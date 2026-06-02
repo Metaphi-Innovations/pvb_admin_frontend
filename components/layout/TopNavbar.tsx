@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, BookOpen, ShoppingCart, BarChart3,
   UserCheck, Wallet, Wheat, CalendarDays, Monitor, Settings,
-  Palette, ChevronDown, Warehouse, type LucideIcon,
+  Palette, ChevronDown, Warehouse, ChevronLeft, ChevronRight, type LucideIcon,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -175,10 +175,50 @@ const NAV_ITEMS: NavItem[] = [
 // ── Main component ────────────────────────────────────────────────────────────
 export function TopNavbar() {
   const pathname = usePathname();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(false);
 
   const isActive = (item: NavItem) => {
     if (item.href) return pathname === item.href || pathname.startsWith(item.href + "/");
     return item.children?.some((c) => pathname === c.href || pathname.startsWith(c.href + "/")) ?? false;
+  };
+
+  const checkScroll = () => {
+    if (scrollRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
+      setShowLeftArrow(scrollLeft > 4);
+      setShowRightArrow(scrollWidth - scrollLeft - clientWidth > 4);
+    }
+  };
+
+  useEffect(() => {
+    checkScroll();
+    const el = scrollRef.current;
+    if (el) {
+      el.addEventListener("scroll", checkScroll, { passive: true });
+      window.addEventListener("resize", checkScroll);
+    }
+    const timer = setTimeout(checkScroll, 100);
+
+    return () => {
+      if (el) {
+        el.removeEventListener("scroll", checkScroll);
+      }
+      window.removeEventListener("resize", checkScroll);
+      clearTimeout(timer);
+    };
+  }, []);
+
+  const scroll = (direction: "left" | "right") => {
+    if (scrollRef.current) {
+      const { clientWidth } = scrollRef.current;
+      const scrollAmount = clientWidth * 0.6; // Scroll 60% of visible width
+      scrollRef.current.scrollBy({
+        left: direction === "left" ? -scrollAmount : scrollAmount,
+        behavior: "smooth",
+      });
+    }
   };
 
   return (
@@ -198,56 +238,90 @@ export function TopNavbar() {
           </div>
         </Link>
 
-        {/* Nav items — scrollable container */}
-        <div className="flex items-center h-full px-1 gap-0.5 flex-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {NAV_ITEMS.map((item) => {
-            const active = isActive(item);
+        {/* Scrollable Container Wrapper */}
+        <div className="relative flex-1 min-w-0 h-full flex items-center">
+          {/* Left indicator & button */}
+          {showLeftArrow && (
+            <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-white via-white/80 to-transparent flex items-center pl-2 z-10 pointer-events-none">
+              <button
+                type="button"
+                onClick={() => scroll("left")}
+                className="w-7 h-7 rounded-full bg-brand-50 border border-brand-200 shadow-md flex items-center justify-center text-brand-600 hover:bg-brand-100 active:scale-95 transition-all pointer-events-auto"
+                aria-label="Scroll left"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
-            // Icon-only (Settings)
-            if (item.iconOnly) {
-              return (
-                <Tooltip key={item.id}>
-                  <TooltipTrigger asChild>
-                    <Link
-                      href={item.href!}
-                      className={cn(
-                        "w-9 h-9 rounded-lg flex items-center justify-center ml-auto transition-all duration-150 flex-shrink-0",
-                        active
-                          ? "bg-brand-100 text-brand-600"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                      )}
-                    >
-                      <item.icon className="w-4 h-4" />
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" sideOffset={6}>{item.label}</TooltipContent>
-                </Tooltip>
-              );
-            }
+          {/* Nav items — scrollable container */}
+          <div
+            ref={scrollRef}
+            className="flex items-center h-full w-full px-3 gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth"
+          >
+            {NAV_ITEMS.map((item) => {
+              const active = isActive(item);
 
-            // Simple link (no children)
-            if (item.href && !item.children) {
-              return (
-                <Link
-                  key={item.id}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 h-9 rounded-lg text-[13px] font-medium whitespace-nowrap flex-shrink-0",
-                    "transition-all duration-150 cursor-pointer border-l-2",
-                    active
-                      ? "bg-brand-50 text-brand-700 border-brand-600 font-semibold"
-                      : "text-foreground border-transparent hover:bg-muted/50 hover:text-foreground",
-                  )}
-                >
-                  <item.icon className="w-3.5 h-3.5 flex-shrink-0" />
-                  {item.label}
-                </Link>
-              );
-            }
+              // Icon-only (Settings)
+              if (item.iconOnly) {
+                return (
+                  <Tooltip key={item.id}>
+                    <TooltipTrigger asChild>
+                      <Link
+                        href={item.href!}
+                        className={cn(
+                          "w-9 h-9 rounded-lg flex items-center justify-center ml-auto transition-all duration-150 flex-shrink-0",
+                          active
+                            ? "bg-brand-100 text-brand-600"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                        )}
+                      >
+                        <item.icon className="w-4 h-4" />
+                      </Link>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" sideOffset={6}>{item.label}</TooltipContent>
+                  </Tooltip>
+                );
+              }
 
-            // Dropdown — portal-rendered to escape overflow clipping
-            return <NavDropdown key={item.id} item={item} active={active} pathname={pathname} />;
-          })}
+              // Simple link (no children)
+              if (item.href && !item.children) {
+                return (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 h-9 rounded-lg text-[13px] font-medium whitespace-nowrap flex-shrink-0",
+                      "transition-all duration-150 cursor-pointer border-l-2",
+                      active
+                        ? "bg-brand-50 text-brand-700 border-brand-600 font-semibold"
+                        : "text-foreground border-transparent hover:bg-muted/50 hover:text-foreground",
+                    )}
+                  >
+                    <item.icon className="w-3.5 h-3.5 flex-shrink-0" />
+                    {item.label}
+                  </Link>
+                );
+              }
+
+              // Dropdown — portal-rendered to escape overflow clipping
+              return <NavDropdown key={item.id} item={item} active={active} pathname={pathname} />;
+            })}
+          </div>
+
+          {/* Right indicator & button */}
+          {showRightArrow && (
+            <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-white via-white/80 to-transparent flex items-center justify-end pr-2 z-10 pointer-events-none">
+              <button
+                type="button"
+                onClick={() => scroll("right")}
+                className="w-7 h-7 rounded-full bg-brand-50 border border-brand-200 shadow-md flex items-center justify-center text-brand-600 hover:bg-brand-100 active:scale-95 transition-all pointer-events-auto"
+                aria-label="Scroll right"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
       </nav>
     </TooltipProvider>
