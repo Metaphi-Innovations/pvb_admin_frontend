@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -44,13 +44,13 @@ interface QuickAddErrors {
 
 // ── Level card accent (summary cards) ─────────────────────────────────────────
 const LEVEL_CARD: Record<GeoLevel, { bg: string; text: string; border: string }> = {
-  Zone:      { bg: "bg-blue-50",   text: "text-blue-700",   border: "border-blue-200" },
-  State:     { bg: "bg-teal-50",   text: "text-teal-700",   border: "border-teal-200" },
-  Region:    { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200" },
-  Area:      { bg: "bg-amber-50",  text: "text-amber-700",  border: "border-amber-200" },
+  Zone: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
+  State: { bg: "bg-teal-50", text: "text-teal-700", border: "border-teal-200" },
+  Region: { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200" },
+  Area: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
   Territory: { bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-200" },
-  Locality:  { bg: "bg-rose-50",   text: "text-rose-700",   border: "border-rose-200" },
-  City:      { bg: "bg-slate-100", text: "text-slate-700",  border: "border-slate-200" },
+  Locality: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
+  City: { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200" },
 };
 
 // ── Confirm Dialog ────────────────────────────────────────────────────────────

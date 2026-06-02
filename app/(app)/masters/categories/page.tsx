@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -47,24 +47,24 @@ interface Category {
 
 // ── Seed Data ─────────────────────────────────────────────────────────────────
 const SEED: Category[] = [
-  { id: 1, code: "CAT-001", name: "Fertilizers",         description: "Chemical and organic fertilizers",          parentId: null, parentName: "",              status: "active",   productCount: 42, createdBy: "Admin", createdDate: "2024-01-10", updatedBy: "Admin", updatedDate: "2024-01-10", lastStatusChange: "2024-01-10" },
-  { id: 2, code: "CAT-002", name: "Pesticides",           description: "Insecticides, fungicides and herbicides",   parentId: null, parentName: "",              status: "active",   productCount: 35, createdBy: "Admin", createdDate: "2024-01-12", updatedBy: "Admin", updatedDate: "2024-01-12", lastStatusChange: "2024-01-12" },
-  { id: 3, code: "CAT-003", name: "Seeds",                description: "Crop seeds and planting material",          parentId: null, parentName: "",              status: "active",   productCount: 28, createdBy: "Admin", createdDate: "2024-01-15", updatedBy: "Admin", updatedDate: "2024-01-15", lastStatusChange: "2024-01-15" },
-  { id: 4, code: "CAT-004", name: "NPK Fertilizers",      description: "Nitrogen, Phosphorus and Potassium blends", parentId: 1,    parentName: "Fertilizers",   status: "active",   productCount: 18, createdBy: "Admin", createdDate: "2024-01-18", updatedBy: "Admin", updatedDate: "2024-01-18", lastStatusChange: "2024-01-18" },
-  { id: 5, code: "CAT-005", name: "Organic Fertilizers",  description: "Bio-based organic soil amendments",         parentId: 1,    parentName: "Fertilizers",   status: "active",   productCount: 12, createdBy: "Admin", createdDate: "2024-02-01", updatedBy: "Admin", updatedDate: "2024-02-01", lastStatusChange: "2024-02-01" },
-  { id: 6, code: "CAT-006", name: "Herbicides",            description: "Weed control chemicals",                    parentId: 2,    parentName: "Pesticides",    status: "active",   productCount: 15, createdBy: "Admin", createdDate: "2024-02-05", updatedBy: "Admin", updatedDate: "2024-02-05", lastStatusChange: "2024-02-05" },
-  { id: 7, code: "CAT-007", name: "Insecticides",          description: "Pest and insect control",                   parentId: 2,    parentName: "Pesticides",    status: "active",   productCount: 20, createdBy: "Admin", createdDate: "2024-02-08", updatedBy: "Admin", updatedDate: "2024-02-08", lastStatusChange: "2024-02-08" },
-  { id: 8, code: "CAT-008", name: "Hybrid Seeds",          description: "High-yield hybrid crop varieties",          parentId: 3,    parentName: "Seeds",         status: "active",   productCount: 14, createdBy: "Admin", createdDate: "2024-02-10", updatedBy: "Admin", updatedDate: "2024-02-10", lastStatusChange: "2024-02-10" },
-  { id: 9, code: "CAT-009", name: "Equipment",             description: "Farm tools and equipment",                  parentId: null, parentName: "",              status: "inactive", productCount: 8,  createdBy: "Admin", createdDate: "2024-02-15", updatedBy: "Admin", updatedDate: "2024-03-01", lastStatusChange: "2024-03-01" },
-  { id: 10, code: "CAT-010", name: "Micronutrients",       description: "Trace element fertilizers",                 parentId: 1,    parentName: "Fertilizers",   status: "active",   productCount: 9,  createdBy: "Admin", createdDate: "2024-03-05", updatedBy: "Admin", updatedDate: "2024-03-05", lastStatusChange: "2024-03-05" },
+  { id: 1, code: "CAT-001", name: "Fertilizers", description: "Chemical and organic fertilizers", parentId: null, parentName: "", status: "active", productCount: 42, createdBy: "Admin", createdDate: "2024-01-10", updatedBy: "Admin", updatedDate: "2024-01-10", lastStatusChange: "2024-01-10" },
+  { id: 2, code: "CAT-002", name: "Pesticides", description: "Insecticides, fungicides and herbicides", parentId: null, parentName: "", status: "active", productCount: 35, createdBy: "Admin", createdDate: "2024-01-12", updatedBy: "Admin", updatedDate: "2024-01-12", lastStatusChange: "2024-01-12" },
+  { id: 3, code: "CAT-003", name: "Seeds", description: "Crop seeds and planting material", parentId: null, parentName: "", status: "active", productCount: 28, createdBy: "Admin", createdDate: "2024-01-15", updatedBy: "Admin", updatedDate: "2024-01-15", lastStatusChange: "2024-01-15" },
+  { id: 4, code: "CAT-004", name: "NPK Fertilizers", description: "Nitrogen, Phosphorus and Potassium blends", parentId: 1, parentName: "Fertilizers", status: "active", productCount: 18, createdBy: "Admin", createdDate: "2024-01-18", updatedBy: "Admin", updatedDate: "2024-01-18", lastStatusChange: "2024-01-18" },
+  { id: 5, code: "CAT-005", name: "Organic Fertilizers", description: "Bio-based organic soil amendments", parentId: 1, parentName: "Fertilizers", status: "active", productCount: 12, createdBy: "Admin", createdDate: "2024-02-01", updatedBy: "Admin", updatedDate: "2024-02-01", lastStatusChange: "2024-02-01" },
+  { id: 6, code: "CAT-006", name: "Herbicides", description: "Weed control chemicals", parentId: 2, parentName: "Pesticides", status: "active", productCount: 15, createdBy: "Admin", createdDate: "2024-02-05", updatedBy: "Admin", updatedDate: "2024-02-05", lastStatusChange: "2024-02-05" },
+  { id: 7, code: "CAT-007", name: "Insecticides", description: "Pest and insect control", parentId: 2, parentName: "Pesticides", status: "active", productCount: 20, createdBy: "Admin", createdDate: "2024-02-08", updatedBy: "Admin", updatedDate: "2024-02-08", lastStatusChange: "2024-02-08" },
+  { id: 8, code: "CAT-008", name: "Hybrid Seeds", description: "High-yield hybrid crop varieties", parentId: 3, parentName: "Seeds", status: "active", productCount: 14, createdBy: "Admin", createdDate: "2024-02-10", updatedBy: "Admin", updatedDate: "2024-02-10", lastStatusChange: "2024-02-10" },
+  { id: 9, code: "CAT-009", name: "Equipment", description: "Farm tools and equipment", parentId: null, parentName: "", status: "inactive", productCount: 8, createdBy: "Admin", createdDate: "2024-02-15", updatedBy: "Admin", updatedDate: "2024-03-01", lastStatusChange: "2024-03-01" },
+  { id: 10, code: "CAT-010", name: "Micronutrients", description: "Trace element fertilizers", parentId: 1, parentName: "Fertilizers", status: "active", productCount: 9, createdBy: "Admin", createdDate: "2024-03-05", updatedBy: "Admin", updatedDate: "2024-03-05", lastStatusChange: "2024-03-05" },
 ];
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 
 const STATUS_CFG = {
-  active:   { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
-  inactive: { bg: "bg-slate-100",  text: "text-slate-600",   dot: "bg-slate-400"  },
-  archived: { bg: "bg-red-50",     text: "text-red-700",     dot: "bg-red-400"    },
+  active: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
+  inactive: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
+  archived: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-400" },
 };
 
 function StatusPill({ status }: { status: string }) {
@@ -282,10 +282,12 @@ export default function CategoriesPage() {
       showToast("Category created successfully");
     } else if (activeRec) {
       setRecords(p => p.map(r => r.id === activeRec.id
-        ? { ...r, name: form.name, code: form.code, description: form.description,
-            parentId: form.parentId ? Number(form.parentId) : null,
-            parentName: form.parentId ? (records.find(x => x.id === Number(form.parentId))?.name ?? "") : "",
-            status: form.status, updatedBy: "Admin", updatedDate: todayStr() }
+        ? {
+          ...r, name: form.name, code: form.code, description: form.description,
+          parentId: form.parentId ? Number(form.parentId) : null,
+          parentName: form.parentId ? (records.find(x => x.id === Number(form.parentId))?.name ?? "") : "",
+          status: form.status, updatedBy: "Admin", updatedDate: todayStr()
+        }
         : r));
       showToast("Category updated successfully");
     }
@@ -334,8 +336,8 @@ export default function CategoriesPage() {
         <div className="grid grid-cols-3 gap-3">
           {[
             { label: "Total Categories", value: total, icon: Tag, accent: true },
-            { label: "Active",           value: active, icon: CheckCircle2, accent: false },
-            { label: "Inactive",         value: inactive, icon: XCircle, accent: false },
+            { label: "Active", value: active, icon: CheckCircle2, accent: false },
+            { label: "Inactive", value: inactive, icon: XCircle, accent: false },
           ].map(({ label, value, icon: Icon, accent }) => (
             <div key={label} className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
               <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", accent ? "bg-brand-600" : "bg-muted")}>
@@ -408,11 +410,11 @@ export default function CategoriesPage() {
             <table className="w-full">
               <thead>
                 <tr className="bg-muted/40 border-b border-border">
-                  <SortTh label="Code"        colKey="code"        sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-28" />
-                  <SortTh label="Name"        colKey="name"        sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <SortTh label="Code" colKey="code" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-28" />
+                  <SortTh label="Name" colKey="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap">Parent</th>
                   <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap">Products</th>
-                  <SortTh label="Status"      colKey="status"      sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-28" />
+                  <SortTh label="Status" colKey="status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-28" />
                   <th className="px-4 py-2.5 w-10" />
                 </tr>
               </thead>
@@ -469,11 +471,11 @@ export default function CategoriesPage() {
                           </DropdownMenuItem>
                           {rec.status === "active"
                             ? <DropdownMenuItem onClick={() => setConfirm({ type: "deactivate", rec })}>
-                                <XCircle className="w-3.5 h-3.5" /> Deactivate
-                              </DropdownMenuItem>
+                              <XCircle className="w-3.5 h-3.5" /> Deactivate
+                            </DropdownMenuItem>
                             : <DropdownMenuItem onClick={() => setConfirm({ type: "activate", rec })}>
-                                <CheckCircle2 className="w-3.5 h-3.5" /> Activate
-                              </DropdownMenuItem>}
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Activate
+                            </DropdownMenuItem>}
                           <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => setConfirm({ type: "delete", rec })}
                             className="text-red-600 focus:text-red-600 focus:bg-red-50">
@@ -515,8 +517,8 @@ export default function CategoriesPage() {
               {confirm?.type === "delete"
                 ? `Archive "${confirm.rec.name}"? It will no longer appear in product lists.`
                 : confirm?.type === "deactivate"
-                ? `Deactivate "${confirm?.rec.name}"? It will be hidden from product forms.`
-                : `Activate "${confirm?.rec.name}"? It will be available in product forms.`}
+                  ? `Deactivate "${confirm?.rec.name}"? It will be hidden from product forms.`
+                  : `Activate "${confirm?.rec.name}"? It will be available in product forms.`}
             </DialogDescription>
           </DialogHeader>
           <div className="flex items-center justify-end gap-2 pt-2">

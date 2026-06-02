@@ -9,16 +9,16 @@ import Link from "next/link";
 
 // Friendly labels for known module roots
 const MODULE_LABELS: Record<string, string> = {
-  users:       "User Management",
-  masters:     "Masters",
+  users: "User Management",
+  masters: "Masters",
   procurement: "Procurement",
-  sales:       "Sales",
-  hr:          "HR",
-  accounts:    "Accounts",
-  farmer:      "Farmer",
-  events:      "Events",
-  settings:    "Settings",
-  demo:        "Demo",
+  sales: "Sales",
+  hr: "HR",
+  accounts: "Accounts",
+  farmer: "Farmer",
+  events: "Events",
+  settings: "Settings",
+  demo: "Demo",
 };
 
 function toTitle(slug: string) {
@@ -29,12 +29,12 @@ function toTitle(slug: string) {
 }
 
 export default function PlaceholderPage() {
-  const params  = useParams();
+  const params = useParams();
   const segments = Array.isArray(params.slug) ? params.slug : [params.slug ?? ""];
-  const root     = segments[0] ?? "";
-  const module   = MODULE_LABELS[root] ?? toTitle(root);
-  const sub      = segments.slice(1).map(toTitle).join(" › ");
-  const title    = sub ? `${module} › ${sub}` : module;
+  const root = segments[0] ?? "";
+  const module = MODULE_LABELS[root] ?? toTitle(root);
+  const sub = segments.slice(1).map(toTitle).join(" › ");
+  const title = sub ? `${module} › ${sub}` : module;
 
   const crumbs = [
     { label: "Home", href: "/dashboard" },

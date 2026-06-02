@@ -144,3 +144,45 @@ export function MiniKPI({
     </div>
   );
 }
+
+// ── Horizontal Mini KPI Card (Icon on left, value/label stacked on right) ──
+interface MiniKPICardProps extends React.HTMLAttributes<HTMLDivElement> {
+  label: string;
+  value: string | number;
+  icon: LucideIcon;
+  accent?: boolean;
+}
+
+export function MiniKPICard({
+  label,
+  value,
+  icon: Icon,
+  accent = false,
+  className,
+  ...props
+}: MiniKPICardProps) {
+  return (
+    <div
+      className={cn(
+        "bg-white rounded-xl border border-border p-3 flex items-center gap-3",
+        className
+      )}
+      {...props}
+    >
+      <div
+        className={cn(
+          "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
+          accent ? "bg-brand-600" : "bg-muted"
+        )}
+      >
+        <Icon className={cn("w-4 h-4", accent ? "text-white" : "text-muted-foreground")} />
+      </div>
+      <div>
+        <p className="text-base font-bold text-foreground leading-none">{value}</p>
+        <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{label}</p>
+      </div>
+    </div>
+  );
+}
+
+
