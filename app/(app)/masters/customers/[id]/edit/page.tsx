@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Save, X, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, Save, X, CheckCircle2, XCircle, ShieldAlert } from "lucide-react";
 import { loadCustomers, saveCustomers, todayStr } from "../../customer-data";
 import {
   CustomerForm,
@@ -16,7 +16,33 @@ import {
   type CustomerFormValues,
 } from "../../components/CustomerForm";
 import { hasCustomerPermission } from "../../customer-permissions";
-import { ShieldAlert } from "lucide-react";
+
+interface ToastState {
+  msg: string;
+  type: "success" | "error";
+}
+
+function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
+  return (
+    <div
+      className={cn(
+        "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+        "animate-in slide-in-from-bottom-2 fade-in-0 duration-300",
+        toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
+      )}
+    >
+      {toast.type === "success" ? (
+        <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+      ) : (
+        <XCircle className="w-4 h-4 flex-shrink-0" />
+      )}
+      {toast.msg}
+      <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
 
 export default function EditCustomerPage() {
   const router = useRouter();
@@ -24,7 +50,7 @@ export default function EditCustomerPage() {
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [form, setForm] = useState<CustomerFormValues | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [customerCode, setCustomerCode] = useState("");
 
   useEffect(() => {
@@ -38,9 +64,9 @@ export default function EditCustomerPage() {
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
-      const n = { ...prev };
-      delete n[key];
-      return n;
+      const next = { ...prev };
+      delete next[key];
+      return next;
     });
 
   const handleSave = () => {
@@ -60,7 +86,8 @@ export default function EditCustomerPage() {
     const today = todayStr();
     const updated = formValuesToCustomer(form, {
       ...existing,
-      lastStatusChange: existing.status !== form.status ? today : existing.lastStatusChange,
+      lastStatusChange:
+        existing.status !== form.status ? today : existing.lastStatusChange,
       statusHistory:
         existing.status !== form.status
           ? [
@@ -87,13 +114,18 @@ export default function EditCustomerPage() {
   if (allowed === false) {
     return (
       <AppLayout>
-        <div className="py-16 flex flex-col items-center gap-3 text-center">
-          <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center">
-            <ShieldAlert className="w-6 h-6 text-amber-600" />
+        <div className="flex flex-col items-center gap-3 py-16 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-amber-200 bg-amber-50">
+            <ShieldAlert className="h-6 w-6 text-amber-600" />
           </div>
           <h1 className="text-lg font-bold text-foreground">Access restricted</h1>
-          <p className="text-sm text-muted-foreground max-w-md">You do not have permission to update customers.</p>
-          <Link href="/masters/customers" className="text-xs text-brand-600 hover:underline mt-2">
+          <p className="max-w-md text-sm text-muted-foreground">
+            You do not have permission to update customers.
+          </p>
+          <Link
+            href="/masters/customers"
+            className="mt-2 text-xs text-brand-600 hover:underline"
+          >
             Back to listing
           </Link>
         </div>
@@ -106,10 +138,13 @@ export default function EditCustomerPage() {
       <AppLayout>
         <div className="py-16 text-center">
           <p className="text-sm text-muted-foreground">
-            {allowed === null ? "Loading…" : "Customer not found."}
+            {allowed === null ? "Loading..." : "Customer not found."}
           </p>
           {allowed !== null && (
-            <Link href="/masters/customers" className="text-xs text-brand-600 hover:underline mt-2 inline-block">
+            <Link
+              href="/masters/customers"
+              className="mt-2 inline-block text-xs text-brand-600 hover:underline"
+            >
               Back to listing
             </Link>
           )}
@@ -119,51 +154,46 @@ export default function EditCustomerPage() {
   }
 
   return (
-    <AppLayout noPadding>
-      <div className="flex flex-col" style={{ minHeight: "calc(100vh - 104px)" }}>
-        <div className="flex-shrink-0 bg-white border-b border-border px-6 py-3 flex items-center gap-3 shadow-sm sticky top-0 z-10">
+    <AppLayout>
+      <div className="flex flex-col h-full">
+        <div className="sticky top-0 z-10 bg-white border-b border-border px-5 py-3 flex items-center gap-3 flex-shrink-0">
           <button
             type="button"
             onClick={() => router.back()}
-            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors"
+            className="w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
           >
             <ArrowLeft className="w-4 h-4 text-muted-foreground" />
           </button>
           <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold text-foreground">Edit Customer</h2>
-            <p className="text-[11px] text-muted-foreground">Masters → Customer Master → Edit</p>
+            <h2 className="text-sm font-semibold text-foreground leading-none">Edit Customer</h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Masters → Customer Master → Edit</p>
           </div>
-          <div className="flex items-center gap-1.5 bg-muted/50 border border-border rounded-lg px-3 py-1.5">
-            <span className="font-mono text-xs font-bold text-brand-700">{customerCode}</span>
-          </div>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.back()}>
-            <X className="w-3.5 h-3.5 mr-1" /> Discard
+          <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
+            {customerCode}
+          </span>
+          <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => router.back()}>
+            Discard
           </Button>
           <Button
             size="sm"
-            className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+            className="h-7 text-[11px] gap-1.5 px-3 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
           >
-            <Save className="w-3.5 h-3.5" /> Save Changes
+            <Save className="w-3.5 h-3.5" /> Update Customer
           </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 bg-muted/20">
-          <CustomerForm form={form} onChange={setForm} errors={errors} onClearError={clearErr} />
+        <div className="flex-1 overflow-y-auto px-6 py-6 bg-muted/10">
+          <CustomerForm
+            form={form}
+            onChange={setForm}
+            errors={errors}
+            onClearError={clearErr}
+          />
         </div>
       </div>
 
-      {toast && (
-        <div
-          className={cn(
-            "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
-            toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
-          )}
-        >
-          {toast.type === "success" ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-          {toast.msg}
-        </div>
-      )}
+      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </AppLayout>
   );
 }

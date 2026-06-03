@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { Check, ChevronsUpDown, Search } from "lucide-react";
+import { ChevronsUpDown, Check } from "lucide-react";
 
 export interface SelectOption {
   value: string;
@@ -29,60 +30,58 @@ export function SearchableSelect({
   options,
   placeholder = "Select…",
   searchPlaceholder = "Search…",
-  disabled,
-  error,
+  disabled = false,
+  error = false,
   className,
-  emptyMessage = "No options found",
+  emptyMessage = "No options",
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
 
   const selected = options.find((o) => o.value === value);
-
-  const filtered = useMemo(() => {
-    if (!q.trim()) return options;
-    const lower = q.toLowerCase();
-    return options.filter(
-      (o) =>
-        o.label.toLowerCase().includes(lower) ||
-        o.sublabel?.toLowerCase().includes(lower) ||
-        o.value.toLowerCase().includes(lower),
-    );
-  }, [options, q]);
+  const filtered = q
+    ? options.filter(
+        (o) =>
+          o.label.toLowerCase().includes(q.toLowerCase()) ||
+          o.sublabel?.toLowerCase().includes(q.toLowerCase()) ||
+          o.value.toLowerCase().includes(q.toLowerCase()),
+      )
+    : options;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild disabled={disabled}>
+    <Popover open={open && !disabled} onOpenChange={(v) => { if (!disabled) { setOpen(v); if (!v) setQ(""); } }}>
+      <PopoverTrigger asChild>
         <button
           type="button"
+          disabled={disabled}
           className={cn(
-            "w-full h-9 px-3 text-sm text-left border rounded-lg bg-background flex items-center justify-between gap-2 hover:bg-muted/30 transition-colors",
-            error ? "border-red-400" : "border-border",
-            disabled && "opacity-50 cursor-not-allowed",
+            "w-full h-8 px-2.5 text-xs text-left border border-border rounded-lg bg-background flex items-center justify-between transition-colors",
+            disabled ? "opacity-50 cursor-not-allowed bg-muted/30" : "hover:bg-muted/30",
+            error && "border-red-400",
             className,
           )}
         >
-          <span className={cn("truncate", selected ? "text-foreground" : "text-muted-foreground")}>
-            {selected ? selected.label : placeholder}
+          <span className={selected ? "text-foreground" : "text-muted-foreground"}>
+            {selected?.label || placeholder}
           </span>
-          <ChevronsUpDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-        <div className="p-2 border-b border-border">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-[7px] text-muted-foreground pointer-events-none" />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder={searchPlaceholder}
-              className="w-full pl-8 pr-3 py-1.5 text-sm focus:outline-none bg-transparent"
-            />
-          </div>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <div className="p-1.5 border-b border-border">
+          <Input
+            placeholder={searchPlaceholder}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="h-7 text-xs focus-visible:ring-0"
+            autoFocus
+          />
         </div>
-        <div className="max-h-52 overflow-y-auto p-1">
+        <div className="max-h-48 overflow-y-auto py-1">
           {filtered.length === 0 ? (
-            <p className="text-xs text-muted-foreground px-3 py-4 text-center">{emptyMessage}</p>
+            <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+              {q ? `No results for "${q}"` : emptyMessage}
+            </p>
           ) : (
             filtered.map((opt) => (
               <button
@@ -94,17 +93,19 @@ export function SearchableSelect({
                   setQ("");
                 }}
                 className={cn(
-                  "w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left rounded-lg transition-colors hover:bg-muted/60",
-                  value === opt.value && "bg-brand-50",
+                  "w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-muted/60 transition-colors",
+                  selected?.value === opt.value && "bg-brand-50",
                 )}
               >
-                <span className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0">
                   <span className="block truncate">{opt.label}</span>
                   {opt.sublabel && (
-                    <span className="block text-[11px] text-muted-foreground truncate">{opt.sublabel}</span>
+                    <span className="text-[10px] text-muted-foreground">{opt.sublabel}</span>
                   )}
-                </span>
-                {value === opt.value && <Check className="w-3.5 h-3.5 text-brand-600 flex-shrink-0" />}
+                </div>
+                {selected?.value === opt.value && (
+                  <Check className="w-3 h-3 text-brand-600 flex-shrink-0" />
+                )}
               </button>
             ))
           )}

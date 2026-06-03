@@ -1,25 +1,96 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import {
-  ArrowLeft,
-  Save,
-  AlertCircle,
-} from "lucide-react";
+import { ArrowLeft, Save, AlertCircle, ChevronsUpDown, Check } from "lucide-react";
 import {
   GSTMaster,
   loadGSTMasters,
   saveGSTMasters,
   todayStr,
 } from "../../gst-data";
+
+// ── Autocomplete (matches EmployeeForm AC) ────────────────────────────────────
+interface ACOption { label: string; value: string }
+function AC({ label, value, onChange, options, placeholder, required, error, disabled }: {
+  label: string; value: string; onChange: (v: string) => void;
+  options: ACOption[]; placeholder?: string; required?: boolean; error?: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const filtered = q ? options.filter(o => o.label.toLowerCase().includes(q.toLowerCase())) : options;
+  const selected = options.find(o => o.value === value);
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs font-medium">
+        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+      </Label>
+      <Popover open={open && !disabled} onOpenChange={v => { if (!disabled) { setOpen(v); if (!v) setQ(""); } }}>
+        <PopoverTrigger asChild>
+          <button disabled={disabled} className={cn(
+            "w-full h-8 px-2.5 text-xs text-left border border-border rounded-lg bg-background flex items-center justify-between transition-colors",
+            disabled ? "opacity-50 cursor-not-allowed bg-muted/30" : "hover:bg-muted/30",
+            error && "border-red-400",
+          )}>
+            <span className={selected ? "text-foreground" : "text-muted-foreground"}>
+              {selected?.label || placeholder || "Select…"}
+            </span>
+            <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+          <div className="p-1.5 border-b border-border">
+            <Input placeholder="Search…" value={q} onChange={e => setQ(e.target.value)}
+              className="h-7 text-xs focus-visible:ring-0" autoFocus />
+          </div>
+          <div className="max-h-48 overflow-y-auto py-1">
+            {filtered.length === 0
+              ? <p className="px-3 py-4 text-center text-xs text-muted-foreground">No options</p>
+              : filtered.map(opt => (
+                <button key={opt.value} onClick={() => { onChange(opt.value); setOpen(false); setQ(""); }}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-muted/60 transition-colors",
+                    selected?.value === opt.value && "bg-brand-50"
+                  )}>
+                  <div className="flex-1 min-w-0">
+                    <span className="block truncate">{opt.label}</span>
+                  </div>
+                  {selected?.value === opt.value && <Check className="w-3 h-3 text-brand-600 flex-shrink-0" />}
+                </button>
+              ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+      {error && <p className="flex items-center gap-1 text-[11px] text-red-500"><AlertCircle className="w-3 h-3 flex-shrink-0" />{error}</p>}
+    </div>
+  );
+}
+
+function FieldError({ msg }: { msg?: string }) {
+  if (!msg) return null;
+  return (
+    <p className="flex items-center gap-1 mt-1 text-[11px] text-red-500">
+      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+      {msg}
+    </p>
+  );
+}
+
+function SectionHead({ label, sub }: { label: string; sub?: string }) {
+  return (
+    <div className="mb-2.5 mt-0.5">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
+      {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
+    </div>
+  );
+}
 
 export default function EditGSTPage() {
   const router = useRouter();
@@ -28,13 +99,11 @@ export default function EditGSTPage() {
 
   const [record, setRecord] = useState<GSTMaster | null>(null);
   const [form, setForm] = useState({
-    gstCode: "",
+    gstName: "",
     gstPercentage: 0,
-    cgst: 0,
-    sgst: 0,
-    igst: 0,
+    gstType: "CGST" as "CGST" | "SGST" | "IGST" | "UTGST",
+    applicableFromDate: "",
     status: "active" as "active" | "inactive",
-    remarks: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -47,13 +116,11 @@ export default function EditGSTPage() {
     }
     setRecord(found);
     setForm({
-      gstCode: found.gstCode,
+      gstName: found.gstName,
       gstPercentage: found.gstPercentage,
-      cgst: found.cgst,
-      sgst: found.sgst,
-      igst: found.igst,
+      gstType: found.gstType,
+      applicableFromDate: found.applicableFromDate,
       status: found.status,
-      remarks: found.remarks || "",
     });
   }, [id, router]);
 
@@ -70,40 +137,29 @@ export default function EditGSTPage() {
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
-    if (!form.gstCode.trim()) e.gstCode = "GST Code is required";
+    if (!form.gstName.trim()) e.gstName = "GST Name is required";
     if (form.gstPercentage === undefined || form.gstPercentage === null || form.gstPercentage < 0) {
       e.gstPercentage = "GST Percentage is required and must be non-negative";
     }
-    if (form.cgst === undefined || form.cgst === null || form.cgst < 0) {
-      e.cgst = "CGST % is required and must be non-negative";
-    }
-    if (form.sgst === undefined || form.sgst === null || form.sgst < 0) {
-      e.sgst = "SGST % is required and must be non-negative";
-    }
-    if (form.igst === undefined || form.igst === null || form.igst < 0) {
-      e.igst = "IGST % is required and must be non-negative";
-    }
+    if (!form.applicableFromDate) e.applicableFromDate = "Applicable From Date is required";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
   const handleSave = () => {
-    if (!validate()) return;
+    if (!validate() || !record) return;
     const records = loadGSTMasters();
     const updated = records.map(r =>
       r.id === id
         ? {
             ...r,
-            gstCode: form.gstCode,
+            gstName: form.gstName,
             gstPercentage: form.gstPercentage,
-            cgst: form.cgst,
-            sgst: form.sgst,
-            igst: form.igst,
+            gstType: form.gstType,
+            applicableFromDate: form.applicableFromDate,
             status: form.status,
-            remarks: form.remarks,
             updatedBy: "Admin",
             updatedDate: todayStr(),
-            lastStatusChange: form.status !== record?.status ? todayStr() : r.lastStatusChange,
           }
         : r
     );
@@ -114,8 +170,8 @@ export default function EditGSTPage() {
   if (!record) {
     return (
       <AppLayout>
-        <div className="flex items-center justify-center h-screen">
-          <p className="text-muted-foreground">Loading...</p>
+        <div className="py-16 text-center">
+          <p className="text-sm text-muted-foreground">Loading...</p>
         </div>
       </AppLayout>
     );
@@ -123,233 +179,125 @@ export default function EditGSTPage() {
 
   return (
     <AppLayout>
-      {/* Sticky Header */}
-      <div className="sticky top-0 z-10 bg-white border-b border-border px-6 py-3 flex items-center gap-3">
-        <button
-          onClick={() => router.back()}
-          className="p-1.5 hover:bg-muted rounded-lg transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-        </button>
-        <div className="flex-1">
-          <h2 className="text-sm font-semibold">Edit GST Rate</h2>
-          <p className="text-[11px] text-muted-foreground">Masters → GST → {record.gstCode}</p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs"
-          onClick={() => router.back()}
-        >
-          Discard
-        </Button>
-        <Button
-          size="sm"
-          className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-          onClick={handleSave}
-        >
-          <Save className="w-3.5 h-3.5" /> Save Changes
-        </Button>
-      </div>
-
-      {/* Form Content */}
-      <div className="flex gap-0">
-        <div className="flex-1 p-6 space-y-6 max-w-[600px]">
-          {/* GST Code */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">
-              GST Code <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              value={form.gstCode}
-              onChange={e => set("gstCode", e.target.value)}
-              placeholder="e.g., GST-18"
-              className={cn(
-                "h-9 text-sm rounded-lg",
-                errors.gstCode && "border-red-400 focus-visible:ring-red-300"
-              )}
-            />
-            {errors.gstCode && (
-              <p className="text-xs text-red-500 flex items-center gap-1">
-                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                {errors.gstCode}
-              </p>
-            )}
+      <div className="flex flex-col" style={{ minHeight: "calc(100vh - 104px)" }}>
+        {/* Sticky Header - matches Customer/User Management */}
+        <div className="sticky top-0 z-10 bg-white border-b border-border px-4 py-2 flex items-center gap-2.5 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="p-1 hover:bg-muted rounded transition-colors flex-shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4 text-muted-foreground" />
+          </button>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-sm font-semibold leading-none">Edit GST</h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Masters → GST → {record.gstId}</p>
           </div>
-
-          {/* GST Percentage */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">
-              GST Percentage <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              type="number"
-              value={form.gstPercentage}
-              onChange={e => set("gstPercentage", parseFloat(e.target.value))}
-              placeholder="e.g., 18"
-              step="0.01"
-              min="0"
-              className={cn(
-                "h-9 text-sm rounded-lg",
-                errors.gstPercentage && "border-red-400 focus-visible:ring-red-300"
-              )}
-            />
-            {errors.gstPercentage && (
-              <p className="text-xs text-red-500 flex items-center gap-1">
-                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                {errors.gstPercentage}
-              </p>
-            )}
-          </div>
-
-          {/* CGST, SGST, IGST */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">
-                CGST % <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                type="number"
-                value={form.cgst}
-                onChange={e => set("cgst", parseFloat(e.target.value))}
-                placeholder="e.g., 9"
-                step="0.01"
-                min="0"
-                className={cn(
-                  "h-9 text-sm rounded-lg",
-                  errors.cgst && "border-red-400 focus-visible:ring-red-300"
-                )}
-              />
-              {errors.cgst && (
-                <p className="text-xs text-red-500 flex items-center gap-1">
-                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                  Required
-                </p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">
-                SGST % <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                type="number"
-                value={form.sgst}
-                onChange={e => set("sgst", parseFloat(e.target.value))}
-                placeholder="e.g., 9"
-                step="0.01"
-                min="0"
-                className={cn(
-                  "h-9 text-sm rounded-lg",
-                  errors.sgst && "border-red-400 focus-visible:ring-red-300"
-                )}
-              />
-              {errors.sgst && (
-                <p className="text-xs text-red-500 flex items-center gap-1">
-                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                  Required
-                </p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">
-                IGST % <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                type="number"
-                value={form.igst}
-                onChange={e => set("igst", parseFloat(e.target.value))}
-                placeholder="e.g., 18"
-                step="0.01"
-                min="0"
-                className={cn(
-                  "h-9 text-sm rounded-lg",
-                  errors.igst && "border-red-400 focus-visible:ring-red-300"
-                )}
-              />
-              {errors.igst && (
-                <p className="text-xs text-red-500 flex items-center gap-1">
-                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                  Required
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Status Toggle */}
-          <div className="flex items-center justify-between p-3.5 rounded-xl border border-border bg-muted/20">
-            <div>
-              <p className="text-xs font-medium text-foreground">Status</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                {form.status === "active"
-                  ? "Active and visible"
-                  : "Inactive and hidden"}
-              </p>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <span
-                className={cn(
-                  "text-xs font-medium",
-                  form.status === "active"
-                    ? "text-emerald-600"
-                    : "text-muted-foreground"
-                )}
-              >
-                {form.status === "active" ? "Active" : "Inactive"}
-              </span>
-              <Switch
-                checked={form.status === "active"}
-                onCheckedChange={v =>
-                  set("status", v ? "active" : "inactive")
-                }
-              />
-            </div>
-          </div>
-
-          {/* Remarks */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Remarks</Label>
-            <Textarea
-              value={form.remarks}
-              onChange={e => set("remarks", e.target.value)}
-              placeholder="Optional notes about this GST rate"
-              rows={3}
-              className="text-sm rounded-lg"
-            />
-          </div>
-
-          {/* Audit Info */}
-          <div className="bg-muted/30 rounded-xl p-3.5 space-y-2 text-[11px]">
-            <p className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">Record Info</p>
-            <div className="grid grid-cols-2 gap-y-1.5 gap-x-4">
-              <div>
-                <span className="text-muted-foreground">Created By</span>
-                <p className="font-medium text-foreground">{record.createdBy}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Created Date</span>
-                <p className="font-medium text-foreground">{record.createdDate}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Updated By</span>
-                <p className="font-medium text-foreground">{record.updatedBy}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Updated Date</span>
-                <p className="font-medium text-foreground">{record.updatedDate}</p>
-              </div>
-            </div>
-          </div>
+          <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
+            {record.gstId}
+          </span>
+          <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => router.back()}>
+            Discard
+          </Button>
+          <Button
+            size="sm"
+            className="h-7 text-[11px] px-3 gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
+            onClick={handleSave}
+          >
+            <Save className="w-3 h-3" /> Update GST
+          </Button>
         </div>
 
-        {/* Sidebar */}
-        <div className="w-64 flex-shrink-0 border-l border-border bg-muted/20 p-5 space-y-4">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Quick Actions</p>
-            <p className="text-xs text-muted-foreground mt-1">Click Save Changes to update this GST rate</p>
-          </div>
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <p className="text-xs font-medium text-blue-700">Tip</p>
-            <p className="text-[11px] text-blue-600 mt-1">Changing GST rates may affect existing invoices</p>
+        {/* Form Content */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          <SectionHead label="GST Details" />
+          <div className="grid grid-cols-4 gap-3">
+            {/* GST ID (Read Only) */}
+            <div className="col-span-1 space-y-1">
+              <Label className="text-xs font-medium">GST ID</Label>
+              <Input
+                value={record.gstId}
+                disabled
+                className="h-8 text-xs bg-muted/30 text-muted-foreground cursor-not-allowed"
+              />
+            </div>
+
+            {/* Status */}
+            <div className="col-span-1">
+              <AC
+                label="Status"
+                required
+                value={form.status}
+                onChange={v => set("status", v)}
+                options={[
+                  { value: "active", label: "Active" },
+                  { value: "inactive", label: "Inactive" },
+                ]}
+                placeholder="Select status…"
+              />
+            </div>
+
+            {/* GST Name */}
+            <div className="col-span-2 space-y-1">
+              <Label className="text-xs font-medium">
+                GST Name <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                value={form.gstName}
+                onChange={e => set("gstName", e.target.value)}
+                placeholder="e.g., Standard IGST"
+                className={cn("h-8 text-xs", errors.gstName && "border-red-400 focus-visible:ring-red-300")}
+              />
+              <FieldError msg={errors.gstName} />
+            </div>
+
+            {/* GST Percentage */}
+            <div className="col-span-1 space-y-1">
+              <Label className="text-xs font-medium">
+                GST Percentage <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                type="number"
+                value={form.gstPercentage}
+                onChange={e => set("gstPercentage", parseFloat(e.target.value) || 0)}
+                placeholder="e.g., 18.0"
+                step="0.01"
+                min="0"
+                className={cn("h-8 text-xs", errors.gstPercentage && "border-red-400 focus-visible:ring-red-300")}
+              />
+              <FieldError msg={errors.gstPercentage} />
+            </div>
+
+            {/* GST Type */}
+            <div className="col-span-1">
+              <AC
+                label="GST Type"
+                required
+                value={form.gstType}
+                onChange={v => set("gstType", v)}
+                options={[
+                  { value: "CGST", label: "CGST" },
+                  { value: "SGST", label: "SGST" },
+                  { value: "IGST", label: "IGST" },
+                  { value: "UTGST", label: "UTGST" },
+                ]}
+                placeholder="Select type…"
+              />
+            </div>
+
+            {/* Applicable From Date */}
+            <div className="col-span-2 space-y-1">
+              <Label className="text-xs font-medium">
+                Applicable From Date <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                type="date"
+                value={form.applicableFromDate}
+                onChange={e => set("applicableFromDate", e.target.value)}
+                className={cn("h-8 text-xs", errors.applicableFromDate && "border-red-400 focus-visible:ring-red-300")}
+              />
+              <FieldError msg={errors.applicableFromDate} />
+            </div>
           </div>
         </div>
       </div>
