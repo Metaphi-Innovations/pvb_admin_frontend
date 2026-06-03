@@ -4,25 +4,26 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-btn text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-btn text-table font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/40 focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        default:     "bg-primary text-primary-foreground hover:bg-primary/90",
+        default:     "bg-brand-600 text-white shadow-sm hover:bg-brand-700 active:bg-brand-800",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-        outline:     "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-        secondary:   "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost:       "hover:bg-accent hover:text-accent-foreground",
-        link:        "text-primary underline-offset-4 hover:underline",
+        outline:     "border border-border bg-white text-foreground hover:bg-muted/60 hover:border-brand-200",
+        secondary:   "bg-navy-700 text-white hover:bg-navy-800 shadow-sm",
+        ghost:       "text-foreground hover:bg-muted/70",
+        link:        "text-brand-600 underline-offset-4 hover:underline hover:text-brand-700",
+        success:     "bg-leaf-600 text-white hover:bg-leaf-700 shadow-sm",
       },
       size: {
-        default: "h-10 px-4 py-2",
-        sm:      "h-9 rounded-btn px-3",
-        lg:      "h-11 rounded-btn px-8",
-        icon:    "h-10 w-10",
+        default: "h-9 px-4 py-2 text-sm",
+        sm:      "h-8 rounded-btn px-3 text-xs",
+        lg:      "h-10 rounded-btn px-6 text-sm",
+        icon:    "h-8 w-8",
       },
     },
-    defaultVariants: { variant: "default", size: "default" },
+    defaultVariants: { variant: "default", size: "sm" },
   },
 );
 

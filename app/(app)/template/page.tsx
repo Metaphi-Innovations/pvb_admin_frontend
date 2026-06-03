@@ -11,43 +11,7 @@ import {
   ChevronDown, ChevronRight, Search, ListFilter, MapPin,
   LogIn, CalendarDays, List, PanelRight, BookOpen, SlidersHorizontal,
 } from "lucide-react";
-import ColorSection from "./sections/ColorSection";
-import TypographySection from "./sections/TypographySection";
-import SpacingSection from "./sections/SpacingSection";
-import BorderRadiusSection from "./sections/BorderRadiusSection";
-import ShadowsSection from "./sections/ShadowsSection";
-import IconsSection from "./sections/IconsSection";
-import ButtonsSection from "./sections/ButtonsSection";
-import StatusBadgesSection from "./sections/StatusBadgesSection";
-import CardsSection from "./sections/CardsSection";
-import FormsSection from "./sections/FormsSection";
-import TablesSection from "./sections/TablesSection";
-import FiltersSection from "./sections/FiltersSection";
-import ModalsSection from "./sections/ModalsSection";
-import LoadersSection from "./sections/LoadersSection";
-import EmptyStatesSection from "./sections/EmptyStatesSection";
-import AlertsSection from "./sections/AlertsSection";
-import NavbarSection from "./sections/NavbarSection";
-import SidebarSection from "./sections/SidebarSection";
-import ApprovalUISection from "./sections/ApprovalUISection";
-import ProfileSection from "./sections/ProfileSection";
-import NestedDataSection from "./sections/NestedDataSection";
-import MobileComponentsSection from "./sections/MobileComponentsSection";
-import ChartsSection from "./sections/ChartsSection";
-import AutocompleteSection from "./sections/AutocompleteSection";
-import FileUploadSection from "./sections/FileUploadSection";
-import StepperSection from "./sections/StepperSection";
-import DrawerSection from "./sections/DrawerSection";
-import TabsAccordionSection from "./sections/TabsAccordionSection";
-import TimelineSection from "./sections/TimelineSection";
-import CommentsSection from "./sections/CommentsSection";
-import AuditLogsSection from "./sections/AuditLogsSection";
-import BeatPlanningSection from "./sections/BeatPlanningSection";
-import LoginSection from "./sections/LoginSection";
-import FinancialYearSection from "./sections/FinancialYearSection";
-import ListingPatternsSection from "./sections/ListingPatternsSection";
-import FullPageFormsSection from "./sections/FullPageFormsSection";
-import DrawerFormsSection from "./sections/DrawerFormsSection";
+import { TemplateSection } from "./section-registry";
 
 // ── Section registry ──────────────────────────────────────────────────────────
 const GROUPS = [
@@ -143,46 +107,7 @@ const GROUPS = [
 const ALL_ITEMS = GROUPS.flatMap((g) => g.items); // auto-counts all sections
 
 function renderSection(id: string) {
-  switch (id) {
-    case "colors":       return <ColorSection />;
-    case "typography":   return <TypographySection />;
-    case "spacing":      return <SpacingSection />;
-    case "radius":       return <BorderRadiusSection />;
-    case "shadows":      return <ShadowsSection />;
-    case "icons":        return <IconsSection />;
-    case "buttons":      return <ButtonsSection />;
-    case "badges":       return <StatusBadgesSection />;
-    case "cards":        return <CardsSection />;
-    case "forms":             return <FormsSection />;
-    case "full-page-forms":   return <FullPageFormsSection />;
-    case "drawer-forms":      return <DrawerFormsSection />;
-    case "autocomplete":      return <AutocompleteSection />;
-    case "tables":            return <TablesSection />;
-    case "listing-patterns":  return <ListingPatternsSection />;
-    case "filters":           return <FiltersSection />;
-    case "modals":       return <ModalsSection />;
-    case "loaders":      return <LoadersSection />;
-    case "empty-states": return <EmptyStatesSection />;
-    case "alerts":       return <AlertsSection />;
-    case "navbar":       return <NavbarSection />;
-    case "sidebar":      return <SidebarSection />;
-    case "approval":     return <ApprovalUISection />;
-    case "profile":      return <ProfileSection />;
-    case "nested-data":  return <NestedDataSection />;
-    case "mobile":       return <MobileComponentsSection />;
-    case "charts":       return <ChartsSection />;
-    case "file-upload":  return <FileUploadSection />;
-    case "stepper":      return <StepperSection />;
-    case "drawer":       return <DrawerSection />;
-    case "tabs":         return <TabsAccordionSection />;
-    case "timeline":     return <TimelineSection />;
-    case "comments":     return <CommentsSection />;
-    case "audit-logs":     return <AuditLogsSection />;
-    case "beat-planning":   return <BeatPlanningSection />;
-    case "login":           return <LoginSection />;
-    case "financial-year":  return <FinancialYearSection />;
-    default:                return <ColorSection />;
-  }
+  return <TemplateSection id={id} />;
 }
 
 // ── Left sidebar ──────────────────────────────────────────────────────────────

@@ -1,6 +1,12 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export type FYStatus = "upcoming" | "live" | "closed" | "archived";
@@ -52,14 +58,55 @@ export const FINANCIAL_YEARS: FinancialYear[] = [
   },
 ];
 
-export const FY_STATUS_CONFIG: Record<FYStatus, { label: string; bg: string; color: string; dot: string; border: string }> = {
-  live:     { label: "Live",     bg: "bg-green-50",  color: "text-green-700",  dot: "bg-green-500",  border: "border-green-200" },
-  upcoming: { label: "Upcoming", bg: "bg-blue-50",   color: "text-blue-700",   dot: "bg-blue-500",   border: "border-blue-200"  },
-  closed:   { label: "Closed",   bg: "bg-slate-100", color: "text-slate-600",  dot: "bg-slate-400",  border: "border-slate-200" },
-  archived: { label: "Archived", bg: "bg-rose-50",   color: "text-rose-700",   dot: "bg-rose-400",   border: "border-rose-200"  },
+export const FY_STATUS_CONFIG: Record<
+  FYStatus,
+  { label: string; bg: string; color: string; dot: string; border: string }
+> = {
+  live: {
+    label: "Live",
+    bg: "bg-green-50",
+    color: "text-green-700",
+    dot: "bg-green-500",
+    border: "border-green-200",
+  },
+  upcoming: {
+    label: "Upcoming",
+    bg: "bg-blue-50",
+    color: "text-blue-700",
+    dot: "bg-blue-500",
+    border: "border-blue-200",
+  },
+  closed: {
+    label: "Closed",
+    bg: "bg-slate-100",
+    color: "text-slate-600",
+    dot: "bg-slate-400",
+    border: "border-slate-200",
+  },
+  archived: {
+    label: "Archived",
+    bg: "bg-rose-50",
+    color: "text-rose-700",
+    dot: "bg-rose-400",
+    border: "border-rose-200",
+  },
 };
 
 const FY_STORAGE_KEY = "dharitrisutra_selected_fy";
+
+const DEFAULT_FY =
+  FINANCIAL_YEARS.find((f) => f.status === "live") ?? FINANCIAL_YEARS[0];
+
+function readStoredFY(): FinancialYear {
+  if (typeof window === "undefined") return DEFAULT_FY;
+  try {
+    const stored = localStorage.getItem(FY_STORAGE_KEY);
+    if (!stored) return DEFAULT_FY;
+    return FINANCIAL_YEARS.find((f) => f.id === stored) ?? DEFAULT_FY;
+  } catch {
+    return DEFAULT_FY;
+  }
+}
 
 // ── Context ───────────────────────────────────────────────────────────────────
 interface FYContextType {
@@ -70,48 +117,25 @@ interface FYContextType {
 
 const FYContext = createContext<FYContextType | null>(null);
 
-// ── Provider ──────────────────────────────────────────────────────────────────
+// ── Provider — single render tree (no mount gate that remounts children) ───────
 export function FYProvider({ children }: { children: React.ReactNode }) {
-  const defaultFY = FINANCIAL_YEARS.find((f) => f.status === "live") ?? FINANCIAL_YEARS[0];
-  const [selectedFY, setSelectedFYState] = useState<FinancialYear>(defaultFY);
-  const [mounted, setMounted] = useState(false);
+  const [selectedFY, setSelectedFYState] = useState<FinancialYear>(readStoredFY);
 
-  useEffect(() => {
-    setMounted(true);
-    try {
-      const stored = localStorage.getItem(FY_STORAGE_KEY);
-      if (stored) {
-        const found = FINANCIAL_YEARS.find((f) => f.id === stored);
-        if (found) setSelectedFYState(found);
-      }
-    } catch {
-      // localStorage not available (SSR)
-    }
-  }, []);
-
-  const setSelectedFY = (fy: FinancialYear) => {
+  const setSelectedFY = useCallback((fy: FinancialYear) => {
     setSelectedFYState(fy);
     try {
       localStorage.setItem(FY_STORAGE_KEY, fy.id);
     } catch {
       // ignore
     }
-  };
+  }, []);
 
-  if (!mounted) {
-    // Render with default to avoid hydration mismatch
-    return (
-      <FYContext.Provider value={{ selectedFY: defaultFY, setSelectedFY: () => {}, allFYs: FINANCIAL_YEARS }}>
-        {children}
-      </FYContext.Provider>
-    );
-  }
-
-  return (
-    <FYContext.Provider value={{ selectedFY, setSelectedFY, allFYs: FINANCIAL_YEARS }}>
-      {children}
-    </FYContext.Provider>
+  const value = useMemo(
+    () => ({ selectedFY, setSelectedFY, allFYs: FINANCIAL_YEARS }),
+    [selectedFY, setSelectedFY],
   );
+
+  return <FYContext.Provider value={value}>{children}</FYContext.Provider>;
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────

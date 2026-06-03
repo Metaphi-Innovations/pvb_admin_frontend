@@ -117,16 +117,16 @@ export default function TDSPage() {
 
   const confirmToggle = () => {
     if (!confirmDialog || confirmDialog.type !== "toggle") return;
-    const updated = records.map(r =>
+    const updated: TDSMaster[] = records.map((r) =>
       r.id === confirmDialog.record.id
         ? {
             ...r,
-            status: r.status === "active" ? "inactive" : "active",
+            status: (r.status === "active" ? "inactive" : "active") as TDSMaster["status"],
             updatedBy: "Admin",
             updatedDate: todayStr(),
             lastStatusChange: todayStr(),
           }
-        : r
+        : r,
     );
     saveTDSMasters(updated);
     setRecords(updated);
@@ -141,10 +141,10 @@ export default function TDSPage() {
 
   const confirmDelete = () => {
     if (!confirmDialog || confirmDialog.type !== "delete") return;
-    const updated = records.map(r =>
+    const updated: TDSMaster[] = records.map((r) =>
       r.id === confirmDialog.record.id
-        ? { ...r, status: "archived", updatedBy: "Admin", updatedDate: todayStr() }
-        : r
+        ? { ...r, status: "archived" as const, updatedBy: "Admin", updatedDate: todayStr() }
+        : r,
     );
     saveTDSMasters(updated);
     setRecords(updated);

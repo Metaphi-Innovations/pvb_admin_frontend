@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { memo, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   Search, Bell, HelpCircle, ChevronDown, MapPin, Globe,
@@ -43,7 +43,7 @@ const NOTIFICATIONS = [
 ];
 
 const PENDING_APPROVALS = [
-  { label: "Purchase Orders", count: 4,  href: "/procurement/orders?status=pending" },
+  { label: "Purchase Orders", count: 4,  href: "/procurement/purchase-orders" },
   { label: "Expense Claims",  count: 7,  href: "/hr/expenses?status=pending"        },
   { label: "Leave Requests",  count: 2,  href: "/hr/leaves?status=pending"          },
   { label: "New Farmers",     count: 12, href: "/farmer/registry?status=pending"    },
@@ -228,13 +228,13 @@ function FYSelector() {
 }
 
 // ── Header ────────────────────────────────────────────────────────────────────
-export function AppHeader() {
+function AppHeaderInner() {
   const [selectedState,     setSelectedState]     = useState("All States");
   const [selectedTerritory, setSelectedTerritory] = useState("All Territories");
 
   return (
     <TooltipProvider delayDuration={300}>
-      <header className="h-12 bg-white border-b border-border/50 flex items-center px-4 gap-3 z-30 sticky top-[56px]">
+      <header className="h-12 bg-white border-b border-border/50 flex items-center px-4 gap-3 z-[90] sticky top-[56px]">
 
         {/* Global search */}
         <div className="relative flex-1 max-w-md">
@@ -452,3 +452,5 @@ export function AppHeader() {
     </TooltipProvider>
   );
 }
+
+export const AppHeader = memo(AppHeaderInner);

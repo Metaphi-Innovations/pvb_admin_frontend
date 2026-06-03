@@ -403,9 +403,10 @@ export default function HSNPage() {
                         {record.remarks || "—"}
                       </td>
                       <td className="px-4 py-2">
-                        <button
-                          onClick={() => handleToggleStatus(record)}
-                          className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg transition-colors bg-muted/50 hover:bg-muted"
+                        <div
+                          role="presentation"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-muted/50"
                         >
                           <span
                             className={cn(
@@ -420,9 +421,8 @@ export default function HSNPage() {
                           <Switch
                             checked={record.status === "active"}
                             onCheckedChange={() => handleToggleStatus(record)}
-                            onClick={e => e.stopPropagation()}
                           />
-                        </button>
+                        </div>
                       </td>
                       <td className="px-4 py-2 text-right">
                         <DropdownMenu>

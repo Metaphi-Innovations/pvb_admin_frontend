@@ -96,7 +96,11 @@ export default function NewCustomerPage() {
   }
 
   if (allowed === null) {
-    return <AppLayout />;
+    return (
+      <AppLayout>
+        <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div>
+      </AppLayout>
+    );
   }
 
   return (

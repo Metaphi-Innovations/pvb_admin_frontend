@@ -4,7 +4,7 @@ export interface TDSMaster {
   id: number;
   tdsCode: string;           // e.g., "194C", "194J", "194H"
   tdsRate: number;           // Main TDS rate percentage (e.g., 5, 10, 20)
-  status: "active" | "inactive";
+  status: "active" | "inactive" | "archived";
   remarks?: string;
   createdBy: string;
   createdDate: string;       // YYYY-MM-DD
