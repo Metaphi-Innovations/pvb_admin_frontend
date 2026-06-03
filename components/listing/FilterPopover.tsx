@@ -8,6 +8,8 @@ import { Filter, X, Search, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ColumnConfig, FilterValue } from "./types";
 
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+
 interface FilterPopoverProps {
   column: ColumnConfig;
   value?: FilterValue;
@@ -116,29 +118,15 @@ export function FilterPopover({ column, value, onChange }: FilterPopoverProps) {
 
         {column.filterType === "dropdown" && (
           <div className="space-y-3">
-            <div className="relative">
-              <select
-                value={selectedDropdownValues[0] || ""}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setSelectedDropdownValues(val ? [val] : []);
-                }}
-                className="w-full h-8 px-2.5 text-xs border border-border rounded-lg bg-background text-foreground appearance-none pr-8 cursor-pointer focus:outline-none focus:ring-1 focus:ring-brand-500 focus:border-brand-500 font-medium"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                  backgroundRepeat: "no-repeat",
-                  backgroundPosition: "right 10px center",
-                  backgroundSize: "14px",
-                }}
-              >
-                <option value="">Select option...</option>
-                {column.filterOptions?.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <AutocompleteSelect
+              options={column.filterOptions || []}
+              value={selectedDropdownValues[0] || ""}
+              onChange={(val) => {
+                setSelectedDropdownValues(val ? [val] : []);
+              }}
+              placeholder="Select option..."
+              searchPlaceholder={`Search ${column.header.toLowerCase()}...`}
+            />
             <div className="flex items-center justify-end gap-2 pt-1 border-t">
               <Button
                 variant="ghost"

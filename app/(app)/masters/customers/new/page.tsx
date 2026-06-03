@@ -96,7 +96,7 @@ export default function NewCustomerPage() {
   }
 
   if (allowed === null) {
-    return <AppLayout />;
+    return <AppLayout><div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading...</div></AppLayout>;
   }
 
   return (

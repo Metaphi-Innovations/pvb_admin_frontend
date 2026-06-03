@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { MiniKPICard } from "@/components/ui/KPICard";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { QcPassedStockRecord, RejectedStockRecord, GrnPendingStockRecord } from "./types";
@@ -422,17 +422,17 @@ export default function StockOverviewPage() {
             {/* Warehouse Dropdown */}
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-muted-foreground">Warehouse:</span>
-              <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
-                <SelectTrigger className="h-9 w-[200px] text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none">
-                  <SelectValue placeholder="All Warehouses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All">All Warehouses</SelectItem>
-                  {WAREHOUSE_OPTIONS.map(w => (
-                    <SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <AutocompleteSelect
+                options={[
+                  { value: "All", label: "All Warehouses" },
+                  ...WAREHOUSE_OPTIONS
+                ]}
+                value={selectedWarehouse}
+                onChange={setSelectedWarehouse}
+                placeholder="All Warehouses"
+                searchPlaceholder="Search warehouse..."
+                className="h-9 w-[200px] text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none"
+              />
             </div>
           </div>
 

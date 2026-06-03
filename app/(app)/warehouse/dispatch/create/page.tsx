@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { ArrowLeft, Truck, Building, Package, CheckSquare, Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getPackedOrdersByWarehouse, saveDispatch, generateDispatchNumber } from "../services";
@@ -146,15 +146,17 @@ export default function CreateDispatchPage() {
             </div>
             <div>
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Warehouse</p>
-              <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
-                <SelectTrigger className="h-8 text-xs mt-1.5 rounded-lg border-border bg-white">
-                  <SelectValue placeholder="Select warehouse" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All">All Warehouses</SelectItem>
-                  {WAREHOUSE_OPTIONS.map(w => <SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+               <AutocompleteSelect
+                options={[
+                  { value: "All", label: "All Warehouses" },
+                  ...WAREHOUSE_OPTIONS
+                ]}
+                value={selectedWarehouse}
+                onChange={setSelectedWarehouse}
+                placeholder="Select warehouse"
+                searchPlaceholder="Search warehouse..."
+                className="h-8 text-xs mt-1.5 rounded-lg border-border bg-white"
+              />
             </div>
             <div>
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Dispatch Date *</p>
@@ -174,14 +176,14 @@ export default function CreateDispatchPage() {
             </div>
             <div>
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Delivery Status</p>
-              <Select value={deliveryStatus} onValueChange={setDeliveryStatus}>
-                <SelectTrigger className="h-8 text-xs mt-1.5 rounded-lg border-border bg-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {DELIVERY_STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <AutocompleteSelect
+                options={DELIVERY_STATUS_OPTIONS}
+                value={deliveryStatus}
+                onChange={setDeliveryStatus}
+                placeholder="Select status"
+                searchPlaceholder="Search status..."
+                className="h-8 text-xs mt-1.5 rounded-lg border-border bg-white"
+              />
             </div>
           </div>
         </div>

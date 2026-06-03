@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { ArrowLeft, Truck, Package, Save } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import { getDispatchById, saveDispatch } from "../../services";
@@ -91,25 +91,25 @@ export default function EditDispatchPage() {
             </div>
             <div>
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Warehouse</p>
-              <Select value={record.warehouse} onValueChange={v => handleChange("warehouse", v)}>
-                <SelectTrigger className="h-8 text-xs mt-1.5 rounded-lg border-border">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {WAREHOUSE_OPTIONS.map(w => <SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <AutocompleteSelect
+                options={WAREHOUSE_OPTIONS}
+                value={record.warehouse}
+                onChange={v => handleChange("warehouse", v)}
+                placeholder="Select warehouse"
+                searchPlaceholder="Search warehouse..."
+                className="h-8 text-xs mt-1.5 rounded-lg border-border bg-white"
+              />
             </div>
             <div>
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Delivery Status</p>
-              <Select value={record.deliveryStatus} onValueChange={v => handleChange("deliveryStatus", v)}>
-                <SelectTrigger className="h-8 text-xs mt-1.5 rounded-lg border-border">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {DELIVERY_STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <AutocompleteSelect
+                options={DELIVERY_STATUS_OPTIONS}
+                value={record.deliveryStatus}
+                onChange={v => handleChange("deliveryStatus", v)}
+                placeholder="Select status"
+                searchPlaceholder="Search status..."
+                className="h-8 text-xs mt-1.5 rounded-lg border-border bg-white"
+              />
             </div>
           </div>
         </div>

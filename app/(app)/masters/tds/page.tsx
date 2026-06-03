@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -121,13 +121,13 @@ export default function TDSPage() {
       r.id === confirmDialog.record.id
         ? {
             ...r,
-            status: r.status === "active" ? "inactive" : "active",
+            status: (r.status === "active" ? "inactive" : "active") as "active" | "inactive" | "archived",
             updatedBy: "Admin",
             updatedDate: todayStr(),
             lastStatusChange: todayStr(),
           }
         : r
-    );
+    ) as TDSMaster[];
     saveTDSMasters(updated);
     setRecords(updated);
     setConfirmDialog(null);
@@ -143,9 +143,9 @@ export default function TDSPage() {
     if (!confirmDialog || confirmDialog.type !== "delete") return;
     const updated = records.map(r =>
       r.id === confirmDialog.record.id
-        ? { ...r, status: "archived", updatedBy: "Admin", updatedDate: todayStr() }
+        ? { ...r, status: "archived" as const, updatedBy: "Admin", updatedDate: todayStr() }
         : r
-    );
+    ) as TDSMaster[];
     saveTDSMasters(updated);
     setRecords(updated);
     setConfirmDialog(null);

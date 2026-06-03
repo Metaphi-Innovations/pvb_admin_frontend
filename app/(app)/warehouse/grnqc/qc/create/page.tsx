@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, Suspense } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { saveQcRecord, getQcRecords } from "../mock-data";
 import { QcItem, QcRecord, QcStatus } from "../types";
 import { cn } from "@/lib/utils";
 
-export default function CreateQcPage() {
+function CreateQcForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const grnId = searchParams.get("grnId") || "";
@@ -310,5 +310,13 @@ export default function CreateQcPage() {
         </div>
       </div>
     </AppLayout>
+  );
+}
+
+export default function CreateQcPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading...</div>}>
+      <CreateQcForm />
+    </Suspense>
   );
 }

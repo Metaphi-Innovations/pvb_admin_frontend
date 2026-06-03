@@ -9,13 +9,7 @@ import { useRouter } from "next/navigation";
 import { MOCK_POS, saveGrnRecord, getGrnRecords } from "../mock-data";
 import { GrnItem, GrnBatch, GrnRecord, GrnStatus } from "../types";
 import { cn } from "@/lib/utils";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 
 export default function GenerateGrnPage() {
   const router = useRouter();
@@ -214,18 +208,14 @@ export default function GenerateGrnPage() {
 
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">PO Number</label>
-              <Select value={selectedPoNo} onValueChange={handlePoChange}>
-                <SelectTrigger className="h-8 text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none">
-                  <SelectValue placeholder="Select PO..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {MOCK_POS.map((po) => (
-                    <SelectItem key={po.poNumber} value={po.poNumber} className="text-xs py-1.5 pl-7 pr-2 cursor-pointer">
-                      {po.poNumber}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <AutocompleteSelect
+                options={MOCK_POS.map((po) => ({ value: po.poNumber, label: po.poNumber }))}
+                value={selectedPoNo}
+                onChange={handlePoChange}
+                placeholder="Select PO..."
+                searchPlaceholder="Search PO..."
+                className="h-8 text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none"
+              />
             </div>
 
             <div className="space-y-1">
@@ -235,17 +225,19 @@ export default function GenerateGrnPage() {
 
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Warehouse Destination</label>
-              <Select value={warehouse} onValueChange={setWarehouse}>
-                <SelectTrigger className="h-8 text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none">
-                  <SelectValue placeholder="Select Warehouse..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Central Warehouse" className="text-xs py-1.5 pl-7 pr-2 cursor-pointer">Central Warehouse</SelectItem>
-                  <SelectItem value="North Zone Hub" className="text-xs py-1.5 pl-7 pr-2 cursor-pointer">North Zone Hub</SelectItem>
-                  <SelectItem value="South Zone Depot" className="text-xs py-1.5 pl-7 pr-2 cursor-pointer">South Zone Depot</SelectItem>
-                  <SelectItem value="West Zone Hub" className="text-xs py-1.5 pl-7 pr-2 cursor-pointer">West Zone Hub</SelectItem>
-                </SelectContent>
-              </Select>
+              <AutocompleteSelect
+                options={[
+                  { value: "Central Warehouse", label: "Central Warehouse" },
+                  { value: "North Zone Hub", label: "North Zone Hub" },
+                  { value: "South Zone Depot", label: "South Zone Depot" },
+                  { value: "West Zone Hub", label: "West Zone Hub" }
+                ]}
+                value={warehouse}
+                onChange={setWarehouse}
+                placeholder="Select Warehouse..."
+                searchPlaceholder="Search warehouse..."
+                className="h-8 text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none"
+              />
             </div>
 
             <div className="space-y-1">
@@ -344,21 +336,14 @@ export default function GenerateGrnPage() {
                     {batches.map((b, idx) => (
                       <tr key={idx} className="border-b border-border/50">
                         <td className="px-4 py-2 text-xs">
-                           <Select
+                           <AutocompleteSelect
+                             options={items.map((it) => ({ value: it.productId, label: it.productName }))}
                              value={b.productId}
-                             onValueChange={(val) => handleBatchUpdate(idx, "productId", val)}
-                           >
-                             <SelectTrigger className="h-8 text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none">
-                               <SelectValue placeholder="Select product..." />
-                             </SelectTrigger>
-                             <SelectContent>
-                               {items.map((it) => (
-                                 <SelectItem key={it.productId} value={it.productId} className="text-xs py-1.5 pl-7 pr-2 cursor-pointer">
-                                   {it.productName}
-                                 </SelectItem>
-                               ))}
-                             </SelectContent>
-                           </Select>
+                             onChange={(val) => handleBatchUpdate(idx, "productId", val)}
+                             placeholder="Select product..."
+                             searchPlaceholder="Search product..."
+                             className="h-8 text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none"
+                           />
                         </td>
                         <td className="px-4 py-2">
                           <Input

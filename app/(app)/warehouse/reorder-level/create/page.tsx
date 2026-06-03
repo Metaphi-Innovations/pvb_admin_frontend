@@ -4,7 +4,7 @@ import React, { useState, useEffect, Suspense } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { ArrowLeft, Activity, Package, Info, Warehouse } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { saveReorder } from "../services";
@@ -102,22 +102,21 @@ function CreateReorderLevelForm() {
             {!fromOverview ? (
               <div>
                 <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-1.5">Warehouse *</p>
-                <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
-                  <SelectTrigger className="h-8 text-xs rounded-lg border-border bg-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All">
-                      <div className="flex items-center gap-2">
-                        <Warehouse className="w-3.5 h-3.5 text-brand-500" />
-                        All Warehouses
-                      </div>
-                    </SelectItem>
-                    {WAREHOUSE_OPTIONS.map(w => (
-                      <SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <AutocompleteSelect
+                  options={[
+                    {
+                      value: "All",
+                      label: "All Warehouses",
+                      icon: <Warehouse className="w-3.5 h-3.5 text-brand-500" />,
+                    },
+                    ...WAREHOUSE_OPTIONS,
+                  ]}
+                  value={selectedWarehouse}
+                  onChange={setSelectedWarehouse}
+                  placeholder="Select warehouse"
+                  searchPlaceholder="Search warehouse..."
+                  className="h-8 text-xs rounded-lg border-border bg-white"
+                />
               </div>
             ) : (
               /* Overview flow: show locked "All Warehouses" chip */
@@ -133,16 +132,15 @@ function CreateReorderLevelForm() {
             {/* Product */}
             <div>
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-1.5">Product *</p>
-              <Select value={product} onValueChange={setProduct}>
-                <SelectTrigger className={`h-8 text-xs rounded-lg border-border bg-white ${errors.product ? "border-red-400" : ""}`}>
-                  <SelectValue placeholder="Select product" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRODUCT_OPTIONS.map(p => (
-                    <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <AutocompleteSelect
+                options={PRODUCT_OPTIONS}
+                value={product}
+                onChange={setProduct}
+                placeholder="Select product"
+                searchPlaceholder="Search product..."
+                error={!!errors.product}
+                className="h-8 text-xs rounded-lg border-border bg-white"
+              />
               {errors.product && <p className="text-[10px] text-red-500 font-semibold mt-1">{errors.product}</p>}
             </div>
 

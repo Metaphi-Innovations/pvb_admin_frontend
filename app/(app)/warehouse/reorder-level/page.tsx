@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { MiniKPICard } from "@/components/ui/KPICard";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -277,16 +277,14 @@ export default function ReorderLevelPage() {
             {activeTab === "warehouse-wise" && (
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Warehouse:</span>
-                <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
-                  <SelectTrigger className="h-9 w-[200px] text-xs rounded-lg border-border bg-white focus:ring-1 focus:ring-brand-500">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {WAREHOUSE_OPTIONS.map(w => (
-                      <SelectItem key={w.value} value={w.value}>{w.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <AutocompleteSelect
+                  options={WAREHOUSE_OPTIONS}
+                  value={selectedWarehouse}
+                  onChange={setSelectedWarehouse}
+                  placeholder="Select warehouse..."
+                  searchPlaceholder="Search warehouse..."
+                  className="h-9 w-[200px] text-xs rounded-lg border-border bg-white focus:ring-1 focus:ring-brand-500"
+                />
                 <Button
                   size="sm"
                   className="h-9 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5 whitespace-nowrap"

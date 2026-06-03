@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -420,7 +420,6 @@ export default function HSNPage() {
                           <Switch
                             checked={record.status === "active"}
                             onCheckedChange={() => handleToggleStatus(record)}
-                            onClick={e => e.stopPropagation()}
                           />
                         </button>
                       </td>

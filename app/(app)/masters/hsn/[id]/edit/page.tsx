@@ -47,7 +47,7 @@ export default function EditHSNPage() {
     setForm({
       hsnCode: found.hsnCode,
       gstRate: found.gstRate,
-      uom: found.uom,
+      uom: found.uom || "",
       status: found.status,
       remarks: found.remarks || "",
     });
