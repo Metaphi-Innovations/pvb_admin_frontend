@@ -134,7 +134,7 @@ export function DataTable<T = Record<string, unknown>>({
   };
 
   return (
-    <div className={cn("bg-white rounded-card border border-border shadow-card overflow-hidden", className)}>
+    <div className={cn("page-shell overflow-hidden", className)}>
       {/* Toolbar */}
       <div className="px-4 py-3 border-b border-border flex items-center gap-3 flex-wrap">
         {/* Search */}
@@ -230,10 +230,10 @@ export function DataTable<T = Record<string, unknown>>({
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto max-h-[calc(100vh-280px)]">
         <table className="w-full">
-          <thead>
-            <tr className="bg-muted/30 border-b border-border">
+          <thead className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm shadow-[0_1px_0_0_hsl(var(--border))]">
+            <tr className="border-b border-border/80">
               {bulkActions && (
                 <th className="w-10 px-4 py-2.5">
                   <Checkbox

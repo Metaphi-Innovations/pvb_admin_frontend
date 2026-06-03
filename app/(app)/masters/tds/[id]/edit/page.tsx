@@ -46,7 +46,7 @@ export default function EditTDSPage() {
     setForm({
       tdsCode: found.tdsCode,
       tdsRate: found.tdsRate,
-      status: found.status,
+      status: found.status === "archived" ? "inactive" : found.status,
       remarks: found.remarks || "",
     });
   }, [id, router]);
