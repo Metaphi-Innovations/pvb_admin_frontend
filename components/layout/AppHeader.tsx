@@ -46,7 +46,7 @@ const PENDING_APPROVALS = [
   { label: "Purchase Orders", count: 4,  href: "/procurement/purchase-orders" },
   { label: "Expense Claims",  count: 7,  href: "/hr/expenses?status=pending"        },
   { label: "Leave Requests",  count: 2,  href: "/hr/leaves?status=pending"          },
-  { label: "New Farmers",     count: 12, href: "/farmer/registry?status=pending"    },
+  { label: "New Farmers",     count: 12, href: "/farmer"                            },
 ];
 
 const totalPending = PENDING_APPROVALS.reduce((s, a) => s + a.count, 0);
