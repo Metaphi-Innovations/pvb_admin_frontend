@@ -16,6 +16,7 @@ import {
   Settings2,
   Receipt,
   BadgeCheck,
+  Warehouse
 } from "lucide-react";
 
 export interface NavChild {
@@ -189,13 +190,14 @@ export const NAV_ITEMS: NavItem[] = [
     id: "farmer",
     label: "Farmer",
     icon: Wheat,
-    children: [
-      { label: "Farmer Registry", href: "/farmer/registry" },
-      { label: "Field Surveys", href: "/farmer/surveys" },
-      { label: "Crop Calendar", href: "/farmer/crop-calendar" },
-      { label: "Input Distribution", href: "/farmer/inputs" },
-      { label: "FPO Management", href: "/farmer/fpo" },
-    ],
+    href: "/farmer",
+    // children: [
+    //   { label: "Farmer Registry", href: "/farmer/registry" },
+    //   { label: "Field Surveys", href: "/farmer/surveys" },
+    //   { label: "Crop Calendar", href: "/farmer/crop-calendar" },
+    //   { label: "Input Distribution", href: "/farmer/inputs" },
+    //   { label: "FPO Management", href: "/farmer/fpo" },
+    // ],
   },
   {
     id: "event",
@@ -214,6 +216,18 @@ export const NAV_ITEMS: NavItem[] = [
     children: [
       { label: "Listing Demo", href: "/listing-demo" },
       { label: "Form Demo", href: "/form-demo" },
+    ],
+  },
+  {
+    id: "warehouse",
+    label: "Warehouse",
+    icon: Warehouse,
+    children: [
+      { label: "GRN & QC", href: "/warehouse/grnqc" },
+      { label: "Stock Overview", href: "/warehouse/stockoverview" },
+      { label: "Packing", href: "/warehouse/packing" },
+      { label: "Dispatch", href: "/warehouse/dispatch" },
+      { label: "Reorder Levels", href: "/warehouse/reorder-levels" },
     ],
   },
   {

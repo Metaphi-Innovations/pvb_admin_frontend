@@ -53,6 +53,9 @@ export const TopNavbar = memo(function TopNavbar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const search = searchParams.toString() ? `?${searchParams.toString()}` : "";
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(false);
 
   const activeById = useMemo(() => {
     const map = new Map<string, boolean>();
@@ -62,14 +65,45 @@ export const TopNavbar = memo(function TopNavbar() {
     return map;
   }, [pathname, search]);
 
+  const checkScroll = () => {
+    if (scrollRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
+      setShowLeftArrow(scrollLeft > 4);
+      setShowRightArrow(scrollWidth - scrollLeft - clientWidth > 4);
+    }
+  };
+
+  useEffect(() => {
+    checkScroll();
+    const el = scrollRef.current;
+    if (el) {
+      el.addEventListener("scroll", checkScroll, { passive: true });
+      window.addEventListener("resize", checkScroll);
+    }
+    const timer = setTimeout(checkScroll, 100);
+
+    return () => {
+      if (el) {
+        el.removeEventListener("scroll", checkScroll);
+      }
+      window.removeEventListener("resize", checkScroll);
+      clearTimeout(timer);
+    };
+  }, []);
+
+  const scroll = (direction: "left" | "right") => {
+    if (scrollRef.current) {
+      const { clientWidth } = scrollRef.current;
+      const scrollAmount = clientWidth * 0.6;
+      scrollRef.current.scrollBy({
+        left: direction === "left" ? -scrollAmount : scrollAmount,
+        behavior: "smooth",
+      });
+    }
+  };
+
   return (
     <TooltipProvider delayDuration={300}>
-      {/*
-        IMPORTANT: No overflow-x-auto on the nav items wrapper.
-        overflow-x:auto forces overflow-y:auto per CSS spec, which clips
-        absolutely-positioned children (dropdowns) that extend below the container.
-        We use overflow:visible here and portal-render dropdowns instead.
-      */}
       <nav className="h-[56px] bg-white border-b border-border/70 shadow-navbar flex items-center z-[100] sticky top-0 isolate">
         {/* Logo */}
         <PrefetchLink
@@ -85,64 +119,98 @@ export const TopNavbar = memo(function TopNavbar() {
           </div>
         </PrefetchLink>
 
-        {/* Nav items — overflow:visible so portal dropdowns are not clipped */}
-        <div className="flex items-center h-full px-1 gap-0.5 flex-1 min-w-0">
-          {NAV_ITEMS.map((item) => {
-            const active = activeById.get(item.id) ?? false;
+        {/* Scrollable Container Wrapper */}
+        <div className="flex-1 min-w-0 h-full flex items-center px-2">
+          {/* Left button */}
+          {showLeftArrow && (
+            <div className="flex items-center pr-2 flex-shrink-0 z-10">
+              <button
+                type="button"
+                onClick={() => scroll("left")}
+                className="w-7 h-7 rounded-full bg-brand-50 border border-brand-200 shadow-md flex items-center justify-center text-brand-600 hover:bg-brand-100 active:scale-95 transition-all flex-shrink-0"
+                aria-label="Scroll left"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
-            // Icon-only (Settings)
-            if (item.iconOnly) {
-              return (
-                <Tooltip key={item.id}>
-                  <TooltipTrigger asChild>
-                    <PrefetchLink
-                      href={item.href!}
-                      className={cn(
-                        "w-9 h-9 rounded-lg flex items-center justify-center ml-auto transition-all duration-150",
-                        active
-                          ? "bg-brand-100 text-brand-600"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                      )}
-                    >
-                      <item.icon className="w-4 h-4" />
-                    </PrefetchLink>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" sideOffset={6}>{item.label}</TooltipContent>
-                </Tooltip>
-              );
-            }
+          {/* Nav items — scrollable container */}
+          <div
+            ref={scrollRef}
+            className="flex items-center h-full flex-1 min-w-0 px-1 gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth"
+          >
+            {NAV_ITEMS.map((item) => {
+              const active = activeById.get(item.id) ?? false;
 
-            // Simple link (no dropdown)
-            if (item.href && !item.children && !item.groupedChildren) {
+              // Icon-only (Settings)
+              if (item.iconOnly) {
+                return (
+                  <Tooltip key={item.id}>
+                    <TooltipTrigger asChild>
+                      <PrefetchLink
+                        href={item.href!}
+                        className={cn(
+                          "w-9 h-9 rounded-lg flex items-center justify-center ml-auto transition-all duration-150 flex-shrink-0",
+                          active
+                            ? "bg-brand-100 text-brand-600"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                        )}
+                      >
+                        <item.icon className="w-4 h-4" />
+                      </PrefetchLink>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" sideOffset={6}>{item.label}</TooltipContent>
+                  </Tooltip>
+                );
+              }
+
+              // Simple link (no dropdown)
+              if (item.href && !item.children && !item.groupedChildren) {
+                return (
+                  <PrefetchLink
+                    key={item.id}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 h-9 rounded-lg text-[13px] font-medium whitespace-nowrap flex-shrink-0",
+                      "transition-all duration-150 cursor-pointer border-l-2",
+                      active
+                        ? "nav-active-indicator"
+                        : "text-foreground border-transparent hover:bg-brand-50/40 hover:text-brand-700",
+                    )}
+                  >
+                    <item.icon className="w-3.5 h-3.5 flex-shrink-0" />
+                    {item.label}
+                  </PrefetchLink>
+                );
+              }
+
+              // Dropdown — portal-rendered to escape overflow clipping
               return (
-                <PrefetchLink
+                <NavDropdown
                   key={item.id}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 h-9 rounded-lg text-[13px] font-medium whitespace-nowrap",
-                    "transition-all duration-150 cursor-pointer border-l-2",
-                    active
-                      ? "nav-active-indicator"
-                      : "text-foreground border-transparent hover:bg-brand-50/40 hover:text-brand-700",
-                  )}
-                >
-                  <item.icon className="w-3.5 h-3.5 flex-shrink-0" />
-                  {item.label}
-                </PrefetchLink>
+                  item={item}
+                  active={active}
+                  pathname={pathname}
+                  search={search}
+                />
               );
-            }
+            })}
+          </div>
 
-            // Dropdown — portal-rendered to escape overflow clipping
-            return (
-              <NavDropdown
-                key={item.id}
-                item={item}
-                active={active}
-                pathname={pathname}
-                search={search}
-              />
-            );
-          })}
+          {/* Right button */}
+          {showRightArrow && (
+            <div className="flex items-center pl-2 flex-shrink-0 z-10">
+              <button
+                type="button"
+                onClick={() => scroll("right")}
+                className="w-7 h-7 rounded-full bg-brand-50 border border-brand-200 shadow-md flex items-center justify-center text-brand-600 hover:bg-brand-100 active:scale-95 transition-all flex-shrink-0"
+                aria-label="Scroll right"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
       </nav>
     </TooltipProvider>
