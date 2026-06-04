@@ -1,16 +1,28 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Users, Plus, Search, SlidersHorizontal, X, ShieldAlert,
-  ChevronsUpDown, ChevronDown, Eye, Edit2,
-  CheckCircle2, XCircle, Ban, ChevronLeft, ChevronRight, UserCheck, UserX,
+  ChevronsUpDown, ChevronDown, Eye, Edit2, MoreVertical,
+  CheckCircle2, XCircle, Ban, ChevronLeft, ChevronRight,
+  UserCheck, UserX, CircleDashed, Ban as BanIcon,
+  Filter,
 } from "lucide-react";
 import {
   type Customer,
@@ -22,44 +34,131 @@ import {
   formatMobile,
   formatCreditLimit,
 } from "./customer-data";
-import { CustomerStatusControl } from "./components/CustomerStatusControl";
 import { readCustomerPermissions } from "./customer-permissions";
 
 type SortKey = "customerName" | "status" | "creditLimit";
 
-function SortTh({
+function TableTh({
   label,
   colKey,
   sortKey,
   sortDir,
   onSort,
+  filterValues,
+  filterOptions,
+  onFilterChange,
   className,
 }: {
   label: string;
-  colKey: SortKey;
-  sortKey: SortKey;
-  sortDir: "asc" | "desc";
-  onSort: (k: SortKey) => void;
+  colKey: string;
+  sortKey?: SortKey;
+  sortDir?: "asc" | "desc";
+  onSort?: (k: SortKey) => void;
+  filterValues?: string[];
+  filterOptions?: string[];
+  onFilterChange?: (vals: string[]) => void;
   className?: string;
 }) {
+  const sortable = !!onSort;
   const active = sortKey === colKey;
+  const selected = filterValues?.[0] ?? "";
+  const [open, setOpen] = useState(false);
+  const [draftValue, setDraftValue] = useState(selected);
+
+  useEffect(() => {
+    if (open) setDraftValue(selected);
+  }, [open, selected]);
   return (
     <th
-      onClick={() => onSort(colKey)}
       className={cn(
-        "px-4 py-3 text-left text-xs font-semibold cursor-pointer select-none group whitespace-nowrap",
+        "h-11 px-3 text-left text-[13px] font-semibold select-none group whitespace-nowrap",
         active && "bg-brand-50/60",
         className,
       )}
     >
-      <div className="flex items-center gap-1.5">
-        <span className={active ? "text-brand-700" : "text-foreground"}>{label}</span>
-        {active ? (
-          <ChevronDown
-            className={cn("w-3 h-3 text-brand-600 transition-transform", sortDir === "desc" && "rotate-180")}
-          />
-        ) : (
-          <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground" />
+      <div className="flex items-center justify-between gap-2">
+        <div
+          className={cn("flex min-w-0 flex-1 items-center gap-1.5", sortable && "cursor-pointer")}
+          onClick={() => sortable && onSort(colKey as SortKey)}
+        >
+          <span className={active ? "text-brand-700" : "text-foreground"}>{label}</span>
+          {sortable && (
+            <span className="ml-auto inline-flex shrink-0 items-center gap-0.5">
+              {active ? (
+                <ChevronDown
+                  className={cn("w-3 h-3 text-brand-600 transition-transform", sortDir === "desc" && "rotate-180")}
+                />
+              ) : (
+                <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground" />
+              )}
+            </span>
+          )}
+        </div>
+        
+        {onFilterChange && (
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                onClick={(e) => e.stopPropagation()}
+                className={cn(
+                  "inline-flex shrink-0 items-center justify-center rounded p-1 transition-colors hover:bg-muted",
+                  selected ? "text-brand-600 bg-brand-50" : "text-muted-foreground/40 hover:text-muted-foreground/80",
+                )}
+              >
+                <Filter className="w-3 h-3" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              side="bottom"
+              align="start"
+              sideOffset={8}
+              avoidCollisions={false}
+              className="z-[9999] w-[220px] p-2.5 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="space-y-2">
+                <div className="text-[11px] font-medium text-muted-foreground">Select</div>
+                <Select value={draftValue || "all"} onValueChange={(value) => setDraftValue(value === "all" ? "" : value)}>
+                  <SelectTrigger className="h-9 w-full rounded-md border border-border bg-white px-2 text-xs text-foreground shadow-sm data-[state=open]:border-orange-500 data-[state=open]:ring-1 data-[state=open]:ring-orange-200">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent
+                    position="popper"
+                    side="bottom"
+                    align="start"
+                    sideOffset={4}
+                    avoidCollisions={false}
+                    className="z-[9999] bg-white border-border shadow-lg"
+                  >
+                    <SelectItem value="all" className="text-xs">
+                      All
+                    </SelectItem>
+                    {(filterOptions ?? []).map((option) => (
+                      <SelectItem key={option} value={option} className="text-xs hover:bg-orange-50 focus:bg-orange-50">
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center justify-end gap-1.5 pt-1">
+                  <Button type="button" variant="outline" className="h-8 px-2.5 text-[11px]" onClick={() => setOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-8 px-2.5 text-[11px] bg-orange-500 hover:bg-orange-600 text-white"
+                    onClick={() => {
+                      onFilterChange(draftValue ? [draftValue] : []);
+                      setOpen(false);
+                    }}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
         )}
       </div>
     </th>
@@ -80,7 +179,7 @@ function KpiCard({
   color?: string;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
+    <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
       <div
         className={cn(
           "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
@@ -90,14 +189,27 @@ function KpiCard({
         <Icon className={cn("w-4 h-4", accent ? "text-white" : "text-muted-foreground")} />
       </div>
       <div>
-        <p className="text-base font-bold text-foreground leading-none">{value}</p>
+        <p className="text-base font-bold leading-none text-foreground">{value}</p>
         <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{label}</p>
       </div>
     </div>
   );
 }
 
-const PAGE_SIZE = 10;
+function StatusBadge({ status }: { status: CustomerStatus }) {
+  const cfg = {
+    active: { className: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+    inactive: { className: "border-slate-200 bg-slate-100 text-slate-700" },
+    draft: { className: "border-amber-200 bg-amber-50 text-amber-700" },
+    blocked: { className: "border-red-200 bg-red-50 text-red-700" },
+  }[status];
+
+  return (
+    <Badge variant="outline" className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium", cfg.className)}>
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+    </Badge>
+  );
+}
 
 export default function CustomersPage() {
   const [records, setRecords] = useState<Customer[]>([]);
@@ -108,7 +220,19 @@ export default function CustomersPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [perms, setPerms] = useState(readCustomerPermissions);
+  const [colFilters, setColFilters] = useState<Record<string, string[]>>({});
+
+  const handleColFilter = (key: string, vals: string[]) => {
+    setColFilters((prev) => {
+      const next = { ...prev };
+      if (!vals.length) delete next[key];
+      else next[key] = vals;
+      return next;
+    });
+    setPage(1);
+  };
 
   useEffect(() => {
     setRecords(loadCustomers());
@@ -148,6 +272,8 @@ export default function CustomersPage() {
     showToast("Status updated.");
   };
 
+  const markDraft = (customerId: number) => updateStatus(customerId, "draft");
+
   const filtered = useMemo(() => {
     let data = [...records];
     if (search.trim()) {
@@ -158,12 +284,37 @@ export default function CustomersPage() {
           r.customerCode.toLowerCase().includes(q) ||
           r.mobile.includes(q) ||
           r.email.toLowerCase().includes(q) ||
+          r.gstin.toLowerCase().includes(q) ||
+          r.address.toLowerCase().includes(q) ||
           r.stateName.toLowerCase().includes(q) ||
+          r.districtName.toLowerCase().includes(q) ||
           r.territoryName.toLowerCase().includes(q),
       );
     }
+
     if (filterStatus.length) data = data.filter((r) => filterStatus.includes(r.status));
     if (filterType.length) data = data.filter((r) => filterType.includes(r.customerType));
+
+    if (Object.keys(colFilters).length > 0) {
+      data = data.filter((r) => {
+        return Object.entries(colFilters).every(([key, vals]) => {
+          if (!vals.length) return true;
+          let rVal = "";
+          if (key === "customerType") {
+            rVal = CUSTOMER_TYPE_LABELS[r.customerType as keyof typeof CUSTOMER_TYPE_LABELS] ?? r.customerType;
+          } else if (key === "creditLimit") {
+            rVal = formatCreditLimit(r.creditLimit);
+          } else if (key === "status") {
+            rVal = r.status;
+          } else if (key === "mobile") {
+            rVal = formatMobile(r.countryCode, r.mobile);
+          } else {
+            rVal = String(r[key as keyof Customer] ?? "");
+          }
+          return vals.some((v) => v.toLowerCase() === rVal.toLowerCase());
+        });
+      });
+    }
 
     data.sort((a, b) => {
       if (sortKey === "creditLimit") {
@@ -175,12 +326,11 @@ export default function CustomersPage() {
       return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
     });
     return data;
-  }, [records, search, filterStatus, filterType, sortKey, sortDir]);
+  }, [records, search, filterStatus, filterType, sortKey, sortDir, colFilters]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const hasFilters = search.trim() !== "" || filterStatus.length > 0 || filterType.length > 0;
-
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const hasFilters = search.trim() !== "" || filterStatus.length > 0 || filterType.length > 0 || Object.keys(colFilters).length > 0;
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
@@ -199,18 +349,18 @@ export default function CustomersPage() {
   const inactive = records.filter((r) => r.status === "inactive").length;
   const blocked = records.filter((r) => r.status === "blocked").length;
 
-  const start = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const end = Math.min(page * PAGE_SIZE, filtered.length);
+  const start = filtered.length === 0 ? 0 : (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, filtered.length);
 
   if (!perms.canView) {
     return (
       <AppLayout>
         <div className="max-w-[1200px] mx-auto py-16 flex flex-col items-center gap-3 text-center">
-          <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center">
+          <div className="flex items-center justify-center w-12 h-12 border rounded-xl bg-amber-50 border-amber-200">
             <ShieldAlert className="w-6 h-6 text-amber-600" />
           </div>
           <h1 className="text-lg font-bold text-foreground">Access restricted</h1>
-          <p className="text-sm text-muted-foreground max-w-md">
+          <p className="max-w-md text-sm text-muted-foreground">
             You do not have permission to view Customer Master. Ask your administrator for the View / Read permission.
           </p>
         </div>
@@ -237,7 +387,7 @@ export default function CustomersPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <KpiCard label="Total Customers" value={total} icon={Users} accent />
           <KpiCard label="Active" value={active} icon={CheckCircle2} color="bg-emerald-50" />
           <KpiCard label="Inactive" value={inactive} icon={XCircle} color="bg-slate-100" />
@@ -254,7 +404,7 @@ export default function CustomersPage() {
                 setPage(1);
               }}
               placeholder="Search name, mobile, state…"
-              className="pl-9 h-8 text-xs"
+              className="h-8 text-xs pl-9"
             />
           </div>
 
@@ -278,7 +428,7 @@ export default function CustomersPage() {
                 )}
               </button>
             </PopoverTrigger>
-            <PopoverContent align="start" className="w-60 p-0">
+            <PopoverContent align="start" className="p-0 w-60">
               <div className="px-3 py-2.5 border-b border-border">
                 <p className="text-xs font-semibold text-foreground">Filter Customers</p>
               </div>
@@ -341,7 +491,7 @@ export default function CustomersPage() {
           {filterStatus.map((v) => (
             <span
               key={v}
-              className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium"
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border rounded-md bg-brand-50 border-brand-200 text-brand-700"
             >
               {v.charAt(0).toUpperCase() + v.slice(1)}
               <button type="button" onClick={() => toggleFilter(filterStatus, setFilterStatus, v)}>
@@ -351,40 +501,109 @@ export default function CustomersPage() {
           ))}
         </div>
 
-        <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
+        <div className="w-full max-w-full overflow-hidden bg-white border shadow-sm border-border rounded-xl">
+          <div className="max-w-full overflow-x-auto overflow-y-hidden">
+            <table className="w-max min-w-full border-collapse table-fixed">
               <thead>
-                <tr className="bg-muted/40 border-b border-border">
-                  <SortTh
+                <tr className="border-b bg-muted/40 border-border">
+                  <TableTh
                     label="Customer Name"
                     colKey="customerName"
                     sortKey={sortKey}
                     sortDir={sortDir}
                     onSort={handleSort}
-                    className="min-w-[200px]"
+                    filterValues={colFilters.customerName}
+                    filterOptions={Array.from(new Set(records.map((r) => r.customerName).filter(Boolean))).sort()}
+                    onFilterChange={(v) => handleColFilter("customerName", v)}
+                    className="w-[190px] pl-4 py-3"
                   />
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap">
-                    Mobile
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap">
-                    Type
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap">
-                    State
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap">
-                    Territory
-                  </th>
-                  <SortTh
+                  <TableTh
+                    label="Mobile Number"
+                    colKey="mobile"
+                    filterValues={colFilters.mobile}
+                    filterOptions={Array.from(new Set(records.map((r) => formatMobile(r.countryCode, r.mobile)).filter(Boolean))).sort()}
+                    onFilterChange={(v) => handleColFilter("mobile", v)}
+                    className="w-[150px]"
+                  />
+                  <TableTh
+                    label="Email Address"
+                    colKey="email"
+                    filterValues={colFilters.email}
+                    filterOptions={Array.from(new Set(records.map((r) => r.email).filter(Boolean))).sort()}
+                    onFilterChange={(v) => handleColFilter("email", v)}
+                    className="w-[190px]"
+                  />
+                  <TableTh
+                    label="GSTIN"
+                    colKey="gstin"
+                    filterValues={colFilters.gstin}
+                    filterOptions={Array.from(new Set(records.map((r) => r.gstin).filter(Boolean))).sort()}
+                    onFilterChange={(v) => handleColFilter("gstin", v)}
+                    className="w-[150px]"
+                  />
+                  <TableTh
+                    label="Customer Type"
+                    colKey="customerType"
+                    filterValues={colFilters.customerType}
+                    filterOptions={Array.from(new Set(records.map((r) => CUSTOMER_TYPE_LABELS[r.customerType] ?? r.customerType).filter(Boolean))).sort()}
+                    onFilterChange={(v) => handleColFilter("customerType", v)}
+                    className="w-[130px]"
+                  />
+                  <TableTh
+                    label="Address"
+                    colKey="address"
+                    filterValues={colFilters.address}
+                    filterOptions={Array.from(new Set(records.map((r) => r.address).filter(Boolean))).sort()}
+                    onFilterChange={(v) => handleColFilter("address", v)}
+                    className="w-[240px]"
+                  />
+                  <TableTh
+                    label="State"
+                    colKey="stateName"
+                    filterValues={colFilters.stateName}
+                    filterOptions={Array.from(new Set(records.map((r) => r.stateName).filter(Boolean))).sort()}
+                    onFilterChange={(v) => handleColFilter("stateName", v)}
+                    className="w-[130px]"
+                  />
+                  <TableTh
+                    label="District"
+                    colKey="districtName"
+                    filterValues={colFilters.districtName}
+                    filterOptions={Array.from(new Set(records.map((r) => r.districtName).filter(Boolean))).sort()}
+                    onFilterChange={(v) => handleColFilter("districtName", v)}
+                    className="w-[130px]"
+                  />
+                  <TableTh
+                    label="Territory"
+                    colKey="territoryName"
+                    filterValues={colFilters.territoryName}
+                    filterOptions={Array.from(new Set(records.map((r) => r.territoryName).filter(Boolean))).sort()}
+                    onFilterChange={(v) => handleColFilter("territoryName", v)}
+                    className="w-[130px]"
+                  />
+                  <TableTh
                     label="Credit Limit"
                     colKey="creditLimit"
                     sortKey={sortKey}
                     sortDir={sortDir}
                     onSort={handleSort}
+                    filterValues={colFilters.creditLimit}
+                    filterOptions={Array.from(new Set(records.map((r) => formatCreditLimit(r.creditLimit)).filter(Boolean))).sort()}
+                    onFilterChange={(v) => handleColFilter("creditLimit", v)}
+                    className="w-[110px]"
                   />
-                  <SortTh label="Status" colKey="status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap w-[220px]">
+                  <TableTh
+                    label="Status"
+                    colKey="status"
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                    filterValues={colFilters.status}
+                    filterOptions={Array.from(new Set(records.map((r) => r.status.charAt(0).toUpperCase() + r.status.slice(1)).filter(Boolean))).sort()}
+                    onFilterChange={(v) => handleColFilter("status", v)}
+                    className="w-[110px] pr-4"
+                  />
+                  <th className="sticky right-0 z-30 w-[96px] min-w-[96px] h-11 px-3 text-left text-[13px] font-semibold whitespace-nowrap bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]">
                     Actions
                   </th>
                 </tr>
@@ -392,9 +611,9 @@ export default function CustomersPage() {
               <tbody>
                 {paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-16 text-center">
+                    <td colSpan={12} className="px-4 text-center py-14">
                       <div className="flex flex-col items-center gap-2">
-                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                        <div className="flex items-center justify-center w-10 h-10 rounded-full bg-muted">
                           <Users className="w-5 h-5 text-muted-foreground" />
                         </div>
                         <p className="text-sm font-medium text-foreground">
@@ -412,81 +631,136 @@ export default function CustomersPage() {
                   paginated.map((r) => (
                     <tr
                       key={r.id}
-                      className="border-b border-border/60 hover:bg-muted/20 transition-colors"
+                      className="align-top transition-colors border-b border-border/60 hover:bg-muted/20"
                     >
-                      <td className="px-4 py-2">
+                      <td className="py-2 pl-4 pr-3">
                         {perms.canView ? (
                           <Link href={`/masters/customers/${r.id}`} className="block group/name">
-                            <p className="text-xs font-semibold text-foreground group-hover/name:text-brand-700">
+                            <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">
                               {r.customerName}
                             </p>
-                            <p className="font-mono text-[11px] text-brand-700 mt-0.5">{r.customerCode}</p>
+                            <p className="font-mono text-[10px] text-brand-700 mt-0.5 leading-3">{r.customerCode}</p>
                           </Link>
                         ) : (
                           <div>
-                            <p className="text-xs font-semibold text-foreground">{r.customerName}</p>
-                            <p className="font-mono text-[11px] text-brand-700 mt-0.5">{r.customerCode}</p>
+                            <p className="text-xs font-semibold leading-4 text-foreground">{r.customerName}</p>
+                            <p className="font-mono text-[10px] text-brand-700 mt-0.5 leading-3">{r.customerCode}</p>
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-2 font-mono text-xs text-foreground whitespace-nowrap">
+                      <td className="px-3 py-2 font-mono text-xs text-foreground whitespace-nowrap">
                         {formatMobile(r.countryCode, r.mobile)}
                       </td>
-                      <td className="px-4 py-2 text-xs text-foreground whitespace-nowrap">
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">
+                        {r.email || "—"}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs text-foreground whitespace-nowrap">
+                        {r.gstin || "—"}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">
                         {CUSTOMER_TYPE_LABELS[r.customerType] ?? r.customerType}
                       </td>
-                      <td className="px-4 py-2 text-xs text-foreground whitespace-nowrap">
+                      <td className="px-3 py-2 text-xs leading-4 text-foreground">
+                        {r.address || "—"}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">
                         {r.stateName || "—"}
                       </td>
-                      <td className="px-4 py-2 text-xs text-foreground whitespace-nowrap">
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">
+                        {r.districtName || "—"}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">
                         {r.territoryName || "—"}
                       </td>
-                      <td className="px-4 py-2 text-xs font-semibold text-foreground whitespace-nowrap">
+                      <td className="px-3 py-2 text-xs font-semibold text-foreground whitespace-nowrap">
                         {formatCreditLimit(r.creditLimit)}
                       </td>
-                      <td className="px-4 py-2">
-                        <CustomerStatusControl
-                          customer={r}
-                          onStatusChange={updateStatus}
-                          canEdit={perms.canEdit}
-                        />
+                      <td className="py-2 pl-3 pr-4">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button type="button" className="inline-flex items-center gap-1.5">
+                              <StatusBadge status={r.status} />
+                              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="w-44">
+                            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
+                              Status Actions
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            {r.status === "active" ? (
+                              <DropdownMenuItem
+                                className="gap-2 text-xs cursor-pointer"
+                                onClick={() => updateStatus(r.id, "inactive")}
+                              >
+                                <UserX className="w-3.5 h-3.5" /> Deactivate
+                              </DropdownMenuItem>
+                            ) : r.status === "inactive" ? (
+                              <DropdownMenuItem
+                                className="gap-2 text-xs cursor-pointer"
+                                onClick={() => updateStatus(r.id, "active")}
+                              >
+                                <UserCheck className="w-3.5 h-3.5" /> Activate
+                              </DropdownMenuItem>
+                            ) : r.status === "draft" ? (
+                              <DropdownMenuItem
+                                className="gap-2 text-xs cursor-pointer"
+                                onClick={() => updateStatus(r.id, "active")}
+                              >
+                                <UserCheck className="w-3.5 h-3.5" /> Activate
+                              </DropdownMenuItem>
+                            ) : null}
+                            {r.status !== "draft" && r.status !== "blocked" && (
+                              <DropdownMenuItem
+                                className="gap-2 text-xs cursor-pointer"
+                                onClick={() => updateStatus(r.id, "blocked")}
+                              >
+                                <BanIcon className="w-3.5 h-3.5" /> Block Customer
+                              </DropdownMenuItem>
+                            )}
+                            {r.status !== "blocked" && (
+                              <DropdownMenuItem
+                                className="gap-2 text-xs cursor-pointer"
+                                onClick={() => markDraft(r.id)}
+                              >
+                                <CircleDashed className="w-3.5 h-3.5" /> Mark as Draft
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </td>
-                      <td className="px-4 py-2">
-                        <div className="flex items-center gap-1 flex-wrap">
-                          {perms.canView && (
-                            <Link href={`/masters/customers/${r.id}`}>
-                              <Button variant="outline" size="sm" className="h-7 text-[11px] px-2 gap-1">
-                                <Eye className="w-3 h-3" /> View
-                              </Button>
-                            </Link>
-                          )}
-                          {perms.canEdit && (
-                            <Link href={`/masters/customers/${r.id}/edit`}>
-                              <Button variant="outline" size="sm" className="h-7 text-[11px] px-2 gap-1">
-                                <Edit2 className="w-3 h-3" /> Edit
-                              </Button>
-                            </Link>
-                          )}
-                          {perms.canEdit && r.status === "active" ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-[11px] px-2 gap-1 text-amber-700 border-amber-200 hover:bg-amber-50"
-                              onClick={() => updateStatus(r.id, "inactive")}
+                      <td className="px-3 py-2 pr-4 sticky right-0 z-20 w-[96px] min-w-[96px] bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center transition-colors rounded-md w-7 h-7 text-muted-foreground hover:bg-muted"
+                              aria-label="Row actions"
                             >
-                              <UserX className="w-3 h-3" /> Deactivate
-                            </Button>
-                          ) : perms.canEdit && (r.status === "inactive" || r.status === "draft") ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-[11px] px-2 gap-1 text-emerald-700 border-emerald-200 hover:bg-emerald-50"
-                              onClick={() => updateStatus(r.id, "active")}
-                            >
-                              <UserCheck className="w-3 h-3" /> Activate
-                            </Button>
-                          ) : null}
-                        </div>
+                              <MoreVertical className="w-3.5 h-3.5" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
+                              Actions
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            {perms.canView && (
+                              <DropdownMenuItem asChild className="gap-2 text-xs cursor-pointer">
+                                <Link href={`/masters/customers/${r.id}`}>
+                                  <Eye className="w-3.5 h-3.5" /> View
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                            {perms.canEdit && (
+                              <DropdownMenuItem asChild className="gap-2 text-xs cursor-pointer">
+                                <Link href={`/masters/customers/${r.id}/edit`}>
+                                  <Edit2 className="w-3.5 h-3.5" /> Edit
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </td>
                     </tr>
                   ))
@@ -506,12 +780,26 @@ export default function CustomersPage() {
                 </>
               )}
             </p>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="px-2 text-xs bg-white border rounded-md h-7 border-border text-foreground"
+              >
+                {[10, 25, 50, 100].map((n) => (
+                  <option key={n} value={n}>
+                    {n} / page
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="w-7 h-7 flex items-center justify-center rounded-md border border-border text-xs disabled:opacity-40 hover:bg-muted"
+                className="flex items-center justify-center text-xs border rounded-md w-7 h-7 border-border disabled:opacity-40 hover:bg-muted"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
@@ -522,7 +810,7 @@ export default function CustomersPage() {
                 type="button"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="w-7 h-7 flex items-center justify-center rounded-md border border-border text-xs disabled:opacity-40 hover:bg-muted"
+                className="flex items-center justify-center text-xs border rounded-md w-7 h-7 border-border disabled:opacity-40 hover:bg-muted"
               >
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>

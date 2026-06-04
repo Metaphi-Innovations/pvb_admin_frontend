@@ -1,96 +1,58 @@
-﻿// GST Master Data & Helpers
+// GST Master Data & Helpers
 
 export interface GSTMaster {
   id: number;
-  gstCode: string;           // e.g., "GST-0", "GST-5", "GST-18"
-  gstPercentage: number;     // 0, 5, 12, 18, 28
-  cgst: number;              // CGST percentage
-  sgst: number;              // SGST percentage
-  igst: number;              // IGST percentage
+  gstId: string;             // Auto Generated, e.g., "GST-0001"
+  gstName: string;           // Text
+  gstPercentage: number;     // Decimal
+  gstType: "CGST" | "SGST" | "IGST" | "UTGST"; // Dropdown
+  applicableFromDate: string; // Date (YYYY-MM-DD)
   status: "active" | "inactive";
-  remarks?: string;
   createdBy: string;
   createdDate: string;       // YYYY-MM-DD
   updatedBy: string;
   updatedDate: string;       // YYYY-MM-DD
-  lastStatusChange: string;  // YYYY-MM-DD
 }
 
 const SEED_GST: GSTMaster[] = [
   {
     id: 1,
-    gstCode: "GST-0",
-    gstPercentage: 0,
-    cgst: 0,
-    sgst: 0,
-    igst: 0,
+    gstId: "GST-0001",
+    gstName: "Zero GST CGST",
+    gstPercentage: 0.0,
+    gstType: "CGST",
+    applicableFromDate: "2026-01-01",
     status: "active",
-    remarks: "Zero GST for exempted goods",
     createdBy: "Admin",
-    createdDate: "2024-01-10",
+    createdDate: "2026-01-10",
     updatedBy: "Admin",
-    updatedDate: "2024-01-10",
-    lastStatusChange: "2024-01-10",
+    updatedDate: "2026-01-10",
   },
   {
     id: 2,
-    gstCode: "GST-5",
-    gstPercentage: 5,
-    cgst: 2.5,
-    sgst: 2.5,
-    igst: 5,
+    gstId: "GST-0002",
+    gstName: "Essential SGST",
+    gstPercentage: 2.5,
+    gstType: "SGST",
+    applicableFromDate: "2026-01-01",
     status: "active",
-    remarks: "5% GST for essential items",
     createdBy: "Admin",
-    createdDate: "2024-01-12",
+    createdDate: "2026-01-12",
     updatedBy: "Admin",
-    updatedDate: "2024-01-12",
-    lastStatusChange: "2024-01-12",
+    updatedDate: "2026-01-12",
   },
   {
     id: 3,
-    gstCode: "GST-12",
-    gstPercentage: 12,
-    cgst: 6,
-    sgst: 6,
-    igst: 12,
+    gstId: "GST-0003",
+    gstName: "Standard IGST",
+    gstPercentage: 18.0,
+    gstType: "IGST",
+    applicableFromDate: "2026-01-01",
     status: "active",
-    remarks: "12% GST for standard products",
     createdBy: "Admin",
-    createdDate: "2024-01-15",
+    createdDate: "2026-01-15",
     updatedBy: "Admin",
-    updatedDate: "2024-01-15",
-    lastStatusChange: "2024-01-15",
-  },
-  {
-    id: 4,
-    gstCode: "GST-18",
-    gstPercentage: 18,
-    cgst: 9,
-    sgst: 9,
-    igst: 18,
-    status: "active",
-    remarks: "18% GST for general products",
-    createdBy: "Admin",
-    createdDate: "2024-01-18",
-    updatedBy: "Admin",
-    updatedDate: "2024-01-18",
-    lastStatusChange: "2024-01-18",
-  },
-  {
-    id: 5,
-    gstCode: "GST-28",
-    gstPercentage: 28,
-    cgst: 14,
-    sgst: 14,
-    igst: 28,
-    status: "active",
-    remarks: "28% GST for luxury goods",
-    createdBy: "Admin",
-    createdDate: "2024-02-01",
-    updatedBy: "Admin",
-    updatedDate: "2024-02-01",
-    lastStatusChange: "2024-02-01",
+    updatedDate: "2026-01-15",
   },
 ];
 
@@ -114,6 +76,10 @@ export function saveGSTMasters(data: GSTMaster[]): void {
 
 export function nextGSTId(list: GSTMaster[]): number {
   return Math.max(0, ...list.map(g => g.id)) + 1;
+}
+
+export function generateGSTCode(id: number): string {
+  return `GST-${String(id).padStart(4, "0")}`;
 }
 
 export function todayStr(): string {

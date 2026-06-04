@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Save, X, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Save, X, XCircle, ShieldAlert } from "lucide-react";
 import {
   loadCustomers,
   saveCustomers,
@@ -21,7 +21,33 @@ import {
   type CustomerFormValues,
 } from "../components/CustomerForm";
 import { hasCustomerPermission } from "../customer-permissions";
-import { ShieldAlert } from "lucide-react";
+
+interface ToastState {
+  msg: string;
+  type: "success" | "error";
+}
+
+function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
+  return (
+    <div
+      className={cn(
+        "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+        "animate-in slide-in-from-bottom-2 fade-in-0 duration-300",
+        toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
+      )}
+    >
+      {toast.type === "success" ? (
+        <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
+      ) : (
+        <XCircle className="flex-shrink-0 w-4 h-4" />
+      )}
+      {toast.msg}
+      <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
 
 export default function NewCustomerPage() {
   const router = useRouter();
@@ -29,19 +55,18 @@ export default function NewCustomerPage() {
   const [form, setForm] = useState<CustomerFormValues>(DEFAULT_CUSTOMER_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [customerCode, setCustomerCode] = useState("CUST-0001");
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   useEffect(() => {
     setAllowed(hasCustomerPermission("create"));
-    const list = loadCustomers();
-    setCustomerCode(generateCustomerCode(list));
+    setCustomerCode(generateCustomerCode(loadCustomers()));
   }, []);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
-      const n = { ...prev };
-      delete n[key];
-      return n;
+      const next = { ...prev };
+      delete next[key];
+      return next;
     });
 
   const persist = (asDraft: boolean) => {
@@ -52,9 +77,14 @@ export default function NewCustomerPage() {
       setTimeout(() => setToast(null), 3200);
       return;
     }
+
     const list = loadCustomers();
     const today = todayStr();
-    const status = asDraft ? "draft" : form.status === "draft" ? "active" : form.status;
+    const status = asDraft
+      ? "draft"
+      : form.status === "draft"
+        ? "active"
+        : form.status;
 
     const record = formValuesToCustomer(
       { ...form, status },
@@ -66,28 +96,42 @@ export default function NewCustomerPage() {
         lastStatusChange: today,
         blockReason: "",
         statusHistory: [
-          { date: today, from: "-", to: status, by: "Admin", reason: asDraft ? "Saved as draft" : "Customer created" },
+          {
+            date: today,
+            from: "-",
+            to: status,
+            by: "Admin",
+            reason: asDraft ? "Saved as draft" : "Customer created",
+          },
         ],
       },
     );
 
     saveCustomers([...list, record]);
-    setToast({ msg: asDraft ? "Draft saved successfully." : "Customer created successfully.", type: "success" });
+    setToast({
+      msg: asDraft ? "Draft saved successfully." : "Customer created successfully.",
+      type: "success",
+    });
     setTimeout(() => router.push("/masters/customers"), 1000);
   };
 
   if (allowed === false) {
     return (
       <AppLayout>
-        <div className="py-16 flex flex-col items-center gap-3 text-center">
-          <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 py-16 text-center">
+          <div className="flex items-center justify-center w-12 h-12 border rounded-xl border-amber-200 bg-amber-50">
             <ShieldAlert className="w-6 h-6 text-amber-600" />
           </div>
           <h1 className="text-lg font-bold text-foreground">Access restricted</h1>
-          <p className="text-sm text-muted-foreground max-w-md">
+          <p className="max-w-md text-sm text-muted-foreground">
             You do not have permission to create customers.
           </p>
-          <Button variant="outline" size="sm" className="h-8 text-xs mt-2" onClick={() => router.push("/masters/customers")}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 mt-2 text-[11px] px-3"
+            onClick={() => router.push("/masters/customers")}
+          >
             Back to listing
           </Button>
         </div>
@@ -96,59 +140,53 @@ export default function NewCustomerPage() {
   }
 
   if (allowed === null) {
-    return <AppLayout><div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading...</div></AppLayout>;
+    return <AppLayout>{null}</AppLayout>;
   }
 
   return (
-    <AppLayout noPadding>
-      <div className="flex flex-col" style={{ minHeight: "calc(100vh - 104px)" }}>
-        <div className="flex-shrink-0 bg-white border-b border-border px-6 py-3 flex items-center gap-3 shadow-sm sticky top-0 z-10">
+    <AppLayout>
+      <div className="flex flex-col h-full">
+        <div className="sticky top-0 z-10 flex items-center flex-shrink-0 gap-3 px-5 py-3 bg-white border-b border-border">
           <button
             type="button"
             onClick={() => router.back()}
-            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors"
+            className="flex items-center justify-center flex-shrink-0 w-8 h-8 transition-colors border rounded-lg border-border hover:bg-muted"
           >
             <ArrowLeft className="w-4 h-4 text-muted-foreground" />
           </button>
           <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold text-foreground">Add Customer</h2>
-            <p className="text-[11px] text-muted-foreground">Masters → Customer Master → Add</p>
+            <h2 className="text-sm font-semibold leading-none text-foreground">Add Customer</h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Masters → Customer Master → Add</p>
           </div>
-          <div className="flex items-center gap-1.5 bg-muted/50 border border-border rounded-lg px-3 py-1.5">
-            <span className="text-[11px] text-muted-foreground">Code:</span>
-            <span className="font-mono text-xs font-bold text-brand-700">{customerCode}</span>
-          </div>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.back()}>
-            <X className="w-3.5 h-3.5 mr-1" /> Discard
+          <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
+            {customerCode}
+          </span>
+          <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => router.back()}>
+            Discard
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => persist(true)}>
+          <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => persist(true)}>
             Save Draft
           </Button>
           <Button
             size="sm"
-            className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+            className="h-7 text-[11px] gap-1.5 px-3 bg-brand-600 text-white hover:bg-brand-700"
             onClick={() => persist(false)}
           >
-            <Save className="w-3.5 h-3.5" /> Save Customer
+            <Save className="w-3.5 h-3.5" /> Save
           </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 bg-muted/20">
-          <CustomerForm form={form} onChange={setForm} errors={errors} onClearError={clearErr} />
+        <div className="flex-1 px-6 py-6 overflow-y-auto bg-muted/10">
+          <CustomerForm
+            form={form}
+            onChange={setForm}
+            errors={errors}
+            onClearError={clearErr}
+          />
         </div>
       </div>
 
-      {toast && (
-        <div
-          className={cn(
-            "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
-            toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
-          )}
-        >
-          {toast.type === "success" ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-          {toast.msg}
-        </div>
-      )}
+      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </AppLayout>
   );
 }

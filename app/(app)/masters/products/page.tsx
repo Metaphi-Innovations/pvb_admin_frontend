@@ -1,392 +1,657 @@
-﻿"use client";
+"use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
-import {
-  Package, Plus, Download, Search, SlidersHorizontal,
-  MoreVertical, Edit2, Trash2, ChevronsUpDown, ChevronDown,
-  CheckCircle2, XCircle, X, Check, AlertTriangle, Eye,
-} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Popover, PopoverContent, PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-} from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
-import Link from "next/link";
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsUpDown,
+  Download,
+  Edit2,
+  Eye,
+  Filter,
+  MoreVertical,
+  Package,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  UserCheck,
+  UserX,
+  X,
+  XCircle,
+} from "lucide-react";
+import { type Product, type ProductStatus, formatMoney, loadProducts, saveProducts } from "./product-data";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface Product {
-  id: number;
-  code: string;
-  name: string;
-  categoryName: string;
-  uom: string;
-  hsnCode: string;
-  gstRate: string;
-  mrp: number;
-  sellingPrice: number;
-  stock: number;
-  status: "active" | "inactive" | "archived";
-  createdBy: string;
-  createdDate: string;
-  updatedBy: string;
-  updatedDate: string;
-}
+type SortKey = "productName" | "createdDate" | "category" | "gstRate" | "status";
 
-// ── Seed ──────────────────────────────────────────────────────────────────────
-const SEED: Product[] = [
-  { id: 1,  code: "PRD-001", name: "NPK 19:19:19",         categoryName: "NPK Fertilizers",     uom: "KG",  hsnCode: "3105",  gstRate: "5%",  mrp: 1200, sellingPrice: 1050, stock: 450,  status: "active",   createdBy: "Admin", createdDate: "2024-01-10", updatedBy: "Admin", updatedDate: "2024-01-10" },
-  { id: 2,  code: "PRD-002", name: "DAP Fertilizer",        categoryName: "NPK Fertilizers",     uom: "KG",  hsnCode: "3105",  gstRate: "5%",  mrp: 1400, sellingPrice: 1250, stock: 320,  status: "active",   createdBy: "Admin", createdDate: "2024-01-12", updatedBy: "Admin", updatedDate: "2024-01-12" },
-  { id: 3,  code: "PRD-003", name: "Urea 46%",              categoryName: "NPK Fertilizers",     uom: "KG",  hsnCode: "3102",  gstRate: "5%",  mrp: 950,  sellingPrice: 820,  stock: 800,  status: "active",   createdBy: "Admin", createdDate: "2024-01-15", updatedBy: "Admin", updatedDate: "2024-01-15" },
-  { id: 4,  code: "PRD-004", name: "Chlorpyrifos 20 EC",    categoryName: "Insecticides",        uom: "LTR", hsnCode: "3808",  gstRate: "18%", mrp: 380,  sellingPrice: 320,  stock: 180,  status: "active",   createdBy: "Admin", createdDate: "2024-01-18", updatedBy: "Admin", updatedDate: "2024-01-18" },
-  { id: 5,  code: "PRD-005", name: "Glyphosate 41% SL",     categoryName: "Herbicides",          uom: "LTR", hsnCode: "3808",  gstRate: "18%", mrp: 450,  sellingPrice: 390,  stock: 95,   status: "active",   createdBy: "Admin", createdDate: "2024-01-20", updatedBy: "Admin", updatedDate: "2024-01-20" },
-  { id: 6,  code: "PRD-006", name: "Hybrid Tomato Seeds",   categoryName: "Hybrid Seeds",        uom: "PKT", hsnCode: "1209",  gstRate: "0%",  mrp: 120,  sellingPrice: 95,   stock: 600,  status: "active",   createdBy: "Admin", createdDate: "2024-02-01", updatedBy: "Admin", updatedDate: "2024-02-01" },
-  { id: 7,  code: "PRD-007", name: "Hybrid Chilli Seeds",   categoryName: "Hybrid Seeds",        uom: "PKT", hsnCode: "1209",  gstRate: "0%",  mrp: 85,   sellingPrice: 70,   stock: 420,  status: "active",   createdBy: "Admin", createdDate: "2024-02-05", updatedBy: "Admin", updatedDate: "2024-02-05" },
-  { id: 8,  code: "PRD-008", name: "Vermicompost",          categoryName: "Organic Fertilizers", uom: "KG",  hsnCode: "3101",  gstRate: "0%",  mrp: 18,   sellingPrice: 14,   stock: 2400, status: "active",   createdBy: "Admin", createdDate: "2024-02-08", updatedBy: "Admin", updatedDate: "2024-02-08" },
-  { id: 9,  code: "PRD-009", name: "Zinc Sulphate 21%",     categoryName: "Micronutrients",      uom: "KG",  hsnCode: "3105",  gstRate: "5%",  mrp: 85,   sellingPrice: 72,   stock: 340,  status: "active",   createdBy: "Admin", createdDate: "2024-02-10", updatedBy: "Admin", updatedDate: "2024-02-10" },
-  { id: 10, code: "PRD-010", name: "Manual Sprayer 16L",    categoryName: "Equipment",           uom: "PCS", hsnCode: "8424",  gstRate: "12%", mrp: 550,  sellingPrice: 480,  stock: 45,   status: "inactive", createdBy: "Admin", createdDate: "2024-02-15", updatedBy: "Admin", updatedDate: "2024-03-01" },
-  { id: 11, code: "PRD-011", name: "MOP Potash",            categoryName: "NPK Fertilizers",     uom: "KG",  hsnCode: "3104",  gstRate: "5%",  mrp: 780,  sellingPrice: 680,  stock: 220,  status: "active",   createdBy: "Admin", createdDate: "2024-03-05", updatedBy: "Admin", updatedDate: "2024-03-05" },
-  { id: 12, code: "PRD-012", name: "Mancozeb 75 WP",        categoryName: "Pesticides",          uom: "KG",  hsnCode: "3808",  gstRate: "18%", mrp: 280,  sellingPrice: 235,  stock: 130,  status: "active",   createdBy: "Admin", createdDate: "2024-03-10", updatedBy: "Admin", updatedDate: "2024-03-10" },
-];
-
-function todayStr() { return new Date().toISOString().slice(0, 10); }
-
-const STATUS_CFG = {
-  active:   { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
-  inactive: { bg: "bg-slate-100",  text: "text-slate-600",   dot: "bg-slate-400"  },
-  archived: { bg: "bg-red-50",     text: "text-red-700",     dot: "bg-red-400"    },
-};
-
-function StatusPill({ status }: { status: string }) {
-  const cfg = STATUS_CFG[status as keyof typeof STATUS_CFG] ?? STATUS_CFG.inactive;
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium", cfg.bg, cfg.text)}>
-      <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
-      {status.charAt(0).toUpperCase() + status.slice(1)}
-    </span>
-  );
-}
-
-function SortTh({ label, colKey, sortKey, sortDir, onSort, className }: {
-  label: string; colKey: string; sortKey: string; sortDir: string;
-  onSort: (k: string) => void; className?: string;
+function TableTh({
+  label,
+  colKey,
+  sortKey,
+  sortDir,
+  onSort,
+  filterValues,
+  filterOptions,
+  onFilterChange,
+  className,
+}: {
+  label: string;
+  colKey: string;
+  sortKey?: SortKey;
+  sortDir?: "asc" | "desc";
+  onSort?: (key: SortKey) => void;
+  filterValues?: string[];
+  filterOptions?: string[];
+  onFilterChange?: (vals: string[]) => void;
+  className?: string;
 }) {
   const active = sortKey === colKey;
+  const sortable = !!onSort;
+  const selected = filterValues?.[0] ?? "";
+  const [open, setOpen] = useState(false);
+  const [draftValue, setDraftValue] = useState(selected);
+
+  useEffect(() => {
+    if (open) setDraftValue(selected);
+  }, [open, selected]);
+
   return (
-    <th onClick={() => onSort(colKey)}
-      className={cn("px-4 py-3 text-left text-xs font-semibold cursor-pointer select-none group whitespace-nowrap", active && "bg-brand-50/60", className)}>
-      <div className="flex items-center gap-1.5">
-        <span className={active ? "text-brand-700" : "text-foreground"}>{label}</span>
-        {active
-          ? <ChevronDown className={cn("w-3 h-3 text-brand-600 transition-transform", sortDir === "desc" && "rotate-180")} />
-          : <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />}
+    <th className={cn("h-11 px-3 text-left text-[13px] font-semibold select-none group whitespace-nowrap", active && "bg-brand-50/60", className)}>
+      <div className="flex items-center justify-between gap-2">
+        <div className={cn("flex min-w-0 flex-1 items-center gap-1.5", sortable && "cursor-pointer")} onClick={() => sortable && onSort(colKey as SortKey)}>
+          <span className={active ? "text-brand-700" : "text-foreground"}>{label}</span>
+          {sortable && (
+            <span className="ml-auto inline-flex shrink-0 items-center gap-0.5">
+              {active ? (
+                <ChevronDown className={cn("w-3 h-3 text-brand-600 transition-transform", sortDir === "desc" && "rotate-180")} />
+              ) : (
+                <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground" />
+              )}
+            </span>
+          )}
+        </div>
+
+        {onFilterChange && (
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                onClick={(e) => e.stopPropagation()}
+                className={cn(
+                  "inline-flex shrink-0 items-center justify-center rounded p-1 transition-colors hover:bg-muted",
+                  selected ? "text-brand-600 bg-brand-50" : "text-muted-foreground/40 hover:text-muted-foreground/80",
+                )}
+              >
+                <Filter className="w-3 h-3" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="z-50 w-[220px] p-2.5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <div className="space-y-2">
+                <div className="text-[11px] font-medium text-muted-foreground">Select</div>
+                <Select value={draftValue || "all"} onValueChange={(value) => setDraftValue(value === "all" ? "" : value)}>
+                  <SelectTrigger className="h-9 w-full rounded-md border border-border bg-white px-2 text-xs text-foreground shadow-sm data-[state=open]:border-orange-500 data-[state=open]:ring-1 data-[state=open]:ring-orange-200">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent className="z-50 bg-white shadow-lg border-border">
+                    <SelectItem value="all" className="text-xs">
+                      All
+                    </SelectItem>
+                    {(filterOptions ?? []).map((option) => (
+                      <SelectItem key={option} value={option} className="text-xs hover:bg-orange-50 focus:bg-orange-50">
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center justify-end gap-1.5 pt-1">
+                  <Button type="button" variant="outline" className="h-8 px-2.5 text-[11px]" onClick={() => setOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-8 px-2.5 text-[11px] bg-orange-500 hover:bg-orange-600 text-white"
+                    onClick={() => {
+                      onFilterChange(draftValue ? [draftValue] : []);
+                      setOpen(false);
+                    }}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
       </div>
     </th>
   );
 }
 
+function KpiCard({
+  label,
+  value,
+  icon: Icon,
+  accent,
+  color,
+}: {
+  label: string;
+  value: number;
+  icon: React.ElementType;
+  accent?: boolean;
+  color?: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
+      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", accent ? "bg-brand-600" : color ?? "bg-muted")}>
+        <Icon className={cn("w-4 h-4", accent ? "text-white" : "text-muted-foreground")} />
+      </div>
+      <div>
+        <p className="text-base font-bold leading-none text-foreground">{value}</p>
+        <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{label}</p>
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: ProductStatus }) {
+  const cfg = {
+    active: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    inactive: "border-slate-200 bg-slate-100 text-slate-700",
+    draft: "border-amber-200 bg-amber-50 text-amber-700",
+  }[status];
+
+  return (
+    <Badge variant="outline" className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium", cfg)}>
+      {status === "draft" ? "Draft" : status === "active" ? "Active" : "Inactive"}
+    </Badge>
+  );
+}
+
 export default function ProductsPage() {
-  const [records, setRecords] = useState<Product[]>(SEED);
+  const [records, setRecords] = useState<Product[]>([]);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
-  const [filterCategory, setFilterCategory] = useState<string[]>([]);
-  const [sortKey, setSortKey] = useState<string>("name");
+  const [sortKey, setSortKey] = useState<SortKey>("productName");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [confirm, setConfirm] = useState<{ type: string; rec: Product } | null>(null);
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [colFilters, setColFilters] = useState<Record<string, string[]>>({});
 
-  const showToast = (msg: string, type: "success" | "error" = "success") => {
-    setToast({ msg, type });
+  useEffect(() => {
+    setRecords(loadProducts());
+  }, []);
+
+  const handleColFilter = (key: string, vals: string[]) => {
+    setColFilters((prev) => {
+      const next = { ...prev };
+      if (!vals.length) delete next[key];
+      else next[key] = vals;
+      return next;
+    });
+    setPage(1);
+  };
+
+  const updateStatus = (productId: number, status: ProductStatus) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const updated = records.map((item) =>
+      item.id === productId ? { ...item, status, updatedBy: "Admin", updatedDate: today } : item,
+    );
+    setRecords(updated);
+    saveProducts(updated);
+    setToast("Status updated.");
     setTimeout(() => setToast(null), 3200);
   };
 
-  const categories = useMemo(() => [...new Set(records.map(r => r.categoryName))].sort(), [records]);
-
-  const visible = useMemo(() => {
-    let r = records.filter(p => p.status !== "archived");
+  const filtered = useMemo(() => {
+    let data = [...records];
     if (search.trim()) {
       const q = search.toLowerCase();
-      r = r.filter(p => p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q) || p.hsnCode.includes(q) || p.categoryName.toLowerCase().includes(q));
+      data = data.filter((item) =>
+        item.productName.toLowerCase().includes(q) ||
+        item.sku.toLowerCase().includes(q) ||
+        item.hsnCode.toLowerCase().includes(q),
+      );
     }
-    if (filterStatus.length) r = r.filter(p => filterStatus.includes(p.status));
-    if (filterCategory.length) r = r.filter(p => filterCategory.includes(p.categoryName));
-    r = [...r].sort((a, b) => {
-      const av = String((a as unknown as Record<string, unknown>)[sortKey] ?? "");
-      const bv = String((b as unknown as Record<string, unknown>)[sortKey] ?? "");
+
+    if (filterStatus.length) data = data.filter((item) => filterStatus.includes(item.status));
+
+    if (Object.keys(colFilters).length > 0) {
+      data = data.filter((item) =>
+        Object.entries(colFilters).every(([key, values]) => {
+          if (!values.length) return true;
+          let rowValue = String(item[key as keyof Product] ?? "");
+          if (key === "status") rowValue = item.status.charAt(0).toUpperCase() + item.status.slice(1);
+          return values.some((value) => value.toLowerCase() === rowValue.toLowerCase());
+        }),
+      );
+    }
+
+    data.sort((a, b) => {
+      if (sortKey === "gstRate") {
+        const av = parseInt(a.gstRate, 10);
+        const bv = parseInt(b.gstRate, 10);
+        return sortDir === "asc" ? av - bv : bv - av;
+      }
+      const av = String(a[sortKey] ?? "");
+      const bv = String(b[sortKey] ?? "");
       return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
     });
-    return r;
-  }, [records, search, filterStatus, filterCategory, sortKey, sortDir]);
+    return data;
+  }, [records, search, filterStatus, sortKey, sortDir, colFilters]);
 
-  const handleSort = (k: string) => {
-    if (sortKey === k) setSortDir(d => d === "asc" ? "desc" : "asc");
-    else { setSortKey(k); setSortDir("asc"); }
-  };
-  const toggleStatus = (v: string) => setFilterStatus(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]);
-  const toggleCategory = (v: string) => setFilterCategory(p => p.includes(v) ? p.filter(x => x !== v) : [...p, v]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const hasFilters = search.trim() !== "" || filterStatus.length > 0 || Object.keys(colFilters).length > 0;
+  const total = records.length;
+  const active = records.filter((item) => item.status === "active").length;
+  const inactive = records.filter((item) => item.status === "inactive").length;
+  const draft = records.filter((item) => item.status === "draft").length;
+  const start = filtered.length === 0 ? 0 : (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, filtered.length);
 
-  const total = records.filter(p => p.status !== "archived").length;
-  const active = records.filter(p => p.status === "active").length;
-  const inactive = records.filter(p => p.status === "inactive").length;
-  const activeFilters = filterStatus.length + filterCategory.length;
-
-  const handleConfirm = () => {
-    if (!confirm) return;
-    const { type, rec } = confirm;
-    if (type === "delete") {
-      setRecords(p => p.map(r => r.id === rec.id ? { ...r, status: "archived", updatedDate: todayStr() } : r));
-      showToast("Product archived");
-    } else if (type === "deactivate") {
-      setRecords(p => p.map(r => r.id === rec.id ? { ...r, status: "inactive", updatedDate: todayStr() } : r));
-      showToast("Product deactivated");
-    } else if (type === "activate") {
-      setRecords(p => p.map(r => r.id === rec.id ? { ...r, status: "active", updatedDate: todayStr() } : r));
-      showToast("Product activated");
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("asc");
     }
-    setConfirm(null);
+  };
+
+  const toggleStatusFilter = (value: string) => {
+    setFilterStatus((prev) => (prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value]));
+    setPage(1);
+  };
+
+  const handleExport = () => {
+    const headers = [
+      "Product ID",
+      "Product Name",
+      "Category",
+      "Sub Category",
+      "Segment",
+      "Formulation",
+      "Unit",
+      "HSN Code",
+      "GST Rate",
+      "SKU",
+      "Crop Applicable",
+      "Pack Size",
+      "MRP",
+      "Cost Price",
+      "Distributor Price",
+      "Reorder Level",
+      "Status",
+    ];
+
+    const rows = filtered.map(item => [
+      item.productId,
+      item.productName,
+      item.category,
+      item.subCategory,
+      item.segment,
+      item.formulation,
+      item.unit,
+      item.hsnCode,
+      item.gstRate,
+      item.sku,
+      item.cropApplicable || "",
+      item.packSize || "",
+      item.mrp,
+      item.costPrice,
+      item.distributorPrice,
+      item.reorderLevel,
+      item.status,
+    ]);
+
+    const csvString = [
+      headers.join(","),
+      ...rows.map(row => row.map(val => {
+        const str = String(val ?? "").replace(/"/g, '""');
+        return `"${str}"`;
+      }).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "product-master-export.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
     <AppLayout>
-      <div className="max-w-[1200px] mx-auto space-y-4">
-
-        {/* Header */}
+      <div className="space-y-5">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-bold text-foreground">Products</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Manage product catalogue and pricing</p>
+            <h1 className="text-xl font-bold text-foreground">Product Master</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">Manage product catalogue, compliance, and pricing</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+          <div className="flex items-center flex-shrink-0 gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs gap-1.5 border border-border bg-white text-foreground hover:bg-muted"
+              onClick={handleExport}
+            >
               <Download className="w-3.5 h-3.5" /> Export
             </Button>
-            <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white">
-              <Plus className="w-3.5 h-3.5" /> Add Product
-            </Button>
+            <Link href="/masters/products/add">
+              <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white">
+                <Plus className="w-3.5 h-3.5" /> Add Product
+              </Button>
+            </Link>
           </div>
         </div>
 
-        {/* KPI */}
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: "Total Products", value: total, icon: Package, accent: true },
-            { label: "Active", value: active, icon: CheckCircle2, accent: false },
-            { label: "Inactive", value: inactive, icon: XCircle, accent: false },
-          ].map(({ label, value, icon: Icon, accent }) => (
-            <div key={label} className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
-              <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", accent ? "bg-brand-600" : "bg-muted")}>
-                <Icon className={cn("w-4 h-4", accent ? "text-white" : "text-muted-foreground")} />
-              </div>
-              <div>
-                <p className="text-base font-bold text-foreground leading-none">{value}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">{label}</p>
-              </div>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <KpiCard label="Total Products" value={total} icon={Package} accent />
+          <KpiCard label="Active" value={active} icon={CheckCircle2} color="bg-emerald-50" />
+          <KpiCard label="Inactive" value={inactive} icon={XCircle} color="bg-slate-100" />
+          <KpiCard label="Draft" value={draft} icon={Package} color="bg-amber-50" />
         </div>
 
-        {/* Toolbar */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-[9px] text-muted-foreground pointer-events-none" />
-            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search products…" className="pl-8 h-8 text-xs" />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[220px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Search product, SKU, HSN..."
+              className="h-8 text-xs pl-9"
+            />
           </div>
 
           <Popover>
             <PopoverTrigger asChild>
-              <button className={cn("h-8 px-2.5 text-xs border rounded-lg inline-flex items-center gap-1.5 font-medium transition-colors",
-                activeFilters > 0 ? "border-brand-400 bg-brand-50 text-brand-700" : "border-border text-muted-foreground hover:bg-muted")}>
-                <SlidersHorizontal className="w-3.5 h-3.5" /> Filter
-                {activeFilters > 0 && <span className="w-4 h-4 text-[10px] bg-brand-600 text-white rounded-full inline-flex items-center justify-center font-bold">{activeFilters}</span>}
+              <button
+                type="button"
+                className={cn(
+                  "h-8 px-2.5 text-xs border rounded-lg inline-flex items-center gap-1.5 font-medium transition-colors",
+                  filterStatus.length > 0 ? "border-brand-400 bg-brand-50 text-brand-700" : "border-border text-muted-foreground hover:bg-muted",
+                )}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                Filter
+                {filterStatus.length > 0 && (
+                  <span className="w-4 h-4 text-[10px] bg-brand-600 text-white rounded-full inline-flex items-center justify-center font-bold">
+                    {filterStatus.length}
+                  </span>
+                )}
               </button>
             </PopoverTrigger>
-            <PopoverContent align="start" className="w-60 p-0">
+            <PopoverContent align="start" className="w-56 p-0">
               <div className="px-3 py-2.5 border-b border-border">
-                <p className="text-xs font-semibold text-foreground">Filter by Status</p>
+                <p className="text-xs font-semibold text-foreground">Filter Products</p>
               </div>
-              <div className="px-3 py-2 space-y-2">
-                {["active", "inactive"].map(v => (
-                  <label key={v} className="flex items-center gap-2.5 cursor-pointer">
-                    <input type="checkbox" className="w-4 h-4 rounded accent-brand-600"
-                      checked={filterStatus.includes(v)} onChange={() => toggleStatus(v)} />
-                    <span className="text-xs capitalize">{v}</span>
+              <div className="px-3 py-3 space-y-2">
+                {(["active", "inactive", "draft"] as ProductStatus[]).map((value) => (
+                  <label key={value} className="flex items-center gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 rounded accent-brand-600"
+                      checked={filterStatus.includes(value)}
+                      onChange={() => toggleStatusFilter(value)}
+                    />
+                    <span className="text-xs capitalize text-foreground">{value}</span>
                   </label>
                 ))}
               </div>
-              <div className="px-3 py-2.5 border-t border-border">
-                <p className="text-xs font-semibold text-foreground mb-2">Category</p>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {categories.map(c => (
-                    <label key={c} className="flex items-center gap-2.5 cursor-pointer">
-                      <input type="checkbox" className="w-4 h-4 rounded accent-brand-600"
-                        checked={filterCategory.includes(c)} onChange={() => toggleCategory(c)} />
-                      <span className="text-xs">{c}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              {activeFilters > 0 && (
+              {filterStatus.length > 0 && (
                 <div className="px-3 py-2 border-t border-border">
-                  <button onClick={() => { setFilterStatus([]); setFilterCategory([]); }} className="text-xs text-brand-600 hover:underline">Clear all</button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterStatus([]);
+                      setPage(1);
+                    }}
+                    className="text-xs text-brand-600 hover:underline"
+                  >
+                    Clear all filters
+                  </button>
                 </div>
               )}
             </PopoverContent>
           </Popover>
 
-          {filterStatus.map(v => (
-            <span key={v} className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium">
-              {v} <button onClick={() => toggleStatus(v)}><X className="w-3 h-3" /></button>
+          {filterStatus.map((value) => (
+            <span key={value} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border rounded-md bg-brand-50 border-brand-200 text-brand-700">
+              {value.charAt(0).toUpperCase() + value.slice(1)}
+              <button type="button" onClick={() => toggleStatusFilter(value)}>
+                <X className="w-3 h-3" />
+              </button>
             </span>
           ))}
-          {filterCategory.map(v => (
-            <span key={v} className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium">
-              {v} <button onClick={() => toggleCategory(v)}><X className="w-3 h-3" /></button>
-            </span>
-          ))}
-
-          <p className="ml-auto text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">{visible.length}</span> of <span className="font-medium text-foreground">{total}</span>
-          </p>
         </div>
 
-        {/* Table */}
-        <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
+        <div className="w-full max-w-full overflow-hidden bg-white border shadow-sm rounded-xl border-border">
+          <div className="max-w-full overflow-x-auto overflow-y-hidden">
+            <table className="min-w-full border-collapse table-fixed w-max">
               <thead>
-                <tr className="bg-muted/40 border-b border-border">
-                  <SortTh label="Code"     colKey="code"         sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-28" />
-                  <SortTh label="Product"  colKey="name"         sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh label="Category" colKey="categoryName" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap">UOM</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap">HSN</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap">GST</th>
-                  <SortTh label="MRP (₹)"  colKey="mrp"          sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap">Stock</th>
-                  <SortTh label="Status"   colKey="status"       sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-28" />
-                  <th className="px-4 py-2.5 w-10" />
+                <tr className="border-b bg-muted/40 border-border">
+                  <TableTh label="Product ID" colKey="productId" className="w-[120px] pl-4 py-3" />
+                  <TableTh label="Product Name" colKey="productName" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-[220px]" />
+                  <TableTh label="Category" colKey="category" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} filterValues={colFilters.category} filterOptions={Array.from(new Set(records.map((item) => item.category))).sort()} onFilterChange={(value) => handleColFilter("category", value)} className="w-[130px]" />
+                  <TableTh label="Sub Category" colKey="subCategory" filterValues={colFilters.subCategory} filterOptions={Array.from(new Set(records.map((item) => item.subCategory))).sort()} onFilterChange={(value) => handleColFilter("subCategory", value)} className="w-[170px]" />
+                  <TableTh label="Segment" colKey="segment" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} filterValues={colFilters.segment} filterOptions={Array.from(new Set(records.map((item) => item.segment))).sort()} onFilterChange={(value) => handleColFilter("segment", value)} className="w-[130px]" />
+                  <TableTh label="Formulation" colKey="formulation" filterValues={colFilters.formulation} filterOptions={Array.from(new Set(records.map((item) => item.formulation))).sort()} onFilterChange={(value) => handleColFilter("formulation", value)} className="w-[220px]" />
+                  <TableTh label="Unit" colKey="unit" className="w-[90px]" />
+                  <TableTh label="HSN Code" colKey="hsnCode" className="w-[110px]" />
+                  <TableTh label="GST Rate" colKey="gstRate" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} filterValues={colFilters.gstRate} filterOptions={Array.from(new Set(records.map((item) => item.gstRate))).sort()} onFilterChange={(value) => handleColFilter("gstRate", value)} className="w-[100px]" />
+                  <TableTh label="SKU" colKey="sku" className="w-[140px]" />
+                  <TableTh label="Crop Applicable" colKey="cropApplicable" className="w-[140px]" />
+                  <TableTh label="Pack Size" colKey="packSize" className="w-[110px]" />
+                  <TableTh label="MRP" colKey="mrp" className="w-[120px]" />
+                  <TableTh label="Cost Price" colKey="costPrice" className="w-[120px]" />
+                  <TableTh label="Distributor Price" colKey="distributorPrice" className="w-[150px]" />
+                  <TableTh label="Reorder Level" colKey="reorderLevel" className="w-[120px]" />
+                  <TableTh label="Status" colKey="status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} filterValues={colFilters.status} filterOptions={["Active", "Inactive", "Draft"]} onFilterChange={(value) => handleColFilter("status", value)} className="w-[110px] pr-4" />
+                  <th className="sticky right-0 z-30 w-[96px] min-w-[96px] h-11 px-3 text-left text-[13px] font-semibold whitespace-nowrap bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {visible.length === 0 ? (
+                {paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-16 text-center">
+                    <td colSpan={18} className="px-4 text-center py-14">
                       <div className="flex flex-col items-center gap-2">
-                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                        <div className="flex items-center justify-center w-10 h-10 rounded-full bg-muted">
                           <Package className="w-5 h-5 text-muted-foreground" />
                         </div>
                         <p className="text-sm font-medium text-foreground">
-                          {search || activeFilters ? "No products match your filters" : "No products yet"}
+                          {hasFilters ? "No products match your filters" : "No products yet"}
                         </p>
-                        {(search || activeFilters > 0) && (
-                          <button onClick={() => { setSearch(""); setFilterStatus([]); setFilterCategory([]); }}
-                            className="text-xs text-brand-600 hover:underline">Clear filters</button>
+                        {!hasFilters && (
+                          <Link href="/masters/products/add" className="text-xs text-brand-600 hover:underline">
+                            + Add your first product
+                          </Link>
                         )}
                       </div>
                     </td>
                   </tr>
-                ) : visible.map(rec => (
-                  <tr key={rec.id} className="border-b border-border/60 hover:bg-muted/20 transition-colors group">
-                    <td className="px-4 py-2"><span className="font-mono text-xs font-semibold text-brand-700">{rec.code}</span></td>
-                    <td className="px-4 py-2">
-                      <p className="text-xs font-semibold text-foreground">{rec.name}</p>
-                    </td>
-                    <td className="px-4 py-2 text-xs text-muted-foreground">{rec.categoryName}</td>
-                    <td className="px-4 py-2 text-xs text-muted-foreground">{rec.uom}</td>
-                    <td className="px-4 py-2"><span className="font-mono text-xs text-muted-foreground">{rec.hsnCode}</span></td>
-                    <td className="px-4 py-2 text-xs text-muted-foreground">{rec.gstRate}</td>
-                    <td className="px-4 py-2 text-xs font-medium text-foreground">₹{rec.mrp.toLocaleString("en-IN")}</td>
-                    <td className="px-4 py-2">
-                      <span className={cn("text-xs font-medium", rec.stock < 50 ? "text-red-600" : rec.stock < 200 ? "text-amber-600" : "text-foreground")}>
-                        {rec.stock.toLocaleString("en-IN")}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2"><StatusPill status={rec.status} /></td>
-                    <td className="px-3 py-2.5 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto">
-                            <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44">
-                          <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">Actions</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem>
-                            <Edit2 className="w-3.5 h-3.5" /> Edit
-                          </DropdownMenuItem>
-                          {rec.status === "active"
-                            ? <DropdownMenuItem onClick={() => setConfirm({ type: "deactivate", rec })}>
-                                <XCircle className="w-3.5 h-3.5" /> Deactivate
-                              </DropdownMenuItem>
-                            : <DropdownMenuItem onClick={() => setConfirm({ type: "activate", rec })}>
-                                <CheckCircle2 className="w-3.5 h-3.5" /> Activate
-                              </DropdownMenuItem>}
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => setConfirm({ type: "delete", rec })}
-                            className="text-red-600 focus:text-red-600 focus:bg-red-50">
-                            <Trash2 className="w-3.5 h-3.5" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                  </tr>
-                ))}
+                ) : (
+                  paginated.map((item) => (
+                    <tr key={item.id} className="align-top transition-colors border-b border-border/60 hover:bg-muted/30">
+                      <td className="px-4 py-2 font-mono text-xs text-brand-700 whitespace-nowrap">{item.productId}</td>
+                      <td className="px-3 py-2">
+                        <Link href={`/masters/products/${item.id}`} className="block group/name">
+                          <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">{item.productName}</p>
+                          <p className="font-mono text-[10px] text-muted-foreground mt-0.5 leading-3">{item.sku}</p>
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.category}</td>
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.subCategory}</td>
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.segment}</td>
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.formulation}</td>
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.unit}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-foreground whitespace-nowrap">{item.hsnCode}</td>
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.gstRate}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-foreground whitespace-nowrap">{item.sku}</td>
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.cropApplicable || "-"}</td>
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.packSize || "-"}</td>
+                      <td className="px-3 py-2 text-xs font-semibold text-foreground whitespace-nowrap">{formatMoney(item.mrp)}</td>
+                      <td className="px-3 py-2 text-xs font-semibold text-foreground whitespace-nowrap">{formatMoney(item.costPrice)}</td>
+                      <td className="px-3 py-2 text-xs font-semibold text-foreground whitespace-nowrap">{formatMoney(item.distributorPrice)}</td>
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.reorderLevel}</td>
+                      <td className="px-3 py-2">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button type="button" className="inline-flex items-center gap-1.5">
+                              <StatusBadge status={item.status} />
+                              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="w-40">
+                            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
+                              Status Actions
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            {item.status === "active" && (
+                              <>
+                                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(item.id, "inactive")}>
+                                  <UserX className="w-3.5 h-3.5" /> Deactivate
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(item.id, "draft")}>
+                                  <Package className="w-3.5 h-3.5" /> Mark as Draft
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            {item.status === "inactive" && (
+                              <>
+                                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(item.id, "active")}>
+                                  <UserCheck className="w-3.5 h-3.5" /> Activate
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(item.id, "draft")}>
+                                  <Package className="w-3.5 h-3.5" /> Mark as Draft
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            {item.status === "draft" && (
+                              <>
+                                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(item.id, "active")}>
+                                  <UserCheck className="w-3.5 h-3.5" /> Activate
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(item.id, "inactive")}>
+                                  <UserX className="w-3.5 h-3.5" /> Deactivate
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                      <td className="sticky right-0 z-20 w-[96px] min-w-[96px] px-3 py-2 pr-4 bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className="inline-flex items-center justify-center transition-colors rounded-md w-7 h-7 text-muted-foreground hover:bg-muted"
+                              aria-label="Row actions"
+                            >
+                              <MoreVertical className="w-3.5 h-3.5" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
+                              Actions
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem asChild className="gap-2 text-xs cursor-pointer">
+                              <Link href={`/masters/products/${item.id}`}>
+                                <Eye className="w-3.5 h-3.5" /> View
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild className="gap-2 text-xs cursor-pointer">
+                              <Link href={`/masters/products/${item.id}/edit`}>
+                                <Edit2 className="w-3.5 h-3.5" /> Edit
+                              </Link>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
+
           <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/20">
             <p className="text-[11px] text-muted-foreground">
-              Showing <span className="font-medium text-foreground">{visible.length}</span> of{" "}
-              <span className="font-medium text-foreground">{total}</span> products
+              {filtered.length === 0 ? (
+                "No records"
+              ) : (
+                <>
+                  Showing <span className="font-medium text-foreground">{start}-{end}</span> of{" "}
+                  <span className="font-medium text-foreground">{filtered.length}</span> products
+                </>
+              )}
             </p>
+            <div className="flex items-center gap-2">
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="px-2 text-xs bg-white border rounded-md h-7 border-border text-foreground"
+              >
+                {[10, 25, 50, 100].map((value) => (
+                  <option key={value} value={value}>
+                    {value} / page
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={page === 1}
+                className="flex items-center justify-center text-xs border rounded-md w-7 h-7 border-border disabled:opacity-40 hover:bg-muted"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <span className="text-xs text-muted-foreground px-2 min-w-[48px] text-center">
+                {page} / {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={page === totalPages}
+                className="flex items-center justify-center text-xs border rounded-md w-7 h-7 border-border disabled:opacity-40 hover:bg-muted"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Confirm */}
-      <Dialog open={!!confirm} onOpenChange={() => setConfirm(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-                confirm?.type === "delete" ? "bg-red-50 border border-red-200" : "bg-amber-50 border border-amber-200")}>
-                <AlertTriangle className={cn("w-4 h-4", confirm?.type === "delete" ? "text-red-500" : "text-amber-500")} />
-              </div>
-              {confirm?.type === "delete" ? "Archive Product" : confirm?.type === "deactivate" ? "Deactivate Product" : "Activate Product"}
-            </DialogTitle>
-            <DialogDescription className="pt-1">
-              {confirm?.type === "delete"
-                ? `Archive "${confirm.rec.name}"? It will be hidden from all forms.`
-                : confirm?.type === "deactivate"
-                ? `Deactivate "${confirm?.rec.name}"?`
-                : `Activate "${confirm?.rec.name}"?`}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setConfirm(null)}>Cancel</Button>
-            <Button size="sm" onClick={handleConfirm}
-              className={cn("h-8 text-xs", confirm?.type === "delete" ? "bg-red-600 hover:bg-red-700 text-white" : "bg-brand-600 hover:bg-brand-700 text-white")}>
-              Confirm
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {toast && (
-        <div className={cn("fixed bottom-5 right-5 z-[400] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
-          "animate-in slide-in-from-bottom-2 fade-in-0 duration-300",
-          toast.type === "success" ? "bg-emerald-600" : "bg-red-600")}>
-          <Check className="w-4 h-4 flex-shrink-0" />
-          {toast.msg}
+        <div className="fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium bg-emerald-600">
+          {toast}
         </div>
       )}
     </AppLayout>

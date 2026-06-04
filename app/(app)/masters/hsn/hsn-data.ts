@@ -1,110 +1,58 @@
-﻿// HSN Master Data & Helpers
+// HSN Master Data & Helpers
 
 export interface HSNMaster {
   id: number;
-  hsnCode: string;           // e.g., "010210"
-  gstRate: number;           // 0, 5, 12, 18, 28
-  uom?: string;              // Optional: KG, LTR, etc.
+  hsnId: string;             // Auto Generated, e.g., "HSN-0001"
+  hsnCode: string;           // Text, e.g., "120991"
+  hsnDescription: string;     // Text Area description
+  gstRate: string;           // Lookup / dropdown, e.g. "18%" or "0%"
+  applicableCategory: "Seeds" | "Fertilizers" | "Pesticides" | "Bio Products" | "Equipment";
   status: "active" | "inactive";
-  remarks?: string;
   createdBy: string;
   createdDate: string;       // YYYY-MM-DD
   updatedBy: string;
   updatedDate: string;       // YYYY-MM-DD
-  lastStatusChange: string;  // YYYY-MM-DD
 }
 
 const SEED_HSN: HSNMaster[] = [
   {
     id: 1,
-    hsnCode: "010210",
-    gstRate: 5,
-    uom: "KG",
+    hsnId: "HSN-0001",
+    hsnCode: "120991",
+    hsnDescription: "Vegetable seeds for planting/sowing",
+    gstRate: "0%",
+    applicableCategory: "Seeds",
     status: "active",
-    remarks: "Meat of bovine animals, fresh or chilled",
     createdBy: "Admin",
-    createdDate: "2024-01-10",
+    createdDate: "2026-01-10",
     updatedBy: "Admin",
-    updatedDate: "2024-01-10",
-    lastStatusChange: "2024-01-10",
+    updatedDate: "2026-01-10",
   },
   {
     id: 2,
-    hsnCode: "020110",
-    gstRate: 5,
-    uom: "KG",
+    hsnId: "HSN-0002",
+    hsnCode: "310100",
+    hsnDescription: "Animal or vegetable fertilizers, whether or not mixed together",
+    gstRate: "5%",
+    applicableCategory: "Fertilizers",
     status: "active",
-    remarks: "Meat of swine, fresh or chilled",
     createdBy: "Admin",
-    createdDate: "2024-01-12",
+    createdDate: "2026-01-12",
     updatedBy: "Admin",
-    updatedDate: "2024-01-12",
-    lastStatusChange: "2024-01-12",
+    updatedDate: "2026-01-12",
   },
   {
     id: 3,
-    hsnCode: "020714",
-    gstRate: 5,
-    uom: "KG",
+    hsnId: "HSN-0003",
+    hsnCode: "380891",
+    hsnDescription: "Insecticides, fungicides, herbicides, put up in forms or packings",
+    gstRate: "18%",
+    applicableCategory: "Pesticides",
     status: "active",
-    remarks: "Meat of poultry, not cut in pieces, fresh or chilled",
     createdBy: "Admin",
-    createdDate: "2024-01-15",
+    createdDate: "2026-01-15",
     updatedBy: "Admin",
-    updatedDate: "2024-01-15",
-    lastStatusChange: "2024-01-15",
-  },
-  {
-    id: 4,
-    hsnCode: "030389",
-    gstRate: 5,
-    uom: "KG",
-    status: "active",
-    remarks: "Fish, not elsewhere specified, fresh or chilled",
-    createdBy: "Admin",
-    createdDate: "2024-01-18",
-    updatedBy: "Admin",
-    updatedDate: "2024-01-18",
-    lastStatusChange: "2024-01-18",
-  },
-  {
-    id: 5,
-    hsnCode: "040710",
-    gstRate: 0,
-    uom: "KG",
-    status: "active",
-    remarks: "Natural honey",
-    createdBy: "Admin",
-    createdDate: "2024-01-20",
-    updatedBy: "Admin",
-    updatedDate: "2024-01-20",
-    lastStatusChange: "2024-01-20",
-  },
-  {
-    id: 6,
-    hsnCode: "100610",
-    gstRate: 0,
-    uom: "KG",
-    status: "active",
-    remarks: "Barley, not pearled or hulled",
-    createdBy: "Admin",
-    createdDate: "2024-02-01",
-    updatedBy: "Admin",
-    updatedDate: "2024-02-01",
-    lastStatusChange: "2024-02-01",
-  },
-  {
-    id: 7,
-    hsnCode: "120991",
-    gstRate: 0,
-    uom: "KG",
-    status: "inactive",
-    remarks: "Seeds of other plants, oil-bearing",
-    createdBy: "Admin",
-    createdDate: "2024-02-05",
-    updatedBy: "Admin",
-    updatedDate: "2024-02-15",
-    lastStatusChange: "2024-02-15",
+    updatedDate: "2026-01-15",
   },
 ];
 
@@ -128,6 +76,10 @@ export function saveHSNMasters(data: HSNMaster[]): void {
 
 export function nextHSNId(list: HSNMaster[]): number {
   return Math.max(0, ...list.map(h => h.id)) + 1;
+}
+
+export function generateHSNCode(id: number): string {
+  return `HSN-${String(id).padStart(4, "0")}`;
 }
 
 export function todayStr(): string {
