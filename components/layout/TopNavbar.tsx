@@ -1,6 +1,7 @@
 "use client";
 
 import React, { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -108,14 +109,17 @@ export const TopNavbar = memo(function TopNavbar() {
         {/* Logo */}
         <PrefetchLink
           href="/dashboard"
-          className="flex items-center gap-2.5 px-4 border-r border-border h-full flex-shrink-0"
+          className="flex items-center px-4 border-r border-border h-full flex-shrink-0"
         >
-          <div className="w-8 h-8 rounded-xl bg-brand-gradient flex items-center justify-center shadow-sm">
-            <span className="text-white text-[11px] font-extrabold tracking-tight">DS</span>
-          </div>
-          <div className="hidden sm:block">
-            <p className="text-[13px] font-bold text-brand-700 leading-tight">Dharitri Sutra</p>
-            <p className="text-[10px] text-muted-foreground font-medium leading-tight -mt-0.5">Agri ERP</p>
+          <div className="h-10 flex items-center justify-center">
+            <Image
+              src="/images/dharitri sutra.png"
+              alt="Dharitri Sutra Logo"
+              width={140}
+              height={40}
+              className="h-8 w-auto object-contain"
+              priority
+            />
           </div>
         </PrefetchLink>
 

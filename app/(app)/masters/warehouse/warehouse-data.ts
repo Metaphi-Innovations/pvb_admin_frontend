@@ -220,3 +220,25 @@ export function generateWarehouseCode(id: number): string {
 export function formatStatus(status: WarehouseStatus): string {
   return WAREHOUSE_STATUSES.find(s => s.value === status)?.label ?? status;
 }
+
+export interface WarehouseLocation {
+  code: string;
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+}
+
+export function loadWarehouseLocations(): WarehouseLocation[] {
+  const warehouses = loadWarehouses();
+  return warehouses.map(w => ({
+    code: w.warehouseCode,
+    name: w.warehouseName,
+    address: w.address,
+    city: w.city,
+    state: w.state,
+    pincode: w.pincode,
+  }));
+}
+

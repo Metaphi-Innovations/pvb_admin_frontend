@@ -141,33 +141,33 @@ export function PurchaseRequestForm({
     <div className="space-y-5">
       {/* Top fields — 3 column like Swipe */}
       <div className="bg-white rounded-lg border border-border/60 p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <Label className={labelClass}>Initiated By</Label>
-              <Input readOnly value={form.requestedBy} className={cn(fieldClass, "bg-muted/25")} />
-            </div>
-            <div>
-              <Label className={labelClass}>PR Date</Label>
-              <Input
-                type="date"
-                disabled={readOnly}
-                value={form.prDate}
-                onChange={(e) => set("prDate", e.target.value)}
-                className={fieldClass}
-              />
-            </div>
-            <div>
-              <Label className={labelClass}>Required By Date</Label>
-              <Input
-                type="date"
-                disabled={readOnly}
-                value={form.requiredByDate}
-                onChange={(e) => set("requiredByDate", e.target.value)}
-                className={fieldClass}
-              />
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <Label className={labelClass}>Initiated By</Label>
+            <Input readOnly value={form.requestedBy} className={cn(fieldClass, "bg-muted/25")} />
+          </div>
+          <div>
+            <Label className={labelClass}>PR Date</Label>
+            <Input
+              type="date"
+              disabled={readOnly}
+              value={form.prDate}
+              onChange={(e) => set("prDate", e.target.value)}
+              className={fieldClass}
+            />
+          </div>
+          <div>
+            <Label className={labelClass}>Required By Date</Label>
+            <Input
+              type="date"
+              disabled={readOnly}
+              value={form.requiredByDate}
+              onChange={(e) => set("requiredByDate", e.target.value)}
+              className={fieldClass}
+            />
           </div>
         </div>
+      </div>
 
       {/* Products & services block */}
       <div className="bg-white rounded-lg border border-border/60 overflow-hidden">
@@ -278,7 +278,7 @@ export function PurchaseRequestForm({
                         className="w-full h-8 text-xs border border-border/60 rounded-md px-1.5"
                       >
                         {uomOptions.map((u) => (
-                          <option key={u.id} value={u.unitCode}>
+                          <option key={u.id} value={u.shortName}>
                             {u.shortName}
                           </option>
                         ))}

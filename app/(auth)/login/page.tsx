@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import {
   Leaf, Eye, EyeOff, ArrowRight, Shield, Phone, Mail, Lock,
@@ -11,6 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FINANCIAL_YEARS, FY_STATUS_CONFIG, setStoredFYId, type FinancialYear } from "@/lib/fy-store";
+import { AuthService } from "@/services/auth.service";
+import { LoginRequest } from "@/types/api.types";
+
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 type IdentifierType = "email" | "mobile" | "unknown";
@@ -24,11 +28,7 @@ function detectType(val: string): IdentifierType {
 
 // ── Steps ─────────────────────────────────────────────────────────────────────
 type Step =
-  | "identifier"
-  | "email-password"
-  | "mobile-choice"
-  | "mobile-password"
-  | "otp-input"
+  | "credentials"
   | "forgot"
   | "forgot-sent"
   | "fy-select";
@@ -101,17 +101,14 @@ function FYStatusBadge({ status }: { status: string }) {
 }
 
 function StepProgress({ step }: { step: Step }) {
-  const authSteps: Step[] = ["email-password", "mobile-choice", "mobile-password", "otp-input"];
-  const authDone = authSteps.includes(step) || step === "fy-select";
-  const fyDone = step === "fy-select";
+  const isFy = step === "fy-select";
 
-  if (step === "identifier" || step === "forgot" || step === "forgot-sent") return null;
+  if (step === "forgot" || step === "forgot-sent") return null;
 
   return (
     <div className="flex items-center gap-2 mb-2">
       <div className="flex-1 h-1 rounded-full bg-brand-500" />
-      <div className={cn("flex-1 h-1 rounded-full", authDone ? "bg-brand-500" : "bg-muted")} />
-      <div className={cn("flex-1 h-1 rounded-full", fyDone ? "bg-brand-500" : "bg-muted")} />
+      <div className={cn("flex-1 h-1 rounded-full", isFy ? "bg-brand-500" : "bg-muted")} />
     </div>
   );
 }
@@ -127,8 +124,15 @@ function LeftPanel() {
       <div className="relative z-10 flex flex-col h-full p-10">
         {/* Logo */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center">
-            <Leaf className="w-5 h-5 text-white" />
+          <div className="h-12 bg-white rounded-xl px-3 py-1 flex items-center justify-center border border-white/20">
+            <Image
+              src="/images/dharitri sutra.png"
+              alt="Dharitri Sutra Logo"
+              width={140}
+              height={40}
+              className="h-10 w-auto object-contain"
+              priority
+            />
           </div>
           <div>
             <p className="text-white font-bold text-lg leading-tight">Paramverse Bio</p>
@@ -164,8 +168,8 @@ function LeftPanel() {
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4">
           {[
-            { label: "Farmers",      value: "2.4L+" },
-            { label: "Districts",    value: "180+"  },
+            { label: "Farmers", value: "2.4L+" },
+            { label: "Districts", value: "180+" },
             { label: "Daily Orders", value: "3,200+" },
           ].map((s) => (
             <div key={s.label} className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/15">
@@ -182,17 +186,17 @@ function LeftPanel() {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function LoginPage() {
   // ── State ──────────────────────────────────────────────────────────────────
-  const [step,       setStep]       = useState<Step>("identifier");
+  const [step, setStep] = useState<Step>("credentials");
   const [identifier, setIdentifier] = useState("");
-  const [idError,    setIdError]    = useState("");
-  const [password,   setPassword]   = useState("");
-  const [pwError,    setPwError]    = useState("");
-  const [showPass,   setShowPass]   = useState(false);
-  const [otp,        setOtp]        = useState(["", "", "", "", "", ""]);
-  const [otpError,   setOtpError]   = useState("");
-  const [remember,   setRemember]   = useState(false);
-  const [loading,    setLoading]    = useState(false);
-  const [forgotVal,  setForgotVal]  = useState("");
+  const [idError, setIdError] = useState("");
+  const [password, setPassword] = useState("");
+  const [pwError, setPwError] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [otpError, setOtpError] = useState("");
+  const [remember, setRemember] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [forgotVal, setForgotVal] = useState("");
   const [resendSecs, setResendSecs] = useState(0);
   const [selectedFY, setSelectedFY] = useState<FinancialYear | null>(null);
 
@@ -221,33 +225,53 @@ export default function LoginPage() {
   };
 
   // ── Actions ────────────────────────────────────────────────────────────────
-  const handleIdentifierNext = () => {
-    if (!identifier.trim()) { setIdError("Enter your email or mobile number"); return; }
-    if (idType === "unknown") {
+  const handleCredentialsLogin = async () => {
+    let hasError = false;
+    if (!identifier.trim()) {
+      setIdError("Enter your email or mobile number");
+      hasError = true;
+    } else if (idType === "unknown") {
       setIdError("Enter a valid email address or 10-digit mobile number");
-      return;
+      hasError = true;
+    } else {
+      setIdError("");
     }
-    setIdError("");
-    setStep(idType === "email" ? "email-password" : "mobile-choice");
-  };
 
-  const handlePasswordLogin = () => {
-    if (!password.trim()) { setPwError("Password is required"); return; }
-    setPwError("");
-    simulate(() => setStep("fy-select"));
-  };
+    if (!password.trim()) {
+      setPwError("Password is required");
+      hasError = true;
+    } else {
+      setPwError("");
+    }
 
-  const handleSendOtp = () => {
-    simulate(() => {
-      setStep("otp-input");
-      startResendTimer();
-    }, 1000);
-  };
+    if (hasError) return;
 
-  const handleVerifyOtp = () => {
-    if (otp.some((v) => !v)) { setOtpError("Please enter all 6 digits"); return; }
-    setOtpError("");
-    simulate(() => setStep("fy-select"));
+    setLoading(true);
+    try {
+      const payload: LoginRequest = {
+        password,
+        remember_me: remember,
+      };
+
+      if (idType === "mobile") {
+        payload.mobile_number = identifier.trim();
+      } else {
+        payload.email = identifier.trim();
+      }
+
+      const response = await AuthService.login(payload);
+
+      if (response.success) {
+        setStep("fy-select");
+      } else {
+        setPwError(response.error || "Login failed. Please check your credentials.");
+      }
+    } catch (err: any) {
+      console.error("Login integration error:", err);
+      setPwError(err.error || err.message || "An unexpected error occurred.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleForgotSubmit = () => {
@@ -263,84 +287,43 @@ export default function LoginPage() {
 
   // ── Step renderers ─────────────────────────────────────────────────────────
   const renderContent = () => {
-    /* ────── IDENTIFIER ────── */
-    if (step === "identifier") return (
+    /* ────── CREDENTIALS ────── */
+    if (step === "credentials") return (
       <div className="space-y-5">
         <div>
           <h2 className="text-2xl font-bold text-foreground tracking-tight">Welcome back</h2>
-          <p className="text-sm text-muted-foreground mt-1">Enter your email or mobile number to continue</p>
+          <p className="text-sm text-muted-foreground mt-1">Enter your details to sign in</p>
         </div>
 
         <div className="space-y-1.5">
           <Label className="text-sm font-medium">Email or Mobile Number</Label>
           <div className="relative">
             <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-              {idType === "email"  ? <Mail  className="w-4 h-4 text-brand-500" /> :
-               idType === "mobile" ? <Phone className="w-4 h-4 text-brand-500" /> :
-               <Mail className="w-4 h-4 text-muted-foreground" />}
+              {idType === "email" ? <Mail className="w-4 h-4 text-brand-500" /> :
+                idType === "mobile" ? <Phone className="w-4 h-4 text-brand-500" /> :
+                  <Mail className="w-4 h-4 text-muted-foreground" />}
             </div>
             <Input
               type="text"
               value={identifier}
               onChange={(e) => { setIdentifier(e.target.value); setIdError(""); }}
-              onKeyDown={(e) => e.key === "Enter" && handleIdentifierNext()}
               placeholder="you@company.com or 9876543210"
               className={cn("h-10 pl-10 rounded-input", idError && "border-red-400 focus-visible:ring-red-400")}
               autoFocus
             />
-            {identifier && (
-              <button
-                type="button"
-                onClick={() => { setIdentifier(""); setIdError(""); }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
           </div>
           {idError && (
             <p className="flex items-center gap-1.5 text-xs text-red-500">
               <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {idError}
             </p>
           )}
-          {identifier.length > 3 && idType !== "unknown" && (
-            <p className="text-xs text-muted-foreground">
-              {idType === "email"
-                ? "✓ Email detected — you'll use password login"
-                : "✓ Mobile detected — choose password or OTP login"}
-            </p>
-          )}
-        </div>
-
-        <Button
-          className="w-full h-10 bg-brand-500 hover:bg-brand-600 text-white font-semibold rounded-btn gap-2"
-          onClick={handleIdentifierNext}
-        >
-          Continue <ArrowRight className="w-4 h-4" />
-        </Button>
-      </div>
-    );
-
-    /* ────── EMAIL PASSWORD ────── */
-    if (step === "email-password") return (
-      <div className="space-y-5">
-        <div>
-          <button
-            onClick={() => setStep("identifier")}
-            className="text-xs text-brand-600 hover:underline mb-3 flex items-center gap-1 font-medium"
-          >
-            ← Change email
-          </button>
-          <h2 className="text-2xl font-bold text-foreground tracking-tight">Enter your password</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Signing in as <span className="font-semibold text-foreground">{identifier}</span>
-          </p>
         </div>
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <Label className="text-sm font-medium">Password</Label>
             <button
+              type="button"
               onClick={() => { setForgotVal(identifier); setStep("forgot"); }}
               className="text-xs text-brand-600 hover:underline font-medium"
             >
@@ -353,10 +336,9 @@ export default function LoginPage() {
               type={showPass ? "text" : "password"}
               value={password}
               onChange={(e) => { setPassword(e.target.value); setPwError(""); }}
-              onKeyDown={(e) => e.key === "Enter" && handlePasswordLogin()}
+              onKeyDown={(e) => e.key === "Enter" && handleCredentialsLogin()}
               placeholder="Enter your password"
               className={cn("h-10 pl-10 pr-10 rounded-input", pwError && "border-red-400")}
-              autoFocus
             />
             <button
               type="button"
@@ -382,7 +364,7 @@ export default function LoginPage() {
 
         <Button
           className="w-full h-10 bg-brand-500 hover:bg-brand-600 text-white font-semibold rounded-btn gap-2"
-          onClick={handlePasswordLogin}
+          onClick={handleCredentialsLogin}
           disabled={loading}
         >
           {loading ? (
@@ -391,202 +373,6 @@ export default function LoginPage() {
             <> Sign In <ArrowRight className="w-4 h-4" /> </>
           )}
         </Button>
-      </div>
-    );
-
-    /* ────── MOBILE CHOICE ────── */
-    if (step === "mobile-choice") return (
-      <div className="space-y-5">
-        <div>
-          <button
-            onClick={() => setStep("identifier")}
-            className="text-xs text-brand-600 hover:underline mb-3 flex items-center gap-1 font-medium"
-          >
-            ← Change number
-          </button>
-          <h2 className="text-2xl font-bold text-foreground tracking-tight">How to sign in?</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Mobile <span className="font-semibold text-foreground">+91 {identifier}</span>
-          </p>
-        </div>
-
-        <div className="space-y-3">
-          {/* Password option */}
-          <button
-            onClick={() => setStep("mobile-password")}
-            className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-border hover:border-brand-400 hover:bg-brand-50/40 transition-all text-left group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center flex-shrink-0 group-hover:bg-brand-200 transition-colors">
-              <Lock className="w-5 h-5 text-brand-600" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-foreground">Password Login</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Sign in with your account password</p>
-            </div>
-            <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-brand-600 transition-colors" />
-          </button>
-
-          {/* OTP option */}
-          <button
-            onClick={handleSendOtp}
-            disabled={loading}
-            className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-border hover:border-brand-400 hover:bg-brand-50/40 transition-all text-left group disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center flex-shrink-0 group-hover:bg-green-100 transition-colors">
-              {loading ? (
-                <span className="w-5 h-5 rounded-full border-2 border-green-300 border-t-green-600 animate-spin" />
-              ) : (
-                <Shield className="w-5 h-5 text-green-600" />
-              )}
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-foreground">OTP Login</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {loading ? "Sending OTP…" : "Get a one-time password on your mobile"}
-              </p>
-            </div>
-            <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-brand-600 transition-colors" />
-          </button>
-        </div>
-      </div>
-    );
-
-    /* ────── MOBILE PASSWORD ────── */
-    if (step === "mobile-password") return (
-      <div className="space-y-5">
-        <div>
-          <button
-            onClick={() => setStep("mobile-choice")}
-            className="text-xs text-brand-600 hover:underline mb-3 flex items-center gap-1 font-medium"
-          >
-            ← Back
-          </button>
-          <h2 className="text-2xl font-bold text-foreground tracking-tight">Enter your password</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Mobile <span className="font-semibold text-foreground">+91 {identifier}</span>
-          </p>
-        </div>
-
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <Label className="text-sm font-medium">Password</Label>
-            <button
-              onClick={() => { setForgotVal(identifier); setStep("forgot"); }}
-              className="text-xs text-brand-600 hover:underline font-medium"
-            >
-              Forgot password?
-            </button>
-          </div>
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-            <Input
-              type={showPass ? "text" : "password"}
-              value={password}
-              onChange={(e) => { setPassword(e.target.value); setPwError(""); }}
-              onKeyDown={(e) => e.key === "Enter" && handlePasswordLogin()}
-              placeholder="Enter your password"
-              className={cn("h-10 pl-10 pr-10 rounded-input", pwError && "border-red-400")}
-              autoFocus
-            />
-            <button
-              type="button"
-              onClick={() => setShowPass((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-          {pwError && (
-            <p className="flex items-center gap-1.5 text-xs text-red-500">
-              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {pwError}
-            </p>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Checkbox id="rem-mobile" checked={remember} onCheckedChange={(v) => setRemember(!!v)} />
-          <label htmlFor="rem-mobile" className="text-sm text-muted-foreground cursor-pointer select-none">
-            Keep me signed in
-          </label>
-        </div>
-
-        <Button
-          className="w-full h-10 bg-brand-500 hover:bg-brand-600 text-white font-semibold rounded-btn gap-2"
-          onClick={handlePasswordLogin}
-          disabled={loading}
-        >
-          {loading ? (
-            <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-          ) : (
-            <> Sign In <ArrowRight className="w-4 h-4" /> </>
-          )}
-        </Button>
-
-        <div className="text-center">
-          <button
-            className="text-xs text-brand-600 hover:underline font-medium"
-            onClick={handleSendOtp}
-          >
-            Use OTP instead →
-          </button>
-        </div>
-      </div>
-    );
-
-    /* ────── OTP INPUT ────── */
-    if (step === "otp-input") return (
-      <div className="space-y-5">
-        <div className="text-center">
-          <div className="w-14 h-14 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center mx-auto mb-4">
-            <Shield className="w-7 h-7 text-brand-500" />
-          </div>
-          <h2 className="text-2xl font-bold text-foreground tracking-tight">Verify OTP</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            6-digit OTP sent to <span className="font-semibold text-foreground">+91 {identifier}</span>
-          </p>
-        </div>
-
-        <OtpInput value={otp} onChange={setOtp} />
-
-        {otpError && (
-          <p className="flex items-center gap-1.5 text-xs text-red-500 justify-center">
-            <AlertCircle className="w-3.5 h-3.5" /> {otpError}
-          </p>
-        )}
-
-        <Button
-          className="w-full h-10 bg-brand-500 hover:bg-brand-600 text-white font-semibold rounded-btn gap-2"
-          onClick={handleVerifyOtp}
-          disabled={loading || otp.some((v) => !v)}
-        >
-          {loading ? (
-            <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-          ) : (
-            <> Verify & Sign In <ArrowRight className="w-4 h-4" /> </>
-          )}
-        </Button>
-
-        <div className="flex items-center justify-center gap-4 text-xs">
-          {resendSecs > 0 ? (
-            <span className="text-muted-foreground">
-              Resend OTP in <span className="font-semibold text-foreground">{resendSecs}s</span>
-            </span>
-          ) : (
-            <button
-              className="text-brand-600 hover:underline font-medium flex items-center gap-1"
-              onClick={() => { setOtp(["", "", "", "", "", ""]); handleSendOtp(); }}
-            >
-              <RefreshCw className="w-3 h-3" /> Resend OTP
-            </button>
-          )}
-          <span className="text-muted-foreground">·</span>
-          <button
-            className="text-muted-foreground hover:text-foreground"
-            onClick={() => setStep("mobile-choice")}
-          >
-            Change method
-          </button>
-        </div>
       </div>
     );
 
@@ -595,7 +381,7 @@ export default function LoginPage() {
       <div className="space-y-5">
         <div>
           <button
-            onClick={() => setStep(idType === "email" ? "email-password" : "mobile-password")}
+            onClick={() => setStep("credentials")}
             className="text-xs text-brand-600 hover:underline mb-3 flex items-center gap-1 font-medium"
           >
             ← Back to login
@@ -647,7 +433,7 @@ export default function LoginPage() {
         </p>
         <div className="pt-2">
           <button
-            onClick={() => setStep("identifier")}
+            onClick={() => setStep("credentials")}
             className="text-sm text-brand-600 hover:underline font-medium"
           >
             ← Back to sign in
@@ -721,8 +507,15 @@ export default function LoginPage() {
 
           {/* Mobile logo */}
           <div className="flex items-center gap-2.5 lg:hidden mb-2">
-            <div className="w-9 h-9 rounded-xl bg-brand-gradient flex items-center justify-center">
-              <Leaf className="w-4 h-4 text-white" />
+            <div className="h-10 bg-white rounded-xl px-3 py-1 flex items-center justify-center border border-border">
+              <Image
+                src="/images/dharitri sutra.png"
+                alt="Dharitri Sutra Logo"
+                width={120}
+                height={32}
+                className="h-7 w-auto object-contain"
+                priority
+              />
             </div>
             <p className="font-bold text-brand-700">Paramverse Bio ERP</p>
           </div>

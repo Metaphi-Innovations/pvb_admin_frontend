@@ -12,6 +12,8 @@
  * FYProvider mounted once. Only the page content (children) swaps on navigation.
  */
 
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 
 export default function AppGroupLayout({
@@ -19,5 +21,12 @@ export default function AppGroupLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const cookieStore = cookies();
+  const token = cookieStore.get("access_token")?.value;
+
+  if (!token) {
+    redirect("/login");
+  }
+
   return <AppShell>{children}</AppShell>;
 }
