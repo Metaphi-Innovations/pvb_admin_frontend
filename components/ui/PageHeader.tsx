@@ -69,7 +69,7 @@ export function PageHeader({
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           {Icon && (
-            <div className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-50 to-navy-50 border border-brand-100/80 flex items-center justify-center flex-shrink-0 shadow-xs">
               <Icon className="w-5 h-5 text-brand-600" />
             </div>
           )}
@@ -77,8 +77,8 @@ export function PageHeader({
             <div className="flex items-center gap-2 flex-wrap">
               <h1
                 className={cn(
-                  "font-bold text-foreground tracking-tight truncate",
-                  compact ? "text-xl" : "text-page-title",
+                  "font-bold tracking-tight truncate text-navy-900",
+                  compact ? "text-lg" : "text-page-title",
                 )}
               >
                 {title}

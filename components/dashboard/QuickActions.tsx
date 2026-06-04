@@ -12,7 +12,7 @@ const QUICK_ACTIONS: { label: string; icon: LucideIcon; href: string; accent: st
   { label: "New Invoice",     icon: FileText,  href: "/sales/invoices/new",       accent: "bg-sage-50 text-sage-600 border-sage-200"    },
   { label: "Dispatch",        icon: Truck,     href: "/sales/dispatch/new",       accent: "bg-blue-50 text-blue-600 border-blue-200"    },
   { label: "Collection",      icon: CreditCard,href: "/sales/collections/new",    accent: "bg-amber-50 text-amber-600 border-amber-200" },
-  { label: "Add Farmer",      icon: Wheat,     href: "/farmer/registry/new",      accent: "bg-olive-50 text-olive-600 border-olive-200" },
+  { label: "Add Farmer",      icon: Wheat,     href: "/farmer",                   accent: "bg-olive-50 text-olive-600 border-olive-200" },
   { label: "Add Employee",    icon: UserPlus,  href: "/hr/employees/new",         accent: "bg-purple-50 text-purple-600 border-purple-200"},
 ];
 

@@ -136,6 +136,10 @@ module.exports = {
         border:  "hsl(var(--border))",
         input:   "hsl(var(--input))",
         ring:    "hsl(var(--ring))",
+        success: {
+          DEFAULT:    "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
         // ── Status colors ─────────────────────────────────────────────
         status: {
           active:   { bg: "#F0F9F0", text: "#1A5F22", border: "#7CC87C" },

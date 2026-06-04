@@ -30,7 +30,7 @@ export default function EditTDSPage() {
   const [form, setForm] = useState({
     tdsCode: "",
     tdsRate: 0,
-    status: "active" as "active" | "inactive",
+    status: "active" as "active" | "inactive" | "archived",
     remarks: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -46,7 +46,7 @@ export default function EditTDSPage() {
     setForm({
       tdsCode: found.tdsCode,
       tdsRate: found.tdsRate,
-      status: found.status,
+      status: found.status === "archived" ? "inactive" : found.status,
       remarks: found.remarks || "",
     });
   }, [id, router]);

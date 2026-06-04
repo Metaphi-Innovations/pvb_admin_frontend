@@ -2,56 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── CSS Design Tokens ────────────────────────────────────────────────────── */
+/* ── Dharitri Sutra Design Tokens ─────────────────────────────────────────── */
 @layer base {
   :root {
-    /* Background */
-    --background:         48 33% 97%;
-    --foreground:         150 15% 12%;
+    /* Warm cream canvas — less sterile than flat grey */
+    --background:         42 40% 97%;
+    --foreground:         225 45% 14%;
 
-    /* Card */
     --card:               0 0% 100%;
-    --card-foreground:    150 15% 12%;
+    --card-foreground:    225 45% 14%;
 
-    /* Popover */
     --popover:            0 0% 100%;
-    --popover-foreground: 150 15% 12%;
+    --popover-foreground: 225 45% 14%;
 
-    /* Primary: brand orange (Dharitri wordmark) */
+    /* Primary: brand orange */
     --primary:            27 86% 46%;
     --primary-foreground: 0 0% 100%;
 
-    /* Secondary: navy (Sutra wordmark) */
+    /* Secondary: deep navy */
     --secondary:          225 70% 35%;
     --secondary-foreground: 0 0% 100%;
 
-    /* Muted */
-    --muted:              36 20% 93%;
-    --muted-foreground:   220 8% 46%;
+    --muted:              36 22% 94%;
+    --muted-foreground:   220 10% 42%;
 
-    /* Accent */
     --accent:             27 70% 55%;
     --accent-foreground:  0 0% 100%;
 
-    /* Destructive */
     --destructive:        0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    /* Border / Input / Ring */
-    --border:             36 15% 88%;
-    --input:              36 15% 88%;
+    /* Success: leaf green */
+    --success:            142 55% 32%;
+    --success-foreground: 0 0% 100%;
+
+    --border:             36 18% 86%;
+    --input:              36 18% 86%;
     --ring:               27 86% 46%;
 
-    /* Navbar */
     --navbar-height: 56px;
     --sidebar-width: 240px;
-
-    /* Radius */
     --radius: 0.75rem;
-  }
-
-  * {
-    @apply border-border;
   }
 
   html {
@@ -63,42 +54,50 @@
 
   body {
     @apply bg-background text-foreground;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1.5;
+    background-image: radial-gradient(circle at 0% 0%, rgb(244 121 32 / 0.04) 0%, transparent 45%),
+      radial-gradient(circle at 100% 0%, rgb(26 58 150 / 0.03) 0%, transparent 40%);
+    background-attachment: fixed;
   }
 
-  /* ── Scrollbar ────────────────────────────────────────────────────────── */
   ::-webkit-scrollbar       { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: #FFCB90; border-radius: 99px; }
   ::-webkit-scrollbar-thumb:hover { background: #D96A10; }
 
-  /* ── Selection ────────────────────────────────────────────────────────── */
   ::selection {
     background-color: #FFE4C4;
     color: #6B2D07;
   }
 }
 
-/* ── Component helpers ────────────────────────────────────────────────────── */
 @layer components {
   .page-container {
     @apply max-w-[1440px] mx-auto px-5 py-4;
   }
 
+  .page-shell {
+    @apply rounded-card border border-border/50 bg-white/90 backdrop-blur-sm shadow-card;
+  }
+
   .glass-card {
-    @apply bg-white/80 backdrop-blur-sm border border-white/60 shadow-card rounded-card;
+    @apply bg-white/90 backdrop-blur-sm border border-white/80 shadow-card rounded-card;
+  }
+
+  .surface-muted {
+    @apply bg-muted/40 border border-border/40 rounded-lg;
   }
 
   .section-divider {
-    @apply border-t border-border my-5;
+    @apply border-t border-border/60 my-4;
   }
 
   .skeleton {
     background: linear-gradient(
       90deg,
       hsl(var(--muted)) 25%,
-      hsl(60 10% 85%) 50%,
+      hsl(42 30% 92%) 50%,
       hsl(var(--muted)) 75%
     );
     background-size: 200% 100%;
@@ -106,26 +105,37 @@
   }
 
   .table-row-hover {
-    @apply transition-colors duration-100 hover:bg-brand-50/60 cursor-pointer;
+    @apply transition-colors duration-100 hover:bg-brand-50/50 cursor-pointer;
   }
 
   .input-base {
-    @apply w-full rounded-input border border-border bg-white px-3 py-2 text-sm
+    @apply w-full h-8 rounded-input border border-input bg-white px-3 text-xs
            placeholder:text-muted-foreground
-           focus:outline-none focus:ring-1 focus:ring-brand-400 focus:border-brand-400
+           focus:outline-none focus:ring-2 focus:ring-brand-400/30 focus:border-brand-400
            transition-all duration-150;
+  }
+
+  .btn-primary-brand {
+    @apply bg-brand-600 hover:bg-brand-700 text-white shadow-sm;
+  }
+
+  .nav-active-indicator {
+    @apply bg-gradient-to-r from-brand-50 to-white text-brand-700 border-l-2 border-brand-600 font-semibold;
+  }
+
+  .nav-active-navy {
+    @apply bg-gradient-to-r from-navy-50/80 to-white text-navy-800 border-l-2 border-navy-600 font-semibold;
   }
 }
 
-/* ── Utilities ────────────────────────────────────────────────────────────── */
 @layer utilities {
-  .text-page-title    { font-size: 28px; line-height: 36px; font-weight: 700; letter-spacing: -0.02em; }
-  .text-section-title { font-size: 22px; line-height: 30px; font-weight: 600; letter-spacing: -0.01em; }
-  .text-card-title    { font-size: 16px; line-height: 22px; font-weight: 600; }
-  .text-body-lg       { font-size: 15px; line-height: 22px; }
-  .text-body          { font-size: 14px; line-height: 20px; }
-  .text-table         { font-size: 13px; line-height: 18px; }
-  .text-helper        { font-size: 12px; line-height: 16px; }
+  .text-page-title    { font-size: 20px; line-height: 28px; font-weight: 700; letter-spacing: -0.02em; color: hsl(225 45% 14%); }
+  .text-section-title { font-size: 16px; line-height: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .text-card-title    { font-size: 14px; line-height: 20px; font-weight: 600; }
+  .text-body-lg       { font-size: 13px; line-height: 18px; }
+  .text-body          { font-size: 13px; line-height: 18px; }
+  .text-table         { font-size: 12px; line-height: 16px; }
+  .text-helper        { font-size: 11px; line-height: 14px; }
   .text-badge         { font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: 0.04em; }
 
   .truncate-2 {

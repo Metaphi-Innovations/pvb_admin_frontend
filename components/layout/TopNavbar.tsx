@@ -1,178 +1,112 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import React, { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, BookOpen, ShoppingCart, BarChart3,
   UserCheck, Wallet, Wheat, CalendarDays, Monitor, Settings,
-  Palette, ChevronDown, type LucideIcon,
+  Palette, ChevronDown, Warehouse, ChevronLeft, ChevronRight, type LucideIcon,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { NAV_ITEMS, type NavGroup, type NavItem } from "@/components/navigation/nav-config";
+import { PrefetchLink } from "@/components/navigation/PrefetchLink";
+import { prefetchNavChildren } from "@/components/navigation/NavRoutePrefetch";
 
-// ── Nav config ────────────────────────────────────────────────────────────────
-interface NavChild {
-  label: string;
-  href: string;
+function navPath(href: string): string {
+  return href.split("?")[0];
 }
 
-interface NavItem {
-  id: string;
-  label: string;
-  icon: LucideIcon;
-  href?: string;
-  iconOnly?: boolean;
-  children?: NavChild[];
+function isNavHrefActive(pathname: string, search: string, href: string): boolean {
+  const path = navPath(href);
+  const pathMatch = pathname === path || pathname.startsWith(path + "/");
+  if (!pathMatch) return false;
+  const query = href.includes("?") ? href.split("?")[1] : "";
+  if (!query) return true;
+  const expected = new URLSearchParams(query);
+  const current = new URLSearchParams(search.replace(/^\?/, ""));
+  for (const [key, value] of expected.entries()) {
+    if (current.get(key) !== value) return false;
+  }
+  return true;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  {
-    id: "dashboard",
-    label: "Dashboard",
-    icon: LayoutDashboard,
-    href: "/dashboard",
-  },
-  {
-    id: "user-management",
-    label: "User Management",
-    icon: Users,
-    children: [
-      { label: "Geography",  href: "/masters/geography" },
-      { label: "Department", href: "/user-management/department" },
-      { label: "Roles",      href: "/user-management/roles" },
-      { label: "User",       href: "/user-management/employee" },
-    ],
-  },
-  {
-    id: "masters",
-    label: "Masters",
-    icon: BookOpen,
-    children: [
-      { label: "Categories",  href: "/masters/categories" },
-      { label: "Customers",   href: "/masters/customers" },
-      { label: "Products",    href: "/masters/products" },
-      { label: "Warehouse",   href: "/masters/warehouse" },
-      { label: "Unit Master", href: "/masters/uom" },
-      { label: "HSN",         href: "/masters/hsn" },
-      { label: "GST",         href: "/masters/gst" },
-      { label: "TDS",         href: "/masters/tds" },
-    ],
-  },
-  {
-    id: "procurement",
-    label: "Procurement",
-    icon: ShoppingCart,
-    children: [
-      { label: "Purchase Orders", href: "/procurement/orders" },
-      { label: "GRN",             href: "/procurement/grn" },
-      { label: "Vendor Bills",    href: "/procurement/bills" },
-      { label: "Vendor Returns",  href: "/procurement/returns" },
-      { label: "Stock Ledger",    href: "/procurement/stock" },
-    ],
-  },
-  {
-    id: "sales",
-    label: "Sales",
-    icon: BarChart3,
-    children: [
-      { label: "Sales Orders", href: "/sales/orders" },
-      { label: "Invoices",     href: "/sales/invoices" },
-      { label: "Dispatch",     href: "/sales/dispatch" },
-      { label: "Collections",  href: "/sales/collections" },
-      { label: "Targets",      href: "/sales/targets" },
-      { label: "Beat Plan",    href: "/sales/beat-plan" },
-    ],
-  },
-  {
-    id: "hr",
-    label: "HR",
-    icon: UserCheck,
-    children: [
-      { label: "Employees",        href: "/hr/employees" },
-      { label: "Attendance",       href: "/hr/attendance" },
-      { label: "Leave Management", href: "/hr/leaves" },
-      { label: "Payroll",          href: "/hr/payroll" },
-      { label: "Expense Claims",   href: "/hr/expenses" },
-    ],
-  },
-  {
-    id: "accounts",
-    label: "Accounts",
-    icon: Wallet,
-    children: [
-      { label: "Ledger",      href: "/accounts/ledger" },
-      { label: "Vouchers",    href: "/accounts/vouchers" },
-      { label: "Outstanding", href: "/accounts/outstanding" },
-      { label: "Reports",     href: "/accounts/reports" },
-    ],
-  },
-  {
-    id: "farmer",
-    label: "Farmer",
-    icon: Wheat,
-    children: [
-      { label: "Farmer Registry",    href: "/farmer/registry" },
-      { label: "Field Surveys",      href: "/farmer/surveys" },
-      { label: "Crop Calendar",      href: "/farmer/crop-calendar" },
-      { label: "Input Distribution", href: "/farmer/inputs" },
-      { label: "FPO Management",     href: "/farmer/fpo" },
-    ],
-  },
-  {
-    id: "event",
-    label: "Event",
-    icon: CalendarDays,
-    children: [
-      { label: "Events",     href: "/events" },
-      { label: "Attendance", href: "/events/attendance" },
-      { label: "Feedback",   href: "/events/feedback" },
-    ],
-  },
-  {
-    id: "demo",
-    label: "Demo",
-    icon: Monitor,
-    children: [
-      { label: "Listing Demo", href: "/listing-demo" },
-      { label: "Form Demo",    href: "/form-demo" },
-    ],
-  },
-  {
-    id: "template",
-    label: "Template",
-    icon: Palette,
-    href: "/template",
-  },
-  {
-    id: "settings",
-    label: "Settings",
-    icon: Settings,
-    iconOnly: true,
-    href: "/settings",
-  },
-];
+function computeNavActive(pathname: string, search: string, item: NavItem): boolean {
+  if (item.href && isNavHrefActive(pathname, search, item.href)) return true;
+  if (item.groupedChildren) {
+    return item.groupedChildren.some((g) =>
+      g.children.some((c) => isNavHrefActive(pathname, search, c.href)),
+    );
+  }
+  return item.children?.some((c) => isNavHrefActive(pathname, search, c.href)) ?? false;
+}
 
-// ── Main component ────────────────────────────────────────────────────────────
-export function TopNavbar() {
+function activeGroupIndex(pathname: string, search: string, groups: NavGroup[]): number {
+  const idx = groups.findIndex((g) =>
+    g.children.some((c) => isNavHrefActive(pathname, search, c.href)),
+  );
+  return idx >= 0 ? idx : 0;
+}
+
+export const TopNavbar = memo(function TopNavbar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const search = searchParams.toString() ? `?${searchParams.toString()}` : "";
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(false);
 
-  const isActive = (item: NavItem) => {
-    if (item.href) return pathname === item.href || pathname.startsWith(item.href + "/");
-    return item.children?.some((c) => pathname === c.href || pathname.startsWith(c.href + "/")) ?? false;
+  const activeById = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const item of NAV_ITEMS) {
+      map.set(item.id, computeNavActive(pathname, search, item));
+    }
+    return map;
+  }, [pathname, search]);
+
+  const checkScroll = () => {
+    if (scrollRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
+      setShowLeftArrow(scrollLeft > 4);
+      setShowRightArrow(scrollWidth - scrollLeft - clientWidth > 4);
+    }
+  };
+
+  useEffect(() => {
+    checkScroll();
+    const el = scrollRef.current;
+    if (el) {
+      el.addEventListener("scroll", checkScroll, { passive: true });
+      window.addEventListener("resize", checkScroll);
+    }
+    const timer = setTimeout(checkScroll, 100);
+
+    return () => {
+      if (el) {
+        el.removeEventListener("scroll", checkScroll);
+      }
+      window.removeEventListener("resize", checkScroll);
+      clearTimeout(timer);
+    };
+  }, []);
+
+  const scroll = (direction: "left" | "right") => {
+    if (scrollRef.current) {
+      const { clientWidth } = scrollRef.current;
+      const scrollAmount = clientWidth * 0.6;
+      scrollRef.current.scrollBy({
+        left: direction === "left" ? -scrollAmount : scrollAmount,
+        behavior: "smooth",
+      });
+    }
   };
 
   return (
     <TooltipProvider delayDuration={300}>
-      {/*
-        IMPORTANT: No overflow-x-auto on the nav items wrapper.
-        overflow-x:auto forces overflow-y:auto per CSS spec, which clips
-        absolutely-positioned children (dropdowns) that extend below the container.
-        We use overflow:visible here and portal-render dropdowns instead.
-      */}
-      <nav className="h-[56px] bg-white border-b border-border shadow-navbar flex items-center z-50 sticky top-0">
+      <nav className="h-[56px] bg-white border-b border-border/70 shadow-navbar flex items-center z-[100] sticky top-0 isolate">
         {/* Logo */}
-        <Link
+        <PrefetchLink
           href="/dashboard"
           className="flex items-center gap-2.5 px-4 border-r border-border h-full flex-shrink-0"
         >
@@ -183,105 +117,194 @@ export function TopNavbar() {
             <p className="text-[13px] font-bold text-brand-700 leading-tight">Dharitri Sutra</p>
             <p className="text-[10px] text-muted-foreground font-medium leading-tight -mt-0.5">Agri ERP</p>
           </div>
-        </Link>
+        </PrefetchLink>
 
-        {/* Nav items — overflow:visible so portal dropdowns are not clipped */}
-        <div className="flex items-center h-full px-1 gap-0.5 flex-1 min-w-0">
-          {NAV_ITEMS.map((item) => {
-            const active = isActive(item);
+        {/* Scrollable Container Wrapper */}
+        <div className="flex-1 min-w-0 h-full flex items-center px-2">
+          {/* Left button */}
+          {showLeftArrow && (
+            <div className="flex items-center pr-2 flex-shrink-0 z-10">
+              <button
+                type="button"
+                onClick={() => scroll("left")}
+                className="w-7 h-7 rounded-full bg-brand-50 border border-brand-200 shadow-md flex items-center justify-center text-brand-600 hover:bg-brand-100 active:scale-95 transition-all flex-shrink-0"
+                aria-label="Scroll left"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
-            // Icon-only (Settings)
-            if (item.iconOnly) {
+          {/* Nav items — scrollable container */}
+          <div
+            ref={scrollRef}
+            className="flex items-center h-full flex-1 min-w-0 px-1 gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scroll-smooth"
+          >
+            {NAV_ITEMS.map((item) => {
+              const active = activeById.get(item.id) ?? false;
+
+              // Icon-only (Settings)
+              if (item.iconOnly) {
+                return (
+                  <Tooltip key={item.id}>
+                    <TooltipTrigger asChild>
+                      <PrefetchLink
+                        href={item.href!}
+                        className={cn(
+                          "w-9 h-9 rounded-lg flex items-center justify-center ml-auto transition-all duration-150 flex-shrink-0",
+                          active
+                            ? "bg-brand-100 text-brand-600"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                        )}
+                      >
+                        <item.icon className="w-4 h-4" />
+                      </PrefetchLink>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" sideOffset={6}>{item.label}</TooltipContent>
+                  </Tooltip>
+                );
+              }
+
+              // Simple link (no dropdown)
+              if (item.href && !item.children && !item.groupedChildren) {
+                return (
+                  <PrefetchLink
+                    key={item.id}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 h-9 rounded-lg text-[13px] font-medium whitespace-nowrap flex-shrink-0",
+                      "transition-all duration-150 cursor-pointer border-l-2",
+                      active
+                        ? "nav-active-indicator"
+                        : "text-foreground border-transparent hover:bg-brand-50/40 hover:text-brand-700",
+                    )}
+                  >
+                    <item.icon className="w-3.5 h-3.5 flex-shrink-0" />
+                    {item.label}
+                  </PrefetchLink>
+                );
+              }
+
+              // Dropdown — portal-rendered to escape overflow clipping
               return (
-                <Tooltip key={item.id}>
-                  <TooltipTrigger asChild>
-                    <Link
-                      href={item.href!}
-                      className={cn(
-                        "w-9 h-9 rounded-lg flex items-center justify-center ml-auto transition-all duration-150",
-                        active
-                          ? "bg-brand-100 text-brand-600"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                      )}
-                    >
-                      <item.icon className="w-4 h-4" />
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" sideOffset={6}>{item.label}</TooltipContent>
-                </Tooltip>
-              );
-            }
-
-            // Simple link (no children)
-            if (item.href && !item.children) {
-              return (
-                <Link
+                <NavDropdown
                   key={item.id}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 h-9 rounded-lg text-[13px] font-medium whitespace-nowrap",
-                    "transition-all duration-150 cursor-pointer border-l-2",
-                    active
-                      ? "bg-brand-50 text-brand-700 border-brand-600 font-semibold"
-                      : "text-foreground border-transparent hover:bg-muted/50 hover:text-foreground",
-                  )}
-                >
-                  <item.icon className="w-3.5 h-3.5 flex-shrink-0" />
-                  {item.label}
-                </Link>
+                  item={item}
+                  active={active}
+                  pathname={pathname}
+                  search={search}
+                />
               );
-            }
+            })}
+          </div>
 
-            // Dropdown — portal-rendered to escape overflow clipping
-            return <NavDropdown key={item.id} item={item} active={active} pathname={pathname} />;
-          })}
+          {/* Right button */}
+          {showRightArrow && (
+            <div className="flex items-center pl-2 flex-shrink-0 z-10">
+              <button
+                type="button"
+                onClick={() => scroll("right")}
+                className="w-7 h-7 rounded-full bg-brand-50 border border-brand-200 shadow-md flex items-center justify-center text-brand-600 hover:bg-brand-100 active:scale-95 transition-all flex-shrink-0"
+                aria-label="Scroll right"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
       </nav>
     </TooltipProvider>
   );
-}
+});
 
-// ── NavDropdown — inline rendering (no portal) ────────────────────────────
-//
-// The nav items wrapper has NO overflow-x:auto, so inline position:absolute
-// dropdowns are NOT clipped by any overflow container. The portal approach
-// was abandoned because createPortal + dropdownRef caused a timing bug in
-// React 18 concurrent mode: dropdownRef.current is null between setIsOpen(true)
-// and React's commit phase. Fast mousedowns found null, closed the dropdown
-// before the Link's click event fired → 9-10 clicks required.
-//
-// With inline rendering, a single containerRef wraps both the trigger button
-// AND the dropdown div. containerRef.contains(e.target) is always correct
-// because the dropdown IS inside containerRef — no timing issues possible.
+// ── NavDropdown — portaled menu (solid panel, above page content) ───────────
 
-function NavDropdown({
+const NavDropdown = memo(function NavDropdown({
   item,
   active,
   pathname,
+  search,
 }: {
   item: NavItem;
   active: boolean;
   pathname: string;
+  search: string;
 }) {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const children = item.children ?? [];
-  const useTwoCols = children.length > 4;
+  const groupedChildren = item.groupedChildren ?? [];
+  const hasGroups = groupedChildren.length > 0;
+  const isSidebarMenu = item.menuLayout === "sidebar" && hasGroups;
+  const isMasters = item.id === "masters";
+  const [hoveredGroup, setHoveredGroup] = useState(0);
 
-  // ── Close when clicking outside the container (trigger + dropdown) ───────
+  const menuWidth = isSidebarMenu
+    ? 760
+    : hasGroups
+      ? groupedChildren.length > 3
+        ? 820
+        : 780
+      : isMasters
+        ? 520
+        : 300;
+
+  const updateMenuPosition = () => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const maxLeft = Math.max(8, Math.min(rect.left, window.innerWidth - menuWidth - 8));
+    setMenuPos({ top: rect.bottom + 6, left: maxLeft });
+  };
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [isOpen, menuWidth]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const links = [
+      ...children,
+      ...groupedChildren.flatMap((g) => g.children),
+    ];
+    prefetchNavChildren(router, links);
+    if (item.href) router.prefetch(item.href);
+  }, [isOpen, item.href, children, groupedChildren, router]);
+
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
+      const target = e.target as Node;
+      if (
+        triggerRef.current?.contains(target) ||
+        menuRef.current?.contains(target)
+      ) {
+        return;
       }
+      setIsOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [isOpen]);
 
+  useEffect(() => {
+    if (isOpen && isSidebarMenu) {
+      setHoveredGroup(activeGroupIndex(pathname, search, groupedChildren));
+    }
+  }, [isOpen, isSidebarMenu, pathname, search, groupedChildren]);
+
   // ── Close on route change ────────────────────────────────────────────────
-  useEffect(() => { setIsOpen(false); }, [pathname]);
+  useEffect(() => { setIsOpen(false); }, [pathname, search]);
 
   // ── Close on Escape ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -291,17 +314,212 @@ function NavDropdown({
     return () => document.removeEventListener("keydown", handler);
   }, [isOpen]);
 
+  const menuPanel = isOpen ? (
+    <div
+      ref={menuRef}
+      role="menu"
+      className={cn(
+        "fixed rounded-xl border border-border bg-white p-3 shadow-2xl",
+        "animate-in fade-in-0 zoom-in-95 duration-100",
+      )}
+      style={{
+        top: menuPos.top,
+        left: menuPos.left,
+        width: menuWidth,
+        zIndex: 10000,
+      }}
+    >
+      {hasGroups && isSidebarMenu ? (
+        <div className="flex min-h-[260px] -m-1 overflow-hidden rounded-lg">
+          <div className="w-[272px] flex-shrink-0 bg-muted/25 border-r border-border/80 p-2 space-y-1">
+            {groupedChildren.map((group, idx) => {
+              const GroupIcon = group.icon;
+              const isHovered = hoveredGroup === idx;
+              return (
+                <button
+                  key={group.label}
+                  type="button"
+                  onMouseEnter={() => setHoveredGroup(idx)}
+                  className={cn(
+                    "w-full text-left rounded-lg border p-3 transition-all duration-150 outline-none",
+                    isHovered
+                      ? "bg-white border-border shadow-sm"
+                      : "border-transparent hover:bg-white/70",
+                  )}
+                >
+                  <div className="flex gap-3 items-start">
+                    {GroupIcon ? (
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-50 to-brand-100/80 border border-brand-100 flex items-center justify-center flex-shrink-0">
+                        <GroupIcon className="w-5 h-5 text-brand-600" />
+                      </div>
+                    ) : null}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-semibold text-foreground leading-tight">
+                        {group.label}
+                      </p>
+                      {group.description ? (
+                        <p className="text-[11px] text-muted-foreground leading-snug mt-1 line-clamp-2">
+                          {group.description}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex-1 p-4 min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-3 px-1">
+              {groupedChildren[hoveredGroup]?.label}
+            </p>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-0.5">
+              {groupedChildren[hoveredGroup]?.children.map((child) => {
+                const childActive = isNavHrefActive(pathname, search, child.href);
+                return (
+                  <PrefetchLink
+                    key={child.href}
+                    href={child.href}
+                    onClick={() => setIsOpen(false)}
+                    className={cn(
+                      "group flex items-center gap-2.5 py-2 px-1 rounded-md transition-colors duration-100",
+                      childActive ? "text-brand-700" : "text-foreground hover:text-brand-700",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "w-2 h-2 rounded-full border flex-shrink-0 transition-colors",
+                        childActive
+                          ? "border-brand-600 bg-brand-600"
+                          : "border-foreground/30 group-hover:border-brand-500",
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        "text-[13px] font-medium leading-tight",
+                        childActive && "font-semibold",
+                      )}
+                    >
+                      {child.label}
+                    </span>
+                  </PrefetchLink>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : hasGroups ? (
+        <div className="space-y-2">
+          {item.href && item.id === "accounts" && (
+            <PrefetchLink
+              href={item.href}
+              onClick={() => setIsOpen(false)}
+              className="flex items-center justify-between px-2 py-1.5 rounded-md text-[11px] font-medium text-brand-700 hover:bg-brand-50"
+            >
+              <span>Accounts overview</span>
+              <span>›</span>
+            </PrefetchLink>
+          )}
+          <div
+            className={cn(
+              "grid gap-3",
+              groupedChildren.length > 3 ? "grid-cols-4" : "grid-cols-3",
+            )}
+          >
+            {groupedChildren.map((group) => (
+              <div
+                key={group.label}
+                className="rounded-lg border border-border/60 bg-white p-2 shadow-sm"
+              >
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1.5 pb-1.5 mb-1 border-b border-border/50">
+                  {group.label}
+                </p>
+                <div className="space-y-0.5">
+                  {group.children.map((child) => {
+                    const childActive = isNavHrefActive(pathname, search, child.href);
+                    return (
+                      <PrefetchLink
+                        key={child.href}
+                        href={child.href}
+                        onClick={() => setIsOpen(false)}
+                        className={cn(
+                          "group flex items-center gap-1.5 px-2 py-[7px] rounded-md transition-colors duration-100 cursor-pointer w-full",
+                          childActive ? "bg-brand-50 text-brand-700" : "hover:bg-brand-50",
+                        )}
+                      >
+                        <span className="text-brand-400 text-[11px] font-bold leading-none select-none flex-shrink-0">
+                          ›
+                        </span>
+                        <span
+                          className={cn(
+                            "text-[12px] font-medium leading-tight transition-colors duration-100 truncate",
+                            childActive
+                              ? "text-brand-700 font-semibold"
+                              : "text-foreground group-hover:text-brand-700 group-hover:font-semibold",
+                          )}
+                        >
+                          {child.label}
+                        </span>
+                      </PrefetchLink>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div
+          className={cn(
+            "grid gap-x-2 gap-y-0.5",
+            isMasters || children.length > 4 ? "grid-cols-2" : "grid-cols-1",
+          )}
+        >
+          {children.map((child) => {
+            const childActive = isNavHrefActive(pathname, search, child.href);
+            return (
+              <PrefetchLink
+                key={child.href}
+                href={child.href}
+                onClick={() => setIsOpen(false)}
+                className={cn(
+                  "group flex items-center gap-1.5 px-2.5 py-[7px] rounded-lg",
+                  "transition-colors duration-100 cursor-pointer w-full",
+                  childActive ? "bg-brand-50 text-brand-700" : "hover:bg-brand-50",
+                )}
+              >
+                <span className="text-brand-400 text-[11px] font-bold leading-none select-none flex-shrink-0">
+                  ›
+                </span>
+                <span
+                  className={cn(
+                    "text-[13px] font-medium leading-tight transition-colors duration-100 truncate",
+                    childActive
+                      ? "text-brand-700 font-semibold"
+                      : "text-foreground group-hover:text-brand-700 group-hover:font-semibold",
+                  )}
+                >
+                  {child.label}
+                </span>
+              </PrefetchLink>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  ) : null;
+
   return (
-    <div ref={containerRef} className="relative h-full flex items-center">
-      {/* Trigger button */}
+    <div className="relative h-full flex items-center">
       <button
+        ref={triggerRef}
+        type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         className={cn(
           "flex items-center gap-1.5 px-3 h-9 rounded-lg text-[13px] font-medium whitespace-nowrap",
           "transition-all duration-150 cursor-pointer border-l-2 select-none outline-none",
           active
-            ? "bg-brand-50 text-brand-700 border-brand-600 font-semibold"
-            : "text-foreground border-transparent hover:bg-muted/50 hover:text-foreground",
+            ? "nav-active-indicator"
+            : "text-foreground border-transparent hover:bg-brand-50/40 hover:text-brand-700",
           isOpen && !active && "bg-muted/50 text-foreground border-transparent",
         )}
       >
@@ -315,51 +533,9 @@ function NavDropdown({
         />
       </button>
 
-      {/* Inline dropdown — not clipped because parent has no overflow:auto */}
-      {isOpen && (
-        <div
-          className={cn(
-            "absolute top-full left-0 mt-1.5",
-            "bg-white border border-border/60 rounded-xl shadow-lg p-2.5",
-            "animate-in fade-in-0 zoom-in-95 duration-100",
-            useTwoCols ? "w-[300px]" : "w-[200px]",
-          )}
-          style={{ zIndex: 9999 }}
-        >
-          <div className={cn("grid gap-x-1 gap-y-0.5", useTwoCols ? "grid-cols-2" : "grid-cols-1")}>
-            {children.map((child) => {
-              const childActive =
-                pathname === child.href || pathname.startsWith(child.href + "/");
-              return (
-                <Link
-                  key={child.href}
-                  href={child.href}
-                  onClick={() => setIsOpen(false)}
-                  className={cn(
-                    "group flex items-center gap-1.5 px-2.5 py-[7px] rounded-lg",
-                    "transition-colors duration-100 cursor-pointer w-full",
-                    childActive
-                      ? "bg-brand-50 text-brand-700"
-                      : "hover:bg-brand-50",
-                  )}
-                >
-                  <span className="text-brand-400 text-[11px] font-bold leading-none select-none flex-shrink-0">›</span>
-                  <span
-                    className={cn(
-                      "text-[13px] font-medium leading-tight transition-colors duration-100 truncate",
-                      childActive
-                        ? "text-brand-700 font-semibold"
-                        : "text-foreground/80 group-hover:text-brand-700 group-hover:font-semibold",
-                    )}
-                  >
-                    {child.label}
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {typeof document !== "undefined" && menuPanel
+        ? createPortal(menuPanel, document.body)
+        : null}
     </div>
   );
-}
+});

@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { AlertCircle, ChevronDown, Check } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { AlertCircle, Building2, CreditCard, MapPin, Receipt, User, Users } from "lucide-react";
 import { SearchableSelect } from "./SearchableSelect";
 import {
   type Customer,
@@ -130,37 +132,10 @@ export function customerToFormValues(c: Customer): CustomerFormValues {
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
   return (
-    <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
-      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+    <p className="flex items-center gap-1 mt-1 text-[11px] text-red-500">
+      <AlertCircle className="flex-shrink-0 w-3 h-3" />
       {msg}
     </p>
-  );
-}
-
-function SectionBlock({
-  icon: Icon,
-  title,
-  subtitle,
-  children,
-}: {
-  icon: React.ElementType;
-  title: string;
-  subtitle: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="bg-white rounded-xl border border-border shadow-sm p-5 space-y-4">
-      <div className="flex items-center gap-2.5 pb-3 border-b border-border">
-        <div className="w-7 h-7 rounded-lg bg-brand-50 border border-brand-100 flex items-center justify-center flex-shrink-0">
-          <Icon className="w-3.5 h-3.5 text-brand-600" />
-        </div>
-        <div>
-          <p className="text-xs font-semibold text-foreground">{title}</p>
-          <p className="text-[11px] text-muted-foreground">{subtitle}</p>
-        </div>
-      </div>
-      {children}
-    </div>
   );
 }
 
@@ -175,6 +150,66 @@ const STATUS_OPTIONS = [
   { value: "draft", label: "Draft" },
   { value: "blocked", label: "Blocked" },
 ];
+
+function SectionHead({ label, sub }: { label: string; sub?: string }) {
+  return (
+    <div className="mb-2.5 mt-0.5">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
+      {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+function CountryCodePicker({
+  value,
+  onChange,
+  disabled,
+  hasError,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+  hasError?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open && !disabled} onOpenChange={setOpen}>
+      <PopoverTrigger asChild disabled={disabled}>
+        <button
+          type="button"
+          disabled={disabled}
+          className={cn(
+            "h-8 px-2 text-xs border border-border rounded-lg bg-background flex items-center gap-1 hover:bg-muted/30 transition-colors flex-shrink-0",
+            hasError && "border-red-400",
+            disabled && "opacity-50 cursor-not-allowed bg-muted/30"
+          )}
+        >
+          <span className="font-medium text-foreground">{value}</span>
+          <ChevronDown className="w-3 h-3 text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="p-1 w-52">
+        {COUNTRY_CODES.map((cc) => (
+          <button
+            key={cc.code}
+            type="button"
+            onClick={() => {
+              onChange(cc.code);
+              setOpen(false);
+            }}
+            className={cn(
+              "w-full text-left px-2.5 py-1.5 text-xs rounded hover:bg-muted/60 transition-colors flex items-center justify-between",
+              value === cc.code && "bg-brand-50 text-brand-700"
+            )}
+          >
+            {cc.label}
+            {value === cc.code && <Check className="w-3 h-3 text-brand-600" />}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 interface CustomerFormProps {
   form: CustomerFormValues;
@@ -215,7 +250,7 @@ export function CustomerForm({ form, onChange, errors, onClearError, readOnly }:
     return getActiveSalesEmployees().map((e) => ({
       value: String(e.id),
       label: e.fullName || `${e.firstName} ${e.lastName}`.trim(),
-      sublabel: [e.employeeId, e.mobile, e.role, e.territory].filter(Boolean).join(" · "),
+      sublabel: [e.employeeId, e.mobile, e.role, e.territory].filter(Boolean).join(" - "),
     }));
   }, []);
 
@@ -223,416 +258,470 @@ export function CustomerForm({ form, onChange, errors, onClearError, readOnly }:
     if (form.districtId && !districts.some((d) => String(d.id) === form.districtId)) {
       onChange({ ...form, districtId: "", territoryId: "", pincode: "" });
     }
-  }, [form.stateId]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.stateId]);
 
   useEffect(() => {
     if (form.territoryId && !territories.some((t) => String(t.id) === form.territoryId)) {
       onChange({ ...form, territoryId: "", pincode: "" });
     }
-  }, [form.districtId]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.districtId]);
 
-  const inputCls = (key: string) =>
-    cn("h-9 text-sm rounded-lg", errors[key] && "border-red-400 focus-visible:ring-red-300");
+  const inputCls = (key: string) => cn("h-8 text-xs", errors[key] && "border-red-400 focus-visible:ring-red-300");
+  const textareaCls = (key?: string) => cn("text-xs resize-none", key && errors[key] && "border-red-400");
 
   return (
-    <div className="space-y-4 max-w-[1400px]">
-      <SectionBlock icon={User} title="Customer Basic Details" subtitle="Identity, contact, and classification">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="lg:col-span-2 space-y-1.5">
-            <Label className="text-xs font-medium">
-              Customer Name <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              value={form.customerName}
-              onChange={(e) => set("customerName", e.target.value)}
-              placeholder="e.g. Agro Solutions Pvt Ltd"
-              className={inputCls("customerName")}
-              disabled={readOnly}
-            />
-            <FieldError msg={errors.customerName} />
-          </div>
+    <div className="w-full">
+      <Tabs defaultValue="basic" className="w-full">
+        <TabsList className="h-8 p-0.5 bg-muted/30 mb-4 inline-flex gap-0.5">
+          <TabsTrigger value="basic" className="px-4 text-xs h-7">Basic Details</TabsTrigger>
+          <TabsTrigger value="tax" className="px-4 text-xs h-7">Tax & Registration</TabsTrigger>
+          <TabsTrigger value="commercial" className="px-4 text-xs h-7">Bank & Commercial</TabsTrigger>
+        </TabsList>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Customer Type <span className="text-red-500">*</span></Label>
-            <SearchableSelect
-              value={form.customerType}
-              onChange={(v) => set("customerType", v)}
-              options={CUSTOMER_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-              placeholder="Select type…"
-              disabled={readOnly}
-              error={!!errors.customerType}
-            />
-            <FieldError msg={errors.customerType} />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Status</Label>
-            <SearchableSelect
-              value={form.status}
-              onChange={(v) => set("status", v as CustomerStatus)}
-              options={STATUS_OPTIONS}
-              placeholder="Select status…"
-              disabled={readOnly}
-            />
-          </div>
-
-          {form.status === "blocked" && (
-            <div className="lg:col-span-4 space-y-1.5">
-              <Label className="text-xs font-medium">
-                Block Reason <span className="text-red-500">*</span>
-              </Label>
-              <Textarea
-                value={form.blockReason}
-                onChange={(e) => set("blockReason", e.target.value)}
-                rows={2}
-                placeholder="Reason for blocking this customer…"
-                className={cn("text-sm rounded-lg resize-none", errors.blockReason && "border-red-400")}
-                disabled={readOnly}
-              />
-              <FieldError msg={errors.blockReason} />
-            </div>
-          )}
-
-          <div className="lg:col-span-2 space-y-1.5">
-            <Label className="text-xs font-medium">
-              Mobile Number <span className="text-red-500">*</span>
-            </Label>
-            <div className="flex gap-2">
-              <select
-                value={form.countryCode}
-                onChange={(e) => set("countryCode", e.target.value)}
-                disabled={readOnly}
-                className={cn(
-                  "h-9 w-[110px] text-sm rounded-lg border border-border bg-background px-2 focus:outline-none focus:ring-2 focus:ring-ring flex-shrink-0",
-                )}
-              >
-                {COUNTRY_CODES.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.code}
-                  </option>
-                ))}
-              </select>
-              <Input
-                value={form.mobile}
-                onChange={(e) => set("mobile", e.target.value.replace(/\D/g, "").slice(0, 10))}
-                placeholder="10-digit mobile"
-                className={cn("flex-1", inputCls("mobile"))}
-                inputMode="numeric"
-                disabled={readOnly}
-              />
-            </div>
-            <FieldError msg={errors.mobile} />
-          </div>
-
-          <div className="lg:col-span-2 space-y-1.5">
-            <Label className="text-xs font-medium">Email Address</Label>
-            <Input
-              type="email"
-              value={form.email}
-              onChange={(e) => set("email", e.target.value)}
-              placeholder="email@company.com"
-              className={inputCls("email")}
-              disabled={readOnly}
-            />
-            <FieldError msg={errors.email} />
-          </div>
-        </div>
-      </SectionBlock>
-
-      <SectionBlock icon={Receipt} title="Tax & Registration Details" subtitle="GST, TDS, and regulatory identifiers">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">GST Applicable</Label>
-            <SearchableSelect
-              value={form.gstApplicable ? "yes" : "no"}
-              onChange={(v) => {
-                const yes = v === "yes";
-                onChange({
-                  ...form,
-                  gstApplicable: yes,
-                  gstin: yes ? form.gstin : "",
-                  gstMasterId: yes ? form.gstMasterId : "",
-                });
-              }}
-              options={YES_NO_OPTIONS}
-              disabled={readOnly}
-            />
-          </div>
-
-          {form.gstApplicable && (
-            <>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">
-                  GSTIN <span className="text-red-500">*</span>
-                </Label>
+        {/* ── TAB 1: BASIC DETAILS ── */}
+        <TabsContent value="basic" className="mt-0 space-y-5">
+          <div>
+            <SectionHead label="Basic Information" />
+            <div className="grid grid-cols-6 gap-6">
+              {/* Customer Name */}
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs font-medium">Customer Name <span className="text-red-500">*</span></Label>
                 <Input
-                  value={form.gstin}
-                  onChange={(e) => set("gstin", e.target.value.toUpperCase())}
-                  placeholder="27AABCU9603R1ZX"
-                  className={cn("font-mono", inputCls("gstin"))}
+                  value={form.customerName}
+                  onChange={(e) => set("customerName", e.target.value)}
+                  placeholder="e.g. Agro Solutions Pvt Ltd"
+                  className={inputCls("customerName")}
                   disabled={readOnly}
                 />
-                <FieldError msg={errors.gstin} />
+                <FieldError msg={errors.customerName} />
               </div>
-              <div className="lg:col-span-2 space-y-1.5">
-                <Label className="text-xs font-medium">GST % / GST Code</Label>
+
+              {/* Mobile Number */}
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">Mobile Number <span className="text-red-500">*</span></Label>
+                <div className="flex gap-1.5">
+                  <CountryCodePicker
+                    value={form.countryCode}
+                    onChange={(value) => set("countryCode", value)}
+                    disabled={readOnly}
+                    hasError={!!errors.mobile}
+                  />
+                  <Input
+                    value={form.mobile}
+                    onChange={(e) => set("mobile", e.target.value.replace(/\D/g, "").slice(0, 10))}
+                    placeholder="10-digit mobile"
+                    className={cn("flex-1", inputCls("mobile"))}
+                    inputMode="numeric"
+                    disabled={readOnly}
+                  />
+                </div>
+                <FieldError msg={errors.mobile} />
+                </div>
+             
+
+              {/* Email Address */}
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs font-medium">Email Address</Label>
+                <Input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => set("email", e.target.value)}
+                  placeholder="email@company.com"
+                  className={inputCls("email")}
+                  disabled={readOnly}
+                />
+                <FieldError msg={errors.email} />
+              </div>
+
+              {/* Customer Type */}
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">Customer Type <span className="text-red-500">*</span></Label>
                 <SearchableSelect
-                  value={form.gstMasterId}
-                  onChange={(v) => set("gstMasterId", v)}
-                  options={gstMasters.map((g) => ({
-                    value: String(g.id),
-                    label: `${g.gstCode} — ${g.gstPercentage}%`,
-                    sublabel: `CGST ${g.cgst}% · SGST ${g.sgst}% · IGST ${g.igst}%`,
-                  }))}
-                  placeholder="Select from GST Master…"
-                  searchPlaceholder="Search GST code…"
+                  value={form.customerType}
+                  onChange={(value) => set("customerType", value)}
+                  options={CUSTOMER_TYPE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                  placeholder="Select type..."
                   disabled={readOnly}
-                  error={!!errors.gstMasterId}
+                  error={!!errors.customerType}
                 />
-                <FieldError msg={errors.gstMasterId} />
+                <FieldError msg={errors.customerType} />
               </div>
-            </>
-          )}
+               
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">TDS Applicable</Label>
-            <SearchableSelect
-              value={form.tdsApplicable ? "yes" : "no"}
-              onChange={(v) => {
-                const yes = v === "yes";
-                onChange({
-                  ...form,
-                  tdsApplicable: yes,
-                  tdsMasterId: yes ? form.tdsMasterId : "",
-                });
-              }}
-              options={YES_NO_OPTIONS}
-              disabled={readOnly}
-            />
-          </div>
+              {/* Status */}
+              {/* <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">Status</Label>
+                <SearchableSelect
+                  value={form.status}
+                  onChange={(value) => set("status", value as CustomerStatus)}
+                  options={STATUS_OPTIONS}
+                  placeholder="Select status..."
+                  disabled={readOnly}
+                />
+              </div> */}
 
-          {form.tdsApplicable && (
-            <div className="lg:col-span-2 space-y-1.5">
-              <Label className="text-xs font-medium">TDS % / TDS Section</Label>
-              <SearchableSelect
-                value={form.tdsMasterId}
-                onChange={(v) => set("tdsMasterId", v)}
-                options={tdsMasters.map((t) => ({
-                  value: String(t.id),
-                  label: `${t.tdsCode} — ${t.tdsRate}%`,
-                  sublabel: t.remarks,
-                }))}
-                placeholder="Select from TDS Master…"
-                disabled={readOnly}
-                error={!!errors.tdsMasterId}
-              />
-              <FieldError msg={errors.tdsMasterId} />
+              {/* Block Reason */}
+              {form.status === "blocked" && (
+                <div className="col-span-4 space-y-1">
+                  <Label className="text-xs font-medium">Block Reason <span className="text-red-500">*</span></Label>
+                  <Textarea
+                    value={form.blockReason}
+                    onChange={(e) => set("blockReason", e.target.value)}
+                    rows={2}
+                    placeholder="Reason for blocking this customer..."
+                    className={textareaCls("blockReason")}
+                    disabled={readOnly}
+                  />
+                  <FieldError msg={errors.blockReason} />
+                </div>
+              )}
             </div>
-          )}
-
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">TAN #</Label>
-            <Input value={form.tan} onChange={(e) => set("tan", e.target.value)} className={inputCls("tan")} disabled={readOnly} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">CIB Regn #</Label>
-            <Input value={form.cibRegn} onChange={(e) => set("cibRegn", e.target.value)} disabled={readOnly} className="h-9 text-sm rounded-lg" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">FCO Regn #</Label>
-            <Input value={form.fcoRegn} onChange={(e) => set("fcoRegn", e.target.value)} disabled={readOnly} className="h-9 text-sm rounded-lg" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">FSSAI #</Label>
-            <Input value={form.fssai} onChange={(e) => set("fssai", e.target.value)} disabled={readOnly} className="h-9 text-sm rounded-lg" />
-          </div>
-        </div>
-      </SectionBlock>
-
-      <SectionBlock icon={MapPin} title="Address & Geography Details" subtitle="Cascading geography from Geography Master">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="lg:col-span-4 space-y-1.5">
-            <Label className="text-xs font-medium">
-              Address <span className="text-red-500">*</span>
-            </Label>
-            <Textarea
-              value={form.address}
-              onChange={(e) => set("address", e.target.value)}
-              rows={2}
-              placeholder="Street, area, landmark…"
-              className={cn("text-sm rounded-lg resize-none", errors.address && "border-red-400")}
-              disabled={readOnly}
-            />
-            <FieldError msg={errors.address} />
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">
-              State <span className="text-red-500">*</span>
-            </Label>
-            <SearchableSelect
-              value={form.stateId}
-              onChange={(v) =>
-                onChange({ ...form, stateId: v, districtId: "", territoryId: "", pincode: "" })
-              }
-              options={states.map((s) => ({ value: String(s.id), label: s.name }))}
-              placeholder="Select state…"
-              disabled={readOnly}
-              error={!!errors.stateId}
-            />
-            <FieldError msg={errors.stateId} />
-          </div>
+          {/* Address Details */}
+          <div className="pt-4 border-t border-border/60">
+            <SectionHead label="Address Details" />
+            <div className="grid grid-cols-4 gap-3">
+              {/* Address */}
+              <div className="col-span-4 space-y-1">
+                <Label className="text-xs font-medium">Address <span className="text-red-500">*</span></Label>
+                <Textarea
+                  value={form.address}
+                  onChange={(e) => set("address", e.target.value)}
+                  rows={2}
+                  placeholder="Street, area, landmark..."
+                  className={textareaCls("address")}
+                  disabled={readOnly}
+                />
+                <FieldError msg={errors.address} />
+              </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">
-              District <span className="text-red-500">*</span>
-            </Label>
-            <SearchableSelect
-              value={form.districtId}
-              onChange={(v) => onChange({ ...form, districtId: v, territoryId: "", pincode: "" })}
-              options={districts.map((d) => ({ value: String(d.id), label: d.name }))}
-              placeholder={form.stateId ? "Select district…" : "Select state first"}
-              disabled={readOnly || !form.stateId}
-              error={!!errors.districtId}
-            />
-            <FieldError msg={errors.districtId} />
-          </div>
+              {/* State */}
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">State <span className="text-red-500">*</span></Label>
+                <SearchableSelect
+                  value={form.stateId}
+                  onChange={(value) => onChange({ ...form, stateId: value, districtId: "", territoryId: "", pincode: "" })}
+                  options={states.map((state) => ({ value: String(state.id), label: state.name }))}
+                  placeholder="Select state..."
+                  disabled={readOnly}
+                  error={!!errors.stateId}
+                />
+                <FieldError msg={errors.stateId} />
+              </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Territory</Label>
-            <SearchableSelect
-              value={form.territoryId}
-              onChange={(v) => onChange({ ...form, territoryId: v, pincode: "" })}
-              options={territories.map((t) => ({ value: String(t.id), label: t.name }))}
-              placeholder={form.districtId ? "Select territory…" : "Select district first"}
-              disabled={readOnly || !form.districtId}
-            />
-          </div>
+              {/* District */}
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">District <span className="text-red-500">*</span></Label>
+                <SearchableSelect
+                  value={form.districtId}
+                  onChange={(value) => onChange({ ...form, districtId: value, territoryId: "", pincode: "" })}
+                  options={districts.map((district) => ({ value: String(district.id), label: district.name }))}
+                  placeholder={form.stateId ? "Select district..." : "Select state first"}
+                  disabled={readOnly || !form.stateId}
+                  error={!!errors.districtId}
+                />
+                <FieldError msg={errors.districtId} />
+              </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Pin Code</Label>
-            {pincodeOptions.length > 0 ? (
-              <SearchableSelect
-                value={form.pincode}
-                onChange={(v) => set("pincode", v)}
-                options={pincodeOptions.map((p) => ({ value: p, label: p }))}
-                placeholder="Select pin code…"
-                disabled={readOnly || !form.territoryId}
-                error={!!errors.pincode}
-              />
-            ) : (
-              <Input
-                value={form.pincode}
-                onChange={(e) => set("pincode", e.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="6-digit PIN"
-                className={inputCls("pincode")}
-                inputMode="numeric"
-                disabled={readOnly}
-              />
-            )}
-            <FieldError msg={errors.pincode} />
-          </div>
-        </div>
-      </SectionBlock>
+              {/* Territory */}
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">Territory</Label>
+                <SearchableSelect
+                  value={form.territoryId}
+                  onChange={(value) => onChange({ ...form, territoryId: value, pincode: "" })}
+                  options={territories.map((territory) => ({ value: String(territory.id), label: territory.name }))}
+                  placeholder={form.districtId ? "Select territory..." : "Select district first"}
+                  disabled={readOnly || !form.districtId}
+                />
+              </div>
 
-      <SectionBlock icon={Users} title="Sales Mapping" subtitle="Assign active sales person from User Master">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Sales Man</Label>
-            <SearchableSelect
-              value={form.salesManId}
-              onChange={(v) => set("salesManId", v)}
-              options={salesOptions}
-              placeholder="Search by name, ID, mobile, role…"
-              searchPlaceholder="Search sales person…"
-              disabled={readOnly}
-            />
-            <p className="text-[11px] text-muted-foreground">Only active users are listed</p>
-          </div>
-        </div>
-      </SectionBlock>
+              {/* Pin Code */}
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">Pin Code</Label>
+                {pincodeOptions.length > 0 ? (
+                  <SearchableSelect
+                    value={form.pincode}
+                    onChange={(value) => set("pincode", value)}
+                    options={pincodeOptions.map((pincode) => ({ value: pincode, label: pincode }))}
+                    placeholder="Select pin code..."
+                    disabled={readOnly || !form.territoryId}
+                    error={!!errors.pincode}
+                  />
+                ) : (
+                  <Input
+                    value={form.pincode}
+                    onChange={(e) => set("pincode", e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="6-digit PIN"
+                    className={inputCls("pincode")}
+                    inputMode="numeric"
+                    disabled={readOnly}
+                  />
+                )}
+                <FieldError msg={errors.pincode} />
+              </div>
 
-      <SectionBlock icon={CreditCard} title="Credit & Commercial Details" subtitle="Limits, interest, and payment terms">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Credit Limit (₹)</Label>
-            <Input
-              type="number"
-              min={0}
-              step="0.01"
-              value={form.creditLimit}
-              onChange={(e) => set("creditLimit", e.target.value)}
-              placeholder="0.00"
-              className={inputCls("creditLimit")}
-              disabled={readOnly}
-            />
-            <FieldError msg={errors.creditLimit} />
+              {/* Sales Man */}
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs font-medium">Sales Man</Label>
+                <SearchableSelect
+                  value={form.salesManId}
+                  onChange={(value) => set("salesManId", value)}
+                  options={salesOptions}
+                  placeholder="Search by name, ID, mobile, role..."
+                  searchPlaceholder="Search sales person..."
+                  disabled={readOnly}
+                />
+                <p className="text-[11px] text-muted-foreground mt-0.5">Only active users are listed</p>
+              </div>
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Interest Rate (%)</Label>
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              step="0.01"
-              value={form.interestRate}
-              onChange={(e) => set("interestRate", e.target.value)}
-              placeholder="0.00"
-              className={inputCls("interestRate")}
-              disabled={readOnly}
-            />
-            <FieldError msg={errors.interestRate} />
-          </div>
-          <div className="lg:col-span-2 space-y-1.5">
-            <Label className="text-xs font-medium">Payment Terms</Label>
-            <SearchableSelect
-              value={form.paymentTerms}
-              onChange={(v) => set("paymentTerms", v)}
-              options={PAYMENT_TERMS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-              placeholder="Select payment terms…"
-              disabled={readOnly}
-            />
-          </div>
-        </div>
-      </SectionBlock>
+        </TabsContent>
 
-      <SectionBlock icon={Building2} title="Bank Details" subtitle="Account information for settlements">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Bank Name</Label>
-            <Input value={form.bankName} onChange={(e) => set("bankName", e.target.value)} disabled={readOnly} className="h-9 text-sm rounded-lg" />
+        {/* ── TAB 2: TAX & REGISTRATION ── */}
+        <TabsContent value="tax" className="mt-0 space-y-5">
+          <div>
+            <SectionHead label="Tax & Registration" />
+            <div className="grid grid-cols-4 gap-3">
+              {/* GST Applicable */}
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">GST Applicable</Label>
+                <SearchableSelect
+                  value={form.gstApplicable ? "yes" : "no"}
+                  onChange={(value) => {
+                    const yes = value === "yes";
+                    onChange({
+                      ...form,
+                      gstApplicable: yes,
+                      gstin: yes ? form.gstin : "",
+                      gstMasterId: yes ? form.gstMasterId : "",
+                    });
+                  }}
+                  options={YES_NO_OPTIONS}
+                  disabled={readOnly}
+                />
+              </div>
+
+              {/* GSTIN */}
+              {form.gstApplicable && (
+                <>
+                  <div className="col-span-1 space-y-1">
+                    <Label className="text-xs font-medium">GSTIN <span className="text-red-500">*</span></Label>
+                    <Input
+                      value={form.gstin}
+                      onChange={(e) => set("gstin", e.target.value.toUpperCase())}
+                      placeholder="27AABCU9603R1ZX"
+                      className={cn("font-mono", inputCls("gstin"))}
+                      disabled={readOnly}
+                    />
+                    <FieldError msg={errors.gstin} />
+                  </div>
+
+                  {/* GST Master */}
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-xs font-medium">GST % / GST Code</Label>
+                    <SearchableSelect
+                      value={form.gstMasterId}
+                      onChange={(value) => set("gstMasterId", value)}
+                      options={gstMasters.map((gst) => ({
+                        value: String(gst.id),
+                        label: `${gst.gstId} - ${gst.gstPercentage}%`,
+                        sublabel: gst.gstType,
+                      }))}
+                      placeholder="Select from GST Master..."
+                      searchPlaceholder="Search GST code..."
+                      disabled={readOnly}
+                      error={!!errors.gstMasterId}
+                    />
+                    <FieldError msg={errors.gstMasterId} />
+                  </div>
+                </>
+              )}
+
+              {/* TDS Applicable */}
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">TDS Applicable</Label>
+                <SearchableSelect
+                  value={form.tdsApplicable ? "yes" : "no"}
+                  onChange={(value) => {
+                    const yes = value === "yes";
+                    onChange({
+                      ...form,
+                      tdsApplicable: yes,
+                      tdsMasterId: yes ? form.tdsMasterId : "",
+                    });
+                  }}
+                  options={YES_NO_OPTIONS}
+                  disabled={readOnly}
+                />
+              </div>
+
+              {/* TDS Master */}
+              {form.tdsApplicable && (
+                <div className="col-span-2 space-y-1">
+                  <Label className="text-xs font-medium">TDS % / TDS Section</Label>
+                  <SearchableSelect
+                    value={form.tdsMasterId}
+                    onChange={(value) => set("tdsMasterId", value)}
+                    options={tdsMasters.map((tds) => ({
+                      value: String(tds.id),
+                      label: `${tds.tdsCode} - ${tds.tdsRate}%`,
+                      sublabel: tds.remarks,
+                    }))}
+                    placeholder="Select from TDS Master..."
+                    disabled={readOnly}
+                    error={!!errors.tdsMasterId}
+                  />
+                  <FieldError msg={errors.tdsMasterId} />
+                </div>
+              )}
+
+              {/* Other Registration Numbers */}
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">CIB Regn #</Label>
+                <Input
+                  value={form.cibRegn}
+                  onChange={(e) => set("cibRegn", e.target.value)}
+                  disabled={readOnly}
+                  className="h-8 text-xs"
+                />
+              </div>
+
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">FCO Regn #</Label>
+                <Input
+                  value={form.fcoRegn}
+                  onChange={(e) => set("fcoRegn", e.target.value)}
+                  disabled={readOnly}
+                  className="h-8 text-xs"
+                />
+              </div>
+
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">TAN #</Label>
+                <Input
+                  value={form.tan}
+                  onChange={(e) => set("tan", e.target.value)}
+                  className={inputCls("tan")}
+                  disabled={readOnly}
+                />
+              </div>
+
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">FSSAI #</Label>
+                <Input
+                  value={form.fssai}
+                  onChange={(e) => set("fssai", e.target.value)}
+                  disabled={readOnly}
+                  className="h-8 text-xs"
+                />
+              </div>
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Bank A/c #</Label>
-            <Input
-              value={form.bankAccountNo}
-              onChange={(e) => set("bankAccountNo", e.target.value)}
-              className={cn("font-mono", inputCls("bankAccountNo"))}
-              disabled={readOnly}
-            />
+        </TabsContent>
+
+        {/* ── TAB 3: BANK & COMMERCIAL ── */}
+        <TabsContent value="commercial" className="mt-0 space-y-5">
+          <div>
+            <SectionHead label="Bank & Commercial" />
+            <div className="grid grid-cols-4 gap-3">
+              {/* Credit Limit */}
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">Credit Limit</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={form.creditLimit}
+                  onChange={(e) => set("creditLimit", e.target.value)}
+                  placeholder="0.00"
+                  className={inputCls("creditLimit")}
+                  disabled={readOnly}
+                />
+                <FieldError msg={errors.creditLimit} />
+              </div>
+
+              {/* Interest Rate */}
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">Interest Rate (%)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.01"
+                  value={form.interestRate}
+                  onChange={(e) => set("interestRate", e.target.value)}
+                  placeholder="0.00"
+                  className={inputCls("interestRate")}
+                  disabled={readOnly}
+                />
+                <FieldError msg={errors.interestRate} />
+              </div>
+
+              {/* Payment Terms */}
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs font-medium">Payment Terms</Label>
+                <SearchableSelect
+                  value={form.paymentTerms}
+                  onChange={(value) => set("paymentTerms", value)}
+                  options={PAYMENT_TERMS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                  placeholder="Select payment terms..."
+                  disabled={readOnly}
+                />
+              </div>
+
+              {/* Bank Details */}
+              <div className="col-span-4 space-y-1">
+                <Label className="text-xs font-medium">Bank details</Label>
+                <Textarea
+                  value={form.bankName}
+                  onChange={(e) => set("bankName", e.target.value)}
+                  rows={2}
+                  className={textareaCls()}
+                  disabled={readOnly}
+                />
+              </div>
+
+              {/* Bank Branch Address */}
+              <div className="col-span-4 space-y-1">
+                <Label className="text-xs font-medium">Bank-Branch-Address</Label>
+                <Textarea
+                  value={form.bankBranchAddress}
+                  onChange={(e) => set("bankBranchAddress", e.target.value)}
+                  rows={2}
+                  className={textareaCls()}
+                  disabled={readOnly}
+                />
+              </div>
+
+              {/* Bank Account No */}
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs font-medium">Bank A/c #</Label>
+                <Input
+                  value={form.bankAccountNo}
+                  onChange={(e) => set("bankAccountNo", e.target.value)}
+                  className={cn("font-mono", inputCls("bankAccountNo"))}
+                  disabled={readOnly}
+                />
+              </div>
+
+              {/* IFSC Code */}
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs font-medium">IFSC Code</Label>
+                <Input
+                  value={form.ifscCode}
+                  onChange={(e) => set("ifscCode", e.target.value.toUpperCase())}
+                  className={cn("font-mono", inputCls("ifscCode"))}
+                  disabled={readOnly}
+                />
+                <FieldError msg={errors.ifscCode} />
+              </div>
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">IFSC Code</Label>
-            <Input
-              value={form.ifscCode}
-              onChange={(e) => set("ifscCode", e.target.value.toUpperCase())}
-              className={cn("font-mono", inputCls("ifscCode"))}
-              disabled={readOnly}
-            />
-            <FieldError msg={errors.ifscCode} />
-          </div>
-          <div className="lg:col-span-4 space-y-1.5">
-            <Label className="text-xs font-medium">Bank Branch Address</Label>
-            <Textarea
-              value={form.bankBranchAddress}
-              onChange={(e) => set("bankBranchAddress", e.target.value)}
-              rows={2}
-              className="text-sm rounded-lg resize-none"
-              disabled={readOnly}
-            />
-          </div>
-        </div>
-      </SectionBlock>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -657,11 +746,10 @@ export function validateCustomerForm(form: CustomerFormValues): Record<string, s
   if (form.creditLimit.trim() && isNaN(parseFloat(form.creditLimit))) e.creditLimit = "Invalid amount";
   if (form.interestRate.trim()) {
     const ir = parseFloat(form.interestRate);
-    if (isNaN(ir) || ir < 0 || ir > 100) e.interestRate = "Interest rate must be 0–100";
+    if (isNaN(ir) || ir < 0 || ir > 100) e.interestRate = "Interest rate must be 0-100";
   }
   if (form.ifscCode.trim() && !validateIFSC(form.ifscCode)) e.ifscCode = "Invalid IFSC format";
-  if (form.status === "blocked" && !form.blockReason.trim())
-    e.blockReason = "Block reason is required when status is Blocked";
+  if (form.status === "blocked" && !form.blockReason.trim()) e.blockReason = "Block reason is required when status is Blocked";
   return e;
 }
 

@@ -4,6 +4,25 @@ import { Copy, Check } from "lucide-react";
 export default function ColorSection() {
   const [copied, setCopied] = React.useState<string | null>(null);
 
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border border-brand-200 bg-brand-50/60 px-4 py-3 text-xs text-brand-900">
+        <strong>Production standard:</strong> Use tokens from <code className="font-mono">tailwind.config.js</code>,{" "}
+        <code className="font-mono">app/globals.css</code>, and shared components from{" "}
+        <code className="font-mono">@/components/module</code>. See <code className="font-mono">docs/DESIGN_SYSTEM.md</code>.
+      </div>
+      <ColorSectionContent copied={copied} setCopied={setCopied} />
+    </div>
+  );
+}
+
+function ColorSectionContent({
+  copied,
+  setCopied,
+}: {
+  copied: string | null;
+  setCopied: (v: string | null) => void;
+}) {
   const colors = {
     brand: [
       { name: "50",  hex: "#FFF3E8", use: "Lightest tint backgrounds" },

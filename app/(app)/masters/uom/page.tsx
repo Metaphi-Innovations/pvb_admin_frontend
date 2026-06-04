@@ -1,18 +1,10 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
 import {
   Popover,
   PopoverContent,
@@ -22,9 +14,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
@@ -33,18 +23,13 @@ import {
   XCircle,
   Plus,
   Download,
-  Upload,
   Edit2,
-  Trash2,
-  Eye,
   MoreVertical,
   SlidersHorizontal,
   X,
-  ChevronDown,
   ChevronsUpDown,
-  AlertTriangle,
+  ChevronDown,
   Check,
-  Search,
 } from "lucide-react";
 import {
   UOMMaster,
@@ -53,64 +38,38 @@ import {
   todayStr,
 } from "./uom-data";
 
-// ── Status pill ───────────────────────────────────────────────────────────────
-const STATUS_CFG = {
-  active:   { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
-  inactive: { bg: "bg-slate-100",  text: "text-slate-600",   dot: "bg-slate-400"   },
-} as const;
+type SortKey = "uomId" | "unitName" | "shortName" | "decimalAllowed" | "baseUnit" | "status";
 
-function StatusPill({ status }: { status: "active" | "inactive" }) {
-  const cfg = STATUS_CFG[status];
+function StatusBadge({ status }: { status: "active" | "inactive" }) {
+  const cfg = {
+    active: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    inactive: "border-slate-200 bg-slate-100 text-slate-700",
+  }[status];
+
   return (
-    <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium", cfg.bg, cfg.text)}>
-      <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
+    <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium border inline-flex items-center justify-center", cfg)}>
       {status === "active" ? "Active" : "Inactive"}
     </span>
   );
 }
 
-// ── Sortable column header ────────────────────────────────────────────────────
-type SortKey = "unitCode" | "unitName" | "shortName" | "baseUnit" | "conversionFactor" | "status" | "updatedBy" | "updatedDate";
-
-function SortTh({ label, col, sortKey, sortDir, onSort, className }: {
-  label: string; col: SortKey; sortKey: SortKey; sortDir: "asc" | "desc";
-  onSort: (k: SortKey) => void; className?: string;
-}) {
-  const active = sortKey === col;
-  return (
-    <th
-      onClick={() => onSort(col)}
-      className={cn(
-        "px-4 py-3 text-left text-xs font-semibold cursor-pointer select-none whitespace-nowrap group",
-        active && "bg-brand-50/60",
-        className,
-      )}
-    >
-      <div className="flex items-center gap-1.5">
-        <span className={active ? "text-brand-700" : "text-foreground"}>{label}</span>
-        {active
-          ? <ChevronDown className={cn("w-3 h-3 text-brand-600 transition-transform", sortDir === "desc" && "rotate-180")} />
-          : <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />}
-      </div>
-    </th>
-  );
-}
-
-// ── Main page ─────────────────────────────────────────────────────────────────
 export default function UOMPage() {
   const router = useRouter();
   const [records, setRecords] = useState<UOMMaster[]>([]);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
-  const [sortKey, setSortKey] = useState<SortKey>("unitCode");
+  const [filterDecimal, setFilterDecimal] = useState<string[]>([]);
+  const [filterBase, setFilterBase] = useState<string[]>([]);
+  const [sortKey, setSortKey] = useState<SortKey>("uomId");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [confirmDialog, setConfirmDialog] = useState<{
-    type: "toggle" | "delete";
-    record: UOMMaster;
+  const [toast, setToast] = useState<{
+    msg: string;
+    type: "success" | "error";
   } | null>(null);
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
-  useEffect(() => { setRecords(loadUOMMasters()); }, []);
+  useEffect(() => {
+    setRecords(loadUOMMasters());
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -118,86 +77,107 @@ export default function UOMPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir("asc"); }
-  };
-
-  const toggleFilter = (v: string) =>
-    setFilterStatus(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v]);
-
   const filtered = useMemo(() => {
     return records
       .filter(r => {
         if (!search) return true;
         const q = search.toLowerCase();
-        return (
-          r.unitCode.toLowerCase().includes(q) ||
-          r.unitName.toLowerCase().includes(q) ||
-          r.shortName.toLowerCase().includes(q) ||
-          r.baseUnit.toLowerCase().includes(q) ||
-          r.description.toLowerCase().includes(q)
-        );
+        return r.unitName.toLowerCase().includes(q) || r.shortName.toLowerCase().includes(q);
       })
-      .filter(r => filterStatus.length === 0 || filterStatus.includes(r.status))
+      .filter(r => {
+        if (filterStatus.length === 0) return true;
+        return filterStatus.includes(r.status);
+      })
+      .filter(r => {
+        if (filterDecimal.length === 0) return true;
+        const decVal = r.decimalAllowed ? "yes" : "no";
+        return filterDecimal.includes(decVal);
+      })
+      .filter(r => {
+        if (filterBase.length === 0) return true;
+        const baseVal = r.baseUnit ? "yes" : "no";
+        return filterBase.includes(baseVal);
+      })
       .sort((a, b) => {
-        let aVal: any = a[sortKey as keyof UOMMaster];
-        let bVal: any = b[sortKey as keyof UOMMaster];
-        if (typeof aVal === "string") { aVal = aVal.toLowerCase(); bVal = (bVal as string).toLowerCase(); }
+        let aVal: any = a[sortKey];
+        let bVal: any = b[sortKey];
+        if (typeof aVal === "string") {
+          aVal = aVal.toLowerCase();
+          bVal = (bVal as string).toLowerCase();
+        }
         const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
         return sortDir === "asc" ? cmp : -cmp;
       });
-  }, [records, search, filterStatus, sortKey, sortDir]);
+  }, [records, search, filterStatus, filterDecimal, filterBase, sortKey, sortDir]);
 
   const totalCount = records.length;
   const activeCount = records.filter(r => r.status === "active").length;
   const inactiveCount = records.filter(r => r.status === "inactive").length;
 
-  const confirmToggle = (record: UOMMaster) => setConfirmDialog({ type: "toggle", record });
-  const confirmDelete = (record: UOMMaster) => setConfirmDialog({ type: "delete", record });
-
-  const executeToggle = () => {
-    if (!confirmDialog) return;
-    const { record } = confirmDialog;
+  const handleToggleStatus = (record: UOMMaster) => {
     const newStatus = record.status === "active" ? "inactive" : "active";
     const updated = records.map(r =>
       r.id === record.id
-        ? { ...r, status: newStatus as "active" | "inactive", updatedBy: "Admin", updatedDate: todayStr(), lastStatusChange: todayStr() }
+        ? {
+          ...r,
+          status: newStatus as "active" | "inactive",
+          updatedBy: "Admin",
+          updatedDate: todayStr(),
+        }
         : r
+    ) as UOMMaster[];
+    setRecords(updated);
+    saveUOMMasters(updated);
+    setToast({
+      msg: `Unit status updated to ${newStatus === "active" ? "Active" : "Inactive"} successfully`,
+      type: "success",
+    });
+  };
+
+  const toggleFilterStatus = (status: string) => {
+    setFilterStatus(prev =>
+      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
     );
-    setRecords(updated);
-    saveUOMMasters(updated);
-    setToast({ msg: `Unit marked ${newStatus}`, type: "success" });
-    setConfirmDialog(null);
   };
 
-  const executeDelete = () => {
-    if (!confirmDialog) return;
-    const updated = records.filter(r => r.id !== confirmDialog.record.id);
-    setRecords(updated);
-    saveUOMMasters(updated);
-    setToast({ msg: "Unit deleted", type: "success" });
-    setConfirmDialog(null);
+  const toggleFilterDecimal = (val: string) => {
+    setFilterDecimal(prev =>
+      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+    );
   };
 
-  const hasFilters = search || filterStatus.length > 0;
+  const toggleFilterBase = (val: string) => {
+    setFilterBase(prev =>
+      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
+    );
+  };
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
 
   return (
     <AppLayout>
-      <div className="max-w-[1200px] mx-auto space-y-4">
-        {/* Page header */}
-        <div className="flex items-start justify-between gap-4">
+      <div className="space-y-5">
+        {/* Header */}
+        <div className="flex items-start justify-between">
           <div>
             <h1 className="text-xl font-bold text-foreground">Unit Master</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Manage units of measure used across products, inventory, procurement and sales
+              Manage units of measure used across products and stock metrics
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-              <Upload className="w-3.5 h-3.5" /> Import
-            </Button>
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+          <div className="flex items-center flex-shrink-0 gap-2">
+            <Button
+              size="sm"
+              className="h-8 text-xs gap-1.5 border border-border bg-white text-foreground hover:bg-muted"
+              variant="outline"
+            >
               <Download className="w-3.5 h-3.5" /> Export
             </Button>
             <Button
@@ -212,253 +192,274 @@ export default function UOMPage() {
 
         {/* KPI Cards */}
         <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: "Total Units", value: totalCount, icon: Ruler, accent: true },
-            { label: "Active", value: activeCount, icon: CheckCircle2, accent: false },
-            { label: "Inactive", value: inactiveCount, icon: XCircle, accent: false },
-          ].map(({ label, value, icon: Icon, accent }) => (
-            <div key={label} className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
-              <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-                accent ? "bg-brand-600" : "bg-muted")}>
-                <Icon className={cn("w-4 h-4", accent ? "text-white" : "text-muted-foreground")} />
-              </div>
-              <div>
-                <p className="text-base font-bold text-foreground leading-none">{value}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">{label}</p>
-              </div>
+          <div className="flex items-center gap-3 p-3 bg-white border shadow-sm rounded-xl border-border">
+            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-brand-600">
+              <Ruler className="w-4 h-4 text-white" />
             </div>
-          ))}
+            <div>
+              <p className="text-base font-bold leading-none text-foreground">
+                {totalCount}
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
+                Total Units
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 p-3 bg-white border shadow-sm rounded-xl border-border">
+            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-muted">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+            </div>
+            <div>
+              <p className="text-base font-bold leading-none text-foreground">
+                {activeCount}
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
+                Active
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 p-3 bg-white border shadow-sm rounded-xl border-border">
+            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-muted">
+              <XCircle className="w-4 h-4 text-slate-400" />
+            </div>
+            <div>
+              <p className="text-base font-bold leading-none text-foreground">
+                {inactiveCount}
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
+                Inactive
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Toolbar */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Search */}
-          <div className="relative flex-1 min-w-[220px] max-w-[340px]">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-[9px] text-muted-foreground pointer-events-none" />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[220px] max-w-sm">
             <Input
-              placeholder="Search by code, name, short name…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="h-8 pl-8 text-xs rounded-lg"
+              placeholder="Search unit name or short name..."
+              className="h-8 text-xs"
             />
-            {search && (
-              <button onClick={() => setSearch("")} className="absolute right-2 top-[7px] text-muted-foreground hover:text-foreground">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
           </div>
 
-          {/* Status filter */}
           <Popover>
             <PopoverTrigger asChild>
-              <button className={cn(
-                "h-8 px-2.5 text-xs border rounded-lg inline-flex items-center gap-1.5 font-medium transition-colors",
-                filterStatus.length > 0
-                  ? "border-brand-400 bg-brand-50 text-brand-700"
-                  : "border-border text-muted-foreground hover:bg-muted",
-              )}>
+              <button
+                className={cn(
+                  "h-8 px-2.5 text-xs border rounded-lg inline-flex items-center gap-1.5 font-medium transition-colors",
+                  filterStatus.length > 0 || filterDecimal.length > 0 || filterBase.length > 0
+                    ? "border-brand-400 bg-brand-50 text-brand-700"
+                    : "border-border text-muted-foreground hover:bg-muted"
+                )}
+              >
                 <SlidersHorizontal className="w-3.5 h-3.5" />
                 Filter
-                {filterStatus.length > 0 && (
+                {(filterStatus.length > 0 || filterDecimal.length > 0 || filterBase.length > 0) && (
                   <span className="w-4 h-4 text-[10px] bg-brand-600 text-white rounded-full inline-flex items-center justify-center font-bold">
-                    {filterStatus.length}
+                    {filterStatus.length + filterDecimal.length + filterBase.length}
                   </span>
                 )}
               </button>
             </PopoverTrigger>
-            <PopoverContent align="start" className="w-48 p-0">
-              <div className="px-3 py-2.5 border-b border-border">
-                <p className="text-xs font-semibold text-foreground">Filter by Status</p>
+            <PopoverContent align="start" className="w-56 p-0 bg-white border shadow-lg border-border">
+              <div className="px-3 py-2 border-b border-border">
+                <p className="text-xs font-semibold text-foreground">Filter Units</p>
               </div>
-              <div className="px-3 py-2.5 space-y-2">
-                {["active", "inactive"].map(v => (
-                  <label key={v} className="flex items-center gap-2.5 cursor-pointer">
-                    <input type="checkbox" className="w-4 h-4 rounded accent-brand-600"
-                      checked={filterStatus.includes(v)} onChange={() => toggleFilter(v)} />
-                    <span className="text-xs capitalize text-foreground">{v}</span>
-                  </label>
-                ))}
+              <div className="p-3 space-y-3 max-h-[300px] overflow-y-auto">
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Decimal Allowed</p>
+                  {["yes", "no"].map(v => (
+                    <label key={v} className="flex items-center gap-2 cursor-pointer py-0.5">
+                      <input
+                        type="checkbox"
+                        className="w-3.5 h-3.5 rounded accent-brand-600"
+                        checked={filterDecimal.includes(v)}
+                        onChange={() => toggleFilterDecimal(v)}
+                      />
+                      <span className="text-xs capitalize text-foreground">{v}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="space-y-1.5 border-t border-border/60 pt-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Base Unit</p>
+                  {["yes", "no"].map(v => (
+                    <label key={v} className="flex items-center gap-2 cursor-pointer py-0.5">
+                      <input
+                        type="checkbox"
+                        className="w-3.5 h-3.5 rounded accent-brand-600"
+                        checked={filterBase.includes(v)}
+                        onChange={() => toggleFilterBase(v)}
+                      />
+                      <span className="text-xs capitalize text-foreground">{v}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="space-y-1.5 border-t border-border/60 pt-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</p>
+                  {["active", "inactive"].map(v => (
+                    <label key={v} className="flex items-center gap-2 cursor-pointer py-0.5">
+                      <input
+                        type="checkbox"
+                        className="w-3.5 h-3.5 rounded accent-brand-600"
+                        checked={filterStatus.includes(v)}
+                        onChange={() => toggleFilterStatus(v)}
+                      />
+                      <span className="text-xs capitalize text-foreground">{v}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
-              {filterStatus.length > 0 && (
-                <div className="px-3 py-2 border-t border-border">
-                  <button onClick={() => setFilterStatus([])} className="text-xs text-brand-600 hover:underline">Clear filter</button>
+              {(filterStatus.length > 0 || filterDecimal.length > 0 || filterBase.length > 0) && (
+                <div className="px-3 py-2 border-t border-border bg-muted/10">
+                  <button
+                    onClick={() => {
+                      setFilterStatus([]);
+                      setFilterDecimal([]);
+                      setFilterBase([]);
+                    }}
+                    className="text-xs font-medium text-brand-600 hover:underline"
+                  >
+                    Clear filters
+                  </button>
                 </div>
               )}
             </PopoverContent>
           </Popover>
 
-          {/* Active chips */}
-          {filterStatus.map(v => (
-            <span key={v} className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium">
-              {v.charAt(0).toUpperCase() + v.slice(1)}
-              <button onClick={() => toggleFilter(v)}><X className="w-3 h-3" /></button>
+          {filterDecimal.map(v => (
+            <span
+              key={v}
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium"
+            >
+              Decimal: {v === "yes" ? "Yes" : "No"}
+              <button onClick={() => toggleFilterDecimal(v)} className="hover:text-brand-800">
+                <X className="w-3 h-3" />
+              </button>
             </span>
           ))}
 
-          {hasFilters && (
-            <button onClick={() => { setSearch(""); setFilterStatus([]); }}
-              className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">
-              Clear all
-            </button>
-          )}
+          {filterBase.map(v => (
+            <span
+              key={v}
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium"
+            >
+              Base Unit: {v === "yes" ? "Yes" : "No"}
+              <button onClick={() => toggleFilterBase(v)} className="hover:text-brand-800">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+
+          {filterStatus.map(v => (
+            <span
+              key={v}
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium"
+            >
+              {v === "active" ? "Active" : "Inactive"}
+              <button onClick={() => toggleFilterStatus(v)} className="hover:text-brand-800">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
         </div>
 
         {/* Table */}
-        <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
+        <div className="overflow-hidden bg-white border shadow-sm border-border rounded-xl">
           <div className="overflow-x-auto">
-            <table className="w-full table-fixed">
-              <colgroup>
-                <col className="w-28" />
-                <col className="w-44" />
-                <col className="w-28" />
-                <col className="w-28" />
-                <col className="w-32" />
-                <col className="w-28" />
-                <col className="w-20" />
-                <col className="w-28" />
-                <col className="w-28" />
-                <col className="w-12" />
-              </colgroup>
+            <table className="w-full border-collapse">
               <thead>
-                <tr className="bg-muted/40 border-b border-border">
-                  <SortTh label="Unit Code" col="unitCode" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh label="Unit Name" col="unitName" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh label="Short Name" col="shortName" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh label="Base Unit" col="baseUnit" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh label="Conv. Factor" col="conversionFactor" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh label="Status" col="status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap">Active</th>
-                  <SortTh label="Updated By" col="updatedBy" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh label="Updated On" col="updatedDate" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <th className="px-4 py-2.5 w-10" />
+                <tr className="border-b bg-muted/40 border-border">
+                  <SortTh label="Unit ID" colKey="uomId" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-[110px] pl-4 py-3" />
+                  <SortTh label="Unit Name" colKey="unitName" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-[180px]" />
+                  <SortTh label="Short Name" colKey="shortName" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-[110px]" />
+                  <SortTh label="Decimal Allowed" colKey="decimalAllowed" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-[130px]" />
+                  <SortTh label="Base Unit" colKey="baseUnit" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-[110px]" />
+                  <SortTh label="Status" colKey="status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-[110px]" />
+                  <th className="sticky right-0 z-30 w-[72px] min-w-[72px] h-11 px-2 text-left text-[13px] font-semibold whitespace-nowrap bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-16 text-center">
+                    <td colSpan={7} className="py-16 text-center">
                       <div className="flex flex-col items-center gap-2">
-                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                        <div className="flex items-center justify-center w-10 h-10 rounded-full bg-muted">
                           <Ruler className="w-5 h-5 text-muted-foreground" />
                         </div>
-                        {hasFilters ? (
-                          <>
-                            <p className="text-sm font-medium text-foreground">No units match your filters</p>
-                            <button onClick={() => { setSearch(""); setFilterStatus([]); }}
-                              className="text-xs text-brand-600 hover:underline">Clear filters</button>
-                          </>
-                        ) : (
-                          <>
-                            <p className="text-sm font-medium text-foreground">No units yet</p>
-                            <p className="text-xs text-muted-foreground">Add your first unit to get started.</p>
-                            <button onClick={() => router.push("/masters/uom/add")}
-                              className="text-xs text-brand-600 hover:underline mt-1">+ Add Unit</button>
-                          </>
-                        )}
+                        <p className="text-sm font-medium text-foreground">
+                          No unit configs found
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {search || filterStatus.length > 0 || filterDecimal.length > 0 || filterBase.length > 0
+                            ? "Try adjusting your search or filters"
+                            : "Add your first unit configuration to get started"}
+                        </p>
                       </div>
                     </td>
                   </tr>
                 ) : (
                   filtered.map(record => (
-                    <tr key={record.id} className="border-b border-border/60 hover:bg-muted/20 transition-colors group">
-                      {/* Unit Code */}
-                      <td className="px-4 py-2">
-                        <span className="font-mono text-xs font-semibold text-brand-700">{record.unitCode}</span>
+                    <tr
+                      key={record.id}
+                      className="align-top transition-colors border-b border-border/60 hover:bg-muted/20 group"
+                    >
+                      <td className="px-3 py-2 text-[11px] font-semibold font-mono text-brand-700 whitespace-nowrap">
+                        {record.uomId}
                       </td>
-                      {/* Unit Name */}
-                      <td className="px-4 py-2">
+                      <td className="px-3 py-2 text-xs font-semibold text-foreground whitespace-nowrap">
+                        {record.unitName}
+                      </td>
+                      <td className="px-3 py-2 text-[11px] text-foreground whitespace-nowrap font-mono font-semibold">
+                        {record.shortName}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap font-medium">
+                        {record.decimalAllowed ? (
+                          <span className="inline-flex items-center text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Yes</span>
+                        ) : (
+                          <span className="inline-flex items-center text-[10px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-full border">No</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap font-medium">
+                        {record.baseUnit ? (
+                          <span className="inline-flex items-center text-[10px] font-bold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-200">Yes</span>
+                        ) : (
+                          <span className="inline-flex items-center text-[10px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-full border">No</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
                         <button
-                          onClick={() => router.push(`/masters/uom/${record.id}/edit`)}
-                          className="text-xs font-semibold text-foreground hover:text-brand-700 transition-colors text-left"
+                          type="button"
+                          onClick={() => handleToggleStatus(record)}
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-full px-0.5 py-0.5 transition-opacity focus:outline-none",
+                            record.status === "active" ? "hover:opacity-90" : "hover:opacity-90",
+                          )}
+                          title="Click to toggle status"
                         >
-                          {record.unitName}
+                          <StatusBadge status={record.status} />
                         </button>
-                        {record.description && (
-                          <p className="text-[11px] text-muted-foreground mt-0.5 truncate max-w-[180px]">{record.description}</p>
-                        )}
                       </td>
-                      {/* Short Name */}
-                      <td className="px-4 py-2">
-                        <span className="font-mono text-xs font-semibold text-slate-600">{record.shortName}</span>
-                      </td>
-                      {/* Base Unit */}
-                      <td className="px-4 py-2">
-                        {record.baseUnit ? (
-                          <span className="font-mono text-xs font-medium text-foreground">{record.baseUnit}</span>
-                        ) : (
-                          <span className="text-[11px] text-muted-foreground italic">Base unit</span>
-                        )}
-                      </td>
-                      {/* Conversion Factor */}
-                      <td className="px-4 py-2">
-                        {record.baseUnit ? (
-                          <span className="text-xs text-foreground">
-                            {record.conversionFactor} {record.baseUnit}
-                          </span>
-                        ) : (
-                          <span className="text-[11px] text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      {/* Status */}
-                      <td className="px-4 py-2">
-                        <StatusPill status={record.status} />
-                      </td>
-                      {/* Active toggle */}
-                      <td className="px-4 py-2">
-                        <Switch
-                          checked={record.status === "active"}
-                          onCheckedChange={() => confirmToggle(record)}
-                        />
-                      </td>
-                      {/* Updated By */}
-                      <td className="px-4 py-2">
-                        <span className="text-xs text-muted-foreground">{record.updatedBy}</span>
-                      </td>
-                      {/* Updated On */}
-                      <td className="px-4 py-2">
-                        <span className="text-xs text-muted-foreground">{record.updatedDate}</span>
-                      </td>
-                      {/* Actions */}
-                      <td className="px-4 py-2">
+                      <td className="sticky right-0 z-20 w-[72px] min-w-[72px] px-2 py-2 bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <button className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto">
-                              <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                            <button className="inline-flex items-center justify-center transition-colors rounded-md w-7 h-7 text-muted-foreground hover:bg-muted focus:outline-none">
+                              <MoreVertical className="w-3.5 h-3.5 text-muted-foreground" />
                             </button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-44">
-                            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
-                              Actions
-                            </DropdownMenuLabel>
-                            <DropdownMenuSeparator />
+                          <DropdownMenuContent align="end" className="w-32 bg-white border shadow-lg border-border">
                             <DropdownMenuItem
-                              onClick={() => router.push(`/masters/uom/${record.id}/edit`)}
-                              className="text-xs gap-2"
-                            >
-                              <Eye className="w-3.5 h-3.5" /> View / Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => router.push(`/masters/uom/${record.id}/edit`)}
-                              className="text-xs gap-2"
+                              onClick={() =>
+                                router.push(`/masters/uom/${record.id}/edit`)
+                              }
+                              className="flex items-center gap-2 text-xs cursor-pointer"
                             >
                               <Edit2 className="w-3.5 h-3.5" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => confirmToggle(record)}
-                              className="text-xs gap-2"
-                            >
-                              {record.status === "active" ? (
-                                <><XCircle className="w-3.5 h-3.5" /> Deactivate</>
-                              ) : (
-                                <><CheckCircle2 className="w-3.5 h-3.5" /> Activate</>
-                              )}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => confirmDelete(record)}
-                              className="text-xs gap-2 text-red-600 focus:text-red-600 focus:bg-red-50"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" /> Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -469,7 +470,6 @@ export default function UOMPage() {
               </tbody>
             </table>
           </div>
-          {/* Footer */}
           <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/20">
             <p className="text-[11px] text-muted-foreground">
               Showing <span className="font-medium text-foreground">{filtered.length}</span> of{" "}
@@ -479,58 +479,64 @@ export default function UOMPage() {
         </div>
       </div>
 
-      {/* Confirm Dialog */}
-      {confirmDialog && (
-        <Dialog open onOpenChange={() => setConfirmDialog(null)}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-base">
-                <div className={cn(
-                  "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-                  confirmDialog.type === "delete"
-                    ? "bg-red-50 border border-red-200"
-                    : "bg-amber-50 border border-amber-200",
-                )}>
-                  <AlertTriangle className={cn("w-4 h-4",
-                    confirmDialog.type === "delete" ? "text-red-500" : "text-amber-500")} />
-                </div>
-                {confirmDialog.type === "delete" ? "Delete Unit?" : "Change Status?"}
-              </DialogTitle>
-              <DialogDescription className="pt-1">
-                {confirmDialog.type === "delete"
-                  ? `Are you sure you want to delete "${confirmDialog.record.unitName}"? This action cannot be undone.`
-                  : `Mark "${confirmDialog.record.unitName}" as ${confirmDialog.record.status === "active" ? "inactive" : "active"}?`}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setConfirmDialog(null)}>Cancel</Button>
-              <Button
-                size="sm"
-                className={cn("h-8 text-xs gap-1.5",
-                  confirmDialog.type === "delete"
-                    ? "bg-red-600 hover:bg-red-700 text-white"
-                    : "bg-brand-600 hover:bg-brand-700 text-white")}
-                onClick={confirmDialog.type === "delete" ? executeDelete : executeToggle}
-              >
-                <Check className="w-3.5 h-3.5" />
-                {confirmDialog.type === "delete" ? "Delete" : "Confirm"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
-
       {/* Toast */}
       {toast && (
-        <div className={cn(
-          "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
-          "animate-in slide-in-from-bottom-2 fade-in-0 duration-300",
-          toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
-        )}>
-          <Check className="w-4 h-4" />
+        <div
+          className={cn(
+            "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+            "animate-in slide-in-from-bottom-2 fade-in-0 duration-300",
+            toast.type === "success" ? "bg-emerald-600" : "bg-red-600"
+          )}
+        >
+          <Check className="flex-shrink-0 w-4 h-4" />
           {toast.msg}
         </div>
       )}
     </AppLayout>
+  );
+}
+
+// SortTh Component
+function SortTh({
+  label,
+  colKey,
+  sortKey,
+  sortDir,
+  onSort,
+  className,
+}: {
+  label: string;
+  colKey: SortKey;
+  sortKey: string;
+  sortDir: string;
+  onSort: (key: SortKey) => void;
+  className?: string;
+}) {
+  const active = sortKey === colKey;
+  return (
+    <th
+      onClick={() => onSort(colKey)}
+      className={cn(
+        "px-3 py-3 text-left text-xs font-semibold cursor-pointer select-none group whitespace-nowrap",
+        active && "bg-brand-50/60",
+        className
+      )}
+    >
+      <div className="flex items-center gap-1.5">
+        <span className={active ? "text-brand-700" : "text-foreground"}>
+          {label}
+        </span>
+        {active ? (
+          <ChevronDown
+            className={cn(
+              "w-3 h-3 text-brand-600 transition-transform",
+              sortDir === "desc" && "rotate-180"
+            )}
+          />
+        ) : (
+          <ChevronsUpDown className="w-3 h-3 transition-colors text-muted-foreground/40 group-hover:text-muted-foreground" />
+        )}
+      </div>
+    </th>
   );
 }

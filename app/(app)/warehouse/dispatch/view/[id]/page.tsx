@@ -1,0 +1,173 @@
+"use client";
+
+import React, { useEffect, useState } from "react";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Truck, Package, Building, User, Calendar, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { useRouter, useParams } from "next/navigation";
+import { getDispatchById } from "../../services";
+import { DispatchRecord } from "../../types";
+import { DELIVERY_STATUS_BADGE_CONFIG } from "../../constants";
+
+export default function ViewDispatchPage() {
+  const router = useRouter();
+  const params = useParams();
+  const id = params?.id as string;
+
+  const [record, setRecord] = useState<DispatchRecord | null>(null);
+
+  useEffect(() => {
+    if (id) setRecord(getDispatchById(id) || null);
+  }, [id]);
+
+  if (!record) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading dispatch record...</div>
+      </AppLayout>
+    );
+  }
+
+  const statusConfig = DELIVERY_STATUS_BADGE_CONFIG[record.deliveryStatus] || { bg: "bg-slate-100 text-slate-600 border-slate-200", label: record.deliveryStatus };
+
+  return (
+    <AppLayout>
+      <div className="w-full space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-3 border-b pb-4">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted" onClick={() => router.push("/warehouse/dispatch")}>
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+            <div>
+              <p className="text-xs text-muted-foreground">Warehouse &rsaquo; Dispatch Management &rsaquo; View</p>
+              <h1 className="text-lg font-bold text-foreground mt-0.5 font-mono">{record.dispatchNumber}</h1>
+            </div>
+          </div>
+          <span className={`inline-flex items-center text-xs px-3 py-1 rounded-full font-semibold border ${statusConfig.bg}`}>
+            {statusConfig.label}
+          </span>
+        </div>
+
+        {/* Summary Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "Sales Order No", value: record.salesOrderNumber, icon: Package },
+            { label: "Customer", value: record.customer, icon: User },
+            { label: "Warehouse", value: record.warehouse, icon: Building },
+            { label: "Dispatch Date", value: record.dispatchDate, icon: Calendar },
+          ].map(card => (
+            <div key={card.label} className="bg-white border border-border rounded-xl p-4 shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-7 h-7 rounded-lg bg-brand-50 border border-brand-100 flex items-center justify-center">
+                  <card.icon className="w-3.5 h-3.5 text-brand-600" />
+                </div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{card.label}</p>
+              </div>
+              <p className="text-sm font-bold text-foreground leading-tight">{card.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Vehicle & Transport Details */}
+        <div className="bg-white rounded-xl border border-border p-5 shadow-sm">
+          <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5 mb-4">
+            <Truck className="w-4 h-4 text-brand-600" /> Vehicle & Transport Details
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
+            {[
+              { label: "Vehicle Number", value: record.vehicleNumber },
+              { label: "Driver Name", value: record.driverName },
+              { label: "Transporter Name", value: record.transporterName || "—" },
+            ].map(item => (
+              <div key={item.label}>
+                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">{item.label}</p>
+                <p className="text-sm font-bold text-foreground mt-1">{item.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Products */}
+        <div className="bg-white rounded-xl border border-border p-5 shadow-sm">
+          <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5 mb-4">
+            <Package className="w-4 h-4 text-brand-600" /> Dispatched Products
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-border bg-slate-50/60">
+                  <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Product</th>
+                  <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">SKU</th>
+                  <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Packed Qty</th>
+                  <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Dispatch Qty</th>
+                </tr>
+              </thead>
+              <tbody>
+                {record.products.map((p, i) => (
+                  <tr key={i} className="border-b border-border/60 hover:bg-slate-50/40">
+                    <td className="py-3 px-3 text-xs font-bold">{p.product}</td>
+                    <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{p.sku}</td>
+                    <td className="py-3 px-3 text-xs font-bold text-center">{p.packedQty}</td>
+                    <td className="py-3 px-3 text-xs font-bold text-center">{p.dispatchQty}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Delivery Details (if delivered) */}
+        {record.deliveryDetails && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5">
+            <h2 className="text-xs font-bold text-emerald-800 uppercase tracking-wider border-b border-emerald-200 pb-2 flex items-center gap-1.5 mb-4">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Delivery Confirmation
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+              <div>
+                <p className="text-[10px] text-emerald-700 font-semibold uppercase tracking-wider">Delivery Date</p>
+                <p className="text-sm font-bold text-emerald-900 mt-1">{record.deliveryDetails.deliveryDate}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-emerald-700 font-semibold uppercase tracking-wider">Received By</p>
+                <p className="text-sm font-bold text-emerald-900 mt-1">{record.deliveryDetails.receiverName}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-emerald-700 font-semibold uppercase tracking-wider">Remarks</p>
+                <p className="text-sm font-bold text-emerald-900 mt-1">{record.deliveryDetails.remarks || "—"}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Packing References */}
+        {record.packingNumbers?.length > 0 && (
+          <div className="bg-white rounded-xl border border-border p-5 shadow-sm">
+            <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5 mb-4">
+              <AlertTriangle className="w-4 h-4 text-brand-600" /> Linked Packing References
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {record.packingNumbers.map(pn => (
+                <span key={pn} className="inline-flex items-center text-xs font-mono font-bold px-3 py-1.5 rounded-lg border border-brand-200 bg-brand-50 text-brand-700">
+                  {pn}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex items-center justify-end gap-3 border-t pt-4">
+          <Button variant="outline" size="sm" className="h-8 text-xs font-semibold" onClick={() => router.push("/warehouse/dispatch")}>
+            Back to List
+          </Button>
+          {record.deliveryStatus !== "Delivered" && (
+            <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5" onClick={() => router.push(`/warehouse/dispatch/edit/${record.id}`)}>
+              Edit Dispatch
+            </Button>
+          )}
+        </div>
+      </div>
+    </AppLayout>
+  );
+}
