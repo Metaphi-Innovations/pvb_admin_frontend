@@ -111,13 +111,7 @@ const NAV_ITEMS: NavItem[] = [
     id: "farmer",
     label: "Farmer",
     icon: Wheat,
-    children: [
-      { label: "Farmer Registry",    href: "/farmer/registry" },
-      { label: "Field Surveys",      href: "/farmer/surveys" },
-      { label: "Crop Calendar",      href: "/farmer/crop-calendar" },
-      { label: "Input Distribution", href: "/farmer/inputs" },
-      { label: "FPO Management",     href: "/farmer/fpo" },
-    ],
+    href: "/farmer",
   },
   {
     id: "event",
