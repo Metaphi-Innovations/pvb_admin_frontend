@@ -218,10 +218,12 @@ export default function ProductDetailPage() {
             <InfoRow label="Product ID" value={product.productId} mono />
             <InfoRow label="Product Name" value={product.productName} />
             <InfoRow label="Category" value={product.category} />
-            <InfoRow label="Sub Category" value={product.subCategory} />
             <InfoRow label="Segment" value={product.segment} />
             <InfoRow label="Formulation" value={product.formulation} />
             <InfoRow label="Unit" value={product.unit} />
+            <InfoRow label="Base Unit" value={product.baseUnit} />
+            <InfoRow label="Packaging Unit" value={product.packagingUnit} />
+            <InfoRow label="Conversion Quantity" value={product.conversionQuantity !== undefined ? String(product.conversionQuantity) : undefined} />
             <InfoRow label="Pack Size" value={product.packSize} />
           </DetailCard>
 
@@ -229,8 +231,6 @@ export default function ProductDetailPage() {
             <InfoRow label="HSN Code" value={product.hsnCode} mono />
             <InfoRow label="GST Rate" value={product.gstRate} />
             <InfoRow label="MRP" value={formatMoney(product.mrp)} />
-            <InfoRow label="Cost Price" value={formatMoney(product.costPrice)} />
-            <InfoRow label="Distributor Price" value={formatMoney(product.distributorPrice)} />
           </DetailCard>
 
           <DetailCard title="Commercial & Stock">

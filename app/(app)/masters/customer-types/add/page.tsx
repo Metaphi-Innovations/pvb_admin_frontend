@@ -1,36 +1,30 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { ArrowLeft, CheckCircle2, Save, XCircle } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, CheckCircle2, Save, X, XCircle } from "lucide-react";
 import {
-  generateSupplierCode,
-  loadSuppliers,
-  nextSupplierId,
-  saveSuppliers,
-  todayStr,
-} from "../supplier-data";
+  loadCustomerTypes,
+  saveCustomerTypes,
+  nextCustomerTypeId,
+  type CustomerTypeRecord,
+} from "../customer-type-data";
 import {
-  DEFAULT_SUPPLIER_FORM,
-  formValuesToSupplier,
-  SupplierForm,
-  type SupplierFormValues,
-  validateSupplierForm,
-} from "../components/SupplierForm";
+  CustomerTypeForm,
+  DEFAULT_CUSTOMER_TYPE_FORM,
+  type CustomerTypeFormValues,
+  validateCustomerTypeForm,
+} from "../components/CustomerTypeForm";
 
-export default function NewSupplierPage() {
+export default function AddCustomerTypePage() {
   const router = useRouter();
-  const [form, setForm] = useState<SupplierFormValues>(DEFAULT_SUPPLIER_FORM);
+  const [form, setForm] = useState<CustomerTypeFormValues>(DEFAULT_CUSTOMER_TYPE_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [supplierCode, setSupplierCode] = useState("SUP-0001");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-
-  useEffect(() => {
-    setSupplierCode(generateSupplierCode(loadSuppliers()));
-  }, []);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -40,7 +34,7 @@ export default function NewSupplierPage() {
     });
 
   const handleSave = () => {
-    const validation = validateSupplierForm(form);
+    const validation = validateCustomerTypeForm(form);
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
       setToast({ msg: "Please fix the errors before saving.", type: "error" });
@@ -48,23 +42,23 @@ export default function NewSupplierPage() {
       return;
     }
 
-    const list = loadSuppliers();
-    const today = todayStr();
-    const record = formValuesToSupplier(form, {
-      id: nextSupplierId(list),
-      supplierCode,
-      createdBy: "Admin",
-      createdDate: today,
-    });
+    const list = loadCustomerTypes();
+    const newRecord: CustomerTypeRecord = {
+      id: nextCustomerTypeId(list),
+      customerType: form.customerType.trim(),
+      description: form.description.trim(),
+      documentTypes: form.documentTypes || [],
+    };
 
-    saveSuppliers([...list, record]);
-    setToast({ msg: "Supplier created successfully.", type: "success" });
-    setTimeout(() => router.push("/masters/suppliers"), 900);
+    saveCustomerTypes([...list, newRecord]);
+    setToast({ msg: "Customer Type added successfully.", type: "success" });
+    setTimeout(() => router.push("/masters/customer-types"), 900);
   };
 
   return (
     <AppLayout>
       <div className="flex flex-col h-full">
+        {/* Header */}
         <div className="sticky top-0 z-10 flex items-center flex-shrink-0 gap-3 px-5 py-3 bg-white border-b border-border">
           <button
             type="button"
@@ -74,12 +68,9 @@ export default function NewSupplierPage() {
             <ArrowLeft className="w-4 h-4 text-muted-foreground" />
           </button>
           <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold leading-none text-foreground">Add Supplier</h2>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Masters → Supplier Master → Add</p>
+            <h2 className="text-sm font-semibold leading-none text-foreground">Add Customer Type</h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Masters → Customer Type Master → Add</p>
           </div>
-          <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
-            {supplierCode}
-          </span>
           <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => router.back()}>
             Discard
           </Button>
@@ -88,13 +79,22 @@ export default function NewSupplierPage() {
             className="h-7 text-[11px] gap-1.5 px-3 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
           >
-            <Save className="w-3.5 h-3.5" /> Save
+            <Save className="w-3.5 h-3.5" /> Save Customer Type
           </Button>
         </div>
 
         {/* Form Content */}
         <div className="flex-1 px-6 py-6 overflow-y-auto bg-muted/10">
-          <SupplierForm form={form} onChange={setForm} errors={errors} onClearError={clearErr} />
+          <CustomerTypeForm
+            form={form}
+            onChange={setForm}
+            errors={errors}
+            onClearError={clearErr}
+            triggerToast={(msg, type) => {
+              setToast({ msg, type });
+              setTimeout(() => setToast(null), 3200);
+            }}
+          />
         </div>
       </div>
 

@@ -16,7 +16,7 @@ interface ToastState {
 
 function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
   return (
-    <div className={cn("fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium", toast.type === "success" ? "bg-emerald-600" : "bg-red-600")}>
+    <div className={cn("fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium", toast.type === "success" ? "bg-emerald-600" : "bg-red-600")}>
       <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
@@ -101,30 +101,41 @@ export default function EditSubCategoryPage() {
 
   return (
     <AppLayout>
-      <div className="flex flex-col" style={{ minHeight: "calc(100vh - 104px)" }}>
-        <div className="sticky top-0 z-10 flex items-center gap-2.5 border-b border-border bg-white px-4 py-2 flex-shrink-0">
-          <button type="button" onClick={() => router.back()} className="flex-shrink-0 p-1 transition-colors rounded hover:bg-muted">
+      <div className="flex flex-col h-full">
+        {/* Sticky Header */}
+        <div className="sticky top-0 z-10 bg-white border-b border-border px-5 py-3 flex items-center gap-3 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
+          >
             <ArrowLeft className="w-4 h-4 text-muted-foreground" />
           </button>
           <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold leading-none">Edit Sub Category</h2>
+            <h2 className="text-sm font-semibold text-foreground leading-none">Edit Sub Category</h2>
             <p className="text-[11px] text-muted-foreground mt-0.5">Masters → Sub Category Master → Edit</p>
           </div>
-          <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">{form.subCategoryCode}</span>
-          <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => router.back()}>Discard</Button>
-          <Button size="sm" className="h-7 text-[11px] px-3 gap-1.5 bg-brand-600 text-white hover:bg-brand-700" onClick={persist}>
-            <Save className="w-3 h-3" /> Update Sub Category
+          <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
+            {form.subCategoryCode}
+          </span>
+          <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => router.back()}>
+            Discard
+          </Button>
+          <Button
+            size="sm"
+            className="h-7 text-[11px] gap-1.5 px-3 bg-brand-600 text-white hover:bg-brand-700"
+            onClick={persist}
+          >
+            <Save className="w-3.5 h-3.5" /> Update Sub Category
           </Button>
         </div>
 
-        <div className="flex-1 px-5 py-4 overflow-y-auto">
-          <div className="mx-auto max-w-4xl">
-            <SubCategoryForm form={form} onChange={setForm} errors={errors} onClearError={clearErr} categoryOptions={getCategoryOptions()} />
-          </div>
+        {/* Form Body */}
+        <div className="flex-1 px-5 py-4 overflow-y-auto bg-muted/10">
+          <SubCategoryForm form={form} onChange={setForm} errors={errors} onClearError={clearErr} categoryOptions={getCategoryOptions()} />
         </div>
       </div>
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </AppLayout>
   );
 }
-

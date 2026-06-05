@@ -43,19 +43,19 @@ export function SubCategoryForm({
     onClearError(key);
   };
 
-  const inputCls = (key: string) => cn("h-8 text-xs", errors[key] && "border-red-400 focus-visible:ring-red-300");
+  const inputCls = (key: string) => cn("h-8 text-xs", errors[key] && "border-red-400  focus-visible:ring-red-300");
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className="space-y-1">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Sub Category Details</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest  text-muted-foreground">Sub Category Details</p>
         <p className="text-[11px] text-muted-foreground">Keep sub category details compact and aligned with Category Master.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="space-y-1">
           <Label className="text-xs font-medium">Sub Category Code</Label>
-          <Input value={form.subCategoryCode} readOnly className={cn(inputCls("subCategoryCode"), "font-mono bg-muted/40")} />
+          <Input value={form.subCategoryCode} readOnly className={cn(inputCls("subCategoryCode"), "font-mono bg-muted/30 cursor-not-allowed")} />
         </div>
         <div className="space-y-1">
           <Label className="text-xs font-medium">
@@ -65,7 +65,7 @@ export function SubCategoryForm({
             value={form.subCategoryName}
             onChange={(e) => set("subCategoryName", e.target.value)}
             placeholder="e.g. Hybrid Seeds"
-            className={inputCls("subCategoryName")}
+            className={cn(inputCls("subCategoryName"), "bg-background")}
           />
           {errors.subCategoryName && <p className="text-[11px] text-red-500">{errors.subCategoryName}</p>}
         </div>
@@ -74,7 +74,7 @@ export function SubCategoryForm({
             Category <span className="text-red-500">*</span>
           </Label>
           <Select value={form.categoryName} onValueChange={(value) => set("categoryName", value)}>
-            <SelectTrigger className={inputCls("categoryName")}>
+            <SelectTrigger className={cn(inputCls("categoryName"), "bg-muted/30")}>
               <SelectValue placeholder="Select category" />
             </SelectTrigger>
             <SelectContent>
@@ -87,16 +87,7 @@ export function SubCategoryForm({
           </Select>
           {errors.categoryName && <p className="text-[11px] text-red-500">{errors.categoryName}</p>}
         </div>
-        <div className="space-y-1 md:col-span-2">
-          <Label className="text-xs font-medium">Description</Label>
-          <Textarea
-            value={form.description}
-            onChange={(e) => set("description", e.target.value)}
-            placeholder="Short description..."
-            className="min-h-[96px] text-xs resize-none"
-          />
-        </div>
-        <div className="space-y-1">
+        {/* <div className="space-y-1">
           <Label className="text-xs font-medium">Status</Label>
           <Select value={form.status} onValueChange={(value) => set("status", value as SubCategoryStatus)}>
             <SelectTrigger className={inputCls("status")}>
@@ -107,6 +98,15 @@ export function SubCategoryForm({
               <SelectItem value="inactive">Inactive</SelectItem>
             </SelectContent>
           </Select>
+        </div> */}
+        <div className="space-y-1 md:col-span-2">
+          <Label className="text-xs font-medium">Description</Label>
+          <Textarea
+            value={form.description}
+            onChange={(e) => set("description", e.target.value)}
+            placeholder="Short description..."
+            className="min-h-[96px] text-xs resize-none rounded-lg"
+          />
         </div>
       </div>
     </div>

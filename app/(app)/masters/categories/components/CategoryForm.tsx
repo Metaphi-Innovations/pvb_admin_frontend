@@ -44,7 +44,7 @@ export function CategoryForm({
   const inputCls = (key: string) => cn("h-8 text-xs", errors[key] && "border-red-400 focus-visible:ring-red-300");
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className="space-y-1">
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Category Details</p>
         <p className="text-[11px] text-muted-foreground">Keep category master details compact and consistent.</p>
@@ -53,7 +53,7 @@ export function CategoryForm({
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="space-y-1">
           <Label className="text-xs font-medium">Category Code</Label>
-          <Input value={form.categoryCode} readOnly className={cn(inputCls("categoryCode"), "font-mono bg-muted/40")} />
+          <Input value={form.categoryCode} readOnly className={cn(inputCls("categoryCode"), "font-mono bg-muted/30 cursor-not-allowed")} />
         </div>
         <div className="space-y-1">
           <Label className="text-xs font-medium">
@@ -63,20 +63,10 @@ export function CategoryForm({
             value={form.categoryName}
             onChange={(e) => set("categoryName", e.target.value)}
             placeholder="e.g. Fertilizers"
-            className={inputCls("categoryName")}
+            className={cn(inputCls("categoryName"), "bg-background")}
             disabled={readOnly}
           />
           {errors.categoryName && <p className="text-[11px] text-red-500">{errors.categoryName}</p>}
-        </div>
-        <div className="space-y-1 md:col-span-2">
-          <Label className="text-xs font-medium">Description</Label>
-          <Textarea
-            value={form.description}
-            onChange={(e) => set("description", e.target.value)}
-            placeholder="Short description..."
-            className="min-h-[96px] text-xs resize-none"
-            disabled={readOnly}
-          />
         </div>
         <div className="space-y-1">
           <Label className="text-xs font-medium">Status</Label>
@@ -89,6 +79,17 @@ export function CategoryForm({
               <SelectItem value="inactive">Inactive</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+        <div className="hidden md:block" />
+        <div className="space-y-1 md:col-span-2">
+          <Label className="text-xs font-medium">Description</Label>
+          <Textarea
+            value={form.description}
+            onChange={(e) => set("description", e.target.value)}
+            placeholder="Short description..."
+            className="min-h-[96px] text-xs resize-none rounded-lg"
+            disabled={readOnly}
+          />
         </div>
       </div>
     </div>

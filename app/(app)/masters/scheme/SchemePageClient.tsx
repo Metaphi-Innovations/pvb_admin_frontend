@@ -1,8 +1,57 @@
 "use client";
 
-import { Gift } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsUpDown,
+  Download,
+  Edit2,
+  Eye,
+  MoreVertical,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  X,
+  Gift,
+  XCircle,
+  Trash2,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetBody,
+  SheetFooter,
+} from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { MiniKPICard } from "@/components/ui/KPICard";
+import { MasterFormGrid, MasterViewRow } from "@/components/masters/MasterModule";
 import {
   Select,
   SelectContent,
@@ -10,98 +59,864 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Column } from "@/components/ui/DataTable";
-import {
-  MasterModule,
-  MasterFormGrid,
-  MasterField,
-  MasterViewRow,
-  compactInput,
-} from "@/components/masters/MasterModule";
 import {
   DEFAULT_SCHEME_FORM,
   formToScheme,
   SCHEME_SEED,
   SCHEME_STORAGE_KEY,
-  SCHEME_TYPE_OPTIONS,
   schemeToForm,
-  schemeTypeLabel,
   type SchemeForm,
   type SchemeRecord,
   validateSchemeForm,
+  type DiscountType,
 } from "./scheme-data";
+import {
+  loadMasterRecords,
+  saveMasterRecords,
+  nextMasterCode,
+  masterToday,
+  MASTER_CURRENT_USER,
+  type MasterStatus,
+} from "@/lib/masters/common";
 
-const columns: Column<SchemeRecord>[] = [
-  { key: "schemeName", header: "Scheme Name", sortable: true },
-  { key: "schemeCode", header: "Scheme Code", sortable: true, render: (v) => <span className="font-mono text-xs">{String(v)}</span> },
-  {
-    key: "schemeType",
-    header: "Scheme Type",
-    sortable: true,
-    render: (v) => schemeTypeLabel(v as SchemeRecord["schemeType"]),
-  },
-  { key: "startDate", header: "Start Date", sortable: true },
-  { key: "endDate", header: "End Date", sortable: true },
-];
+type SortKey = "schemeCode" | "schemeName" | "discountType" | "status" | "startDate" | "endDate";
+
+interface ToastState {
+  msg: string;
+  type: "success" | "error";
+}
+
+function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
+  return (
+    <div
+      className={cn(
+        "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+        toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
+      )}
+    >
+      <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+      {toast.msg}
+      <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function StatusToggle({ record, onToggle }: { record: SchemeRecord; onToggle: (item: SchemeRecord) => void }) {
+  const active = record.status === "active";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggle(record);
+      }}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+        active
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
+      )}
+    >
+      {active ? "Active" : "Inactive"}
+    </button>
+  );
+}
+
+function SortTh({
+  label,
+  colKey,
+  sortKey,
+  sortDir,
+  onSort,
+  className,
+}: {
+  label: string;
+  colKey: SortKey;
+  sortKey: SortKey;
+  sortDir: "asc" | "desc";
+  onSort: (key: SortKey) => void;
+  className?: string;
+}) {
+  const active = sortKey === colKey;
+  return (
+    <th
+      onClick={() => onSort(colKey)}
+      className={cn(
+        "px-3 py-3 text-left text-[13px] font-semibold cursor-pointer select-none group whitespace-nowrap",
+        active && "bg-brand-50/60",
+        className,
+      )}
+    >
+      <div className="flex items-center gap-1.5">
+        <span className={active ? "text-brand-700" : "text-foreground"}>{label}</span>
+        {active ? (
+          <ChevronDown className={cn("w-3 h-3 text-brand-600 transition-transform", sortDir === "desc" && "rotate-180")} />
+        ) : (
+          <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground" />
+        )}
+      </div>
+    </th>
+  );
+}
 
 export default function SchemeMasterPage() {
+  const [records, setRecords] = useState<SchemeRecord[]>([]);
+  const [search, setSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState<string[]>([]);
+  const [sortKey, setSortKey] = useState<SortKey>("schemeCode");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [toast, setToast] = useState<ToastState | null>(null);
+
+  // Sheet & Dialog states
+  const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
+  const [active, setActive] = useState<SchemeRecord | null>(null);
+  const [form, setForm] = useState<SchemeForm>(DEFAULT_SCHEME_FORM);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [deleteTarget, setDeleteTarget] = useState<SchemeRecord | null>(null);
+
+  useEffect(() => {
+    const loaded = loadMasterRecords<SchemeRecord>(SCHEME_STORAGE_KEY, SCHEME_SEED);
+    const needsMigration = loaded.some((r) => !r.discountType);
+    if (needsMigration) {
+      localStorage.removeItem(SCHEME_STORAGE_KEY);
+      setRecords(loadMasterRecords<SchemeRecord>(SCHEME_STORAGE_KEY, SCHEME_SEED));
+    } else {
+      setRecords(loaded);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, filterStatus, sortKey, sortDir, pageSize]);
+
+  const toggleStatus = (record: SchemeRecord) => {
+    const nextStatus: MasterStatus = record.status === "active" ? "inactive" : "active";
+    const updated = records.map((item) =>
+      item.id === record.id
+        ? { ...item, status: nextStatus, updatedBy: MASTER_CURRENT_USER, updatedAt: masterToday() }
+        : item,
+    );
+    setRecords(updated);
+    saveMasterRecords(SCHEME_STORAGE_KEY, updated);
+    setToast({
+      msg: `Scheme status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`,
+      type: "success",
+    });
+  };
+
+  const openAdd = () => {
+    const codes = records.map((r) => r.schemeCode);
+    const code = nextMasterCode("SCH-", codes);
+    setForm({
+      ...DEFAULT_SCHEME_FORM,
+      schemeCode: code,
+    });
+    setErrors({});
+    setActive(null);
+    setSheetMode("add");
+  };
+
+  const openEdit = (row: SchemeRecord) => {
+    setForm(schemeToForm(row));
+    setErrors({});
+    setActive(row);
+    setSheetMode("edit");
+  };
+
+  const openView = (row: SchemeRecord) => {
+    setActive(row);
+    setSheetMode("view");
+  };
+
+  const closeSheet = () => {
+    setSheetMode(null);
+    setActive(null);
+    setErrors({});
+  };
+
+  const persist = () => {
+    const mode = sheetMode === "add" ? "add" : "edit";
+    const err = validateSchemeForm(form);
+    if (err) {
+      setErrors({ _form: err });
+      return;
+    }
+    const list = loadMasterRecords<SchemeRecord>(SCHEME_STORAGE_KEY, SCHEME_SEED);
+    let updatedList: SchemeRecord[];
+    if (mode === "add") {
+      const id = list.length ? Math.max(...list.map((r) => r.id)) + 1 : 1;
+      updatedList = [...list, formToScheme(form, id)];
+      setToast({ msg: "Scheme added successfully", type: "success" });
+    } else if (active) {
+      updatedList = list.map((r) => (r.id === active.id ? formToScheme(form, active.id, active) : r));
+      setToast({ msg: "Scheme updated successfully", type: "success" });
+    } else {
+      return;
+    }
+    saveMasterRecords(SCHEME_STORAGE_KEY, updatedList);
+    setRecords(updatedList);
+    closeSheet();
+  };
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    const list = loadMasterRecords<SchemeRecord>(SCHEME_STORAGE_KEY, SCHEME_SEED).filter(
+      (r) => r.id !== deleteTarget.id,
+    );
+    saveMasterRecords(SCHEME_STORAGE_KEY, list);
+    setRecords(list);
+    setDeleteTarget(null);
+    setToast({ msg: "Scheme deleted successfully", type: "success" });
+  };
+
+  const handleExport = () => {
+    try {
+      const headers = ["ID", "Scheme Code", "Scheme Name", "Discount Type", "Discount Value", "Start Date", "End Date", "Description", "Status", "Created By", "Updated By", "Created At", "Updated At"];
+      const csvRows = [headers.join(",")];
+      for (const r of records) {
+        const discValue = r.discountType === "Percentage" ? `${r.percentage}%` : `₹${r.flatDiscountAmount}`;
+        const row = [
+          r.id,
+          `"${r.schemeCode.replace(/"/g, '""')}"`,
+          `"${r.schemeName.replace(/"/g, '""')}"`,
+          r.discountType,
+          `"${discValue}"`,
+          `"${r.startDate || ""}"`,
+          `"${r.endDate || ""}"`,
+          `"${(r.description || "").replace(/"/g, '""')}"`,
+          r.status,
+          r.createdBy,
+          r.updatedBy,
+          r.createdAt,
+          r.updatedAt,
+        ];
+        csvRows.push(row.join(","));
+      }
+      const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `schemes_export_${masterToday()}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setToast({ msg: "Schemes exported successfully", type: "success" });
+    } catch {
+      setToast({ msg: "Failed to export schemes", type: "error" });
+    }
+  };
+
+  const filtered = useMemo(() => {
+    return records
+      .filter((r) => {
+        const q = search.trim().toLowerCase();
+        if (!q) return true;
+        return (
+          r.schemeCode.toLowerCase().includes(q) ||
+          r.schemeName.toLowerCase().includes(q) ||
+          (r.description || "").toLowerCase().includes(q)
+        );
+      })
+      .filter((r) => (filterStatus.length ? filterStatus.includes(r.status) : true))
+      .sort((a, b) => {
+        const aVal = String(a[sortKey] ?? "").toLowerCase();
+        const bVal = String(b[sortKey] ?? "").toLowerCase();
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+  }, [records, search, filterStatus, sortKey, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const start = filtered.length === 0 ? 0 : (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, filtered.length);
+
+  const sheetTitle =
+    sheetMode === "add"
+      ? "Add Scheme"
+      : sheetMode === "edit"
+      ? "Edit Scheme"
+      : "View Scheme";
+
+  const nextAutoCode = nextMasterCode("SCH-", records.map((r) => r.schemeCode));
+
   return (
-    <MasterModule<SchemeRecord, SchemeForm>
-      config={{
-        title: "Scheme Master",
-        description: "Promotional and pricing schemes",
-        icon: Gift,
-        storageKey: SCHEME_STORAGE_KEY,
-        seed: SCHEME_SEED,
-        codePrefix: "SCH-",
-        columns,
-        searchKeys: ["schemeName", "schemeCode", "description", "schemeType"],
-        defaultForm: DEFAULT_SCHEME_FORM,
-        getFormFromRecord: schemeToForm,
-        recordFromForm: formToScheme,
-        validate: validateSchemeForm,
-        setCodeOnForm: (f, code) => ({ ...f, schemeCode: code }),
-        renderFormFields: ({ form, setForm }) => (
-          <MasterFormGrid>
-            <MasterField label="Scheme Name" required>
-              <Input className={compactInput()} value={form.schemeName} onChange={(e) => setForm((f) => ({ ...f, schemeName: e.target.value }))} />
-            </MasterField>
-            <MasterField label="Scheme Code" required>
-              <Input className={compactInput("font-mono")} value={form.schemeCode} onChange={(e) => setForm((f) => ({ ...f, schemeCode: e.target.value.toUpperCase() }))} />
-            </MasterField>
-            <MasterField label="Scheme Type" required>
-              <Select value={form.schemeType} onValueChange={(v) => setForm((f) => ({ ...f, schemeType: v as SchemeForm["schemeType"] }))}>
-                <SelectTrigger className={compactInput()}><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {SCHEME_TYPE_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </MasterField>
-            <MasterField label="Start Date" required>
-              <Input type="date" className={compactInput()} value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} />
-            </MasterField>
-            <MasterField label="End Date" required>
-              <Input type="date" className={compactInput()} value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} />
-            </MasterField>
-            <MasterField label="Description" className="sm:col-span-2">
-              <Textarea className="text-xs min-h-[72px] resize-none" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
-            </MasterField>
-          </MasterFormGrid>
-        ),
-        renderViewDetails: (r) => (
-          <div className="rounded-lg border border-border/60 bg-muted/10 px-3">
-            <MasterViewRow label="Scheme Name" value={r.schemeName} />
-            <MasterViewRow label="Scheme Code" value={<span className="font-mono">{r.schemeCode}</span>} />
-            <MasterViewRow label="Scheme Type" value={schemeTypeLabel(r.schemeType)} />
-            <MasterViewRow label="Start Date" value={r.startDate} />
-            <MasterViewRow label="End Date" value={r.endDate} />
-            <MasterViewRow label="Description" value={r.description || "—"} />
-            <MasterViewRow label="Status" value={r.status === "active" ? "Active" : "Inactive"} />
+    <AppLayout>
+      <div className="space-y-5">
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-foreground">Scheme Master</h1>
+            <p className="mt-0.5 text-xs text-muted-foreground">Promotional and pricing schemes</p>
           </div>
-        ),
-      }}
-    />
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5 border-border bg-white text-xs text-foreground hover:bg-muted"
+              onClick={handleExport}
+            >
+              <Download className="h-3.5 w-3.5" /> Export
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 gap-1.5 bg-brand-600 text-xs text-white hover:bg-brand-700"
+              onClick={openAdd}
+            >
+              <Plus className="h-3.5 w-3.5" /> Add Scheme
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <MiniKPICard label="Total Schemes" value={records.length} icon={Gift} accent={true} />
+          <MiniKPICard
+            label="Active"
+            value={records.filter((r) => r.status === "active").length}
+            icon={CheckCircle2}
+            accent={false}
+          />
+          <MiniKPICard
+            label="Inactive"
+            value={records.filter((r) => r.status === "inactive").length}
+            icon={XCircle}
+            accent={false}
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[220px] max-w-sm">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search scheme code, name, description..."
+              className="h-8 pl-9 text-xs"
+            />
+          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                className={cn(
+                  "h-8 px-2.5 text-xs border rounded-lg inline-flex items-center gap-1.5 font-medium transition-colors",
+                  filterStatus.length > 0 ? "border-brand-400 bg-brand-50 text-brand-700" : "border-border text-muted-foreground hover:bg-muted",
+                )}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                Filter
+                {filterStatus.length > 0 && (
+                  <span className="w-4 h-4 text-[10px] bg-brand-600 text-white rounded-full inline-flex items-center justify-center font-bold">
+                    {filterStatus.length}
+                  </span>
+                )}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-56 p-0 bg-white border shadow-lg border-border">
+              <div className="px-3 py-2 border-b border-border">
+                <p className="text-xs font-semibold text-foreground">Filter Scheme</p>
+              </div>
+              <div className="p-3 space-y-3">
+                <div className="space-y-1.5 border-t-0 pt-0">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</p>
+                  {["active", "inactive"].map((v) => (
+                    <label key={v} className="flex items-center gap-2 cursor-pointer py-0.5">
+                      <input
+                        type="checkbox"
+                        className="w-3.5 h-3.5 rounded accent-brand-600"
+                        checked={filterStatus.includes(v)}
+                        onChange={() => {
+                          setFilterStatus((prev) =>
+                            prev.includes(v) ? prev.filter((s) => s !== v) : [...prev, v],
+                          );
+                        }}
+                      />
+                      <span className="text-xs capitalize text-foreground">{v}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {filterStatus.length > 0 && (
+                <div className="px-3 py-2 border-t border-border bg-muted/10">
+                  <button
+                    onClick={() => setFilterStatus([])}
+                    className="text-xs font-medium text-brand-600 hover:underline"
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-collapse table-fixed w-max">
+              <thead>
+                <tr className="border-b bg-muted/40 border-border">
+                  <SortTh
+                    label="Scheme Code"
+                    colKey="schemeCode"
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                    className="w-[120px] pl-4 py-3"
+                  />
+                  <SortTh
+                    label="Scheme Name"
+                    colKey="schemeName"
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                    className="w-[220px]"
+                  />
+                  <SortTh
+                    label="Discount Type"
+                    colKey="discountType"
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                    className="w-[120px]"
+                  />
+                  <th className="px-3 py-3 text-left text-[13px] font-semibold select-none whitespace-nowrap w-[120px]">
+                    Discount Value
+                  </th>
+                  <SortTh
+                    label="Start Date"
+                    colKey="startDate"
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                    className="w-[110px]"
+                  />
+                  <SortTh
+                    label="End Date"
+                    colKey="endDate"
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                    className="w-[110px]"
+                  />
+                  <SortTh
+                    label="Status"
+                    colKey="status"
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                    className="w-[100px]"
+                  />
+                  <th className="sticky right-0 z-30 w-[80px] min-w-[80px] h-11 px-3 text-left text-[13px] font-semibold whitespace-nowrap bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginated.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-xs text-muted-foreground">
+                      No records found
+                    </td>
+                  </tr>
+                ) : (
+                  paginated.map((row) => (
+                    <tr
+                      key={row.id}
+                      onClick={() => openView(row)}
+                      className="align-top transition-colors border-b border-border/60 hover:bg-muted/20 group cursor-pointer"
+                    >
+                      <td className="px-4 py-2.5 text-xs font-semibold font-mono text-brand-700 whitespace-nowrap">
+                        {row.schemeCode}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs font-semibold text-foreground">
+                        {row.schemeName}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-foreground whitespace-nowrap font-medium">
+                        {row.discountType}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-foreground whitespace-nowrap font-semibold">
+                        {row.discountType === "Percentage" ? `${row.percentage}%` : `₹${row.flatDiscountAmount}`}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                        {row.startDate || "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                        {row.endDate || "—"}
+                      </td>
+                      <td
+                        className="px-3 py-2.5"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                      >
+                        <StatusToggle record={row} onToggle={toggleStatus} />
+                      </td>
+                      <td
+                        className="sticky right-0 z-20 w-[80px] min-w-[80px] px-3 py-2.5 bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-32 bg-white border shadow-lg border-border">
+                            <DropdownMenuItem
+                              onClick={() => openView(row)}
+                              className="flex items-center gap-2 cursor-pointer"
+                            >
+                              <Eye className="h-3.5 w-3.5" /> View
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => openEdit(row)}
+                              className="flex items-center gap-2 cursor-pointer"
+                            >
+                              <Edit2 className="h-3.5 w-3.5" /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => setDeleteTarget(row)}
+                              className="flex items-center gap-2 cursor-pointer text-red-600 focus:text-red-700"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/20">
+            <p className="text-[11px] text-muted-foreground">
+              {filtered.length === 0 ? (
+                "No records"
+              ) : (
+                <>
+                  Showing <span className="font-medium text-foreground">{start}-{end}</span> of{" "}
+                  <span className="font-medium text-foreground">{filtered.length}</span> schemes
+                </>
+              )}
+            </p>
+            <div className="flex items-center gap-2">
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="px-2 text-xs bg-white border rounded-md h-7 border-border text-foreground"
+              >
+                {[10, 25, 50, 100].map((value) => (
+                  <option key={value} value={value}>
+                    {value} / page
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={page === 1}
+                className="flex items-center justify-center text-xs border rounded-md w-7 h-7 border-border disabled:opacity-40 hover:bg-muted"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <span className="text-xs text-muted-foreground px-2 min-w-[48px] text-center">
+                {page} / {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={page === totalPages}
+                className="flex items-center justify-center text-xs border rounded-md w-7 h-7 border-border disabled:opacity-40 hover:bg-muted"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <Sheet open={sheetMode !== null} onOpenChange={(o) => !o && closeSheet()}>
+        <SheetContent>
+          <SheetHeader>
+            <div className="flex items-start gap-3 pr-8">
+              <div className="w-9 h-9 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center">
+                <Gift className="w-4 h-4 text-brand-600" />
+              </div>
+              <div>
+                <SheetTitle className="text-base">{sheetTitle}</SheetTitle>
+                <SheetDescription className="text-xs">
+                  {sheetMode === "view" ? "Read-only details" : "Compact scheme form"}
+                </SheetDescription>
+              </div>
+            </div>
+          </SheetHeader>
+
+          <SheetBody>
+            {sheetMode === "view" && active ? (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-border/60 bg-muted/10 px-3">
+                  <MasterViewRow label="Scheme Name" value={active.schemeName} />
+                  <MasterViewRow label="Scheme Code" value={<span className="font-mono">{active.schemeCode}</span>} />
+                  <MasterViewRow label="Discount Type" value={active.discountType} />
+                  <MasterViewRow
+                    label={active.discountType === "Percentage" ? "Percentage" : "Flat Discount Amount"}
+                    value={active.discountType === "Percentage" ? `${active.percentage}%` : `₹${active.flatDiscountAmount}`}
+                  />
+                  <MasterViewRow label="Start Date" value={active.startDate || "—"} />
+                  <MasterViewRow label="End Date" value={active.endDate || "—"} />
+                  <MasterViewRow label="Description" value={active.description || "—"} />
+                  <MasterViewRow label="Status" value={active.status === "active" ? "Active" : "Inactive"} />
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs pt-2 border-t">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
+                    <p className="font-medium">{active.createdBy}</p>
+                    <p className="text-muted-foreground">{active.createdAt}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Updated By</p>
+                    <p className="font-medium">{active.updatedBy}</p>
+                    <p className="text-muted-foreground">{active.updatedAt}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {errors._form && <p className="text-xs text-red-600 font-semibold">{errors._form}</p>}
+                <MasterFormGrid>
+                  {/* Scheme Name */}
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-xs font-medium">
+                      Scheme Name <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      value={form.schemeName}
+                      onChange={(e) => {
+                        setForm((prev) => ({ ...prev, schemeName: e.target.value }));
+                        setErrors((prev) => ({ ...prev, schemeName: "", _form: "" }));
+                      }}
+                      placeholder="e.g., Monsoon Discount"
+                      className="h-8 text-xs"
+                    />
+                  </div>
+
+                  {/* Scheme Code */}
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-xs font-medium">
+                      Scheme Code <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      value={sheetMode === "add" ? nextAutoCode : form.schemeCode}
+                      disabled={sheetMode === "edit"}
+                      onChange={(e) => {
+                        setForm((prev) => ({ ...prev, schemeCode: e.target.value }));
+                        setErrors((prev) => ({ ...prev, schemeCode: "", _form: "" }));
+                      }}
+                      placeholder="e.g., SCH-001"
+                      className="h-8 text-xs font-mono disabled:opacity-50 cursor-not-allowed bg-muted/30"
+                    />
+                  </div>
+
+                  {/* Discount Type */}
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-xs font-medium">
+                      Discount Type <span className="text-red-500">*</span>
+                    </Label>
+                    <Select
+                      value={form.discountType}
+                      onValueChange={(v: DiscountType) => {
+                        setForm((prev) => ({
+                          ...prev,
+                          discountType: v,
+                          percentage: v === "Percentage" ? prev.percentage : "",
+                          flatDiscountAmount: v === "Flat" ? prev.flatDiscountAmount : "",
+                        }));
+                        setErrors((prev) => ({ ...prev, _form: "" }));
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-xs bg-white">
+                        <SelectValue placeholder="Select discount type" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border shadow-lg border-border">
+                        <SelectItem value="Percentage" className="text-xs">Percentage</SelectItem>
+                        <SelectItem value="Flat" className="text-xs">Flat</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Conditional Discount Value Input */}
+                  {form.discountType === "Percentage" ? (
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs font-medium">
+                        Percentage (%) <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        type="number"
+                        step="any"
+                        value={form.percentage}
+                        onChange={(e) => {
+                          setForm((prev) => ({ ...prev, percentage: e.target.value }));
+                          setErrors((prev) => ({ ...prev, percentage: "", _form: "" }));
+                        }}
+                        placeholder="e.g., 10"
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  ) : (
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs font-medium">
+                        Flat Discount Amount (₹) <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        type="number"
+                        step="any"
+                        value={form.flatDiscountAmount}
+                        onChange={(e) => {
+                          setForm((prev) => ({ ...prev, flatDiscountAmount: e.target.value }));
+                          setErrors((prev) => ({ ...prev, flatDiscountAmount: "", _form: "" }));
+                        }}
+                        placeholder="e.g., 500"
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  )}
+
+                  {/* Start Date */}
+                  <div className="col-span-2 sm:col-span-1 space-y-1">
+                    <Label className="text-xs font-medium">Start Date</Label>
+                    <Input
+                      type="date"
+                      value={form.startDate}
+                      onChange={(e) => {
+                        setForm((prev) => ({ ...prev, startDate: e.target.value }));
+                        setErrors((prev) => ({ ...prev, _form: "" }));
+                      }}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+
+                  {/* End Date */}
+                  <div className="col-span-2 sm:col-span-1 space-y-1">
+                    <Label className="text-xs font-medium">End Date</Label>
+                    <Input
+                      type="date"
+                      value={form.endDate}
+                      onChange={(e) => {
+                        setForm((prev) => ({ ...prev, endDate: e.target.value }));
+                        setErrors((prev) => ({ ...prev, _form: "" }));
+                      }}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-xs font-medium">Description</Label>
+                    <Textarea
+                      value={form.description}
+                      onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+                      placeholder="e.g., monsoon scheme rules"
+                      className="text-xs min-h-[72px] resize-none"
+                    />
+                  </div>
+                </MasterFormGrid>
+
+                <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/20">
+                  <div>
+                    <p className="text-xs font-medium">Status</p>
+                    <p className="text-[11px] text-muted-foreground">{form.status === "active" ? "Active" : "Inactive"}</p>
+                  </div>
+                  <Switch
+                    checked={form.status === "active"}
+                    onCheckedChange={(checked) =>
+                      setForm((prev) => ({ ...prev, status: checked ? "active" : "inactive" }))
+                    }
+                  />
+                </div>
+              </div>
+            )}
+          </SheetBody>
+
+          <SheetFooter>
+            {sheetMode === "view" ? (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Back
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                  onClick={() => active && openEdit(active)}
+                >
+                  Edit
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                  onClick={persist}
+                >
+                  Save
+                </Button>
+              </>
+            )}
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Delete record?</DialogTitle>
+            <DialogDescription className="text-xs">
+              This action cannot be undone. The record will be permanently removed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" onClick={confirmDelete}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
+    </AppLayout>
   );
 }
