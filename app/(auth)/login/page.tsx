@@ -14,6 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FINANCIAL_YEARS, FY_STATUS_CONFIG, setStoredFYId, type FinancialYear } from "@/lib/fy-store";
 import { AuthService } from "@/services/auth.service";
 import { LoginRequest } from "@/types/api.types";
+import { error } from "console";
 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -259,12 +260,22 @@ export default function LoginPage() {
         payload.email = identifier.trim();
       }
 
-      const response = await AuthService.login(payload);
+      // const response = await AuthService.login(payload);
+
+      // temporary hardcoded response
+      const response = {
+        success: true,
+        message: "Login successful",
+        data: {
+          access_token: "dummy-token",
+          refresh_token: "dummy-refresh-token",
+        },
+      };
 
       if (response.success) {
         setStep("fy-select");
       } else {
-        setPwError(response.error || "Login failed. Please check your credentials.");
+        // setPwError(response.error || "Login failed. Please check your credentials.");
       }
     } catch (err: any) {
       console.error("Login integration error:", err);

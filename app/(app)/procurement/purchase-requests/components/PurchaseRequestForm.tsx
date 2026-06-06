@@ -278,8 +278,8 @@ export function PurchaseRequestForm({
                         className="w-full h-8 text-xs border border-border/60 rounded-md px-1.5"
                       >
                         {uomOptions.map((u) => (
-                          <option key={u.id} value={u.shortName}>
-                            {u.shortName}
+                          <option key={u.id} value={u.uomId}>
+                            {u.unitName} ({u.shortName})
                           </option>
                         ))}
                       </select>

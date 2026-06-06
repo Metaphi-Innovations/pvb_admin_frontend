@@ -21,12 +21,12 @@ export default function AppGroupLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const cookieStore = cookies();
-  const token = cookieStore.get("access_token")?.value;
+  // const cookieStore = cookies();
+  // const token = cookieStore.get("access_token")?.value;
 
-  if (!token) {
-    redirect("/login");
-  }
+  // if (!token) {
+  //   redirect("/login");
+  // }
 
   return <AppShell>{children}</AppShell>;
 }
