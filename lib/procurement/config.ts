@@ -2,6 +2,8 @@
 
 export const CURRENT_USER = "Admin";
 
+export const PROCUREMENT_APPROVER = "Admin";
+
 export const PROCUREMENT_APPROVAL = {
   prEnabled: true,
   poEnabled: true,

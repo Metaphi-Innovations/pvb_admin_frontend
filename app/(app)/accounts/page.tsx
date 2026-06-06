@@ -2,27 +2,20 @@
 
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { BookOpen, ArrowRightLeft, BarChart3 } from "lucide-react";
+import { ArrowRightLeft, BarChart3 } from "lucide-react";
 
 const sections = [
-  {
-    title: "Masters",
-    icon: BookOpen,
-    links: [
-      { label: "Chart of Accounts", href: "/accounts/masters/chart-of-accounts" },
-      { label: "Ledgers", href: "/accounts/masters/ledgers" },
-    ],
-  },
   {
     title: "Transactions",
     icon: ArrowRightLeft,
     links: [
+      { label: "Invoices", href: "/accounts/transactions/invoices" },
+      { label: "Credit Notes", href: "/accounts/transactions/credit-notes" },
       { label: "Purchase", href: "/accounts/transactions/purchase" },
-      { label: "Sales", href: "/accounts/transactions/sales" },
-      { label: "Purchase Return", href: "/accounts/transactions/purchase-return" },
-      { label: "Sales Return", href: "/accounts/transactions/sales-return" },
-      { label: "Payment", href: "/accounts/transactions/payment" },
-      { label: "Bank Reconciliation", href: "/accounts/transactions/bank-reconciliation" },
+      { label: "Debit Notes", href: "/accounts/transactions/debit-notes" },
+      { label: "Expenses (Payments)", href: "/accounts/transactions/expenses" },
+      { label: "Payments", href: "/accounts/transactions/payments" },
+      { label: "Reconciliation", href: "/accounts/transactions/reconciliation" },
       { label: "Journal", href: "/accounts/transactions/journal" },
     ],
   },
@@ -44,10 +37,10 @@ export default function AccountsHomePage() {
         <div>
           <h1 className="text-lg font-semibold">Accounts</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Masters, transactions, and reports for approved ERP postings.
+            Financial transactions, accounting entries and reports.
           </p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {sections.map((s) => {
             const Icon = s.icon;
             return (

@@ -2,14 +2,24 @@ export type RecordStatus = "draft" | "approved" | "rejected" | "posted";
 
 export type AccountType = "Asset" | "Liability" | "Income" | "Expense" | "Equity";
 
+export type ErpUsageModule =
+  | "procurement"
+  | "sales"
+  | "tada_claims"
+  | "payments"
+  | "journal";
+
 export interface ChartOfAccount {
   id: number;
   accountCode: string;
   accountName: string;
   accountType: AccountType;
+  parentAccountId: number | null;
   parentAccount: string;
   description: string;
   status: "active" | "inactive";
+  usedIn: ErpUsageModule[];
+  isSystem: boolean;
   createdBy: string;
   updatedBy: string;
 }
@@ -33,6 +43,7 @@ export type TxnType =
   | "sales"
   | "purchase_return"
   | "sales_return"
+  | "expenses"
   | "payment"
   | "bank_reconciliation"
   | "journal";
@@ -55,15 +66,179 @@ export interface AccountTxn {
   updatedBy: string;
 }
 
-const COA_KEY = "ds_accounts_coa";
+const COA_KEY = "ds_accounts_coa_v2";
 const LEDGER_KEY = "ds_accounts_ledgers";
 const TXN_KEY = "ds_accounts_txns";
 
 const COA_SEED: ChartOfAccount[] = [
-  { id: 1, accountCode: "1000", accountName: "Cash in Hand", accountType: "Asset", parentAccount: "Current Assets", description: "", status: "active", createdBy: "Admin", updatedBy: "Admin" },
-  { id: 2, accountCode: "2000", accountName: "Accounts Payable", accountType: "Liability", parentAccount: "Current Liabilities", description: "", status: "active", createdBy: "Admin", updatedBy: "Admin" },
-  { id: 3, accountCode: "4000", accountName: "Sales Revenue", accountType: "Income", parentAccount: "Revenue", description: "", status: "active", createdBy: "Admin", updatedBy: "Admin" },
-  { id: 4, accountCode: "5000", accountName: "Purchase Expense", accountType: "Expense", parentAccount: "Direct Expense", description: "", status: "active", createdBy: "Admin", updatedBy: "Admin" },
+  {
+    id: 1,
+    accountCode: "1000",
+    accountName: "Assets",
+    accountType: "Asset",
+    parentAccountId: null,
+    parentAccount: "",
+    description: "System asset group",
+    status: "active",
+    usedIn: [],
+    isSystem: true,
+    createdBy: "System",
+    updatedBy: "System",
+  },
+  {
+    id: 2,
+    accountCode: "2000",
+    accountName: "Liabilities",
+    accountType: "Liability",
+    parentAccountId: null,
+    parentAccount: "",
+    description: "System liability group",
+    status: "active",
+    usedIn: [],
+    isSystem: true,
+    createdBy: "System",
+    updatedBy: "System",
+  },
+  {
+    id: 3,
+    accountCode: "3000",
+    accountName: "Income",
+    accountType: "Income",
+    parentAccountId: null,
+    parentAccount: "",
+    description: "System income group",
+    status: "active",
+    usedIn: [],
+    isSystem: true,
+    createdBy: "System",
+    updatedBy: "System",
+  },
+  {
+    id: 4,
+    accountCode: "4000",
+    accountName: "Expenses",
+    accountType: "Expense",
+    parentAccountId: null,
+    parentAccount: "",
+    description: "System expense group",
+    status: "active",
+    usedIn: [],
+    isSystem: true,
+    createdBy: "System",
+    updatedBy: "System",
+  },
+  {
+    id: 5,
+    accountCode: "5000",
+    accountName: "Equity",
+    accountType: "Equity",
+    parentAccountId: null,
+    parentAccount: "",
+    description: "System equity group",
+    status: "active",
+    usedIn: [],
+    isSystem: true,
+    createdBy: "System",
+    updatedBy: "System",
+  },
+  {
+    id: 10,
+    accountCode: "1010",
+    accountName: "Cash",
+    accountType: "Asset",
+    parentAccountId: 1,
+    parentAccount: "Assets",
+    description: "Cash on hand",
+    status: "active",
+    usedIn: ["payments", "journal"],
+    isSystem: false,
+    createdBy: "Admin",
+    updatedBy: "Admin",
+  },
+  {
+    id: 11,
+    accountCode: "1020",
+    accountName: "Bank",
+    accountType: "Asset",
+    parentAccountId: 1,
+    parentAccount: "Assets",
+    description: "Bank accounts",
+    status: "active",
+    usedIn: ["payments", "journal"],
+    isSystem: false,
+    createdBy: "Admin",
+    updatedBy: "Admin",
+  },
+  {
+    id: 20,
+    accountCode: "2010",
+    accountName: "Vendor Payable",
+    accountType: "Liability",
+    parentAccountId: 2,
+    parentAccount: "Liabilities",
+    description: "Amounts owed to vendors",
+    status: "active",
+    usedIn: ["procurement", "payments"],
+    isSystem: false,
+    createdBy: "Admin",
+    updatedBy: "Admin",
+  },
+  {
+    id: 21,
+    accountCode: "2020",
+    accountName: "Employee Payable",
+    accountType: "Liability",
+    parentAccountId: 2,
+    parentAccount: "Liabilities",
+    description: "Employee reimbursements & claims payable",
+    status: "active",
+    usedIn: ["tada_claims", "payments"],
+    isSystem: false,
+    createdBy: "Admin",
+    updatedBy: "Admin",
+  },
+  {
+    id: 30,
+    accountCode: "3010",
+    accountName: "Sales Income",
+    accountType: "Income",
+    parentAccountId: 3,
+    parentAccount: "Income",
+    description: "Revenue from sales",
+    status: "active",
+    usedIn: ["sales"],
+    isSystem: false,
+    createdBy: "Admin",
+    updatedBy: "Admin",
+  },
+  {
+    id: 40,
+    accountCode: "4010",
+    accountName: "Purchase Expense",
+    accountType: "Expense",
+    parentAccountId: 4,
+    parentAccount: "Expenses",
+    description: "Procurement purchases",
+    status: "active",
+    usedIn: ["procurement"],
+    isSystem: false,
+    createdBy: "Admin",
+    updatedBy: "Admin",
+  },
+  {
+    id: 41,
+    accountCode: "4020",
+    accountName: "Travel Expense",
+    accountType: "Expense",
+    parentAccountId: 4,
+    parentAccount: "Expenses",
+    description: "TA/DA and travel claims",
+    status: "active",
+    usedIn: ["tada_claims", "journal"],
+    isSystem: false,
+    createdBy: "Admin",
+    updatedBy: "Admin",
+  },
 ];
 
 const LEDGER_SEED: Ledger[] = [
@@ -127,6 +302,7 @@ export function postEntryAfterApproval(input: {
     sales: "SAL",
     purchase_return: "PRT",
     sales_return: "SRT",
+    expenses: "EXP",
     payment: "PAY",
     bank_reconciliation: "BNK",
     journal: "JRN",

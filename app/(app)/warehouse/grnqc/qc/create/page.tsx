@@ -19,8 +19,10 @@ function CreateQcForm() {
   // Dynamic state
   const [qcNo, setQcNo] = useState("");
   const [grnNo, setGrnNo] = useState("");
+  const [poNumber, setPoNumber] = useState("");
   const [vendor, setVendor] = useState("");
   const [inspectionDate, setInspectionDate] = useState(new Date().toISOString().split("T")[0]);
+  const [qcRemarks, setQcRemarks] = useState("");
   const [items, setItems] = useState<QcItem[]>([]);
 
   // Find GRN and populate
@@ -28,6 +30,7 @@ function CreateQcForm() {
     const grn = getGrnById(grnId);
     if (grn) {
       setGrnNo(grn.grnNo);
+      setPoNumber(grn.poNumber);
       setVendor(grn.vendorName);
       
       // Map batches to QC items
@@ -106,11 +109,13 @@ function CreateQcForm() {
       id: `qc-${Date.now()}`,
       qcNo,
       grnNo,
+      poNumber,
       vendorName: vendor,
       inspectionDate,
       totalAcceptedQty: items.reduce((sum, it) => sum + it.acceptedQty, 0),
       totalRejectedQty: items.reduce((sum, it) => sum + it.rejectedQty, 0),
       status,
+      qcRemarks: qcRemarks.trim(),
       items,
     };
 
@@ -177,8 +182,13 @@ function CreateQcForm() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">GRN Source No</label>
+              <label className="text-xs font-medium text-muted-foreground">GRN No.</label>
               <Input value={grnNo} readOnly className="h-8 text-xs font-mono font-semibold bg-muted/30" />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">PO No.</label>
+              <Input value={poNumber} readOnly className="h-8 text-xs font-mono font-semibold bg-muted/30" />
             </div>
 
             <div className="space-y-1">
@@ -195,6 +205,15 @@ function CreateQcForm() {
                 className="h-8 text-xs"
               />
             </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">QC Remarks</label>
+            <Input
+              value={qcRemarks}
+              onChange={(e) => setQcRemarks(e.target.value)}
+              placeholder="Inspection notes for 3-Way Match and debit note reference…"
+              className="h-8 text-xs"
+            />
           </div>
         </div>
 

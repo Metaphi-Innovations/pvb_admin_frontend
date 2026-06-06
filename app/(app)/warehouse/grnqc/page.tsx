@@ -10,6 +10,23 @@ import { getGrnRecords, saveGrnRecord } from "./grn/mock-data";
 import { getQcRecords } from "./qc/mock-data";
 import { GrnRecord } from "./grn/types";
 import { QcRecord } from "./qc/types";
+
+type GrnListingRow = GrnRecord & {
+  receivedQty: number;
+  acceptedQty: number;
+  rejectedQty: number;
+};
+
+function enrichGrnRow(grn: GrnRecord, qcs: QcRecord[]): GrnListingRow {
+  const receivedQty = grn.items.reduce((s, it) => s + (it.receivedQty ?? 0), 0);
+  const qc = qcs.find((q) => q.grnNo === grn.grnNo && q.status === "completed");
+  return {
+    ...grn,
+    receivedQty,
+    acceptedQty: qc?.totalAcceptedQty ?? 0,
+    rejectedQty: qc?.totalRejectedQty ?? 0,
+  };
+}
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { MiniKPICard } from "@/components/ui/KPICard";
@@ -49,9 +66,14 @@ export default function GrnQcDashboardPage() {
     setQcList(getQcRecords());
   }, []);
 
+  const grnListingRows = useMemo(
+    () => grnList.map((g) => enrichGrnRow(g, qcList)),
+    [grnList, qcList],
+  );
+
   // Filter & Sort GRN list client-side
   const processedGrns = useMemo(() => {
-    let result = [...grnList];
+    let result = [...grnListingRows];
     Object.keys(grnFilters).forEach((key) => {
       const val = grnFilters[key];
       if (!val) return;
@@ -65,7 +87,7 @@ export default function GrnQcDashboardPage() {
         );
       } else if (key === "grnNo" || key === "poNumber" || key === "vendorName") {
         const q = (val as string).toLowerCase();
-        result = result.filter(item => String(item[key as keyof GrnRecord]).toLowerCase().includes(q));
+        result = result.filter(item => String(item[key as keyof GrnListingRow]).toLowerCase().includes(q));
       } else if (key === "warehouse" || key === "status") {
         const selected = val as string[];
         result = result.filter(item => selected.includes(String(item[key as keyof GrnRecord])));
@@ -78,13 +100,13 @@ export default function GrnQcDashboardPage() {
 
     if (grnSort.key && grnSort.direction !== "none") {
       result.sort((a, b) => {
-        const valA = String(a[grnSort.key as keyof GrnRecord] || "");
-        const valB = String(b[grnSort.key as keyof GrnRecord] || "");
+        const valA = String(a[grnSort.key as keyof GrnListingRow] || "");
+        const valB = String(b[grnSort.key as keyof GrnListingRow] || "");
         return grnSort.direction === "asc" ? valA.localeCompare(valB) : valB.localeCompare(valA);
       });
     }
     return result;
-  }, [grnList, grnFilters, grnSort]);
+  }, [grnListingRows, grnFilters, grnSort]);
 
   const paginatedGrns = useMemo(() => {
     const start = (grnPage - 1) * grnPageSize;
@@ -103,6 +125,7 @@ export default function GrnQcDashboardPage() {
         result = result.filter(item =>
           item.qcNo.toLowerCase().includes(q) ||
           item.grnNo.toLowerCase().includes(q) ||
+          (item.poNumber ?? "").toLowerCase().includes(q) ||
           item.vendorName.toLowerCase().includes(q)
         );
       } else if (key === "qcNo" || key === "grnNo" || key === "vendorName") {
@@ -134,25 +157,13 @@ export default function GrnQcDashboardPage() {
   }, [processedQcs, qcPage, qcPageSize]);
 
   // GRN Column Configurations
-  const grnColumns: ColumnConfig<GrnRecord>[] = [
+  const grnColumns: ColumnConfig<GrnListingRow>[] = [
     { key: "grnNo", header: "GRN No", sortable: true, filterable: true, filterType: "text", width: "130px" },
-    { key: "poNumber", header: "PO No", sortable: true, filterable: true, filterType: "text", width: "120px" },
-    { key: "vendorName", header: "Vendor Name", sortable: true, filterable: true, filterType: "text" },
-    {
-      key: "warehouse",
-      header: "Warehouse",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: [
-        { label: "Central Warehouse", value: "Central Warehouse" },
-        { label: "North Zone Hub", value: "North Zone Hub" },
-        { label: "South Zone Depot", value: "South Zone Depot" },
-        { label: "West Zone Hub", value: "West Zone Hub" },
-      ],
-    },
-    { key: "totalProducts", header: "Total Products", sortable: true, align: "center", width: "120px" },
-    { key: "totalQty", header: "Total Qty", sortable: true, align: "right", width: "110px" },
+    { key: "poNumber", header: "PO No.", sortable: true, filterable: true, filterType: "text", width: "120px" },
+    { key: "vendorName", header: "Vendor", sortable: true, filterable: true, filterType: "text" },
+    { key: "receivedQty", header: "Received Qty", sortable: true, align: "right", width: "110px" },
+    { key: "acceptedQty", header: "Accepted Qty", sortable: true, align: "right", width: "110px" },
+    { key: "rejectedQty", header: "Rejected Qty", sortable: true, align: "right", width: "110px" },
     { key: "grnDate", header: "GRN Date", sortable: true, filterable: true, filterType: "date", width: "140px" },
     {
       key: "status",
@@ -181,7 +192,8 @@ export default function GrnQcDashboardPage() {
   // QC Column Configurations
   const qcColumns: ColumnConfig<QcRecord>[] = [
     { key: "qcNo", header: "QC No", sortable: true, filterable: true, filterType: "text", width: "130px" },
-    { key: "grnNo", header: "GRN No", sortable: true, filterable: true, filterType: "text", width: "130px" },
+    { key: "grnNo", header: "GRN No.", sortable: true, filterable: true, filterType: "text", width: "130px" },
+    { key: "poNumber", header: "PO No.", sortable: true, filterable: true, filterType: "text", width: "120px" },
     { key: "vendorName", header: "Vendor", sortable: true, filterable: true, filterType: "text" },
     { key: "inspectionDate", header: "Inspection Date", sortable: true, filterable: true, filterType: "date", width: "145px" },
     { key: "totalAcceptedQty", header: "Total Accepted Qty", sortable: true, align: "right", width: "140px" },
@@ -209,7 +221,7 @@ export default function GrnQcDashboardPage() {
   ];
 
   // Action Configurations for GRN
-  const grnActions: ActionItemConfig<GrnRecord>[] = [
+  const grnActions: ActionItemConfig<GrnListingRow>[] = [
     {
       label: "View Detail",
       action: "view",
@@ -291,7 +303,7 @@ export default function GrnQcDashboardPage() {
               <div className="flex justify-between items-center">
                 <h2 className="text-sm font-semibold text-foreground">Goods Receipt Notes</h2>
               </div>
-              <MasterListing<GrnRecord>
+              <MasterListing<GrnListingRow>
                 columns={grnColumns}
                 data={paginatedGrns}
                 totalRecords={processedGrns.length}

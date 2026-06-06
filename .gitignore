@@ -5,3 +5,10 @@
 *.tsbuildinfo
 /.env
 AGENTS.md
+
+# Never commit real bank statements
+samples/*.csv
+samples/*.xlsx
+samples/*.xls
+**/bank-statement*.csv
+**/bank-statement*.xlsx

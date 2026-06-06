@@ -1,17 +1,43 @@
 import { PROCUREMENT_APPROVAL, CURRENT_USER, COMPANY_BILLING } from "@/lib/procurement/config";
 import { amountInWords, calcLineAmounts, nextId, round2, todayStr } from "@/lib/procurement/utils";
 import type { ActivityEntry } from "@/lib/procurement/types";
+import type { POShortCloseInfo } from "./po-qty";
+
+export type { POShortCloseInfo } from "./po-qty";
+export { canShortClosePO, getPOQtySummary, shortClosePO } from "./po-qty";
 
 export type POStatus =
   | "draft"
   | "pending_approval"
   | "approved"
   | "rejected"
+  | "invoice_uploaded"
+  | "short_closed"
+  | "closed"
+  | "cancelled";
+
+/** Legacy statuses migrated on load */
+type LegacyPOStatus =
   | "sent_to_supplier"
   | "partially_received"
   | "fully_received"
-  | "closed"
-  | "cancelled";
+  | "partially_fulfilled"
+  | "fully_fulfilled";
+
+export function normalizePOStatus(status: string): POStatus {
+  const map: Record<LegacyPOStatus, POStatus> = {
+    sent_to_supplier: "approved",
+    partially_received: "approved",
+    fully_received: "approved",
+    partially_fulfilled: "approved",
+    fully_fulfilled: "approved",
+  };
+  return (map[status as LegacyPOStatus] ?? status) as POStatus;
+}
+
+function normalizePO(po: PurchaseOrder): PurchaseOrder {
+  return { ...po, status: normalizePOStatus(po.status) };
+}
 
 export interface POLineItem {
   uid: string;
@@ -31,6 +57,9 @@ export interface POLineItem {
   netAmount: number;
   deliverySchedule: string;
   prLineUid?: string;
+  /** Fallback when GRN not linked by PO number */
+  receivedQty?: number;
+  shortClosedQty?: number;
 }
 
 export interface POAttachment {
@@ -104,6 +133,7 @@ export interface PurchaseOrder {
   approvedBy: string;
   approvedDate: string;
   activity: ActivityEntry[];
+  shortClose?: POShortCloseInfo;
 }
 
 const STORAGE_KEY = "ds_procurement_purchase_orders";
@@ -218,6 +248,7 @@ const SEED: PurchaseOrder[] = [
         description: "Insecticide",
         uom: "LTR",
         orderedQty: 100,
+        receivedQty: 60,
         unitPrice: 310,
         discountPct: 2,
         cgstPct: 9,
@@ -256,7 +287,7 @@ const SEED: PurchaseOrder[] = [
       ],
       500,
     ),
-    status: "sent_to_supplier",
+    status: "approved",
     createdBy: "Admin",
     createdDate: "2024-01-25",
     updatedBy: "Admin",
@@ -359,16 +390,17 @@ const SEED: PurchaseOrder[] = [
 ];
 
 export function loadPurchaseOrders(): PurchaseOrder[] {
-  if (typeof window === "undefined") return SEED;
+  if (typeof window === "undefined") return SEED.map(normalizePO);
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED));
-      return SEED;
+      return SEED.map(normalizePO);
     }
-    return JSON.parse(raw) as PurchaseOrder[];
+    const list = (JSON.parse(raw) as PurchaseOrder[]).map(normalizePO);
+    return list;
   } catch {
-    return SEED;
+    return SEED.map(normalizePO);
   }
 }
 
@@ -428,14 +460,45 @@ export function rejectPO(po: PurchaseOrder, reason?: string): PurchaseOrder {
   };
 }
 
+export function closePO(po: PurchaseOrder, remarks?: string): PurchaseOrder {
+  const today = todayStr();
+  return {
+    ...po,
+    status: "closed",
+    updatedBy: CURRENT_USER,
+    updatedDate: today,
+    activity: [...po.activity, { date: today, action: "Closed", by: CURRENT_USER, note: remarks }],
+  };
+}
+
+export function cancelPO(po: PurchaseOrder, reason?: string): PurchaseOrder {
+  const today = todayStr();
+  return {
+    ...po,
+    status: "cancelled",
+    updatedBy: CURRENT_USER,
+    updatedDate: today,
+    activity: [...po.activity, { date: today, action: "Cancelled", by: CURRENT_USER, note: reason }],
+  };
+}
+
+export const PO_LIST_TABS: POStatus[] = [
+  "draft",
+  "pending_approval",
+  "approved",
+  "invoice_uploaded",
+  "short_closed",
+  "closed",
+  "cancelled",
+];
+
 export const PO_STATUS_CFG: Record<POStatus, { bg: string; text: string; dot: string; label: string }> = {
   draft: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400", label: "Draft" },
   pending_approval: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400", label: "Pending Approval" },
   approved: { bg: "bg-blue-50", text: "text-blue-700", dot: "bg-blue-500", label: "Approved" },
   rejected: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-400", label: "Rejected" },
-  sent_to_supplier: { bg: "bg-violet-50", text: "text-violet-700", dot: "bg-violet-500", label: "Sent To Supplier" },
-  partially_received: { bg: "bg-cyan-50", text: "text-cyan-700", dot: "bg-cyan-500", label: "Partially Received" },
-  fully_received: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Fully Received" },
+  invoice_uploaded: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Invoice Uploaded" },
+  short_closed: { bg: "bg-violet-50", text: "text-violet-700", dot: "bg-violet-500", label: "Short Closed" },
   closed: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-500", label: "Closed" },
   cancelled: { bg: "bg-red-50", text: "text-red-600", dot: "bg-red-400", label: "Cancelled" },
 };

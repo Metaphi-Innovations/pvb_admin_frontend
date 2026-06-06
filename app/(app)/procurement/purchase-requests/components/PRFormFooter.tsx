@@ -1,8 +1,8 @@
 "use client";
 
 import React from "react";
-import { Button } from "@/components/ui/button";
 import { Send } from "lucide-react";
+import { ProcButton } from "../../design/proc-design";
 
 export function PRFormFooter({
   readOnly,
@@ -18,31 +18,14 @@ export function PRFormFooter({
   showSubmit?: boolean;
 }) {
   if (readOnly) {
-    return (
-      <Button variant="outline" size="sm" className="h-9 text-sm" onClick={onCancel}>
-        Back to list
-      </Button>
-    );
+    return <ProcButton variant="outline" onClick={onCancel}>Back to list</ProcButton>;
   }
-
   return (
     <>
-      <Button variant="outline" size="sm" className="h-9 text-sm" onClick={onCancel}>
-        Cancel
-      </Button>
-      {onSaveDraft && (
-        <Button variant="outline" size="sm" className="h-9 text-sm" onClick={onSaveDraft}>
-          Save as Draft
-        </Button>
-      )}
+      <ProcButton variant="ghost" onClick={onCancel}>Cancel</ProcButton>
+      {onSaveDraft && <ProcButton variant="outline" onClick={onSaveDraft}>Save as Draft</ProcButton>}
       {showSubmit && onSubmit && (
-        <Button
-          size="sm"
-          className="h-9 text-sm bg-brand-600 hover:bg-brand-700 text-white px-4"
-          onClick={onSubmit}
-        >
-          <Send className="w-4 h-4 mr-1.5" /> Submit
-        </Button>
+        <ProcButton variant="success" onClick={onSubmit}><Send className="w-3.5 h-3.5" /> Submit</ProcButton>
       )}
     </>
   );

@@ -118,7 +118,7 @@ export default function CustomerInfoDialog({ customer, open, onOpenChange }: Cus
                 <InfoRow label="GSTIN" value={customer.gstin} mono />
                 <InfoRow
                   label="GST Code"
-                  value={gst ? `${gst.gstCode} (${gst.gstPercentage}%)` : undefined}
+                  value={gst ? `${gst.gstId} (${gst.gstPercentage}%)` : undefined}
                   mono
                 />
               </>
