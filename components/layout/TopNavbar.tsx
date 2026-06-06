@@ -334,7 +334,18 @@ const NavDropdown = memo(function NavDropdown({
       }}
     >
       {hasGroups && isSidebarMenu ? (
-        <div className="flex min-h-[260px] -m-1 overflow-hidden rounded-lg">
+        <div className="flex flex-col min-h-[260px] -m-1 overflow-hidden rounded-lg">
+          {item.href && (
+            <PrefetchLink
+              href={item.href}
+              onClick={() => setIsOpen(false)}
+              className="flex items-center justify-between mx-2 mt-2 mb-1 px-2.5 py-1.5 rounded-md text-[11px] font-semibold text-brand-700 hover:bg-brand-50 border border-brand-100/80"
+            >
+              <span>{item.label} overview</span>
+              <span className="text-brand-400">›</span>
+            </PrefetchLink>
+          )}
+          <div className="flex flex-1 min-h-0">
           <div className="w-[272px] flex-shrink-0 bg-muted/25 border-r border-border/80 p-2 space-y-1">
             {groupedChildren.map((group, idx) => {
               const GroupIcon = group.icon;
@@ -376,7 +387,14 @@ const NavDropdown = memo(function NavDropdown({
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-3 px-1">
               {groupedChildren[hoveredGroup]?.label}
             </p>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-0.5">
+            <div
+              className={cn(
+                "grid gap-x-6 gap-y-0.5",
+                (groupedChildren[hoveredGroup]?.children.length ?? 0) > 4
+                  ? "grid-cols-1"
+                  : "grid-cols-2",
+              )}
+            >
               {groupedChildren[hoveredGroup]?.children.map((child) => {
                 const childActive = isNavHrefActive(pathname, search, child.href);
                 return (
@@ -410,19 +428,10 @@ const NavDropdown = memo(function NavDropdown({
               })}
             </div>
           </div>
+          </div>
         </div>
       ) : hasGroups ? (
         <div className="space-y-2">
-          {item.href && item.id === "accounts" && (
-            <PrefetchLink
-              href={item.href}
-              onClick={() => setIsOpen(false)}
-              className="flex items-center justify-between px-2 py-1.5 rounded-md text-[11px] font-medium text-brand-700 hover:bg-brand-50"
-            >
-              <span>Accounts overview</span>
-              <span>›</span>
-            </PrefetchLink>
-          )}
           <div
             className={cn(
               "grid gap-3",

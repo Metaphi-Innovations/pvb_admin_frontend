@@ -4,6 +4,13 @@ import {
   HR_APPROVAL,
 } from "@/lib/hr/config";
 import { getHrEmployeeById } from "../../employees/employee-master-data";
+import {
+  getLevelByCode,
+  loadApprovalHierarchy,
+  resolveApproverForLevel,
+  resolveRequiredLevels,
+  type ApprovalHierarchyLevel,
+} from "./approval-hierarchy-data";
 
 export type ClaimStatus =
   | "draft"
@@ -43,6 +50,21 @@ export interface TadaExpenseDetail {
   remarks: string;
 }
 
+export type ApprovalChannel = "web" | "mobile";
+
+export interface ClaimApprovalTrailEntry {
+  levelCode: string;
+  levelLabel: string;
+  action: "submitted" | "approved" | "rejected";
+  actorName: string;
+  actorRole: string;
+  at: string;
+  remarks: string;
+  claimedAmount?: number;
+  approvedAmount?: number;
+  channel: ApprovalChannel;
+}
+
 export interface TadaClaim {
   id: number;
   claimNumber: string;
@@ -67,6 +89,15 @@ export interface TadaClaim {
   rejectionRemarks?: string;
   paymentStatus: PaymentStatus;
   paymentReady: boolean;
+  /** Multi-level approval */
+  currentApprovalLevelCode: string | null;
+  currentApprovalLevelLabel: string | null;
+  requiredApprovalLevelCodes: string[];
+  approvalTrail: ClaimApprovalTrailEntry[];
+  submittedBy?: string;
+  submittedAt?: string;
+  finalApprovedAt?: string;
+  accountsSyncedAt?: string;
   createdBy: string;
   updatedBy: string;
 }
@@ -85,7 +116,27 @@ export interface TadaClaimFormValues {
   attachments: ClaimAttachment[];
 }
 
-const STORAGE_KEY = "ds_hr_tada_claims_v2";
+const STORAGE_KEY = "ds_hr_tada_claims_v3";
+
+export function getClaimedAmount(claim: TadaClaim): number {
+  return claim.claimAmount;
+}
+
+export function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function normalizeClaim(raw: TadaClaim): TadaClaim {
+  const trail = raw.approvalTrail ?? [];
+  const required = raw.requiredApprovalLevelCodes ?? [];
+  return {
+    ...raw,
+    approvalTrail: trail,
+    requiredApprovalLevelCodes: required,
+    currentApprovalLevelCode: raw.currentApprovalLevelCode ?? null,
+    currentApprovalLevelLabel: raw.currentApprovalLevelLabel ?? null,
+  };
+}
 
 export function newRowId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -171,6 +222,24 @@ const SEED: TadaClaim[] = [
     status: "pending_approval",
     claimAmount: 625,
     approvedAmount: 0,
+    currentApprovalLevelCode: "TM",
+    currentApprovalLevelLabel: "Territory Manager",
+    requiredApprovalLevelCodes: ["TM", "ASM"],
+    approvalTrail: [
+      {
+        levelCode: "—",
+        levelLabel: "Submission",
+        action: "submitted",
+        actorName: "Amit Deshmukh",
+        actorRole: "Employee",
+        at: "2026-05-28T09:05:00.000Z",
+        remarks: "Submitted from mobile app",
+        claimedAmount: 625,
+        channel: "mobile",
+      },
+    ],
+    submittedBy: "Amit Deshmukh",
+    submittedAt: "2026-05-28T09:05:00.000Z",
     paymentStatus: "pending_payment",
     paymentReady: false,
     createdBy: "Amit Deshmukh",
@@ -209,7 +278,47 @@ const SEED: TadaClaim[] = [
     approvedAmount: 4500,
     approvedBy: "Admin",
     approvedAt: "2026-05-22",
-    paymentStatus: "pending_payment",
+    currentApprovalLevelCode: null,
+    currentApprovalLevelLabel: null,
+    requiredApprovalLevelCodes: ["TM", "ASM"],
+    approvalTrail: [
+      {
+        levelCode: "—",
+        levelLabel: "Submission",
+        action: "submitted",
+        actorName: "Priya Patil",
+        actorRole: "Employee",
+        at: "2026-05-20T10:00:00.000Z",
+        remarks: "Submitted",
+        claimedAmount: 4500,
+        channel: "web",
+      },
+      {
+        levelCode: "TM",
+        levelLabel: "Territory Manager",
+        action: "approved",
+        actorName: "Admin",
+        actorRole: "Territory Manager",
+        at: "2026-05-21T11:00:00.000Z",
+        remarks: "Approved",
+        claimedAmount: 4500,
+        approvedAmount: 4500,
+        channel: "web",
+      },
+      {
+        levelCode: "ASM",
+        levelLabel: "Area Sales Manager",
+        action: "approved",
+        actorName: "Admin",
+        actorRole: "Area Sales Manager",
+        at: "2026-05-22T09:00:00.000Z",
+        remarks: "Final approval",
+        approvedAmount: 4500,
+        channel: "web",
+      },
+    ],
+    finalApprovedAt: "2026-05-22T09:00:00.000Z",
+    paymentStatus: "sent_to_accounts",
     paymentReady: true,
     createdBy: "Priya Patil",
     updatedBy: "Admin",
@@ -275,6 +384,14 @@ function migrateLegacy(raw: unknown): TadaClaim[] {
       rejectionRemarks: c.rejectionRemarks as string | undefined,
       paymentStatus: (c.paymentStatus as PaymentStatus) ?? "pending_payment",
       paymentReady: Boolean(c.paymentReady),
+      currentApprovalLevelCode: (c.currentApprovalLevelCode as string) ?? null,
+      currentApprovalLevelLabel: (c.currentApprovalLevelLabel as string) ?? null,
+      requiredApprovalLevelCodes: (c.requiredApprovalLevelCodes as string[]) ?? [],
+      approvalTrail: (c.approvalTrail as ClaimApprovalTrailEntry[]) ?? [],
+      submittedBy: c.submittedBy as string | undefined,
+      submittedAt: c.submittedAt as string | undefined,
+      finalApprovedAt: c.finalApprovedAt as string | undefined,
+      accountsSyncedAt: c.accountsSyncedAt as string | undefined,
       createdBy: String(c.createdBy ?? CURRENT_USER),
       updatedBy: String(c.updatedBy ?? CURRENT_USER),
     };
@@ -295,7 +412,7 @@ export function loadTadaClaims(): TadaClaim[] {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED));
       return SEED;
     }
-    return JSON.parse(raw) as TadaClaim[];
+    return (JSON.parse(raw) as TadaClaim[]).map(normalizeClaim);
   } catch {
     return SEED;
   }
@@ -391,6 +508,14 @@ export function formToClaim(
     rejectionRemarks: existing?.rejectionRemarks,
     paymentStatus: existing?.paymentStatus ?? "pending_payment",
     paymentReady: existing?.paymentReady ?? false,
+    currentApprovalLevelCode: existing?.currentApprovalLevelCode ?? null,
+    currentApprovalLevelLabel: existing?.currentApprovalLevelLabel ?? null,
+    requiredApprovalLevelCodes: existing?.requiredApprovalLevelCodes ?? [],
+    approvalTrail: existing?.approvalTrail ?? [],
+    submittedBy: existing?.submittedBy,
+    submittedAt: existing?.submittedAt,
+    finalApprovedAt: existing?.finalApprovedAt,
+    accountsSyncedAt: existing?.accountsSyncedAt,
     createdBy: existing?.createdBy ?? CURRENT_USER,
     updatedBy: CURRENT_USER,
   };
@@ -416,48 +541,182 @@ export function claimToForm(c: TadaClaim): TadaClaimFormValues {
   };
 }
 
-export function submitClaim(claim: TadaClaim): TadaClaim {
-  const status: ClaimStatus = HR_APPROVAL.tadaClaimEnabled ? "pending_approval" : "approved";
+function buildRequiredChain(claimAmount: number): {
+  levels: ApprovalHierarchyLevel[];
+  codes: string[];
+} {
+  const levels = resolveRequiredLevels(claimAmount);
+  return { levels, codes: levels.map((l) => l.code) };
+}
+
+export function submitClaim(claim: TadaClaim, channel: ApprovalChannel = "web"): TadaClaim {
+  const claimed = getClaimedAmount(claim);
+  if (!HR_APPROVAL.tadaClaimEnabled) {
+    return finalizeClaimApproval(claim, claimed, "Auto-approved", channel);
+  }
+  const { levels, codes } = buildRequiredChain(claimed);
+  const first = levels[0];
+  const trail: ClaimApprovalTrailEntry[] = [
+    ...(claim.approvalTrail ?? []),
+    {
+      levelCode: "—",
+      levelLabel: "Submission",
+      action: "submitted",
+      actorName: claim.employeeName,
+      actorRole: "Employee",
+      at: nowIso(),
+      remarks: claim.remarks || "Claim submitted",
+      claimedAmount: claimed,
+      channel,
+    },
+  ];
   return {
     ...claim,
-    status,
-    paymentReady: status === "approved",
-    paymentStatus: status === "approved" ? "pending_payment" : claim.paymentStatus,
+    status: "pending_approval",
+    requiredApprovalLevelCodes: codes,
+    currentApprovalLevelCode: first?.code ?? null,
+    currentApprovalLevelLabel: first?.label ?? null,
+    approvalTrail: trail,
+    submittedBy: claim.employeeName,
+    submittedAt: nowIso(),
+    paymentReady: false,
+    paymentStatus: "pending_payment",
     updatedBy: CURRENT_USER,
   };
 }
 
-export function approveClaim(claim: TadaClaim, remarks?: string): TadaClaim {
-  const approvedAmount =
-    sumExpenseClaimed(
-      claim.expenseDetails.map((e) => ({
-        ...e,
-        approvedAmount: e.approvedAmount || e.claimedAmount,
-      })),
-    ) + sumTravelAmounts(claim.travelDetails);
+export function getCurrentApprovalLevel(claim: TadaClaim): ApprovalHierarchyLevel | undefined {
+  if (!claim.currentApprovalLevelCode) return undefined;
+  return getLevelByCode(claim.currentApprovalLevelCode);
+}
+
+export function validatePartialApprovedAmount(claim: TadaClaim, amount: number): string | null {
+  const claimed = getClaimedAmount(claim);
+  if (amount <= 0) return "Approved amount must be greater than zero.";
+  if (amount > claimed) return `Cannot exceed claimed amount (${claimed}).`;
+  return null;
+}
+
+function advanceToNextLevel(
+  claim: TadaClaim,
+  approvedAmount: number,
+  remarks: string,
+  channel: ApprovalChannel,
+): TadaClaim {
+  const config = loadApprovalHierarchy();
+  const chain = resolveRequiredLevels(getClaimedAmount(claim), config);
+  const currentIdx = chain.findIndex((l) => l.code === claim.currentApprovalLevelCode);
+  const level = currentIdx >= 0 ? chain[currentIdx] : chain[0];
+  if (!level) return finalizeClaimApproval(claim, approvedAmount, remarks, channel);
+
+  const approver = resolveApproverForLevel(level);
+  const trail: ClaimApprovalTrailEntry[] = [
+    ...claim.approvalTrail,
+    {
+      levelCode: level.code,
+      levelLabel: level.label,
+      action: "approved",
+      actorName: approver.name,
+      actorRole: approver.role,
+      at: nowIso(),
+      remarks: remarks || `Approved at ${level.label}`,
+      claimedAmount: getClaimedAmount(claim),
+      approvedAmount,
+      channel,
+    },
+  ];
+
+  const next = chain[currentIdx + 1];
+  if (next) {
+    return {
+      ...claim,
+      approvalTrail: trail,
+      approvedAmount,
+      currentApprovalLevelCode: next.code,
+      currentApprovalLevelLabel: next.label,
+      updatedBy: CURRENT_USER,
+    };
+  }
+  return finalizeClaimApproval({ ...claim, approvalTrail: trail, approvedAmount }, approvedAmount, remarks, channel);
+}
+
+export function finalizeClaimApproval(
+  claim: TadaClaim,
+  approvedAmount: number,
+  remarks: string,
+  channel: ApprovalChannel = "web",
+): TadaClaim {
+  const ts = nowIso();
   return {
     ...claim,
     status: "approved",
     approvedAmount,
     approvedBy: CURRENT_USER,
-    approvedAt: new Date().toISOString().slice(0, 10),
-    rejectionRemarks: remarks,
+    approvedAt: ts.slice(0, 10),
+    currentApprovalLevelCode: null,
+    currentApprovalLevelLabel: null,
+    finalApprovedAt: ts,
     paymentReady: true,
-    paymentStatus: "pending_payment",
+    paymentStatus: "sent_to_accounts",
+    rejectionRemarks: undefined,
+    updatedBy: CURRENT_USER,
     expenseDetails: claim.expenseDetails.map((e) => ({
       ...e,
       approvedAmount: e.approvedAmount || e.claimedAmount,
     })),
-    updatedBy: CURRENT_USER,
   };
 }
 
-export function rejectClaim(claim: TadaClaim, remarks: string): TadaClaim {
+/** Approve at current hierarchy level; may advance or finalize */
+export function approveClaim(
+  claim: TadaClaim,
+  approvedAmount: number,
+  remarks?: string,
+  channel: ApprovalChannel = "web",
+): TadaClaim {
+  const err = validatePartialApprovedAmount(claim, approvedAmount);
+  if (err) throw new Error(err);
+  if (claim.status !== "pending_approval" && claim.status !== "submitted") {
+    return claim;
+  }
+  if (!claim.currentApprovalLevelCode) {
+    return finalizeClaimApproval(claim, approvedAmount, remarks ?? "", channel);
+  }
+  return advanceToNextLevel(claim, approvedAmount, remarks ?? "", channel);
+}
+
+export function approveClaimFull(claim: TadaClaim, remarks?: string, channel: ApprovalChannel = "web"): TadaClaim {
+  return approveClaim(claim, getClaimedAmount(claim), remarks, channel);
+}
+
+export function rejectClaim(
+  claim: TadaClaim,
+  remarks: string,
+  channel: ApprovalChannel = "web",
+): TadaClaim {
+  const level = getCurrentApprovalLevel(claim);
+  const approver = level ? resolveApproverForLevel(level) : { name: CURRENT_USER, role: "Approver" };
   return {
     ...claim,
     status: "rejected",
     rejectionRemarks: remarks,
     paymentReady: false,
+    currentApprovalLevelCode: null,
+    currentApprovalLevelLabel: null,
+    approvalTrail: [
+      ...claim.approvalTrail,
+      {
+        levelCode: level?.code ?? "—",
+        levelLabel: level?.label ?? "Rejection",
+        action: "rejected",
+        actorName: approver.name,
+        actorRole: approver.role,
+        at: nowIso(),
+        remarks,
+        claimedAmount: getClaimedAmount(claim),
+        channel,
+      },
+    ],
     updatedBy: CURRENT_USER,
   };
 }

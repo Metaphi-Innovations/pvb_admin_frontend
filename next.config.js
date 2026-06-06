@@ -29,6 +29,15 @@ const nextConfig = {
       { source: "/hr/masters/monthly-target", destination: "/hr/tada-config", permanent: false },
       { source: "/hr/attendance/sync", destination: "/hr/attendance", permanent: false },
       { source: "/hr/attendance/reports", destination: "/hr/attendance", permanent: false },
+      { source: "/accounts/transactions/sales", destination: "/accounts/transactions/invoices", permanent: false },
+      { source: "/accounts/transactions/sales-return", destination: "/accounts/transactions/credit-notes", permanent: false },
+      { source: "/accounts/transactions/purchase-return", destination: "/accounts/transactions/debit-notes", permanent: false },
+      { source: "/accounts/transactions/payment", destination: "/accounts/transactions/payments", permanent: false },
+      { source: "/accounts/transactions/bank-reconciliation", destination: "/accounts/transactions/reconciliation", permanent: false },
+      { source: "/accounts/masters/chart-of-accounts", destination: "/accounts", permanent: false },
+      { source: "/accounts/masters/ledgers", destination: "/accounts", permanent: false },
+      { source: "/accounts/ledger", destination: "/accounts", permanent: false },
+      { source: "/accounts/outstanding", destination: "/accounts/reports/trial-balance", permanent: false },
     ];
   },
 };

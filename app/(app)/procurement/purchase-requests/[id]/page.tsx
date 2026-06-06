@@ -3,10 +3,10 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { PRFormLayout } from "../components/PRFormLayout";
 import { PurchaseRequestForm, prToFormValues } from "../components/PurchaseRequestForm";
 import { PRFormFooter } from "../components/PRFormFooter";
+import { ProcButton } from "../../design/proc-design";
 import { PRApprovalModal, type PRApprovalAction } from "../components/PRApprovalModal";
 import {
   getPRById,
@@ -49,35 +49,22 @@ export default function PRViewPage() {
     <>
       {pr.status === "pending_approval" && (
         <>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 text-sm text-red-600 border-red-200"
-            onClick={() => openApproval("reject")}
-          >
-            <XCircle className="w-4 h-4 mr-1" /> Reject
-          </Button>
-          <Button
-            size="sm"
-            className="h-9 text-sm bg-emerald-600 hover:bg-emerald-700 text-white"
-            onClick={() => openApproval("approve")}
-          >
-            <CheckCircle2 className="w-4 h-4 mr-1" /> Approve
-          </Button>
+          <ProcButton variant="danger" size="sm" onClick={() => openApproval("reject")}>
+            <XCircle className="w-3.5 h-3.5" /> Reject
+          </ProcButton>
+          <ProcButton variant="success" size="sm" onClick={() => openApproval("approve")}>
+            <CheckCircle2 className="w-3.5 h-3.5" /> Approve
+          </ProcButton>
         </>
       )}
       {["draft", "rejected"].includes(pr.status) && (
         <Link href={`/procurement/purchase-requests/${id}/edit`}>
-          <Button variant="outline" size="sm" className="h-9 text-sm">
-            <Edit2 className="w-4 h-4 mr-1" /> Edit
-          </Button>
+          <ProcButton variant="outline" size="sm"><Edit2 className="w-3.5 h-3.5" /> Edit</ProcButton>
         </Link>
       )}
       {pr.status === "approved" && (
         <Link href={`/procurement/purchase-orders/new?prId=${id}`}>
-          <Button size="sm" className="h-9 text-sm bg-brand-600 text-white">
-            <ShoppingCart className="w-4 h-4 mr-1" /> Create PO
-          </Button>
+          <ProcButton variant="primary" size="sm"><ShoppingCart className="w-3.5 h-3.5" /> Create PO</ProcButton>
         </Link>
       )}
     </>
@@ -88,7 +75,7 @@ export default function PRViewPage() {
       <PRFormLayout
         mode="view"
         prNumber={pr.prNumber}
-        pr={pr}
+        status={pr.status}
         headerActions={headerActions}
         footer={
           <PRFormFooter
@@ -101,6 +88,7 @@ export default function PRViewPage() {
           form={prToFormValues(pr)}
           onChange={() => {}}
           readOnly
+          prNumber={pr.prNumber}
         />
       </PRFormLayout>
 

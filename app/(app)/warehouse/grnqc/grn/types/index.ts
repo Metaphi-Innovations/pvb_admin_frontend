@@ -42,6 +42,7 @@ export interface GrnRecord {
   grnNo: string;
   poNumber: string;
   vendorName: string;
+  vendorReference?: string;
   warehouse: string;
   grnDate: string;
   totalProducts: number;

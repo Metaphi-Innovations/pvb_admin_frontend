@@ -329,6 +329,31 @@ const SEED: WarehouseMaster[] = [
   },
 ];
 
+/** Ship-to options for procurement PO (active warehouses only). */
+// export interface WarehouseLocationOption {
+//   id: number;
+//   code: string;
+//   name: string;
+//   address: string;
+//   city: string;
+//   state: string;
+//   pincode: string;
+// }
+
+// export function loadWarehouseLocations(): WarehouseLocationOption[] {
+//   return loadWarehouses()
+//     .filter((w) => w.status === "active")
+//     .map((w) => ({
+//       id: w.id,
+//       code: w.warehouseCode,
+//       name: w.warehouseName,
+//       address: w.address,
+//       city: w.city,
+//       state: w.state,
+//       pincode: w.pincode,
+//     }));
+// }
+
 export function loadWarehouses(): WarehouseMaster[] {
   if (typeof window === "undefined") return SEED;
   try {
