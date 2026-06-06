@@ -16,6 +16,22 @@ export type OrderStatus =
   | "dispatched"
   | "delivered";
 
+export type PackingStatus =
+  | "draft"
+  | "generated"
+  | "partially_packed"
+  | "packed"
+  | "cancelled";
+
+/** Statuses that may be changed on edit. */
+export const EDITABLE_ORDER_STATUSES: OrderStatus[] = [
+  "draft",
+  "pending_approval",
+  "approved",
+  "rejected",
+  "confirmed",
+];
+
 export const ORDER_STATUS_OPTIONS: { value: OrderStatus; label: string }[] = [
   { value: "draft", label: "Draft" },
   { value: "pending_approval", label: "Pending Approval" },
@@ -47,6 +63,10 @@ export interface SalesOrderLineItem {
   discount: number;
   gstAmount: number;
   lineTotal: number;
+  /** Split form only: parent line when qty is taken from original order */
+  splitSourceLineId?: string;
+  /** Split form only: max qty available from parent line */
+  maxSplitQty?: number;
 }
 
 export interface SalesOrder {
@@ -69,6 +89,34 @@ export interface SalesOrder {
   createdDate: string;
   updatedBy: string;
   updatedDate: string;
+  /** Split order lineage */
+  parentOrderId?: number;
+  parentOrderNumber?: string;
+  splitFromOrderId?: number;
+  splitFromOrderNumber?: string;
+  referenceOrderNumber?: string;
+  /** Cancellation audit */
+  cancellationReason?: string;
+  cancelledBy?: string;
+  cancelledDate?: string;
+  /** Packing list reference */
+  packingListId?: number;
+  packingListNumber?: string;
+  packingStatus?: PackingStatus;
+  warehouseId?: number;
+  warehouseName?: string;
+}
+
+export interface InventoryBatch {
+  id: string;
+  productId: number;
+  productCode: string;
+  productName: string;
+  batchNumber: string;
+  expiryDate: string;
+  availableQty: number;
+  warehouseCode: string;
+  warehouseName: string;
 }
 
 const PRODUCT_CATALOG: ProductCatalogItem[] = [
@@ -195,17 +243,18 @@ export function getSalesmenForOrders(): Employee[] {
 }
 
 export function loadOrders(): SalesOrder[] {
-  if (typeof window === "undefined") return SEED_ORDERS;
+  if (typeof window === "undefined") return hydrateOrders(SEED_ORDERS);
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_ORDERS));
+      const hydrated = hydrateOrders(SEED_ORDERS);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(hydrated));
       localStorage.setItem(ID_KEY, "10");
-      return SEED_ORDERS;
+      return hydrated;
     }
-    return JSON.parse(raw) as SalesOrder[];
+    return hydrateOrders(JSON.parse(raw) as SalesOrder[]);
   } catch {
-    return SEED_ORDERS;
+    return hydrateOrders(SEED_ORDERS);
   }
 }
 
@@ -271,4 +320,382 @@ export function formatOrderStatus(status: OrderStatus): string {
   const opt = ORDER_STATUS_OPTIONS.find(o => o.value === status);
   if (opt) return opt.label;
   return status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, " ");
+}
+
+// ── Inventory batches (FEFO packing suggestions) ─────────────────────────────
+
+const INVENTORY_BATCHES: InventoryBatch[] = [
+  { id: "b1", productId: 1, productCode: "PRD-001", productName: "NPK 19:19:19", batchNumber: "NPK-2401-A", expiryDate: "2025-06-30", availableQty: 120, warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub" },
+  { id: "b2", productId: 1, productCode: "PRD-001", productName: "NPK 19:19:19", batchNumber: "NPK-2402-B", expiryDate: "2025-09-15", availableQty: 200, warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub" },
+  { id: "b3", productId: 2, productCode: "PRD-002", productName: "DAP Fertilizer", batchNumber: "DAP-2310-C", expiryDate: "2025-04-20", availableQty: 80, warehouseCode: "WH-0002", warehouseName: "Western Regional Depot" },
+  { id: "b4", productId: 2, productCode: "PRD-002", productName: "DAP Fertilizer", batchNumber: "DAP-2401-D", expiryDate: "2025-11-01", availableQty: 150, warehouseCode: "WH-0002", warehouseName: "Western Regional Depot" },
+  { id: "b5", productId: 3, productCode: "PRD-003", productName: "Urea 46%", batchNumber: "URE-2403-E", expiryDate: "2025-08-10", availableQty: 400, warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub" },
+  { id: "b6", productId: 4, productCode: "PRD-004", productName: "Chlorpyrifos 20 EC", batchNumber: "CHL-2308-F", expiryDate: "2025-03-15", availableQty: 45, warehouseCode: "WH-0003", warehouseName: "South Zone Warehouse" },
+  { id: "b7", productId: 4, productCode: "PRD-004", productName: "Chlorpyrifos 20 EC", batchNumber: "CHL-2401-G", expiryDate: "2026-01-20", availableQty: 90, warehouseCode: "WH-0003", warehouseName: "South Zone Warehouse" },
+  { id: "b8", productId: 6, productCode: "PRD-006", productName: "Hybrid Tomato Seeds", batchNumber: "TOM-2401-H", expiryDate: "2025-12-31", availableQty: 250, warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub" },
+  { id: "b9", productId: 8, productCode: "PRD-008", productName: "Vermicompost", batchNumber: "VER-2402-I", expiryDate: "2025-07-01", availableQty: 800, warehouseCode: "WH-0002", warehouseName: "Western Regional Depot" },
+  { id: "b10", productId: 11, productCode: "PRD-011", productName: "MOP Potash", batchNumber: "MOP-2401-J", expiryDate: "2025-05-25", availableQty: 60, warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub" },
+];
+
+export function getBatchesForProduct(productId: number): InventoryBatch[] {
+  return INVENTORY_BATCHES.filter(b => b.productId === productId);
+}
+
+export function getAllInventoryBatches(): InventoryBatch[] {
+  return INVENTORY_BATCHES;
+}
+
+/** Suggest batch allocations using FEFO (nearest expiry first). */
+export function suggestFefoAllocations(productId: number, orderedQty: number): {
+  batchId: string;
+  batchNumber: string;
+  expiryDate: string;
+  availableQty: number;
+  suggestedQty: number;
+  warehouseCode: string;
+  warehouseName: string;
+}[] {
+  const batches = getBatchesForProduct(productId)
+    .filter(b => b.availableQty > 0)
+    .sort((a, b) => a.expiryDate.localeCompare(b.expiryDate));
+
+  let remaining = orderedQty;
+  const result: ReturnType<typeof suggestFefoAllocations> = [];
+
+  for (const batch of batches) {
+    if (remaining <= 0) break;
+    const suggestedQty = Math.min(remaining, batch.availableQty);
+    result.push({
+      batchId: batch.id,
+      batchNumber: batch.batchNumber,
+      expiryDate: batch.expiryDate,
+      availableQty: batch.availableQty,
+      suggestedQty,
+      warehouseCode: batch.warehouseCode,
+      warehouseName: batch.warehouseName,
+    });
+    remaining -= suggestedQty;
+  }
+
+  return result;
+}
+
+// ── Order access & business rules ────────────────────────────────────────────
+
+export function hydrateOrderLineItems(order: SalesOrder): SalesOrder {
+  if (order.lineItems.length > 0) return order;
+  if (order.items <= 0) return order;
+
+  const catalog = PRODUCT_CATALOG.filter(p => p.status === "active");
+  const count = Math.min(order.items, catalog.length);
+  const perLineAmount = order.totalAmount / count;
+  const lineItems: SalesOrderLineItem[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const product = catalog[i];
+    const quantity = Math.max(1, Math.round(perLineAmount / product.sellingPrice));
+    const discount = 0;
+    const gstAmount = computeGstAmount(quantity, product.sellingPrice, discount, product.gstRate);
+    lineItems.push(recalculateLineItem({
+      id: `line-seed-${order.id}-${i}`,
+      productId: product.id,
+      productCode: product.code,
+      productName: product.name,
+      availableStock: product.stock,
+      quantity,
+      unitPrice: product.sellingPrice,
+      discount,
+      gstAmount,
+      lineTotal: 0,
+    }));
+  }
+
+  return { ...order, lineItems };
+}
+
+export function hydrateOrders(orders: SalesOrder[]): SalesOrder[] {
+  return orders.map(hydrateOrderLineItems);
+}
+
+export function getOrderById(id: number): SalesOrder | undefined {
+  const orders = hydrateOrders(loadOrders());
+  return orders.find(o => o.id === id);
+}
+
+export function updateOrderInStore(updated: SalesOrder): void {
+  const orders = loadOrders().map(o => (o.id === updated.id ? updated : o));
+  saveOrders(orders);
+}
+
+export function isOrderCancelled(order: SalesOrder): boolean {
+  return order.status === "cancelled";
+}
+
+export function canEditOrder(order: SalesOrder): boolean {
+  if (isOrderCancelled(order)) return false;
+  return EDITABLE_ORDER_STATUSES.includes(order.status);
+}
+
+export function canSplitOrder(order: SalesOrder): boolean {
+  if (isOrderCancelled(order)) return false;
+  return !["delivered", "dispatched"].includes(order.status);
+}
+
+export function canCancelOrder(order: SalesOrder): boolean {
+  return !isOrderCancelled(order) && order.status !== "delivered";
+}
+
+export function canDownloadPI(order: SalesOrder): boolean {
+  return !isOrderCancelled(order);
+}
+
+export function canGeneratePackingList(order: SalesOrder): boolean {
+  if (isOrderCancelled(order)) return false;
+  if (order.status === "draft") return false;
+  const hydrated = hydrateOrderLineItems(order);
+  return hydrated.lineItems.some(l => l.productId && l.quantity > 0);
+}
+
+export function orderToFormValues(order: SalesOrder): {
+  orderDate: string;
+  customerId: number | null;
+  salesManId: number | null;
+  deliveryDate: string;
+  status: OrderStatus;
+  lineItems: SalesOrderLineItem[];
+} {
+  const hydrated = hydrateOrderLineItems(order);
+  return {
+    orderDate: hydrated.orderDate,
+    customerId: hydrated.customerId,
+    salesManId: hydrated.salesManId,
+    deliveryDate: hydrated.deliveryDate,
+    status: hydrated.status,
+    lineItems: hydrated.lineItems.length > 0 ? hydrated.lineItems : [createEmptyLineItem()],
+  };
+}
+
+export function buildOrderFromForm(
+  form: {
+    orderDate: string;
+    customerId: number | null;
+    salesManId: number | null;
+    deliveryDate: string;
+    status: OrderStatus;
+    lineItems: SalesOrderLineItem[];
+  },
+  existing: Partial<SalesOrder> & { soNumber: string },
+  asDraft: boolean,
+): SalesOrder | null {
+  const customers = getCustomersForTransactionDropdown();
+  const salesmen = getSalesmenForOrders();
+  const customer = customers.find(c => c.id === form.customerId);
+  const salesman = salesmen.find(s => s.id === form.salesManId);
+  if (!customer || !salesman) return null;
+
+  const totalAmount = calculateOrderTotalsSummary(form.lineItems).grandTotal;
+  const finalStatus = resolveSubmitStatus(totalAmount, form.status, asDraft);
+  const requiresApproval = orderRequiresApproval(totalAmount) && !asDraft;
+  const today = todayStr();
+
+  return {
+    id: existing.id ?? nextOrderId(loadOrders()),
+    soNumber: existing.soNumber,
+    customerId: customer.id,
+    customerName: customer.customerName,
+    customerCode: customer.customerCode,
+    territory: customer.territoryName || "—",
+    salesManId: salesman.id,
+    salesManName: salesman.fullName,
+    orderDate: form.orderDate,
+    deliveryDate: form.deliveryDate,
+    status: finalStatus,
+    lineItems: form.lineItems,
+    totalAmount,
+    requiresApproval,
+    items: form.lineItems.length,
+    createdBy: existing.createdBy ?? "Admin",
+    createdDate: existing.createdDate ?? today,
+    updatedBy: "Admin",
+    updatedDate: today,
+    parentOrderId: existing.parentOrderId,
+    parentOrderNumber: existing.parentOrderNumber,
+    splitFromOrderId: existing.splitFromOrderId,
+    splitFromOrderNumber: existing.splitFromOrderNumber,
+    referenceOrderNumber: existing.referenceOrderNumber,
+    cancellationReason: existing.cancellationReason,
+    cancelledBy: existing.cancelledBy,
+    cancelledDate: existing.cancelledDate,
+    packingListId: existing.packingListId,
+    packingListNumber: existing.packingListNumber,
+    packingStatus: existing.packingStatus,
+    warehouseId: existing.warehouseId,
+    warehouseName: existing.warehouseName,
+  };
+}
+
+function stripSplitLineMeta(line: SalesOrderLineItem): SalesOrderLineItem {
+  const { splitSourceLineId: _s, maxSplitQty: _m, ...rest } = line;
+  return recalculateLineItem(rest);
+}
+
+export function splitSalesOrderFromForm(
+  parentOrderId: number,
+  form: {
+    orderDate: string;
+    customerId: number | null;
+    salesManId: number | null;
+    deliveryDate: string;
+    status: OrderStatus;
+    lineItems: SalesOrderLineItem[];
+  },
+  newSoNumber: string,
+  asDraft: boolean,
+): { original: SalesOrder; newOrder: SalesOrder } | { error: string } {
+  const orders = hydrateOrders(loadOrders());
+  const order = orders.find(o => o.id === parentOrderId);
+  if (!order) return { error: "Order not found" };
+  if (!canSplitOrder(order)) return { error: "This order cannot be split" };
+
+  const activeLines = form.lineItems.filter(l => l.productId && l.quantity > 0);
+  if (activeLines.length === 0) {
+    return { error: "Add at least one product line to the split order" };
+  }
+
+  const splitBySource: Record<string, number> = {};
+  for (const line of activeLines) {
+    if (!line.splitSourceLineId) continue;
+    const parentLine = order.lineItems.find(l => l.id === line.splitSourceLineId);
+    if (!parentLine) return { error: `Invalid source line for ${line.productName}` };
+    const max = line.maxSplitQty ?? parentLine.quantity;
+    const acc = (splitBySource[line.splitSourceLineId] ?? 0) + line.quantity;
+    if (acc > max) {
+      return { error: `Split quantity cannot exceed available quantity for ${line.productName}` };
+    }
+    splitBySource[line.splitSourceLineId] = acc;
+  }
+
+  const splits = Object.entries(splitBySource).map(([lineId, splitQty]) => ({ lineId, splitQty }));
+
+  const cleanLineItems = activeLines.map(stripSplitLineMeta);
+  const built = buildOrderFromForm(
+    { ...form, lineItems: cleanLineItems },
+    {
+      soNumber: newSoNumber,
+      parentOrderId: order.id,
+      parentOrderNumber: order.soNumber,
+      splitFromOrderId: order.id,
+      splitFromOrderNumber: order.soNumber,
+      referenceOrderNumber: order.soNumber,
+    },
+    asDraft,
+  );
+  if (!built) return { error: "Invalid customer or salesman selection" };
+
+  const updatedOriginalLines: SalesOrderLineItem[] = [];
+
+  for (const line of order.lineItems) {
+    const splitQty = splitBySource[line.id];
+    if (!splitQty) {
+      updatedOriginalLines.push(line);
+      continue;
+    }
+    if (splitQty <= 0 || splitQty > line.quantity) {
+      return { error: `Split quantity cannot exceed available quantity for ${line.productName || "product"}` };
+    }
+    const ratio = splitQty / line.quantity;
+    const splitDiscount = Math.round(line.discount * ratio * 100) / 100;
+    const splitGst = Math.round(line.gstAmount * ratio * 100) / 100;
+
+    const remainQty = line.quantity - splitQty;
+    if (remainQty > 0) {
+      const remainDiscount = Math.round((line.discount - splitDiscount) * 100) / 100;
+      const remainGst = Math.round((line.gstAmount - splitGst) * 100) / 100;
+      updatedOriginalLines.push(recalculateLineItem({
+        ...line,
+        quantity: remainQty,
+        discount: remainDiscount,
+        gstAmount: remainGst,
+        lineTotal: 0,
+      }));
+    }
+  }
+
+  const today = todayStr();
+  const newOrder: SalesOrder = {
+    ...built,
+    id: nextOrderId(orders),
+    createdBy: "Admin",
+    createdDate: today,
+    updatedBy: "Admin",
+    updatedDate: today,
+  };
+
+  const originalTotal = calculateOrderTotal(updatedOriginalLines);
+  const updatedOriginal: SalesOrder = {
+    ...order,
+    lineItems: updatedOriginalLines,
+    totalAmount: originalTotal,
+    items: updatedOriginalLines.length,
+    requiresApproval: orderRequiresApproval(originalTotal),
+    updatedBy: "Admin",
+    updatedDate: today,
+  };
+
+  saveOrders(orders.map(o => {
+    if (o.id === order.id) return updatedOriginal;
+    return o;
+  }).concat(newOrder));
+
+  return { original: updatedOriginal, newOrder };
+}
+
+export function cancelSalesOrder(orderId: number, reason: string): SalesOrder | { error: string } {
+  const trimmed = reason.trim();
+  if (!trimmed) return { error: "Cancellation reason is required" };
+
+  const orders = loadOrders();
+  const order = orders.find(o => o.id === orderId);
+  if (!order) return { error: "Order not found" };
+  if (!canCancelOrder(order)) return { error: "This order cannot be cancelled" };
+
+  const updated: SalesOrder = {
+    ...order,
+    status: "cancelled",
+    cancellationReason: trimmed,
+    cancelledBy: "Admin",
+    cancelledDate: todayStr(),
+    updatedBy: "Admin",
+    updatedDate: todayStr(),
+  };
+
+  saveOrders(orders.map(o => (o.id === orderId ? updated : o)));
+  return updated;
+}
+
+export function attachPackingListToOrder(
+  orderId: number,
+  packingListId: number,
+  packingListNumber: string,
+  warehouseId: number,
+  warehouseName: string,
+  packingStatus: PackingStatus = "generated",
+): SalesOrder | { error: string } {
+  const orders = loadOrders();
+  const order = orders.find(o => o.id === orderId);
+  if (!order) return { error: "Order not found" };
+
+  const updated: SalesOrder = {
+    ...order,
+    packingListId,
+    packingListNumber,
+    packingStatus,
+    warehouseId,
+    warehouseName,
+    updatedBy: "Admin",
+    updatedDate: todayStr(),
+  };
+
+  saveOrders(orders.map(o => (o.id === orderId ? updated : o)));
+  return updated;
 }

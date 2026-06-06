@@ -1,55 +1,72 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Save, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, Split, CheckCircle2, XCircle } from "lucide-react";
 import type { Customer } from "@/app/(app)/masters/customers/customer-data";
 import type { Employee } from "@/app/(app)/user-management/employee/employee-data";
 import SalesOrderForm, {
   type SalesOrderFormValues,
-  validateSalesOrderForm,
-} from "../components/SalesOrderForm";
+  validateSplitOrderForm,
+} from "../../components/SalesOrderForm";
 import {
+  type SalesOrder,
   type ProductCatalogItem,
-  buildOrderFromForm,
+  getOrderById,
+  hydrateOrderLineItems,
+  loadProductCatalog,
   createEmptyLineItem,
+  splitSalesOrderFromForm,
+  canSplitOrder,
   generateOrderNumber,
   loadOrders,
-  saveOrders,
-  todayStr,
   getCustomersForTransactionDropdown,
   getSalesmenForOrders,
-  loadProductCatalog,
-} from "../orders-data";
+} from "../../orders-data";
 
-export default function AddSalesOrderPage() {
+export default function SplitSalesOrderPage() {
+  const params = useParams();
   const router = useRouter();
+  const id = Number(params.id);
+
+  const [originalOrder, setOriginalOrder] = useState<SalesOrder | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [salesmen, setSalesmen] = useState<Employee[]>([]);
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
-  const [orderNumber, setOrderNumber] = useState("SO-2024-011");
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-
-  const [form, setForm] = useState<SalesOrderFormValues>({
-    orderDate: todayStr(),
-    customerId: null,
-    salesManId: null,
-    deliveryDate: "",
-    status: "confirmed",
-    lineItems: [createEmptyLineItem()],
-  });
+  const [orderNumber, setOrderNumber] = useState("");
+  const [form, setForm] = useState<SalesOrderFormValues | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
   useEffect(() => {
     setCustomers(getCustomersForTransactionDropdown());
     setSalesmen(getSalesmenForOrders());
     setProducts(loadProductCatalog());
-    const orders = loadOrders();
-    setOrderNumber(generateOrderNumber(orders));
-  }, []);
+    setOrderNumber(generateOrderNumber(loadOrders()));
+
+    const loaded = getOrderById(id);
+    if (!loaded) return;
+
+    if (!canSplitOrder(loaded)) {
+      setToast({ msg: "This order cannot be split.", type: "error" });
+      setTimeout(() => router.push(`/sales/orders/${id}`), 1200);
+      return;
+    }
+
+    const hydrated = hydrateOrderLineItems(loaded);
+    setOriginalOrder(hydrated);
+    setForm({
+      orderDate: hydrated.orderDate,
+      customerId: hydrated.customerId,
+      salesManId: hydrated.salesManId,
+      deliveryDate: hydrated.deliveryDate,
+      status: hydrated.status === "draft" ? "draft" : "confirmed",
+      lineItems: [createEmptyLineItem()],
+    });
+  }, [id, router]);
 
   useEffect(() => {
     if (!toast) return;
@@ -58,31 +75,39 @@ export default function AddSalesOrderPage() {
   }, [toast]);
 
   const handleSave = (asDraft: boolean) => {
-    const e = validateSalesOrderForm(form);
+    if (!form || !originalOrder) return;
+
+    const e = validateSplitOrderForm(form, originalOrder);
     setErrors(e);
     if (Object.keys(e).length > 0) {
       setToast({ msg: "Please fix the errors before saving.", type: "error" });
       return;
     }
 
-    const newOrder = buildOrderFromForm(form, { soNumber: orderNumber }, asDraft);
-    if (!newOrder) {
-      setToast({ msg: "Invalid customer or salesman selection.", type: "error" });
+    const result = splitSalesOrderFromForm(originalOrder.id, form, orderNumber, asDraft);
+    if ("error" in result) {
+      setToast({ msg: result.error, type: "error" });
       return;
     }
 
-    const orders = loadOrders();
-    saveOrders([...orders, newOrder]);
     setToast({
       msg: asDraft
-        ? "Sales order saved as draft."
-        : newOrder.requiresApproval
-          ? "Sales order submitted for approval."
-          : "Sales order created successfully.",
+        ? "Split order saved as draft."
+        : result.newOrder.requiresApproval
+          ? "Split order submitted for approval."
+          : `Split order ${result.newOrder.soNumber} created successfully.`,
       type: "success",
     });
     setTimeout(() => router.push("/sales/orders"), 1000);
   };
+
+  if (!form || !originalOrder) {
+    return (
+      <AppLayout>
+        <p className="text-sm text-muted-foreground p-4">Loading order…</p>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout noPadding>
@@ -90,19 +115,19 @@ export default function AddSalesOrderPage() {
         <div className="sticky top-0 z-10 bg-white border-b border-border px-5 py-2.5 flex items-center gap-2 flex-shrink-0">
           <button
             type="button"
-            onClick={() => router.push("/sales/orders")}
+            onClick={() => router.push(`/sales/orders/${id}`)}
             className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
           >
             <ArrowLeft className="w-3.5 h-3.5 text-muted-foreground" />
           </button>
-          <h2 className="flex-1 text-sm font-semibold text-foreground">Add Sales Order</h2>
+          <h2 className="flex-1 text-sm font-semibold text-foreground">Split Sales Order</h2>
           <Button
             variant="outline"
             size="sm"
             className="h-8 text-xs"
-            onClick={() => router.push("/sales/orders")}
+            onClick={() => router.push(`/sales/orders/${id}`)}
           >
-            Discard
+            Cancel
           </Button>
           <Button
             variant="outline"
@@ -117,13 +142,13 @@ export default function AddSalesOrderPage() {
             className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
             onClick={() => handleSave(false)}
           >
-            <Save className="w-3.5 h-3.5" /> Submit Order
+            <Split className="w-3.5 h-3.5" /> Create Split Order
           </Button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 bg-muted/10">
           <SalesOrderForm
-            mode="add"
+            mode="split"
             orderNumber={orderNumber}
             form={form}
             onChange={setForm}
@@ -131,6 +156,7 @@ export default function AddSalesOrderPage() {
             customers={customers}
             salesmen={salesmen}
             products={products}
+            originalOrder={originalOrder}
           />
         </div>
       </div>
