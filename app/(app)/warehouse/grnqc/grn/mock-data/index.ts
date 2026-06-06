@@ -25,6 +25,13 @@ export const MOCK_POS: PurchaseOrder[] = [
     ],
   },
   {
+    poNumber: "PO-2024-0001",
+    vendorName: "Agro Chem Distributors",
+    items: [
+      { productId: "4", productName: "Chlorpyrifos 20 EC", productCode: "PRD-004", orderedQty: 100 },
+    ],
+  },
+  {
     poNumber: "PO-2024-003",
     vendorName: "Fertilizer World",
     items: [
@@ -90,18 +97,48 @@ const SEED_GRNS: GrnRecord[] = [
       { productId: "5", productName: "Zinc Sulphate 21%", batchNumber: "B-ZN-77Y", mfgDate: "2023-11-15", expDate: "2025-11-15", quantity: 140 },
     ],
   },
+  {
+    id: "grn-4",
+    grnNo: "GRN-2024-004",
+    poNumber: "PO-2024-0001",
+    vendorName: "Agro Chem Distributors",
+    vendorReference: "REF/AC/25",
+    warehouse: "Central Warehouse",
+    grnDate: "2024-01-28",
+    totalProducts: 1,
+    totalQty: 60,
+    status: "qc_completed",
+    items: [
+      { productId: "4", productName: "Chlorpyrifos 20 EC", productCode: "PRD-004", orderedQty: 100, receivedQty: 60 },
+    ],
+    batches: [
+      { productId: "4", productName: "Chlorpyrifos 20 EC", batchNumber: "B-CP-24A", mfgDate: "2023-10-01", expDate: "2025-10-01", quantity: 60 },
+    ],
+  },
 ];
 
-const LOCAL_STORAGE_KEY = "ds_grn_records";
+const LOCAL_STORAGE_KEY = "ds_grn_records_v2";
+
+function mergeSeedGrns(stored: GrnRecord[]): GrnRecord[] {
+  const byId = new Map(stored.map((g) => [g.id, g]));
+  for (const seed of SEED_GRNS) {
+    if (!byId.has(seed.id)) byId.set(seed.id, seed);
+  }
+  return Array.from(byId.values());
+}
 
 export function getGrnRecords(): GrnRecord[] {
   if (typeof window === "undefined") return SEED_GRNS;
+  const legacy = localStorage.getItem("ds_grn_records");
   const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
   if (!stored) {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(SEED_GRNS));
-    return SEED_GRNS;
+    const base = legacy ? mergeSeedGrns(JSON.parse(legacy) as GrnRecord[]) : SEED_GRNS;
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(base));
+    return base;
   }
-  return JSON.parse(stored);
+  const merged = mergeSeedGrns(JSON.parse(stored) as GrnRecord[]);
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(merged));
+  return merged;
 }
 
 export function saveGrnRecord(record: GrnRecord): void {

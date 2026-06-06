@@ -21,6 +21,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { loadUOMMasters } from "../../uom/uom-data";
+import {
   type Product,
   type ProductAsset,
   type ProductStatus,
@@ -54,6 +62,9 @@ export interface ProductFormValues {
   distributorPrice: string;
   reorderLevel: string;
   status: ProductStatus;
+  baseUnit: string;
+  packagingUnit: string;
+  conversionQuantity: string;
 }
 
 export const DEFAULT_PRODUCT_FORM: ProductFormValues = {
@@ -73,6 +84,9 @@ export const DEFAULT_PRODUCT_FORM: ProductFormValues = {
   distributorPrice: "",
   reorderLevel: "medium",
   status: "active",
+  baseUnit: "",
+  packagingUnit: "",
+  conversionQuantity: "",
 };
 
 export function productToFormValues(product: Product): ProductFormValues {
@@ -93,6 +107,9 @@ export function productToFormValues(product: Product): ProductFormValues {
     distributorPrice: String(product.distributorPrice),
     reorderLevel: PRODUCT_REORDER_LEVEL_OPTIONS.find((option) => option.label === product.reorderLevel)?.value ?? "medium",
     status: product.status,
+    baseUnit: product.baseUnit ?? "",
+    packagingUnit: product.packagingUnit ?? "",
+    conversionQuantity: product.conversionQuantity !== undefined ? String(product.conversionQuantity) : "",
   };
 }
 
@@ -211,6 +228,22 @@ export function ProductForm({
   const inputCls = (key: string) =>
     cn("h-8 text-xs", errors[key] && "border-red-400 focus-visible:ring-red-300");
 
+  const uomData = typeof window !== "undefined" ? loadUOMMasters() : [];
+  const uomOptions = uomData.length > 0 
+    ? uomData.filter(u => u.status === "active").map(u => ({ value: u.shortName, label: u.shortName }))
+    : [
+        { value: "KG", label: "KG" },
+        { value: "Gram", label: "Gram" },
+        { value: "Liter", label: "Liter" },
+        { value: "ML", label: "ML" },
+        { value: "Packet", label: "Packet" },
+        { value: "Bottle", label: "Bottle" },
+        { value: "Box", label: "Box" },
+        { value: "Drum", label: "Drum" },
+        { value: "Ton", label: "Ton" },
+        { value: "Piece", label: "Piece" },
+      ];
+
   const decimalInput = (key: keyof ProductFormValues, value: string) =>
     set(key, value.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1") as ProductFormValues[keyof ProductFormValues]);
 
@@ -287,7 +320,7 @@ export function ProductForm({
 
   return (
     <div className="w-full space-y-4">
-      <div className="flex items-start gap-2.5 pb-3 border-b border-border">
+      {/* <div className="flex items-start gap-2.5 pb-3 border-b border-border">
         <div className="flex items-center justify-center flex-shrink-0 border rounded-lg w-7 h-7 bg-brand-50 border-brand-100">
           <Package className="w-3.5 h-3.5 text-brand-600" />
         </div>
@@ -295,7 +328,7 @@ export function ProductForm({
           <p className="text-xs font-semibold text-foreground">Product Master</p>
           <p className="text-[11px] text-muted-foreground">Catalogue, pricing, compliance, and media</p>
         </div>
-      </div>
+      </div> */}
 
       <div className="pt-1 space-y-5">
         <div>
@@ -328,20 +361,7 @@ export function ProductForm({
                 />
               </div> */}
 
-              {/* SKU */}
-              <div className="col-span-1 space-y-1">
-                <Label className="text-xs font-medium">
-                  SKU <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  value={form.sku}
-                  onChange={(e) => set("sku", e.target.value.toUpperCase())}
-                  placeholder="e.g. FERT-WSF-019"
-                  className={cn("font-mono", inputCls("sku"))}
-                  disabled={readOnly}
-                />
-                <FieldError msg={errors.sku} />
-              </div>
+             
 
               {/* Category */}
               <div className="col-span-1">
@@ -357,7 +377,7 @@ export function ProductForm({
                 <FieldError msg={errors.category} />
               </div>
 
-              {/* Sub Category */}
+              {/* Sub Category
               <div className="col-span-1">
                 <AC
                   label="Sub Category"
@@ -369,7 +389,7 @@ export function ProductForm({
                   disabled={readOnly}
                 />
                 <FieldError msg={errors.subCategory} />
-              </div>
+              </div> */}
 
               {/* Segment */}
               <div className="col-span-1">
@@ -394,6 +414,20 @@ export function ProductForm({
                   disabled={readOnly}
                 />
               </div>
+               {/* SKU */}
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">
+                  SKU <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  value={form.sku}
+                  onChange={(e) => set("sku", e.target.value.toUpperCase())}
+                  placeholder="e.g. FERT-WSF-019"
+                  className={cn("font-mono", inputCls("sku"))}
+                  disabled={readOnly}
+                />
+                <FieldError msg={errors.sku} />
+              </div>
             </div>
           </div>
 
@@ -408,6 +442,82 @@ export function ProductForm({
                   onChange={(value) => set("unit", value)}
                   options={PRODUCT_UNIT_OPTIONS}
                   placeholder="Select unit..."
+                  disabled={readOnly}
+                />
+              </div>
+
+              {/* Base Unit */}
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">
+                  Base Unit <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={form.baseUnit}
+                  onValueChange={(value) => set("baseUnit", value)}
+                  disabled={readOnly}
+                >
+                  <SelectTrigger className={inputCls("baseUnit")}>
+                    <SelectValue placeholder="Select base unit..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border shadow-lg border-border">
+                    {uomOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FieldError msg={errors.baseUnit} />
+              </div>
+
+              {/* Packaging Unit */}
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">
+                  Packaging Unit <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={form.packagingUnit}
+                  onValueChange={(value) => set("packagingUnit", value)}
+                  disabled={readOnly}
+                >
+                  <SelectTrigger className={inputCls("packagingUnit")}>
+                    <SelectValue placeholder="Select packaging unit..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border shadow-lg border-border">
+                    {uomOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FieldError msg={errors.packagingUnit} />
+              </div>
+
+              {/* Conversion Quantity */}
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">
+                  Conversion Qty <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  value={form.conversionQuantity}
+                  onChange={(e) => decimalInput("conversionQuantity", e.target.value)}
+                  placeholder="e.g. 25"
+                  className={inputCls("conversionQuantity")}
+                  inputMode="decimal"
+                  disabled={readOnly}
+                />
+                <FieldError msg={errors.conversionQuantity} />
+              </div>
+
+              {/* Pack Size */}
+              <div className="col-span-1 space-y-1">
+                <Label className="text-xs font-medium">Pack Size</Label>
+                <Input
+                  value={form.packSize}
+                  onChange={(e) => set("packSize", e.target.value)}
+                  placeholder="e.g. 500 ML"
+                  className={inputCls("packSize")}
                   disabled={readOnly}
                 />
               </div>
@@ -450,18 +560,6 @@ export function ProductForm({
                 />
               </div>
 
-              {/* Pack Size */}
-              <div className="col-span-1 space-y-1">
-                <Label className="text-xs font-medium">Pack Size</Label>
-                <Input
-                  value={form.packSize}
-                  onChange={(e) => set("packSize", e.target.value)}
-                  placeholder="e.g. 500 ML"
-                  className={inputCls("packSize")}
-                  disabled={readOnly}
-                />
-              </div>
-
               {/* MRP */}
               <div className="col-span-1 space-y-1">
                 <Label className="text-xs font-medium">MRP</Label>
@@ -475,7 +573,7 @@ export function ProductForm({
               </div>
 
               {/* Cost Price */}
-              <div className="col-span-1 space-y-1">
+              {/* <div className="col-span-1 space-y-1">
                 <Label className="text-xs font-medium">Cost Price</Label>
                 <Input
                   value={form.costPrice}
@@ -484,10 +582,10 @@ export function ProductForm({
                   inputMode="decimal"
                   disabled={readOnly}
                 />
-              </div>
+              </div> */}
 
               {/* Distributor Price */}
-              <div className="col-span-1 space-y-1">
+              {/* <div className="col-span-1 space-y-1">
                 <Label className="text-xs font-medium">Distributor Price</Label>
                 <Input
                   value={form.distributorPrice}
@@ -496,7 +594,7 @@ export function ProductForm({
                   inputMode="decimal"
                   disabled={readOnly}
                 />
-              </div>
+              </div> */}
 
               {/* Reorder Level */}
               <div className="col-span-1">
@@ -537,7 +635,7 @@ export function ProductForm({
                 </div>
 
                 {assetType === "media" ? (
-                  <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/10 px-3 py-3 md:flex-row md:items-center md:justify-between">
+                  <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/10 px-1 py-1 md:flex-row md:items-center md:justify-between">
                     <input
                       ref={mediaInputRef}
                       type="file"
@@ -683,9 +781,15 @@ export function validateProductForm(form: ProductFormValues): Record<string, str
   const errors: Record<string, string> = {};
   if (!form.productName.trim()) errors.productName = "Product name is required";
   if (!form.category) errors.category = "Category is required";
-  if (!form.subCategory) errors.subCategory = "Sub category is required";
   if (!form.hsnCode.trim()) errors.hsnCode = "HSN code is required";
   if (!form.sku.trim()) errors.sku = "SKU is required";
+  if (!form.baseUnit) errors.baseUnit = "Base unit is required";
+  if (!form.packagingUnit) errors.packagingUnit = "Packaging unit is required";
+  if (!form.conversionQuantity) {
+    errors.conversionQuantity = "Conversion quantity is required";
+  } else if (isNaN(Number(form.conversionQuantity)) || Number(form.conversionQuantity) <= 0) {
+    errors.conversionQuantity = "Must be a positive number";
+  }
   return errors;
 }
 
@@ -725,5 +829,8 @@ export function formValuesToProduct(
     updatedDate: todayStr(),
     assets: base.assets ?? base.mediaItems ?? [],
     mediaItems: base.assets ?? base.mediaItems ?? [],
+    baseUnit: form.baseUnit,
+    packagingUnit: form.packagingUnit,
+    conversionQuantity: form.conversionQuantity ? Number(form.conversionQuantity) : undefined,
   };
 }

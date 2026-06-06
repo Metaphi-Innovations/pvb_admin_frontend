@@ -50,6 +50,7 @@ import {
   type IncidentalPolicy,
   type ClaimTypeMaster,
 } from "./tada-config-data";
+import { ApprovalHierarchySection } from "./ApprovalHierarchySection";
 
 const TABS = [
   { id: "role", label: "Role Entitlement" },
@@ -59,6 +60,7 @@ const TABS = [
   { id: "km", label: "KM Reimbursement" },
   { id: "incidental", label: "Incidental" },
   { id: "claimType", label: "Claim Types" },
+  { id: "approval", label: "Approval Hierarchy" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -449,6 +451,8 @@ export default function TadaConfigPageClient() {
             )}
           />
         )}
+
+        {tab === "approval" && <ApprovalHierarchySection />}
       </div>
     </AppLayout>
   );

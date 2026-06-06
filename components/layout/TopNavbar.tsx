@@ -1,6 +1,7 @@
 "use client";
 
 import React, { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -108,14 +109,17 @@ export const TopNavbar = memo(function TopNavbar() {
         {/* Logo */}
         <PrefetchLink
           href="/dashboard"
-          className="flex items-center gap-2.5 px-4 border-r border-border h-full flex-shrink-0"
+          className="flex items-center px-4 border-r border-border h-full flex-shrink-0"
         >
-          <div className="w-8 h-8 rounded-xl bg-brand-gradient flex items-center justify-center shadow-sm">
-            <span className="text-white text-[11px] font-extrabold tracking-tight">DS</span>
-          </div>
-          <div className="hidden sm:block">
-            <p className="text-[13px] font-bold text-brand-700 leading-tight">Dharitri Sutra</p>
-            <p className="text-[10px] text-muted-foreground font-medium leading-tight -mt-0.5">Agri ERP</p>
+          <div className="h-10 flex items-center justify-center">
+            <Image
+              src="/images/dharitri sutra.png"
+              alt="Dharitri Sutra Logo"
+              width={140}
+              height={40}
+              className="h-8 w-auto object-contain"
+              priority
+            />
           </div>
         </PrefetchLink>
 
@@ -330,7 +334,18 @@ const NavDropdown = memo(function NavDropdown({
       }}
     >
       {hasGroups && isSidebarMenu ? (
-        <div className="flex min-h-[260px] -m-1 overflow-hidden rounded-lg">
+        <div className="flex flex-col min-h-[260px] -m-1 overflow-hidden rounded-lg">
+          {item.href && (
+            <PrefetchLink
+              href={item.href}
+              onClick={() => setIsOpen(false)}
+              className="flex items-center justify-between mx-2 mt-2 mb-1 px-2.5 py-1.5 rounded-md text-[11px] font-semibold text-brand-700 hover:bg-brand-50 border border-brand-100/80"
+            >
+              <span>{item.label} overview</span>
+              <span className="text-brand-400">›</span>
+            </PrefetchLink>
+          )}
+          <div className="flex flex-1 min-h-0">
           <div className="w-[272px] flex-shrink-0 bg-muted/25 border-r border-border/80 p-2 space-y-1">
             {groupedChildren.map((group, idx) => {
               const GroupIcon = group.icon;
@@ -372,7 +387,14 @@ const NavDropdown = memo(function NavDropdown({
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-3 px-1">
               {groupedChildren[hoveredGroup]?.label}
             </p>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-0.5">
+            <div
+              className={cn(
+                "grid gap-x-6 gap-y-0.5",
+                (groupedChildren[hoveredGroup]?.children.length ?? 0) > 4
+                  ? "grid-cols-1"
+                  : "grid-cols-2",
+              )}
+            >
               {groupedChildren[hoveredGroup]?.children.map((child) => {
                 const childActive = isNavHrefActive(pathname, search, child.href);
                 return (
@@ -406,19 +428,10 @@ const NavDropdown = memo(function NavDropdown({
               })}
             </div>
           </div>
+          </div>
         </div>
       ) : hasGroups ? (
         <div className="space-y-2">
-          {item.href && item.id === "accounts" && (
-            <PrefetchLink
-              href={item.href}
-              onClick={() => setIsOpen(false)}
-              className="flex items-center justify-between px-2 py-1.5 rounded-md text-[11px] font-medium text-brand-700 hover:bg-brand-50"
-            >
-              <span>Accounts overview</span>
-              <span>›</span>
-            </PrefetchLink>
-          )}
           <div
             className={cn(
               "grid gap-3",

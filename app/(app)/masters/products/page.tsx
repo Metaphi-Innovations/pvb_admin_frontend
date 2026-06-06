@@ -285,18 +285,18 @@ export default function ProductsPage() {
       "Product ID",
       "Product Name",
       "Category",
-      "Sub Category",
       "Segment",
       "Formulation",
       "Unit",
+      "Base Unit",
+      "Packaging Unit",
+      "Conversion Quantity",
       "HSN Code",
       "GST Rate",
       "SKU",
       "Crop Applicable",
       "Pack Size",
       "MRP",
-      "Cost Price",
-      "Distributor Price",
       "Reorder Level",
       "Status",
     ];
@@ -305,18 +305,18 @@ export default function ProductsPage() {
       item.productId,
       item.productName,
       item.category,
-      item.subCategory,
       item.segment,
       item.formulation,
       item.unit,
+      item.baseUnit || "",
+      item.packagingUnit || "",
+      item.conversionQuantity !== undefined ? item.conversionQuantity : "",
       item.hsnCode,
       item.gstRate,
       item.sku,
       item.cropApplicable || "",
       item.packSize || "",
       item.mrp,
-      item.costPrice,
-      item.distributorPrice,
       item.reorderLevel,
       item.status,
     ]);
@@ -455,18 +455,18 @@ export default function ProductsPage() {
                   <TableTh label="Product ID" colKey="productId" className="w-[120px] pl-4 py-3" />
                   <TableTh label="Product Name" colKey="productName" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-[220px]" />
                   <TableTh label="Category" colKey="category" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} filterValues={colFilters.category} filterOptions={Array.from(new Set(records.map((item) => item.category))).sort()} onFilterChange={(value) => handleColFilter("category", value)} className="w-[130px]" />
-                  <TableTh label="Sub Category" colKey="subCategory" filterValues={colFilters.subCategory} filterOptions={Array.from(new Set(records.map((item) => item.subCategory))).sort()} onFilterChange={(value) => handleColFilter("subCategory", value)} className="w-[170px]" />
                   <TableTh label="Segment" colKey="segment" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} filterValues={colFilters.segment} filterOptions={Array.from(new Set(records.map((item) => item.segment))).sort()} onFilterChange={(value) => handleColFilter("segment", value)} className="w-[130px]" />
                   <TableTh label="Formulation" colKey="formulation" filterValues={colFilters.formulation} filterOptions={Array.from(new Set(records.map((item) => item.formulation))).sort()} onFilterChange={(value) => handleColFilter("formulation", value)} className="w-[220px]" />
                   <TableTh label="Unit" colKey="unit" className="w-[90px]" />
+                  <TableTh label="Base Unit" colKey="baseUnit" className="w-[110px]" />
+                  <TableTh label="Packaging Unit" colKey="packagingUnit" className="w-[130px]" />
+                  <TableTh label="Conversion Qty" colKey="conversionQuantity" className="w-[140px]" />
                   <TableTh label="HSN Code" colKey="hsnCode" className="w-[110px]" />
                   <TableTh label="GST Rate" colKey="gstRate" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} filterValues={colFilters.gstRate} filterOptions={Array.from(new Set(records.map((item) => item.gstRate))).sort()} onFilterChange={(value) => handleColFilter("gstRate", value)} className="w-[100px]" />
                   <TableTh label="SKU" colKey="sku" className="w-[140px]" />
                   <TableTh label="Crop Applicable" colKey="cropApplicable" className="w-[140px]" />
                   <TableTh label="Pack Size" colKey="packSize" className="w-[110px]" />
                   <TableTh label="MRP" colKey="mrp" className="w-[120px]" />
-                  <TableTh label="Cost Price" colKey="costPrice" className="w-[120px]" />
-                  <TableTh label="Distributor Price" colKey="distributorPrice" className="w-[150px]" />
                   <TableTh label="Reorder Level" colKey="reorderLevel" className="w-[120px]" />
                   <TableTh label="Status" colKey="status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} filterValues={colFilters.status} filterOptions={["Active", "Inactive", "Draft"]} onFilterChange={(value) => handleColFilter("status", value)} className="w-[110px] pr-4" />
                   <th className="sticky right-0 z-30 w-[96px] min-w-[96px] h-11 px-3 text-left text-[13px] font-semibold whitespace-nowrap bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]">
@@ -504,18 +504,18 @@ export default function ProductsPage() {
                         </Link>
                       </td>
                       <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.category}</td>
-                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.subCategory}</td>
                       <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.segment}</td>
                       <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.formulation}</td>
                       <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.unit}</td>
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.baseUnit || "—"}</td>
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.packagingUnit || "—"}</td>
+                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.conversionQuantity ?? "—"}</td>
                       <td className="px-3 py-2 font-mono text-xs text-foreground whitespace-nowrap">{item.hsnCode}</td>
                       <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.gstRate}</td>
                       <td className="px-3 py-2 font-mono text-xs text-foreground whitespace-nowrap">{item.sku}</td>
                       <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.cropApplicable || "-"}</td>
                       <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.packSize || "-"}</td>
                       <td className="px-3 py-2 text-xs font-semibold text-foreground whitespace-nowrap">{formatMoney(item.mrp)}</td>
-                      <td className="px-3 py-2 text-xs font-semibold text-foreground whitespace-nowrap">{formatMoney(item.costPrice)}</td>
-                      <td className="px-3 py-2 text-xs font-semibold text-foreground whitespace-nowrap">{formatMoney(item.distributorPrice)}</td>
                       <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.reorderLevel}</td>
                       <td className="px-3 py-2">
                         <DropdownMenu>
@@ -650,7 +650,7 @@ export default function ProductsPage() {
       </div>
 
       {toast && (
-        <div className="fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium bg-emerald-600">
+        <div className="fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium bg-emerald-600">
           {toast}
         </div>
       )}

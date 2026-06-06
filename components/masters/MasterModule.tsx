@@ -69,6 +69,7 @@ export interface MasterModuleConfig<T extends BaseMasterRecord, F> {
   renderViewDetails: (record: T) => React.ReactNode;
   getCodeFromForm?: (form: F) => string;
   setCodeOnForm?: (form: F, code: string) => F;
+  hideColumnSelection?: boolean;
 }
 
 export function MasterModule<T extends BaseMasterRecord, F>({
@@ -93,6 +94,7 @@ export function MasterModule<T extends BaseMasterRecord, F>({
     renderFormFields,
     renderViewDetails,
     setCodeOnForm,
+    hideColumnSelection,
   } = config;
 
   const { data: loadedRecords, ready } = useDeferredLoad(
@@ -328,6 +330,7 @@ export function MasterModule<T extends BaseMasterRecord, F>({
             rowKey={(r) => String(r.id)}
             onRowClick={openView}
             emptyModule={title}
+            hideColumnSelection={hideColumnSelection}
             filterSlot={
               <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
                 <SelectTrigger className="h-8 w-[120px] text-xs">
