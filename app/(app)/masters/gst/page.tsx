@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useMemo, useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Popover,
@@ -23,6 +23,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetBody,
+  SheetFooter,
+} from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
   Percent,
@@ -34,50 +45,124 @@ import {
   MoreVertical,
   SlidersHorizontal,
   X,
+  Search,
+  ChevronLeft,
+  ChevronRight,
   ChevronsUpDown,
   ChevronDown,
-  AlertTriangle,
-  Check,
   CalendarDays,
+  Eye,
+  Trash2,
 } from "lucide-react";
 import {
   GSTMaster,
   loadGSTMasters,
   saveGSTMasters,
   todayStr,
+  nextGSTId,
+  generateGSTCode,
 } from "./gst-data";
+import { MiniKPICard } from "@/components/ui/KPICard";
+import { MasterViewRow } from "@/components/masters/MasterModule";
 
 type SortKey = "gstId" | "gstName" | "gstPercentage" | "gstType" | "applicableFromDate" | "status";
 
-function StatusBadge({ status }: { status: "active" | "inactive" }) {
-  const cfg = {
-    active: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    inactive: "border-slate-200 bg-slate-100 text-slate-700",
-  }[status];
+interface ToastState {
+  msg: string;
+  type: "success" | "error";
+}
 
+function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
   return (
-    <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium border inline-flex items-center justify-center", cfg)}>
-      {status === "active" ? "Active" : "Inactive"}
-    </span>
+    <div
+      className={cn(
+        "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+        toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
+      )}
+    >
+      <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+      {toast.msg}
+      <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100"><X className="h-3.5 w-3.5" /></button>
+    </div>
+  );
+}
+
+function StatusToggle({ record, onToggle }: { record: GSTMaster; onToggle: (item: GSTMaster) => void }) {
+  const active = record.status === "active";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(record);
+      }}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+        active ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
+      )}
+    >
+      {active ? "Active" : "Inactive"}
+    </button>
+  );
+}
+
+function SortTh({
+  label,
+  colKey,
+  sortKey,
+  sortDir,
+  onSort,
+  className,
+}: {
+  label: string;
+  colKey: SortKey;
+  sortKey: SortKey;
+  sortDir: "asc" | "desc";
+  onSort: (key: SortKey) => void;
+  className?: string;
+}) {
+  const active = sortKey === colKey;
+  return (
+    <th
+      onClick={() => onSort(colKey)}
+      className={cn("px-3 py-3 text-left text-[13px] font-semibold cursor-pointer select-none group whitespace-nowrap", active && "bg-brand-50/60", className)}
+    >
+      <div className="flex items-center gap-1.5">
+        <span className={active ? "text-brand-700" : "text-foreground"}>{label}</span>
+        {active ? (
+          <ChevronDown className={cn("w-3 h-3 text-brand-600 transition-transform", sortDir === "desc" && "rotate-180")} />
+        ) : (
+          <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground" />
+        )}
+      </div>
+    </th>
   );
 }
 
 export default function GSTPage() {
-  const router = useRouter();
   const [records, setRecords] = useState<GSTMaster[]>([]);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [filterType, setFilterType] = useState<string[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>("gstId");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [confirmDialog, setConfirmDialog] = useState<{
-    type: "toggle";
-    record: GSTMaster;
-  } | null>(null);
-  const [toast, setToast] = useState<{
-    msg: string;
-    type: "success" | "error";
-  } | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [toast, setToast] = useState<ToastState | null>(null);
+
+  // Sheet & Dialog states
+  const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
+  const [active, setActive] = useState<GSTMaster | null>(null);
+  const [form, setForm] = useState({
+    gstId: "",
+    gstName: "",
+    gstPercentage: 0,
+    gstType: "CGST" as "CGST" | "SGST" | "IGST" | "UTGST",
+    applicableFromDate: todayStr(),
+    status: "active" as "active" | "inactive",
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [deleteTarget, setDeleteTarget] = useState<GSTMaster | null>(null);
 
   useEffect(() => {
     setRecords(loadGSTMasters());
@@ -85,48 +170,54 @@ export default function GSTPage() {
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3200);
+    const t = setTimeout(() => setToast(null), 3000);
     return () => clearTimeout(t);
   }, [toast]);
 
-  const filtered = records
-    .filter(r => {
-      if (!search) return true;
-      const q = search.toLowerCase();
-      return r.gstName.toLowerCase().includes(q) || r.gstType.toLowerCase().includes(q);
-    })
-    .filter(r => {
-      if (filterStatus.length === 0) return true;
-      return filterStatus.includes(r.status);
-    })
-    .filter(r => {
-      if (filterType.length === 0) return true;
-      return filterType.includes(r.gstType);
-    })
-    .sort((a, b) => {
-      let aVal: any = a[sortKey];
-      let bVal: any = b[sortKey];
-      if (typeof aVal === "string") {
-        aVal = aVal.toLowerCase();
-        bVal = (bVal as string).toLowerCase();
-      }
-      const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-      return sortDir === "asc" ? cmp : -cmp;
-    });
+  const filtered = useMemo(() => {
+    return records
+      .filter((r) => {
+        const q = search.toLowerCase();
+        return r.gstName.toLowerCase().includes(q) || r.gstType.toLowerCase().includes(q) || r.gstId.toLowerCase().includes(q);
+      })
+      .filter((r) => (filterStatus.length ? filterStatus.includes(r.status) : true))
+      .filter((r) => (filterType.length ? filterType.includes(r.gstType) : true))
+      .sort((a, b) => {
+        let aVal = a[sortKey];
+        let bVal = b[sortKey];
+        if (typeof aVal === "string") {
+          aVal = aVal.toLowerCase();
+          bVal = (bVal as string).toLowerCase();
+        }
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+  }, [records, search, filterStatus, filterType, sortKey, sortDir]);
 
-  const totalCount = records.length;
-  const activeCount = records.filter(r => r.status === "active").length;
-  const inactiveCount = records.filter(r => r.status === "inactive").length;
-
-  const handleToggleStatus = (record: GSTMaster) => {
-    setConfirmDialog({ type: "toggle", record });
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
   };
 
-  const confirmToggleStatus = () => {
-    const record = confirmDialog?.record;
-    if (!record) return;
+  const toggleFilterStatus = (status: string) => {
+    setFilterStatus((prev) =>
+      prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status],
+    );
+  };
+
+  const toggleFilterType = (type: string) => {
+    setFilterType((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type],
+    );
+  };
+
+  const toggleStatus = (record: GSTMaster) => {
     const newStatus = record.status === "active" ? "inactive" : "active";
-    const updated = records.map(r =>
+    const updated = records.map((r) =>
       r.id === record.id
         ? {
             ...r,
@@ -134,42 +225,183 @@ export default function GSTPage() {
             updatedBy: "Admin",
             updatedDate: todayStr(),
           }
-        : r
-    ) as GSTMaster[];
+        : r,
+    );
     setRecords(updated);
     saveGSTMasters(updated);
     setToast({
-      msg: `GST status updated to ${newStatus === "active" ? "Active" : "Inactive"} successfully`,
+      msg: `GST status updated to ${newStatus === "active" ? "Active" : "Inactive"}`,
       type: "success",
     });
-    setConfirmDialog(null);
   };
 
-  const toggleFilterStatus = (status: string) => {
-    setFilterStatus(prev =>
-      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
-    );
+  const openAdd = () => {
+    const nextIdVal = nextGSTId(records);
+    const code = generateGSTCode(nextIdVal);
+    setForm({
+      gstId: code,
+      gstName: "",
+      gstPercentage: 0,
+      gstType: "CGST",
+      applicableFromDate: todayStr(),
+      status: "active",
+    });
+    setErrors({});
+    setActive(null);
+    setSheetMode("add");
   };
 
-  const toggleFilterType = (type: string) => {
-    setFilterType(prev =>
-      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
-    );
+  const openEdit = (row: GSTMaster) => {
+    setForm({
+      gstId: row.gstId,
+      gstName: row.gstName,
+      gstPercentage: row.gstPercentage,
+      gstType: row.gstType,
+      applicableFromDate: row.applicableFromDate,
+      status: row.status,
+    });
+    setErrors({});
+    setActive(row);
+    setSheetMode("edit");
   };
 
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir(d => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
+  const openView = (row: GSTMaster) => {
+    setActive(row);
+    setSheetMode("view");
+  };
+
+  const closeSheet = () => {
+    setSheetMode(null);
+    setActive(null);
+    setErrors({});
+  };
+
+  const setFormField = (key: string, value: any) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    if (errors[key]) {
+      setErrors((prev) => {
+        const copy = { ...prev };
+        delete copy[key];
+        return copy;
+      });
     }
   };
+
+  const validate = (): boolean => {
+    const e: Record<string, string> = {};
+    if (!form.gstName.trim()) e.gstName = "GST Name is required";
+    if (form.gstPercentage === undefined || form.gstPercentage === null || form.gstPercentage < 0) {
+      e.gstPercentage = "GST Percentage is required and must be non-negative";
+    }
+    if (!form.applicableFromDate) e.applicableFromDate = "Applicable From Date is required";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const persist = () => {
+    if (!validate()) return;
+    const list = loadGSTMasters();
+    let updatedList: GSTMaster[];
+    if (sheetMode === "add") {
+      const id = nextGSTId(list);
+      const newRecord: GSTMaster = {
+        id,
+        gstId: form.gstId,
+        gstName: form.gstName,
+        gstPercentage: form.gstPercentage,
+        gstType: form.gstType,
+        applicableFromDate: form.applicableFromDate,
+        status: form.status,
+        createdBy: "Admin",
+        createdDate: todayStr(),
+        updatedBy: "Admin",
+        updatedDate: todayStr(),
+      };
+      updatedList = [...list, newRecord];
+      setToast({ msg: "GST added successfully", type: "success" });
+    } else if (active) {
+      updatedList = list.map((r) =>
+        r.id === active.id
+          ? {
+              ...r,
+              gstName: form.gstName,
+              gstPercentage: form.gstPercentage,
+              gstType: form.gstType,
+              applicableFromDate: form.applicableFromDate,
+              status: form.status,
+              updatedBy: "Admin",
+              updatedDate: todayStr(),
+            }
+          : r,
+      );
+      setToast({ msg: "GST updated successfully", type: "success" });
+    } else {
+      return;
+    }
+    saveGSTMasters(updatedList);
+    setRecords(updatedList);
+    closeSheet();
+  };
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    const list = loadGSTMasters().filter((r) => r.id !== deleteTarget.id);
+    saveGSTMasters(list);
+    setRecords(list);
+    setDeleteTarget(null);
+    setToast({ msg: "GST deleted successfully", type: "success" });
+  };
+
+  const handleExport = () => {
+    try {
+      const headers = ["ID", "GST ID", "GST Name", "GST Percentage", "GST Type", "Applicable From", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
+      const csvRows = [headers.join(",")];
+      for (const r of records) {
+        const row = [
+          r.id,
+          `"${r.gstId.replace(/"/g, '""')}"`,
+          `"${r.gstName.replace(/"/g, '""')}"`,
+          r.gstPercentage,
+          r.gstType,
+          r.applicableFromDate,
+          r.status,
+          r.createdBy,
+          r.createdDate,
+          r.updatedBy,
+          r.updatedDate,
+        ];
+        csvRows.push(row.join(","));
+      }
+      const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `gst_export_${todayStr()}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setToast({ msg: "GST configs exported successfully", type: "success" });
+    } catch {
+      setToast({ msg: "Failed to export GST configs", type: "error" });
+    }
+  };
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const start = filtered.length === 0 ? 0 : (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, filtered.length);
+
+  const sheetTitle =
+    sheetMode === "add"
+      ? "Add GST"
+      : sheetMode === "edit"
+      ? "Edit GST"
+      : "View GST";
 
   return (
     <AppLayout>
       <div className="space-y-5">
-        {/* Header */}
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-xl font-bold text-foreground">GST Master</h1>
@@ -177,80 +409,51 @@ export default function GSTPage() {
               Manage GST configurations and tax rates
             </p>
           </div>
-          <div className="flex items-center flex-shrink-0 gap-2">
+          <div className="flex items-center gap-2">
             <Button
               size="sm"
-              className="h-8 text-xs gap-1.5 border border-border bg-white text-foreground hover:bg-muted"
               variant="outline"
+              className="h-8 gap-1.5 border-border bg-white text-xs text-foreground hover:bg-muted"
+              onClick={handleExport}
             >
-              <Download className="w-3.5 h-3.5" /> Export
+              <Download className="h-3.5 w-3.5" /> Export
             </Button>
             <Button
               size="sm"
-              className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-              onClick={() => router.push("/masters/gst/add")}
+              className="h-8 gap-1.5 bg-brand-600 text-xs text-white hover:bg-brand-700"
+              onClick={openAdd}
             >
-              <Plus className="w-3.5 h-3.5" /> Add GST
+              <Plus className="h-3.5 w-3.5" /> Add GST
             </Button>
           </div>
         </div>
 
-        {/* KPI Cards */}
         <div className="grid grid-cols-3 gap-3">
-          <div className="flex items-center gap-3 p-3 bg-white border shadow-sm rounded-xl border-border">
-            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-brand-600">
-              <Percent className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <p className="text-base font-bold leading-none text-foreground">
-                {totalCount}
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
-                Total GST Configs
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 p-3 bg-white border shadow-sm rounded-xl border-border">
-            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-muted">
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-            </div>
-            <div>
-              <p className="text-base font-bold leading-none text-foreground">
-                {activeCount}
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
-                Active
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 p-3 bg-white border shadow-sm rounded-xl border-border">
-            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-muted">
-              <XCircle className="w-4 h-4 text-slate-400" />
-            </div>
-            <div>
-              <p className="text-base font-bold leading-none text-foreground">
-                {inactiveCount}
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
-                Inactive
-              </p>
-            </div>
-          </div>
+          <MiniKPICard label="Total GST Configs" value={records.length} icon={Percent} accent={true} />
+          <MiniKPICard
+            label="Active"
+            value={records.filter((r) => r.status === "active").length}
+            icon={CheckCircle2}
+            accent={false}
+          />
+          <MiniKPICard
+            label="Inactive"
+            value={records.filter((r) => r.status === "inactive").length}
+            icon={XCircle}
+            accent={false}
+          />
         </div>
 
-        {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[220px] max-w-sm">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={(e) => setSearch(e.target.value)}
               placeholder="Search GST name or type..."
-              className="h-8 text-xs"
+              className="h-8 pl-9 text-xs"
             />
           </div>
-
           <Popover>
             <PopoverTrigger asChild>
               <button
@@ -277,7 +480,7 @@ export default function GSTPage() {
               <div className="p-3 space-y-3">
                 <div className="space-y-1.5">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">GST Type</p>
-                  {["CGST", "SGST", "IGST", "UTGST"].map(type => (
+                  {["CGST", "SGST", "IGST", "UTGST"].map((type) => (
                     <label key={type} className="flex items-center gap-2 cursor-pointer py-0.5">
                       <input
                         type="checkbox"
@@ -291,7 +494,7 @@ export default function GSTPage() {
                 </div>
                 <div className="space-y-1.5 border-t border-border/60 pt-2">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</p>
-                  {["active", "inactive"].map(v => (
+                  {["active", "inactive"].map((v) => (
                     <label key={v} className="flex items-center gap-2 cursor-pointer py-0.5">
                       <input
                         type="checkbox"
@@ -319,34 +522,9 @@ export default function GSTPage() {
               )}
             </PopoverContent>
           </Popover>
-
-          {filterType.map(type => (
-            <span
-              key={type}
-              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium"
-            >
-              {type}
-              <button onClick={() => toggleFilterType(type)} className="hover:text-brand-800">
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          ))}
-
-          {filterStatus.map(v => (
-            <span
-              key={v}
-              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium"
-            >
-              {v === "active" ? "Active" : "Inactive"}
-              <button onClick={() => toggleFilterStatus(v)} className="hover:text-brand-800">
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          ))}
         </div>
 
-        {/* Table */}
-        <div className="overflow-hidden bg-white border shadow-sm border-border rounded-xl">
+        <div className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
           <div className="overflow-x-auto">
             <table className="min-w-full border-collapse table-fixed w-max">
               <thead>
@@ -363,76 +541,71 @@ export default function GSTPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
+                {paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-16 text-center">
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="flex items-center justify-center w-10 h-10 rounded-full bg-muted">
-                          <Percent className="w-5 h-5 text-muted-foreground" />
-                        </div>
-                        <p className="text-sm font-medium text-foreground">
-                          No GST configs found
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {search || filterStatus.length > 0 || filterType.length > 0
-                            ? "Try adjusting your search or filters"
-                            : "Add your first GST configuration to get started"}
-                        </p>
-                      </div>
+                    <td colSpan={7} className="px-4 py-8 text-center text-xs text-muted-foreground">
+                      No records found
                     </td>
                   </tr>
                 ) : (
-                  filtered.map(record => (
+                  paginated.map((row) => (
                     <tr
-                      key={record.id}
-                      className="align-top transition-colors border-b border-border/60 hover:bg-muted/20 group"
+                      key={row.id}
+                      onClick={() => openView(row)}
+                      className="align-top transition-colors border-b border-border/60 hover:bg-muted/20 group cursor-pointer"
                     >
                       <td className="px-4 py-2.5 text-xs font-semibold font-mono text-brand-700 whitespace-nowrap">
-                        {record.gstId}
+                        {row.gstId}
                       </td>
                       <td className="px-3 py-2.5 text-xs font-semibold text-foreground">
-                        {record.gstName}
+                        {row.gstName}
                       </td>
                       <td className="px-3 py-2.5 text-xs text-foreground whitespace-nowrap font-medium">
-                        {record.gstPercentage}%
+                        {row.gstPercentage}%
                       </td>
                       <td className="px-3 py-2.5 text-xs text-foreground whitespace-nowrap font-medium">
-                        {record.gstType}
+                        {row.gstType}
                       </td>
                       <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
-                          <CalendarDays className="w-3.5 h-3.5 text-muted-foreground/60 animate-none shrink-0" />
-                          {record.applicableFromDate}
+                          <CalendarDays className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
+                          {row.applicableFromDate}
                         </div>
                       </td>
-                      <td className="px-3 py-2.5">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleStatus(record)}
-                          className={cn(
-                            "inline-flex items-center gap-1.5 rounded-full px-0.5 py-0.5 transition-opacity focus:outline-none",
-                            "hover:opacity-90",
-                          )}
-                          title="Click to toggle status"
-                        >
-                          <StatusBadge status={record.status} />
-                        </button>
+                      <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                        <StatusToggle record={row} onToggle={toggleStatus} />
                       </td>
-                      <td className="sticky right-0 z-20 w-[80px] min-w-[80px] px-3 py-2.5 bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]">
+                      <td
+                        className="sticky right-0 z-20 w-[80px] min-w-[80px] px-3 py-2.5 bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <button className="inline-flex items-center justify-center transition-colors rounded-md w-7 h-7 text-muted-foreground hover:bg-muted focus:outline-none">
-                              <MoreVertical className="w-3.5 h-3.5 text-muted-foreground" />
+                            <button
+                              type="button"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                            >
+                              <MoreVertical className="h-4 w-4" />
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-32 bg-white border shadow-lg border-border">
                             <DropdownMenuItem
-                              onClick={() =>
-                                router.push(`/masters/gst/${record.id}/edit`)
-                              }
-                              className="flex items-center gap-2 text-xs cursor-pointer"
+                              onClick={() => openView(row)}
+                              className="flex items-center gap-2 cursor-pointer"
                             >
-                              <Edit2 className="w-3.5 h-3.5" /> Edit
+                              <Eye className="h-3.5 w-3.5" /> View
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => openEdit(row)}
+                              className="flex items-center gap-2 cursor-pointer"
+                            >
+                              <Edit2 className="h-3.5 w-3.5" /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => setDeleteTarget(row)}
+                              className="flex items-center gap-2 cursor-pointer text-red-600 focus:text-red-700"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" /> Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -445,117 +618,228 @@ export default function GSTPage() {
           </div>
           <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/20">
             <p className="text-[11px] text-muted-foreground">
-              Showing <span className="font-medium text-foreground">{filtered.length}</span> of{" "}
-              <span className="font-medium text-foreground">{totalCount}</span> GST configs
+              {filtered.length === 0 ? (
+                "No records"
+              ) : (
+                <>
+                  Showing <span className="font-medium text-foreground">{start}-{end}</span> of{" "}
+                  <span className="font-medium text-foreground">{filtered.length}</span> GST configs
+                </>
+              )}
             </p>
+            <div className="flex items-center gap-2">
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="px-2 text-xs bg-white border rounded-md h-7 border-border text-foreground"
+              >
+                {[10, 25, 50, 100].map((value) => (
+                  <option key={value} value={value}>
+                    {value} / page
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={page === 1}
+                className="flex items-center justify-center text-xs border rounded-md w-7 h-7 border-border disabled:opacity-40 hover:bg-muted"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <span className="text-xs text-muted-foreground px-2 min-w-[48px] text-center">
+                {page} / {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={page === totalPages}
+                className="flex items-center justify-center text-xs border rounded-md w-7 h-7 border-border disabled:opacity-40 hover:bg-muted"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Confirm Dialog */}
-      {confirmDialog && (
-        <Dialog
-          open={true}
-          onOpenChange={open => {
-            if (!open) setConfirmDialog(null);
-          }}
-        >
-          <DialogContent className="max-w-sm bg-white border shadow-xl border-border rounded-xl">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-base">
-                <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 border rounded-lg bg-amber-50 border-amber-200">
-                  <AlertTriangle className="w-4 h-4 text-amber-500" />
-                </div>
-                {confirmDialog.record.status === "active" ? "Deactivate" : "Activate"} GST Config?
-              </DialogTitle>
-              <DialogDescription className="pt-1">
-                Are you sure you want to {confirmDialog.record.status === "active" ? "deactivate" : "activate"}{" "}
-                "{confirmDialog.record.gstName}"?
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs"
-                onClick={() => setConfirmDialog(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
-                onClick={confirmToggleStatus}
-              >
-                Confirm
-              </Button>
+      <Sheet open={sheetMode !== null} onOpenChange={(o) => !o && closeSheet()}>
+        <SheetContent>
+          <SheetHeader>
+            <div className="flex items-start gap-3 pr-8">
+              <div className="w-9 h-9 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center">
+                <Percent className="w-4 h-4 text-brand-600" />
+              </div>
+              <div>
+                <SheetTitle className="text-base">{sheetTitle}</SheetTitle>
+                <SheetDescription className="text-xs">
+                  {sheetMode === "view" ? "Read-only details" : "Compact GST form"}
+                </SheetDescription>
+              </div>
             </div>
-          </DialogContent>
-        </Dialog>
-      )}
+          </SheetHeader>
 
-      {/* Toast */}
-      {toast && (
-        <div
-          className={cn(
-            "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
-            "animate-in slide-in-from-bottom-2 fade-in-0 duration-300",
-            toast.type === "success" ? "bg-emerald-600" : "bg-red-600"
-          )}
-        >
-          {toast.type === "success" ? (
-            <Check className="flex-shrink-0 w-4 h-4" />
-          ) : (
-            <AlertTriangle className="flex-shrink-0 w-4 h-4" />
-          )}
-          {toast.msg}
-        </div>
-      )}
-    </AppLayout>
-  );
-}
-
-// SortTh Component
-function SortTh({
-  label,
-  colKey,
-  sortKey,
-  sortDir,
-  onSort,
-  className,
-}: {
-  label: string;
-  colKey: SortKey;
-  sortKey: string;
-  sortDir: string;
-  onSort: (key: SortKey) => void;
-  className?: string;
-}) {
-  const active = sortKey === colKey;
-  return (
-    <th
-      onClick={() => onSort(colKey)}
-      className={cn(
-        "px-3 py-3 text-left text-xs font-semibold cursor-pointer select-none group whitespace-nowrap",
-        active && "bg-brand-50/60",
-        className
-      )}
-    >
-      <div className="flex items-center gap-1.5">
-        <span className={active ? "text-brand-700" : "text-foreground"}>
-          {label}
-        </span>
-        {active ? (
-          <ChevronDown
-            className={cn(
-              "w-3 h-3 text-brand-600 transition-transform",
-              sortDir === "desc" && "rotate-180"
+          <SheetBody>
+            {sheetMode === "view" && active ? (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-border/60 bg-muted/10 px-3">
+                  <MasterViewRow label="GST Name" value={active.gstName} />
+                  <MasterViewRow label="GST ID" value={<span className="font-mono">{active.gstId}</span>} />
+                  <MasterViewRow label="GST Percentage" value={`${active.gstPercentage}%`} />
+                  <MasterViewRow label="GST Type" value={active.gstType} />
+                  <MasterViewRow label="Applicable From Date" value={active.applicableFromDate} />
+                  <MasterViewRow label="Status" value={active.status === "active" ? "Active" : "Inactive"} />
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs pt-2 border-t">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
+                    <p className="font-medium">{active.createdBy}</p>
+                    <p className="text-muted-foreground">{active.createdDate}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Updated By</p>
+                    <p className="font-medium">{active.updatedBy}</p>
+                    <p className="text-muted-foreground">{active.updatedDate}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">GST ID (Auto)</Label>
+                    <Input
+                      value={form.gstId}
+                      disabled
+                      className="h-8 text-xs cursor-not-allowed bg-muted/30 text-muted-foreground"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">
+                      GST Name <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      value={form.gstName}
+                      onChange={(e) => setFormField("gstName", e.target.value)}
+                      placeholder="e.g., Standard IGST"
+                      className={cn("h-8 text-xs", errors.gstName && "border-red-400 focus-visible:ring-red-300")}
+                    />
+                    {errors.gstName && <p className="text-[11px] text-red-500">{errors.gstName}</p>}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">
+                      GST Percentage <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      type="number"
+                      value={form.gstPercentage}
+                      onChange={(e) => setFormField("gstPercentage", parseFloat(e.target.value) || 0)}
+                      placeholder="e.g., 18.0"
+                      step="0.01"
+                      min="0"
+                      className={cn("h-8 text-xs", errors.gstPercentage && "border-red-400 focus-visible:ring-red-300")}
+                    />
+                    {errors.gstPercentage && <p className="text-[11px] text-red-500">{errors.gstPercentage}</p>}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">
+                      GST Type <span className="text-red-500">*</span>
+                    </Label>
+                    <select
+                      value={form.gstType}
+                      onChange={(e) => setFormField("gstType", e.target.value)}
+                      className="w-full h-8 px-2 text-xs border border-border rounded-lg bg-background"
+                    >
+                      {["CGST", "SGST", "IGST", "UTGST"].map((type) => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label className="text-xs font-medium">
+                      Applicable From Date <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      type="date"
+                      value={form.applicableFromDate}
+                      onChange={(e) => setFormField("applicableFromDate", e.target.value)}
+                      className={cn("h-8 text-xs", errors.applicableFromDate && "border-red-400 focus-visible:ring-red-300")}
+                    />
+                    {errors.applicableFromDate && <p className="text-[11px] text-red-500">{errors.applicableFromDate}</p>}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/20 mt-4">
+                  <div>
+                    <p className="text-xs font-medium">Status</p>
+                    <p className="text-[11px] text-muted-foreground">{form.status === "active" ? "Active" : "Inactive"}</p>
+                  </div>
+                  <Switch
+                    checked={form.status === "active"}
+                    onCheckedChange={(checked) =>
+                      setFormField("status", checked ? "active" : "inactive")
+                    }
+                  />
+                </div>
+              </div>
             )}
-          />
-        ) : (
-          <ChevronsUpDown className="w-3 h-3 transition-colors text-muted-foreground/40 group-hover:text-muted-foreground" />
-        )}
-      </div>
-    </th>
+          </SheetBody>
+
+          <SheetFooter>
+            {sheetMode === "view" ? (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Back
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                  onClick={() => active && openEdit(active)}
+                >
+                  Edit
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                  onClick={persist}
+                >
+                  Save
+                </Button>
+              </>
+            )}
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Delete record?</DialogTitle>
+            <DialogDescription className="text-xs">
+              This action cannot be undone. The record will be permanently removed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" onClick={confirmDelete}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
+    </AppLayout>
   );
 }

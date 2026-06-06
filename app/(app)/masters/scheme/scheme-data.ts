@@ -5,30 +5,27 @@ import {
   type MasterStatus,
 } from "@/lib/masters/common";
 
-export type SchemeType = "discount" | "quantity_offer" | "cashback" | "other";
-
-export const SCHEME_TYPE_OPTIONS: { value: SchemeType; label: string }[] = [
-  { value: "discount", label: "Discount" },
-  { value: "quantity_offer", label: "Quantity Offer" },
-  { value: "cashback", label: "Cashback" },
-  { value: "other", label: "Other" },
-];
+export type DiscountType = "Percentage" | "Flat";
 
 export const SCHEME_STORAGE_KEY = "ds_master_scheme_v1";
 
 export interface SchemeRecord extends BaseMasterRecord {
   schemeName: string;
   schemeCode: string;
-  schemeType: SchemeType;
-  startDate: string;
-  endDate: string;
+  discountType: DiscountType;
+  percentage?: number;
+  flatDiscountAmount?: number;
+  startDate?: string;
+  endDate?: string;
   description: string;
 }
 
 export interface SchemeForm {
   schemeName: string;
   schemeCode: string;
-  schemeType: SchemeType;
+  discountType: DiscountType;
+  percentage: string;
+  flatDiscountAmount: string;
   startDate: string;
   endDate: string;
   description: string;
@@ -38,7 +35,9 @@ export interface SchemeForm {
 export const DEFAULT_SCHEME_FORM: SchemeForm = {
   schemeName: "",
   schemeCode: "",
-  schemeType: "discount",
+  discountType: "Percentage",
+  percentage: "",
+  flatDiscountAmount: "",
   startDate: "",
   endDate: "",
   description: "",
@@ -50,7 +49,8 @@ export const SCHEME_SEED: SchemeRecord[] = [
     id: 1,
     schemeName: "Monsoon Discount 2025",
     schemeCode: "SCH-001",
-    schemeType: "discount",
+    discountType: "Percentage",
+    percentage: 10,
     startDate: "2025-06-01",
     endDate: "2025-09-30",
     description: "Seasonal discount on select SKUs",
@@ -62,12 +62,13 @@ export const SCHEME_SEED: SchemeRecord[] = [
   },
   {
     id: 2,
-    schemeName: "Buy 10 Get 1",
+    schemeName: "Festive Flat Offer",
     schemeCode: "SCH-002",
-    schemeType: "quantity_offer",
+    discountType: "Flat",
+    flatDiscountAmount: 500,
     startDate: "2025-04-01",
     endDate: "2025-12-31",
-    description: "Volume offer for distributors",
+    description: "Flat offer for distributors",
     status: "active",
     createdBy: "Admin",
     updatedBy: "Admin",
@@ -76,17 +77,15 @@ export const SCHEME_SEED: SchemeRecord[] = [
   },
 ];
 
-export function schemeTypeLabel(t: SchemeType): string {
-  return SCHEME_TYPE_OPTIONS.find((o) => o.value === t)?.label ?? t;
-}
-
 export function schemeToForm(r: SchemeRecord): SchemeForm {
   return {
     schemeName: r.schemeName,
     schemeCode: r.schemeCode,
-    schemeType: r.schemeType,
-    startDate: r.startDate,
-    endDate: r.endDate,
+    discountType: r.discountType,
+    percentage: r.percentage !== undefined ? String(r.percentage) : "",
+    flatDiscountAmount: r.flatDiscountAmount !== undefined ? String(r.flatDiscountAmount) : "",
+    startDate: r.startDate ?? "",
+    endDate: r.endDate ?? "",
     description: r.description,
     status: r.status,
   };
@@ -94,13 +93,16 @@ export function schemeToForm(r: SchemeRecord): SchemeForm {
 
 export function formToScheme(form: SchemeForm, id: number, existing?: SchemeRecord): SchemeRecord {
   const now = masterToday();
+  const isPerc = form.discountType === "Percentage";
   return {
     id,
     schemeName: form.schemeName.trim(),
     schemeCode: form.schemeCode.trim(),
-    schemeType: form.schemeType,
-    startDate: form.startDate,
-    endDate: form.endDate,
+    discountType: form.discountType,
+    percentage: isPerc && form.percentage ? parseFloat(form.percentage) : undefined,
+    flatDiscountAmount: !isPerc && form.flatDiscountAmount ? parseFloat(form.flatDiscountAmount) : undefined,
+    startDate: form.startDate ? form.startDate : undefined,
+    endDate: form.endDate ? form.endDate : undefined,
     description: form.description.trim(),
     status: form.status,
     createdBy: existing?.createdBy ?? MASTER_CURRENT_USER,
@@ -113,8 +115,17 @@ export function formToScheme(form: SchemeForm, id: number, existing?: SchemeReco
 export function validateSchemeForm(form: SchemeForm): string | null {
   if (!form.schemeName.trim()) return "Scheme name is required.";
   if (!form.schemeCode.trim()) return "Scheme code is required.";
-  if (!form.startDate) return "Start date is required.";
-  if (!form.endDate) return "End date is required.";
-  if (form.startDate > form.endDate) return "End date must be after start date.";
+  if (form.discountType === "Percentage") {
+    if (!form.percentage || isNaN(parseFloat(form.percentage)) || parseFloat(form.percentage) <= 0) {
+      return "Percentage is required and must be greater than 0.";
+    }
+  } else if (form.discountType === "Flat") {
+    if (!form.flatDiscountAmount || isNaN(parseFloat(form.flatDiscountAmount)) || parseFloat(form.flatDiscountAmount) <= 0) {
+      return "Flat Discount Amount is required and must be greater than 0.";
+    }
+  }
+  if (form.startDate && form.endDate && form.startDate > form.endDate) {
+    return "End date must be after start date.";
+  }
   return null;
 }

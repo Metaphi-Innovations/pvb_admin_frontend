@@ -1,38 +1,36 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Save, X, XCircle } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { ArrowLeft, CheckCircle2, Save, XCircle } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { loadCustomerTypes, saveCustomerTypes, type CustomerTypeRecord } from "../../customer-type-data";
 import {
-  generateProductCode,
-  loadProducts,
-  nextProductId,
-  saveProducts,
-  todayStr,
-  type ProductMediaItem,
-} from "../product-data";
-import {
-  DEFAULT_PRODUCT_FORM,
-  formValuesToProduct,
-  ProductForm,
-  type ProductFormValues,
-  validateProductForm,
-} from "../components/ProductForm";
+  CustomerTypeForm,
+  type CustomerTypeFormValues,
+  validateCustomerTypeForm,
+} from "../../components/CustomerTypeForm";
 
-export default function NewProductPage() {
+export default function EditCustomerTypePage() {
   const router = useRouter();
-  const [form, setForm] = useState<ProductFormValues>(DEFAULT_PRODUCT_FORM);
+  const { id } = useParams<{ id: string }>();
+  const [form, setForm] = useState<CustomerTypeFormValues | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [productCode, setProductCode] = useState("PRD-0001");
-  const [mediaItems, setMediaItems] = useState<ProductMediaItem[]>([]);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
   useEffect(() => {
-    setProductCode(generateProductCode(loadProducts()));
-  }, []);
+    const list = loadCustomerTypes();
+    const found = list.find((c) => c.id === Number(id));
+    if (!found) return;
+    setForm({
+      customerType: found.customerType,
+      description: found.description,
+      documentTypes: found.documentTypes || [],
+    });
+  }, [id]);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -42,7 +40,8 @@ export default function NewProductPage() {
     });
 
   const handleSave = () => {
-    const validation = validateProductForm(form);
+    if (!form) return;
+    const validation = validateCustomerTypeForm(form);
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
       setToast({ msg: "Please fix the errors before saving.", type: "error" });
@@ -50,38 +49,40 @@ export default function NewProductPage() {
       return;
     }
 
-    const list = loadProducts();
-    const today = todayStr();
-    const record = formValuesToProduct(form, {
-      id: nextProductId(list),
-      productId: productCode,
-      mediaItems,
-      createdBy: "Admin",
-      createdDate: today,
-    });
+    const list = loadCustomerTypes();
+    const updated = list.map((c) =>
+      c.id === Number(id)
+        ? {
+            ...c,
+            customerType: form.customerType.trim(),
+            description: form.description.trim(),
+            documentTypes: form.documentTypes || [],
+          }
+        : c,
+    );
 
-    saveProducts([...list, record]);
-    setToast({ msg: "Product created successfully.", type: "success" });
-    setTimeout(() => router.push("/masters/products"), 900);
+    saveCustomerTypes(updated);
+    setToast({ msg: "Customer Type updated successfully.", type: "success" });
+    setTimeout(() => router.push(`/masters/customer-types/${id}`), 900);
   };
 
-  const addMedia = (items: ProductMediaItem[]) => setMediaItems((prev) => [...prev, ...items]);
-  const removeMedia = (id: string) =>
-    setMediaItems((prev) => {
-      const next = prev.filter((item) => {
-        if (item.id !== id) return true;
-        if (typeof item.url === "string" && item.url.startsWith("blob:")) {
-          URL.revokeObjectURL(item.url);
-        }
-        return false;
-      });
-      return next;
-    });
-  const uploadMedia = () => setMediaItems((prev) => prev.map((item) => (item.uploaded ? item : { ...item, uploaded: true })));
+  if (!form) {
+    return (
+      <AppLayout>
+        <div className="py-16 text-center">
+          <p className="text-sm text-muted-foreground">Customer Type not found.</p>
+          <Link href="/masters/customer-types" className="text-xs text-brand-600 hover:underline mt-2 inline-block">
+            Back to listing
+          </Link>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
       <div className="flex flex-col h-full">
+        {/* Header */}
         <div className="sticky top-0 z-10 flex items-center flex-shrink-0 gap-3 px-5 py-3 bg-white border-b border-border">
           <button
             type="button"
@@ -91,12 +92,9 @@ export default function NewProductPage() {
             <ArrowLeft className="w-4 h-4 text-muted-foreground" />
           </button>
           <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold leading-none text-foreground">Add Product</h2>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Masters → Product Master → Add</p>
+            <h2 className="text-sm font-semibold leading-none text-foreground">Edit Customer Type</h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Masters → Customer Type Master → Edit</p>
           </div>
-          <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
-            {productCode}
-          </span>
           <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => router.back()}>
             Discard
           </Button>
@@ -105,21 +103,21 @@ export default function NewProductPage() {
             className="h-7 text-[11px] gap-1.5 px-3 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
           >
-            <Save className="w-3.5 h-3.5" /> Save
+            <Save className="w-3.5 h-3.5" /> Update Customer Type
           </Button>
         </div>
 
         {/* Form Content */}
         <div className="flex-1 px-6 py-6 overflow-y-auto bg-muted/10">
-          <ProductForm
+          <CustomerTypeForm
             form={form}
             onChange={setForm}
             errors={errors}
             onClearError={clearErr}
-            mediaItems={mediaItems}
-            onMediaAdd={addMedia}
-            onMediaRemove={removeMedia}
-            onMediaUpload={uploadMedia}
+            triggerToast={(msg, type) => {
+              setToast({ msg, type });
+              setTimeout(() => setToast(null), 3200);
+            }}
           />
         </div>
       </div>

@@ -49,7 +49,7 @@ interface ToastState {
 
 function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
   return (
-    <div className={cn("fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium", toast.type === "success" ? "bg-emerald-600" : "bg-red-600")}>
+    <div className={cn("fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium", toast.type === "success" ? "bg-emerald-600" : "bg-red-600")}>
       <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
@@ -144,4 +144,3 @@ export default function SubCategoryDetailPage() {
     </AppLayout>
   );
 }
-

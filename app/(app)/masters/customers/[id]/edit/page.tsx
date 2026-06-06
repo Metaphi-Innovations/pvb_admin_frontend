@@ -26,8 +26,8 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
   return (
     <div
       className={cn(
-        "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
-        "animate-in slide-in-from-bottom-2 fade-in-0 duration-300",
+        "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+        "animate-in slide-in-from-top-2 fade-in-0 duration-300",
         toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
       )}
     >
@@ -74,7 +74,11 @@ export default function EditCustomerPage() {
     const e = validateCustomerForm(form);
     setErrors(e);
     if (Object.keys(e).length > 0) {
-      setToast({ msg: "Please fix the errors before saving.", type: "error" });
+      const hasProductErrors = Object.keys(e).some((key) => key.startsWith("product_"));
+      const msg = hasProductErrors
+        ? "Please complete product details before saving."
+        : e.requiredDocuments || "Please fix the errors before saving.";
+      setToast({ msg, type: "error" });
       setTimeout(() => setToast(null), 3200);
       return;
     }
@@ -188,6 +192,7 @@ export default function EditCustomerPage() {
             form={form}
             onChange={setForm}
             errors={errors}
+            onSetErrors={setErrors}
             onClearError={clearErr}
           />
         </div>

@@ -20,6 +20,8 @@ import {
 	Search,
 	SlidersHorizontal,
 	X,
+	Folder,
+	XCircle,
 } from "lucide-react";
 import {
 	DropdownMenu,
@@ -39,6 +41,7 @@ import {
 	type SubCategoryStatus,
 	todayStr,
 } from "./subcategory-data";
+import { MiniKPICard } from "@/components/ui/KPICard";
 
 type SortKey =
 	| "subCategoryCode"
@@ -62,7 +65,7 @@ function Toast({
 	return (
 		<div
 			className={cn(
-				"fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+				"fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
 				toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
 			)}
 		>
@@ -344,27 +347,10 @@ export default function SubCategoryMasterPage() {
 					</div>
 				</div>
 
-				<div className='grid grid-cols-3 gap-3'>
-					<div className='p-3 bg-white border shadow-sm rounded-xl border-border'>
-						<p className='text-base font-bold text-foreground'>
-							{records.length}
-						</p>
-						<p className='mt-0.5 text-[11px] text-muted-foreground'>
-							Total Sub Categories
-						</p>
-					</div>
-					<div className='p-3 bg-white border shadow-sm rounded-xl border-border'>
-						<p className='text-base font-bold text-foreground'>
-							{records.filter((r) => r.status === "active").length}
-						</p>
-						<p className='mt-0.5 text-[11px] text-muted-foreground'>Active</p>
-					</div>
-					<div className='p-3 bg-white border shadow-sm rounded-xl border-border'>
-						<p className='text-base font-bold text-foreground'>
-							{records.filter((r) => r.status === "inactive").length}
-						</p>
-						<p className='mt-0.5 text-[11px] text-muted-foreground'>Inactive</p>
-					</div>
+				<div className="grid grid-cols-3 gap-3">
+					<MiniKPICard label="Total Sub Categories" value={records.length} icon={Folder} accent={true} />
+					<MiniKPICard label="Active" value={records.filter((r) => r.status === "active").length} icon={CheckCircle2} accent={false} />
+					<MiniKPICard label="Inactive" value={records.filter((r) => r.status === "inactive").length} icon={XCircle} accent={false} />
 				</div>
 
 				<div className='flex flex-wrap items-center gap-2'>

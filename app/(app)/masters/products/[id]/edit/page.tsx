@@ -136,7 +136,7 @@ export default function EditProductPage() {
       {toast && (
         <div
           className={cn(
-            "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+            "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
             toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
           )}
         >

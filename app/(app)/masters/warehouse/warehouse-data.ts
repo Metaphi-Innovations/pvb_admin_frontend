@@ -203,6 +203,8 @@ export function loadWarehouses(): WarehouseMaster[] {
   }
 }
 
+export const loadWarehouseLocations = loadWarehouses;
+
 export function saveWarehouses(records: WarehouseMaster[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: SEED_VERSION, data: records }));
