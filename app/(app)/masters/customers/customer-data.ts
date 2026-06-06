@@ -1,4 +1,4 @@
-﻿// ── Customer Master — types, seed, storage, validation, master linkages ─────
+// ── Customer Master — types, seed, storage, validation, master linkages ─────
 
 import { loadGSTMasters, type GSTMaster } from "../gst/gst-data";
 import { loadTDSMasters, type TDSMaster } from "../tds/tds-data";
@@ -17,6 +17,40 @@ export interface StatusChange {
   to: string;
   by: string;
   reason: string;
+}
+
+export interface CustomerProductMapping {
+  id: string;
+  productId: string;
+  productName: string;
+  sku?: string;
+  mrp?: number;
+  price?: number;
+  discountType?: "Percentage" | "Flat";
+  discountValue?: number;
+  status: "Active" | "Inactive";
+}
+
+export interface BranchAddress {
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+}
+
+export interface BranchDocument {
+  documentName: string;
+  required: boolean;
+  fileName?: string;
+  fileUrl?: string;
+}
+
+export interface CustomerBranch {
+  branchName: string;
+  isMain?: boolean;
+  billingAddress: BranchAddress;
+  shippingAddress: BranchAddress;
+  documents: BranchDocument[];
 }
 
 export interface Customer {
@@ -68,6 +102,26 @@ export interface Customer {
   updatedDate: string;
   lastStatusChange: string;
   statusHistory: StatusChange[];
+  documents?: {
+    requiredDocuments: {
+      documentTypeId: string;
+      documentName: string;
+      required: true;
+      fileName?: string;
+      fileUrl?: string;
+    }[];
+    additionalDocuments: {
+      id: string;
+      title: string;
+      fileName?: string;
+      fileUrl?: string;
+    }[];
+  };
+  
+  // NEW FIELDS
+  customerProducts?: CustomerProductMapping[];
+  products?: CustomerProductMapping[];
+  branches?: CustomerBranch[];
 }
 
 export const CUSTOMER_TYPE_OPTIONS = [
@@ -1255,6 +1309,13 @@ function migrateCustomer(raw: Record<string, unknown>): Customer {
     updatedDate: c.updatedDate ?? "",
     lastStatusChange: c.lastStatusChange ?? "",
     statusHistory: c.statusHistory ?? [],
+    documents: c.documents ?? {
+      requiredDocuments: [],
+      additionalDocuments: [],
+    },
+    customerProducts: c.customerProducts ?? (c as any).products ?? [],
+    products: c.customerProducts ?? (c as any).products ?? [],
+    branches: c.branches ?? [],
   };
 }
 

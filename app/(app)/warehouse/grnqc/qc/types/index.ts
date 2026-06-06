@@ -14,10 +14,12 @@ export interface QcRecord {
   id: string;
   qcNo: string;
   grnNo: string;
+  poNumber?: string;
   vendorName: string;
   inspectionDate: string;
   totalAcceptedQty: number;
   totalRejectedQty: number;
   status: QcStatus;
+  qcRemarks?: string;
   items: QcItem[];
 }

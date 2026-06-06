@@ -70,6 +70,7 @@ interface DataTableProps<T = Record<string, unknown>> {
   onRowClick?:    (row: T) => void;
   emptyModule?:   string;
   className?:     string;
+  hideColumnSelection?: boolean;
 }
 
 // ── DataTable ─────────────────────────────────────────────────────────────────
@@ -83,6 +84,7 @@ export function DataTable<T = Record<string, unknown>>({
   actions, filterSlot, bulkActions,
   rowKey = (r: T) => JSON.stringify(r),
   onRowClick, emptyModule, className,
+  hideColumnSelection = false,
 }: DataTableProps<T>) {
   const [sortKey,     setSortKey]     = useState<string | null>(null);
   const [sortDir,     setSortDir]     = useState<"asc" | "desc">("asc");
@@ -183,31 +185,33 @@ export function DataTable<T = Record<string, unknown>>({
         {/* Right actions */}
         <div className="ml-auto flex items-center gap-2">
           {/* Column visibility */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-                <Columns3 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Columns</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              {columns.filter(c => c.hideable !== false).map(col => (
-                <div
-                  key={col.key}
-                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 cursor-pointer"
-                  onClick={() => toggleHidden(col.key)}
-                >
-                  <div className={cn(
-                    "w-4 h-4 rounded border flex items-center justify-center",
-                    !hiddenCols.has(col.key) ? "bg-brand-500 border-brand-500" : "border-border",
-                  )}>
-                    {!hiddenCols.has(col.key) && <Check className="w-2.5 h-2.5 text-white" />}
+          {!hideColumnSelection && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                  <Columns3 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Columns</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                {columns.filter(c => c.hideable !== false).map(col => (
+                  <div
+                    key={col.key}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 cursor-pointer"
+                    onClick={() => toggleHidden(col.key)}
+                  >
+                    <div className={cn(
+                      "w-4 h-4 rounded border flex items-center justify-center",
+                      !hiddenCols.has(col.key) ? "bg-brand-500 border-brand-500" : "border-border",
+                    )}>
+                      {!hiddenCols.has(col.key) && <Check className="w-2.5 h-2.5 text-white" />}
+                    </div>
+                    <span className="text-xs">{col.header}</span>
                   </div>
-                  <span className="text-xs">{col.header}</span>
-                </div>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
           {/* Export */}
           <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">

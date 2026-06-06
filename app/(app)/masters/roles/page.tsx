@@ -32,8 +32,8 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
       : "bg-red-600";
   return (
     <div className={cn(
-      "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium max-w-xs",
-      "animate-in slide-in-from-bottom-2 fade-in-0 duration-300",
+      "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium max-w-xs",
+      "animate-in slide-in-from-top-2 fade-in-0 duration-300",
       bg,
     )}>
       {toast.type === "success"

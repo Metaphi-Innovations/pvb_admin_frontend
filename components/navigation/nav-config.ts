@@ -16,7 +16,9 @@ import {
   Settings2,
   Receipt,
   BadgeCheck,
-  Warehouse
+  Warehouse,
+  ArrowLeftRight,
+  PieChart,
 } from "lucide-react";
 
 export interface NavChild {
@@ -70,13 +72,13 @@ export const NAV_ITEMS: NavItem[] = [
     icon: BookOpen,
     children: [
       { label: "Category", href: "/masters/categories" },
-      { label: "Sub Category", href: "/masters/subcategories" },
       { label: "Segment", href: "/masters/segment" },
       { label: "Formulation", href: "/masters/formulation" },
       { label: "CFU", href: "/masters/cfu" },
       { label: "Unit", href: "/masters/uom" },
       { label: "Scheme", href: "/masters/scheme" },
       { label: "Customers", href: "/masters/customers" },
+      { label: "Customer Type", href: "/masters/customer-types" },
       { label: "Vendor Master", href: "/masters/vendors" },
       { label: "Products", href: "/masters/products" },
       { label: "Warehouse", href: "/masters/warehouse" },
@@ -132,6 +134,7 @@ export const NAV_ITEMS: NavItem[] = [
           { label: "KM Reimbursement", href: "/hr/tada-config?tab=km" },
           { label: "Incidental Allowance", href: "/hr/tada-config?tab=incidental" },
           { label: "Claim Type Master", href: "/hr/tada-config?tab=claimType" },
+          { label: "Approval Hierarchy", href: "/hr/tada-config?tab=approval" },
         ],
       },
       {
@@ -156,28 +159,27 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Accounts",
     icon: Wallet,
     href: "/accounts",
+    menuLayout: "sidebar",
     groupedChildren: [
       {
-        label: "Masters",
-        children: [
-          { label: "Chart of Accounts", href: "/accounts/masters/chart-of-accounts" },
-          { label: "Ledgers", href: "/accounts/masters/ledgers" },
-        ],
-      },
-      {
         label: "Transactions",
+        description: "Invoices, payments, journals and other accounting entries.",
+        icon: ArrowLeftRight,
         children: [
+          { label: "Invoices", href: "/accounts/transactions/invoices" },
+          { label: "Credit Notes", href: "/accounts/transactions/credit-notes" },
           { label: "Purchase", href: "/accounts/transactions/purchase" },
-          { label: "Sales", href: "/accounts/transactions/sales" },
-          { label: "Purchase Return", href: "/accounts/transactions/purchase-return" },
-          { label: "Sales Return", href: "/accounts/transactions/sales-return" },
-          { label: "Payment", href: "/accounts/transactions/payment" },
-          { label: "Bank Reconciliation", href: "/accounts/transactions/bank-reconciliation" },
+          { label: "Debit Notes", href: "/accounts/transactions/debit-notes" },
+          { label: "Expenses", href: "/accounts/transactions/expenses" },
+          { label: "Payments", href: "/accounts/transactions/payments" },
+          { label: "Reconciliation", href: "/accounts/transactions/reconciliation" },
           { label: "Journal", href: "/accounts/transactions/journal" },
         ],
       },
       {
         label: "Reports",
+        description: "Financial reporting and summaries.",
+        icon: PieChart,
         children: [
           { label: "Trial Balance", href: "/accounts/reports/trial-balance" },
           { label: "P&L", href: "/accounts/reports/pl" },

@@ -12,7 +12,6 @@ import { PRFormFooter } from "../../components/PRFormFooter";
 import { formToPR, submitPR, todayStr } from "../../components/pr-form-utils";
 import { getPRById, loadPurchaseRequests, savePurchaseRequests } from "../../pr-data";
 import { CURRENT_USER } from "@/lib/procurement/config";
-import { Toast } from "../../../components/ProcurementUI";
 
 export default function EditPRPage() {
   const params = useParams();
@@ -20,7 +19,6 @@ export default function EditPRPage() {
   const id = Number(params.id);
   const [form, setForm] = useState<PRFormValues | null>(null);
   const [pr, setPr] = useState(getPRById(id));
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
   useEffect(() => {
     const p = getPRById(id);
@@ -49,29 +47,27 @@ export default function EditPRPage() {
     });
     if (asSubmit && ["draft", "rejected"].includes(pr.status)) record = submitPR(record);
     savePurchaseRequests(loadPurchaseRequests().map((p) => (p.id === id ? record : p)));
-    setToast({ msg: asSubmit ? "PR submitted." : "Saved.", type: "success" });
-    setTimeout(() => router.push(`/procurement/purchase-requests/${id}`), 800);
+    router.push(
+      `/procurement/purchase-requests?toast=${asSubmit ? "pr-submitted" : "pr-saved"}`,
+    );
   };
 
   return (
-    <>
-      <PRFormLayout
-        mode="edit"
-        prNumber={pr.prNumber}
-        pr={pr}
-        onSave={() => persist(false)}
-        footer={
-          <PRFormFooter
-            onCancel={() => router.push(`/procurement/purchase-requests/${id}`)}
-            onSaveDraft={() => persist(false)}
-            onSubmit={() => persist(true)}
-            showSubmit={["draft", "rejected"].includes(pr.status)}
-          />
-        }
-      >
-        <PurchaseRequestForm form={form} onChange={setForm} />
-      </PRFormLayout>
-      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-    </>
+    <PRFormLayout
+      mode="edit"
+      prNumber={pr.prNumber}
+      status={pr.status}
+      onSave={() => persist(false)}
+      footer={
+        <PRFormFooter
+          onCancel={() => router.push("/procurement/purchase-requests")}
+          onSaveDraft={() => persist(false)}
+          onSubmit={() => persist(true)}
+          showSubmit={["draft", "rejected"].includes(pr.status)}
+        />
+      }
+    >
+      <PurchaseRequestForm form={form} onChange={setForm} prNumber={pr.prNumber} />
+    </PRFormLayout>
   );
 }

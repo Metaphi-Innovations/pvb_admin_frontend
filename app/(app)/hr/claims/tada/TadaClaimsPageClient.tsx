@@ -20,15 +20,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, MoreVertical, Eye, Edit2, CheckCircle, XCircle, Receipt } from "lucide-react";
+import { Plus, MoreVertical, Eye, Edit2, CheckCircle, Receipt } from "lucide-react";
 import { HrStatusBadge } from "../../components/HrStatusBadge";
-import { HrApprovalModal, type HrApprovalAction } from "../../components/HrApprovalModal";
+import { TadaClaimApprovalModal } from "./components/TadaClaimApprovalModal";
 import {
   approveClaim,
+  approveClaimFull,
   getTadaClaimById,
   loadTadaClaims,
   rejectClaim,
   saveTadaClaims,
+  sendClaimToAccounts,
   submitClaim,
   type TadaClaim,
 } from "./tada-claim-data";
@@ -39,7 +41,6 @@ export default function TadaClaimsPageClient() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [approvalTarget, setApprovalTarget] = useState<TadaClaim | null>(null);
-  const [approvalAction, setApprovalAction] = useState<HrApprovalAction>("approve");
 
   const refresh = useCallback(() => setRecords(loadTadaClaims()), []);
   useEffect(() => {
@@ -60,18 +61,12 @@ export default function TadaClaimsPageClient() {
     return r.sort((a, b) => b.claimDate.localeCompare(a.claimDate));
   }, [records, search, statusFilter]);
 
-  const openApproval = (claim: TadaClaim, action: HrApprovalAction) => {
-    setApprovalTarget(claim);
-    setApprovalAction(action);
-  };
-
-  const handleApproval = (remarks: string) => {
-    if (!approvalTarget) return;
-    const updated =
-      approvalAction === "approve"
-        ? approveClaim(approvalTarget, remarks)
-        : rejectClaim(approvalTarget, remarks);
-    saveTadaClaims(records.map((c) => (c.id === updated.id ? updated : c)));
+  const persistClaim = (updated: TadaClaim) => {
+    let next = updated;
+    if (next.status === "approved" && next.paymentStatus !== "sent_to_accounts") {
+      next = sendClaimToAccounts(next);
+    }
+    saveTadaClaims(records.map((c) => (c.id === next.id ? next : c)));
     setApprovalTarget(null);
     refresh();
   };
@@ -136,6 +131,7 @@ export default function TadaClaimsPageClient() {
                   <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Period</th>
                   <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Claim Date</th>
                   <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Amount</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Approval Level</th>
                   <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Status</th>
                   <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground w-16">Actions</th>
                 </tr>
@@ -143,7 +139,7 @@ export default function TadaClaimsPageClient() {
               <tbody>
                 {visible.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-3 py-12 text-center text-xs text-muted-foreground">
+                    <td colSpan={8} className="px-3 py-12 text-center text-xs text-muted-foreground">
                       No claims found.
                     </td>
                   </tr>
@@ -157,6 +153,9 @@ export default function TadaClaimsPageClient() {
                       </td>
                       <td className="px-3 py-2 text-xs text-muted-foreground">{c.claimDate}</td>
                       <td className="px-3 py-2 text-xs font-medium">₹{c.claimAmount.toLocaleString("en-IN")}</td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">
+                        {c.currentApprovalLevelLabel ?? (c.status === "approved" ? "Complete" : "—")}
+                      </td>
                       <td className="px-3 py-2">
                         <HrStatusBadge status={c.status} />
                       </td>
@@ -186,20 +185,12 @@ export default function TadaClaimsPageClient() {
                               </DropdownMenuItem>
                             )}
                             {c.status === "pending_approval" && (
-                              <>
-                                <DropdownMenuItem
-                                  className="text-xs gap-2 text-emerald-700"
-                                  onClick={() => openApproval(c, "approve")}
-                                >
-                                  <CheckCircle className="w-3.5 h-3.5" /> Approve
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-xs gap-2 text-red-600"
-                                  onClick={() => openApproval(c, "reject")}
-                                >
-                                  <XCircle className="w-3.5 h-3.5" /> Reject
-                                </DropdownMenuItem>
-                              </>
+                              <DropdownMenuItem
+                                className="text-xs gap-2 text-emerald-700"
+                                onClick={() => setApprovalTarget(c)}
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" /> Approve / Reject
+                              </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -213,15 +204,15 @@ export default function TadaClaimsPageClient() {
         </div>
       </div>
 
-      <HrApprovalModal
+      <TadaClaimApprovalModal
         open={!!approvalTarget}
         onClose={() => setApprovalTarget(null)}
-        title={approvalAction === "approve" ? "Approve TA/DA Claim" : "Reject TA/DA Claim"}
-        referenceLabel="Claim No."
-        referenceValue={approvalTarget?.claimNumber ?? ""}
-        employeeValue={approvalTarget?.employeeName}
-        action={approvalAction}
-        onConfirm={handleApproval}
+        claim={approvalTarget}
+        onApproveFull={(remarks) => approvalTarget && persistClaim(approveClaimFull(approvalTarget, remarks))}
+        onApprovePartial={(amount, remarks) =>
+          approvalTarget && persistClaim(approveClaim(approvalTarget, amount, remarks))
+        }
+        onReject={(remarks) => approvalTarget && persistClaim(rejectClaim(approvalTarget, remarks))}
       />
     </AppLayout>
   );

@@ -81,10 +81,10 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
         {/* Section 1: Header Info Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
-            { label: "GRN Reference", val: qc.grnNo, icon: FileText },
+            { label: "GRN No.", val: qc.grnNo, icon: FileText },
+            { label: "PO No.", val: qc.poNumber ?? "—", icon: FileText },
             { label: "Vendor", val: qc.vendorName, icon: CheckCircle2 },
             { label: "Inspection Date", val: qc.inspectionDate, icon: Calendar },
-            { label: "Approved Stocks", val: `${qc.totalAcceptedQty} Units`, icon: CheckCircle2, accent: true },
           ].map((card, idx) => {
             const Icon = card.icon;
             return (
@@ -103,6 +103,41 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
               </div>
             );
           })}
+        </div>
+
+        {qc.qcRemarks && (
+          <div className="bg-white rounded-xl border border-border p-4 shadow-sm">
+            <h2 className="text-xs font-bold text-foreground uppercase tracking-wider mb-2">QC Remarks</h2>
+            <p className="text-xs text-foreground">{qc.qcRemarks}</p>
+          </div>
+        )}
+
+        <div className="bg-white rounded-xl border border-border p-4 shadow-sm space-y-4">
+          <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">
+            Product QC Summary
+          </h2>
+          <div className="border border-border rounded-lg overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-muted/40 border-b border-border">
+                  <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground">Product</th>
+                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-28">Received Qty</th>
+                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-emerald-800 w-28">Accepted Qty</th>
+                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-red-800 w-28">Rejected Qty</th>
+                </tr>
+              </thead>
+              <tbody>
+                {qc.items.map((it, idx) => (
+                  <tr key={idx} className="border-b border-border/50">
+                    <td className="px-4 py-2 text-xs font-bold text-foreground">{it.productName}</td>
+                    <td className="px-4 py-2 text-xs text-center tabular-nums">{it.receivedQty}</td>
+                    <td className="px-4 py-2 text-xs text-center tabular-nums text-emerald-700">{it.acceptedQty}</td>
+                    <td className="px-4 py-2 text-xs text-center tabular-nums text-red-700">{it.rejectedQty}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* Section 2: Accepted Stock Grid */}

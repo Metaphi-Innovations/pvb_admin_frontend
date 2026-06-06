@@ -1,5 +1,5 @@
 "use client";
 
-import { createTxnPage } from "../../createTxnPage";
+import { createLazyClientPage } from "@/lib/createLazyClientPage";
 
-export default createTxnPage("purchase", "Purchase", "Supplier");
+export default createLazyClientPage(() => import("../../purchase/PurchasePageClient"));

@@ -70,6 +70,7 @@ export function TransactionPage({
       sales: "SAL",
       purchase_return: "PRT",
       sales_return: "SRT",
+      expenses: "EXP",
       payment: "PAY",
       bank_reconciliation: "BNK",
       journal: "JRN",

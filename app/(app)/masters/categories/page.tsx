@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +19,9 @@ import {
   Search,
   SlidersHorizontal,
   X,
+  Folder,
+  XCircle,
+  Trash2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -28,7 +30,29 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { loadCategories, saveCategories, type Category, type CategoryStatus, todayStr } from "./category-data";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetBody,
+  SheetFooter,
+} from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { loadCategories, saveCategories, type Category, type CategoryStatus, todayStr, nextCategoryId, generateCategoryCode } from "./category-data";
+import { MiniKPICard } from "@/components/ui/KPICard";
+import { CategoryForm, DEFAULT_CATEGORY_FORM, type CategoryFormValues, validateCategoryForm } from "./components/CategoryForm";
+import { MasterFormGrid, MasterViewRow } from "@/components/masters/MasterModule";
 
 type SortKey = "categoryCode" | "categoryName" | "description" | "status";
 
@@ -41,7 +65,7 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
   return (
     <div
       className={cn(
-        "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+        "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
         toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
       )}
     >
@@ -57,7 +81,10 @@ function StatusToggle({ record, onToggle }: { record: Category; onToggle: (item:
   return (
     <button
       type="button"
-      onClick={() => onToggle(record)}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(record);
+      }}
       className={cn(
         "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
         active ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
@@ -101,79 +128,6 @@ function SortTh({
   );
 }
 
-function FilterPopover({
-  label,
-  options,
-  values,
-  onChange,
-}: {
-  label: string;
-  options: string[];
-  values: string[];
-  onChange: (values: string[]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<string[]>(values);
-
-  useEffect(() => {
-    if (open) setDraft(values);
-  }, [open, values]);
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "inline-flex items-center justify-center rounded p-1 transition-colors hover:bg-muted",
-            values.length ? "bg-brand-50 text-brand-600" : "text-muted-foreground/40 hover:text-muted-foreground/80",
-          )}
-        >
-          <SlidersHorizontal className="h-3 w-3" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="z-50 w-[220px] p-2.5 shadow-xl">
-        <div className="space-y-2">
-          <div className="text-[11px] font-medium text-muted-foreground">{label}</div>
-          <div className="max-h-44 space-y-1 overflow-y-auto">
-            {options.map((option) => (
-              <button
-                key={option}
-                type="button"
-                className={cn(
-                  "flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs hover:bg-muted/60",
-                  draft.includes(option) && "bg-brand-50 text-brand-700",
-                )}
-                onClick={() =>
-                  setDraft((prev) => (prev.includes(option) ? prev.filter((v) => v !== option) : [...prev, option]))
-                }
-              >
-                <span>{option}</span>
-                {draft.includes(option) ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center justify-end gap-1.5 pt-1">
-            <Button type="button" variant="outline" className="h-8 px-2.5 text-[11px]" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="h-8 px-2.5 text-[11px] bg-brand-600 text-white hover:bg-brand-700"
-              onClick={() => {
-                onChange(draft);
-                setOpen(false);
-              }}
-            >
-              Apply
-            </Button>
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 export default function CategoryMasterPage() {
   const [records, setRecords] = useState<Category[]>([]);
   const [search, setSearch] = useState("");
@@ -183,6 +137,13 @@ export default function CategoryMasterPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
+
+  // Sheet & Dialog states
+  const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
+  const [active, setActive] = useState<Category | null>(null);
+  const [form, setForm] = useState<CategoryFormValues>(DEFAULT_CATEGORY_FORM);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
 
   useEffect(() => {
     setRecords(loadCategories());
@@ -244,6 +205,135 @@ export default function CategoryMasterPage() {
     setToast({ msg: `Category status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`, type: "success" });
   };
 
+  const openAdd = () => {
+    const code = generateCategoryCode(records);
+    setForm({
+      ...DEFAULT_CATEGORY_FORM,
+      categoryCode: code,
+    });
+    setErrors({});
+    setActive(null);
+    setSheetMode("add");
+  };
+
+  const openEdit = (row: Category) => {
+    setForm({
+      categoryCode: row.categoryCode,
+      categoryName: row.categoryName,
+      description: row.description,
+      status: row.status,
+    });
+    setErrors({});
+    setActive(row);
+    setSheetMode("edit");
+  };
+
+  const openView = (row: Category) => {
+    setActive(row);
+    setSheetMode("view");
+  };
+
+  const closeSheet = () => {
+    setSheetMode(null);
+    setActive(null);
+    setErrors({});
+  };
+
+  const persist = () => {
+    const mode = sheetMode === "add" ? "add" : "edit";
+    const errs = validateCategoryForm(form);
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      return;
+    }
+    const list = loadCategories();
+    let updatedList: Category[];
+    if (mode === "add") {
+      const id = nextCategoryId(list);
+      const newRecord: Category = {
+        id,
+        categoryCode: form.categoryCode,
+        categoryName: form.categoryName,
+        description: form.description,
+        status: form.status,
+        createdBy: "Admin",
+        createdDate: todayStr(),
+        updatedBy: "Admin",
+        updatedDate: todayStr(),
+      };
+      updatedList = [...list, newRecord];
+      setToast({ msg: "Category added successfully", type: "success" });
+    } else if (active) {
+      updatedList = list.map((r) =>
+        r.id === active.id
+          ? {
+              ...r,
+              categoryName: form.categoryName,
+              description: form.description,
+              status: form.status,
+              updatedBy: "Admin",
+              updatedDate: todayStr(),
+            }
+          : r,
+      );
+      setToast({ msg: "Category updated successfully", type: "success" });
+    } else {
+      return;
+    }
+    saveCategories(updatedList);
+    setRecords(updatedList);
+    closeSheet();
+  };
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    const list = loadCategories().filter((r) => r.id !== deleteTarget.id);
+    saveCategories(list);
+    setRecords(list);
+    setDeleteTarget(null);
+    setToast({ msg: "Category deleted successfully", type: "success" });
+  };
+
+  const handleExport = () => {
+    try {
+      const headers = ["ID", "Category Code", "Category Name", "Description", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
+      const csvRows = [headers.join(",")];
+      for (const r of records) {
+        const row = [
+          r.id,
+          `"${r.categoryCode.replace(/"/g, '""')}"`,
+          `"${r.categoryName.replace(/"/g, '""')}"`,
+          `"${(r.description || "").replace(/"/g, '""')}"`,
+          r.status,
+          r.createdBy,
+          r.createdDate,
+          r.updatedBy,
+          r.updatedDate,
+        ];
+        csvRows.push(row.join(","));
+      }
+      const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `categories_export_${todayStr()}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setToast({ msg: "Categories exported successfully", type: "success" });
+    } catch {
+      setToast({ msg: "Failed to export categories", type: "error" });
+    }
+  };
+
+  const sheetTitle =
+    sheetMode === "add"
+      ? "Add Category"
+      : sheetMode === "edit"
+      ? "Edit Category"
+      : "View Category";
+
   return (
     <AppLayout>
       <div className="space-y-5">
@@ -253,30 +343,19 @@ export default function CategoryMasterPage() {
             <p className="mt-0.5 text-xs text-muted-foreground">Manage product categories used across the masters</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" className="h-8 gap-1.5 border-border bg-white text-xs text-foreground hover:bg-muted">
+            <Button size="sm" variant="outline" className="h-8 gap-1.5 border-border bg-white text-xs text-foreground hover:bg-muted" onClick={handleExport}>
               <Download className="h-3.5 w-3.5" /> Export
             </Button>
-            <Link href="/masters/categories/add">
-              <Button size="sm" className="h-8 gap-1.5 bg-brand-600 text-xs text-white hover:bg-brand-700">
-                <Plus className="h-3.5 w-3.5" /> Add Category
-              </Button>
-            </Link>
+            <Button size="sm" className="h-8 gap-1.5 bg-brand-600 text-xs text-white hover:bg-brand-700" onClick={openAdd}>
+              <Plus className="h-3.5 w-3.5" /> Add Category
+            </Button>
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-3">
-          <div className="rounded-xl border border-border bg-white p-3 shadow-sm">
-            <p className="text-base font-bold text-foreground">{records.length}</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">Total Categories</p>
-          </div>
-          <div className="rounded-xl border border-border bg-white p-3 shadow-sm">
-            <p className="text-base font-bold text-foreground">{records.filter((r) => r.status === "active").length}</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">Active</p>
-          </div>
-          <div className="rounded-xl border border-border bg-white p-3 shadow-sm">
-            <p className="text-base font-bold text-foreground">{records.filter((r) => r.status === "inactive").length}</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">Inactive</p>
-          </div>
+          <MiniKPICard label="Total Categories" value={records.length} icon={Folder} accent={true} />
+          <MiniKPICard label="Active" value={records.filter((r) => r.status === "active").length} icon={CheckCircle2} accent={false} />
+          <MiniKPICard label="Inactive" value={records.filter((r) => r.status === "inactive").length} icon={XCircle} accent={false} />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -359,39 +438,48 @@ export default function CategoryMasterPage() {
                 </tr>
               </thead>
               <tbody>
-                {paginated.map((row) => (
-                  <tr key={row.id} className="align-top transition-colors border-b border-border/60 hover:bg-muted/20 group">
-                    <td className="px-4 py-2.5 text-xs font-semibold font-mono text-brand-700 whitespace-nowrap">{row.categoryCode}</td>
-                    <td className="px-3 py-2.5 text-xs font-semibold text-foreground">{row.categoryName}</td>
-                    <td className="px-3 py-2.5 text-xs text-foreground whitespace-nowrap font-medium">{row.description}</td>
-                    <td className="px-3 py-2.5">
-                      <button type="button" onClick={() => toggleStatus(row)} className="inline-flex items-center gap-1.5 rounded-full px-0.5 py-0.5 transition-opacity focus:outline-none hover:opacity-90" title="Click to toggle status">
-                        <StatusToggle record={row} onToggle={toggleStatus} />
-                      </button>
-                    </td>
-                    <td className="sticky right-0 z-20 w-[80px] min-w-[80px] px-3 py-2.5 bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button type="button" className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
-                            <MoreVertical className="h-4 w-4" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-32 bg-white border shadow-lg border-border">
-                          <DropdownMenuItem asChild>
-                            <Link href={`/masters/categories/${row.id}`} className="flex items-center gap-2">
-                              <Eye className="h-3.5 w-3.5" /> View
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem asChild>
-                            <Link href={`/masters/categories/${row.id}/edit`} className="flex items-center gap-2">
-                              <Edit2 className="h-3.5 w-3.5" /> Edit
-                            </Link>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                {paginated.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-xs text-muted-foreground">
+                      No records found
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  paginated.map((row) => (
+                    <tr
+                      key={row.id}
+                      onClick={() => openView(row)}
+                      className="align-top transition-colors border-b border-border/60 hover:bg-muted/20 group cursor-pointer"
+                    >
+                      <td className="px-4 py-2.5 text-xs font-semibold font-mono text-brand-700 whitespace-nowrap">{row.categoryCode}</td>
+                      <td className="px-3 py-2.5 text-xs font-semibold text-foreground">{row.categoryName}</td>
+                      <td className="px-3 py-2.5 text-xs text-foreground whitespace-nowrap font-medium">{row.description || "—"}</td>
+                      <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                        <StatusToggle record={row} onToggle={toggleStatus} />
+                      </td>
+                      <td className="sticky right-0 z-20 w-[80px] min-w-[80px] px-3 py-2.5 bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button type="button" className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
+                              <MoreVertical className="h-4 w-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-32 bg-white border shadow-lg border-border">
+                            <DropdownMenuItem onClick={() => openView(row)} className="flex items-center gap-2 cursor-pointer">
+                              <Eye className="h-3.5 w-3.5" /> View
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openEdit(row)} className="flex items-center gap-2 cursor-pointer">
+                              <Edit2 className="h-3.5 w-3.5" /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setDeleteTarget(row)} className="flex items-center gap-2 cursor-pointer text-red-600 focus:text-red-700">
+                              <Trash2 className="h-3.5 w-3.5" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -444,13 +532,115 @@ export default function CategoryMasterPage() {
           </div>
         </div>
       </div>
+
+      <Sheet open={sheetMode !== null} onOpenChange={(o) => !o && closeSheet()}>
+        <SheetContent>
+          <SheetHeader>
+            <div className="flex items-start gap-3 pr-8">
+              <div className="w-9 h-9 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center">
+                <Folder className="w-4 h-4 text-brand-600" />
+              </div>
+              <div>
+                <SheetTitle className="text-base">{sheetTitle}</SheetTitle>
+                <SheetDescription className="text-xs">
+                  {sheetMode === "view" ? "Read-only details" : "Compact category form"}
+                </SheetDescription>
+              </div>
+            </div>
+          </SheetHeader>
+
+          <SheetBody>
+            {sheetMode === "view" && active ? (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-border/60 bg-muted/10 px-3">
+                  <MasterViewRow label="Category Name" value={active.categoryName} />
+                  <MasterViewRow label="Category Code" value={<span className="font-mono">{active.categoryCode}</span>} />
+                  <MasterViewRow label="Description" value={active.description || "—"} />
+                  <MasterViewRow label="Status" value={active.status === "active" ? "Active" : "Inactive"} />
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs pt-2 border-t">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
+                    <p className="font-medium">{active.createdBy}</p>
+                    <p className="text-muted-foreground">{active.createdDate}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Updated By</p>
+                    <p className="font-medium">{active.updatedBy}</p>
+                    <p className="text-muted-foreground">{active.updatedDate}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <CategoryForm
+                  form={form}
+                  onChange={setForm}
+                  errors={errors}
+                  onClearError={(key) =>
+                    setErrors((prev) => {
+                      const copy = { ...prev };
+                      delete copy[key];
+                      return copy;
+                    })
+                  }
+                />
+              </div>
+            )}
+          </SheetBody>
+
+          <SheetFooter>
+            {sheetMode === "view" ? (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Back
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                  onClick={() => active && openEdit(active)}
+                >
+                  Edit
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                  onClick={persist}
+                >
+                  Save
+                </Button>
+              </>
+            )}
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Delete record?</DialogTitle>
+            <DialogDescription className="text-xs">
+              This action cannot be undone. The record will be permanently removed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" onClick={confirmDelete}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </AppLayout>
   );
 }
-
-
-
-
-
-
