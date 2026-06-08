@@ -1,9 +1,9 @@
----
 name: Frontend Deploy - pvb.dev.metaphi.in
 on:
   push:
     branches:
       - staging
+
 jobs:
   deploy:
     runs-on: self-hosted

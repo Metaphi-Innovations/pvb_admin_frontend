@@ -96,7 +96,7 @@ export default function CustomerTypeDetailPage() {
                     customerType.documentTypes.map((doc, idx) => (
                       <tr key={doc.id} className="hover:bg-muted/10 transition-colors">
                         <td className="px-3 py-2.5 text-xs text-muted-foreground font-medium">{idx + 1}</td>
-                        <td className="px-3 py-2.5 text-xs text-foreground font-medium break-words whitespace-normal">
+                        <td className="px-3 py-2.5 text-xs text-foreground font-medium break-words whitespace-normal font-mono">
                           {doc.documentName}
                         </td>
                       </tr>

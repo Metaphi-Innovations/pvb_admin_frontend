@@ -1,32 +1,28 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
   Plus,
-  Search,
-  MoreVertical,
   Eye,
   Edit2,
   Trash2,
-  ChevronDown,
-  ChevronsUpDown,
   Building2,
+  CheckCircle2,
+  XCircle,
+  X,
+  AlertCircle,
 } from "lucide-react";
-import { ActiveInactiveToggle } from "./components/CompactToggle";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   type Vendor,
   loadVendors,
@@ -34,65 +30,61 @@ import {
   formatCreditPeriod,
   todayStr,
 } from "./vendor-data";
+import { CURRENT_USER } from "@/lib/procurement/config";
+import { MiniKPICard } from "@/components/ui/KPICard";
 
-function SortTh({
-  label,
-  colKey,
-  sortKey,
-  sortDir,
-  onSort,
-}: {
-  label: string;
-  colKey: string;
-  sortKey: string;
-  sortDir: string;
-  onSort: (k: string) => void;
-}) {
-  const active = sortKey === colKey;
-  return (
-    <th
-      onClick={() => onSort(colKey)}
-      className={cn(
-        "px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground cursor-pointer select-none whitespace-nowrap",
-        active && "text-brand-700",
-      )}
-    >
-      <span className="inline-flex items-center gap-1">
-        {label}
-        {active ? (
-          <ChevronDown className={cn("w-3 h-3", sortDir === "desc" && "rotate-180")} />
-        ) : (
-          <ChevronsUpDown className="w-3 h-3 opacity-40" />
-        )}
-      </span>
-    </th>
-  );
+import { MasterListing } from "@/components/listing/MasterListing";
+import { applyFilters } from "@/components/listing/filter-utils";
+import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
+
+interface ToastState {
+  msg: string;
+  type: "success" | "error";
 }
 
-function Toast({ msg, type, onDismiss }: { msg: string; type: "success" | "error"; onDismiss: () => void }) {
+function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
   return (
     <div
       className={cn(
-        "fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-lg shadow-lg text-sm text-white",
-        type === "success" ? "bg-emerald-600" : "bg-red-600",
+        "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+        toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
       )}
     >
-      {msg}
-      <button type="button" className="ml-3 opacity-80 hover:opacity-100" onClick={onDismiss}>
-        ×
-      </button>
+      <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
+      {toast.msg}
+      <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100"><X className="h-3.5 w-3.5" /></button>
     </div>
+  );
+}
+
+function StatusToggle({ record, onToggle }: { record: Vendor; onToggle: (item: Vendor) => void }) {
+  const active = record.status === "active";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(record);
+      }}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+        active ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
+      )}
+    >
+      {active ? "Active" : "Inactive"}
+    </button>
   );
 }
 
 export default function VendorMasterPage() {
   const router = useRouter();
   const [records, setRecords] = useState<Vendor[]>([]);
-  const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState("vendorName");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [filters, setFilters] = useState<FilterState>({});
+  const [sort, setSort] = useState<SortState>({ key: "vendorName", direction: "asc" });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Vendor | null>(null);
 
   const refresh = useCallback(() => setRecords(loadVendors()), []);
 
@@ -100,204 +92,285 @@ export default function VendorMasterPage() {
     refresh();
   }, [refresh]);
 
-  const handleSort = (k: string) => {
-    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(k);
-      setSortDir("asc");
-    }
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const toggleStatus = (record: Vendor) => {
+    const nextStatus = record.status === "active" ? "inactive" : "active";
+    const updated: Vendor = {
+      ...record,
+      status: nextStatus,
+      updatedBy: CURRENT_USER,
+      updatedDate: todayStr(),
+    };
+    const updatedList = records.map((x) => (x.id === record.id ? updated : x));
+    saveVendors(updatedList);
+    setRecords(updatedList);
+    setToast({ msg: `Vendor status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`, type: "success" });
   };
 
-  const visible = useMemo(() => {
-    let r = [...records];
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      r = r.filter(
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    const updatedList = records.filter((v) => v.id !== deleteTarget.id);
+    saveVendors(updatedList);
+    setRecords(updatedList);
+    setDeleteTarget(null);
+    setToast({ msg: "Vendor deleted successfully", type: "success" });
+  };
+
+  const columns: ColumnConfig<Vendor>[] = [
+    {
+      key: "vendorName",
+      header: "Vendor Name",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "180px",
+      render: (val, row) => (
+        <div>
+          <button
+            type="button"
+            className="font-medium text-[13px] text-brand-700 hover:underline text-left"
+            onClick={() => router.push(`/masters/vendors/${row.id}`)}
+          >
+            {row.vendorName}
+          </button>
+          <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{row.vendorCode}</p>
+        </div>
+      ),
+    },
+    {
+      key: "companyName",
+      header: "Company Name",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "180px",
+      render: (val, row) => row.companyName || "—",
+    },
+    {
+      key: "mobile",
+      header: "Mobile Number",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "140px",
+      render: (val, row) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.mobileCountryCode} {row.mobile || "—"}
+        </span>
+      ),
+    },
+    {
+      key: "email",
+      header: "Email ID",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "160px",
+      render: (val, row) => row.email || "—",
+    },
+    {
+      key: "gstNumber",
+      header: "GSTIN",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "150px",
+      render: (val, row) => (
+        <span className="font-mono text-[11px]">{row.gstApplicable ? row.gstNumber || "—" : "—"}</span>
+      ),
+    },
+    {
+      key: "creditPeriod",
+      header: "Credit Period",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => formatCreditPeriod(row),
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: [
+        { label: "Active", value: "active" },
+        { label: "Inactive", value: "inactive" },
+      ],
+      width: "110px",
+      render: (val, row) => (
+        <StatusToggle record={row} onToggle={toggleStatus} />
+      ),
+    },
+    {
+      key: "createdBy",
+      header: "Created By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "110px",
+      render: (val, row) => row.createdBy || "—",
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "110px",
+      render: (val, row) => row.updatedBy || "—",
+    },
+  ];
+
+  const actions: ActionItemConfig<Vendor>[] = [
+    {
+      label: "View",
+      action: "view",
+      icon: Eye,
+      onClick: (row) => router.push(`/masters/vendors/${row.id}`),
+    },
+    {
+      label: "Edit",
+      action: "edit",
+      icon: Edit2,
+      onClick: (row) => router.push(`/masters/vendors/${row.id}/edit`),
+    },
+    {
+      label: "Delete",
+      action: "delete",
+      icon: Trash2,
+      variant: "destructive",
+      onClick: (row) => setDeleteTarget(row),
+    },
+  ];
+
+  const filtered = useMemo(() => {
+    let result = [...records];
+
+    // Search filter
+    if (filters.search) {
+      const q = String(filters.search).trim().toLowerCase();
+      result = result.filter(
         (v) =>
           v.vendorName.toLowerCase().includes(q) ||
           v.companyName.toLowerCase().includes(q) ||
           v.vendorCode.toLowerCase().includes(q) ||
           v.mobile.includes(q) ||
           v.email.toLowerCase().includes(q) ||
-          v.gstNumber.toLowerCase().includes(q),
+          v.gstNumber.toLowerCase().includes(q)
       );
     }
-    return r.sort((a, b) => {
-      let av: string;
-      let bv: string;
-      if (sortKey === "creditPeriod") {
-        av = formatCreditPeriod(a);
-        bv = formatCreditPeriod(b);
-      } else {
-        av = String((a as unknown as Record<string, unknown>)[sortKey] ?? "");
-        bv = String((b as unknown as Record<string, unknown>)[sortKey] ?? "");
-      }
-      return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
-    });
-  }, [records, search, sortKey, sortDir]);
 
-  const toggleStatus = (v: Vendor, active: boolean) => {
-    const updated: Vendor = {
-      ...v,
-      status: active ? "active" : "inactive",
-      updatedBy: "Admin",
-      updatedDate: todayStr(),
-    };
-    saveVendors(records.map((x) => (x.id === v.id ? updated : x)));
-    refresh();
-    setToast({ msg: active ? "Vendor activated." : "Vendor deactivated.", type: "success" });
-  };
+    // Apply column filters
+    result = applyFilters(result, filters);
 
-  const confirmDelete = () => {
-    if (deleteId == null) return;
-    saveVendors(records.filter((v) => v.id !== deleteId));
-    setDeleteId(null);
-    refresh();
-    setToast({ msg: "Vendor deleted.", type: "success" });
-  };
+    // Sorting
+    if (sort.key && sort.direction !== "none") {
+      result.sort((a, b) => {
+        let av: string;
+        let bv: string;
+        if (sort.key === "creditPeriod") {
+          av = formatCreditPeriod(a);
+          bv = formatCreditPeriod(b);
+        } else {
+          av = String((a as unknown as Record<string, unknown>)[sort.key] ?? "");
+          bv = String((b as unknown as Record<string, unknown>)[sort.key] ?? "");
+        }
+        const cmp = av.localeCompare(bv);
+        return sort.direction === "asc" ? cmp : -cmp;
+      });
+    }
 
-  const activeCount = records.filter((v) => v.status === "active").length;
+    return result;
+  }, [records, filters, sort]);
+
+  const paginated = useMemo(() => {
+    const startOffset = (page - 1) * pageSize;
+    return filtered.slice(startOffset, startOffset + pageSize);
+  }, [filtered, page, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters, sort, pageSize]);
 
   return (
     <AppLayout>
-      <div className="w-full max-w-[1400px] mx-auto space-y-4">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-brand-600 flex items-center justify-center">
-              <Building2 className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-foreground tracking-tight">Vendor Master</h1>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {records.length} vendors · {activeCount} active
-              </p>
-            </div>
-          </div>
-          <Link href="/masters/vendors/new">
-            <Button size="sm" className="h-9 text-sm bg-brand-600 hover:bg-brand-700 text-white shadow-sm">
-              <Plus className="w-4 h-4 mr-1" /> Create Vendor
-            </Button>
-          </Link>
+      <div className="space-y-5">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Vendor Master</h1>
+          <p className="mt-0.5 text-xs text-muted-foreground">Manage vendors and supplier information</p>
         </div>
 
-        <div className="relative max-w-md">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name, company, mobile, GSTIN…"
-            className="pl-9 h-9 text-sm bg-white border-border/70 rounded-lg"
-          />
+        <div className="grid grid-cols-3 gap-3">
+          <MiniKPICard label="Total Vendors" value={records.length} icon={Building2} accent={true} />
+          <MiniKPICard label="Active" value={records.filter((v) => v.status === "active").length} icon={CheckCircle2} accent={false} />
+          <MiniKPICard label="Inactive" value={records.filter((v) => v.status === "inactive").length} icon={XCircle} accent={false} />
         </div>
 
-        <div className="rounded-lg border border-border/60 bg-white overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] text-sm">
-              <thead className="bg-muted/20 border-b border-border/60">
-                <tr>
-                  <SortTh label="Vendor Name" colKey="vendorName" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh label="Company Name" colKey="companyName" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh label="Mobile Number" colKey="mobile" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh label="Email ID" colKey="email" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh label="GSTIN" colKey="gstNumber" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh label="Credit Period" colKey="creditPeriod" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">Status</th>
-                  <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">Created By</th>
-                  <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">Updated By</th>
-                  <th className="w-10" />
-                </tr>
-              </thead>
-              <tbody>
-                {visible.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} className="py-14 text-center text-sm text-muted-foreground">
-                      No vendors found.
-                    </td>
-                  </tr>
-                ) : (
-                  visible.map((v) => (
-                    <tr key={v.id} className="border-b border-border/40 last:border-0 hover:bg-muted/10 group">
-                      <td className="px-3 py-2.5">
-                        <button
-                          type="button"
-                          className="font-medium text-[13px] text-brand-700 hover:underline text-left"
-                          onClick={() => router.push(`/masters/vendors/${v.id}`)}
-                        >
-                          {v.vendorName}
-                        </button>
-                        <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{v.vendorCode}</p>
-                      </td>
-                      <td className="px-3 py-2.5 text-xs">{v.companyName || "—"}</td>
-                      <td className="px-3 py-2.5 tabular-nums text-xs text-muted-foreground">
-                        {v.mobileCountryCode} {v.mobile || "—"}
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground truncate max-w-[140px]">{v.email || "—"}</td>
-                      <td className="px-3 py-2.5 font-mono text-[11px]">{v.gstApplicable ? v.gstNumber || "—" : "—"}</td>
-                      <td className="px-3 py-2.5 text-xs">{formatCreditPeriod(v)}</td>
-                      <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                        <ActiveInactiveToggle
-                          active={v.status === "active"}
-                          onChange={(active) => toggleStatus(v, active)}
-                        />
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{v.createdBy}</td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{v.updatedBy}</td>
-                      <td className="px-2 py-2 text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button className="p-1.5 rounded-md opacity-60 group-hover:opacity-100 hover:bg-muted">
-                              <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-40">
-                            <DropdownMenuLabel className="text-[10px]">Actions</DropdownMenuLabel>
-                            <DropdownMenuItem asChild>
-                              <Link href={`/masters/vendors/${v.id}`}>
-                                <Eye className="w-3.5 h-3.5 mr-2" /> View
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <Link href={`/masters/vendors/${v.id}/edit`}>
-                                <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-red-600 focus:text-red-600"
-                              onClick={() => setDeleteId(v.id)}
-                            >
-                              <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <MasterListing<Vendor>
+          columns={columns}
+          data={paginated}
+          totalRecords={filtered.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          onSortChange={setSort}
+          onFilterChange={setFilters}
+          actions={actions}
+          onAdd={() => router.push("/masters/vendors/new")}
+          addLabel="Create Vendor"
+          emptyMessage="vendors"
+          searchPlaceholder="Search name, company, mobile, GSTIN…"
+          currentFilters={filters}
+          currentSort={sort}
+        />
       </div>
 
-      {deleteId != null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-5">
-            <h3 className="text-sm font-semibold">Delete vendor?</h3>
-            <p className="text-xs text-muted-foreground mt-1">This cannot be undone.</p>
-            <div className="flex justify-end gap-2 mt-4">
-              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteId(null)}>
+      {/* Confirm Delete Dialog */}
+      {deleteTarget && (
+        <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-red-50 border border-red-200">
+                  <AlertCircle className="w-4 h-4 text-red-500" />
+                </div>
+                Delete Vendor
+              </DialogTitle>
+              <DialogDescription className="pt-1">
+                Are you sure you want to delete vendor "{deleteTarget.vendorName}"? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => setDeleteTarget(null)}
+              >
                 Cancel
               </Button>
-              <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" onClick={confirmDelete}>
+              <Button
+                size="sm"
+                className="h-8 text-xs text-white bg-red-600 hover:bg-red-700"
+                onClick={confirmDelete}
+              >
                 Delete
               </Button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
 
-      {toast && <Toast msg={toast.msg} type={toast.type} onDismiss={() => setToast(null)} />}
+      {/* Toast */}
+      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </AppLayout>
   );
 }

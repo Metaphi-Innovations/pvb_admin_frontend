@@ -23,6 +23,17 @@ import { getHrEmployeeById } from "../employees/employee-master-data";
 import { AttendanceRecordDrawer } from "./components/AttendanceRecordDrawer";
 import { AttendanceMonthCalendar } from "./components/AttendanceMonthCalendar";
 import { AttendanceDayPanel } from "./components/AttendanceDayPanel";
+import { SfAttendanceCalendar } from "../sales-force-attendance/components/SfAttendanceCalendar";
+import { SfAttendanceDatePanel } from "../sales-force-attendance/components/SfAttendanceDatePanel";
+import {
+  getSfEmployees,
+  resolveEmployeeMonthDays,
+  type ResolvedAttendanceDay,
+} from "../sales-force-attendance/sf-attendance-data";
+import {
+  getAttendanceStatusForDate,
+  type CalendarTileStatus,
+} from "./components/attendance-status-theme";
 import {
   buildMonthlySummaries,
   currentMonthKey,
@@ -60,7 +71,7 @@ function VibrantStatCard({
 }: {
   label: string;
   value: number;
-  accent: "emerald" | "red" | "sky";
+  accent: "emerald" | "red" | "blue" | "stone";
 }) {
   const styles = {
     emerald: {
@@ -75,11 +86,17 @@ function VibrantStatCard({
       text: "text-red-600",
       glow: "shadow-red-100",
     },
-    sky: {
-      border: "border-t-sky-500",
-      bg: "from-sky-50/90 via-white to-white",
-      text: "text-sky-700",
-      glow: "shadow-sky-100",
+    blue: {
+      border: "border-t-blue-500",
+      bg: "from-blue-50/90 via-white to-white",
+      text: "text-blue-700",
+      glow: "shadow-blue-100",
+    },
+    stone: {
+      border: "border-t-stone-400",
+      bg: "from-stone-100/90 via-white to-white",
+      text: "text-stone-700",
+      glow: "shadow-stone-100",
     },
   }[accent];
 
@@ -109,6 +126,8 @@ export default function EmployeeAttendancePageClient({ employeeId }: { employeeI
   const [records, setRecords] = useState<DailyAttendanceRecord[]>([]);
   const [monthRecords, setMonthRecords] = useState<DailyAttendanceRecord[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedTileStatus, setSelectedTileStatus] = useState<CalendarTileStatus>("empty");
+  const [selectedSfDay, setSelectedSfDay] = useState<ResolvedAttendanceDay | null>(null);
   const [drawerRecord, setDrawerRecord] = useState<DailyAttendanceRecord | null>(null);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -117,7 +136,7 @@ export default function EmployeeAttendancePageClient({ employeeId }: { employeeI
 
   const employee = getHrEmployeeById(employeeId);
   const allRecords = loadDailyRecords();
-  const initials = employee ? employeeInitials(employee.employeeName) : "—";
+  const isSfEmployee = getSfEmployees().some((e) => e.employeeId === employeeId);
 
   useEffect(() => {
     setViewMonth(monthParam);
@@ -157,20 +176,45 @@ export default function EmployeeAttendancePageClient({ employeeId }: { employeeI
 
   useEffect(() => {
     const range = monthDateRange(viewMonth);
+    if (isSfEmployee) {
+      const days = resolveEmployeeMonthDays(employeeId, viewMonth);
+      const withStatus = days.filter((d) => d.status);
+      if (!withStatus.length) {
+        setSelectedDate(null);
+        setSelectedSfDay(null);
+        return;
+      }
+      setSelectedSfDay((prev) => {
+        if (prev && withStatus.some((d) => d.date === prev.date)) return prev;
+        return withStatus[withStatus.length - 1];
+      });
+      setSelectedDate((prev) => {
+        if (prev && withStatus.some((d) => d.date === prev)) return prev;
+        return withStatus[withStatus.length - 1]?.date ?? null;
+      });
+      return;
+    }
     const list = getRecordsForEmployee(employeeId, {
       dateFrom: range.from,
       dateTo: range.to,
     });
     if (!list.length) {
       setSelectedDate(null);
+      setSelectedTileStatus("empty");
       return;
     }
     setSelectedDate((prev) => {
-      if (prev && list.some((r) => r.date === prev)) return prev;
+      if (prev && list.some((r) => r.date === prev)) {
+        const rec = list.find((r) => r.date === prev);
+        setSelectedTileStatus(getAttendanceStatusForDate(prev, rec));
+        return prev;
+      }
       const sorted = [...list].sort((a, b) => b.date.localeCompare(a.date));
-      return sorted[0]?.date ?? null;
+      const next = sorted[0];
+      if (next) setSelectedTileStatus(getAttendanceStatusForDate(next.date, next));
+      return next?.date ?? null;
     });
-  }, [employeeId, viewMonth]);
+  }, [employeeId, viewMonth, isSfEmployee]);
 
   const monthlyRows = useMemo(
     () => buildMonthlySummaries(employeeId, allRecords),
@@ -186,6 +230,25 @@ export default function EmployeeAttendancePageClient({ employeeId }: { employeeI
   }, [monthRecords]);
 
   const selectedRecord = selectedDate ? recordsByDate.get(selectedDate) ?? null : null;
+
+  const sfDaysByDate = useMemo(() => {
+    if (!isSfEmployee) return new Map<string, ResolvedAttendanceDay>();
+    return new Map(resolveEmployeeMonthDays(employeeId, viewMonth).map((d) => [d.date, d]));
+  }, [isSfEmployee, employeeId, viewMonth]);
+
+  const sfMonthCounts = useMemo(() => {
+    const days = [...sfDaysByDate.values()];
+    return {
+      present: days.filter((d) => d.status === "present").length,
+      absent: days.filter((d) => d.status === "absent").length,
+      holiday: days.filter((d) => d.status === "holiday").length,
+      weekOff: days.filter((d) => d.status === "week_off").length,
+    };
+  }, [sfDaysByDate]);
+
+  const CALENDAR_STATUS_OPTIONS = ATTENDANCE_STATUS_OPTIONS.filter((s) =>
+    ["present", "absent", "holiday", "week_off"].includes(s.value),
+  );
 
   const shiftOptions = useMemo(
     () => getShiftOptions(allRecords.filter((r) => r.employeeId === employeeId)),
@@ -231,11 +294,28 @@ export default function EmployeeAttendancePageClient({ employeeId }: { employeeI
           />
         </div>
 
-        {monthSummary && (
-          <div className="grid grid-cols-3 gap-3">
-            <VibrantStatCard label="Present" value={monthSummary.present} accent="emerald" />
-            <VibrantStatCard label="Absent" value={monthSummary.absent} accent="red" />
-            <VibrantStatCard label="Holiday" value={monthSummary.holiday} accent="sky" />
+        {(monthSummary || isSfEmployee) && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <VibrantStatCard
+              label="Present"
+              value={isSfEmployee ? sfMonthCounts.present : monthSummary!.present}
+              accent="emerald"
+            />
+            <VibrantStatCard
+              label="Absent"
+              value={isSfEmployee ? sfMonthCounts.absent : monthSummary!.absent}
+              accent="red"
+            />
+            <VibrantStatCard
+              label="Holiday"
+              value={isSfEmployee ? sfMonthCounts.holiday : monthSummary!.holiday}
+              accent="blue"
+            />
+            <VibrantStatCard
+              label="Week Off"
+              value={isSfEmployee ? sfMonthCounts.weekOff : monthSummary!.weekOff}
+              accent="stone"
+            />
           </div>
         )}
 
@@ -254,9 +334,6 @@ export default function EmployeeAttendancePageClient({ employeeId }: { employeeI
                 )}
               >
                 {m.label}
-                <span className="opacity-80 ml-1">
-                  · P {m.present} / A {m.absent}
-                </span>
               </button>
             ))}
           </div>
@@ -287,21 +364,42 @@ export default function EmployeeAttendancePageClient({ employeeId }: { employeeI
           </TabsList>
 
           <TabsContent value="calendar" className="mt-0">
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4">
-              <AttendanceMonthCalendar
-                monthKey={viewMonth}
-                monthTitle={monthLabel(viewMonth)}
-                recordsByDate={recordsByDate}
-                selectedDate={selectedDate}
-                onSelectDate={(date, record) => setSelectedDate(date)}
-                onMonthChange={handleMonthChange}
-              />
-              <AttendanceDayPanel
-                record={selectedRecord}
-                employeeInitials={initials}
-                onOpenFullDetail={() => selectedRecord && setDrawerRecord(selectedRecord)}
-                onRefresh={refreshMonth}
-              />
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
+              {isSfEmployee ? (
+                <SfAttendanceCalendar
+                  monthKey={viewMonth}
+                  monthTitle={monthLabel(viewMonth)}
+                  daysByDate={sfDaysByDate}
+                  selectedDate={selectedSfDay?.date ?? selectedDate}
+                  onMonthChange={handleMonthChange}
+                  onDateSelect={(day) => {
+                    setSelectedSfDay(day);
+                    setSelectedDate(day.date);
+                  }}
+                />
+              ) : (
+                <AttendanceMonthCalendar
+                  monthKey={viewMonth}
+                  monthTitle={monthLabel(viewMonth)}
+                  recordsByDate={recordsByDate}
+                  selectedDate={selectedDate}
+                  onSelectDate={(date, record, status) => {
+                    setSelectedDate(date);
+                    setSelectedTileStatus(status);
+                  }}
+                  onMonthChange={handleMonthChange}
+                />
+              )}
+              {isSfEmployee ? (
+                <SfAttendanceDatePanel day={selectedSfDay} />
+              ) : (
+                <AttendanceDayPanel
+                  date={selectedDate}
+                  record={selectedRecord}
+                  tileStatus={selectedTileStatus}
+                  onOpenFullDetail={() => selectedRecord && setDrawerRecord(selectedRecord)}
+                />
+              )}
             </div>
           </TabsContent>
 
@@ -327,7 +425,7 @@ export default function EmployeeAttendancePageClient({ employeeId }: { employeeI
                   <SelectItem value="all" className="text-xs">
                     All Status
                   </SelectItem>
-                  {ATTENDANCE_STATUS_OPTIONS.map((s) => (
+                  {CALENDAR_STATUS_OPTIONS.map((s) => (
                     <SelectItem key={s.value} value={s.value} className="text-xs">
                       {s.label}
                     </SelectItem>

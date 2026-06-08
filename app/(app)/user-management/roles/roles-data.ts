@@ -68,6 +68,10 @@ export const MOCK_USER_COUNTS: Record<number, number> = {
   9: 0,   // TM
   10: 0,  // ASM
   11: 0,  // RSM
+  12: 0,  // ZSM
+  13: 0,  // FMO
+  14: 0,  // DO
+  15: 0,  // Intern
 };
 
 // ── Seed data ─────────────────────────────────────────────────────────────────
@@ -231,13 +235,69 @@ export const SEED_ROLES: Role[] = [
     updatedBy: "Admin",
     updatedDate: "2026-04-10",
   },
+  {
+    id: 12,
+    roleName: "ZSM",
+    departmentId: 5,
+    department: "Field Force",
+    description: "Zonal Sales Manager — manages multiple regions.",
+    geoLevel: "Zone",
+    approvalChain: [],
+    status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-04-10",
+    updatedBy: "Admin",
+    updatedDate: "2026-04-10",
+  },
+  {
+    id: 13,
+    roleName: "FMO",
+    departmentId: 5,
+    department: "Field Force",
+    description: "Field Marketing Officer — on-ground marketing activities.",
+    geoLevel: "Territory",
+    approvalChain: [],
+    status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-04-10",
+    updatedBy: "Admin",
+    updatedDate: "2026-04-10",
+  },
+  {
+    id: 14,
+    roleName: "DO",
+    departmentId: 5,
+    department: "Field Force",
+    description: "District Officer — district-level field operations.",
+    geoLevel: "Area",
+    approvalChain: [],
+    status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-04-10",
+    updatedBy: "Admin",
+    updatedDate: "2026-04-10",
+  },
+  {
+    id: 15,
+    roleName: "Intern",
+    departmentId: 5,
+    department: "Field Force",
+    description: "Sales Force intern — limited travel and expense eligibility.",
+    geoLevel: "Locality",
+    approvalChain: [],
+    status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-04-10",
+    updatedBy: "Admin",
+    updatedDate: "2026-04-10",
+  },
 ];
 
 // ── localStorage persistence ──────────────────────────────────────────────────
 const STORAGE_KEY = "ds_um_roles";
 const ID_KEY      = "ds_um_roles_next_id";
 const VERSION_KEY = "ds_um_roles_version";
-const STORAGE_VER = "v1";
+const STORAGE_VER = "v2";
 
 export function loadRoles(): Role[] {
   if (typeof window === "undefined") return SEED_ROLES;

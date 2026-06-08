@@ -2,22 +2,14 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   CheckCircle2,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsUpDown,
-  Download,
   Edit2,
   Eye,
-  MoreVertical,
-  Plus,
-  Search,
   Users,
   X,
   Trash2,
@@ -39,7 +31,9 @@ import {
 import { loadCustomerTypes, saveCustomerTypes, type CustomerTypeRecord } from "./customer-type-data";
 import { MiniKPICard } from "@/components/ui/KPICard";
 
-type SortKey = "customerType" | "description";
+import { MasterListing } from "@/components/listing/MasterListing";
+import { applyFilters } from "@/components/listing/filter-utils";
+import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 
 interface ToastState {
   msg: string;
@@ -61,44 +55,11 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
   );
 }
 
-function SortTh({
-  label,
-  colKey,
-  sortKey,
-  sortDir,
-  onSort,
-  className,
-}: {
-  label: string;
-  colKey: SortKey;
-  sortKey: SortKey;
-  sortDir: "asc" | "desc";
-  onSort: (key: SortKey) => void;
-  className?: string;
-}) {
-  const active = sortKey === colKey;
-  return (
-    <th
-      onClick={() => onSort(colKey)}
-      className={cn("px-3 py-3 text-left text-[13px] font-semibold cursor-pointer select-none group whitespace-nowrap", active && "bg-brand-50/60", className)}
-    >
-      <div className="flex items-center gap-1.5">
-        <span className={active ? "text-brand-700" : "text-foreground"}>{label}</span>
-        {active ? (
-          <ChevronDown className={cn("w-3 h-3 text-brand-600 transition-transform", sortDir === "desc" && "rotate-180")} />
-        ) : (
-          <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground" />
-        )}
-      </div>
-    </th>
-  );
-}
-
 export default function CustomerTypesPage() {
+  const router = useRouter();
   const [records, setRecords] = useState<CustomerTypeRecord[]>([]);
-  const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("customerType");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [filters, setFilters] = useState<FilterState>({});
+  const [sort, setSort] = useState<SortState>({ key: "customerType", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -114,41 +75,90 @@ export default function CustomerTypesPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
+  const columns: ColumnConfig<CustomerTypeRecord>[] = [
+    {
+      key: "customerType",
+      header: "Customer Type",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "240px",
+      render: (val, row) => (
+        <Link href={`/masters/customer-types/${row.id}`} className="font-semibold text-foreground hover:text-brand-700">
+          {row.customerType}
+        </Link>
+      ),
+    },
+    {
+      key: "description",
+      header: "Description",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "480px",
+      render: (val, row) => row.description || "—",
+    },
+  ];
+
+  const actions: ActionItemConfig<CustomerTypeRecord>[] = [
+    {
+      label: "View",
+      action: "view",
+      icon: Eye,
+      onClick: (row) => router.push(`/masters/customer-types/${row.id}`),
+    },
+    {
+      label: "Edit",
+      action: "edit",
+      icon: Edit2,
+      onClick: (row) => router.push(`/masters/customer-types/${row.id}/edit`),
+    },
+    {
+      label: "Delete",
+      action: "delete",
+      icon: Trash2,
+      variant: "destructive",
+      onClick: (row) => setDeleteTarget(row),
+    },
+  ];
+
   const filtered = useMemo(() => {
-    return records
-      .filter((r) => {
-        const q = search.trim().toLowerCase();
-        if (!q) return true;
-        return (
+    let result = [...records];
+
+    // Search filter
+    if (filters.search) {
+      const q = String(filters.search).trim().toLowerCase();
+      result = result.filter(
+        (r) =>
           r.customerType.toLowerCase().includes(q) ||
           r.description.toLowerCase().includes(q)
-        );
-      })
-      .sort((a, b) => {
-        const aVal = String(a[sortKey]).toLowerCase();
-        const bVal = String(b[sortKey]).toLowerCase();
-        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-        return sortDir === "asc" ? cmp : -cmp;
-      });
-  }, [records, search, sortKey, sortDir]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
-  const start = filtered.length === 0 ? 0 : (page - 1) * pageSize + 1;
-  const end = Math.min(page * pageSize, filtered.length);
-
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
+      );
     }
-  };
+
+    // Apply column filters
+    result = applyFilters(result, filters);
+
+    // Sorting
+    if (sort.key && sort.direction !== "none") {
+      result.sort((a, b) => {
+        const aVal = String(a[sort.key as keyof CustomerTypeRecord] ?? "").toLowerCase();
+        const bVal = String(b[sort.key as keyof CustomerTypeRecord] ?? "").toLowerCase();
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return sort.direction === "asc" ? cmp : -cmp;
+      });
+    }
+
+    return result;
+  }, [records, filters, sort]);
+
+  const paginated = useMemo(() => {
+    const startOffset = (page - 1) * pageSize;
+    return filtered.slice(startOffset, startOffset + pageSize);
+  }, [filtered, page, pageSize]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, sortKey, sortDir, pageSize]);
+  }, [filters, sort, pageSize]);
 
   const confirmDelete = () => {
     if (!deleteTarget) return;
@@ -186,151 +196,41 @@ export default function CustomerTypesPage() {
     }
   };
 
+  const handleAdd = () => {
+    router.push("/masters/customer-types/add");
+  };
+
   return (
     <AppLayout>
       <div className="space-y-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-foreground">Customer Type Master</h1>
-            <p className="mt-0.5 text-xs text-muted-foreground">Manage types of customers used in the system</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" className="h-8 gap-1.5 border-border bg-white text-xs text-foreground hover:bg-muted" onClick={handleExport}>
-              <Download className="h-3.5 w-3.5" /> Export
-            </Button>
-            <Link href="/masters/customer-types/add">
-              <Button size="sm" className="h-8 gap-1.5 bg-brand-600 text-xs text-white hover:bg-brand-700">
-                <Plus className="h-3.5 w-3.5" /> Add Customer Type
-              </Button>
-            </Link>
-          </div>
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Customer Type Master</h1>
+          <p className="mt-0.5 text-xs text-muted-foreground">Manage types of customers used in the system</p>
         </div>
 
         <div className="grid grid-cols-1 gap-3">
           <MiniKPICard label="Total Customer Types" value={records.length} icon={Users} accent={true} />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[220px] max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search customer type, description..."
-              className="h-8 pl-9 text-xs"
-            />
-          </div>
-        </div>
-
-        <div className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse table-fixed w-max">
-              <thead>
-                <tr className="border-b bg-muted/40 border-border">
-                  <SortTh label="Customer Type" colKey="customerType" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-[240px] pl-4 py-3" />
-                  <SortTh label="Description" colKey="description" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-[480px]" />
-                  <th className="sticky right-0 z-30 w-[80px] min-w-[80px] h-11 px-3 text-left text-[13px] font-semibold whitespace-nowrap bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="px-4 py-8 text-center text-xs text-muted-foreground">
-                      No records found
-                    </td>
-                  </tr>
-                ) : (
-                  paginated.map((row) => (
-                    <tr
-                      key={row.id}
-                      className="align-top transition-colors border-b border-border/60 hover:bg-muted/20 group"
-                    >
-                      <td className="px-4 py-2.5 text-xs font-semibold text-foreground">
-                        <Link href={`/masters/customer-types/${row.id}`} className="hover:text-brand-700">
-                          {row.customerType}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-foreground whitespace-normal font-medium">{row.description || "—"}</td>
-                      <td className="sticky right-0 z-20 w-[80px] min-w-[80px] px-3 py-2.5 bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]" onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button type="button" className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
-                              <MoreVertical className="h-4 w-4" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-32 bg-white border shadow-lg border-border">
-                            <DropdownMenuItem asChild className="flex items-center gap-2 cursor-pointer">
-                              <Link href={`/masters/customer-types/${row.id}`}>
-                                <Eye className="h-3.5 w-3.5" /> View
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild className="flex items-center gap-2 cursor-pointer">
-                              <Link href={`/masters/customer-types/${row.id}/edit`}>
-                                <Edit2 className="h-3.5 w-3.5" /> Edit
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setDeleteTarget(row)} className="flex items-center gap-2 cursor-pointer text-red-600 focus:text-red-700">
-                              <Trash2 className="h-3.5 w-3.5" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/20">
-            <p className="text-[11px] text-muted-foreground">
-              {filtered.length === 0 ? (
-                "No records"
-              ) : (
-                <>
-                  Showing <span className="font-medium text-foreground">{start}-{end}</span> of{" "}
-                  <span className="font-medium text-foreground">{filtered.length}</span> customer types
-                </>
-              )}
-            </p>
-            <div className="flex items-center gap-2">
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setPage(1);
-                }}
-                className="px-2 text-xs bg-white border rounded-md h-7 border-border text-foreground"
-              >
-                {[10, 25, 50, 100].map((value) => (
-                  <option key={value} value={value}>
-                    {value} / page
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                disabled={page === 1}
-                className="flex items-center justify-center text-xs border rounded-md w-7 h-7 border-border disabled:opacity-40 hover:bg-muted"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              <span className="text-xs text-muted-foreground px-2 min-w-[48px] text-center">
-                {page} / {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-                disabled={page === totalPages}
-                className="flex items-center justify-center text-xs border rounded-md w-7 h-7 border-border disabled:opacity-40 hover:bg-muted"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
+        <MasterListing<CustomerTypeRecord>
+          columns={columns}
+          data={paginated}
+          totalRecords={filtered.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          onSortChange={setSort}
+          onFilterChange={setFilters}
+          actions={actions}
+          onAdd={handleAdd}
+          addLabel="Add Customer Type"
+          onExport={handleExport}
+          emptyMessage="customer types"
+          searchPlaceholder="Search customer type, description..."
+          currentFilters={filters}
+          currentSort={sort}
+        />
       </div>
 
       <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>

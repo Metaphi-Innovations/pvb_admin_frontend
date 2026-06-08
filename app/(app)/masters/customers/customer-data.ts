@@ -96,6 +96,11 @@ export interface Customer {
   bankAccountNo: string;
   ifscCode: string;
 
+  // New aligned bank fields
+  accountHolderName?: string;
+  branch?: string;
+  swiftCode?: string;
+
   createdBy: string;
   createdDate: string;
   updatedBy: string;
@@ -1303,6 +1308,9 @@ function migrateCustomer(raw: Record<string, unknown>): Customer {
     bankBranchAddress: c.bankBranchAddress ?? "",
     bankAccountNo: c.bankAccountNo ?? "",
     ifscCode: c.ifscCode ?? "",
+    accountHolderName: c.accountHolderName ?? "",
+    branch: c.branch ?? "",
+    swiftCode: c.swiftCode ?? "",
     createdBy: c.createdBy ?? "Admin",
     createdDate: c.createdDate ?? "",
     updatedBy: c.updatedBy ?? "Admin",

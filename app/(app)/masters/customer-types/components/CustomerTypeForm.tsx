@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { AlertCircle, X, User } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { type CustomerTypeDocument } from "../customer-type-data";
+import { loadDocumentTypes } from "../../document-types/document-type-data";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 
 export interface CustomerTypeFormValues {
   customerType: string;
@@ -56,7 +58,18 @@ export function CustomerTypeForm({
   readOnly?: boolean;
   triggerToast?: (message: string, type: "success" | "error") => void;
 }) {
-  const [docName, setDocName] = useState("");
+  const [selectedDocId, setSelectedDocId] = useState("");
+
+  const docTypesList = useMemo(() => {
+    return loadDocumentTypes().filter((d) => d.status === "Active");
+  }, []);
+
+  const autocompleteOptions = useMemo(() => {
+    return docTypesList.map((d) => ({
+      value: d.id,
+      label: d.title,
+    }));
+  }, [docTypesList]);
 
   const set = <K extends keyof CustomerTypeFormValues>(key: K, value: CustomerTypeFormValues[K]) => {
     onChange({ ...form, [key]: value });
@@ -64,17 +77,28 @@ export function CustomerTypeForm({
   };
 
   const handleAddDocument = () => {
-    if (!docName.trim()) {
-      triggerToast?.("Please enter a document name", "error");
+    if (!selectedDocId) {
+      triggerToast?.("Please select a document type", "error");
       return;
     }
+    const selectedDoc = docTypesList.find((d) => d.id === selectedDocId);
+    if (!selectedDoc) return;
+
+    // Check duplicate
+    const exists = (form.documentTypes || []).some((d) => d.documentTypeId === selectedDocId);
+    if (exists) {
+      triggerToast?.("This document type is already added", "error");
+      return;
+    }
+
     const newDoc: CustomerTypeDocument = {
       id: `DOC-${Math.floor(100000 + Math.random() * 900000)}`,
-      documentName: docName.trim(),
+      documentTypeId: selectedDoc.id,
+      documentName: selectedDoc.title,
     };
     const updated = [...(form.documentTypes || []), newDoc];
     set("documentTypes", updated);
-    setDocName("");
+    setSelectedDocId("");
     triggerToast?.("Document type added", "success");
   };
 
@@ -89,7 +113,7 @@ export function CustomerTypeForm({
 
   return (
     <div className="w-full space-y-4">
-      {/* Top Header Block matching ProductForm style */}
+      {/* Top Header Block */}
       <div className="flex items-start gap-2.5 pb-3 border-b border-border">
         <div className="flex items-center justify-center flex-shrink-0 border rounded-lg w-7 h-7 bg-brand-50 border-brand-100">
           <User className="w-3.5 h-3.5 text-brand-600" />
@@ -150,15 +174,19 @@ export function CustomerTypeForm({
           {/* Add Controls */}
           {!readOnly && (
             <div className="flex items-end gap-3 bg-muted/20 p-3 rounded-lg border border-border">
+              {/* Document Type Dropdown */}
               <div className="flex-1 space-y-1">
                 <Label className="text-[11px] font-medium text-muted-foreground">Document Details</Label>
-                <Input
-                  value={docName}
-                  onChange={(e) => setDocName(e.target.value)}
-                  placeholder="e.g. GST Registration Copy"
+                <AutocompleteSelect
+                  options={autocompleteOptions}
+                  value={selectedDocId}
+                  onChange={(val) => setSelectedDocId(val || "")}
+                  placeholder="Select Document Type"
+                  searchPlaceholder="Search document type..."
                   className="h-8 text-xs bg-white border-border"
                 />
               </div>
+
               <Button
                 type="button"
                 onClick={handleAddDocument}
@@ -198,7 +226,7 @@ export function CustomerTypeForm({
                   form.documentTypes.map((doc, idx) => (
                     <tr key={doc.id} className="hover:bg-muted/10 transition-colors">
                       <td className="px-3 py-2.5 text-xs text-muted-foreground font-medium">{idx + 1}</td>
-                      <td className="px-3 py-2.5 text-xs text-foreground font-medium break-words whitespace-normal">
+                      <td className="px-3 py-2.5 text-xs text-foreground font-medium break-words whitespace-normal font-mono">
                         {doc.documentName}
                       </td>
                       {!readOnly && (
