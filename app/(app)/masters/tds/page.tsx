@@ -1,35 +1,21 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import {
   Plus,
-  Search,
-  SlidersHorizontal,
   Edit2,
   Trash2,
-  MoreVertical,
-  ChevronDown,
-  ChevronsUpDown,
   AlertCircle,
+  Percent,
+  CheckCircle2,
+  XCircle,
+  X,
+  Download,
+  Eye,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -38,442 +24,561 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetBody,
+  SheetFooter,
+} from "@/components/ui/sheet";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { MasterViewRow } from "@/components/masters/MasterModule";
+import {
   TDSMaster,
   loadTDSMasters,
   saveTDSMasters,
   todayStr,
+  nextTDSId,
 } from "./tds-data";
+import { MiniKPICard } from "@/components/ui/KPICard";
+import { MasterListing } from "@/components/listing/MasterListing";
+import { applyFilters } from "@/components/listing/filter-utils";
+import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
+
+interface ToastState {
+  msg: string;
+  type: "success" | "error";
+}
+
+function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
+  return (
+    <div
+      className={cn(
+        "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+        toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
+      )}
+    >
+      <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
+      {toast.msg}
+      <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100"><X className="h-3.5 w-3.5" /></button>
+    </div>
+  );
+}
+
+function StatusToggle({ record, onToggle }: { record: TDSMaster; onToggle: (item: TDSMaster) => void }) {
+  const active = record.status === "active";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(record);
+      }}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+        active ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
+      )}
+    >
+      {active ? "Active" : "Inactive"}
+    </button>
+  );
+}
 
 export default function TDSPage() {
-  const router = useRouter();
-  const [records, setRecords] = useState<TDSMaster[]>(loadTDSMasters());
-  const [search, setSearch] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string[]>([]);
-  const [sortKey, setSortKey] = useState<"tdsCode" | "tdsRate" | "status">("tdsCode");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-  const [confirmDialog, setConfirmDialog] = useState<{
-    type: "toggle" | "delete";
-    record: TDSMaster;
-  } | null>(null);
+  const [records, setRecords] = useState<TDSMaster[]>([]);
+  const [filters, setFilters] = useState<FilterState>({});
+  const [sort, setSort] = useState<SortState>({ key: "tdsCode", direction: "asc" });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<TDSMaster | null>(null);
+
+  // Sheet & Dialog states
+  const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
+  const [active, setActive] = useState<TDSMaster | null>(null);
+  const [form, setForm] = useState({
+    tdsCode: "",
+    tdsRate: 0,
+    remarks: "",
+    status: "active" as "active" | "inactive",
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setRecords(loadTDSMasters());
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const openAdd = () => {
+    setForm({
+      tdsCode: "",
+      tdsRate: 0,
+      remarks: "",
+      status: "active",
+    });
+    setErrors({});
+    setActive(null);
+    setSheetMode("add");
+  };
+
+  const openEdit = (row: TDSMaster) => {
+    setForm({
+      tdsCode: row.tdsCode,
+      tdsRate: row.tdsRate,
+      remarks: row.remarks || "",
+      status: row.status === "archived" ? "inactive" : row.status,
+    });
+    setErrors({});
+    setActive(row);
+    setSheetMode("edit");
+  };
+
+  const openView = (row: TDSMaster) => {
+    setActive(row);
+    setSheetMode("view");
+  };
+
+  const closeSheet = () => {
+    setSheetMode(null);
+    setActive(null);
+    setErrors({});
+  };
+
+  const setFormField = (key: string, value: any) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    if (errors[key]) {
+      setErrors((prev) => {
+        const copy = { ...prev };
+        delete copy[key];
+        return copy;
+      });
+    }
+  };
+
+  const toggleStatus = (record: TDSMaster) => {
+    const nextStatus: TDSMaster["status"] = record.status === "active" ? "inactive" : "active";
+    const updated = records.map((r) =>
+      r.id === record.id
+        ? {
+            ...r,
+            status: nextStatus,
+            updatedBy: "Admin",
+            updatedDate: todayStr(),
+            lastStatusChange: todayStr(),
+          }
+        : r
+    );
+    setRecords(updated);
+    saveTDSMasters(updated);
+    setToast({ msg: `TDS status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`, type: "success" });
+  };
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    const updated: TDSMaster[] = records.map((r) =>
+      r.id === deleteTarget.id
+        ? { ...r, status: "archived" as const, updatedBy: "Admin", updatedDate: todayStr() }
+        : r,
+    );
+    saveTDSMasters(updated);
+    setRecords(updated);
+    setDeleteTarget(null);
+    setToast({ msg: "TDS archived successfully", type: "success" });
+  };
+
+  const handleExport = () => {
+    try {
+      const headers = ["ID", "TDS Code", "TDS Rate (%)", "Remarks", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
+      const csvRows = [headers.join(",")];
+      for (const r of records.filter(r => r.status !== "archived")) {
+        const row = [
+          r.id,
+          `"${r.tdsCode.replace(/"/g, '""')}"`,
+          r.tdsRate,
+          `"${(r.remarks || "").replace(/"/g, '""')}"`,
+          r.status,
+          r.createdBy,
+          r.createdDate,
+          r.updatedBy,
+          r.updatedDate,
+        ];
+        csvRows.push(row.join(","));
+      }
+      const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `tds_export_${todayStr()}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setToast({ msg: "TDS configs exported successfully", type: "success" });
+    } catch {
+      setToast({ msg: "Failed to export TDS configs", type: "error" });
+    }
+  };
+
+  const validate = (): boolean => {
+    const e: Record<string, string> = {};
+    if (!form.tdsCode.trim()) e.tdsCode = "TDS Code is required";
+    if (form.tdsRate === undefined || form.tdsRate === null || form.tdsRate < 0) {
+      e.tdsRate = "TDS Rate is required and must be non-negative";
+    }
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const persist = () => {
+    if (!validate()) return;
+    const list = loadTDSMasters();
+    let updatedList: TDSMaster[];
+    if (sheetMode === "add") {
+      const id = nextTDSId(list);
+      const newRecord: TDSMaster = {
+        id,
+        tdsCode: form.tdsCode,
+        tdsRate: form.tdsRate,
+        remarks: form.remarks,
+        status: "active",
+        createdBy: "Admin",
+        createdDate: todayStr(),
+        updatedBy: "Admin",
+        updatedDate: todayStr(),
+        lastStatusChange: todayStr(),
+      };
+      updatedList = [...list, newRecord];
+      setToast({ msg: "TDS added successfully", type: "success" });
+    } else if (active) {
+      updatedList = list.map((r) =>
+        r.id === active.id
+          ? {
+              ...r,
+              tdsCode: form.tdsCode,
+              tdsRate: form.tdsRate,
+              remarks: form.remarks,
+              status: form.status,
+              updatedBy: "Admin",
+              updatedDate: todayStr(),
+              lastStatusChange: form.status !== active.status ? todayStr() : r.lastStatusChange,
+            }
+          : r
+      );
+      setToast({ msg: "TDS updated successfully", type: "success" });
+    } else {
+      return;
+    }
+    saveTDSMasters(updatedList);
+    setRecords(updatedList);
+    closeSheet();
+  };
+
+  const columns: ColumnConfig<TDSMaster>[] = [
+    {
+      key: "tdsCode",
+      header: "TDS Code",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => (
+        <span className="font-mono font-semibold text-brand-700">
+          {row.tdsCode}
+        </span>
+      ),
+    },
+    {
+      key: "tdsRate",
+      header: "TDS Rate (%)",
+      sortable: true,
+      filterable: false,
+      width: "120px",
+      render: (val, row) => (
+        <span>{row.tdsRate}%</span>
+      ),
+    },
+    {
+      key: "remarks",
+      header: "Remarks",
+      sortable: false,
+      filterable: true,
+      filterType: "text",
+      width: "320px",
+      render: (val, row) => (
+        <span>{row.remarks || "—"}</span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: [
+        { label: "Active", value: "active" },
+        { label: "Inactive", value: "inactive" },
+      ],
+      width: "110px",
+      render: (val, row) => (
+        <StatusToggle record={row} onToggle={toggleStatus} />
+      ),
+    },
+  ];
+
+  const actions: ActionItemConfig<TDSMaster>[] = [
+    {
+      label: "View",
+      action: "view",
+      icon: Eye,
+      onClick: (row) => openView(row),
+    },
+    {
+      label: "Edit",
+      action: "edit",
+      icon: Edit2,
+      onClick: (row) => openEdit(row),
+    },
+    {
+      label: "Delete",
+      action: "delete",
+      icon: Trash2,
+      variant: "destructive",
+      onClick: (row) => setDeleteTarget(row),
+    },
+  ];
 
   const filtered = useMemo(() => {
     let result = records.filter(r => r.status !== "archived");
 
     // Search
-    if (search.trim()) {
-      const q = search.toLowerCase();
+    if (filters.search) {
+      const q = String(filters.search).trim().toLowerCase();
       result = result.filter(r =>
         r.tdsCode.toLowerCase().includes(q) ||
         r.remarks?.toLowerCase().includes(q)
       );
     }
 
-    // Filter by status
-    if (filterStatus.length > 0) {
-      result = result.filter(r => filterStatus.includes(r.status));
-    }
+    // Apply column filters
+    result = applyFilters(result, filters);
 
-    // Sort
-    result.sort((a, b) => {
-      let aVal: any = a[sortKey];
-      let bVal: any = b[sortKey];
-      if (typeof aVal === "string") {
-        aVal = aVal.toLowerCase();
-        bVal = bVal.toLowerCase();
-      }
-      if (aVal < bVal) return sortDir === "asc" ? -1 : 1;
-      if (aVal > bVal) return sortDir === "asc" ? 1 : -1;
-      return 0;
-    });
+    // Sorting
+    if (sort.key && sort.direction !== "none") {
+      result.sort((a, b) => {
+        let aVal = a[sort.key as keyof TDSMaster];
+        let bVal = b[sort.key as keyof TDSMaster];
+        if (aVal === undefined) aVal = "";
+        if (bVal === undefined) bVal = "";
+        if (typeof aVal === "string") {
+          aVal = aVal.toLowerCase();
+          bVal = (bVal as string).toLowerCase();
+        }
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return sort.direction === "asc" ? cmp : -cmp;
+      });
+    }
 
     return result;
-  }, [records, search, filterStatus, sortKey, sortDir]);
+  }, [records, filters, sort]);
 
-  const total = records.filter(r => r.status !== "archived").length;
-  const active = records.filter(r => r.status === "active").length;
-  const inactive = records.filter(r => r.status === "inactive").length;
+  const paginated = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
 
-  const toggleFilter = (status: string) => {
-    setFilterStatus(prev =>
-      prev.includes(status)
-        ? prev.filter(s => s !== status)
-        : [...prev, status]
-    );
-  };
+  useEffect(() => {
+    setPage(1);
+  }, [filters, sort, pageSize]);
 
-  const handleSort = (key: "tdsCode" | "tdsRate" | "status") => {
-    if (sortKey === key) {
-      setSortDir(d => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  };
+  const totalCount = records.filter(r => r.status !== "archived").length;
+  const activeCount = records.filter(r => r.status === "active").length;
+  const inactiveCount = records.filter(r => r.status === "inactive").length;
 
-  const handleToggleStatus = (record: TDSMaster) => {
-    setConfirmDialog({ type: "toggle", record });
-  };
-
-  const confirmToggle = () => {
-    if (!confirmDialog || confirmDialog.type !== "toggle") return;
-    const updated: TDSMaster[] = records.map((r) =>
-      r.id === confirmDialog.record.id
-        ? {
-            ...r,
-            status: (r.status === "active" ? "inactive" : "active") as TDSMaster["status"],
-            updatedBy: "Admin",
-            updatedDate: todayStr(),
-            lastStatusChange: todayStr(),
-          }
-        : r,
-    );
-    saveTDSMasters(updated);
-    setRecords(updated);
-    setConfirmDialog(null);
-    setToast({ msg: "Status updated successfully", type: "success" });
-    setTimeout(() => setToast(null), 3200);
-  };
-
-  const handleDelete = (record: TDSMaster) => {
-    setConfirmDialog({ type: "delete", record });
-  };
-
-  const confirmDelete = () => {
-    if (!confirmDialog || confirmDialog.type !== "delete") return;
-    const updated: TDSMaster[] = records.map((r) =>
-      r.id === confirmDialog.record.id
-        ? { ...r, status: "archived" as const, updatedBy: "Admin", updatedDate: todayStr() }
-        : r,
-    );
-    saveTDSMasters(updated);
-    setRecords(updated);
-    setConfirmDialog(null);
-    setToast({ msg: "TDS archived successfully", type: "success" });
-    setTimeout(() => setToast(null), 3200);
-  };
-
-  const SortTh = ({
-    label,
-    colKey,
-  }: {
-    label: string;
-    colKey: "tdsCode" | "tdsRate" | "status";
-  }) => {
-    const active = sortKey === colKey;
-    return (
-      <th
-        onClick={() => handleSort(colKey)}
-        className={cn(
-          "px-4 py-3 text-left text-xs font-semibold cursor-pointer select-none group whitespace-nowrap",
-          active && "bg-brand-50/60"
-        )}
-      >
-        <div className="flex items-center gap-1.5">
-          <span className={active ? "text-brand-700" : "text-foreground"}>
-            {label}
-          </span>
-          {active ? (
-            <ChevronDown
-              className={cn(
-                "w-3 h-3 text-brand-600 transition-transform",
-                sortDir === "desc" && "rotate-180"
-              )}
-            />
-          ) : (
-            <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
-          )}
-        </div>
-      </th>
-    );
-  };
+  const sheetTitle =
+    sheetMode === "add"
+      ? "Add TDS"
+      : sheetMode === "edit"
+      ? "Edit TDS"
+      : "View TDS";
 
   return (
     <AppLayout>
-      <div className="max-w-[1200px] mx-auto space-y-4">
+      <div className="space-y-5">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-foreground">TDS Master</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Manage Tax Deducted at Source rates and configurations
-            </p>
-          </div>
-          <Button
-            size="sm"
-            className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-            onClick={() => router.push("/masters/tds/add")}
-          >
-            <Plus className="w-3.5 h-3.5" /> Add TDS
-          </Button>
+        <div>
+          <h1 className="text-xl font-bold text-foreground">TDS Master</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Manage Tax Deducted at Source rates and configurations
+          </p>
         </div>
 
         {/* KPI Cards */}
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center flex-shrink-0">
-              <span className="text-xs font-bold text-white">∑</span>
-            </div>
-            <div>
-              <p className="text-base font-bold text-foreground leading-none">{total}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Total TDS</p>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center flex-shrink-0">
-              <span className="text-xs font-bold text-white">✓</span>
-            </div>
-            <div>
-              <p className="text-base font-bold text-foreground leading-none">{active}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Active</p>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-slate-400 flex items-center justify-center flex-shrink-0">
-              <span className="text-xs font-bold text-white">○</span>
-            </div>
-            <div>
-              <p className="text-base font-bold text-foreground leading-none">{inactive}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Inactive</p>
-            </div>
-          </div>
+          <MiniKPICard label="Total TDS Configs" value={totalCount} icon={Percent} accent={true} />
+          <MiniKPICard label="Active" value={activeCount} icon={CheckCircle2} accent={false} />
+          <MiniKPICard label="Inactive" value={inactiveCount} icon={XCircle} accent={false} />
         </div>
 
-        {/* Toolbar */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-[10px] text-muted-foreground pointer-events-none" />
-            <Input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search TDS Code..."
-              className="pl-9 h-8 text-xs rounded-lg"
-            />
-          </div>
-
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                className={cn(
-                  "h-8 px-2.5 text-xs border rounded-lg inline-flex items-center gap-1.5 font-medium transition-colors",
-                  filterStatus.length > 0
-                    ? "border-brand-400 bg-brand-50 text-brand-700"
-                    : "border-border text-muted-foreground hover:bg-muted"
-                )}
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-                Filter
-                {filterStatus.length > 0 && (
-                  <span className="w-4 h-4 text-[10px] bg-brand-600 text-white rounded-full inline-flex items-center justify-center font-bold">
-                    {filterStatus.length}
-                  </span>
-                )}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-52 p-0">
-              <div className="px-3 py-2.5 border-b border-border">
-                <p className="text-xs font-semibold text-foreground">Filter by Status</p>
-              </div>
-              <div className="px-3 py-2.5 space-y-2">
-                {["active", "inactive"].map(v => (
-                  <label
-                    key={v}
-                    className="flex items-center gap-2.5 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 rounded accent-brand-600"
-                      checked={filterStatus.includes(v)}
-                      onChange={() => toggleFilter(v)}
-                    />
-                    <span className="text-xs capitalize text-foreground">{v}</span>
-                  </label>
-                ))}
-              </div>
-              {filterStatus.length > 0 && (
-                <div className="px-3 py-2 border-t border-border">
-                  <button
-                    onClick={() => setFilterStatus([])}
-                    className="text-xs text-brand-600 hover:underline"
-                  >
-                    Clear filter
-                  </button>
-                </div>
-              )}
-            </PopoverContent>
-          </Popover>
-
-          {filterStatus.map(v => (
-            <span
-              key={v}
-              className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium"
-            >
-              {v.charAt(0).toUpperCase() + v.slice(1)}
-              <button onClick={() => toggleFilter(v)}>
-                <span className="w-3 h-3">×</span>
-              </button>
-            </span>
-          ))}
-        </div>
-
-        {/* Table */}
-        {filtered.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-16 bg-white rounded-xl border border-border">
-            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-              <AlertCircle className="w-5 h-5 text-muted-foreground" />
-            </div>
-            <p className="text-sm font-medium text-foreground">
-              {records.length === 0 ? "No TDS found" : "No TDS match filters"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {records.length === 0
-                ? "Add your first TDS rate to get started."
-                : "Try adjusting your search or filters."}
-            </p>
-            {filterStatus.length > 0 && (
-              <button
-                onClick={() => setFilterStatus([])}
-                className="text-xs text-brand-600 hover:underline mt-1"
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full table-fixed">
-                <colgroup>
-                  <col className="w-36" />
-                  <col className="w-32" />
-                  <col />
-                  <col className="w-44" />
-                  <col className="w-12" />
-                </colgroup>
-                <thead>
-                  <tr className="bg-muted/40 border-b border-border">
-                    <SortTh label="TDS Code" colKey="tdsCode" />
-                    <SortTh label="TDS Rate (%)" colKey="tdsRate" />
-                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground">
-                      Remarks
-                    </th>
-                    <SortTh label="Status" colKey="status" />
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold text-foreground w-12">
-                      —
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map(record => (
-                    <tr
-                      key={record.id}
-                      className="border-b border-border/60 hover:bg-muted/20 transition-colors group"
-                    >
-                      <td className="px-4 py-2">
-                        <span className="font-mono text-xs font-semibold text-brand-700">
-                          {record.tdsCode}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-xs text-foreground">
-                        {record.tdsRate}%
-                      </td>
-                      <td className="px-4 py-2 text-xs text-muted-foreground">
-                        {record.remarks || "—"}
-                      </td>
-                      <td className="px-4 py-2">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={cn(
-                              "text-xs font-medium",
-                              record.status === "active"
-                                ? "text-emerald-600"
-                                : "text-muted-foreground"
-                            )}
-                          >
-                            {record.status === "active" ? "Active" : "Inactive"}
-                          </span>
-                          <Switch
-                            checked={record.status === "active"}
-                            onCheckedChange={() => handleToggleStatus(record)}
-                          />
-                        </div>
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto">
-                              <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-44">
-                            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
-                              Actions
-                            </DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <button
-                              onClick={() => router.push(`/masters/tds/${record.id}/edit`)}
-                              className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted rounded-sm transition-colors"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" /> Edit
-                            </button>
-                            <DropdownMenuSeparator />
-                            <button
-                              onClick={() => handleDelete(record)}
-                              className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-sm transition-colors"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" /> Delete
-                            </button>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/20">
-              <p className="text-[11px] text-muted-foreground">
-                Showing <span className="font-medium text-foreground">{filtered.length}</span> of{" "}
-                <span className="font-medium text-foreground">{total}</span> records
-              </p>
-            </div>
-          </div>
-        )}
+        {/* Table Listing */}
+        <MasterListing<TDSMaster>
+          columns={columns}
+          data={paginated}
+          totalRecords={filtered.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          onSortChange={setSort}
+          onFilterChange={setFilters}
+          actions={actions}
+          onAdd={openAdd}
+          addLabel="Add TDS"
+          onExport={handleExport}
+          emptyMessage="TDS rates"
+          searchPlaceholder="Search TDS Code, remarks..."
+          currentFilters={filters}
+          currentSort={sort}
+        />
       </div>
 
-      {/* Confirm Dialog */}
-      {confirmDialog && (
-        <Dialog open={!!confirmDialog} onOpenChange={() => setConfirmDialog(null)}>
+      <Sheet open={sheetMode !== null} onOpenChange={(o) => !o && closeSheet()}>
+        <SheetContent>
+          <SheetHeader>
+            <div className="flex items-start gap-3 pr-8">
+              <div className="flex items-center justify-center border w-9 h-9 rounded-xl bg-brand-50 border-brand-100">
+                <Percent className="w-4 h-4 text-brand-600" />
+              </div>
+              <div>
+                <SheetTitle className="text-base">{sheetTitle}</SheetTitle>
+                <SheetDescription className="text-xs">
+                  {sheetMode === "view" ? "Read-only details" : "Compact TDS form"}
+                </SheetDescription>
+              </div>
+            </div>
+          </SheetHeader>
+
+          <SheetBody>
+            {sheetMode === "view" && active ? (
+              <div className="space-y-4">
+                <div className="px-3 border rounded-lg border-border/60 bg-muted/10">
+                  <MasterViewRow label="TDS Code" value={<span className="font-mono">{active.tdsCode}</span>} />
+                  <MasterViewRow label="TDS Rate (%)" value={`${active.tdsRate}%`} />
+                  <MasterViewRow label="Remarks" value={active.remarks || "—"} />
+                  <MasterViewRow label="Status" value={active.status === "active" ? "Active" : "Inactive"} />
+                </div>
+                <div className="grid grid-cols-2 gap-3 pt-2 text-xs border-t">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
+                    <p className="font-medium">{active.createdBy}</p>
+                    <p className="text-muted-foreground">{active.createdDate}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Updated By</p>
+                    <p className="font-medium">{active.updatedBy}</p>
+                    <p className="text-muted-foreground">{active.updatedDate}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">
+                      TDS Code <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      value={form.tdsCode}
+                      onChange={(e) => setFormField("tdsCode", e.target.value)}
+                      placeholder="e.g., 194C, 194J"
+                      className={cn("h-8 text-xs", errors.tdsCode && "border-red-400 focus-visible:ring-red-300")}
+                    />
+                    {errors.tdsCode && <p className="text-[11px] text-red-500">{errors.tdsCode}</p>}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">
+                      TDS Rate (%) <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      type="number"
+                      value={form.tdsRate}
+                      onChange={(e) => setFormField("tdsRate", parseFloat(e.target.value) || 0)}
+                      placeholder="e.g., 1, 5, 10"
+                      step="0.01"
+                      min="0"
+                      className={cn("h-8 text-xs", errors.tdsRate && "border-red-400 focus-visible:ring-red-300")}
+                    />
+                    {errors.tdsRate && <p className="text-[11px] text-red-500">{errors.tdsRate}</p>}
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label className="text-xs font-medium">Remarks</Label>
+                    <Textarea
+                      value={form.remarks}
+                      onChange={(e) => setFormField("remarks", e.target.value)}
+                      placeholder="Optional notes..."
+                      rows={3}
+                      className="text-xs rounded-lg resize-none min-h-[72px]"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </SheetBody>
+
+          <SheetFooter>
+            {sheetMode === "view" ? (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Back
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+                  onClick={() => active && openEdit(active)}
+                >
+                  Edit
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+                  onClick={persist}
+                >
+                  Save
+                </Button>
+              </>
+            )}
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* Confirm Delete Dialog */}
+      {deleteTarget && (
+        <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
           <DialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-base">
-                <div
-                  className={cn(
-                    "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-                    confirmDialog.type === "delete"
-                      ? "bg-red-50 border border-red-200"
-                      : "bg-amber-50 border border-amber-200"
-                  )}
-                >
-                  <AlertCircle
-                    className={cn(
-                      "w-4 h-4",
-                      confirmDialog.type === "delete"
-                        ? "text-red-500"
-                        : "text-amber-500"
-                    )}
-                  />
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-red-50 border border-red-200">
+                  <AlertCircle className="w-4 h-4 text-red-500" />
                 </div>
-                {confirmDialog.type === "delete"
-                  ? "Delete TDS"
-                  : "Change Status"}
+                Delete TDS
               </DialogTitle>
               <DialogDescription className="pt-1">
-                {confirmDialog.type === "delete"
-                  ? `Archive TDS ${confirmDialog.record.tdsCode}? This cannot be undone.`
-                  : `Change status of TDS ${confirmDialog.record.tdsCode} to ${
-                      confirmDialog.record.status === "active" ? "Inactive" : "Active"
-                    }?`}
+                Archive TDS {deleteTarget.tdsCode}? This cannot be undone.
               </DialogDescription>
             </DialogHeader>
             <div className="flex items-center justify-end gap-2 pt-2">
@@ -481,23 +586,16 @@ export default function TDSPage() {
                 variant="outline"
                 size="sm"
                 className="h-8 text-xs"
-                onClick={() => setConfirmDialog(null)}
+                onClick={() => setDeleteTarget(null)}
               >
                 Cancel
               </Button>
               <Button
                 size="sm"
-                className={cn(
-                  "h-8 text-xs gap-1.5",
-                  confirmDialog.type === "delete"
-                    ? "bg-red-600 hover:bg-red-700 text-white"
-                    : "bg-brand-600 hover:bg-brand-700 text-white"
-                )}
-                onClick={
-                  confirmDialog.type === "delete" ? confirmDelete : confirmToggle
-                }
+                className="h-8 text-xs text-white bg-red-600 hover:bg-red-700"
+                onClick={confirmDelete}
               >
-                {confirmDialog.type === "delete" ? "Delete" : "Update"}
+                Delete
               </Button>
             </div>
           </DialogContent>
@@ -505,17 +603,7 @@ export default function TDSPage() {
       )}
 
       {/* Toast */}
-      {toast && (
-        <div
-          className={cn(
-            "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
-            "animate-in slide-in-from-top-2 fade-in-0 duration-300",
-            toast.type === "success" ? "bg-emerald-600" : "bg-red-600"
-          )}
-        >
-          {toast.msg}
-        </div>
-      )}
+      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </AppLayout>
   );
 }

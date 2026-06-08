@@ -119,6 +119,13 @@ export interface CustomerFormValues {
   bankBranchAddress: string;
   bankAccountNo: string;
   ifscCode: string;
+  
+  // New aligned bank fields
+  accountHolderName: string;
+  branch: string;
+  accountNumber: string;
+  confirmAccountNumber: string;
+  swiftCode: string;
   requiredDocuments: {
     documentTypeId: string;
     documentName: string;
@@ -170,6 +177,11 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
   bankBranchAddress: "",
   bankAccountNo: "",
   ifscCode: "",
+  accountHolderName: "",
+  branch: "",
+  accountNumber: "",
+  confirmAccountNumber: "",
+  swiftCode: "",
   requiredDocuments: [],
   additionalDocuments: [],
   
@@ -217,6 +229,11 @@ export function customerToFormValues(c: Customer): CustomerFormValues {
     bankBranchAddress: c.bankBranchAddress,
     bankAccountNo: c.bankAccountNo,
     ifscCode: c.ifscCode,
+    accountHolderName: c.accountHolderName || "",
+    branch: c.branch || c.bankBranchAddress || "",
+    accountNumber: c.bankAccountNo || "",
+    confirmAccountNumber: c.bankAccountNo || "",
+    swiftCode: c.swiftCode || "",
     requiredDocuments: c.documents?.requiredDocuments || [],
     additionalDocuments: c.documents?.additionalDocuments || [],
     
@@ -403,7 +420,7 @@ function ProductSelect({
         <button
           type="button"
           disabled={disabled}
-          className="w-full h-7 px-2 text-xs text-left border border-border rounded-lg bg-background flex items-center justify-between hover:bg-muted/30 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center justify-between w-full px-2 text-xs text-left border rounded-lg h-7 border-border bg-background hover:bg-muted/30 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <span className={selected ? "text-foreground truncate" : "text-muted-foreground"}>
             {selected ? `${selected.sku} — ${selected.productName}` : "Select product…"}
@@ -419,7 +436,7 @@ function ProductSelect({
               placeholder="Search product…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="h-8 text-xs pl-8 focus-visible:ring-0"
+              className="h-8 pl-8 text-xs focus-visible:ring-0"
               autoFocus
             />
           </div>
@@ -435,14 +452,14 @@ function ProductSelect({
                 value === p.productId && "bg-brand-50",
               )}
             >
-              <span className="font-mono text-brand-700 flex-shrink-0">{p.sku}</span>
+              <span className="flex-shrink-0 font-mono text-brand-700">{p.sku}</span>
               <span className="flex-1 truncate">{p.productName}</span>
               <span className="text-[10px] text-muted-foreground">MRP: ₹{p.mrp}</span>
               {value === p.productId && <Check className="w-3.5 h-3.5 text-brand-600" />}
             </button>
           ))}
           {filtered.length === 0 && (
-            <p className="px-3 py-3 text-xs text-muted-foreground text-center">No products found</p>
+            <p className="px-3 py-3 text-xs text-center text-muted-foreground">No products found</p>
           )}
         </div>
       </PopoverContent>
@@ -733,15 +750,19 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
 
   const inputCls = (key: string) => cn("h-8 text-xs", errors[key] && "border-red-400 focus-visible:ring-red-300");
   const textareaCls = (key?: string) => cn("text-xs resize-none", key && errors[key] && "border-red-400");
+  const vendorFieldClass = (key: string) => cn(
+    "h-9 text-sm border-border/70 rounded-lg bg-white shadow-none focus-visible:ring-1 focus-visible:ring-brand-500/30 placeholder:text-muted-foreground/50",
+    errors[key] && "border-red-400 focus-visible:ring-red-300"
+  );
 
   return (
     <div className="w-full">
       <Tabs defaultValue="basic" className="w-full">
-        <TabsList className="h-8 p-0.5 bg-muted/30 mb-4 inline-flex gap-0.5">
-          <TabsTrigger value="basic" className="px-4 text-xs h-7">Basic Details</TabsTrigger>
-          <TabsTrigger value="branch" className="px-4 text-xs h-7">Branch</TabsTrigger>
-          <TabsTrigger value="commercial" className="px-4 text-xs h-7">Bank & Commercial</TabsTrigger>
-          <TabsTrigger value="product" className="px-4 text-xs h-7">Product</TabsTrigger>
+        <TabsList className="mb-4 w-full">
+          <TabsTrigger value="basic" className="text-xs">Basic Details</TabsTrigger>
+          <TabsTrigger value="branch" className="text-xs">Branch</TabsTrigger>
+          <TabsTrigger value="commercial" className="text-xs">Bank & Commercial</TabsTrigger>
+          <TabsTrigger value="product" className="text-xs">Product</TabsTrigger>
         </TabsList>
 
         {/* ── TAB 1: BASIC DETAILS ── */}
@@ -880,7 +901,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
               </div>
             </div>
 
-            <div className="border-t border-border/60 pt-5">
+            <div className="pt-5 border-t border-border/60">
               <SectionHead label="Tax & Registration" />
               <div className="grid grid-cols-6 gap-3">
                 {/* GST Applicable */}
@@ -1070,52 +1091,93 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                   disabled={readOnly}
                 />
               </div>
+            </div>
 
-              {/* Bank Details */}
-              <div className="col-span-4 space-y-1">
-                <Label className="text-xs font-medium">Bank details</Label>
-                <Textarea
+            {/* Bank Details Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-3 mt-4 pt-4 border-t border-border/60">
+              {/* Account Holder Name */}
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-foreground">Account Holder Name</Label>
+                <Input
+                  disabled={readOnly}
+                  value={form.accountHolderName}
+                  onChange={(e) => set("accountHolderName", e.target.value)}
+                  className={vendorFieldClass("accountHolderName")}
+                />
+                <FieldError msg={errors.accountHolderName} />
+              </div>
+
+              {/* Bank Name */}
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-foreground">Bank Name</Label>
+                <Input
+                  disabled={readOnly}
                   value={form.bankName}
                   onChange={(e) => set("bankName", e.target.value)}
-                  rows={2}
-                  className={textareaCls()}
-                  disabled={readOnly}
+                  className={vendorFieldClass("bankName")}
                 />
+                <FieldError msg={errors.bankName} />
               </div>
 
-              {/* Bank Branch Address */}
-              <div className="col-span-4 space-y-1">
-                <Label className="text-xs font-medium">Bank-Branch-Address</Label>
-                <Textarea
-                  value={form.bankBranchAddress}
-                  onChange={(e) => set("bankBranchAddress", e.target.value)}
-                  rows={2}
-                  className={textareaCls()}
-                  disabled={readOnly}
-                />
-              </div>
-
-              {/* Bank Account No */}
-              <div className="col-span-2 space-y-1">
-                <Label className="text-xs font-medium">Bank A/c #</Label>
+              {/* Branch Name */}
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-foreground">Branch Name</Label>
                 <Input
-                  value={form.bankAccountNo}
-                  onChange={(e) => set("bankAccountNo", e.target.value)}
-                  className={cn("font-mono", inputCls("bankAccountNo"))}
                   disabled={readOnly}
+                  value={form.branch}
+                  onChange={(e) => set("branch", e.target.value)}
+                  className={vendorFieldClass("branch")}
                 />
+                <FieldError msg={errors.branch} />
+              </div>
+
+              {/* Account Number */}
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-foreground">Account Number</Label>
+                <Input
+                  disabled={readOnly}
+                  value={form.accountNumber}
+                  onChange={(e) => set("accountNumber", e.target.value)}
+                  className={cn(vendorFieldClass("accountNumber"), "font-mono")}
+                />
+                <FieldError msg={errors.accountNumber} />
+              </div>
+
+              {/* Confirm Account Number */}
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-foreground">Confirm Account Number</Label>
+                <Input
+                  disabled={readOnly}
+                  value={form.confirmAccountNumber}
+                  onChange={(e) => set("confirmAccountNumber", e.target.value)}
+                  className={cn(vendorFieldClass("confirmAccountNumber"), "font-mono")}
+                />
+                <FieldError msg={errors.confirmAccountNumber} />
               </div>
 
               {/* IFSC Code */}
-              <div className="col-span-2 space-y-1">
-                <Label className="text-xs font-medium">IFSC Code</Label>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-foreground">IFSC Code</Label>
                 <Input
+                  disabled={readOnly}
                   value={form.ifscCode}
                   onChange={(e) => set("ifscCode", e.target.value.toUpperCase())}
-                  className={cn("font-mono", inputCls("ifscCode"))}
-                  disabled={readOnly}
+                  className={cn(vendorFieldClass("ifscCode"), "font-mono uppercase")}
                 />
                 <FieldError msg={errors.ifscCode} />
+              </div>
+
+              {/* SWIFT Code */}
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-foreground">SWIFT Code</Label>
+                <Input
+                  disabled={readOnly}
+                  value={form.swiftCode}
+                  onChange={(e) => set("swiftCode", e.target.value)}
+                  className={vendorFieldClass("swiftCode")}
+                  placeholder="Optional"
+                />
+                <FieldError msg={errors.swiftCode} />
               </div>
             </div>
           </div>
@@ -1124,7 +1186,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
         {/* ── TAB 4: PRODUCT MAPPING ── */}
         <TabsContent value="product" className="mt-0 space-y-5">
           <div>
-            <div className="flex justify-between items-center border-b border-border/60 pb-3 mb-4">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-border/60">
             <div>
               {/* <SectionHead label="Product Mappings" sub="Map products and custom prices for this customer" /> */}
               </div>
@@ -1133,7 +1195,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-7 text-xs gap-1"
+                  className="gap-1 text-xs h-7"
                   onClick={addProductRow}
                 >
                   <Plus className="w-3 h-3" /> Add Product
@@ -1142,15 +1204,15 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
             </div>
 
             {!form.customerProducts || form.customerProducts.length === 0 ? (
-              <div className="border border-dashed border-border rounded-lg py-6 text-center">
+              <div className="py-6 text-center border border-dashed rounded-lg border-border">
                 <p className="text-xs text-muted-foreground">No products — click Add Product</p>
               </div>
             ) : (
-              <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
+              <div className="overflow-hidden bg-white border shadow-sm border-border rounded-xl">
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[640px]">
                     <thead>
-                      <tr className="bg-muted/40 border-b border-border">
+                      <tr className="border-b bg-muted/40 border-border">
                         {[
                           { h: "Product", className: "" },
                           { h: "MRP", className: "w-36" },
@@ -1179,7 +1241,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                             {/* Product */}
                             <td className="px-2 py-1.5 min-w-[240px]">
                               {readOnly ? (
-                                <span className="text-xs text-foreground font-medium">
+                                <span className="text-xs font-medium text-foreground">
                                   {p.productName ? `${p.sku || "—"} — ${p.productName}` : "—"}
                                 </span>
                               ) : (
@@ -1229,7 +1291,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                                       : "—"
                                   }
                                   readOnly
-                                  className="h-7 text-xs bg-muted/40 text-muted-foreground select-none pointer-events-none cursor-not-allowed border-border"
+                                  className="text-xs cursor-not-allowed pointer-events-none select-none h-7 bg-muted/40 text-muted-foreground border-border"
                                 />
                               )}
                             </td>
@@ -1292,7 +1354,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
         {/* ── TAB 5: BRANCH MAPPING & DOCUMENTS ── */}
         <TabsContent value="branch" className="mt-0 space-y-3">
           <div>
-            <div className="flex justify-between items-center mb-3">
+            <div className="flex items-center justify-between mb-3">
               <div>
                 {/* <SectionHead label="Branch Details" sub="Manage customer branches and document checklists" /> */}
               </div>
@@ -1325,7 +1387,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
 
             {errors.branches && (
               <div className="flex items-center gap-1.5 text-xs text-red-500 bg-red-50 p-2.5 rounded-lg border border-red-100 mb-4">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <AlertCircle className="flex-shrink-0 w-4 h-4" />
                 <span>{errors.branches}</span>
               </div>
             )}
@@ -1336,7 +1398,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                 const isExpanded = !!expandedBranches[bIdx];
 
                 return (
-                  <div key={bIdx} className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+                  <div key={bIdx} className="overflow-hidden bg-white border shadow-sm border-border rounded-xl">
                     {/* Header Small Card */}
                     <div
                       onClick={() => {
@@ -1347,17 +1409,17 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                         isExpanded ? "border-b border-border bg-muted/5" : ""
                       )}
                     >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="flex items-center flex-1 min-w-0 gap-3">
                         <span className="text-xs font-bold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-lg shrink-0">
                           #{bIdx + 1}
                         </span>
                         
                         {readOnly ? (
-                          <span className="text-xs font-semibold text-foreground truncate">
+                          <span className="text-xs font-semibold truncate text-foreground">
                             {branch.branchName}
                           </span>
                         ) : (
-                          <div className="flex items-center gap-2 flex-1 max-w-sm">
+                          <div className="flex items-center flex-1 max-w-sm gap-2">
                             <Input
                               value={branch.branchName}
                               onChange={(e) => {
@@ -1426,7 +1488,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
 
                     {/* Collapsible Details */}
                     {isExpanded && (
-                      <div className="p-5 space-y-5 animate-in fade-in-50 duration-200">
+                      <div className="p-5 space-y-5 duration-200 animate-in fade-in-50">
                         {/* Address Grid */}
                         <div className="grid grid-cols-2 gap-6">
                           {/* Billing Address block */}
@@ -1600,21 +1662,21 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                         </div>
 
                         {/* Branch Documents Section */}
-                        <div className="space-y-3 pt-3 border-t border-border/40">
+                        <div className="pt-3 space-y-3 border-t border-border/40">
                           <div
                             onClick={() => {
                               setExpandedChecklists(prev => ({ ...prev, [bIdx]: !prev[bIdx] }));
                             }}
-                            className="flex items-center justify-between cursor-pointer hover:bg-muted/10 p-2 rounded-lg transition-colors select-none bg-muted/5 border border-border/40"
+                            className="flex items-center justify-between p-2 transition-colors border rounded-lg cursor-pointer select-none hover:bg-muted/10 bg-muted/5 border-border/40"
                           >
                             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Document Upload Checklist</p>
                             <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform duration-200", expandedChecklists[bIdx] && "rotate-180")} />
                           </div>
                           
                           {expandedChecklists[bIdx] && (
-                            <div className="space-y-4 animate-in fade-in-50 duration-200">
+                            <div className="space-y-4 duration-200 animate-in fade-in-50">
                               {!form.customerType ? (
-                                <p className="text-xs text-muted-foreground italic">Please select a Customer Type in Basic Details to view documents.</p>
+                                <p className="text-xs italic text-muted-foreground">Please select a Customer Type in Basic Details to view documents.</p>
                               ) : (
                                 <>
                                   {/* Required Documents Checklist Table */}
@@ -1628,16 +1690,16 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                                         <>
                                           <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Required Checklist</p>
                                           {requiredDocs.length === 0 ? (
-                                            <p className="text-xs text-muted-foreground italic bg-muted/10 p-3 rounded-lg border border-border/40">No required documents for this Customer Type.</p>
+                                            <p className="p-3 text-xs italic border rounded-lg text-muted-foreground bg-muted/10 border-border/40">No required documents for this Customer Type.</p>
                                           ) : (
-                                            <div className="overflow-x-auto border border-border/60 rounded-lg bg-background">
-                                              <table className="w-full text-left text-xs border-collapse">
+                                            <div className="overflow-x-auto border rounded-lg border-border/60 bg-background">
+                                              <table className="w-full text-xs text-left border-collapse">
                                                 <thead>
-                                                  <tr className="border-b border-border bg-muted/20 text-muted-foreground font-semibold">
-                                                    <th className="py-2 px-3 w-12 text-center">Sr.</th>
-                                                    <th className="py-2 px-3">Document Name</th>
-                                                    <th className="py-2 px-3 w-40 text-center">File Attached</th>
-                                                    <th className="py-2 px-3 w-44 text-right">Actions</th>
+                                                  <tr className="font-semibold border-b border-border bg-muted/20 text-muted-foreground">
+                                                    <th className="w-12 px-3 py-2 text-center">Sr.</th>
+                                                    <th className="px-3 py-2">Document Name</th>
+                                                    <th className="w-40 px-3 py-2 text-center">File Attached</th>
+                                                    <th className="px-3 py-2 text-right w-44">Actions</th>
                                                   </tr>
                                                 </thead>
                                                 <tbody>
@@ -1645,9 +1707,9 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                                                     const isAttached = !!doc.fileName;
                                                     return (
                                                       <tr key={originalIdx} className="border-b border-border/60 hover:bg-muted/5">
-                                                        <td className="py-2 px-3 text-center text-muted-foreground">{docIdx + 1}</td>
-                                                        <td className="py-2 px-3 font-medium text-foreground">{doc.documentName}</td>
-                                                        <td className="py-2 px-3 text-center">
+                                                        <td className="px-3 py-2 text-center text-muted-foreground">{docIdx + 1}</td>
+                                                        <td className="px-3 py-2 font-medium text-foreground">{doc.documentName}</td>
+                                                        <td className="px-3 py-2 text-center">
                                                           {isAttached ? (
                                                             <button
                                                               type="button"
@@ -1708,17 +1770,17 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
 
                                   {errors[`branch_${bIdx}_documents`] && (
                                     <div className="flex items-center gap-1.5 mt-2 text-xs text-red-500">
-                                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                                      <AlertCircle className="flex-shrink-0 w-4 h-4" />
                                       <span>{errors[`branch_${bIdx}_documents`]}</span>
                                     </div>
                                   )}
 
                                   {/* Separate Optional Document Upload Section (Below the Checklist Table) */}
-                                  <div className="pt-4 border-t border-border/40 space-y-3">
+                                  <div className="pt-4 space-y-3 border-t border-border/40">
                                     {!readOnly && (
                                       <>
                                         <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Add Additional Document (Optional)</p>
-                                        <div className="flex items-end gap-3 max-w-xl">
+                                        <div className="flex items-end max-w-xl gap-3">
                                           <div className="flex-1 space-y-1">
                                             <Label className="text-xs font-medium text-foreground">Document Title</Label>
                                             <Input
@@ -1761,16 +1823,16 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                                       if (additionalDocs.length === 0) return null;
 
                                       return (
-                                        <div className="space-y-2 mt-3">
+                                        <div className="mt-3 space-y-2">
                                           <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Additional Documents</p>
-                                          <div className="overflow-x-auto border border-border/60 rounded-lg bg-background">
-                                            <table className="w-full text-left text-xs border-collapse">
+                                          <div className="overflow-x-auto border rounded-lg border-border/60 bg-background">
+                                            <table className="w-full text-xs text-left border-collapse">
                                               <thead>
-                                                <tr className="border-b border-border bg-muted/20 text-muted-foreground font-semibold">
-                                                  <th className="py-2 px-3 w-12 text-center">Sr.</th>
-                                                  <th className="py-2 px-3">Document Title</th>
-                                                  <th className="py-2 px-3 w-40 text-center">File Attached</th>
-                                                  <th className="py-2 px-3 w-44 text-right">Actions</th>
+                                                <tr className="font-semibold border-b border-border bg-muted/20 text-muted-foreground">
+                                                  <th className="w-12 px-3 py-2 text-center">Sr.</th>
+                                                  <th className="px-3 py-2">Document Title</th>
+                                                  <th className="w-40 px-3 py-2 text-center">File Attached</th>
+                                                  <th className="px-3 py-2 text-right w-44">Actions</th>
                                                 </tr>
                                               </thead>
                                               <tbody>
@@ -1778,9 +1840,9 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                                                   const isAttached = !!doc.fileName;
                                                   return (
                                                     <tr key={originalIdx} className="border-b border-border/60 hover:bg-muted/5">
-                                                      <td className="py-2 px-3 text-center text-muted-foreground">{addIdx + 1}</td>
-                                                      <td className="py-2 px-3 font-medium text-foreground">{doc.documentName}</td>
-                                                      <td className="py-2 px-3 text-center">
+                                                      <td className="px-3 py-2 text-center text-muted-foreground">{addIdx + 1}</td>
+                                                      <td className="px-3 py-2 font-medium text-foreground">{doc.documentName}</td>
+                                                      <td className="px-3 py-2 text-center">
                                                         {isAttached ? (
                                                           <button
                                                             type="button"
@@ -1873,8 +1935,8 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                   className="max-h-[50vh] max-w-full object-contain rounded-md animate-in zoom-in-95 duration-200"
                 />
               ) : (
-                <div className="text-center space-y-4">
-                  <div className="inline-flex p-3 rounded-full bg-brand-50 border border-brand-100 text-brand-600">
+                <div className="space-y-4 text-center">
+                  <div className="inline-flex p-3 border rounded-full bg-brand-50 border-brand-100 text-brand-600">
                     <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
@@ -1963,6 +2025,9 @@ export function validateCustomerForm(form: CustomerFormValues): Record<string, s
     const ir = parseFloat(form.interestRate);
     if (isNaN(ir) || ir < 0 || ir > 100) e.interestRate = "Interest rate must be 0-100";
   }
+  if (form.accountNumber && form.accountNumber !== form.confirmAccountNumber) {
+    e.confirmAccountNumber = "Account number mismatch";
+  }
   if (form.ifscCode.trim() && !validateIFSC(form.ifscCode)) e.ifscCode = "Invalid IFSC format";
   if (form.status === "blocked" && !form.blockReason.trim()) e.blockReason = "Block reason is required when status is Blocked";
 
@@ -2017,9 +2082,15 @@ export function formValuesToCustomer(
     interestRate: parseFloat(form.interestRate) || 0,
     paymentTerms: form.paymentTerms,
     bankName: form.bankName.trim(),
-    bankBranchAddress: form.bankBranchAddress.trim(),
-    bankAccountNo: form.bankAccountNo.trim(),
+    bankBranchAddress: form.branch.trim(),
+    bankAccountNo: form.accountNumber.trim(),
     ifscCode: form.ifscCode.trim().toUpperCase(),
+    
+    // New aligned bank fields
+    accountHolderName: form.accountHolderName.trim(),
+    branch: form.branch.trim(),
+    swiftCode: form.swiftCode.trim(),
+    
     createdBy: base.createdBy ?? "Admin",
     createdDate: base.createdDate ?? todayStr(),
     updatedBy: "Admin",
