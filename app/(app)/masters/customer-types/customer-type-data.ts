@@ -2,6 +2,7 @@
 
 export interface CustomerTypeDocument {
   id: string;
+  documentTypeId: string;
   documentName: string;
 }
 
@@ -18,8 +19,8 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
     customerType: "Farmer",
     description: "Standard farm customer",
     documentTypes: [
-      { id: "DOC-001", documentName: "Aadhaar Card Copy of Chairman/CEO" },
-      { id: "DOC-002", documentName: "Bank Account Details with Cancelled Cheque" },
+      { id: "DOC-001", documentTypeId: "DT-005", documentName: "Aadhaar Card" },
+      { id: "DOC-002", documentTypeId: "DT-010", documentName: "Bank Account Details with Cancelled Cheque" },
     ],
   },
   {
@@ -27,11 +28,11 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
     customerType: "Distributor",
     description: "Wholesale distributor partner",
     documentTypes: [
-      { id: "DOC-001", documentName: "Letter of Interest to take Distributorship with 2 Security Cheques and details" },
-      { id: "DOC-002", documentName: "Copy of Account Statement (Last 6 months) / IT Return of last year" },
-      { id: "DOC-003", documentName: "GST Registration Copy" },
-      { id: "DOC-004", documentName: "PAN Card of FPO & Chairman" },
-      { id: "DOC-005", documentName: "Passport-size Photo of Authorized Person & Shop Photo" },
+      { id: "DOC-001", documentTypeId: "DT-001", documentName: "Letter of Interest" },
+      { id: "DOC-002", documentTypeId: "DT-011", documentName: "Audited Financial Statements" },
+      { id: "DOC-003", documentTypeId: "DT-003", documentName: "GST Registration Copy" },
+      { id: "DOC-004", documentTypeId: "DT-004", documentName: "PAN Card" },
+      { id: "DOC-005", documentTypeId: "DT-008", documentName: "Shop & Establishment Registration Certificate" },
     ],
   },
   {
@@ -39,9 +40,9 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
     customerType: "Dealer",
     description: "Registered dealer merchant",
     documentTypes: [
-      { id: "DOC-001", documentName: "GST Registration Copy" },
-      { id: "DOC-002", documentName: "Fertilizer License (FCO 1985) & Pesticide License (Insecticides Act 1968)" },
-      { id: "DOC-003", documentName: "Shop & Establishment Registration Certificate" },
+      { id: "DOC-001", documentTypeId: "DT-003", documentName: "GST Registration Copy" },
+      { id: "DOC-002", documentTypeId: "DT-006", documentName: "Fertilizer License" },
+      { id: "DOC-003", documentTypeId: "DT-008", documentName: "Shop & Establishment Registration Certificate" },
     ],
   },
   {
@@ -49,8 +50,7 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
     customerType: "Retailer",
     description: "Direct retail store outlet",
     documentTypes: [
-      { id: "DOC-001", documentName: "Shop & Establishment Registration Certificate" },
-      { id: "DOC-002", documentName: "Passport-size Photo of Authorized Person & Shop Photo" },
+      { id: "DOC-001", documentTypeId: "DT-008", documentName: "Shop & Establishment Registration Certificate" },
     ],
   },
   {
@@ -58,9 +58,9 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
     customerType: "C&F",
     description: "Carrying and Forwarding agent",
     documentTypes: [
-      { id: "DOC-001", documentName: "GST Registration Copy" },
-      { id: "DOC-002", documentName: "Proof of Godown/Storage Facility (ownership/lease documents)" },
-      { id: "DOC-003", documentName: "Delivery Authorization Letter (naming individuals authorized to sign delivery documents)" },
+      { id: "DOC-001", documentTypeId: "DT-003", documentName: "GST Registration Copy" },
+      { id: "DOC-002", documentTypeId: "DT-014", documentName: "Godown/Storage Facility Proof" },
+      { id: "DOC-003", documentTypeId: "DT-015", documentName: "Delivery Authorization Letter" },
     ],
   },
   {
@@ -68,8 +68,7 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
     customerType: "CBBO",
     description: "Cluster Based Business Organization",
     documentTypes: [
-      { id: "DOC-001", documentName: "MCA Portal Verification Document (Board of Directors verification)" },
-      { id: "DOC-002", documentName: "Audited Financial Statements (Last 24 months)" },
+      { id: "DOC-001", documentTypeId: "DT-011", documentName: "Audited Financial Statements" },
     ],
   },
   {
@@ -77,27 +76,21 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
     customerType: "FPO",
     description: "Farmer Producer Organization",
     documentTypes: [
-      { id: "DOC-001", documentName: "Letter of Interest to take Distributorship with 2 Security Cheques and details" },
-      { id: "DOC-002", documentName: "FPO Registration Certificate (Certified Copy)" },
-      { id: "DOC-003", documentName: "Copy of Account Statement (Last 6 months) / IT Return of last year" },
-      { id: "DOC-004", documentName: "GST Registration Copy" },
-      { id: "DOC-005", documentName: "PAN Card of FPO & Chairman" },
-      { id: "DOC-006", documentName: "Aadhaar Card Copy of Chairman/CEO" },
-      { id: "DOC-007", documentName: "Fertilizer License (FCO 1985) & Pesticide License (Insecticides Act 1968)" },
-      { id: "DOC-008", documentName: "Shop & Establishment Registration Certificate" },
-      { id: "DOC-009", documentName: "Board Resolution authorizing signing authority" },
-      { id: "DOC-010", documentName: "Board Resolution for Personal Guarantee (if applicable)" },
-      { id: "DOC-011", documentName: "Passport-size Photo of Authorized Person & Shop Photo" },
-      { id: "DOC-012", documentName: "MCA Portal Verification Document (Board of Directors verification)" },
-      { id: "DOC-013", documentName: "Bank Account Details with Cancelled Cheque" },
-      { id: "DOC-014", documentName: "Audited Financial Statements (Last 24 months)" },
-      { id: "DOC-015", documentName: "Post-Dated Cheques (PDCs) as per company policy" },
-      { id: "DOC-016", documentName: "Personal Guarantee Agreement (signed by Chairman/Directors)" },
-      { id: "DOC-017", documentName: "Tripartite Agreement with Lending Bank (if applicable)" },
-      { id: "DOC-018", documentName: "Proof of Godown/Storage Facility (ownership/lease documents)" },
-      { id: "DOC-019", documentName: "List of Member Farmers (minimum 100 samples with contact details)" },
-      { id: "DOC-020", documentName: "Delivery Authorization Letter (naming individuals authorized to sign delivery documents)" },
-      { id: "DOC-021", documentName: "Latest GST Return Copy" },
+      { id: "DOC-001", documentTypeId: "DT-001", documentName: "Letter of Interest" },
+      { id: "DOC-002", documentTypeId: "DT-002", documentName: "FPO Registration Certificate" },
+      { id: "DOC-003", documentTypeId: "DT-011", documentName: "Audited Financial Statements" },
+      { id: "DOC-004", documentTypeId: "DT-003", documentName: "GST Registration Copy" },
+      { id: "DOC-005", documentTypeId: "DT-004", documentName: "PAN Card" },
+      { id: "DOC-006", documentTypeId: "DT-005", documentName: "Aadhaar Card" },
+      { id: "DOC-007", documentTypeId: "DT-006", documentName: "Fertilizer License" },
+      { id: "DOC-008", documentTypeId: "DT-008", documentName: "Shop & Establishment Registration Certificate" },
+      { id: "DOC-009", documentTypeId: "DT-009", documentName: "Board Resolution" },
+      { id: "DOC-010", documentTypeId: "DT-010", documentName: "Bank Account Details with Cancelled Cheque" },
+      { id: "DOC-011", documentTypeId: "DT-012", documentName: "Post-Dated Cheques" },
+      { id: "DOC-012", documentTypeId: "DT-013", documentName: "Personal Guarantee Agreement" },
+      { id: "DOC-013", documentTypeId: "DT-014", documentName: "Godown/Storage Facility Proof" },
+      { id: "DOC-014", documentTypeId: "DT-015", documentName: "Delivery Authorization Letter" },
+      { id: "DOC-015", documentTypeId: "DT-016", documentName: "Latest GST Return Copy" },
     ],
   },
 ];
@@ -110,8 +103,10 @@ export function loadCustomerTypes(): CustomerTypeRecord[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return CUSTOMER_TYPE_SEED;
     const parsed = JSON.parse(raw) as CustomerTypeRecord[];
-    const fpo = parsed.find((c) => c.customerType === "FPO");
-    if (!fpo || !fpo.documentTypes || fpo.documentTypes.length < 21) {
+    // Check if the loaded data has the updated structure
+    const firstDoc = parsed[0]?.documentTypes?.[0];
+    if (firstDoc && !("documentTypeId" in firstDoc)) {
+      // Data is old format, clear storage to force reload seed data in new format
       localStorage.removeItem(STORAGE_KEY);
       return CUSTOMER_TYPE_SEED;
     }

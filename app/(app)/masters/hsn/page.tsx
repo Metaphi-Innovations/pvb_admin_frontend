@@ -14,17 +14,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -39,17 +28,8 @@ import { cn } from "@/lib/utils";
 import {
   CheckCircle2,
   XCircle,
-  Plus,
-  Download,
-  Edit2,
-  MoreVertical,
-  SlidersHorizontal,
   X,
-  Search,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsUpDown,
-  ChevronDown,
+  Edit2,
   Code2,
   Eye,
   Trash2,
@@ -66,7 +46,9 @@ import { loadGSTMasters } from "../gst/gst-data";
 import { MiniKPICard } from "@/components/ui/KPICard";
 import { MasterViewRow } from "@/components/masters/MasterModule";
 
-type SortKey = "hsnId" | "hsnCode" | "hsnDescription" | "gstRate" | "applicableCategory" | "status";
+import { MasterListing } from "@/components/listing/MasterListing";
+import { applyFilters } from "@/components/listing/filter-utils";
+import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 
 interface ToastState {
   msg: string;
@@ -81,7 +63,7 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
         toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
       )}
     >
-      <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+      <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100"><X className="h-3.5 w-3.5" /></button>
     </div>
@@ -107,47 +89,10 @@ function StatusToggle({ record, onToggle }: { record: HSNMaster; onToggle: (item
   );
 }
 
-function SortTh({
-  label,
-  colKey,
-  sortKey,
-  sortDir,
-  onSort,
-  className,
-}: {
-  label: string;
-  colKey: SortKey;
-  sortKey: SortKey;
-  sortDir: "asc" | "desc";
-  onSort: (key: SortKey) => void;
-  className?: string;
-}) {
-  const active = sortKey === colKey;
-  return (
-    <th
-      onClick={() => onSort(colKey)}
-      className={cn("px-3 py-3 text-left text-[13px] font-semibold cursor-pointer select-none group whitespace-nowrap", active && "bg-brand-50/60", className)}
-    >
-      <div className="flex items-center gap-1.5">
-        <span className={active ? "text-brand-700" : "text-foreground"}>{label}</span>
-        {active ? (
-          <ChevronDown className={cn("w-3 h-3 text-brand-600 transition-transform", sortDir === "desc" && "rotate-180")} />
-        ) : (
-          <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground" />
-        )}
-      </div>
-    </th>
-  );
-}
-
 export default function HSNPage() {
   const [records, setRecords] = useState<HSNMaster[]>([]);
-  const [search, setSearch] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string[]>([]);
-  const [filterCategory, setFilterCategory] = useState<string[]>([]);
-  const [filterGstRate, setFilterGstRate] = useState<string[]>([]);
-  const [sortKey, setSortKey] = useState<SortKey>("hsnId");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [filters, setFilters] = useState<FilterState>({});
+  const [sort, setSort] = useState<SortState>({ key: "hsnId", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -195,59 +140,6 @@ export default function HSNPage() {
     }
   }, [gstRatesList, form.gstRate]);
 
-  const filtered = useMemo(() => {
-    return records
-      .filter((r) => {
-        const q = search.toLowerCase();
-        return (
-          r.hsnCode.toLowerCase().includes(q) ||
-          r.hsnDescription.toLowerCase().includes(q) ||
-          r.applicableCategory.toLowerCase().includes(q) ||
-          r.hsnId.toLowerCase().includes(q)
-        );
-      })
-      .filter((r) => (filterStatus.length ? filterStatus.includes(r.status) : true))
-      .filter((r) => (filterCategory.length ? filterCategory.includes(r.applicableCategory) : true))
-      .filter((r) => (filterGstRate.length ? filterGstRate.includes(r.gstRate) : true))
-      .sort((a, b) => {
-        let aVal = a[sortKey];
-        let bVal = b[sortKey];
-        if (typeof aVal === "string") {
-          aVal = aVal.toLowerCase();
-          bVal = (bVal as string).toLowerCase();
-        }
-        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-        return sortDir === "asc" ? cmp : -cmp;
-      });
-  }, [records, search, filterStatus, filterCategory, filterGstRate, sortKey, sortDir]);
-
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  };
-
-  const toggleFilterStatus = (status: string) => {
-    setFilterStatus((prev) =>
-      prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status],
-    );
-  };
-
-  const toggleFilterCategory = (cat: string) => {
-    setFilterCategory((prev) =>
-      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat],
-    );
-  };
-
-  const toggleFilterGstRate = (rate: string) => {
-    setFilterGstRate((prev) =>
-      prev.includes(rate) ? prev.filter((r) => r !== rate) : [...prev, rate],
-    );
-  };
-
   const toggleStatus = (record: HSNMaster) => {
     const newStatus = record.status === "active" ? "inactive" : "active";
     const updated = records.map((r) =>
@@ -267,6 +159,139 @@ export default function HSNPage() {
       type: "success",
     });
   };
+
+  const columns: ColumnConfig<HSNMaster>[] = [
+    {
+      key: "hsnId",
+      header: "HSN ID",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => (
+        <span className="font-mono font-semibold text-brand-700">{row.hsnId}</span>
+      ),
+    },
+    {
+      key: "hsnCode",
+      header: "HSN Code",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "140px",
+      render: (val, row) => (
+        <span className="font-mono font-bold text-foreground">{row.hsnCode}</span>
+      ),
+    },
+    {
+      key: "hsnDescription",
+      header: "HSN Description",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "320px",
+      render: (val, row) => row.hsnDescription,
+    },
+    {
+      key: "gstRate",
+      header: "GST Rate",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: gstRatesList.map((rate) => ({ label: rate, value: rate })),
+      width: "120px",
+    },
+    {
+      key: "applicableCategory",
+      header: "Applicable Category",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: ["Seeds", "Fertilizers", "Pesticides", "Bio Products", "Equipment"].map(c => ({ label: c, value: c })),
+      width: "180px",
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: [
+        { label: "Active", value: "active" },
+        { label: "Inactive", value: "inactive" },
+      ],
+      width: "130px",
+      render: (val, row) => (
+        <StatusToggle record={row} onToggle={toggleStatus} />
+      ),
+    },
+  ];
+
+  const actions: ActionItemConfig<HSNMaster>[] = [
+    {
+      label: "View",
+      action: "view",
+      icon: Eye,
+      onClick: (row) => openView(row),
+    },
+    {
+      label: "Edit",
+      action: "edit",
+      icon: Edit2,
+      onClick: (row) => openEdit(row),
+    },
+    {
+      label: "Delete",
+      action: "delete",
+      icon: Trash2,
+      variant: "destructive",
+      onClick: (row) => setDeleteTarget(row),
+    },
+  ];
+
+  const filtered = useMemo(() => {
+    let result = [...records];
+
+    // Search filter
+    if (filters.search) {
+      const q = String(filters.search).toLowerCase();
+      result = result.filter(
+        (r) =>
+          r.hsnCode.toLowerCase().includes(q) ||
+          r.hsnDescription.toLowerCase().includes(q) ||
+          r.applicableCategory.toLowerCase().includes(q) ||
+          r.hsnId.toLowerCase().includes(q)
+      );
+    }
+
+    // Apply column filters
+    result = applyFilters(result, filters);
+
+    // Sorting
+    if (sort.key && sort.direction !== "none") {
+      result.sort((a, b) => {
+        let aVal = a[sort.key as keyof HSNMaster];
+        let bVal = b[sort.key as keyof HSNMaster];
+        if (typeof aVal === "string") {
+          aVal = aVal.toLowerCase();
+          bVal = (bVal as string).toLowerCase();
+        }
+        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+        return sort.direction === "asc" ? cmp : -cmp;
+      });
+    }
+
+    return result;
+  }, [records, filters, sort]);
+
+  const paginated = useMemo(() => {
+    const startOffset = (page - 1) * pageSize;
+    return filtered.slice(startOffset, startOffset + pageSize);
+  }, [filtered, page, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters, sort, pageSize]);
 
   const openAdd = () => {
     const nextIdVal = nextHSNId(records);
@@ -418,11 +443,6 @@ export default function HSNPage() {
     }
   };
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
-  const start = filtered.length === 0 ? 0 : (page - 1) * pageSize + 1;
-  const end = Math.min(page * pageSize, filtered.length);
-
   const sheetTitle =
     sheetMode === "add"
       ? "Add HSN"
@@ -433,30 +453,11 @@ export default function HSNPage() {
   return (
     <AppLayout>
       <div className="space-y-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-foreground">HSN Master</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Manage Harmonized System of Nomenclature codes and GST configurations
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 gap-1.5 border-border bg-white text-xs text-foreground hover:bg-muted"
-              onClick={handleExport}
-            >
-              <Download className="h-3.5 w-3.5" /> Export
-            </Button>
-            <Button
-              size="sm"
-              className="h-8 gap-1.5 bg-brand-600 text-xs text-white hover:bg-brand-700"
-              onClick={openAdd}
-            >
-              <Plus className="h-3.5 w-3.5" /> Add HSN
-            </Button>
-          </div>
+        <div>
+          <h1 className="text-xl font-bold text-foreground">HSN Master</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Manage Harmonized System of Nomenclature codes and GST configurations
+          </p>
         </div>
 
         <div className="grid grid-cols-3 gap-3">
@@ -475,245 +476,32 @@ export default function HSNPage() {
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[220px] max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search HSN code, description..."
-              className="h-8 pl-9 text-xs"
-            />
-          </div>
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                className={cn(
-                  "h-8 px-2.5 text-xs border rounded-lg inline-flex items-center gap-1.5 font-medium transition-colors",
-                  filterStatus.length > 0 || filterCategory.length > 0 || filterGstRate.length > 0
-                    ? "border-brand-400 bg-brand-50 text-brand-700"
-                    : "border-border text-muted-foreground hover:bg-muted"
-                )}
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-                Filter
-                {(filterStatus.length > 0 || filterCategory.length > 0 || filterGstRate.length > 0) && (
-                  <span className="w-4 h-4 text-[10px] bg-brand-600 text-white rounded-full inline-flex items-center justify-center font-bold">
-                    {filterStatus.length + filterCategory.length + filterGstRate.length}
-                  </span>
-                )}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-56 p-0 bg-white border shadow-lg border-border">
-              <div className="px-3 py-2 border-b border-border">
-                <p className="text-xs font-semibold text-foreground">Filter HSN</p>
-              </div>
-              <div className="p-3 space-y-3 max-h-[300px] overflow-y-auto">
-                <div className="space-y-1.5">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">GST Rate</p>
-                  {gstRatesList.map((rate) => (
-                    <label key={rate} className="flex items-center gap-2 cursor-pointer py-0.5">
-                      <input
-                        type="checkbox"
-                        className="w-3.5 h-3.5 rounded accent-brand-600"
-                        checked={filterGstRate.includes(rate)}
-                        onChange={() => toggleFilterGstRate(rate)}
-                      />
-                      <span className="text-xs text-foreground">{rate}</span>
-                    </label>
-                  ))}
-                </div>
-                <div className="space-y-1.5 border-t border-border/60 pt-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Applicable Category</p>
-                  {["Seeds", "Fertilizers", "Pesticides", "Bio Products", "Equipment"].map((cat) => (
-                    <label key={cat} className="flex items-center gap-2 cursor-pointer py-0.5">
-                      <input
-                        type="checkbox"
-                        className="w-3.5 h-3.5 rounded accent-brand-600"
-                        checked={filterCategory.includes(cat)}
-                        onChange={() => toggleFilterCategory(cat)}
-                      />
-                      <span className="text-xs text-foreground">{cat}</span>
-                    </label>
-                  ))}
-                </div>
-                <div className="space-y-1.5 border-t border-border/60 pt-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</p>
-                  {["active", "inactive"].map((v) => (
-                    <label key={v} className="flex items-center gap-2 cursor-pointer py-0.5">
-                      <input
-                        type="checkbox"
-                        className="w-3.5 h-3.5 rounded accent-brand-600"
-                        checked={filterStatus.includes(v)}
-                        onChange={() => toggleFilterStatus(v)}
-                      />
-                      <span className="text-xs capitalize text-foreground">{v}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              {(filterStatus.length > 0 || filterCategory.length > 0 || filterGstRate.length > 0) && (
-                <div className="px-3 py-2 border-t border-border bg-muted/10">
-                  <button
-                    onClick={() => {
-                      setFilterStatus([]);
-                      setFilterCategory([]);
-                      setFilterGstRate([]);
-                    }}
-                    className="text-xs font-medium text-brand-600 hover:underline"
-                  >
-                    Clear filters
-                  </button>
-                </div>
-              )}
-            </PopoverContent>
-          </Popover>
-        </div>
-
-        <div className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse table-fixed w-max">
-              <thead>
-                <tr className="border-b bg-muted/40 border-border">
-                  <SortTh label="HSN ID" colKey="hsnId" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-[120px] pl-4 py-3" />
-                  <SortTh label="HSN Code" colKey="hsnCode" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-[140px]" />
-                  <SortTh label="HSN Description" colKey="hsnDescription" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-[320px]" />
-                  <SortTh label="GST Rate" colKey="gstRate" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-[120px]" />
-                  <SortTh label="Applicable Category" colKey="applicableCategory" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-[180px]" />
-                  <SortTh label="Status" colKey="status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-[130px]" />
-                  <th className="sticky right-0 z-30 w-[80px] min-w-[80px] h-11 px-3 text-left text-[13px] font-semibold whitespace-nowrap bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-xs text-muted-foreground">
-                      No records found
-                    </td>
-                  </tr>
-                ) : (
-                  paginated.map((row) => (
-                    <tr
-                      key={row.id}
-                      onClick={() => openView(row)}
-                      className="align-top transition-colors border-b border-border/60 hover:bg-muted/20 group cursor-pointer"
-                    >
-                      <td className="px-4 py-2.5 text-xs font-semibold font-mono text-brand-700 whitespace-nowrap">
-                        {row.hsnId}
-                      </td>
-                      <td className="px-3 py-2.5 text-xs font-bold text-foreground font-mono">
-                        {row.hsnCode}
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap font-medium">
-                        {row.hsnDescription}
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-foreground whitespace-nowrap font-medium">
-                        {row.gstRate}
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-foreground whitespace-nowrap font-medium">
-                        {row.applicableCategory}
-                      </td>
-                      <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                        <StatusToggle record={row} onToggle={toggleStatus} />
-                      </td>
-                      <td
-                        className="sticky right-0 z-20 w-[80px] min-w-[80px] px-3 py-2.5 bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              type="button"
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-32 bg-white border shadow-lg border-border">
-                            <DropdownMenuItem
-                              onClick={() => openView(row)}
-                              className="flex items-center gap-2 cursor-pointer"
-                            >
-                              <Eye className="h-3.5 w-3.5" /> View
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => openEdit(row)}
-                              className="flex items-center gap-2 cursor-pointer"
-                            >
-                              <Edit2 className="h-3.5 w-3.5" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => setDeleteTarget(row)}
-                              className="flex items-center gap-2 cursor-pointer text-red-600 focus:text-red-700"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/20">
-            <p className="text-[11px] text-muted-foreground">
-              {filtered.length === 0 ? (
-                "No records"
-              ) : (
-                <>
-                  Showing <span className="font-medium text-foreground">{start}-{end}</span> of{" "}
-                  <span className="font-medium text-foreground">{filtered.length}</span> HSN configs
-                </>
-              )}
-            </p>
-            <div className="flex items-center gap-2">
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setPage(1);
-                }}
-                className="px-2 text-xs bg-white border rounded-md h-7 border-border text-foreground"
-              >
-                {[10, 25, 50, 100].map((value) => (
-                  <option key={value} value={value}>
-                    {value} / page
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                disabled={page === 1}
-                className="flex items-center justify-center text-xs border rounded-md w-7 h-7 border-border disabled:opacity-40 hover:bg-muted"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              <span className="text-xs text-muted-foreground px-2 min-w-[48px] text-center">
-                {page} / {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-                disabled={page === totalPages}
-                className="flex items-center justify-center text-xs border rounded-md w-7 h-7 border-border disabled:opacity-40 hover:bg-muted"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
+        <MasterListing<HSNMaster>
+          columns={columns}
+          data={paginated}
+          totalRecords={filtered.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          onSortChange={setSort}
+          onFilterChange={setFilters}
+          actions={actions}
+          onAdd={openAdd}
+          addLabel="Add HSN"
+          onExport={handleExport}
+          emptyMessage="HSN configs"
+          searchPlaceholder="Search HSN code, description..."
+          currentFilters={filters}
+          currentSort={sort}
+        />
       </div>
 
       <Sheet open={sheetMode !== null} onOpenChange={(o) => !o && closeSheet()}>
         <SheetContent>
           <SheetHeader>
             <div className="flex items-start gap-3 pr-8">
-              <div className="w-9 h-9 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center">
+              <div className="flex items-center justify-center border w-9 h-9 rounded-xl bg-brand-50 border-brand-100">
                 <Code2 className="w-4 h-4 text-brand-600" />
               </div>
               <div>
@@ -728,7 +516,7 @@ export default function HSNPage() {
           <SheetBody>
             {sheetMode === "view" && active ? (
               <div className="space-y-4">
-                <div className="rounded-lg border border-border/60 bg-muted/10 px-3">
+                <div className="px-3 border rounded-lg border-border/60 bg-muted/10">
                   <MasterViewRow label="HSN Code" value={<span className="font-mono">{active.hsnCode}</span>} />
                   <MasterViewRow label="HSN ID" value={<span className="font-mono">{active.hsnId}</span>} />
                   <MasterViewRow label="HSN Description" value={active.hsnDescription} />
@@ -736,7 +524,7 @@ export default function HSNPage() {
                   <MasterViewRow label="Applicable Category" value={active.applicableCategory} />
                   <MasterViewRow label="Status" value={active.status === "active" ? "Active" : "Inactive"} />
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-xs pt-2 border-t">
+                <div className="grid grid-cols-2 gap-3 pt-2 text-xs border-t">
                   <div>
                     <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
                     <p className="font-medium">{active.createdBy}</p>
@@ -752,7 +540,7 @@ export default function HSNPage() {
             ) : (
               <div className="space-y-4">
                 {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1">
                     <Label className="text-xs font-medium">HSN ID (Auto)</Label>
                     <Input
@@ -780,7 +568,7 @@ export default function HSNPage() {
                     <select
                       value={form.gstRate}
                       onChange={(e) => setFormField("gstRate", e.target.value)}
-                      className="w-full h-8 px-2 text-xs border border-border rounded-lg bg-background"
+                      className="w-full h-8 px-2 text-xs border rounded-lg border-border bg-background"
                     >
                       {gstRatesList.map((rate) => (
                         <option key={rate} value={rate}>{rate}</option>
@@ -794,7 +582,7 @@ export default function HSNPage() {
                     <select
                       value={form.applicableCategory}
                       onChange={(e) => setFormField("applicableCategory", e.target.value)}
-                      className="w-full h-8 px-2 text-xs border border-border rounded-lg bg-background"
+                      className="w-full h-8 px-2 text-xs border rounded-lg border-border bg-background"
                     >
                       {["Seeds", "Fertilizers", "Pesticides", "Bio Products", "Equipment"].map((cat) => (
                         <option key={cat} value={cat}>{cat}</option>
@@ -815,7 +603,7 @@ export default function HSNPage() {
                     {errors.hsnDescription && <p className="text-[11px] text-red-500">{errors.hsnDescription}</p>}
                   </div>
                 </div>
-                <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/20 mt-4">
+                {/* <div className="flex items-center justify-between p-3 mt-4 border rounded-lg border-border bg-muted/20">
                   <div>
                     <p className="text-xs font-medium">Status</p>
                     <p className="text-[11px] text-muted-foreground">{form.status === "active" ? "Active" : "Inactive"}</p>
@@ -826,7 +614,7 @@ export default function HSNPage() {
                       setFormField("status", checked ? "active" : "inactive")
                     }
                   />
-                </div>
+                </div> */}
               </div>
             )}
           </SheetBody>
@@ -839,7 +627,7 @@ export default function HSNPage() {
                 </Button>
                 <Button
                   size="sm"
-                  className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
                   onClick={() => active && openEdit(active)}
                 >
                   Edit
@@ -852,7 +640,7 @@ export default function HSNPage() {
                 </Button>
                 <Button
                   size="sm"
-                  className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
                   onClick={persist}
                 >
                   Save
@@ -875,7 +663,7 @@ export default function HSNPage() {
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
               Cancel
             </Button>
-            <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" onClick={confirmDelete}>
+            <Button size="sm" className="h-8 text-xs text-white bg-red-600 hover:bg-red-700" onClick={confirmDelete}>
               Delete
             </Button>
           </DialogFooter>

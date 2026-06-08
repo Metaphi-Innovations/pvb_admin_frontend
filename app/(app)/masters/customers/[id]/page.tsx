@@ -216,10 +216,12 @@ export default function CustomerDetailPage() {
             </DetailCard>
 
             <DetailCard title="Bank Details">
+              <InfoRow label="Account Holder Name" value={customer.accountHolderName} />
               <InfoRow label="Bank Name" value={customer.bankName} />
+              <InfoRow label="Branch Name" value={customer.branch || customer.bankBranchAddress} />
               <InfoRow label="Bank A/c #" value={customer.bankAccountNo} mono />
               <InfoRow label="IFSC Code" value={customer.ifscCode} mono />
-              <InfoRow label="Branch Address" value={customer.bankBranchAddress} />
+              <InfoRow label="SWIFT Code" value={customer.swiftCode} />
             </DetailCard>
 
             <DetailCard title="Record Info">

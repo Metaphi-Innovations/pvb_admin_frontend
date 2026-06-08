@@ -29,6 +29,7 @@ export function MasterListing<T = any>({
   emptyMessage = "records",
   onAdd,
   addLabel = "Add New",
+  onExport,
   searchPlaceholder = "Search...",
   currentFilters,
   currentSort,
@@ -123,13 +124,16 @@ export function MasterListing<T = any>({
 
         {/* Right aligned actions (Add, Export) */}
         <div className="ml-auto flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs gap-1.5 border-border text-muted-foreground hover:bg-muted font-medium rounded-lg"
-          >
-            <Download className="w-3.5 h-3.5" /> Export
-          </Button>
+          {onExport && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onExport}
+              className="h-8 text-xs gap-1.5 border-border text-muted-foreground hover:bg-muted font-medium rounded-lg"
+            >
+              <Download className="w-3.5 h-3.5" /> Export
+            </Button>
+          )}
           {onAdd && (
             <Button
               size="sm"
@@ -253,7 +257,7 @@ export function MasterListing<T = any>({
                           <td
                             key={col.key}
                             className={cn(
-                              "px-4 py-2.5 text-xs text-foreground",
+                              "px-4 py-2.5 text-xs text-foreground whitespace-nowrap",
                               col.align === "center" && "text-center",
                               col.align === "right" && "text-right",
                               isSticky && "sticky right-0 bg-white group-hover:bg-[#fbfaf7] z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border"
