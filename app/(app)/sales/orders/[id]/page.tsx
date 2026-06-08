@@ -2,15 +2,17 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import {
-  ArrowLeft, Edit, FileText, Package, Split, Trash2, CheckCircle2, XCircle,
+  ArrowLeft, Edit, FileText, Package, Split, Trash2, CheckCircle2, XCircle, Check, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import CancelOrderDialog from "../components/CancelOrderDialog";
 import PackingListDialog from "../components/PackingListDialog";
+import ApproveOrderDialog from "../components/ApproveOrderDialog";
+import RejectOrderDialog from "../components/RejectOrderDialog";
 import { downloadProformaInvoice } from "../pi-document";
 import { getPackingListById, PACKING_LIST_STATUS_LABELS } from "../packing-list-data";
 import {
@@ -25,6 +27,10 @@ import {
   canCancelOrder,
   canDownloadPI,
   canGeneratePackingList,
+  approveSalesOrder,
+  canApproveOrder,
+  formatApprovalStatus,
+  resolveApprovalStatus,
 } from "../orders-data";
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
@@ -62,12 +68,16 @@ function InfoRow({ label, value, mono }: { label: string; value?: string | numbe
 export default function ViewSalesOrderPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const id = Number(params.id);
+  const approvalMode = searchParams.get("from") === "approval";
 
   const [order, setOrder] = useState<SalesOrder | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [packingOpen, setPackingOpen] = useState(false);
+  const [approveOpen, setApproveOpen] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
 
   const refresh = () => {
     const o = getOrderById(id);
@@ -101,11 +111,30 @@ export default function ViewSalesOrderPage() {
   const cancellable = canCancelOrder(order);
   const piAllowed = canDownloadPI(order);
   const packingAllowed = canGeneratePackingList(order);
+  const showApprovalActions = approvalMode && canApproveOrder(order);
+  const approvalStatus = resolveApprovalStatus(order);
 
   const formatRupee = (n: number) =>
     `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
+
+  const handleBack = () => {
+    router.push(approvalMode ? "/sales/orders?tab=approval" : "/sales/orders");
+  };
+
+  const handleApprove = () => {
+    const result = approveSalesOrder(order.id);
+    if ("error" in result) {
+      showToast(result.error, "error");
+      return;
+    }
+    router.push("/sales/orders?tab=approval&toast=approved");
+  };
+
+  const handleRejectSuccess = (_updated: SalesOrder) => {
+    router.push("/sales/orders?tab=approval&toast=rejected");
+  };
 
   return (
     <AppLayout noPadding>
@@ -114,7 +143,7 @@ export default function ViewSalesOrderPage() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => router.push("/sales/orders")}
+              onClick={handleBack}
               className="w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors"
             >
               <ArrowLeft className="w-4 h-4 text-muted-foreground" />
@@ -130,37 +159,67 @@ export default function ViewSalesOrderPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {editable && (
+            {!approvalMode && editable && (
               <Link href={`/sales/orders/${order.id}/edit`}>
                 <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
                   <Edit className="w-3.5 h-3.5" /> Edit
                 </Button>
               </Link>
             )}
-            {piAllowed && (
+            {!approvalMode && piAllowed && (
               <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => downloadProformaInvoice(order)}>
                 <FileText className="w-3.5 h-3.5" /> Download PI
               </Button>
             )}
-            {packingAllowed && (
+            {!approvalMode && packingAllowed && (
               <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setPackingOpen(true)}>
                 <Package className="w-3.5 h-3.5" /> Generate Packing List
               </Button>
             )}
-            {splittable && (
+            {!approvalMode && splittable && (
               <Link href={`/sales/orders/${order.id}/split`}>
                 <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
                   <Split className="w-3.5 h-3.5" /> Split Order
                 </Button>
               </Link>
             )}
-            {cancellable && (
+            {!approvalMode && cancellable && (
               <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 text-red-600 hover:bg-red-50" onClick={() => setCancelOpen(true)}>
                 <Trash2 className="w-3.5 h-3.5" /> Cancel Order
               </Button>
             )}
           </div>
         </div>
+
+        {showApprovalActions && (
+          <div className="bg-white rounded-xl border border-border shadow-sm p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-foreground">Approval Required</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Review order details below and approve or reject this sales order.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs gap-1.5 text-red-600 hover:bg-red-50 border-red-200"
+                  onClick={() => setRejectOpen(true)}
+                >
+                  <X className="w-3.5 h-3.5" /> Reject Order
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => setApproveOpen(true)}
+                >
+                  <Check className="w-3.5 h-3.5" /> Approve Order
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-white rounded-xl border border-border shadow-sm p-4">
@@ -173,10 +232,7 @@ export default function ViewSalesOrderPage() {
             <InfoRow label="Salesman" value={order.salesManName} />
             <InfoRow label="Territory" value={order.territory} />
             <InfoRow label="Order Status" value={formatOrderStatus(order.status)} />
-            <InfoRow
-              label="Approval Status"
-              value={order.requiresApproval ? "Requires Approval" : order.status === "pending_approval" ? "Pending Approval" : "Not Required"}
-            />
+            <InfoRow label="Approval Status" value={formatApprovalStatus(approvalStatus)} />
             <InfoRow label="Total Amount" value={formatRupee(order.totalAmount)} />
           </div>
 
@@ -196,6 +252,23 @@ export default function ViewSalesOrderPage() {
                 <InfoRow label="Reason" value={order.cancellationReason} />
                 <InfoRow label="Cancelled By" value={order.cancelledBy} />
                 <InfoRow label="Cancelled Date" value={order.cancelledDate} />
+              </div>
+            )}
+
+            {(order.approvalStatus === "approved" || order.status === "approved") && (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Approval</p>
+                <InfoRow label="Approved By" value={order.approvedBy} />
+                <InfoRow label="Approved Date" value={order.approvedDate} />
+              </div>
+            )}
+
+            {(order.approvalStatus === "rejected" || order.status === "rejected") && (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Rejection</p>
+                <InfoRow label="Reason" value={order.rejectionReason} />
+                <InfoRow label="Rejected By" value={order.rejectedBy} />
+                <InfoRow label="Rejected Date" value={order.rejectedDate} />
               </div>
             )}
 
@@ -288,6 +361,20 @@ export default function ViewSalesOrderPage() {
           setOrder(updatedOrder);
           showToast(`Packing list ${list.packingListNumber} generated.`);
         }}
+      />
+
+      <ApproveOrderDialog
+        order={order}
+        open={approveOpen}
+        onClose={() => setApproveOpen(false)}
+        onConfirm={handleApprove}
+      />
+
+      <RejectOrderDialog
+        order={order}
+        open={rejectOpen}
+        onClose={() => setRejectOpen(false)}
+        onSuccess={handleRejectSuccess}
       />
 
       {toast && (
