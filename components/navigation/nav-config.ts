@@ -102,11 +102,11 @@ export const NAV_ITEMS: NavItem[] = [
     icon: BarChart3,
     children: [
       { label: "Sales Orders", href: "/sales/orders" },
-      { label: "Invoices", href: "/sales/invoices" },
-      { label: "Dispatch", href: "/sales/dispatch" },
-      { label: "Collections", href: "/sales/collections" },
-      { label: "Targets", href: "/sales/targets" },
-      { label: "Beat Plan", href: "/sales/beat-plan" },
+      // { label: "Invoices", href: "/sales/invoices" },
+      // { label: "Dispatch", href: "/sales/dispatch" },
+      // { label: "Collections", href: "/sales/collections" },
+      // { label: "Targets", href: "/sales/targets" },
+      // { label: "Beat Plan", href: "/sales/beat-plan" },
     ],
   },
   {
