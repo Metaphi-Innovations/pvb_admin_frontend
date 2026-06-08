@@ -9,7 +9,6 @@ import {
   UserCheck,
   Wallet,
   CalendarDays,
-  Monitor,
   Settings,
   Palette,
   CalendarCheck,
@@ -199,21 +198,11 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     id: "event",
-    label: "Event",
+    label: "Events",
     icon: CalendarDays,
     children: [
-      { label: "Events", href: "/events" },
-      { label: "Attendance", href: "/events/attendance" },
-      { label: "Feedback", href: "/events/feedback" },
-    ],
-  },
-  {
-    id: "demo",
-    label: "Demo",
-    icon: Monitor,
-    children: [
-      { label: "Listing Demo", href: "/listing-demo" },
-      { label: "Form Demo", href: "/form-demo" },
+      { label: "Event", href: "/events/event" },
+      { label: "Demo", href: "/events/demo" },
     ],
   },
   {
@@ -252,3 +241,4 @@ export function collectNavHrefs(items: NavItem[] = NAV_ITEMS): string[] {
   }
   return Array.from(hrefs);
 }
+
