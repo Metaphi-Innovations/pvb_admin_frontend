@@ -1,9 +1,9 @@
----
-name: Frontend Deploy - pvb.uat.metaphi.in
+name: Frontend Deploy - pvb.dev.metaphi.in
 on:
   push:
     branches:
-      - main
+      - staging
+
 jobs:
   deploy:
     runs-on: self-hosted
@@ -23,7 +23,7 @@ jobs:
           rsync -av --exclude='.git' \
                     --exclude='node_modules' \
                     --exclude='.env' \
-                    ./ /var/www/pvb.uat.metaphi.in/
+                    ./ /var/www/pvb.dev.metaphi.in/
       - name: Install dependencies
-        working-directory: /var/www/pvb.uat.metaphi.in
+        working-directory: /var/www/pvb.dev.metaphi.in
         run: npm i && npm run build
