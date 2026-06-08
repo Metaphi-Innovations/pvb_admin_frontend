@@ -44,10 +44,11 @@ const NOTIFICATIONS = [
 ];
 
 const PENDING_APPROVALS = [
-  { label: "Purchase Orders", count: 4,  href: "/procurement/purchase-orders" },
-  { label: "Expense Claims",  count: 7,  href: "/hr/expenses?status=pending"        },
-  { label: "Leave Requests",  count: 2,  href: "/hr/leaves?status=pending"          },
-  { label: "New Farmers",     count: 12, href: "/database/farmer"                   },
+  { label: "Purchase Orders",           count: 4, href: "/procurement/purchase-orders" },
+  { label: "TA/DA Claims",              count: 5, href: "/dashboard" },
+  { label: "Attendance Regularization", count: 3, href: "/dashboard" },
+  { label: "Expense Claims",            count: 7, href: "/hr/expenses?status=pending" },
+  { label: "Leave Requests",            count: 2, href: "/hr/leaves?status=pending" },
 ];
 
 const totalPending = PENDING_APPROVALS.reduce((s, a) => s + a.count, 0);
