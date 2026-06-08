@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -13,12 +13,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+
 interface PaginationProps {
   page: number;
   pageSize: number;
   totalRecords: number;
   onPageChange: (page: number) => void;
   onPageSizeChange?: (pageSize: number) => void;
+  onPageJumpError?: (message: string) => void;
+  recordLabel?: string;
 }
 
 export function Pagination({
@@ -27,43 +31,23 @@ export function Pagination({
   totalRecords,
   onPageChange,
   onPageSizeChange,
+  onPageJumpError,
+  recordLabel = "records",
 }: PaginationProps) {
-  const totalPages = Math.ceil(totalRecords / pageSize);
+  const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
   const startItem = totalRecords === 0 ? 0 : (page - 1) * pageSize + 1;
   const endItem = Math.min(page * pageSize, totalRecords);
+  const [pageInput, setPageInput] = useState(String(page));
 
-  const [inputValue, setInputValue] = React.useState(String(page));
-
-  React.useEffect(() => {
-    setInputValue(String(page));
+  useEffect(() => {
+    setPageInput(String(page));
   }, [page]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    if (val === "" || /^[0-9\b]+$/.test(val)) {
-      setInputValue(val);
-    }
-  };
-
-  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      const targetPage = Number(inputValue);
-      if (!isNaN(targetPage) && targetPage >= 1 && targetPage <= totalPages) {
-        onPageChange(targetPage);
-      } else {
-        setInputValue(String(page));
-      }
-    }
-  };
-
-  if (totalRecords === 0) return null;
-
-  // Generate page numbers to show (up to 5 page numbers)
   const getPageNumbers = () => {
-    const pages = [];
+    const pages: number[] = [];
     const maxVisible = 5;
     let start = Math.max(1, page - Math.floor(maxVisible / 2));
-    let end = Math.min(totalPages, start + maxVisible - 1);
+    const end = Math.min(totalPages, start + maxVisible - 1);
 
     if (end - start + 1 < maxVisible) {
       start = Math.max(1, end - maxVisible + 1);
@@ -77,30 +61,49 @@ export function Pagination({
 
   const pageNumbers = getPageNumbers();
 
+  const handlePageJump = () => {
+    const trimmed = pageInput.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      onPageJumpError?.("Enter a valid page number.");
+      return;
+    }
+    const target = Number(trimmed);
+    if (target < 1 || target > totalPages) {
+      onPageJumpError?.(`Page must be between 1 and ${totalPages}.`);
+      return;
+    }
+    onPageChange(target);
+  };
+
   return (
-    <div className="px-4 py-3 border-t border-border bg-muted/10 flex items-center justify-between flex-wrap gap-3">
-      {/* Left section: page info and page size selector */}
-      <div className="flex items-center gap-3">
+    <div className="px-4 py-2.5 border-t border-border bg-muted/20 flex items-center justify-between flex-wrap gap-x-3 gap-y-2">
+      <div className="flex items-center gap-3 flex-wrap">
         <p className="text-[11px] text-muted-foreground whitespace-nowrap">
-          Showing{" "}
-          <span className="font-semibold text-foreground">
-            {startItem}–{endItem}
-          </span>{" "}
-          of <span className="font-semibold text-foreground">{totalRecords}</span> results
+          {totalRecords === 0 ? (
+            <>Showing <span className="font-medium text-foreground">0</span> {recordLabel}</>
+          ) : (
+            <>
+              Showing{" "}
+              <span className="font-medium text-foreground">
+                {startItem}–{endItem}
+              </span>{" "}
+              of <span className="font-medium text-foreground">{totalRecords}</span> {recordLabel}
+            </>
+          )}
         </p>
-        
+
         {onPageSizeChange && (
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-muted-foreground">Rows per page:</span>
+            <span className="text-[11px] text-muted-foreground whitespace-nowrap">Rows per page:</span>
             <Select
               value={String(pageSize)}
               onValueChange={(val) => onPageSizeChange(Number(val))}
             >
-              <SelectTrigger className="h-7 w-16 text-[11px] rounded-lg border-border bg-white">
+              <SelectTrigger className="h-7 w-[52px] text-[11px] rounded-lg border-border bg-white px-2">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {[10, 20, 50, 100].map((n) => (
+                {PAGE_SIZE_OPTIONS.map((n) => (
                   <SelectItem key={n} value={String(n)} className="text-xs">
                     {n}
                   </SelectItem>
@@ -111,51 +114,36 @@ export function Pagination({
         )}
       </div>
 
-      {/* Right section: pagination buttons & direct page input */}
-      <div className="flex items-center gap-3 flex-wrap">
-        {totalPages > 1 && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-muted-foreground">Go to page:</span>
-            <Input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={inputValue}
-              onChange={handleInputChange}
-              onKeyDown={handleInputKeyDown}
-              className="h-7 w-12 text-center text-xs p-1 rounded-lg border-border bg-white focus-visible:ring-1 focus-visible:ring-brand-500"
-            />
-          </div>
+      <div className="flex items-center gap-1 flex-wrap">
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-7 w-7 rounded-lg border-border"
+          disabled={page <= 1 || totalRecords === 0}
+          onClick={() => onPageChange(page - 1)}
+          aria-label="Previous page"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+        </Button>
+
+        {totalRecords > 0 && pageNumbers[0] > 1 && (
+          <>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-7 w-7 text-xs rounded-lg border-border"
+              onClick={() => onPageChange(1)}
+            >
+              1
+            </Button>
+            {pageNumbers[0] > 2 && (
+              <span className="text-xs text-muted-foreground px-0.5 select-none">…</span>
+            )}
+          </>
         )}
 
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-7 w-7 rounded-lg border-border"
-            disabled={page <= 1}
-            onClick={() => onPageChange(page - 1)}
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-          </Button>
-
-          {pageNumbers[0] > 1 && (
-            <>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-7 w-7 text-xs rounded-lg border-border"
-                onClick={() => onPageChange(1)}
-              >
-                1
-              </Button>
-              {pageNumbers[0] > 2 && (
-                <span className="text-xs text-muted-foreground px-0.5 select-none">…</span>
-              )}
-            </>
-          )}
-
-          {pageNumbers.map((p) => {
+        {totalRecords > 0 &&
+          pageNumbers.map((p) => {
             const isCurrent = p === page;
             return (
               <Button
@@ -164,7 +152,7 @@ export function Pagination({
                 size="icon"
                 className={cn(
                   "h-7 w-7 text-xs rounded-lg border-border",
-                  isCurrent && "bg-brand-600 hover:bg-brand-700 text-white border-brand-600 font-semibold"
+                  isCurrent && "bg-brand-600 hover:bg-brand-700 text-white border-brand-600 font-semibold",
                 )}
                 onClick={() => onPageChange(p)}
               >
@@ -173,30 +161,57 @@ export function Pagination({
             );
           })}
 
-          {pageNumbers[pageNumbers.length - 1] < totalPages && (
-            <>
-              {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && (
-                <span className="text-xs text-muted-foreground px-0.5 select-none">…</span>
-              )}
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-7 w-7 text-xs rounded-lg border-border"
-                onClick={() => onPageChange(totalPages)}
-              >
-                {totalPages}
-              </Button>
-            </>
-          )}
+        {totalRecords > 0 && pageNumbers[pageNumbers.length - 1] < totalPages && (
+          <>
+            {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && (
+              <span className="text-xs text-muted-foreground px-0.5 select-none">…</span>
+            )}
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-7 w-7 text-xs rounded-lg border-border"
+              onClick={() => onPageChange(totalPages)}
+            >
+              {totalPages}
+            </Button>
+          </>
+        )}
 
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-7 w-7 rounded-lg border-border"
+          disabled={page >= totalPages || totalRecords === 0}
+          onClick={() => onPageChange(page + 1)}
+          aria-label="Next page"
+        >
+          <ChevronRight className="w-3.5 h-3.5" />
+        </Button>
+
+        <div className="flex items-center gap-1 ml-1 pl-1 border-l border-border/60">
+          <span className="text-[11px] text-muted-foreground whitespace-nowrap">Go to</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={pageInput}
+            onChange={(e) => setPageInput(e.target.value.replace(/\D/g, ""))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handlePageJump();
+              }
+            }}
+            className="h-7 w-10 px-1.5 text-xs text-center border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand-300"
+            aria-label="Page number"
+          />
           <Button
             variant="outline"
-            size="icon"
-            className="h-7 w-7 rounded-lg border-border"
-            disabled={page >= totalPages}
-            onClick={() => onPageChange(page + 1)}
+            size="sm"
+            className="h-7 px-2 text-[11px] rounded-lg border-border"
+            disabled={totalRecords === 0}
+            onClick={handlePageJump}
           >
-            <ChevronRight className="w-3.5 h-3.5" />
+            Go
           </Button>
         </div>
       </div>
