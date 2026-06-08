@@ -4,6 +4,22 @@ import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+function handleScrollableWheel(event: React.WheelEvent<HTMLElement>) {
+  const current = event.currentTarget;
+  if (current.scrollHeight <= current.clientHeight) return;
+
+  const atTop = current.scrollTop <= 0;
+  const atBottom = current.scrollTop + current.clientHeight >= current.scrollHeight - 1;
+  const scrollingUp = event.deltaY < 0;
+  const scrollingDown = event.deltaY > 0;
+
+  if ((scrollingUp && atTop) || (scrollingDown && atBottom)) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  current.scrollTop += event.deltaY;
+}
+
 const Select = SelectPrimitive.Root;
 const SelectGroup = SelectPrimitive.Group;
 const SelectValue = SelectPrimitive.Value;
@@ -71,7 +87,11 @@ const SelectContent = React.forwardRef<
     >
       <SelectScrollUpButton />
       <SelectPrimitive.Viewport
-        className={cn("p-1", position === "popper" && "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]")}
+        className={cn(
+          "max-h-[min(18rem,var(--radix-select-content-available-height))] overflow-y-auto overscroll-contain p-1",
+          position === "popper" && "w-full min-w-[var(--radix-select-trigger-width)]",
+        )}
+        onWheelCapture={handleScrollableWheel}
       >
         {children}
       </SelectPrimitive.Viewport>
