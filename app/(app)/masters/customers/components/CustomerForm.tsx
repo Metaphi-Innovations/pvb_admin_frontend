@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState, useRef } from "react";
-import { AlertCircle, ChevronDown, Check, Eye, Upload, Trash2, Plus, FileText, X, CheckCircle2, XCircle, Pencil, ChevronsUpDown, Search } from "lucide-react";
+import { AlertCircle, ChevronDown, Check, Eye, Download, Upload, Trash2, Plus, FileText, X, CheckCircle2, XCircle, Pencil, ChevronsUpDown, Search } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -491,22 +491,8 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
   const [previewDoc, setPreviewDoc] = useState<{ title: string; fileUrl: string; fileName: string } | null>(null);
 
   // States for adding additional documents
-  const [additionalTitle, setAdditionalTitle] = useState("");
-  const [additionalFile, setAdditionalFile] = useState<File | null>(null);
-  const [additionalFileName, setAdditionalFileName] = useState("");
-  const [branchAdditionalTitle, setBranchAdditionalTitle] = useState<Record<number, string>>({});
-
-  const [activeDocIndex, setActiveDocIndex] = useState<{ type: "required" | "additional"; index?: number } | null>(null);
-  const [activeBranchUpload, setActiveBranchUpload] = useState<{ branchIndex: number; docIndex: number; isAdditional?: boolean } | null>(null);
+  const [activeBranchUpload, setActiveBranchUpload] = useState<{ branchIndex: number; docIndex: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const triggerUpload = (type: "required" | "additional", index?: number) => {
-    setActiveDocIndex({ type, index });
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-      fileInputRef.current.click();
-    }
-  };
 
   const triggerBranchUpload = (branchIndex: number, docIndex: number) => {
     setActiveBranchUpload({ branchIndex, docIndex });
@@ -524,100 +510,26 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
     const fileName = file.name;
 
     if (activeBranchUpload) {
-      const { branchIndex, docIndex, isAdditional } = activeBranchUpload;
+      const { branchIndex, docIndex } = activeBranchUpload;
       const updatedBranches = [...form.branches];
-      if (isAdditional) {
-        const title = (branchAdditionalTitle[branchIndex] || "").trim() || "Additional Document";
-        updatedBranches[branchIndex] = {
-          ...updatedBranches[branchIndex],
-          documents: [
-            ...updatedBranches[branchIndex].documents,
-            {
-              documentName: title,
-              required: false,
+      updatedBranches[branchIndex] = {
+        ...updatedBranches[branchIndex],
+        documents: updatedBranches[branchIndex].documents.map((doc, idx) => {
+          if (idx === docIndex) {
+            return {
+              ...doc,
               fileName,
               fileUrl,
               file,
-            }
-          ]
-        };
-        setBranchAdditionalTitle(prev => ({ ...prev, [branchIndex]: "" }));
-      } else {
-        updatedBranches[branchIndex] = {
-          ...updatedBranches[branchIndex],
-          documents: updatedBranches[branchIndex].documents.map((doc, idx) => {
-            if (idx === docIndex) {
-              return {
-                ...doc,
-                fileName,
-                fileUrl,
-                file,
-              };
-            }
-            return doc;
-          }),
-        };
-      }
+            };
+          }
+          return doc;
+        }),
+      };
       onChange({ ...form, branches: updatedBranches });
       showToast("Document uploaded successfully.", "success");
       setActiveBranchUpload(null);
-    } else if (activeDocIndex) {
-      if (activeDocIndex.type === "required" && activeDocIndex.index !== undefined) {
-        const updated = [...form.requiredDocuments];
-        updated[activeDocIndex.index] = {
-          ...updated[activeDocIndex.index],
-          fileName,
-          fileUrl,
-          file,
-        };
-        onChange({ ...form, requiredDocuments: updated });
-        showToast("Document uploaded successfully.", "success");
-      } else if (activeDocIndex.type === "additional") {
-        setAdditionalFile(file);
-        setAdditionalFileName(fileName);
-      }
-      setActiveDocIndex(null);
     }
-  };
-
-  const addAdditionalDocument = () => {
-    if (!additionalTitle.trim()) {
-      showToast("Please enter document title.", "error");
-      return;
-    }
-    if (!additionalFile) {
-      showToast("Please select a file.", "error");
-      return;
-    }
-
-    const fileUrl = URL.createObjectURL(additionalFile);
-    const newDoc = {
-      id: `ADD-${Date.now()}`,
-      title: additionalTitle.trim(),
-      fileName: additionalFile.name,
-      fileUrl,
-      file: additionalFile,
-    };
-
-    onChange({
-      ...form,
-      additionalDocuments: [...form.additionalDocuments, newDoc],
-    });
-
-    setAdditionalTitle("");
-    setAdditionalFile(null);
-    setAdditionalFileName("");
-    showToast("Additional document added successfully.", "success");
-  };
-
-  const removeAdditionalDocument = (id: string) => {
-    const doc = form.additionalDocuments.find((d) => d.id === id);
-    if (doc?.fileUrl) {
-      URL.revokeObjectURL(doc.fileUrl);
-    }
-    const updated = form.additionalDocuments.filter((d) => d.id !== id);
-    onChange({ ...form, additionalDocuments: updated });
-    showToast("Additional document removed.", "success");
   };
 
   const customerTypes = useMemo(() => loadCustomerTypes(), []);
@@ -1679,221 +1591,139 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                                 <p className="text-xs italic text-muted-foreground">Please select a Customer Type in Basic Details to view documents.</p>
                               ) : (
                                 <>
-                                  {/* Required Documents Checklist Table */}
-                                  <div>
-                                    {(() => {
-                                      const requiredDocs = branch.documents
-                                        .map((doc, originalIdx) => ({ doc, originalIdx }))
-                                        .filter(item => item.doc.required);
-
-                                      return (
-                                        <>
-                                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Required Checklist</p>
-                                          {requiredDocs.length === 0 ? (
-                                            <p className="p-3 text-xs italic border rounded-lg text-muted-foreground bg-muted/10 border-border/40">No required documents for this Customer Type.</p>
-                                          ) : (
-                                            <div className="overflow-x-auto border rounded-lg border-border/60 bg-background">
-                                              <table className="w-full text-xs text-left border-collapse">
-                                                <thead>
-                                                  <tr className="font-semibold border-b border-border bg-muted/20 text-muted-foreground">
-                                                    <th className="w-12 px-3 py-2 text-center">Sr.</th>
-                                                    <th className="px-3 py-2">Document Name</th>
-                                                    <th className="w-40 px-3 py-2 text-center">File Attached</th>
-                                                    <th className="px-3 py-2 text-right w-44">Actions</th>
-                                                  </tr>
-                                                </thead>
-                                                <tbody>
-                                                  {requiredDocs.map(({ doc, originalIdx }, docIdx) => {
-                                                    const isAttached = !!doc.fileName;
-                                                    return (
-                                                      <tr key={originalIdx} className="border-b border-border/60 hover:bg-muted/5">
-                                                        <td className="px-3 py-2 text-center text-muted-foreground">{docIdx + 1}</td>
-                                                        <td className="px-3 py-2 font-medium text-foreground">{doc.documentName}</td>
-                                                        <td className="px-3 py-2 text-center">
-                                                          {isAttached ? (
-                                                            <button
-                                                              type="button"
-                                                              className="text-[11px] text-brand-600 hover:text-brand-700 hover:underline font-medium truncate max-w-[150px] inline-block text-left"
-                                                              title={doc.fileName}
-                                                              onClick={() => setPreviewDoc({ title: doc.documentName, fileUrl: doc.fileUrl!, fileName: doc.fileName! })}
-                                                            >
-                                                              {doc.fileName}
-                                                            </button>
-                                                          ) : (
-                                                            <span className="text-[11px] text-muted-foreground italic">Not uploaded</span>
-                                                          )}
-                                                        </td>
-                                                        <td className="py-2 px-3 text-right space-x-1.5">
-                                                          <Button
-                                                            type="button"
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="h-7 text-[11px] px-2.5 gap-1"
-                                                            onClick={() => triggerBranchUpload(bIdx, originalIdx)}
-                                                            disabled={readOnly}
-                                                          >
-                                                            <Upload className="w-3 h-3" /> {isAttached ? "Re-upload" : "Upload"}
-                                                          </Button>
-                                                          {isAttached && !readOnly && (
-                                                            <Button
-                                                              type="button"
-                                                              variant="outline"
-                                                              size="sm"
-                                                              className="h-7 text-[11px] px-2.5 gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-100"
-                                                              onClick={() => {
-                                                                const updatedBranches = [...form.branches];
-                                                                updatedBranches[bIdx].documents[originalIdx] = {
-                                                                  ...doc,
-                                                                  fileName: undefined,
-                                                                  fileUrl: undefined,
-                                                                  file: undefined,
-                                                                };
-                                                                onChange({ ...form, branches: updatedBranches });
-                                                                showToast("Document removed.", "success");
-                                                              }}
-                                                            >
-                                                              <Trash2 className="w-3 h-3" /> Remove
-                                                            </Button>
-                                                          )}
-                                                        </td>
-                                                      </tr>
-                                                    );
-                                                  })}
-                                                </tbody>
-                                              </table>
-                                            </div>
-                                          )}
-                                        </>
-                                      );
-                                    })()}
-                                  </div>
-
-                                  {errors[`branch_${bIdx}_documents`] && (
-                                    <div className="flex items-center gap-1.5 mt-2 text-xs text-red-500">
+                                  <div className="overflow-x-auto rounded-lg border border-border/50">
+                                    <table className="w-full text-xs min-w-[640px]">
+                                      <thead>
+                                        <tr className="bg-muted/25 border-b border-border/50 text-muted-foreground text-left">
+                                          <th className="px-3 py-2 font-medium">Document Name</th>
+                                          <th className="px-3 py-2 font-medium">Upload File</th>
+                                          <th className="px-3 py-2 w-10" />
+                                        </tr>
+                                      </thead>
+                                    <tbody>
+                                      {branch.documents.map((doc, originalIdx) => {
+                                        const isAttached = !!doc.fileName;
+                                        return (
+                                          <tr key={originalIdx} className="border-b border-border/40 last:border-0 hover:bg-muted/10">
+                                            <td className="px-3 py-2">
+                                              <Input
+                                                disabled={readOnly || doc.required}
+                                                value={doc.documentName}
+                                                onChange={(e) => {
+                                                  const updatedBranches = [...form.branches];
+                                                  updatedBranches[bIdx].documents[originalIdx].documentName = e.target.value;
+                                                  onChange({ ...form, branches: updatedBranches });
+                                                }}
+                                                className={cn(
+                                                  "h-8 text-xs border-border/60 bg-white disabled:opacity-100 disabled:text-neutral-800 disabled:bg-muted/40 font-medium",
+                                                  doc.required && "cursor-not-allowed"
+                                                )}
+                                                placeholder="Document name"
+                                              />
+                                              {errors[`branch_${bIdx}_doc_${originalIdx}_name`] && (
+                                                <p className="text-[10px] text-red-500 mt-0.5">{errors[`branch_${bIdx}_doc_${originalIdx}_name`]}</p>
+                                              )}
+                                            </td>
+                                            <td className="px-3 py-2">
+                                              {isAttached ? (
+                                                <button
+                                                  type="button"
+                                                  className="text-xs text-brand-600 hover:text-brand-700 hover:underline font-medium text-left truncate max-w-[280px] block"
+                                                  title={`Click to view ${doc.fileName}`}
+                                                  onClick={() => {
+                                                    if (doc.fileUrl && doc.fileName) {
+                                                      setPreviewDoc({
+                                                        title: doc.documentName || "Document",
+                                                        fileUrl: doc.fileUrl,
+                                                        fileName: doc.fileName
+                                                      });
+                                                    }
+                                                  }}
+                                                >
+                                                  {doc.fileName}
+                                                </button>
+                                              ) : readOnly ? (
+                                                <span className="text-muted-foreground">—</span>
+                                              ) : (
+                                                <div className="space-y-1">
+                                                  <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8 text-[11px] max-w-[180px] truncate"
+                                                    onClick={() => triggerBranchUpload(bIdx, originalIdx)}
+                                                  >
+                                                    <Upload className="w-3 h-3 mr-1 shrink-0" />
+                                                    Choose File
+                                                  </Button>
+                                                  {errors[`branch_${bIdx}_doc_${originalIdx}_file`] && (
+                                                    <p className="text-[10px] text-red-500 mt-0.5">{errors[`branch_${bIdx}_doc_${originalIdx}_file`]}</p>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </td>
+                                            <td className="px-3 py-2">
+                                              {!readOnly && (
+                                                <Button
+                                                  type="button"
+                                                  variant="ghost"
+                                                  className="h-8 w-8 p-0 rounded-md hover:bg-red-50 text-red-600 disabled:opacity-30 disabled:hover:bg-transparent"
+                                                  disabled={!isAttached && doc.required}
+                                                  onClick={() => {
+                                                    if (doc.required) {
+                                                      const updatedBranches = [...form.branches];
+                                                      updatedBranches[bIdx].documents[originalIdx] = {
+                                                        ...doc,
+                                                        fileName: undefined,
+                                                        fileUrl: undefined,
+                                                        file: undefined,
+                                                      };
+                                                      onChange({ ...form, branches: updatedBranches });
+                                                      showToast("Document removed.", "success");
+                                                    } else {
+                                                      const updatedBranches = [...form.branches];
+                                                      updatedBranches[bIdx].documents = updatedBranches[bIdx].documents.filter((_, idx) => idx !== originalIdx);
+                                                      onChange({ ...form, branches: updatedBranches });
+                                                      showToast("Document row removed.", "success");
+                                                    }
+                                                  }}
+                                                >
+                                                  <Trash2 className="w-3.5 h-3.5" />
+                                                </Button>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                                
+                                {errors[`branch_${bIdx}_documents`] && (
+                                    <div className="flex items-center gap-1.5 mt-2 text-xs text-red-500 bg-red-50 p-2 rounded border border-red-100">
                                       <AlertCircle className="flex-shrink-0 w-4 h-4" />
                                       <span>{errors[`branch_${bIdx}_documents`]}</span>
                                     </div>
                                   )}
 
-                                  {/* Separate Optional Document Upload Section (Below the Checklist Table) */}
-                                  <div className="pt-4 space-y-3 border-t border-border/40">
-                                    {!readOnly && (
-                                      <>
-                                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Add Additional Document (Optional)</p>
-                                        <div className="flex items-end max-w-xl gap-3">
-                                          <div className="flex-1 space-y-1">
-                                            <Label className="text-xs font-medium text-foreground">Document Title</Label>
-                                            <Input
-                                              value={branchAdditionalTitle[bIdx] || ""}
-                                              onChange={(e) => setBranchAdditionalTitle(prev => ({ ...prev, [bIdx]: e.target.value }))}
-                                              placeholder="e.g. Land Deed, Sales Agreement..."
-                                              className="h-8 text-xs bg-background"
-                                            />
-                                          </div>
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="h-8 text-xs gap-1.5"
-                                            onClick={() => {
-                                              const title = (branchAdditionalTitle[bIdx] || "").trim();
-                                              if (!title) {
-                                                showToast("Please enter a title for the additional document.", "error");
-                                                return;
-                                              }
-                                              setActiveBranchUpload({ branchIndex: bIdx, docIndex: -1, isAdditional: true });
-                                              if (fileInputRef.current) {
-                                                fileInputRef.current.value = "";
-                                                fileInputRef.current.click();
-                                              }
-                                            }}
-                                          >
-                                            <Upload className="w-3.5 h-3.5" /> Upload File
-                                          </Button>
-                                        </div>
-                                      </>
-                                    )}
-
-                                    {/* Optional/Additional Documents Table */}
-                                    {(() => {
-                                      const additionalDocs = branch.documents
-                                        .map((doc, originalIdx) => ({ doc, originalIdx }))
-                                        .filter(item => !item.doc.required);
-
-                                      if (additionalDocs.length === 0) return null;
-
-                                      return (
-                                        <div className="mt-3 space-y-2">
-                                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Additional Documents</p>
-                                          <div className="overflow-x-auto border rounded-lg border-border/60 bg-background">
-                                            <table className="w-full text-xs text-left border-collapse">
-                                              <thead>
-                                                <tr className="font-semibold border-b border-border bg-muted/20 text-muted-foreground">
-                                                  <th className="w-12 px-3 py-2 text-center">Sr.</th>
-                                                  <th className="px-3 py-2">Document Title</th>
-                                                  <th className="w-40 px-3 py-2 text-center">File Attached</th>
-                                                  <th className="px-3 py-2 text-right w-44">Actions</th>
-                                                </tr>
-                                              </thead>
-                                              <tbody>
-                                                {additionalDocs.map(({ doc, originalIdx }, addIdx) => {
-                                                  const isAttached = !!doc.fileName;
-                                                  return (
-                                                    <tr key={originalIdx} className="border-b border-border/60 hover:bg-muted/5">
-                                                      <td className="px-3 py-2 text-center text-muted-foreground">{addIdx + 1}</td>
-                                                      <td className="px-3 py-2 font-medium text-foreground">{doc.documentName}</td>
-                                                      <td className="px-3 py-2 text-center">
-                                                        {isAttached ? (
-                                                          <button
-                                                            type="button"
-                                                            className="text-[11px] text-brand-600 hover:text-brand-700 hover:underline font-medium truncate max-w-[150px] inline-block text-left"
-                                                            title={doc.fileName}
-                                                            onClick={() => setPreviewDoc({ title: doc.documentName, fileUrl: doc.fileUrl!, fileName: doc.fileName! })}
-                                                          >
-                                                            {doc.fileName}
-                                                          </button>
-                                                        ) : (
-                                                          <span className="text-[11px] text-muted-foreground italic">Not uploaded</span>
-                                                        )}
-                                                      </td>
-                                                      <td className="py-2 px-3 text-right space-x-1.5">
-                                                        <Button
-                                                          type="button"
-                                                          variant="outline"
-                                                          size="sm"
-                                                          className="h-7 text-[11px] px-2.5 gap-1"
-                                                          onClick={() => triggerBranchUpload(bIdx, originalIdx)}
-                                                          disabled={readOnly}
-                                                        >
-                                                          <Upload className="w-3 h-3" /> {isAttached ? "Re-upload" : "Upload"}
-                                                        </Button>
-                                                        {isAttached && !readOnly && (
-                                                          <Button
-                                                            type="button"
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="h-7 text-[11px] px-2.5 gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-100"
-                                                            onClick={() => {
-                                                              const updatedBranches = [...form.branches];
-                                                              updatedBranches[bIdx].documents = updatedBranches[bIdx].documents.filter((_, idx) => idx !== originalIdx);
-                                                              onChange({ ...form, branches: updatedBranches });
-                                                              showToast("Additional document removed.", "success");
-                                                            }}
-                                                          >
-                                                            <Trash2 className="w-3 h-3" /> Remove
-                                                          </Button>
-                                                        )}
-                                                      </td>
-                                                    </tr>
-                                                  );
-                                                })}
-                                              </tbody>
-                                            </table>
-                                          </div>
-                                        </div>
-                                      );
-                                    })()}
-                                  </div>
+                                  {!readOnly && (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-8 text-xs mt-1 border-dashed"
+                                      onClick={() => {
+                                        const updatedBranches = [...form.branches];
+                                        updatedBranches[bIdx].documents = [
+                                          ...updatedBranches[bIdx].documents,
+                                          { documentName: "", required: false }
+                                        ];
+                                        onChange({ ...form, branches: updatedBranches });
+                                      }}
+                                    >
+                                      <Plus className="w-3.5 h-3.5 mr-1" /> Add Document Row
+                                    </Button>
+                                  )}
                                 </>
                               )}
                             </div>
@@ -2018,6 +1848,19 @@ export function validateCustomerForm(form: CustomerFormValues): Record<string, s
     if (missing) {
       e[`branch_${bIdx}_documents`] = `Please upload all required documents for ${branch.branchName}.`;
     }
+
+    branch.documents.forEach((doc, docIdx) => {
+      if (!doc.required) {
+        const hasName = !!doc.documentName.trim();
+        const hasFile = !!doc.fileName;
+        if (hasName && !hasFile) {
+          e[`branch_${bIdx}_doc_${docIdx}_file`] = "File is required";
+        }
+        if (hasFile && !hasName) {
+          e[`branch_${bIdx}_doc_${docIdx}_name`] = "Document name is required";
+        }
+      }
+    });
   });
 
   if (form.creditLimit.trim() && isNaN(parseFloat(form.creditLimit))) e.creditLimit = "Invalid amount";
@@ -2046,6 +1889,14 @@ export function formValuesToCustomer(
 
   const mainBranch = form.branches.find(b => b.isMain) || form.branches.find(b => b.branchName === "Main Branch") || form.branches[0];
 
+  // Clean custom documents for storage
+  const cleanBranches = form.branches.map((b) => ({
+    ...b,
+    documents: b.documents.filter((d) => d.required || d.documentName.trim() || d.fileName),
+  }));
+
+  const cleanMainBranch = cleanBranches.find(b => b.isMain) || cleanBranches.find(b => b.branchName === "Main Branch") || cleanBranches[0];
+
   return {
     id: base.id,
     customerCode: base.customerCode,
@@ -2067,14 +1918,14 @@ export function formValuesToCustomer(
     fssai: form.fssai.trim(),
     
     // For backwards compatibility and listing/view pages:
-    address: mainBranch?.billingAddress?.address?.trim() || "",
+    address: cleanMainBranch?.billingAddress?.address?.trim() || "",
     stateId: form.stateId ? Number(form.stateId) : null,
-    stateName: mainBranch?.billingAddress?.state?.trim() || "",
+    stateName: cleanMainBranch?.billingAddress?.state?.trim() || "",
     districtId: form.districtId ? Number(form.districtId) : null,
-    districtName: mainBranch?.billingAddress?.city?.trim() || "",
+    districtName: cleanMainBranch?.billingAddress?.city?.trim() || "",
     territoryId: form.territoryId ? Number(form.territoryId) : null,
     territoryName: "",
-    pincode: mainBranch?.billingAddress?.pincode?.trim() || "",
+    pincode: cleanMainBranch?.billingAddress?.pincode?.trim() || "",
     
     salesManId: form.salesManId ? Number(form.salesManId) : null,
     salesManName: sales?.fullName ?? (sales ? `${sales.firstName} ${sales.lastName}`.trim() : ""),
@@ -2099,10 +1950,10 @@ export function formValuesToCustomer(
     statusHistory: base.statusHistory ?? [],
     
     documents: {
-      requiredDocuments: (mainBranch?.documents || []).map((d) => ({
+      requiredDocuments: (cleanMainBranch?.documents || []).map((d) => ({
         documentTypeId: d.documentName,
         documentName: d.documentName,
-        required: true,
+        required: d.required,
         fileName: d.fileName,
         fileUrl: d.fileUrl,
       })),
@@ -2112,6 +1963,6 @@ export function formValuesToCustomer(
     // NEW FIELDS
     products: form.customerProducts,
     customerProducts: form.customerProducts,
-    branches: form.branches,
+    branches: cleanBranches,
   } as any;
 }
