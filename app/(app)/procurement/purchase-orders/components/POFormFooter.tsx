@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Send } from "lucide-react";
+import { Send, Save } from "lucide-react";
 import { ProcButton } from "../../design/proc-design";
 
 export function POFormFooter({
@@ -22,10 +22,16 @@ export function POFormFooter({
   }
   return (
     <>
-      <ProcButton variant="ghost" onClick={onCancel}>Cancel</ProcButton>
-      {onSaveDraft && <ProcButton variant="outline" onClick={onSaveDraft}>Save as Draft</ProcButton>}
+      <ProcButton variant="outline" onClick={onCancel}>Discard</ProcButton>
+      {onSaveDraft && (
+        <ProcButton variant="outline" onClick={onSaveDraft}>
+          <Save className="w-3.5 h-3.5 mr-1.5" /> Save Draft
+        </ProcButton>
+      )}
       {showSubmit && onSubmit && (
-        <ProcButton variant="success" onClick={onSubmit}><Send className="w-3.5 h-3.5" /> Submit</ProcButton>
+        <ProcButton variant="primary" onClick={onSubmit}>
+          <Send className="w-3.5 h-3.5 mr-1.5" /> Submit PO
+        </ProcButton>
       )}
     </>
   );

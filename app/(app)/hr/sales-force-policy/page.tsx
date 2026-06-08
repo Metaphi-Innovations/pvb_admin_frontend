@@ -2,4 +2,4 @@
 
 import { createLazyClientPage } from "@/lib/createLazyClientPage";
 
-export default createLazyClientPage(() => import("./TadaConfigPageClient"));
+export default createLazyClientPage(() => import("./SalesForcePolicyPageClient"));

@@ -1,59 +1,61 @@
-import type { AttendanceDayStatus } from "../attendance-data";
+import type { DailyAttendanceRecord } from "../attendance-data";
 
-export const STATUS_THEME: Record<
-  AttendanceDayStatus,
-  { label: string; cell: string; dot: string; ring: string; pill: string }
-> = {
-  present: {
-    label: "Present",
-    cell: "bg-emerald-500 text-white hover:bg-emerald-600 shadow-sm",
-    dot: "bg-emerald-500",
-    ring: "ring-emerald-600 ring-2",
-    pill: "bg-emerald-600 text-white border-emerald-600",
-  },
-  absent: {
-    label: "Absent",
-    cell: "bg-red-500 text-white hover:bg-red-600 shadow-sm",
-    dot: "bg-red-500",
-    ring: "ring-red-600 ring-2",
-    pill: "bg-red-50 text-red-700 border-red-300",
-  },
-  half_day: {
-    label: "Half Day",
-    cell: "bg-amber-400 text-amber-950 hover:bg-amber-500 shadow-sm",
-    dot: "bg-amber-400",
-    ring: "ring-amber-500 ring-2",
-    pill: "bg-amber-50 text-amber-800 border-amber-300",
-  },
-  leave: {
-    label: "Leave",
-    cell: "bg-violet-500 text-white hover:bg-violet-600 shadow-sm",
-    dot: "bg-violet-500",
-    ring: "ring-violet-600 ring-2",
-    pill: "bg-violet-50 text-violet-700 border-violet-300",
-  },
-  holiday: {
-    label: "Holiday",
-    cell: "bg-sky-500 text-white hover:bg-sky-600 shadow-sm",
-    dot: "bg-sky-500",
-    ring: "ring-sky-600 ring-2",
-    pill: "bg-sky-50 text-sky-700 border-sky-300",
-  },
-  week_off: {
-    label: "Week Off",
-    cell: "bg-stone-400 text-white hover:bg-stone-500 shadow-sm",
-    dot: "bg-stone-400",
-    ring: "ring-stone-500 ring-2",
-    pill: "bg-stone-100 text-stone-700 border-stone-300",
-  },
-  wfh: {
-    label: "WFH",
-    cell: "bg-teal-500 text-white hover:bg-teal-600 shadow-sm",
-    dot: "bg-teal-500",
-    ring: "ring-teal-600 ring-2",
-    pill: "bg-teal-50 text-teal-700 border-teal-300",
-  },
+/** Only these 4 statuses appear on the attendance calendar. */
+export type CalendarTileStatus = "present" | "absent" | "holiday" | "week_off" | "empty";
+
+export const CALENDAR_LEGEND_STATUSES = [
+  "present",
+  "absent",
+  "holiday",
+  "week_off",
+] as const satisfies readonly Exclude<CalendarTileStatus, "empty">[];
+
+export const STATUS_LABELS: Record<Exclude<CalendarTileStatus, "empty">, string> = {
+  present: "Present",
+  absent: "Absent",
+  holiday: "Holiday",
+  week_off: "Week Off",
 };
+
+export const LEGEND_DOT: Record<Exclude<CalendarTileStatus, "empty">, string> = {
+  present: "bg-emerald-600",
+  absent: "bg-red-600",
+  holiday: "bg-blue-600",
+  week_off: "bg-stone-500",
+};
+
+/**
+ * Resolve display status for a calendar date.
+ * Priority: Holiday → Week Off → Present → Absent → Empty
+ * (legacy half_day / leave / wfh are excluded from the calendar)
+ */
+export function getAttendanceStatusForDate(
+  _date: string,
+  record: DailyAttendanceRecord | undefined,
+): CalendarTileStatus {
+  if (!record) return "empty";
+  const s = record.attendanceStatus;
+  if (s === "holiday") return "holiday";
+  if (s === "week_off") return "week_off";
+  if (s === "present") return "present";
+  if (s === "absent") return "absent";
+  return "empty";
+}
+
+export function getStatusTileClass(status: CalendarTileStatus): string {
+  switch (status) {
+    case "present":
+      return "bg-emerald-600 text-white border-emerald-700";
+    case "absent":
+      return "bg-red-600 text-white border-red-700";
+    case "holiday":
+      return "bg-blue-600 text-white border-blue-700";
+    case "week_off":
+      return "bg-stone-500 text-white border-stone-600";
+    default:
+      return "bg-white text-slate-600 border-slate-200";
+  }
+}
 
 export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 

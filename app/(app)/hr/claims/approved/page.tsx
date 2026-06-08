@@ -1,5 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { createLazyClientPage } from "@/lib/createLazyClientPage";
-
-export default createLazyClientPage(() => import("./ApprovedClaimsPageClient"));
+/** Approved claim payments are handled via the global Approval Center. */
+export default function ApprovedClaimsRedirect() {
+  redirect("/dashboard");
+}

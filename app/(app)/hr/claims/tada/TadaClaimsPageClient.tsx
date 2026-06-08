@@ -1,12 +1,10 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ModuleFiltersBar } from "@/components/module/ModuleFiltersBar";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -20,183 +18,282 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, MoreVertical, Eye, Edit2, CheckCircle, Receipt } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { MoreVertical, Eye, CheckCircle, XCircle, RotateCcw, Clock, History, Receipt } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { HrStatusBadge } from "../../components/HrStatusBadge";
-import { TadaClaimApprovalModal } from "./components/TadaClaimApprovalModal";
+import { TadaClaimReviewDrawer } from "./components/TadaClaimReviewDrawer";
+import { getActiveHrEmployees } from "../../employees/employee-master-data";
 import {
-  approveClaim,
-  approveClaimFull,
-  getTadaClaimById,
+  getRoleDisplayName,
+  getSalesForceRoleIds,
+  loadClaimCategories,
+} from "../../sales-force-policy/tada-policy-data";
+import { getClaimPolicySnapshot, getClaimRoleName, POLICY_STATUS_FILTER_OPTIONS } from "./tada-claim-policy";
+import {
+  APPROVAL_STATUS_LABEL,
+  applyHrClaimFilters,
+  filterClaimsByHrTab,
+  hrApproveClaim,
+  hrHoldClaim,
+  hrRejectClaim,
+  hrSendBackClaim,
+  HR_CLAIM_LIST_TABS,
+  HR_STATUS_LABEL,
   loadTadaClaims,
-  rejectClaim,
   saveTadaClaims,
-  sendClaimToAccounts,
-  submitClaim,
+  type HrClaimListTab,
   type TadaClaim,
 } from "./tada-claim-data";
 
+const TAB_IDS = new Set<string>(HR_CLAIM_LIST_TABS.map((t) => t.id));
+
+function formatDate(iso?: string) {
+  if (!iso) return "—";
+  return iso.slice(0, 10);
+}
+
 export default function TadaClaimsPageClient() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [records, setRecords] = useState<TadaClaim[]>([]);
+  const [activeTab, setActiveTab] = useState<HrClaimListTab>("pending_hr");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [approvalTarget, setApprovalTarget] = useState<TadaClaim | null>(null);
+  const [employeeFilter, setEmployeeFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [travelFilter, setTravelFilter] = useState("all");
+  const [policyFilter, setPolicyFilter] = useState("all");
+  const [approvalFilter, setApprovalFilter] = useState("all");
+  const [hrStatusFilter, setHrStatusFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [reviewClaim, setReviewClaim] = useState<TadaClaim | null>(null);
+  const [viewOnly, setViewOnly] = useState(false);
+
+  const employees = getActiveHrEmployees();
+  const sfRoleIds = getSalesForceRoleIds();
+  const categories = loadClaimCategories().filter((c) => c.status === "active");
 
   const refresh = useCallback(() => setRecords(loadTadaClaims()), []);
   useEffect(() => {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    const q = searchParams.get("tab");
+    if (q && TAB_IDS.has(q)) setActiveTab(q as HrClaimListTab);
+  }, [searchParams]);
+
+  const goToTab = (tab: HrClaimListTab) => {
+    setActiveTab(tab);
+    router.replace(`${pathname}?tab=${tab}`);
+  };
+
+  const persist = (updated: TadaClaim) => {
+    saveTadaClaims(records.map((c) => (c.id === updated.id ? updated : c)));
+    setReviewClaim(null);
+    refresh();
+  };
+
+  const openReview = (claim: TadaClaim, readOnly = false) => {
+    setReviewClaim(claim);
+    setViewOnly(readOnly);
+  };
+
   const visible = useMemo(() => {
-    let r = [...records];
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      r = r.filter(
-        (c) =>
-          c.claimNumber.toLowerCase().includes(q) ||
-          c.employeeName.toLowerCase().includes(q),
-      );
+    let r = filterClaimsByHrTab(records, activeTab);
+    r = applyHrClaimFilters(r, {
+      search,
+      employeeId: employeeFilter === "all" ? "all" : Number(employeeFilter),
+      roleId: roleFilter === "all" ? "all" : Number(roleFilter),
+      claimCategory: categoryFilter,
+      travelType: travelFilter,
+      approvalStatus: approvalFilter,
+      hrStatus: hrStatusFilter,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+    });
+    if (policyFilter !== "all") {
+      r = r.filter((c) => getClaimPolicySnapshot(c).policyStatus === policyFilter);
     }
-    if (statusFilter !== "all") r = r.filter((c) => c.status === statusFilter);
-    return r.sort((a, b) => b.claimDate.localeCompare(a.claimDate));
-  }, [records, search, statusFilter]);
+    return r.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+  }, [records, activeTab, search, employeeFilter, roleFilter, categoryFilter, travelFilter, policyFilter, approvalFilter, hrStatusFilter, dateFrom, dateTo]);
 
-  const persistClaim = (updated: TadaClaim) => {
-    let next = updated;
-    if (next.status === "approved" && next.paymentStatus !== "sent_to_accounts") {
-      next = sendClaimToAccounts(next);
-    }
-    saveTadaClaims(records.map((c) => (c.id === next.id ? next : c)));
-    setApprovalTarget(null);
-    refresh();
-  };
+  const tabCounts = useMemo(
+    () =>
+      Object.fromEntries(
+        HR_CLAIM_LIST_TABS.map((t) => [t.id, filterClaimsByHrTab(records, t.id).length]),
+      ) as Record<HrClaimListTab, number>,
+    [records],
+  );
 
-  const handleSubmit = (id: number) => {
-    const claim = getTadaClaimById(id);
-    if (!claim || claim.status !== "draft") return;
-    const submitted = submitClaim(claim);
-    saveTadaClaims(records.map((c) => (c.id === id ? submitted : c)));
-    refresh();
-  };
+  const activeTabMeta = HR_CLAIM_LIST_TABS.find((t) => t.id === activeTab);
 
   return (
     <AppLayout>
-      <div className="max-w-[1400px] mx-auto space-y-3">
+      <div className="max-w-[1600px] mx-auto space-y-3">
         <PageHeader
           title="TA/DA Claims"
-          description="Create and submit travel claims based on Sales Force policy configuration."
+          description="HR monitoring and control for Sales Force TA/DA claims submitted via mobile. Review policy validation, approval trail, and forward HR-approved claims to Payments."
           icon={Receipt}
           breadcrumbs={[
-            { label: "HR", href: "/hr/attendance" },
-            { label: "TA/DA Claims" },
+            { label: "HR", href: "/hr/sales-force-attendance" },
+            { label: "TA/DA Claims", href: "/hr/claims/tada" },
+            ...(activeTabMeta ? [{ label: activeTabMeta.label }] : []),
           ]}
-          actions={
-            <Button
-              className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
-              onClick={() => router.push("/hr/claims/tada/new")}
-            >
-              <Plus className="w-3.5 h-3.5" /> New Claim
-            </Button>
-          }
         />
 
-        <ModuleFiltersBar
-          searchValue={search}
-          onSearchChange={setSearch}
-          searchPlaceholder="Search claim no., employee…"
-        >
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-8 w-[160px] text-xs bg-white">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
+        <div className="flex flex-wrap gap-1 border-b pb-1">
+          {HR_CLAIM_LIST_TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => goToTab(t.id)}
+              className={cn(
+                "px-3 py-2 text-xs font-medium rounded-t-md border-b-2 -mb-px transition-colors",
+                activeTab === t.id
+                  ? "border-brand-600 text-brand-700 bg-brand-50/50"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40",
+              )}
+            >
+              {t.label}
+              <span className="ml-1.5 text-[10px] text-muted-foreground">({tabCounts[t.id]})</span>
+            </button>
+          ))}
+        </div>
+
+        <ModuleFiltersBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search claim no., employee, code…">
+          <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+            <SelectTrigger className="h-8 w-[140px] text-xs bg-white"><SelectValue placeholder="Employee" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all" className="text-xs">All Status</SelectItem>
-              <SelectItem value="draft" className="text-xs">Draft</SelectItem>
-              <SelectItem value="submitted" className="text-xs">Submitted</SelectItem>
-              <SelectItem value="pending_approval" className="text-xs">Pending Approval</SelectItem>
-              <SelectItem value="approved" className="text-xs">Approved</SelectItem>
-              <SelectItem value="rejected" className="text-xs">Rejected</SelectItem>
-              <SelectItem value="paid" className="text-xs">Paid</SelectItem>
+              <SelectItem value="all" className="text-xs">All Employees</SelectItem>
+              {employees.map((e) => <SelectItem key={e.id} value={String(e.id)} className="text-xs">{e.employeeName}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Select value={roleFilter} onValueChange={setRoleFilter}>
+            <SelectTrigger className="h-8 w-[120px] text-xs bg-white"><SelectValue placeholder="Role" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">All Roles</SelectItem>
+              {sfRoleIds.map((id) => <SelectItem key={id} value={String(id)} className="text-xs">{getRoleDisplayName(id)}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="h-8 w-[140px] text-xs bg-white"><SelectValue placeholder="Category" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">All Categories</SelectItem>
+              {categories.map((c) => <SelectItem key={c.id} value={c.claimCategoryName} className="text-xs">{c.claimCategoryName}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={travelFilter} onValueChange={setTravelFilter}>
+            <SelectTrigger className="h-8 w-[110px] text-xs bg-white"><SelectValue placeholder="Travel" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">All Travel</SelectItem>
+              <SelectItem value="Local" className="text-xs">Local</SelectItem>
+              <SelectItem value="Outstation" className="text-xs">Outstation</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={policyFilter} onValueChange={setPolicyFilter}>
+            <SelectTrigger className="h-8 w-[130px] text-xs bg-white"><SelectValue placeholder="Policy" /></SelectTrigger>
+            <SelectContent>
+              {POLICY_STATUS_FILTER_OPTIONS.map((p) => <SelectItem key={p} value={p} className="text-xs">{p === "all" ? "All Policy" : p}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={approvalFilter} onValueChange={setApprovalFilter}>
+            <SelectTrigger className="h-8 w-[150px] text-xs bg-white"><SelectValue placeholder="Approval" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">All Approval</SelectItem>
+              {Object.entries(APPROVAL_STATUS_LABEL).map(([k, v]) => <SelectItem key={k} value={k} className="text-xs">{v}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={hrStatusFilter} onValueChange={setHrStatusFilter}>
+            <SelectTrigger className="h-8 w-[130px] text-xs bg-white"><SelectValue placeholder="HR Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs">All HR Status</SelectItem>
+              {Object.entries(HR_STATUS_LABEL).map(([k, v]) => <SelectItem key={k} value={k} className="text-xs">{v}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Input type="date" className="h-8 w-[130px] text-xs" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} title="From date" />
+          <Input type="date" className="h-8 w-[130px] text-xs" value={dateTo} onChange={(e) => setDateTo(e.target.value)} title="To date" />
         </ModuleFiltersBar>
 
         <div className="page-shell overflow-hidden">
-          <div className="overflow-x-auto max-h-[calc(100vh-280px)]">
-            <table className="w-full text-table">
+          <div className="overflow-x-auto max-h-[calc(100vh-340px)]">
+            <table className="w-full text-table min-w-[1400px]">
               <thead className="sticky top-0 z-10 bg-white border-b border-border">
                 <tr>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Claim No.</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Employee</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Period</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Claim Date</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Amount</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Approval Level</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Status</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground w-16">Actions</th>
+                  {["Claim No", "Employee Name", "Employee Code", "Role", "Reporting Manager", "Travel Type", "Claim Category", "Claim Amount", "Eligible Amount", "Policy Status", "Approval Status", "HR Status", "Submitted Date", "Last Updated", "Actions"].map((h) => (
+                    <th key={h} className="px-2 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap">{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {visible.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-3 py-12 text-center text-xs text-muted-foreground">
-                      No claims found.
+                    <td colSpan={15} className="px-3 py-12 text-center text-xs text-muted-foreground">
+                      No claims in {activeTabMeta?.label ?? "this view"}.
                     </td>
                   </tr>
                 ) : (
-                  visible.map((c) => (
-                    <tr key={c.id} className="border-b border-border/50 hover:bg-brand-50/30">
-                      <td className="px-3 py-2 text-xs font-mono font-medium">{c.claimNumber}</td>
-                      <td className="px-3 py-2 text-xs">{c.employeeName}</td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground">
-                        {c.periodFrom} — {c.periodTo}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground">{c.claimDate}</td>
-                      <td className="px-3 py-2 text-xs font-medium">₹{c.claimAmount.toLocaleString("en-IN")}</td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground">
-                        {c.currentApprovalLevelLabel ?? (c.status === "approved" ? "Complete" : "—")}
-                      </td>
-                      <td className="px-3 py-2">
-                        <HrStatusBadge status={c.status} />
-                      </td>
-                      <td className="px-3 py-2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button type="button" className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted">
-                              <MoreVertical className="w-3.5 h-3.5" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-44">
-                            <DropdownMenuItem asChild>
-                              <Link href={`/hr/claims/tada/${c.id}`} className="text-xs gap-2">
+                  visible.map((c) => {
+                    const policy = getClaimPolicySnapshot(c);
+                    return (
+                      <tr key={c.id} className="border-b border-border/50 hover:bg-brand-50/30">
+                        <td className="px-2 py-2 text-xs font-mono font-medium whitespace-nowrap">{c.claimNumber}</td>
+                        <td className="px-2 py-2 text-xs whitespace-nowrap">{c.employeeName}</td>
+                        <td className="px-2 py-2 text-xs font-mono text-muted-foreground">{c.employeeCode}</td>
+                        <td className="px-2 py-2 text-xs whitespace-nowrap">{getClaimRoleName(c)}</td>
+                        <td className="px-2 py-2 text-xs text-muted-foreground whitespace-nowrap">{c.reportingManager}</td>
+                        <td className="px-2 py-2 text-xs">{c.travelTypeLabel ?? "—"}</td>
+                        <td className="px-2 py-2 text-xs">{c.claimCategoryName ?? "—"}</td>
+                        <td className="px-2 py-2 text-xs font-medium">₹{c.claimAmount.toLocaleString("en-IN")}</td>
+                        <td className="px-2 py-2 text-xs text-emerald-700">₹{policy.eligibleAmount.toLocaleString("en-IN")}</td>
+                        <td className="px-2 py-2">
+                          <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded", policy.policyStatus === "Compliant" ? "bg-emerald-50 text-emerald-700" : policy.policyStatus === "Non-Compliant" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700")}>
+                            {policy.policyStatus}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2 text-[10px] text-muted-foreground whitespace-nowrap">{APPROVAL_STATUS_LABEL[c.approvalStatus]}</td>
+                        <td className="px-2 py-2"><HrStatusBadge status={c.hrStatus} label={HR_STATUS_LABEL[c.hrStatus]} /></td>
+                        <td className="px-2 py-2 text-xs text-muted-foreground whitespace-nowrap">{formatDate(c.submittedAt)}</td>
+                        <td className="px-2 py-2 text-xs text-muted-foreground whitespace-nowrap">{formatDate(c.updatedAt)}</td>
+                        <td className="px-2 py-2">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button type="button" className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted">
+                                <MoreVertical className="w-3.5 h-3.5" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                              <DropdownMenuItem className="text-xs gap-2" onClick={() => openReview(c, true)}>
                                 <Eye className="w-3.5 h-3.5" /> View
-                              </Link>
-                            </DropdownMenuItem>
-                            {(c.status === "draft" || c.status === "rejected") && (
-                              <DropdownMenuItem asChild>
-                                <Link href={`/hr/claims/tada/${c.id}/edit`} className="text-xs gap-2">
-                                  <Edit2 className="w-3.5 h-3.5" /> Edit
-                                </Link>
                               </DropdownMenuItem>
-                            )}
-                            {c.status === "draft" && (
-                              <DropdownMenuItem className="text-xs" onClick={() => handleSubmit(c.id)}>
-                                Submit for Approval
+                              <DropdownMenuItem className="text-xs gap-2" onClick={() => openReview(c, true)}>
+                                <History className="w-3.5 h-3.5" /> View Approval Trail
                               </DropdownMenuItem>
-                            )}
-                            {c.status === "pending_approval" && (
-                              <DropdownMenuItem
-                                className="text-xs gap-2 text-emerald-700"
-                                onClick={() => setApprovalTarget(c)}
-                              >
-                                <CheckCircle className="w-3.5 h-3.5" /> Approve / Reject
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  ))
+                              {(c.hrStatus === "pending_hr_review" || c.hrStatus === "on_hold") && (
+                                <>
+                                  <DropdownMenuItem className="text-xs gap-2 text-emerald-700" onClick={() => openReview(c, false)}>
+                                    <CheckCircle className="w-3.5 h-3.5" /> Approve
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem className="text-xs gap-2 text-red-600" onClick={() => openReview(c, false)}>
+                                    <XCircle className="w-3.5 h-3.5" /> Reject
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem className="text-xs gap-2 text-amber-700" onClick={() => openReview(c, false)}>
+                                    <RotateCcw className="w-3.5 h-3.5" /> Send Back
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem className="text-xs gap-2 text-blue-700" onClick={() => openReview(c, false)}>
+                                    <Clock className="w-3.5 h-3.5" /> Hold
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -204,15 +301,15 @@ export default function TadaClaimsPageClient() {
         </div>
       </div>
 
-      <TadaClaimApprovalModal
-        open={!!approvalTarget}
-        onClose={() => setApprovalTarget(null)}
-        claim={approvalTarget}
-        onApproveFull={(remarks) => approvalTarget && persistClaim(approveClaimFull(approvalTarget, remarks))}
-        onApprovePartial={(amount, remarks) =>
-          approvalTarget && persistClaim(approveClaim(approvalTarget, amount, remarks))
-        }
-        onReject={(remarks) => approvalTarget && persistClaim(rejectClaim(approvalTarget, remarks))}
+      <TadaClaimReviewDrawer
+        open={!!reviewClaim}
+        claim={reviewClaim}
+        viewOnly={viewOnly}
+        onClose={() => setReviewClaim(null)}
+        onHrApprove={(remarks) => reviewClaim && persist(hrApproveClaim(reviewClaim, remarks))}
+        onHrReject={(remarks) => reviewClaim && persist(hrRejectClaim(reviewClaim, remarks))}
+        onHrSendBack={(remarks) => reviewClaim && persist(hrSendBackClaim(reviewClaim, remarks))}
+        onHrHold={(remarks) => reviewClaim && persist(hrHoldClaim(reviewClaim, remarks))}
       />
     </AppLayout>
   );
