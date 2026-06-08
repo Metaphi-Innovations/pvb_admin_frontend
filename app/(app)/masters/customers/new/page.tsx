@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, CheckCircle2, Save, X, XCircle, ShieldAlert } from "lucide-react";
@@ -121,77 +121,64 @@ export default function NewCustomerPage() {
 
   if (allowed === false) {
     return (
-      <AppLayout>
-        <div className="flex flex-col items-center gap-3 py-16 text-center">
-          <div className="flex items-center justify-center w-12 h-12 border rounded-xl border-amber-200 bg-amber-50">
-            <ShieldAlert className="w-6 h-6 text-amber-600" />
-          </div>
-          <h1 className="text-lg font-bold text-foreground">Access restricted</h1>
-          <p className="max-w-md text-sm text-muted-foreground">
-            You do not have permission to create customers.
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 mt-2 text-[11px] px-3"
-            onClick={() => router.push("/masters/customers")}
-          >
-            Back to listing
-          </Button>
+      <div className="flex flex-col items-center gap-3 py-16 text-center">
+        <div className="flex items-center justify-center w-12 h-12 border rounded-xl border-amber-200 bg-amber-50">
+          <ShieldAlert className="w-6 h-6 text-amber-600" />
         </div>
-      </AppLayout>
+        <h1 className="text-lg font-bold text-foreground">Access restricted</h1>
+        <p className="max-w-md text-sm text-muted-foreground">
+          You do not have permission to create customers.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 mt-2 text-[11px] px-3"
+          onClick={() => router.push("/masters/customers")}
+        >
+          Back to listing
+        </Button>
+      </div>
     );
   }
 
   if (allowed === null) {
-    return <AppLayout>{null}</AppLayout>;
+    return null;
   }
 
   return (
-    <AppLayout>
-      <div className="flex flex-col h-full">
-        <div className="sticky top-0 z-10 flex items-center flex-shrink-0 gap-3 px-5 py-3 bg-white border-b border-border">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="flex items-center justify-center flex-shrink-0 w-8 h-8 transition-colors border rounded-lg border-border hover:bg-muted"
-          >
-            <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-          </button>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold leading-none text-foreground">Add Customer</h2>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Masters → Customer Master → Add</p>
-          </div>
-          <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
+    <FormContainer
+      title="Add Customer"
+      description="Masters → Customer Master → Add"
+      onBack={() => router.back()}
+      actions={
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
             {customerCode}
           </span>
-          <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => router.back()}>
+          <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
             Discard
           </Button>
-          <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => persist(true)}>
+          <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => persist(true)}>
             Save Draft
           </Button>
           <Button
-            size="sm"
-            className="h-7 text-[11px] gap-1.5 px-3 bg-brand-600 text-white hover:bg-brand-700"
+            className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={() => persist(false)}
           >
-            <Save className="w-3.5 h-3.5" /> Save
+            <Save className="w-4 h-4" /> Save
           </Button>
         </div>
-
-        <div className="flex-1 px-6 py-6 overflow-y-auto bg-muted/10">
-          <CustomerForm
-            form={form}
-            onChange={setForm}
-            errors={errors}
-            onSetErrors={setErrors}
-            onClearError={clearErr}
-          />
-        </div>
-      </div>
+      }
+    >
+      <CustomerForm
+        form={form}
+        onChange={setForm}
+        errors={errors}
+        onSetErrors={setErrors}
+        onClearError={clearErr}
+      />
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-    </AppLayout>
+    </FormContainer>
   );
 }

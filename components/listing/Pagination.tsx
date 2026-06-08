@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -30,6 +31,30 @@ export function Pagination({
   const totalPages = Math.ceil(totalRecords / pageSize);
   const startItem = totalRecords === 0 ? 0 : (page - 1) * pageSize + 1;
   const endItem = Math.min(page * pageSize, totalRecords);
+
+  const [inputValue, setInputValue] = React.useState(String(page));
+
+  React.useEffect(() => {
+    setInputValue(String(page));
+  }, [page]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (val === "" || /^[0-9\b]+$/.test(val)) {
+      setInputValue(val);
+    }
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      const targetPage = Number(inputValue);
+      if (!isNaN(targetPage) && targetPage >= 1 && targetPage <= totalPages) {
+        onPageChange(targetPage);
+      } else {
+        setInputValue(String(page));
+      }
+    }
+  };
 
   if (totalRecords === 0) return null;
 
@@ -86,77 +111,94 @@ export function Pagination({
         )}
       </div>
 
-      {/* Right section: pagination buttons */}
-      <div className="flex items-center gap-1">
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-7 w-7 rounded-lg border-border"
-          disabled={page <= 1}
-          onClick={() => onPageChange(page - 1)}
-        >
-          <ChevronLeft className="w-3.5 h-3.5" />
-        </Button>
-
-        {pageNumbers[0] > 1 && (
-          <>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-7 w-7 text-xs rounded-lg border-border"
-              onClick={() => onPageChange(1)}
-            >
-              1
-            </Button>
-            {pageNumbers[0] > 2 && (
-              <span className="text-xs text-muted-foreground px-0.5 select-none">…</span>
-            )}
-          </>
+      {/* Right section: pagination buttons & direct page input */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {totalPages > 1 && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-muted-foreground">Go to page:</span>
+            <Input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={inputValue}
+              onChange={handleInputChange}
+              onKeyDown={handleInputKeyDown}
+              className="h-7 w-12 text-center text-xs p-1 rounded-lg border-border bg-white focus-visible:ring-1 focus-visible:ring-brand-500"
+            />
+          </div>
         )}
 
-        {pageNumbers.map((p) => {
-          const isCurrent = p === page;
-          return (
-            <Button
-              key={p}
-              variant={isCurrent ? "default" : "outline"}
-              size="icon"
-              className={cn(
-                "h-7 w-7 text-xs rounded-lg border-border",
-                isCurrent && "bg-brand-600 hover:bg-brand-700 text-white border-brand-600 font-semibold"
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-7 w-7 rounded-lg border-border"
+            disabled={page <= 1}
+            onClick={() => onPageChange(page - 1)}
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+          </Button>
+
+          {pageNumbers[0] > 1 && (
+            <>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-7 w-7 text-xs rounded-lg border-border"
+                onClick={() => onPageChange(1)}
+              >
+                1
+              </Button>
+              {pageNumbers[0] > 2 && (
+                <span className="text-xs text-muted-foreground px-0.5 select-none">…</span>
               )}
-              onClick={() => onPageChange(p)}
-            >
-              {p}
-            </Button>
-          );
-        })}
+            </>
+          )}
 
-        {pageNumbers[pageNumbers.length - 1] < totalPages && (
-          <>
-            {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && (
-              <span className="text-xs text-muted-foreground px-0.5 select-none">…</span>
-            )}
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-7 w-7 text-xs rounded-lg border-border"
-              onClick={() => onPageChange(totalPages)}
-            >
-              {totalPages}
-            </Button>
-          </>
-        )}
+          {pageNumbers.map((p) => {
+            const isCurrent = p === page;
+            return (
+              <Button
+                key={p}
+                variant={isCurrent ? "default" : "outline"}
+                size="icon"
+                className={cn(
+                  "h-7 w-7 text-xs rounded-lg border-border",
+                  isCurrent && "bg-brand-600 hover:bg-brand-700 text-white border-brand-600 font-semibold"
+                )}
+                onClick={() => onPageChange(p)}
+              >
+                {p}
+              </Button>
+            );
+          })}
 
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-7 w-7 rounded-lg border-border"
-          disabled={page >= totalPages}
-          onClick={() => onPageChange(page + 1)}
-        >
-          <ChevronRight className="w-3.5 h-3.5" />
-        </Button>
+          {pageNumbers[pageNumbers.length - 1] < totalPages && (
+            <>
+              {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && (
+                <span className="text-xs text-muted-foreground px-0.5 select-none">…</span>
+              )}
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-7 w-7 text-xs rounded-lg border-border"
+                onClick={() => onPageChange(totalPages)}
+              >
+                {totalPages}
+              </Button>
+            </>
+          )}
+
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-7 w-7 rounded-lg border-border"
+            disabled={page >= totalPages}
+            onClick={() => onPageChange(page + 1)}
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </Button>
+        </div>
       </div>
     </div>
   );

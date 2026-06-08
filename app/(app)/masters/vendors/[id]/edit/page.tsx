@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
-import { VendorFormLayout } from "../../components/VendorFormLayout";
 import { VendorForm } from "../../components/VendorForm";
 import {
   getVendorById,
@@ -80,26 +80,23 @@ export default function EditVendorPage() {
   const vendor = getVendorById(id);
 
   return (
-    <>
-      <VendorFormLayout
-        mode="edit"
-        vendorCode={vendorCode}
-        vendor={vendor}
-        onSave={save}
-        footer={
-          <>
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.push(`/masters/vendors/${id}`)}>
-              Cancel
-            </Button>
-            <Button className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={save}>
-              Save Vendor
-            </Button>
-          </>
-        }
-      >
-        <VendorForm form={form} onChange={setForm} vendorCode={vendorCode} />
-      </VendorFormLayout>
+    <FormContainer
+      title="Edit Vendor"
+      description={`Masters → Vendor Master → ${vendorCode}`}
+      onBack={() => router.push(`/masters/vendors/${id}`)}
+      actions={
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.push(`/masters/vendors/${id}`)}>
+            Cancel
+          </Button>
+          <Button className="h-9 text-xs font-semibold rounded-lg bg-brand-600 hover:bg-brand-700 text-white" onClick={save}>
+            Save Vendor
+          </Button>
+        </div>
+      }
+    >
+      <VendorForm form={form} onChange={setForm} vendorCode={vendorCode} />
       {toast && <Toast msg={toast.msg} type={toast.type} onDismiss={() => setToast(null)} />}
-    </>
+    </FormContainer>
   );
 }

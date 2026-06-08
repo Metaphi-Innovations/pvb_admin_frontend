@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calendar, FileText, CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
+import { Calendar, FileText, CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getQcById } from "../../mock-data";
 import { QcRecord } from "../../types";
@@ -37,7 +37,7 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
 
   if (!qc) {
     return (
-      <AppLayout>
+      <FormContainer title="QC Details" onBack={() => router.push("/warehouse/grnqc")}>
         <div className="max-w-[800px] mx-auto text-center py-12 space-y-4">
           <AlertTriangle className="w-12 h-12 text-red-500 mx-auto" />
           <h1 className="text-base font-bold text-foreground">QC Record Not Found</h1>
@@ -46,38 +46,25 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
             Go Back
           </Button>
         </div>
-      </AppLayout>
+      </FormContainer>
     );
   }
 
   const statusCfg = STATUS_CONFIG[qc.status] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Unknown" };
 
   return (
-    <AppLayout>
+    <FormContainer
+      title={qc.qcNo}
+      description="QC Inspection Summary"
+      onBack={() => router.push("/warehouse/grnqc")}
+      actions={
+        <span className={`inline-flex items-center text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${statusCfg.bg}`}>
+          {statusCfg.label}
+        </span>
+      }
+      noCard={true}
+    >
       <div className="w-full space-y-6">
-        {/* Top Header */}
-        <div className="flex items-center justify-between border-b pb-4">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-lg hover:bg-muted"
-              onClick={() => router.push("/warehouse/grnqc")}
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg font-bold text-foreground font-mono">{qc.qcNo}</h1>
-                <span className={`inline-flex items-center text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${statusCfg.bg}`}>
-                  {statusCfg.label}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">QC Inspection Summary</p>
-            </div>
-          </div>
-        </div>
-
         {/* Section 1: Header Info Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
@@ -206,6 +193,6 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
           )}
         </div>
       </div>
-    </AppLayout>
+    </FormContainer>
   );
 }

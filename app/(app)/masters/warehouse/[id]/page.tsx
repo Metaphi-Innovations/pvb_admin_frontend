@@ -3,11 +3,10 @@
 import React, { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
-  ArrowLeft,
   Edit2,
   Warehouse,
 } from "lucide-react";
@@ -104,59 +103,39 @@ export default function WarehouseDetailPage() {
 
   if (!warehouse) {
     return (
-      <AppLayout>
-        <div className="py-16 text-center">
-          <p className="text-sm text-muted-foreground">Warehouse not found.</p>
-          <Link
-            href="/masters/warehouse"
-            className="mt-2 inline-block text-xs text-brand-600 hover:underline"
-          >
-            Back to listing
-          </Link>
-        </div>
-      </AppLayout>
+      <div className="py-16 text-center">
+        <p className="text-sm text-muted-foreground">Warehouse not found.</p>
+        <Link
+          href="/masters/warehouse"
+          className="mt-2 inline-block text-xs text-brand-600 hover:underline"
+        >
+          Back to listing
+        </Link>
+      </div>
     );
   }
 
   return (
-    <AppLayout>
-      <div className="max-w-[800px] mx-auto space-y-5">
-        {/* Header */}
-        <div className="flex items-start gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 px-2 -ml-2"
-            onClick={() => router.push("/masters/warehouse")}
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <div className="flex-grow min-w-0">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center flex-shrink-0">
-                <Warehouse className="w-5 h-5 text-brand-600" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-foreground truncate">{warehouse.warehouseName}</h1>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {warehouse.warehouseCode} • {warehouse.contactPerson} • {warehouse.mobileNumber}
-                </p>
-              </div>
-              <StatusPill status={warehouse.status} />
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link href={`/masters/warehouse/${warehouse.id}/edit`}>
-              <Button
-                size="sm"
-                className="h-8 gap-1.5 bg-brand-600 text-xs text-white hover:bg-brand-700"
-              >
-                <Edit2 className="h-3.5 w-3.5" /> Edit
-              </Button>
-            </Link>
-          </div>
+    <FormContainer
+      title={warehouse.warehouseName}
+      description={`${warehouse.warehouseCode} • ${warehouse.contactPerson} • ${warehouse.mobileNumber}`}
+      onBack={() => router.push("/masters/warehouse")}
+      actions={
+        <div className="flex items-center gap-2">
+          <StatusPill status={warehouse.status} />
+          <Link href={`/masters/warehouse/${warehouse.id}/edit`}>
+            <Button
+              size="sm"
+              className="h-9 gap-1.5 bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700 rounded-lg"
+            >
+              <Edit2 className="h-3.5 w-3.5" /> Edit
+            </Button>
+          </Link>
         </div>
-
+      }
+      noCard={true}
+    >
+      <div className="max-w-[800px] mx-auto space-y-5">
         {/* Content Cards */}
         <div className="grid grid-cols-2 gap-3">
           <DetailCard title="Basic Details">
@@ -198,6 +177,6 @@ export default function WarehouseDetailPage() {
           </DetailCard>
         </div>
       </div>
-    </AppLayout>
+    </FormContainer>
   );
 }
