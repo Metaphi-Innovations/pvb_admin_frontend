@@ -12,3 +12,4 @@ samples/*.xlsx
 samples/*.xls
 **/bank-statement*.csv
 **/bank-statement*.xlsx
+.vercel

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Activity, Building, Package, Save } from "lucide-react";
@@ -53,26 +53,27 @@ export default function EditReorderLevelPage() {
 
   if (!record) {
     return (
-      <AppLayout>
+      <FormContainer title="Edit Reorder Level" onBack={() => router.push("/warehouse/reorder-level")}>
         <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading record...</div>
-      </AppLayout>
+      </FormContainer>
     );
   }
 
   return (
-    <AppLayout>
-      <div className="w-full space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-3 border-b pb-4">
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted" onClick={() => router.push("/warehouse/reorder-level")}>
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <div>
-            <p className="text-xs text-muted-foreground">Warehouse &rsaquo; Reorder Level Management &rsaquo; Edit</p>
-            <h1 className="text-lg font-bold text-foreground mt-0.5">Edit Reorder Level</h1>
-          </div>
-        </div>
-
+    <FormContainer
+      title="Edit Reorder Level"
+      description={`Update safety stock alert levels for ${record.product}`}
+      onBack={() => router.push("/warehouse/reorder-level")}
+      onCancel={() => router.push("/warehouse/reorder-level")}
+      cancelLabel="Cancel"
+      actions={
+        <Button size="sm" className="h-9 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white gap-1.5" onClick={handleSave}>
+          <Save className="w-3.5 h-3.5" /> Save Changes
+        </Button>
+      }
+      noCard={true}
+    >
+      <div className="space-y-6">
         <div className="bg-white rounded-xl border border-border p-5 shadow-sm space-y-5">
           <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
             <Activity className="w-4 h-4 text-brand-600" /> Record Configuration
@@ -143,17 +144,7 @@ export default function EditReorderLevelPage() {
             </p>
           </div>
         </div>
-
-        {/* Actions */}
-        <div className="flex items-center justify-end gap-3 border-t pt-4">
-          <Button variant="outline" size="sm" className="h-8 text-xs font-semibold" onClick={() => router.push("/warehouse/reorder-level")}>
-            Cancel
-          </Button>
-          <Button size="sm" className="h-8 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white gap-1.5" onClick={handleSave}>
-            <Save className="w-3.5 h-3.5" /> Save Changes
-          </Button>
-        </div>
       </div>
-    </AppLayout>
+    </FormContainer>
   );
 }

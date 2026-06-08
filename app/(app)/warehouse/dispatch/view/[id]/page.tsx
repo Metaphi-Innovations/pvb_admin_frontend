@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Truck, Package, Building, User, Calendar, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
@@ -22,32 +22,27 @@ export default function ViewDispatchPage() {
 
   if (!record) {
     return (
-      <AppLayout>
+      <FormContainer title="Dispatch Details" onBack={() => router.push("/warehouse/dispatch")}>
         <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading dispatch record...</div>
-      </AppLayout>
+      </FormContainer>
     );
   }
 
   const statusConfig = DELIVERY_STATUS_BADGE_CONFIG[record.deliveryStatus] || { bg: "bg-slate-100 text-slate-600 border-slate-200", label: record.deliveryStatus };
 
   return (
-    <AppLayout>
-      <div className="w-full space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 border-b pb-4">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted" onClick={() => router.push("/warehouse/dispatch")}>
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-            <div>
-              <p className="text-xs text-muted-foreground">Warehouse &rsaquo; Dispatch Management &rsaquo; View</p>
-              <h1 className="text-lg font-bold text-foreground mt-0.5 font-mono">{record.dispatchNumber}</h1>
-            </div>
-          </div>
-          <span className={`inline-flex items-center text-xs px-3 py-1 rounded-full font-semibold border ${statusConfig.bg}`}>
-            {statusConfig.label}
-          </span>
-        </div>
+    <FormContainer
+      title={record.dispatchNumber}
+      description={`Outbound shipment details for ${record.customer}`}
+      onBack={() => router.push("/warehouse/dispatch")}
+      actions={
+        <span className={`inline-flex items-center text-xs px-3 py-1 rounded-full font-semibold border ${statusConfig.bg}`}>
+          {statusConfig.label}
+        </span>
+      }
+      noCard={true}
+    >
+      <div className="space-y-6">
 
         {/* Summary Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -168,6 +163,6 @@ export default function ViewDispatchPage() {
           )}
         </div>
       </div>
-    </AppLayout>
+    </FormContainer>
   );
 }

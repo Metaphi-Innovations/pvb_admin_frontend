@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
@@ -121,21 +121,32 @@ export default function CreateDispatchPage() {
   };
 
   return (
-    <AppLayout>
-      <div className="w-full space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-3 border-b pb-4">
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted" onClick={() => router.push("/warehouse/dispatch")}>
-            <ArrowLeft className="w-4 h-4" />
+    <FormContainer
+      title="Create Dispatch"
+      description="Record a new outbound shipment dispatch session"
+      onBack={() => router.push("/warehouse/dispatch")}
+      onCancel={() => router.push("/warehouse/dispatch")}
+      cancelLabel="Cancel"
+      actions={
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="h-9 text-xs font-semibold" onClick={() => handleSubmit(true)}>
+            Save Draft
           </Button>
-          <div>
-            <p className="text-xs text-muted-foreground">Warehouse &rsaquo; Dispatch Management &rsaquo; Create Dispatch</p>
-            <h1 className="text-lg font-bold text-foreground mt-0.5">Create Dispatch</h1>
-          </div>
+          <Button
+            size="sm"
+            disabled={hasErrors || totalDispatchQty <= 0 || !vehicleNumber || !driverName}
+            onClick={() => handleSubmit(false)}
+            className="h-9 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
+          >
+            <Truck className="w-3.5 h-3.5" /> Dispatch
+          </Button>
         </div>
-
-        {/* Header Details Card */}
-        <div className="bg-white rounded-xl border border-border p-5 shadow-sm space-y-4">
+      }
+      noCard={false}
+    >
+      <div className="space-y-6">
+        {/* Header Details */}
+        <div className="space-y-4">
           <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
             <Truck className="w-4 h-4 text-brand-600" /> Dispatch Header Details
           </h2>
@@ -189,7 +200,7 @@ export default function CreateDispatchPage() {
         </div>
 
         {/* Select Packed Orders */}
-        <div className="bg-white rounded-xl border border-border p-5 shadow-sm space-y-4">
+        <div className="border-t border-border/80 pt-6 mt-6 space-y-4">
           <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
             <CheckSquare className="w-4 h-4 text-brand-600" /> Select Packed Orders
           </h2>
@@ -212,7 +223,7 @@ export default function CreateDispatchPage() {
                     <tr key={order.id} className={`border-b border-border/60 hover:bg-slate-50/40 cursor-pointer ${selectedOrderIds.has(order.id) ? "bg-brand-50/40" : ""}`} onClick={() => toggleOrderSelection(order)}>
                       <td className="py-3 px-3">
                         <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${selectedOrderIds.has(order.id) ? "bg-brand-600 border-brand-600" : "border-muted-foreground/30"}`}>
-                          {selectedOrderIds.has(order.id) && <Check className="w-2.5 h-2.5 text-white" />}
+                           {selectedOrderIds.has(order.id) && <Check className="w-2.5 h-2.5 text-white" />}
                         </div>
                       </td>
                       <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{order.packingNo}</td>
@@ -229,7 +240,7 @@ export default function CreateDispatchPage() {
 
         {/* Product Dispatch Grid */}
         {productRows.length > 0 && (
-          <div className="bg-white rounded-xl border border-border p-5 shadow-sm space-y-4">
+          <div className="border-t border-border/80 pt-6 mt-6 space-y-4">
             <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
               <Package className="w-4 h-4 text-brand-600" /> Product Dispatch Grid
             </h2>
@@ -272,25 +283,7 @@ export default function CreateDispatchPage() {
             </div>
           </div>
         )}
-
-        {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-3 border-t pt-4">
-          <Button variant="outline" size="sm" className="h-8 text-xs font-semibold" onClick={() => router.push("/warehouse/dispatch")}>
-            Cancel
-          </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs font-semibold" onClick={() => handleSubmit(true)}>
-            Save Draft
-          </Button>
-          <Button
-            size="sm"
-            disabled={hasErrors || totalDispatchQty <= 0 || !vehicleNumber || !driverName}
-            onClick={() => handleSubmit(false)}
-            className="h-8 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
-          >
-            <Truck className="w-3.5 h-3.5" /> Dispatch
-          </Button>
-        </div>
       </div>
-    </AppLayout>
+    </FormContainer>
   );
 }

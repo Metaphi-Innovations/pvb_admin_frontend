@@ -115,7 +115,7 @@ export default function SplitSalesOrderPage() {
         <div className="sticky top-0 z-10 bg-white border-b border-border px-5 py-2.5 flex items-center gap-2 flex-shrink-0">
           <button
             type="button"
-            onClick={() => router.push(`/sales/orders/${id}`)}
+            onClick={() => router.push(`/sales/orders`)}
             className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
           >
             <ArrowLeft className="w-3.5 h-3.5 text-muted-foreground" />

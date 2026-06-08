@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +10,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import {
-  ArrowLeft,
   Save,
   AlertCircle,
 } from "lucide-react";
@@ -95,48 +94,38 @@ export default function EditTDSPage() {
 
   if (!record) {
     return (
-      <AppLayout>
-        <div className="flex items-center justify-center h-screen">
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </AppLayout>
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
     );
   }
 
   return (
-    <AppLayout>
-      {/* Sticky Header */}
-      <div className="sticky top-0 z-10 bg-white border-b border-border px-6 py-3 flex items-center gap-3">
-        <button
-          onClick={() => router.back()}
-          className="p-1.5 hover:bg-muted rounded-lg transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-        </button>
-        <div className="flex-1">
-          <h2 className="text-sm font-semibold">Edit TDS Rate</h2>
-          <p className="text-[11px] text-muted-foreground">Masters → TDS → {record.tdsCode}</p>
+    <FormContainer
+      title="Edit TDS Rate"
+      description={`Masters → TDS → ${record.tdsCode}`}
+      onBack={() => router.back()}
+      actions={
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="h-9 text-xs font-semibold rounded-lg"
+            onClick={() => router.back()}
+          >
+            Discard
+          </Button>
+          <Button
+            className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+            onClick={handleSave}
+          >
+            <Save className="w-4 h-4" /> Save Changes
+          </Button>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs"
-          onClick={() => router.back()}
-        >
-          Discard
-        </Button>
-        <Button
-          size="sm"
-          className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-          onClick={handleSave}
-        >
-          <Save className="w-3.5 h-3.5" /> Save Changes
-        </Button>
-      </div>
-
+      }
+    >
       {/* Form Content */}
       <div className="flex gap-0">
-        <div className="flex-1 p-6 space-y-6 max-w-[600px]">
+        <div className="flex-1 space-y-6 max-w-[600px]">
           {/* TDS Code */}
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">
@@ -262,6 +251,6 @@ export default function EditTDSPage() {
           </div>
         </div>
       </div>
-    </AppLayout>
+    </FormContainer>
   );
 }

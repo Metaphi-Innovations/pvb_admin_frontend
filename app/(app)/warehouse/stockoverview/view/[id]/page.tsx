@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Calendar, Building, Package, Tag, AlertCircle,
@@ -25,7 +25,7 @@ export default function ViewStockDetailsPage({ params }: { params: { id: string 
 
   if (!stockUnion) {
     return (
-      <AppLayout>
+      <FormContainer title="Stock Details" onBack={() => router.push("/warehouse/stockoverview")}>
         <div className="max-w-[800px] mx-auto text-center py-12 space-y-4">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
           <h1 className="text-base font-bold text-foreground">Stock Record Not Found</h1>
@@ -34,7 +34,7 @@ export default function ViewStockDetailsPage({ params }: { params: { id: string 
             Go Back
           </Button>
         </div>
-      </AppLayout>
+      </FormContainer>
     );
   }
 
@@ -42,37 +42,18 @@ export default function ViewStockDetailsPage({ params }: { params: { id: string 
   const statusCfg = STATUS_BADGE_CONFIG[data.status] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: data.status };
 
   return (
-    <AppLayout>
-      <div className="w-full space-y-6">
-        {/* Top Header Block */}
-        <div className="flex items-center justify-between border-b pb-4">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-lg hover:bg-muted"
-              onClick={() => router.push("/warehouse/stockoverview")}
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-xs text-muted-foreground">
-                  Warehouse &rsaquo; Stock Overview &rsaquo; Details
-                </p>
-              </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <h1 className="text-lg font-bold text-foreground flex items-center gap-2">
-                  <Package className="w-4 h-4 text-brand-600" />
-                  {data.product}
-                </h1>
-                <span className={`inline-flex items-center text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${statusCfg.bg}`}>
-                  {statusCfg.label}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+    <FormContainer
+      title={data.product}
+      description={`Batch Details for ${data.batchNumber}`}
+      onBack={() => router.push("/warehouse/stockoverview")}
+      actions={
+        <span className={`inline-flex items-center text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${statusCfg.bg}`}>
+          {statusCfg.label}
+        </span>
+      }
+      noCard={true}
+    >
+      <div className="space-y-6">
 
         {/* TAB 1: QC Passed Stock Details layout */}
         {type === "qc-passed" && (
@@ -359,6 +340,6 @@ export default function ViewStockDetailsPage({ params }: { params: { id: string 
           </div>
         )}
       </div>
-    </AppLayout>
+    </FormContainer>
   );
 }

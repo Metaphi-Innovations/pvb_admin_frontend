@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calendar, Building, Landmark, Receipt, AlertCircle } from "lucide-react";
+import { Calendar, Building, Landmark, Receipt, AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getGrnById } from "../../mock-data";
 import { GrnRecord } from "../../types";
@@ -28,7 +28,7 @@ export default function ViewGrnPage({ params }: { params: { id: string } }) {
 
   if (!grn) {
     return (
-      <AppLayout>
+      <FormContainer title="GRN Details" onBack={() => router.push("/warehouse/grnqc")}>
         <div className="max-w-[800px] mx-auto text-center py-12 space-y-4">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
           <h1 className="text-base font-bold text-foreground">GRN Record Not Found</h1>
@@ -37,49 +37,36 @@ export default function ViewGrnPage({ params }: { params: { id: string } }) {
             Go Back
           </Button>
         </div>
-      </AppLayout>
+      </FormContainer>
     );
   }
 
   const statusCfg = STATUS_CONFIG[grn.status] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Unknown" };
 
   return (
-    <AppLayout>
-      <div className="w-full space-y-6">
-        {/* Top Header Block */}
-        <div className="flex items-center justify-between border-b pb-4">
-          <div className="flex items-center gap-3">
+    <FormContainer
+      title={grn.grnNo}
+      description="Goods Receipt Note Summary"
+      onBack={() => router.push("/warehouse/grnqc")}
+      actions={
+        <div className="flex items-center gap-2">
+          <span className={`inline-flex items-center text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${statusCfg.bg}`}>
+            {statusCfg.label}
+          </span>
+          {grn.status === "qc_pending" && (
             <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-lg hover:bg-muted"
-              onClick={() => router.push("/warehouse/grnqc")}
+              size="sm"
+              onClick={() => router.push(`/warehouse/grnqc/qc/create?grnId=${grn.id}`)}
+              className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white rounded-lg"
             >
-              <ArrowLeft className="w-4 h-4" />
+              Perform QC Check
             </Button>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg font-bold text-foreground font-mono">{grn.grnNo}</h1>
-                <span className={`inline-flex items-center text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${statusCfg.bg}`}>
-                  {statusCfg.label}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">Goods Receipt Note Summary</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {grn.status === "qc_pending" && (
-              <Button
-                size="sm"
-                onClick={() => router.push(`/warehouse/grnqc/qc/create?grnId=${grn.id}`)}
-                className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white rounded-lg"
-              >
-                Perform QC Check
-              </Button>
-            )}
-          </div>
+          )}
         </div>
-
+      }
+      noCard={true}
+    >
+      <div className="w-full space-y-6">
         {/* Section 1: Header Info Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
@@ -172,6 +159,6 @@ export default function ViewGrnPage({ params }: { params: { id: string } }) {
           </div>
         </div>
       </div>
-    </AppLayout>
+    </FormContainer>
   );
 }

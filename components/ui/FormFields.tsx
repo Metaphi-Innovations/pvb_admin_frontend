@@ -29,7 +29,7 @@ export function Field({ label, required, error, hint, className, children }: Fie
   return (
     <div className={cn("space-y-1.5", className)}>
       {label && (
-        <Label className="text-sm font-medium text-foreground">
+        <Label className="text-xs font-semibold text-foreground/85">
           {label}
           {required && <span className="text-red-500 ml-0.5">*</span>}
         </Label>
@@ -449,7 +449,7 @@ export function FormSection({
   return (
     <div className={cn("space-y-4", className)}>
       <div className="pb-2 border-b border-border">
-        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">{title}</h3>
         {description && (
           <p className="text-helper text-muted-foreground mt-0.5">{description}</p>
         )}

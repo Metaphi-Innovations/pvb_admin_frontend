@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, Save, X, CheckCircle2, XCircle, ShieldAlert } from "lucide-react";
@@ -117,88 +117,73 @@ export default function EditCustomerPage() {
 
   if (allowed === false) {
     return (
-      <AppLayout>
-        <div className="flex flex-col items-center gap-3 py-16 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-amber-200 bg-amber-50">
-            <ShieldAlert className="h-6 w-6 text-amber-600" />
-          </div>
-          <h1 className="text-lg font-bold text-foreground">Access restricted</h1>
-          <p className="max-w-md text-sm text-muted-foreground">
-            You do not have permission to update customers.
-          </p>
-          <Link
-            href="/masters/customers"
-            className="mt-2 text-xs text-brand-600 hover:underline"
-          >
-            Back to listing
-          </Link>
+      <div className="flex flex-col items-center gap-3 py-16 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-amber-200 bg-amber-50">
+          <ShieldAlert className="h-6 w-6 text-amber-600" />
         </div>
-      </AppLayout>
+        <h1 className="text-lg font-bold text-foreground">Access restricted</h1>
+        <p className="max-w-md text-sm text-muted-foreground">
+          You do not have permission to update customers.
+        </p>
+        <Link
+          href="/masters/customers"
+          className="mt-2 text-xs text-brand-600 hover:underline"
+        >
+          Back to listing
+        </Link>
+      </div>
     );
   }
 
   if (!form || allowed === null) {
     return (
-      <AppLayout>
-        <div className="py-16 text-center">
-          <p className="text-sm text-muted-foreground">
-            {allowed === null ? "Loading..." : "Customer not found."}
-          </p>
-          {allowed !== null && (
-            <Link
-              href="/masters/customers"
-              className="mt-2 inline-block text-xs text-brand-600 hover:underline"
-            >
-              Back to listing
-            </Link>
-          )}
-        </div>
-      </AppLayout>
+      <div className="py-16 text-center">
+        <p className="text-sm text-muted-foreground">
+          {allowed === null ? "Loading..." : "Customer not found."}
+        </p>
+        {allowed !== null && (
+          <Link
+            href="/masters/customers"
+            className="mt-2 inline-block text-xs text-brand-600 hover:underline"
+          >
+            Back to listing
+          </Link>
+        )}
+      </div>
     );
   }
 
   return (
-    <AppLayout>
-      <div className="flex flex-col h-full">
-        <div className="sticky top-0 z-10 bg-white border-b border-border px-5 py-3 flex items-center gap-3 flex-shrink-0">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
-          >
-            <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-          </button>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold text-foreground leading-none">Edit Customer</h2>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Masters → Customer Master → Edit</p>
-          </div>
-          <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
+    <FormContainer
+      title="Edit Customer"
+      description="Masters → Customer Master → Edit"
+      onBack={() => router.back()}
+      actions={
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
             {customerCode}
           </span>
-          <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => router.back()}>
+          <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
             Discard
           </Button>
           <Button
-            size="sm"
-            className="h-7 text-[11px] gap-1.5 px-3 bg-brand-600 text-white hover:bg-brand-700"
+            className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
           >
-            <Save className="w-3.5 h-3.5" /> Update Customer
+            <Save className="w-4 h-4" /> Update Customer
           </Button>
         </div>
-
-        <div className="flex-1 overflow-y-auto px-6 py-6 bg-muted/10">
-          <CustomerForm
-            form={form}
-            onChange={setForm}
-            errors={errors}
-            onSetErrors={setErrors}
-            onClearError={clearErr}
-          />
-        </div>
-      </div>
+      }
+    >
+      <CustomerForm
+        form={form}
+        onChange={setForm}
+        errors={errors}
+        onSetErrors={setErrors}
+        onClearError={clearErr}
+      />
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-    </AppLayout>
+    </FormContainer>
   );
 }

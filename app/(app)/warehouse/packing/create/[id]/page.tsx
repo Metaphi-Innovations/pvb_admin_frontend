@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Calendar, Building, Package, Layers, Info, Check } from "lucide-react";
@@ -59,7 +59,7 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
 
   if (!order) {
     return (
-      <AppLayout>
+      <FormContainer title="Sales Order" onBack={() => router.push("/warehouse/packing")}>
         <div className="max-w-[800px] mx-auto text-center py-12 space-y-4">
           <Info className="w-12 h-12 text-blue-500 mx-auto" />
           <h1 className="text-base font-bold text-foreground">Sales Order Not Found</h1>
@@ -68,7 +68,7 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
             Go Back
           </Button>
         </div>
-      </AppLayout>
+      </FormContainer>
     );
   }
 
@@ -115,30 +115,39 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
   };
 
   return (
-    <AppLayout>
-      <div className="w-full space-y-6">
-        {/* Header Navigation */}
-        <div className="flex items-center gap-3 border-b pb-4">
+    <FormContainer
+      title="Create Packing List"
+      description={`Generate packing allocations for ${order.salesOrderNo}`}
+      onBack={() => router.push("/warehouse/packing")}
+      onCancel={() => router.push("/warehouse/packing")}
+      cancelLabel="Cancel"
+      actions={
+        <div className="flex gap-2">
           <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-lg hover:bg-muted"
-            onClick={() => router.push("/warehouse/packing")}
+            variant="outline"
+            size="sm"
+            onClick={() => handleSave(true)}
+            className="h-9 text-xs font-semibold text-slate-700 hover:bg-slate-50"
           >
-            <ArrowLeft className="w-4 h-4" />
+            Save Draft
           </Button>
-          <div>
-            <p className="text-xs text-muted-foreground">
-              Warehouse &rsaquo; Packing Management &rsaquo; Create Packing
-            </p>
-            <h1 className="text-lg font-bold text-foreground mt-0.5">
-              Create Packing List
-            </h1>
-          </div>
+          <Button
+            size="sm"
+            disabled={hasErrors || totalQtyToPack <= 0}
+            onClick={() => handleSave(false)}
+            className="h-9 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
+          >
+            <Check className="w-3.5 h-3.5" />
+            Start Packing
+          </Button>
         </div>
+      }
+      noCard={false}
+    >
+      <div className="space-y-6">
 
-        {/* Header Information Card */}
-        <div className="bg-white rounded-xl border border-border p-5 shadow-sm space-y-4">
+        {/* Header Information */}
+        <div className="space-y-4">
           <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
             <Layers className="w-4 h-4 text-brand-600" />
             Packing Header Details
@@ -177,8 +186,8 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
           </div>
         </div>
 
-        {/* Product Grid Card */}
-        <div className="bg-white rounded-xl border border-border p-5 shadow-sm space-y-4">
+        {/* Product Grid */}
+        <div className="border-t border-border/80 pt-6 mt-6 space-y-4">
           <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
             <Package className="w-4 h-4 text-brand-600" />
             Product Packing Grid
@@ -230,36 +239,7 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
             </table>
           </div>
         </div>
-
-        {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-3 border-t pt-4">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.push("/warehouse/packing")}
-            className="h-8 text-xs font-semibold"
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleSave(true)}
-            className="h-8 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            Save Draft
-          </Button>
-          <Button
-            size="sm"
-            disabled={hasErrors || totalQtyToPack <= 0}
-            onClick={() => handleSave(false)}
-            className="h-8 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
-          >
-            <Check className="w-3.5 h-3.5" />
-            Start Packing
-          </Button>
-        </div>
       </div>
-    </AppLayout>
+    </FormContainer>
   );
 }

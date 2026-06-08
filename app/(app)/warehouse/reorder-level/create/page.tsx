@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, Suspense } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
@@ -75,21 +75,21 @@ function CreateReorderLevelForm() {
     : `Warehouse › Reorder Level Management › Set Reorder Level`;
 
   return (
-    <AppLayout>
-      <div className="w-full space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-3 border-b pb-4">
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted" onClick={() => router.push("/warehouse/reorder-level")}>
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <div>
-            <p className="text-xs text-muted-foreground">{breadcrumb}</p>
-            <h1 className="text-lg font-bold text-foreground mt-0.5">
-              {fromOverview ? "Set Reorder Level — All Warehouses" : "Set Reorder Level"}
-            </h1>
-          </div>
-        </div>
-
+    <FormContainer
+      title={fromOverview ? "Set Reorder Level — All Warehouses" : "Set Reorder Level"}
+      description="Configure safety stock threshold alerts"
+      onBack={() => router.push("/warehouse/reorder-level")}
+      onCancel={() => router.push("/warehouse/reorder-level")}
+      cancelLabel="Cancel"
+      actions={
+        <Button size="sm" className="h-9 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white gap-1.5" onClick={handleSave}>
+          <Activity className="w-3.5 h-3.5" />
+          {isAllWarehouses || fromOverview ? "Apply to All Warehouses" : "Save Reorder Level"}
+        </Button>
+      }
+      noCard={true}
+    >
+      <div className="space-y-6">
         {/* Configuration Card */}
         <div className="bg-white rounded-xl border border-border p-5 shadow-sm space-y-5">
           <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
@@ -182,20 +182,8 @@ function CreateReorderLevelForm() {
             </div>
           )}
         </div>
-
-
-        {/* Actions */}
-        <div className="flex items-center justify-end gap-3 border-t pt-4">
-          <Button variant="outline" size="sm" className="h-8 text-xs font-semibold" onClick={() => router.push("/warehouse/reorder-level")}>
-            Cancel
-          </Button>
-          <Button size="sm" className="h-8 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white gap-1.5" onClick={handleSave}>
-            <Activity className="w-3.5 h-3.5" />
-            {isAllWarehouses || fromOverview ? "Apply to All Warehouses" : "Save Reorder Level"}
-          </Button>
-        </div>
       </div>
-    </AppLayout>
+    </FormContainer>
   );
 }
 

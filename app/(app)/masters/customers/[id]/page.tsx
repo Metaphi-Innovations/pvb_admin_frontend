@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -108,31 +108,27 @@ export default function CustomerDetailPage() {
 
   if (!perms.canView) {
     return (
-      <AppLayout>
-        <div className="flex flex-col items-center gap-3 py-16 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-amber-200 bg-amber-50">
-            <ShieldAlert className="h-6 w-6 text-amber-600" />
-          </div>
-          <h1 className="text-lg font-bold text-foreground">Access restricted</h1>
-          <p className="max-w-md text-sm text-muted-foreground">You do not have permission to view this customer.</p>
-          <Link href="/masters/customers" className="mt-2 text-xs text-brand-600 hover:underline">
-            Back to listing
-          </Link>
+      <div className="flex flex-col items-center gap-3 py-16 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-amber-200 bg-amber-50">
+          <ShieldAlert className="h-6 w-6 text-amber-600" />
         </div>
-      </AppLayout>
+        <h1 className="text-lg font-bold text-foreground">Access restricted</h1>
+        <p className="max-w-md text-sm text-muted-foreground">You do not have permission to view this customer.</p>
+        <Link href="/masters/customers" className="mt-2 text-xs text-brand-600 hover:underline">
+          Back to listing
+        </Link>
+      </div>
     );
   }
 
   if (!customer) {
     return (
-      <AppLayout>
-        <div className="py-16 text-center">
-          <p className="text-sm text-muted-foreground">Customer not found.</p>
-          <Link href="/masters/customers" className="mt-2 inline-block text-xs text-brand-600 hover:underline">
-            Back to listing
-          </Link>
-        </div>
-      </AppLayout>
+      <div className="py-16 text-center">
+        <p className="text-sm text-muted-foreground">Customer not found.</p>
+        <Link href="/masters/customers" className="mt-2 inline-block text-xs text-brand-600 hover:underline">
+          Back to listing
+        </Link>
+      </div>
     );
   }
 
@@ -140,44 +136,26 @@ export default function CustomerDetailPage() {
   const tds = getActiveTDSMasters().find((t) => t.id === customer.tdsMasterId);
   const payLabel = PAYMENT_TERMS_OPTIONS.find((p) => p.value === customer.paymentTerms)?.label ?? customer.paymentTerms;
   return (
-    <AppLayout>
-      <div className="max-w-[800px] mx-auto space-y-5">
-        {/* Header */}
-        <div className="flex items-start gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 px-2 -ml-2"
-            onClick={() => router.push("/masters/customers")}
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <div className="flex-1">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center flex-shrink-0">
-                <User className="w-5 h-5 text-brand-600" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-foreground">{customer.customerName}</h1>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {customer.customerCode} • {formatMobile(customer.countryCode, customer.mobile)} • {customer.email || "No email"}
-                </p>
-              </div>
-              <StatusPill status={customer.status} />
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <CustomerStatusControl customer={customer} onStatusChange={updateStatus} canEdit={perms.canEdit} />
-            {perms.canEdit && (
-              <Link href={`/masters/customers/${customer.id}/edit`}>
-                <Button size="sm" className="h-8 gap-1.5 bg-brand-600 text-xs text-white hover:bg-brand-700">
-                  <Edit2 className="w-3.5 h-3.5" /> Edit
-                </Button>
-              </Link>
-            )}
-          </div>
+    <FormContainer
+      title={customer.customerName}
+      description={`${customer.customerCode} • ${formatMobile(customer.countryCode, customer.mobile)} • ${customer.email || "No email"}`}
+      onBack={() => router.push("/masters/customers")}
+      actions={
+        <div className="flex items-center gap-2">
+          <StatusPill status={customer.status} />
+          <CustomerStatusControl customer={customer} onStatusChange={updateStatus} canEdit={perms.canEdit} />
+          {perms.canEdit && (
+            <Link href={`/masters/customers/${customer.id}/edit`}>
+              <Button size="sm" className="h-9 gap-1.5 bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700 rounded-lg">
+                <Edit2 className="w-3.5 h-3.5" /> Edit
+              </Button>
+            </Link>
+          )}
         </div>
-
+      }
+      noCard={true}
+    >
+      <div className="max-w-[800px] mx-auto space-y-5">
         {customer.status === "blocked" && customer.blockReason && (
           <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
             <Ban className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />
@@ -383,6 +361,6 @@ export default function CustomerDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </AppLayout>
+    </FormContainer>
   );
 }
