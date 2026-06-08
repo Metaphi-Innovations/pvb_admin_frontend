@@ -49,6 +49,7 @@ export const CLAIM_TYPE_OPTIONS = [
 ] as const;
 
 export const TRAVEL_TYPE_OPTIONS = ["Local", "Outstation"] as const;
+export const VEHICLE_TYPE_OPTIONS = ["Two Wheeler", "Four Wheeler"] as const;
 
 export const TRAVEL_MODE_OPTIONS = [
   "Air",

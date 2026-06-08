@@ -15,7 +15,7 @@ import {
   User,
   X,
 } from "lucide-react";
-import { type Farmer, SEED, VIEW_FARMER_STORAGE_KEY } from "../page";
+import { type Farmer, SEED, VIEW_FARMER_STORAGE_KEY } from "../farmer-data";
 
 function getOwnedLeasedSummary(farmer: Farmer) {
   const ownedTotal = farmer.cropEntries

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight, Star, X } from "lucide-react";
-import { type DemoRecord, SEED, VIEW_DEMO_STORAGE_KEY } from "../page";
+import { type DemoRecord, SEED, VIEW_DEMO_STORAGE_KEY } from "../demo-data";
 
 function formatList(values: string[]) {
   return values.join(", ");

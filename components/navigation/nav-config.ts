@@ -203,12 +203,12 @@ export const NAV_ITEMS: NavItem[] = [
       { label: "Demo", href: "/events/demo" },
     ],
   },
-  {
-    id: "template",
-    label: "Template",
-    icon: Palette,
-    href: "/template",
-  },
+  // {
+  //   id: "template",
+  //   label: "Template",
+  //   icon: Palette,
+  //   href: "/template",
+  // },
   {
     id: "settings",
     label: "Settings",

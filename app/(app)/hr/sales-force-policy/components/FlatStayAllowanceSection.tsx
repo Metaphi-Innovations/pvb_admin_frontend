@@ -65,7 +65,7 @@ export function FlatStayAllowanceSection({
           effectiveTo: f.effectiveTo ?? "",
           remarks: f.remarks ?? "",
         };
-        return ex ? stampUpdate({ ...ex, ...b, status: f.status ?? ex.status }) : stampNew(b, id);
+        return ex ? stampUpdate<FlatStayRule>({ ...ex, ...b, status: f.status ?? ex.status }) : stampNew<FlatStayRule>(b, id);
       }}
       validate={(f) => (Number(f.allowancePerDay) <= 0 ? "Allowance amount is required" : null)}
       renderFormFields={({ form, setForm }) => (
@@ -77,7 +77,7 @@ export function FlatStayAllowanceSection({
             </Select>
           </PolicyField>
           <PolicyField label="City Category">
-            <Select value={form.cityCategory ?? ""} onValueChange={(v) => setForm((f) => ({ ...f, cityCategory: v }))}>
+            <Select value={form.cityCategory ?? ""} onValueChange={(v) => setForm((f) => ({ ...f, cityCategory: v as any }))}>
               <SelectTrigger className={compactSelect()}><SelectValue /></SelectTrigger>
               <SelectContent>{CITY_CATEGORIES.map((c) => <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>)}</SelectContent>
             </Select>

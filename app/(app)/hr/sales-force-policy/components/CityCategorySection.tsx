@@ -109,12 +109,12 @@ export function CityCategorySection({
   const [auditOpen, setAuditOpen] = useState(false);
   const [mapCategoryId, setMapCategoryId] = useState<number | null>(null);
 
-  const [stateForm, setStateForm] = useState({ name: "", status: "active" as const, remarks: "" });
+  const [stateForm, setStateForm] = useState<{ name: string; status: "active" | "inactive"; remarks: string }>({ name: "", status: "active", remarks: "" });
   const [newCityName, setNewCityName] = useState("");
   const [newCityStatus, setNewCityStatus] = useState<"active" | "inactive">("active");
   const [newCityRemarks, setNewCityRemarks] = useState("");
   const [editingCity, setEditingCity] = useState<MockCityEntry | null>(null);
-  const [editCityForm, setEditCityForm] = useState({ name: "", status: "active" as const, remarks: "" });
+  const [editCityForm, setEditCityForm] = useState<{ name: string; status: "active" | "inactive"; remarks: string }>({ name: "", status: "active", remarks: "" });
 
   const stateNames = useMemo(() => getActiveMockStateNames(), [mockVersion]);
   const missingTypes = useMemo(() => getMissingCityCategoryTypes(records), [records]);
@@ -380,10 +380,10 @@ export function CityCategorySection({
     };
     let merged =
       mode === "add"
-        ? [...records, stampNew(base, id)]
+        ? [...records, stampNew<CityCategoryMaster>(base, id)]
         : records.map((r) =>
             r.id === id
-              ? stampUpdate({ ...active!, ...base, status: form.status ?? active!.status })
+              ? stampUpdate<CityCategoryMaster>({ ...active!, ...base, status: form.status ?? active!.status })
               : r,
           );
     merged = dedupeCityMappings(merged, id, base.mappedCities);
@@ -642,7 +642,6 @@ export function CityCategorySection({
                 <>
                   <PolicyField label="1. Category" required>
                     <Select
-                      modal={false}
                       value={form.categoryName ?? ""}
                       onValueChange={(v) => setForm((f) => ({ ...f, categoryName: v as CityCategory }))}
                     >
@@ -666,7 +665,7 @@ export function CityCategorySection({
 
                   <PolicyField label="2. State" required>
                     <div className="flex gap-2 items-center">
-                      <Select modal={false} value={selectedState} onValueChange={setSelectedState}>
+                      <Select value={selectedState} onValueChange={setSelectedState}>
                         <SelectTrigger className={compactSelect("flex-1")}>
                           <SelectValue placeholder="Select state" />
                         </SelectTrigger>

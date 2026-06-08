@@ -21,7 +21,7 @@ import {
 import {
   type Distributor,
   loadDistributors,
-} from "../../../database/distributor/page";
+} from "../../../database/distributor/distributor-data";
 import {
   type Event,
   EVENTS_STORAGE_KEY,
@@ -31,7 +31,7 @@ import {
   TYPE_COLORS,
   formatDateRange,
   formatTimeDisplay,
-} from "../page";
+} from "../event-data";
 
 const CUSTOMER_DISTRIBUTOR_ID_OFFSET = 100000;
 const LOCATION_LEVELS: GeoLevel[] = ["Zone", "State", "Region", "Area", "Territory", "Locality", "City"];
