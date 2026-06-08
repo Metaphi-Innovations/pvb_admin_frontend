@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import { HrFormLayout } from "../../../components/HrFormLayout";
 import { TadaClaimForm } from "../components/TadaClaimForm";
 import {
@@ -52,18 +51,16 @@ export default function NewTadaClaimPage() {
       code={claimNumber}
     >
       {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
-      <TadaClaimForm form={form} onChange={setForm} claimNumber={claimNumber} />
-      <div className="flex justify-end gap-2 mt-3">
-        <p className="text-xs text-muted-foreground mr-auto self-center">
-          Total: ₹{sumClaimAmount(form).toLocaleString("en-IN")}
-        </p>
-        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => persist(true)}>
-          Save Draft
-        </Button>
-        <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={() => persist(false)}>
-          Submit for Approval
-        </Button>
-      </div>
+      <TadaClaimForm
+        form={form}
+        onChange={setForm}
+        claimNumber={claimNumber}
+        onSaveDraft={() => persist(true)}
+        onSubmit={() => persist(false)}
+      />
+      <p className="text-xs text-muted-foreground mt-2">
+        Total: ₹{sumClaimAmount(form).toLocaleString("en-IN")} — validated against Sales Force TA/DA Policy Master
+      </p>
     </HrFormLayout>
   );
 }

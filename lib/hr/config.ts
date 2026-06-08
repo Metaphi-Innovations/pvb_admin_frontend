@@ -22,52 +22,49 @@ export const DEPARTMENT_OPTIONS = [
   { value: "Operations", label: "Operations" },
 ];
 
-/** Sales Force Travel Policy — role / grade entitlements */
+/** @deprecated Reference only — roles are managed in User Management Role Master */
+export const SF_ROLE_CODES = ["RSM", "ZSM", "ASM", "TM", "FMO", "KAM", "DO", "Intern"] as const;
+
 export const SF_ROLE_OPTIONS = [
-  "National Sales Manager",
-  "Regional Sales Manager / State Head",
+  "Regional Sales Manager",
+  "Zonal Sales Manager",
   "Area Sales Manager",
   "Territory Manager",
-  "Agronomist",
+  "Field Marketing Officer",
+  "Key Account Manager",
+  "District Officer",
+  "Intern",
 ] as const;
 
-export const TRAVEL_CLASS_OPTIONS = ["Economy", "Business", "AC 2-Tier", "AC 3-Tier", "Sleeper"] as const;
+export const CITY_CATEGORY_POLICY_OPTIONS = ["Mega Metro", "Metro", "Other"] as const;
 
-export const LOCAL_CONVEYANCE_MODE_OPTIONS = [
-  "Auto / Taxi",
-  "Company Cab",
-  "Public Transport",
-  "Own Vehicle",
-] as const;
-
-export const CITY_CATEGORY_POLICY_OPTIONS = ["Mega Metro", "Metro", "Others"] as const;
-
-/** @deprecated Use CITY_CATEGORY_POLICY_OPTIONS — kept for legacy tada-policy route */
+/** @deprecated Use CITY_CATEGORY_POLICY_OPTIONS */
 export const CITY_CATEGORY_OPTIONS = CITY_CATEGORY_POLICY_OPTIONS;
 
-export const VEHICLE_TYPE_POLICY_OPTIONS = ["Two-Wheeler", "Four-Wheeler"] as const;
-
-/** @deprecated Use VEHICLE_TYPE_POLICY_OPTIONS — kept for legacy tada-policy route */
-export const VEHICLE_TYPE_OPTIONS = VEHICLE_TYPE_POLICY_OPTIONS;
-
 export const CLAIM_TYPE_OPTIONS = [
-  { code: "travel", label: "Travel", billsRequired: true },
-  { code: "lodging", label: "Lodging", billsRequired: true },
-  { code: "boarding", label: "Boarding", billsRequired: true },
-  { code: "local_conveyance", label: "Local Conveyance", billsRequired: false },
+  { code: "local_travel", label: "Local Travel", billsRequired: false },
+  { code: "outstation_travel", label: "Outstation Travel", billsRequired: true },
   { code: "km_reimbursement", label: "KM Reimbursement", billsRequired: false },
   { code: "incidental", label: "Incidental", billsRequired: false },
-  { code: "other", label: "Other", billsRequired: true },
 ] as const;
+
+export const TRAVEL_TYPE_OPTIONS = ["Local", "Outstation"] as const;
 
 export const TRAVEL_MODE_OPTIONS = [
   "Air",
-  "Train",
+  "Rail",
   "Bus",
-  "Taxi / Auto",
-  "Own Two-Wheeler",
-  "Own Four-Wheeler",
-  "Company Vehicle",
+  "Own Vehicle",
+  "Local Conveyance",
+] as const;
+
+export const EXPENSE_TYPE_OPTIONS = [
+  "Lodging",
+  "Boarding",
+  "Meals",
+  "Local Conveyance",
+  "Incidental Allowance",
+  "KM Reimbursement",
 ] as const;
 
 export const ATTENDANCE_STATUS_OPTIONS = [
