@@ -185,8 +185,8 @@ export function TravelRulesSection({
     const id = mode === "add" ? Math.max(0, ...records.map((r) => r.id)) + 1 : active!.id;
     const next =
       mode === "add"
-        ? stampNew(base, id)
-        : stampUpdate({ ...active!, ...base, status: form.status ?? active!.status });
+        ? stampNew<TravelModeRule>(base, id)
+        : stampUpdate<TravelModeRule>({ ...active!, ...base, status: form.status ?? active!.status });
     onSave(mode === "add" ? [...records, next] : records.map((r) => (r.id === id ? next : r)));
     appendPolicyAudit({
       user: "Admin",
@@ -305,7 +305,7 @@ export function TravelRulesSection({
             <SheetBody className="space-y-3">
               {error && <p className="text-xs text-red-600">{error}</p>}
               <PolicyField label="Role" required>
-                <Select modal={false} value={String(form.roleId ?? "")} onValueChange={(v) => setForm((f) => ({ ...f, roleId: Number(v) }))}>
+                <Select value={String(form.roleId ?? "")} onValueChange={(v) => setForm((f) => ({ ...f, roleId: Number(v) }))}>
                   <SelectTrigger className={compactSelect()}><SelectValue /></SelectTrigger>
                   <SelectContent {...SHEET_SELECT_CONTENT_PROPS}>
                     {sfRoles.map((r) => <SelectItem key={r.id} value={String(r.id)} className="text-xs">{r.roleName}</SelectItem>)}

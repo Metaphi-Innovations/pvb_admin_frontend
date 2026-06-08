@@ -499,13 +499,13 @@ export default function SalesForceTadaPolicyPageClient() {
                     effectiveTo: f.effectiveTo ?? "",
                     remarks: f.remarks ?? "",
                   };
-                  return ex ? stampUpdate({ ...ex, ...b, status: f.status ?? ex.status }) : stampNew(b, id);
+                  return ex ? stampUpdate<PersonalVehicleKmRule>({ ...ex, ...b, status: f.status ?? ex.status }) : stampNew<PersonalVehicleKmRule>(b, id);
                 }}
                 validate={() => null}
                 renderFormFields={({ form, setForm }) => (
                   <div className="space-y-3">
                     <PolicyField label="Role"><Select value={String(form.roleId ?? "")} onValueChange={(v) => setForm((f) => ({ ...f, roleId: Number(v) }))}><SelectTrigger className={compactSelect()}><SelectValue /></SelectTrigger><SelectContent>{sfIds.map((id) => <SelectItem key={id} value={String(id)} className="text-xs">{getRoleDisplayName(id)}</SelectItem>)}</SelectContent></Select></PolicyField>
-                    <PolicyField label="Vehicle Type"><Select value={form.vehicleType ?? ""} onValueChange={(v) => setForm((f) => ({ ...f, vehicleType: v, ratePerKm: v === "Four Wheeler" ? 12.5 : 5 }))}><SelectTrigger className={compactSelect()}><SelectValue /></SelectTrigger><SelectContent>{VEHICLE_TYPES.map((v) => <SelectItem key={v} value={v} className="text-xs">{v}</SelectItem>)}</SelectContent></Select></PolicyField>
+                    <PolicyField label="Vehicle Type"><Select value={form.vehicleType ?? ""} onValueChange={(v) => setForm((f) => ({ ...f, vehicleType: v as any, ratePerKm: v === "Four Wheeler" ? 12.5 : 5 }))}><SelectTrigger className={compactSelect()}><SelectValue /></SelectTrigger><SelectContent>{VEHICLE_TYPES.map((v) => <SelectItem key={v} value={v} className="text-xs">{v}</SelectItem>)}</SelectContent></Select></PolicyField>
                     <PolicyField label="Rate Per KM"><Input type="number" step="0.1" className="h-8 text-xs" value={form.ratePerKm ?? ""} onChange={(e) => setForm((f) => ({ ...f, ratePerKm: Number(e.target.value) }))} /></PolicyField>
                     <PolicyField label="Max KM Per Day"><Input type="number" className="h-8 text-xs" value={form.maxKmPerDay ?? ""} onChange={(e) => setForm((f) => ({ ...f, maxKmPerDay: Number(e.target.value) }))} /></PolicyField>
                     <PolicyField label="Approval Required Above KM"><Input type="number" className="h-8 text-xs" value={form.approvalRequiredAboveKm ?? ""} onChange={(e) => setForm((f) => ({ ...f, approvalRequiredAboveKm: Number(e.target.value) }))} /></PolicyField>
@@ -558,13 +558,13 @@ export default function SalesForceTadaPolicyPageClient() {
                     effectiveTo: f.effectiveTo ?? "",
                     remarks: f.remarks ?? "",
                   };
-                  return ex ? stampUpdate({ ...ex, ...b, status: f.status ?? ex.status }) : stampNew(b, id);
+                  return ex ? stampUpdate<IncidentalAllowanceRule>({ ...ex, ...b, status: f.status ?? ex.status }) : stampNew<IncidentalAllowanceRule>(b, id);
                 }}
                 validate={() => null}
                 renderFormFields={({ form, setForm }) => (
                   <div className="space-y-3">
                     <PolicyField label="Role"><Select value={String(form.roleId ?? "")} onValueChange={(v) => setForm((f) => ({ ...f, roleId: Number(v) }))}><SelectTrigger className={compactSelect()}><SelectValue /></SelectTrigger><SelectContent>{sfIds.map((id) => <SelectItem key={id} value={String(id)} className="text-xs">{getRoleDisplayName(id)}</SelectItem>)}</SelectContent></Select></PolicyField>
-                    <PolicyField label="City Category"><Select value={form.cityCategory ?? "All"} onValueChange={(v) => setForm((f) => ({ ...f, cityCategory: v }))}><SelectTrigger className={compactSelect()}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="All" className="text-xs">All</SelectItem>{CITY_CATEGORIES.map((c) => <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>)}</SelectContent></Select></PolicyField>
+                    <PolicyField label="City Category"><Select value={form.cityCategory ?? "All"} onValueChange={(v) => setForm((f) => ({ ...f, cityCategory: v as any }))}><SelectTrigger className={compactSelect()}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="All" className="text-xs">All</SelectItem>{CITY_CATEGORIES.map((c) => <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>)}</SelectContent></Select></PolicyField>
                     <PolicyField label="Incidental Allowance Per Day"><Input type="number" className="h-8 text-xs" value={form.allowancePerDay ?? ""} onChange={(e) => setForm((f) => ({ ...f, allowancePerDay: Number(e.target.value) }))} /></PolicyField>
                     <div className="flex items-center justify-between p-2 rounded border"><span className="text-xs">Bill Required</span><Switch checked={!!form.billRequired} onCheckedChange={(v) => setForm((f) => ({ ...f, billRequired: v }))} /></div>
                     <div className="flex items-center justify-between p-2 rounded border"><span className="text-xs">Auto Approval Allowed</span><Switch checked={!!form.autoApprovalAllowed} onCheckedChange={(v) => setForm((f) => ({ ...f, autoApprovalAllowed: v }))} /></div>

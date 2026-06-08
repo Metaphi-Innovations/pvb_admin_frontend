@@ -3,7 +3,8 @@
  * Replace load/save with API when backend is ready.
  */
 
-import { CURRENT_USER, policyToday } from "@/lib/hr/policy-common";
+import { policyToday } from "@/lib/hr/policy-common";
+import { CURRENT_USER } from "@/lib/hr/config";
 
 export const STATE_CITY_MOCK_SEED: Record<string, string[]> = {
   Maharashtra: ["Mumbai", "Pune", "Nagpur", "Nashik"],
@@ -45,18 +46,22 @@ function cityKey(state: string, city: string): string {
   return `${state.trim().toLowerCase()}|${city.trim().toLowerCase()}`;
 }
 
-function stampEntry<T extends { updatedBy: string; updatedAt: string }>(entry: Omit<T, "updatedBy" | "updatedAt">): T {
-  return { ...entry, updatedBy: CURRENT_USER, updatedAt: policyToday() } as T;
+function stampState(entry: Omit<MockStateEntry, "updatedBy" | "updatedAt">): MockStateEntry {
+  return { ...entry, updatedBy: CURRENT_USER, updatedAt: policyToday() };
+}
+
+function stampCity(entry: Omit<MockCityEntry, "updatedBy" | "updatedAt">): MockCityEntry {
+  return { ...entry, updatedBy: CURRENT_USER, updatedAt: policyToday() };
 }
 
 function buildInitialStore(): MockStore {
   const states: MockStateEntry[] = Object.keys(STATE_CITY_MOCK_SEED).map((name) =>
-    stampEntry({ name, status: "active", remarks: "" }),
+    stampState({ name, status: "active", remarks: "" }),
   );
   const cities: MockCityEntry[] = [];
   for (const [state, cityList] of Object.entries(STATE_CITY_MOCK_SEED)) {
     for (const city of cityList) {
-      cities.push(stampEntry({ state, city, status: "active", remarks: "" }));
+      cities.push(stampCity({ state, city, status: "active", remarks: "" }));
     }
   }
   return { states, cities };
@@ -106,7 +111,7 @@ export function addMockState(
   const store = loadMockStore();
   const existing = store.states.find((s) => s.name.toLowerCase() === trimmed.toLowerCase());
   if (existing) return existing;
-  const entry = stampEntry({ name: trimmed, status, remarks });
+  const entry = stampState({ name: trimmed, status, remarks });
   store.states.push(entry);
   saveMockStore(store);
   return entry;
@@ -131,7 +136,7 @@ export function updateMockState(
       c.state.toLowerCase() === prev.name.toLowerCase() ? { ...c, state: newName } : c,
     );
   }
-  const entry = stampEntry({
+  const entry = stampState({
     name: newName,
     status: patch.status ?? prev.status,
     remarks: patch.remarks ?? prev.remarks,
@@ -172,7 +177,7 @@ export function addMockCity(
   const store = loadMockStore();
   const key = cityKey(trimmedState, trimmedCity);
   const existingIdx = store.cities.findIndex((c) => cityKey(c.state, c.city) === key);
-  const entry = stampEntry({ state: trimmedState, city: trimmedCity, status, remarks });
+  const entry = stampCity({ state: trimmedState, city: trimmedCity, status, remarks });
   if (existingIdx >= 0) {
     store.cities[existingIdx] = entry;
   } else {
@@ -200,7 +205,7 @@ export function updateMockCity(
     );
     if (clash) throw new Error("City name already exists in this state");
   }
-  const entry = stampEntry({
+  const entry = stampCity({
     state: prev.state,
     city: newCity,
     status: patch.status ?? prev.status,

@@ -392,7 +392,7 @@ function normalizeCityCategory(r: CityCategoryMaster): CityCategoryMaster {
   };
 }
 
-const CLAIM_CATEGORY_SEED: ClaimCategoryMaster[] = [
+const CLAIM_CATEGORY_SEED: ClaimCategoryMaster[] = ([
   {
     claimCategoryName: "Travel Fare",
     description: "Air, Rail, Bus ticket fare",
@@ -442,7 +442,7 @@ const CLAIM_CATEGORY_SEED: ClaimCategoryMaster[] = [
     limitType: "Per Day",
     remarks: "Flat daily incidental amount",
   },
-].map((c, i) => stampNew(c, i + 1));
+] as (Omit<ClaimCategoryMaster, keyof PolicyBase> & Partial<PolicyBase>)[]).map((c, i) => stampNew<ClaimCategoryMaster>(c, i + 1));
 
 const CC = {
   travelFare: 1,
@@ -475,7 +475,7 @@ function buildEntitlementSeed(): EntitlementMatrix[] {
     { roleId: rid("TM"), cityCategory: "Metro", claimCategoryId: CC.boarding, limitAmount: 275, limitType: "Per Day", billRequired: false, autoApprovalAllowed: true },
     { roleId: rid("TM"), cityCategory: "Other", claimCategoryId: CC.boarding, limitAmount: 250, limitType: "Per Day", billRequired: false, autoApprovalAllowed: true },
   ];
-  return rows.filter((r) => r.roleId > 0).map((r, i) => stampNew(r, i + 1));
+  return rows.filter((r) => r.roleId > 0).map((r, i) => stampNew<EntitlementMatrix>(r, i + 1));
 }
 
 function buildTravelModeSeed(): TravelModeRule[] {
@@ -626,10 +626,10 @@ function buildTravelModeSeed(): TravelModeRule[] {
     },
   ];
 
-  return rows.filter((r) => r.roleId > 0).map((r, i) => stampNew(r, i + 1));
+  return rows.filter((r) => r.roleId > 0).map((r, i) => stampNew<TravelModeRule>(r, i + 1));
 }
 
-const LODGING_SEED: LodgingRule[] = [
+const LODGING_SEED: LodgingRule[] = ([
   {
     roleId: rid("RSM"),
     cityCategory: "Mega Metro",
@@ -660,9 +660,9 @@ const LODGING_SEED: LodgingRule[] = [
     effectiveTo: "",
     remarks: "",
   },
-].filter((r) => r.roleId > 0).map((r, i) => stampNew(r, i + 1));
+] as (Omit<LodgingRule, keyof PolicyBase> & Partial<PolicyBase>)[]).filter((r) => r.roleId > 0).map((r, i) => stampNew<LodgingRule>(r, i + 1));
 
-const FLAT_STAY_SEED: FlatStayRule[] = [
+const FLAT_STAY_SEED: FlatStayRule[] = ([
   {
     roleId: rid("RSM"),
     cityCategory: "Mega Metro",
@@ -696,9 +696,9 @@ const FLAT_STAY_SEED: FlatStayRule[] = [
     effectiveTo: "",
     remarks: "",
   },
-].filter((r) => r.roleId > 0).map((r, i) => stampNew(r, i + 1));
+] as (Omit<FlatStayRule, keyof PolicyBase> & Partial<PolicyBase>)[]).filter((r) => r.roleId > 0).map((r, i) => stampNew<FlatStayRule>(r, i + 1));
 
-const MEALS_ALLOWANCE_SEED: MealsAllowanceRule[] = [
+const MEALS_ALLOWANCE_SEED: MealsAllowanceRule[] = ([
   {
     roleId: rid("RSM"),
     cityCategory: "Mega Metro",
@@ -729,9 +729,9 @@ const MEALS_ALLOWANCE_SEED: MealsAllowanceRule[] = [
     effectiveTo: "",
     remarks: "",
   },
-].filter((r) => r.roleId > 0).map((r, i) => stampNew(r, i + 1));
+] as (Omit<MealsAllowanceRule, keyof PolicyBase> & Partial<PolicyBase>)[]).filter((r) => r.roleId > 0).map((r, i) => stampNew<MealsAllowanceRule>(r, i + 1));
 
-const LOCAL_CONVEYANCE_SEED: LocalConveyanceRule[] = [
+const LOCAL_CONVEYANCE_SEED: LocalConveyanceRule[] = ([
   {
     roleId: rid("RSM"),
     cityCategory: "Mega Metro",
@@ -765,16 +765,16 @@ const LOCAL_CONVEYANCE_SEED: LocalConveyanceRule[] = [
     effectiveTo: "",
     remarks: "",
   },
-].filter((r) => r.roleId > 0).map((r, i) => stampNew(r, i + 1));
+] as (Omit<LocalConveyanceRule, keyof PolicyBase> & Partial<PolicyBase>)[]).filter((r) => r.roleId > 0).map((r, i) => stampNew<LocalConveyanceRule>(r, i + 1));
 
-const PERSONAL_KM_SEED: PersonalVehicleKmRule[] = [
+const PERSONAL_KM_SEED: PersonalVehicleKmRule[] = ([
   { roleId: rid("RSM"), vehicleType: "Two Wheeler", ratePerKm: 5, maxKmPerDay: 150, approvalRequiredAboveKm: 100, autoApprovalAllowed: true, effectiveFrom: "2026-01-01", effectiveTo: "", remarks: "" },
   { roleId: rid("RSM"), vehicleType: "Four Wheeler", ratePerKm: 12.5, maxKmPerDay: 200, approvalRequiredAboveKm: 120, autoApprovalAllowed: true, effectiveFrom: "2026-01-01", effectiveTo: "", remarks: "" },
   { roleId: rid("ASM"), vehicleType: "Two Wheeler", ratePerKm: 5, maxKmPerDay: 120, approvalRequiredAboveKm: 80, autoApprovalAllowed: true, effectiveFrom: "2026-01-01", effectiveTo: "", remarks: "" },
   { roleId: rid("ASM"), vehicleType: "Four Wheeler", ratePerKm: 12.5, maxKmPerDay: 150, approvalRequiredAboveKm: 100, autoApprovalAllowed: true, effectiveFrom: "2026-01-01", effectiveTo: "", remarks: "" },
   { roleId: rid("TM"), vehicleType: "Two Wheeler", ratePerKm: 5, maxKmPerDay: 100, approvalRequiredAboveKm: 60, autoApprovalAllowed: true, effectiveFrom: "2026-01-01", effectiveTo: "", remarks: "" },
   { roleId: rid("TM"), vehicleType: "Four Wheeler", ratePerKm: 12.5, maxKmPerDay: 120, approvalRequiredAboveKm: 80, autoApprovalAllowed: false, effectiveFrom: "2026-01-01", effectiveTo: "", remarks: "" },
-].filter((r) => r.roleId > 0).map((r, i) => stampNew(r, i + 1));
+] as (Omit<PersonalVehicleKmRule, keyof PolicyBase> & Partial<PolicyBase>)[]).filter((r) => r.roleId > 0).map((r, i) => stampNew<PersonalVehicleKmRule>(r, i + 1));
 
 const INCIDENTAL_SEED: IncidentalAllowanceRule[] = SF_ROLE_NAMES.map((name, i) =>
   stampNew<IncidentalAllowanceRule>(
@@ -1267,7 +1267,7 @@ export function copyEntitlementsFromRole(fromRoleId: number, toRoleId: number): 
   const maxId = existing.reduce((m, e) => Math.max(m, e.id), 0);
   const copied = source.map((e, i) => {
     const { id: _id, createdAt, updatedAt, createdBy, updatedBy, ...rest } = e;
-    return stampNew({ ...rest, roleId: toRoleId }, maxId + i + 1);
+    return stampNew<EntitlementMatrix>({ ...rest, roleId: toRoleId }, maxId + i + 1);
   });
   appendPolicyAudit({
     user: "Admin",
