@@ -3,7 +3,7 @@ name: Frontend Deploy - pvb.uat.metaphi.in
 on:
   push:
     branches:
-      - staging
+      - main
 jobs:
   deploy:
     runs-on: self-hosted
