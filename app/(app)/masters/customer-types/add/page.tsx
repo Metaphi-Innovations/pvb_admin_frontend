@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, Save, XCircle } from "lucide-react";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -56,47 +56,34 @@ export default function AddCustomerTypePage() {
   };
 
   return (
-    <AppLayout>
-      <div className="flex flex-col h-full">
-        {/* Header */}
-        <div className="sticky top-0 z-10 flex items-center flex-shrink-0 gap-3 px-5 py-3 bg-white border-b border-border">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="flex items-center justify-center flex-shrink-0 w-8 h-8 transition-colors border rounded-lg border-border hover:bg-muted"
-          >
-            <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-          </button>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold leading-none text-foreground">Add Customer Type</h2>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Masters → Customer Type Master → Add</p>
-          </div>
-          <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => router.back()}>
+    <FormContainer
+      title="Add Customer Type"
+      description="Masters → Customer Type Master → Add"
+      onBack={() => router.back()}
+      actions={
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
             Discard
           </Button>
           <Button
-            size="sm"
-            className="h-7 text-[11px] gap-1.5 px-3 bg-brand-600 text-white hover:bg-brand-700"
+            className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
           >
-            <Save className="w-3.5 h-3.5" /> Save Customer Type
+            <Save className="w-4 h-4" /> Save Customer Type
           </Button>
         </div>
-
-        {/* Form Content */}
-        <div className="flex-1 px-6 py-6 overflow-y-auto bg-muted/10">
-          <CustomerTypeForm
-            form={form}
-            onChange={setForm}
-            errors={errors}
-            onClearError={clearErr}
-            triggerToast={(msg, type) => {
-              setToast({ msg, type });
-              setTimeout(() => setToast(null), 3200);
-            }}
-          />
-        </div>
-      </div>
+      }
+    >
+      <CustomerTypeForm
+        form={form}
+        onChange={setForm}
+        errors={errors}
+        onClearError={clearErr}
+        triggerToast={(msg, type) => {
+          setToast({ msg, type });
+          setTimeout(() => setToast(null), 3200);
+        }}
+      />
 
       {toast && (
         <div
@@ -109,6 +96,6 @@ export default function AddCustomerTypePage() {
           {toast.msg}
         </div>
       )}
-    </AppLayout>
+    </FormContainer>
   );
 }

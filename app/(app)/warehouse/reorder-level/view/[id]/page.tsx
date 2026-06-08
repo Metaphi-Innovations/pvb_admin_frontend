@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Activity, Building, Package, BarChart2, Pencil } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
@@ -44,9 +44,9 @@ export default function ViewReorderLevelPage() {
 
   if (!record || !statusConfig) {
     return (
-      <AppLayout>
+      <FormContainer title="Reorder Level" onBack={() => router.push("/warehouse/reorder-level")}>
         <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading record...</div>
-      </AppLayout>
+      </FormContainer>
     );
   }
 
@@ -56,26 +56,21 @@ export default function ViewReorderLevelPage() {
     : 100;
 
   return (
-    <AppLayout>
-      <div className="w-full space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 border-b pb-4">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted" onClick={() => router.push("/warehouse/reorder-level")}>
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-            <div>
-              <p className="text-xs text-muted-foreground">Warehouse &rsaquo; Reorder Level Management &rsaquo; View</p>
-              <h1 className="text-lg font-bold text-foreground mt-0.5">{record.product}</h1>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <StatusBadge status={record.status} />
-            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => router.push(`/warehouse/reorder-level/edit/${record.id}`)}>
-              <Pencil className="w-3 h-3" /> Edit
-            </Button>
-          </div>
+    <FormContainer
+      title={record.product}
+      description={`Reorder level configurations for ${record.warehouse}`}
+      onBack={() => router.push("/warehouse/reorder-level")}
+      actions={
+        <div className="flex items-center gap-2">
+          <StatusBadge status={record.status} />
+          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => router.push(`/warehouse/reorder-level/edit/${record.id}`)}>
+            <Pencil className="w-3 h-3" /> Edit
+          </Button>
         </div>
+      }
+      noCard={true}
+    >
+      <div className="space-y-6">
 
         {/* Summary cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -192,6 +187,6 @@ export default function ViewReorderLevelPage() {
           </Button>
         </div>
       </div>
-    </AppLayout>
+    </FormContainer>
   );
 }

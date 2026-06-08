@@ -23,6 +23,11 @@ export type PackingStatus =
   | "packed"
   | "cancelled";
 
+export type ApprovalStatus = "not_required" | "pending_approval" | "approved" | "rejected";
+
+/** Order statuses shown on the Sales Order Approval listing tab. */
+export const APPROVAL_ORDER_STATUSES: OrderStatus[] = ["pending_approval", "approved", "rejected"];
+
 /** Statuses that may be changed on edit. */
 export const EDITABLE_ORDER_STATUSES: OrderStatus[] = [
   "draft",
@@ -84,6 +89,12 @@ export interface SalesOrder {
   lineItems: SalesOrderLineItem[];
   totalAmount: number;
   requiresApproval: boolean;
+  approvalStatus?: ApprovalStatus;
+  approvedBy?: string;
+  approvedDate?: string;
+  rejectedBy?: string;
+  rejectedDate?: string;
+  rejectionReason?: string;
   items: number;
   createdBy: string;
   createdDate: string;
@@ -134,7 +145,36 @@ const PRODUCT_CATALOG: ProductCatalogItem[] = [
   { id: 12, code: "PRD-012", name: "Mancozeb 75 WP", uom: "KG", gstRate: "18%", sellingPrice: 235, stock: 130, status: "active" },
 ];
 
-const SEED_ORDERS: SalesOrder[] = [
+const SEED_VERSION = 2;
+const MAX_SEED_ID = 180;
+
+const SEED_CUSTOMERS: {
+  id: number;
+  name: string;
+  code: string;
+  territory: string;
+}[] = [
+  { id: 1, name: "Green Valley Agro", code: "CUST-001", territory: "North Zone" },
+  { id: 2, name: "Kisan Fertilizers Ltd", code: "CUST-002", territory: "South Zone" },
+  { id: 3, name: "Farmtech Solutions", code: "CUST-003", territory: "East Zone" },
+  { id: 4, name: "AgroPlus Distributors", code: "CUST-004", territory: "West Zone" },
+  { id: 5, name: "Sunrise Crops", code: "CUST-005", territory: "North Zone" },
+  { id: 6, name: "Rural Inputs Co.", code: "CUST-006", territory: "Central Zone" },
+  { id: 7, name: "BioGrow Agro", code: "CUST-007", territory: "South Zone" },
+  { id: 8, name: "Fertile Lands Ltd", code: "CUST-008", territory: "East Zone" },
+  { id: 9, name: "CropCare India", code: "CUST-009", territory: "West Zone" },
+  { id: 10, name: "Seeds & More", code: "CUST-010", territory: "North Zone" },
+];
+
+const SEED_SALESMEN: { id: number; name: string }[] = [
+  { id: 1, name: "Rajesh Kumar" },
+  { id: 2, name: "Priya Singh" },
+  { id: 3, name: "Amit Sharma" },
+  { id: 4, name: "Neha Patel" },
+  { id: 5, name: "Vikram Das" },
+];
+
+const BASE_SEED_ORDERS: SalesOrder[] = [
   { id: 1, soNumber: "SO-2024-001", customerId: 1, customerName: "Green Valley Agro", customerCode: "CUST-001", territory: "North Zone", salesManId: 1, salesManName: "Rajesh Kumar", orderDate: "2024-01-10", deliveryDate: "2024-01-17", status: "delivered", lineItems: [], totalAmount: 125000, requiresApproval: true, items: 5, createdBy: "Admin", createdDate: "2024-01-10", updatedBy: "Admin", updatedDate: "2024-01-10" },
   { id: 2, soNumber: "SO-2024-002", customerId: 2, customerName: "Kisan Fertilizers Ltd", customerCode: "CUST-002", territory: "South Zone", salesManId: 2, salesManName: "Priya Singh", orderDate: "2024-01-12", deliveryDate: "2024-01-19", status: "dispatched", lineItems: [], totalAmount: 78500, requiresApproval: true, items: 3, createdBy: "Admin", createdDate: "2024-01-12", updatedBy: "Admin", updatedDate: "2024-01-12" },
   { id: 3, soNumber: "SO-2024-003", customerId: 3, customerName: "Farmtech Solutions", customerCode: "CUST-003", territory: "East Zone", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-01-14", deliveryDate: "2024-01-21", status: "confirmed", lineItems: [], totalAmount: 234000, requiresApproval: true, items: 8, createdBy: "Admin", createdDate: "2024-01-14", updatedBy: "Admin", updatedDate: "2024-01-14" },
@@ -145,10 +185,165 @@ const SEED_ORDERS: SalesOrder[] = [
   { id: 8, soNumber: "SO-2024-008", customerId: 8, customerName: "Fertile Lands Ltd", customerCode: "CUST-008", territory: "East Zone", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-01-17", deliveryDate: "2024-01-24", status: "dispatched", lineItems: [], totalAmount: 67500, requiresApproval: true, items: 3, createdBy: "Admin", createdDate: "2024-01-17", updatedBy: "Admin", updatedDate: "2024-01-17" },
   { id: 9, soNumber: "SO-2024-009", customerId: 9, customerName: "CropCare India", customerCode: "CUST-009", territory: "West Zone", salesManId: 4, salesManName: "Neha Patel", orderDate: "2024-01-05", deliveryDate: "2024-01-12", status: "delivered", lineItems: [], totalAmount: 445000, requiresApproval: true, items: 9, createdBy: "Admin", createdDate: "2024-01-05", updatedBy: "Admin", updatedDate: "2024-01-05" },
   { id: 10, soNumber: "SO-2024-010", customerId: 10, customerName: "Seeds & More", customerCode: "CUST-010", territory: "North Zone", salesManId: 1, salesManName: "Rajesh Kumar", orderDate: "2024-01-18", deliveryDate: "2024-01-25", status: "draft", lineItems: [], totalAmount: 28000, requiresApproval: true, items: 2, createdBy: "Admin", createdDate: "2024-01-18", updatedBy: "Admin", updatedDate: "2024-01-18" },
+  { id: 11, soNumber: "SO-2024-011", customerId: 3, customerName: "Farmtech Solutions", customerCode: "CUST-003", territory: "East Zone", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-01-19", deliveryDate: "2024-01-26", status: "pending_approval", approvalStatus: "pending_approval", lineItems: [], totalAmount: 156000, requiresApproval: true, items: 4, createdBy: "Admin", createdDate: "2024-01-19", updatedBy: "Admin", updatedDate: "2024-01-19" },
+  { id: 12, soNumber: "SO-2024-012", customerId: 5, customerName: "Sunrise Crops", customerCode: "CUST-005", territory: "North Zone", salesManId: 1, salesManName: "Rajesh Kumar", orderDate: "2024-01-20", deliveryDate: "2024-01-27", status: "pending_approval", approvalStatus: "pending_approval", lineItems: [], totalAmount: 98000, requiresApproval: true, items: 3, createdBy: "Admin", createdDate: "2024-01-20", updatedBy: "Admin", updatedDate: "2024-01-20" },
+  { id: 13, soNumber: "SO-2024-013", customerId: 2, customerName: "Kisan Fertilizers Ltd", customerCode: "CUST-002", territory: "South Zone", salesManId: 2, salesManName: "Priya Singh", orderDate: "2024-01-06", deliveryDate: "2024-01-13", status: "approved", approvalStatus: "approved", approvedBy: "Admin", approvedDate: "2024-01-07", lineItems: [], totalAmount: 54000, requiresApproval: true, items: 2, createdBy: "Admin", createdDate: "2024-01-06", updatedBy: "Admin", updatedDate: "2024-01-07" },
+  { id: 14, soNumber: "SO-2024-014", customerId: 8, customerName: "Fertile Lands Ltd", customerCode: "CUST-008", territory: "East Zone", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-01-04", deliveryDate: "2024-01-11", status: "rejected", approvalStatus: "rejected", rejectedBy: "Admin", rejectedDate: "2024-01-05", rejectionReason: "Discount exceeds approved limit for this customer tier.", lineItems: [], totalAmount: 112000, requiresApproval: true, items: 3, createdBy: "Admin", createdDate: "2024-01-04", updatedBy: "Admin", updatedDate: "2024-01-05" },
 ];
+
+/** Bulk statuses for pagination testing — maps to existing OrderStatus values. */
+const BULK_SEED_STATUS_PLAN: { status: OrderStatus; count: number }[] = [
+  { status: "draft", count: 35 },
+  { status: "dispatched", count: 27 },
+  { status: "pending_approval", count: 18 },
+  { status: "approved", count: 12 },
+  { status: "rejected", count: 12 },
+  { status: "confirmed", count: 25 },
+  { status: "delivered", count: 25 },
+  { status: "cancelled", count: 12 },
+];
+
+function seedDateFromId(id: number, offsetDays = 0): string {
+  const base = new Date("2024-01-01T00:00:00.000Z");
+  base.setUTCDate(base.getUTCDate() + ((id + offsetDays) % 300));
+  return base.toISOString().slice(0, 10);
+}
+
+function buildSeedLineItems(orderId: number, lineCount: number): SalesOrderLineItem[] {
+  const products = PRODUCT_CATALOG.filter(p => p.status === "active");
+  const lines: SalesOrderLineItem[] = [];
+
+  for (let i = 0; i < lineCount; i++) {
+    const product = products[(orderId + i) % products.length];
+    const quantity = 4 + ((orderId + i * 3) % 18);
+    const discount = i === 0 ? 0 : ((orderId + i) % 4) * 75;
+    const gstAmount = computeGstAmount(quantity, product.sellingPrice, discount, product.gstRate);
+    lines.push(recalculateLineItem({
+      id: `line-seed-${orderId}-${i}`,
+      productId: product.id,
+      productCode: product.code,
+      productName: product.name,
+      availableStock: product.stock,
+      quantity,
+      unitPrice: product.sellingPrice,
+      discount,
+      gstAmount,
+      lineTotal: 0,
+    }));
+  }
+
+  return lines;
+}
+
+function buildSeedOrder(id: number, status: OrderStatus): SalesOrder {
+  const customer = SEED_CUSTOMERS[(id - 1) % SEED_CUSTOMERS.length];
+  const salesman = SEED_SALESMEN[(id - 1) % SEED_SALESMEN.length];
+  const orderDate = seedDateFromId(id);
+  const deliveryDate = seedDateFromId(id, 7);
+  const lineCount = 1 + (id % 3);
+  const lineItems = buildSeedLineItems(id, lineCount);
+  const totalAmount = calculateOrderTotalsSummary(lineItems).grandTotal;
+  const requiresApproval = orderRequiresApproval(totalAmount) || ["pending_approval", "approved", "rejected"].includes(status);
+
+  const order: SalesOrder = {
+    id,
+    soNumber: `SO-2024-${String(id).padStart(3, "0")}`,
+    customerId: customer.id,
+    customerName: customer.name,
+    customerCode: customer.code,
+    territory: customer.territory,
+    salesManId: salesman.id,
+    salesManName: salesman.name,
+    orderDate,
+    deliveryDate,
+    status,
+    lineItems,
+    totalAmount,
+    requiresApproval,
+    items: lineItems.length,
+    createdBy: "Admin",
+    createdDate: orderDate,
+    updatedBy: "Admin",
+    updatedDate: orderDate,
+  };
+
+  if (status === "pending_approval") {
+    order.approvalStatus = "pending_approval";
+  } else if (status === "approved") {
+    order.approvalStatus = "approved";
+    order.approvedBy = "Admin";
+    order.approvedDate = seedDateFromId(id, 1);
+    order.updatedDate = order.approvedDate;
+  } else if (status === "rejected") {
+    order.approvalStatus = "rejected";
+    order.rejectedBy = "Admin";
+    order.rejectedDate = seedDateFromId(id, 1);
+    order.rejectionReason = "Credit limit exceeded for seasonal booking.";
+    order.updatedDate = order.rejectedDate;
+  } else if (status === "cancelled") {
+    order.cancellationReason = "Customer requested cancellation before dispatch.";
+    order.cancelledBy = "Admin";
+    order.cancelledDate = seedDateFromId(id, 2);
+    order.updatedDate = order.cancelledDate;
+  }
+
+  return order;
+}
+
+function buildGeneratedSeedOrders(): SalesOrder[] {
+  const orders: SalesOrder[] = [];
+  let id = BASE_SEED_ORDERS.length + 1;
+
+  for (const { status, count } of BULK_SEED_STATUS_PLAN) {
+    for (let i = 0; i < count; i++) {
+      orders.push(buildSeedOrder(id, status));
+      id++;
+    }
+  }
+
+  return orders;
+}
+
+function buildFullSeedOrders(): SalesOrder[] {
+  const baseWithLines = BASE_SEED_ORDERS.map(order => {
+    if (order.lineItems.length > 0) return order;
+    const lineCount = Math.max(1, order.items);
+    const lineItems = buildSeedLineItems(order.id, lineCount);
+    const totalAmount = calculateOrderTotalsSummary(lineItems).grandTotal;
+    return {
+      ...order,
+      lineItems,
+      totalAmount,
+      items: lineItems.length,
+      requiresApproval: orderRequiresApproval(totalAmount) || order.requiresApproval,
+    };
+  });
+
+  return [...baseWithLines, ...buildGeneratedSeedOrders()];
+}
+
+interface StoredSalesOrders {
+  version: number;
+  data: SalesOrder[];
+}
 
 const STORAGE_KEY = "ds_sales_orders";
 const ID_KEY = "ds_sales_orders_next_id";
+
+function parseStoredOrders(raw: string): StoredSalesOrders {
+  const parsed = JSON.parse(raw) as StoredSalesOrders | SalesOrder[];
+  if (Array.isArray(parsed)) return { version: 0, data: parsed };
+  return parsed;
+}
+
+function persistOrders(orders: SalesOrder[]): SalesOrder[] {
+  const hydrated = hydrateOrders(orders);
+  if (typeof window !== "undefined") {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: SEED_VERSION, data: hydrated }));
+    localStorage.setItem(ID_KEY, String(Math.max(MAX_SEED_ID, 0, ...hydrated.map(o => o.id))));
+  }
+  return hydrated;
+}
 
 export function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
@@ -226,6 +421,8 @@ export function resolveSubmitStatus(
   return userStatus;
 }
 
+const SEED_ORDERS: SalesOrder[] = buildFullSeedOrders();
+
 export function loadProductCatalog(): ProductCatalogItem[] {
   return PRODUCT_CATALOG.filter(p => p.status === "active");
 }
@@ -247,12 +444,17 @@ export function loadOrders(): SalesOrder[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      const hydrated = hydrateOrders(SEED_ORDERS);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(hydrated));
-      localStorage.setItem(ID_KEY, "10");
-      return hydrated;
+      return persistOrders(SEED_ORDERS);
     }
-    return hydrateOrders(JSON.parse(raw) as SalesOrder[]);
+
+    const stored = parseStoredOrders(raw);
+    if (!stored.version || stored.version < SEED_VERSION) {
+      const seedNumbers = new Set(SEED_ORDERS.map(o => o.soNumber));
+      const userOrders = stored.data.filter(o => !seedNumbers.has(o.soNumber));
+      return persistOrders([...SEED_ORDERS, ...userOrders]);
+    }
+
+    return hydrateOrders(stored.data);
   } catch {
     return hydrateOrders(SEED_ORDERS);
   }
@@ -260,7 +462,7 @@ export function loadOrders(): SalesOrder[] {
 
 export function saveOrders(orders: SalesOrder[]): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: SEED_VERSION, data: orders }));
   const maxId = Math.max(0, ...orders.map(o => o.id));
   localStorage.setItem(ID_KEY, String(maxId));
 }
@@ -320,6 +522,48 @@ export function formatOrderStatus(status: OrderStatus): string {
   const opt = ORDER_STATUS_OPTIONS.find(o => o.value === status);
   if (opt) return opt.label;
   return status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, " ");
+}
+
+const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {
+  not_required: "Not Required",
+  pending_approval: "Pending Approval",
+  approved: "Approved",
+  rejected: "Rejected",
+};
+
+export function resolveApprovalStatus(order: SalesOrder): ApprovalStatus {
+  if (order.approvalStatus) return order.approvalStatus;
+  if (order.status === "pending_approval") return "pending_approval";
+  if (order.status === "approved") return "approved";
+  if (order.status === "rejected") return "rejected";
+  return order.requiresApproval ? "not_required" : "not_required";
+}
+
+export function formatApprovalStatus(status: ApprovalStatus): string {
+  return APPROVAL_STATUS_LABELS[status];
+}
+
+export function isApprovalRelatedOrder(order: SalesOrder): boolean {
+  return APPROVAL_ORDER_STATUSES.includes(order.status);
+}
+
+export function isOrderPendingApproval(order: SalesOrder): boolean {
+  return order.status === "pending_approval" && resolveApprovalStatus(order) === "pending_approval";
+}
+
+export function canApproveOrder(order: SalesOrder): boolean {
+  return isOrderPendingApproval(order);
+}
+
+function resolvePostApprovalStatus(_order: SalesOrder): OrderStatus {
+  return "confirmed";
+}
+
+function resolveApprovalStatusOnSubmit(finalStatus: OrderStatus, requiresApproval: boolean, asDraft: boolean): ApprovalStatus {
+  if (asDraft) return "not_required";
+  if (finalStatus === "pending_approval") return "pending_approval";
+  if (requiresApproval) return "not_required";
+  return "not_required";
 }
 
 // ── Inventory batches (FEFO packing suggestions) ─────────────────────────────
@@ -414,7 +658,13 @@ export function hydrateOrderLineItems(order: SalesOrder): SalesOrder {
 }
 
 export function hydrateOrders(orders: SalesOrder[]): SalesOrder[] {
-  return orders.map(hydrateOrderLineItems);
+  return orders.map(order => {
+    const hydrated = hydrateOrderLineItems(order);
+    return {
+      ...hydrated,
+      approvalStatus: resolveApprovalStatus(hydrated),
+    };
+  });
 }
 
 export function getOrderById(id: number): SalesOrder | undefined {
@@ -496,6 +746,7 @@ export function buildOrderFromForm(
   const totalAmount = calculateOrderTotalsSummary(form.lineItems).grandTotal;
   const finalStatus = resolveSubmitStatus(totalAmount, form.status, asDraft);
   const requiresApproval = orderRequiresApproval(totalAmount) && !asDraft;
+  const approvalStatus = resolveApprovalStatusOnSubmit(finalStatus, requiresApproval, asDraft);
   const today = todayStr();
 
   return {
@@ -513,6 +764,12 @@ export function buildOrderFromForm(
     lineItems: form.lineItems,
     totalAmount,
     requiresApproval,
+    approvalStatus,
+    approvedBy: existing.approvedBy,
+    approvedDate: existing.approvedDate,
+    rejectedBy: existing.rejectedBy,
+    rejectedDate: existing.rejectedDate,
+    rejectionReason: existing.rejectionReason,
     items: form.lineItems.length,
     createdBy: existing.createdBy ?? "Admin",
     createdDate: existing.createdDate ?? today,
@@ -648,6 +905,57 @@ export function splitSalesOrderFromForm(
   }).concat(newOrder));
 
   return { original: updatedOriginal, newOrder };
+}
+
+export function approveSalesOrder(orderId: number, approvedBy = "Admin"): SalesOrder | { error: string } {
+  const orders = loadOrders();
+  const order = orders.find(o => o.id === orderId);
+  if (!order) return { error: "Order not found" };
+  if (!canApproveOrder(order)) return { error: "This order is not pending approval" };
+
+  const today = todayStr();
+  const nextStatus = resolvePostApprovalStatus(order);
+  const updated: SalesOrder = {
+    ...order,
+    approvalStatus: "approved",
+    status: nextStatus,
+    approvedBy,
+    approvedDate: today,
+    updatedBy: approvedBy,
+    updatedDate: today,
+  };
+
+  saveOrders(orders.map(o => (o.id === orderId ? updated : o)));
+  return hydrateOrderLineItems(updated);
+}
+
+export function rejectSalesOrder(
+  orderId: number,
+  reason: string,
+  rejectedBy = "Admin",
+): SalesOrder | { error: string } {
+  const trimmed = reason.trim();
+  if (!trimmed) return { error: "Rejection reason is required" };
+
+  const orders = loadOrders();
+  const order = orders.find(o => o.id === orderId);
+  if (!order) return { error: "Order not found" };
+  if (!canApproveOrder(order)) return { error: "This order is not pending approval" };
+
+  const today = todayStr();
+  const updated: SalesOrder = {
+    ...order,
+    approvalStatus: "rejected",
+    status: "rejected",
+    rejectionReason: trimmed,
+    rejectedBy,
+    rejectedDate: today,
+    updatedBy: rejectedBy,
+    updatedDate: today,
+  };
+
+  saveOrders(orders.map(o => (o.id === orderId ? updated : o)));
+  return hydrateOrderLineItems(updated);
 }
 
 export function cancelSalesOrder(orderId: number, reason: string): SalesOrder | { error: string } {

@@ -109,6 +109,18 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
+    id: "warehouse",
+    label: "Warehouse",
+    icon: Warehouse,
+    children: [
+      { label: "GRN & QC", href: "/warehouse/grnqc" },
+      { label: "Stock Overview", href: "/warehouse/stockoverview" },
+      { label: "Packing", href: "/warehouse/packing" },
+      { label: "Dispatch", href: "/warehouse/dispatch" },
+      { label: "Reorder Level", href: "/warehouse/reorder-level" },
+    ],
+  },
+  {
     id: "hr",
     label: "HR",
     icon: UserCheck,
@@ -203,18 +215,6 @@ export const NAV_ITEMS: NavItem[] = [
     children: [
       { label: "Event", href: "/events/event" },
       { label: "Demo", href: "/events/demo" },
-    ],
-  },
-  {
-    id: "warehouse",
-    label: "Warehouse",
-    icon: Warehouse,
-    children: [
-      { label: "GRN & QC", href: "/warehouse/grnqc" },
-      { label: "Stock Overview", href: "/warehouse/stockoverview" },
-      { label: "Packing", href: "/warehouse/packing" },
-      { label: "Dispatch", href: "/warehouse/dispatch" },
-      { label: "Reorder Levels", href: "/warehouse/reorder-levels" },
     ],
   },
   {

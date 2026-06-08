@@ -158,11 +158,10 @@ export function MasterListing<T = any>({
                       onClick={() => col.sortable && handleSort(col.key)}
                       style={{ width: col.width }}
                       className={cn(
-                        "px-4 py-2.5 text-left text-xs font-semibold text-foreground select-none whitespace-nowrap",
+                        "px-4 py-2.5 text-xs font-semibold text-foreground select-none whitespace-nowrap",
+                        col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left",
                         col.sortable && "cursor-pointer hover:bg-muted/60 transition-colors",
                         isSorted && "bg-brand-50/60 text-brand-700",
-                        col.align === "center" && "text-center",
-                        col.align === "right" && "text-right",
                         isSticky && "sticky right-0 bg-white z-20 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border"
                       )}
                     >
