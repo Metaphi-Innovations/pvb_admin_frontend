@@ -110,7 +110,7 @@ export function ApprovalSection({
             approvalLevel4: f.approvalLevel4 ?? "",
             remarks: f.remarks ?? "",
           };
-          return ex ? stampUpdate({ ...ex, ...b, status: f.status ?? ex.status }) : stampNew(b, id);
+          return ex ? stampUpdate<ApprovalThresholdRule>({ ...ex, ...b, status: f.status ?? ex.status }) : stampNew<ApprovalThresholdRule>(b, id);
         }}
         validate={(f) => (Number(f.amountTo) < Number(f.amountFrom) ? "Amount To must be ≥ Amount From" : null)}
         renderFormFields={({ form, setForm }) => (

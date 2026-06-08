@@ -119,7 +119,7 @@ export function RolePolicyMappingSection({
     const id = mode === "add" ? Math.max(0, ...mappings.map((m) => m.id)) + 1 : active!.id;
     const next =
       mode === "add"
-        ? stampNew(
+        ? stampNew<RolePolicyMapping>(
             {
               roleId: form.roleId,
               isSalesForceRole: !!form.isSalesForceRole,
@@ -132,7 +132,7 @@ export function RolePolicyMappingSection({
             },
             id,
           )
-        : stampUpdate({
+        : stampUpdate<RolePolicyMapping>({
             ...active!,
             isSalesForceRole: !!form.isSalesForceRole,
             tadaApplicable: !!form.tadaApplicable,
@@ -254,7 +254,6 @@ export function RolePolicyMappingSection({
               ) : (
                 <div className="space-y-1">
                   <Select
-                    modal={false}
                     value={form.roleId ? String(form.roleId) : undefined}
                     onValueChange={(v) => setForm((f) => ({ ...f, roleId: Number(v), reportingRoleId: f.reportingRoleId === Number(v) ? null : f.reportingRoleId }))}
                   >
@@ -285,7 +284,6 @@ export function RolePolicyMappingSection({
             </PolicyField>
             <PolicyField label="Reporting Role">
               <Select
-                modal={false}
                 value={form.reportingRoleId ? String(form.reportingRoleId) : "none"}
                 onValueChange={(v) => setForm((f) => ({ ...f, reportingRoleId: v === "none" ? null : Number(v) }))}
               >

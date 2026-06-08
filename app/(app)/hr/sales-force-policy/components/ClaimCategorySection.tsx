@@ -61,7 +61,7 @@ export function ClaimCategorySection({
           limitType: f.limitType as LimitType,
           remarks: f.remarks ?? "",
         };
-        return ex ? stampUpdate({ ...ex, ...b, status: f.status ?? ex.status }) : stampNew(b, id);
+        return ex ? stampUpdate<ClaimCategoryMaster>({ ...ex, ...b, status: f.status ?? ex.status }) : stampNew<ClaimCategoryMaster>(b, id);
       }}
       validate={(f) => (!f.claimCategoryName ? "Name required" : null)}
       renderFormFields={({ form, setForm }) => (
@@ -74,7 +74,7 @@ export function ClaimCategorySection({
           </PolicyField>
           <PolicyField label="Description"><Input className="h-8 text-xs" value={form.description ?? ""} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} /></PolicyField>
           <PolicyField label="Limit Type">
-            <Select value={form.limitType ?? ""} onValueChange={(v) => setForm((f) => ({ ...f, limitType: v }))}>
+            <Select value={form.limitType ?? ""} onValueChange={(v) => setForm((f) => ({ ...f, limitType: v as any }))}>
               <SelectTrigger className={compactSelect()}><SelectValue /></SelectTrigger>
               <SelectContent>{LIMIT_TYPES.map((t) => <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>)}</SelectContent>
             </Select>

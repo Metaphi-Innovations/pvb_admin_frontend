@@ -710,6 +710,9 @@ function migrateLegacy(raw: unknown): TadaClaim[] {
       accountsSyncedAt: c.accountsSyncedAt as string | undefined,
       createdBy: String(c.createdBy ?? CURRENT_USER),
       updatedBy: String(c.updatedBy ?? CURRENT_USER),
+      approvalStatus: (c.approvalStatus as ApprovalStatus) ?? "submitted",
+      hrStatus: (c.hrStatus as HrClaimStatus) ?? "awaiting_hierarchy",
+      updatedAt: String(c.updatedAt ?? c.submittedAt ?? c.claimDate),
     };
   });
 }

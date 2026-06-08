@@ -67,7 +67,7 @@ export function LodgingRulesSection({
           effectiveTo: f.effectiveTo ?? "",
           remarks: f.remarks ?? "",
         };
-        return ex ? stampUpdate({ ...ex, ...b, status: f.status ?? ex.status }) : stampNew(b, id);
+        return ex ? stampUpdate<LodgingRule>({ ...ex, ...b, status: f.status ?? ex.status }) : stampNew<LodgingRule>(b, id);
       }}
       validate={(f) => (Number(f.lodgingLimitPerDay) <= 0 ? "Lodging limit is required" : null)}
       renderFormFields={({ form, setForm }) => (
@@ -79,7 +79,7 @@ export function LodgingRulesSection({
             </Select>
           </PolicyField>
           <PolicyField label="City Category">
-            <Select value={form.cityCategory ?? ""} onValueChange={(v) => setForm((f) => ({ ...f, cityCategory: v }))}>
+            <Select value={form.cityCategory ?? ""} onValueChange={(v) => setForm((f) => ({ ...f, cityCategory: v as any }))}>
               <SelectTrigger className={compactSelect()}><SelectValue /></SelectTrigger>
               <SelectContent>{CITY_CATEGORIES.map((c) => <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>)}</SelectContent>
             </Select>

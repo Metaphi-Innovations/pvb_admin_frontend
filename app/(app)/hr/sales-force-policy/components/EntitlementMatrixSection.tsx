@@ -120,7 +120,7 @@ export function EntitlementMatrixSection({
             billRequired: !!form.billRequired,
             autoApprovalAllowed: !!form.autoApprovalAllowed,
           };
-          return existing ? stampUpdate({ ...existing, ...base, status: form.status ?? existing.status }) : stampNew(base, id);
+          return existing ? stampUpdate<EntitlementMatrix>({ ...existing, ...base, status: form.status ?? existing.status }) : stampNew<EntitlementMatrix>(base, id);
         }}
         validate={(f) => (Number(f.limitAmount) <= 0 ? "Limit amount required" : null)}
         renderFormFields={({ form, setForm }) => (
@@ -136,7 +136,7 @@ export function EntitlementMatrixSection({
               </Select>
             </PolicyField>
             <PolicyField label="City Category">
-              <Select value={form.cityCategory ?? ""} onValueChange={(v) => setForm((f) => ({ ...f, cityCategory: v }))}>
+              <Select value={form.cityCategory ?? ""} onValueChange={(v) => setForm((f) => ({ ...f, cityCategory: v as any }))}>
                 <SelectTrigger className={compactSelect()}><SelectValue /></SelectTrigger>
                 <SelectContent>{CITY_CATEGORIES.map((c) => <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>)}</SelectContent>
               </Select>
@@ -153,7 +153,7 @@ export function EntitlementMatrixSection({
             </PolicyField>
             <PolicyField label="Limit Amount"><Input type="number" className="h-8 text-xs" value={form.limitAmount ?? ""} onChange={(e) => setForm((f) => ({ ...f, limitAmount: Number(e.target.value) }))} /></PolicyField>
             <PolicyField label="Limit Type">
-              <Select value={form.limitType ?? ""} onValueChange={(v) => setForm((f) => ({ ...f, limitType: v }))}>
+              <Select value={form.limitType ?? ""} onValueChange={(v) => setForm((f) => ({ ...f, limitType: v as any }))}>
                 <SelectTrigger className={compactSelect()}><SelectValue /></SelectTrigger>
                 <SelectContent>{LIMIT_TYPES.map((t) => <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>)}</SelectContent>
               </Select>

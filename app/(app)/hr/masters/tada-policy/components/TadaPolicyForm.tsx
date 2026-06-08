@@ -73,7 +73,7 @@ export function TadaPolicyForm({
               <Label className="text-[10px]">Vehicle Type</Label>
               <Select value={row.vehicleType} disabled={readOnly} onValueChange={(v) => {
                 const next = [...form.travelAllowance];
-                next[i] = { ...row, vehicleType: v };
+                next[i] = { ...row, vehicleType: v as any };
                 set({ travelAllowance: next });
               }}>
                 <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
@@ -107,7 +107,7 @@ export function TadaPolicyForm({
               <Label className="text-[10px]">City Category</Label>
               <Select value={row.cityCategory} disabled={readOnly} onValueChange={(v) => {
                 const next = [...form.dailyAllowance];
-                next[i] = { ...row, cityCategory: v };
+                next[i] = { ...row, cityCategory: v as any };
                 set({ dailyAllowance: next });
               }}>
                 <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
@@ -141,7 +141,7 @@ export function TadaPolicyForm({
               <Label className="text-[10px]">City Category</Label>
               <Select value={row.cityCategory} disabled={readOnly} onValueChange={(v) => {
                 const next = [...form.accommodation];
-                next[i] = { ...row, cityCategory: v };
+                next[i] = { ...row, cityCategory: v as any };
                 set({ accommodation: next });
               }}>
                 <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>

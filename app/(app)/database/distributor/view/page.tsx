@@ -20,7 +20,7 @@ import {
   type Distributor,
   loadDistributors,
   VIEW_DISTRIBUTOR_STORAGE_KEY,
-} from "../page";
+} from "../distributor-data";
 
 function SectionBlock({
   icon: Icon,
