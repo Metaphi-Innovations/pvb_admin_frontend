@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
@@ -35,28 +35,29 @@ export default function EditDispatchPage() {
 
   if (!record) {
     return (
-      <AppLayout>
+      <FormContainer title="Edit Dispatch" onBack={() => router.push("/warehouse/dispatch")}>
         <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading dispatch record...</div>
-      </AppLayout>
+      </FormContainer>
     );
   }
 
   return (
-    <AppLayout>
-      <div className="w-full space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-3 border-b pb-4">
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted" onClick={() => router.push("/warehouse/dispatch")}>
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <div>
-            <p className="text-xs text-muted-foreground">Warehouse &rsaquo; Dispatch Management &rsaquo; Edit</p>
-            <h1 className="text-lg font-bold text-foreground mt-0.5">Edit Dispatch</h1>
-          </div>
-        </div>
-
+    <FormContainer
+      title="Edit Dispatch"
+      description={`Update details for dispatch note ${record.dispatchNumber}`}
+      onBack={() => router.push("/warehouse/dispatch")}
+      onCancel={() => router.push("/warehouse/dispatch")}
+      cancelLabel="Cancel"
+      actions={
+        <Button size="sm" onClick={handleSubmit} className="h-9 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white gap-1.5">
+          <Save className="w-3.5 h-3.5" /> Save Changes
+        </Button>
+      }
+      noCard={false}
+    >
+      <div className="space-y-6">
         {/* Dispatch Header Fields */}
-        <div className="bg-white rounded-xl border border-border p-5 shadow-sm space-y-4">
+        <div className="space-y-4">
           <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
             <Truck className="w-4 h-4 text-brand-600" /> Header Details
           </h2>
@@ -115,7 +116,7 @@ export default function EditDispatchPage() {
         </div>
 
         {/* Product View (Read-only) */}
-        <div className="bg-white rounded-xl border border-border p-5 shadow-sm space-y-4">
+        <div className="border-t border-border/80 pt-6 mt-6 space-y-4">
           <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
             <Package className="w-4 h-4 text-brand-600" /> Products (Read-only)
           </h2>
@@ -142,17 +143,7 @@ export default function EditDispatchPage() {
             </table>
           </div>
         </div>
-
-        {/* Actions */}
-        <div className="flex items-center justify-end gap-3 border-t pt-4">
-          <Button variant="outline" size="sm" className="h-8 text-xs font-semibold" onClick={() => router.push("/warehouse/dispatch")}>
-            Cancel
-          </Button>
-          <Button size="sm" onClick={handleSubmit} className="h-8 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white gap-1.5">
-            <Save className="w-3.5 h-3.5" /> Save Changes
-          </Button>
-        </div>
       </div>
-    </AppLayout>
+    </FormContainer>
   );
 }

@@ -50,6 +50,9 @@ export interface Product {
   updatedDate: string;
   assets?: ProductAsset[];
   mediaItems?: ProductAsset[];
+  baseUnit?: string;
+  packagingUnit?: string;
+  conversionQuantity?: number;
 }
 
 export function todayStr(): string {
@@ -174,7 +177,7 @@ const SEED_PRODUCTS: Product[] = [
     productId: "PRD-0001",
     productName: "Dharitri Hybrid Corn Gold",
     category: "Seeds",
-    subCategory: "Hybrid Seeds",
+    subCategory: "",
     segment: "Premium",
     formulation: "Powder",
     unit: "Packet",
@@ -184,14 +187,17 @@ const SEED_PRODUCTS: Product[] = [
     cropApplicable: "Corn",
     packSize: "1 KG",
     mrp: 1450,
-    costPrice: 1120,
-    distributorPrice: 1265,
+    costPrice: 0,
+    distributorPrice: 0,
     reorderLevel: "Medium",
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-01-10",
     updatedBy: "Admin",
     updatedDate: "2026-03-12",
+    baseUnit: "KG",
+    packagingUnit: "Bag",
+    conversionQuantity: 25,
     assets: [
       {
         id: "prd-1-media-1",
@@ -237,7 +243,7 @@ const SEED_PRODUCTS: Product[] = [
     productId: "PRD-0002",
     productName: "NutriGrow WS 19:19:19",
     category: "Fertilizers",
-    subCategory: "Water Soluble Fertilizers",
+    subCategory: "",
     segment: "Commercial",
     formulation: "Powder",
     unit: "KG",
@@ -247,14 +253,17 @@ const SEED_PRODUCTS: Product[] = [
     cropApplicable: "Vegetables",
     packSize: "25 KG",
     mrp: 1325,
-    costPrice: 1010,
-    distributorPrice: 1155,
+    costPrice: 0,
+    distributorPrice: 0,
     reorderLevel: "High",
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-01-18",
     updatedBy: "Admin",
     updatedDate: "2026-03-18",
+    baseUnit: "KG",
+    packagingUnit: "Box",
+    conversionQuantity: 10,
     assets: [
       {
         id: "prd-2-media-1",
@@ -272,7 +281,7 @@ const SEED_PRODUCTS: Product[] = [
     productId: "PRD-0003",
     productName: "Shield EC Crop Guard",
     category: "Pesticides",
-    subCategory: "Insecticides",
+    subCategory: "",
     segment: "Retail",
     formulation: "Emulsifiable Concentrate (EC)",
     unit: "Bottle",
@@ -282,14 +291,17 @@ const SEED_PRODUCTS: Product[] = [
     cropApplicable: "Cotton",
     packSize: "500 ML",
     mrp: 680,
-    costPrice: 495,
-    distributorPrice: 560,
+    costPrice: 0,
+    distributorPrice: 0,
     reorderLevel: "Medium",
     status: "inactive",
     createdBy: "Admin",
     createdDate: "2026-02-03",
     updatedBy: "Admin",
     updatedDate: "2026-04-05",
+    baseUnit: "Liter",
+    packagingUnit: "Drum",
+    conversionQuantity: 200,
     assets: [],
   },
   {
@@ -297,7 +309,7 @@ const SEED_PRODUCTS: Product[] = [
     productId: "PRD-0004",
     productName: "BioRoot Vital Suspension",
     category: "Bio Products",
-    subCategory: "Fungicides",
+    subCategory: "",
     segment: "Institutional",
     formulation: "Suspension",
     unit: "Liter",
@@ -307,14 +319,17 @@ const SEED_PRODUCTS: Product[] = [
     cropApplicable: "Paddy",
     packSize: "1 Liter",
     mrp: 890,
-    costPrice: 640,
-    distributorPrice: 725,
+    costPrice: 0,
+    distributorPrice: 0,
     reorderLevel: "Low",
     status: "draft",
     createdBy: "Admin",
     createdDate: "2026-02-16",
     updatedBy: "Admin",
     updatedDate: "2026-04-22",
+    baseUnit: "Gram",
+    packagingUnit: "Packet",
+    conversionQuantity: 50,
     assets: [],
   },
 ];
@@ -347,6 +362,9 @@ function migrateProduct(raw: Record<string, unknown>): Product {
     updatedDate: p.updatedDate ?? todayStr(),
     assets,
     mediaItems: assets,
+    baseUnit: p.baseUnit ?? "",
+    packagingUnit: p.packagingUnit ?? "",
+    conversionQuantity: p.conversionQuantity !== undefined ? Number(p.conversionQuantity) : undefined,
   };
 }
 

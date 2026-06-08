@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Calendar, Building, Package, Tag, AlertCircle,
@@ -25,7 +25,7 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
 
   if (!unionRecord) {
     return (
-      <AppLayout>
+      <FormContainer title="Packing Details" onBack={() => router.push("/warehouse/packing")}>
         <div className="max-w-[800px] mx-auto text-center py-12 space-y-4">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
           <h1 className="text-base font-bold text-foreground">Packing Record Not Found</h1>
@@ -34,7 +34,7 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
             Go Back
           </Button>
         </div>
-      </AppLayout>
+      </FormContainer>
     );
   }
 
@@ -42,37 +42,18 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
   const statusCfg = STATUS_BADGE_CONFIG[data.status] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: data.status };
 
   return (
-    <AppLayout>
-      <div className="w-full space-y-6">
-        {/* Top Header Block */}
-        <div className="flex items-center justify-between border-b pb-4">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-lg hover:bg-muted"
-              onClick={() => router.push("/warehouse/packing")}
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-xs text-muted-foreground">
-                  Warehouse &rsaquo; Packing Management &rsaquo; Details
-                </p>
-              </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <h1 className="text-lg font-bold text-foreground flex items-center gap-2">
-                  <Package className="w-4 h-4 text-brand-600" />
-                  {type === "order" ? `Sales Order: ${(data as any).salesOrderNo}` : `Packing: ${(data as any).packingNo}`}
-                </h1>
-                <span className={`inline-flex items-center text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${statusCfg.bg}`}>
-                  {statusCfg.label}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+    <FormContainer
+      title={type === "order" ? `Sales Order: ${(data as any).salesOrderNo}` : `Packing: ${(data as any).packingNo}`}
+      description="Packing Details and batch lists"
+      onBack={() => router.push("/warehouse/packing")}
+      actions={
+        <span className={`inline-flex items-center text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${statusCfg.bg}`}>
+          {statusCfg.label}
+        </span>
+      }
+      noCard={true}
+    >
+      <div className="space-y-6">
 
         {/* Sales Order View (Ready For Packing) */}
         {type === "order" && (
@@ -240,6 +221,6 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
           </div>
         )}
       </div>
-    </AppLayout>
+    </FormContainer>
   );
 }

@@ -2,6 +2,7 @@
 
 import React, { memo, useState } from "react";
 import { cn } from "@/lib/utils";
+import { AuthService } from "@/services/auth.service";
 import {
   Search, Bell, HelpCircle, ChevronDown, MapPin, Globe,
   LogOut, User, Settings, Shield, CheckSquare, Calendar,
@@ -232,6 +233,19 @@ function FYSelector() {
 function AppHeaderInner() {
   const [selectedState,     setSelectedState]     = useState("All States");
   const [selectedTerritory, setSelectedTerritory] = useState("All Territories");
+  const [userData, setUserData] = useState<any>(null);
+
+  React.useEffect(() => {
+    setUserData(AuthService.getUserData());
+  }, []);
+
+  const username = userData?.username || "Admin";
+  const email = userData?.email || "admin@gmail.com";
+  
+  // Map or default the role label
+  const userRole = userData?.username === "Admin" ? "Administrator" : "User";
+  const shortName = username.split(" ")[0];
+  const initials = username.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -413,24 +427,24 @@ function AppHeaderInner() {
             <button className="flex items-center gap-2 hover:bg-muted/50 rounded-xl px-2 py-1 transition-colors">
               <Avatar className="w-7 h-7">
                 <AvatarImage src="" />
-                <AvatarFallback className="bg-brand-500 text-white text-xs font-bold">RS</AvatarFallback>
+                <AvatarFallback className="bg-brand-500 text-white text-xs font-bold">{initials}</AvatarFallback>
               </Avatar>
               <div className="hidden md:block text-left">
-                <p className="text-[12px] font-semibold text-foreground leading-tight">Rajesh S.</p>
-                <p className="text-[10px] text-muted-foreground leading-tight">Area Sales Manager</p>
+                <p className="text-[12px] font-semibold text-foreground leading-tight">{shortName}</p>
+                <p className="text-[10px] text-muted-foreground leading-tight">{userRole}</p>
               </div>
               <span className="hidden lg:inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold bg-brand-100 text-brand-700 border border-brand-200">
-                ASM
+                {initials}
               </span>
               <ChevronDown className="w-3 h-3 text-muted-foreground hidden md:block" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" sideOffset={8} className="w-56 rounded-modal">
             <div className="px-3 py-2.5">
-              <p className="text-sm font-semibold text-foreground">Rajesh Sharma</p>
-              <p className="text-xs text-muted-foreground">rajesh.sharma@dharitrisutra.com</p>
+              <p className="text-sm font-semibold text-foreground">{username}</p>
+              <p className="text-xs text-muted-foreground">{email}</p>
               <span className="inline-flex items-center mt-1.5 rounded-md px-2 py-0.5 text-[10px] font-semibold bg-brand-100 text-brand-700 border border-brand-200">
-                Area Sales Manager
+                {userRole}
               </span>
             </div>
             <DropdownMenuSeparator />
@@ -444,7 +458,10 @@ function AppHeaderInner() {
               <Shield className="w-3.5 h-3.5" /> Change Password
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-xs gap-2 cursor-pointer text-red-500 focus:text-red-500 focus:bg-red-50">
+            <DropdownMenuItem
+              onClick={() => AuthService.logout()}
+              className="text-xs gap-2 cursor-pointer text-red-500 focus:text-red-500 focus:bg-red-50"
+            >
               <LogOut className="w-3.5 h-3.5" /> Sign Out
             </DropdownMenuItem>
           </DropdownMenuContent>

@@ -3,6 +3,7 @@
 export interface GSTMaster {
   id: number;
   gstId: string;             // Auto Generated, e.g., "GST-0001"
+  gstCode?: string;          // Optional code field compatible with CustomerInfoDialog
   gstName: string;           // Text
   gstPercentage: number;     // Decimal
   gstType: "CGST" | "SGST" | "IGST" | "UTGST"; // Dropdown
@@ -18,6 +19,7 @@ const SEED_GST: GSTMaster[] = [
   {
     id: 1,
     gstId: "GST-0001",
+    gstCode: "GST-0001",
     gstName: "Zero GST CGST",
     gstPercentage: 0.0,
     gstType: "CGST",
@@ -31,6 +33,7 @@ const SEED_GST: GSTMaster[] = [
   {
     id: 2,
     gstId: "GST-0002",
+    gstCode: "GST-0002",
     gstName: "Essential SGST",
     gstPercentage: 2.5,
     gstType: "SGST",
@@ -44,6 +47,7 @@ const SEED_GST: GSTMaster[] = [
   {
     id: 3,
     gstId: "GST-0003",
+    gstCode: "GST-0003",
     gstName: "Standard IGST",
     gstPercentage: 18.0,
     gstType: "IGST",
@@ -62,7 +66,12 @@ export function loadGSTMasters(): GSTMaster[] {
   if (typeof window === "undefined") return SEED_GST;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : SEED_GST;
+    if (!raw) return SEED_GST;
+    const list = JSON.parse(raw);
+    return list.map((g: any) => ({
+      ...g,
+      gstCode: g.gstCode || g.gstId || `GST-${String(g.id).padStart(4, "0")}`
+    }));
   } catch {
     return SEED_GST;
   }

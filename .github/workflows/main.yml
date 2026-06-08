@@ -1,0 +1,29 @@
+---
+name: Frontend Deploy - pvb.uat.metaphi.in
+on:
+  push:
+    branches:
+      - main
+jobs:
+  deploy:
+    runs-on: self-hosted
+    env:
+      PATH: /root/.nvm/versions/node/v20.19.6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      PM2_HOME: /root/.pm2
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Verify node, npm and pm2
+        run: |
+          node -v
+          npm -v
+          pm2 -v
+      - name: Copy files to deployment directory
+        run: |
+          rsync -av --exclude='.git' \
+                    --exclude='node_modules' \
+                    --exclude='.env' \
+                    ./ /var/www/pvb.uat.metaphi.in/
+      - name: Install dependencies
+        working-directory: /var/www/pvb.uat.metaphi.in
+        run: npm i && npm run build

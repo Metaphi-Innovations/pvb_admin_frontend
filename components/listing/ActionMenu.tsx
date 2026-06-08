@@ -28,22 +28,28 @@ export function ActionMenu({ actions, row }: ActionMenuProps) {
           <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-40 z-[200]">
+      <DropdownMenuContent align="end" className="w-48 z-[200] rounded-xl p-1.5 border border-border bg-white shadow-md">
+        <div className="px-2.5 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+          Actions
+        </div>
+        <DropdownMenuSeparator className="my-1" />
         {actions.map((act, idx) => {
           const Icon = act.icon;
           const isDestructive = act.variant === "destructive";
 
           return (
             <React.Fragment key={idx}>
-              {idx > 0 && isDestructive && <DropdownMenuSeparator />}
+              {idx > 0 && isDestructive && <DropdownMenuSeparator className="my-1" />}
               <DropdownMenuItem
                 onClick={() => act.onClick?.(row)}
                 className={cn(
-                  "text-xs gap-2 cursor-pointer py-1.5 px-2.5 rounded-lg",
-                  isDestructive && "text-red-600 focus:text-red-600 focus:bg-red-50"
+                  "text-xs gap-2.5 cursor-pointer py-2 px-2.5 rounded-lg font-medium transition-colors",
+                  isDestructive
+                    ? "text-red-600 focus:text-red-700 focus:bg-red-50"
+                    : "text-foreground focus:bg-muted/50"
                 )}
               >
-                {Icon && <Icon className="w-3.5 h-3.5" />}
+                {Icon && <Icon className="w-4 h-4 text-muted-foreground/80" />}
                 <span>{act.label}</span>
               </DropdownMenuItem>
             </React.Fragment>

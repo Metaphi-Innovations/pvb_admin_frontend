@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Edit2, Eye, FileText, Link2, Package, UserCheck, UserX } from "lucide-react";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatMoney, loadProducts, saveProducts, type Product, type ProductStatus } from "../product-data";
@@ -154,74 +154,56 @@ export default function ProductDetailPage() {
 
   if (!product) {
     return (
-      <AppLayout>
-        <div className="py-16 text-center">
-          <p className="text-sm text-muted-foreground">Product not found.</p>
-          <Link href="/masters/products" className="text-xs text-brand-600 hover:underline mt-2 inline-block">
-            Back to listing
-          </Link>
-        </div>
-      </AppLayout>
+      <div className="py-16 text-center">
+        <p className="text-sm text-muted-foreground">Product not found.</p>
+        <Link href="/masters/products" className="text-xs text-brand-600 hover:underline mt-2 inline-block">
+          Back to listing
+        </Link>
+      </div>
     );
   }
 
   const statusCfg = STATUS_CFG[product.status];
 
   return (
-    <AppLayout>
-      <div className="max-w-[800px] mx-auto space-y-5">
-        {/* Header */}
-        <div className="flex items-start gap-4">
+    <FormContainer
+      title={product.productName}
+      description={`${product.productId} • ${product.category || "No category"} • ${product.sku || "No SKU"}`}
+      onBack={() => router.push("/masters/products")}
+      actions={
+        <div className="flex items-center gap-2">
+          <StatusPill status={product.status} />
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="h-8 px-2 -ml-2"
-            onClick={() => router.push("/masters/products")}
+            className="h-9 text-xs font-semibold rounded-lg gap-1.5"
+            onClick={() => updateStatus(product.status === "active" ? "inactive" : "active")}
           >
-            <ArrowLeft className="w-4 h-4" />
+            {product.status === "active" ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+            {product.status === "active" ? "Deactivate" : "Activate"}
           </Button>
-          <div className="flex-grow min-w-0">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center flex-shrink-0">
-                <Package className="w-5 h-5 text-brand-600" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-foreground truncate">{product.productName}</h1>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {product.productId} • {product.category || "No category"} • {product.sku || "No SKU"}
-                </p>
-              </div>
-              <StatusPill status={product.status} />
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              onClick={() => updateStatus(product.status === "active" ? "inactive" : "active")}
-            >
-              {product.status === "active" ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
-              {product.status === "active" ? "Deactivate" : "Activate"}
+          <Link href={`/masters/products/${product.id}/edit`}>
+            <Button size="sm" className="h-9 gap-1.5 bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700 rounded-lg">
+              <Edit2 className="w-3.5 h-3.5" /> Edit
             </Button>
-            <Link href={`/masters/products/${product.id}/edit`}>
-              <Button size="sm" className="h-8 gap-1.5 bg-brand-600 text-xs text-white hover:bg-brand-700">
-                <Edit2 className="w-3.5 h-3.5" /> Edit
-              </Button>
-            </Link>
-          </div>
+          </Link>
         </div>
-
+      }
+      noCard={true}
+    >
+      <div className="max-w-[800px] mx-auto space-y-5">
         {/* Details Cards */}
         <div className="grid grid-cols-2 gap-3">
           <DetailCard title="Product Details">
             <InfoRow label="Product ID" value={product.productId} mono />
             <InfoRow label="Product Name" value={product.productName} />
             <InfoRow label="Category" value={product.category} />
-            <InfoRow label="Sub Category" value={product.subCategory} />
             <InfoRow label="Segment" value={product.segment} />
             <InfoRow label="Formulation" value={product.formulation} />
             <InfoRow label="Unit" value={product.unit} />
+            <InfoRow label="Base Unit" value={product.baseUnit} />
+            <InfoRow label="Packaging Unit" value={product.packagingUnit} />
+            <InfoRow label="Conversion Quantity" value={product.conversionQuantity !== undefined ? String(product.conversionQuantity) : undefined} />
             <InfoRow label="Pack Size" value={product.packSize} />
           </DetailCard>
 
@@ -229,8 +211,6 @@ export default function ProductDetailPage() {
             <InfoRow label="HSN Code" value={product.hsnCode} mono />
             <InfoRow label="GST Rate" value={product.gstRate} />
             <InfoRow label="MRP" value={formatMoney(product.mrp)} />
-            <InfoRow label="Cost Price" value={formatMoney(product.costPrice)} />
-            <InfoRow label="Distributor Price" value={formatMoney(product.distributorPrice)} />
           </DetailCard>
 
           <DetailCard title="Commercial & Stock">
@@ -254,7 +234,7 @@ export default function ProductDetailPage() {
           </DetailCard>
         )}
       </div>
-    </AppLayout>
+    </FormContainer>
   );
 }
 

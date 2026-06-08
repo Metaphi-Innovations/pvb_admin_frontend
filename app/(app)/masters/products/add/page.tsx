@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CheckCircle2, Save, X, XCircle } from "lucide-react";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -80,54 +80,42 @@ export default function NewProductPage() {
   const uploadMedia = () => setMediaItems((prev) => prev.map((item) => (item.uploaded ? item : { ...item, uploaded: true })));
 
   return (
-    <AppLayout>
-      <div className="flex flex-col h-full">
-        <div className="sticky top-0 z-10 flex items-center flex-shrink-0 gap-3 px-5 py-3 bg-white border-b border-border">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="flex items-center justify-center flex-shrink-0 w-8 h-8 transition-colors border rounded-lg border-border hover:bg-muted"
-          >
-            <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-          </button>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold leading-none text-foreground">Add Product</h2>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Masters → Product Master → Add</p>
-          </div>
-          <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
+    <FormContainer
+      title="Add Product"
+      description="Masters → Product Master → Add"
+      onBack={() => router.back()}
+      actions={
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
             {productCode}
           </span>
-          <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => router.back()}>
+          <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
             Discard
           </Button>
           <Button
-            size="sm"
-            className="h-7 text-[11px] gap-1.5 px-3 bg-brand-600 text-white hover:bg-brand-700"
+            className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
           >
-            <Save className="w-3.5 h-3.5" /> Save
+            <Save className="w-4 h-4" /> Save
           </Button>
         </div>
-
-        {/* Form Content */}
-        <div className="flex-1 px-6 py-6 overflow-y-auto bg-muted/10">
-          <ProductForm
-            form={form}
-            onChange={setForm}
-            errors={errors}
-            onClearError={clearErr}
-            mediaItems={mediaItems}
-            onMediaAdd={addMedia}
-            onMediaRemove={removeMedia}
-            onMediaUpload={uploadMedia}
-          />
-        </div>
-      </div>
+      }
+    >
+      <ProductForm
+        form={form}
+        onChange={setForm}
+        errors={errors}
+        onClearError={clearErr}
+        mediaItems={mediaItems}
+        onMediaAdd={addMedia}
+        onMediaRemove={removeMedia}
+        onMediaUpload={uploadMedia}
+      />
 
       {toast && (
         <div
           className={cn(
-            "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+            "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
             toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
           )}
         >
@@ -135,6 +123,6 @@ export default function NewProductPage() {
           {toast.msg}
         </div>
       )}
-    </AppLayout>
+    </FormContainer>
   );
 }

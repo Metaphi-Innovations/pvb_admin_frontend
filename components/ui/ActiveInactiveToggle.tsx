@@ -24,7 +24,10 @@ export function CompactToggle({
       role="switch"
       aria-checked={checked}
       disabled={disabled}
-      onClick={() => !disabled && onCheckedChange(!checked)}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!disabled) onCheckedChange(!checked);
+      }}
       className={cn(
         "relative inline-flex h-6 w-[52px] shrink-0 items-center rounded-full transition-colors duration-200",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/50",

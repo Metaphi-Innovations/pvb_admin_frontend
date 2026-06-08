@@ -5,8 +5,6 @@ export interface UOMMaster {
   uomId: string;           // Auto Generated, e.g. "UOM-0001"
   unitName: string;        // e.g. "Kilogram"
   shortName: string;       // e.g. "KG"
-  decimalAllowed: boolean; // Checkbox
-  baseUnit: boolean;       // Checkbox
   status: "active" | "inactive";
   createdBy: string;
   createdDate: string;
@@ -19,57 +17,57 @@ export function todayStr(): string {
 }
 
 const STORAGE_KEY = "ds_uom_masters";
-const SEED_VERSION = 2; // Incremented version to force migration
+const SEED_VERSION = 3; // Incremented version to force migration
 
 const SEED: UOMMaster[] = [
   {
     id: 1, uomId: "UOM-0001", unitName: "Kilogram", shortName: "KG",
-    decimalAllowed: true, baseUnit: true, status: "active",
+    status: "active",
     createdBy: "Admin", createdDate: "2026-01-01", updatedBy: "Admin", updatedDate: "2026-01-01"
   },
   {
     id: 2, uomId: "UOM-0002", unitName: "Gram", shortName: "GM",
-    decimalAllowed: true, baseUnit: false, status: "active",
+    status: "active",
     createdBy: "Admin", createdDate: "2026-01-01", updatedBy: "Admin", updatedDate: "2026-01-01"
   },
   {
     id: 3, uomId: "UOM-0003", unitName: "Litre", shortName: "LTR",
-    decimalAllowed: true, baseUnit: true, status: "active",
+    status: "active",
     createdBy: "Admin", createdDate: "2026-01-01", updatedBy: "Admin", updatedDate: "2026-01-01"
   },
   {
     id: 4, uomId: "UOM-0004", unitName: "Millilitre", shortName: "ML",
-    decimalAllowed: true, baseUnit: false, status: "active",
+    status: "active",
     createdBy: "Admin", createdDate: "2026-01-01", updatedBy: "Admin", updatedDate: "2026-01-01"
   },
   {
     id: 5, uomId: "UOM-0005", unitName: "Packet", shortName: "PKT",
-    decimalAllowed: false, baseUnit: true, status: "active",
+    status: "active",
     createdBy: "Admin", createdDate: "2026-01-01", updatedBy: "Admin", updatedDate: "2026-01-01"
   },
   {
     id: 6, uomId: "UOM-0006", unitName: "Bottle", shortName: "BTL",
-    decimalAllowed: false, baseUnit: true, status: "active",
+    status: "active",
     createdBy: "Admin", createdDate: "2026-01-01", updatedBy: "Admin", updatedDate: "2026-01-01"
   },
   {
     id: 7, uomId: "UOM-0007", unitName: "Box", shortName: "BOX",
-    decimalAllowed: false, baseUnit: false, status: "active",
+    status: "active",
     createdBy: "Admin", createdDate: "2026-01-01", updatedBy: "Admin", updatedDate: "2026-01-01"
   },
   {
     id: 8, uomId: "UOM-0008", unitName: "Drum", shortName: "DRM",
-    decimalAllowed: false, baseUnit: false, status: "active",
+    status: "active",
     createdBy: "Admin", createdDate: "2026-01-01", updatedBy: "Admin", updatedDate: "2026-01-01"
   },
   {
     id: 9, uomId: "UOM-0009", unitName: "Ton", shortName: "TON",
-    decimalAllowed: true, baseUnit: false, status: "active",
+    status: "active",
     createdBy: "Admin", createdDate: "2026-01-01", updatedBy: "Admin", updatedDate: "2026-01-01"
   },
   {
     id: 10, uomId: "UOM-0010", unitName: "Piece", shortName: "PCS",
-    decimalAllowed: false, baseUnit: true, status: "active",
+    status: "active",
     createdBy: "Admin", createdDate: "2026-01-01", updatedBy: "Admin", updatedDate: "2026-01-01"
   }
 ];
