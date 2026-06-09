@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1033,33 +1034,30 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
   const inp = (key: string) => cn("h-8 text-xs", errors[key] && "border-red-400");
 
   return (
-    <div className="flex flex-col" style={{ minHeight: "calc(100vh - 104px)" }}>
-
-      {/* ── Sticky header ──────────────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-10 bg-white border-b border-border px-4 py-2 flex items-center gap-2.5">
-        <button onClick={onCancel} className="p-1 hover:bg-muted rounded transition-colors">
-          <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-        </button>
-        <div className="flex-1 min-w-0">
-          <h2 className="text-sm font-semibold leading-none">{mode === "add" ? "Add User" : "Edit User"}</h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            User Management → User → {mode === "add" ? "Create" : "Update"}
-          </p>
+    <FormContainer
+      title={mode === "add" ? "Add User" : "Edit User"}
+      description={`User Management → User → ${mode === "add" ? "Create" : "Update"}`}
+      onBack={onCancel}
+      onCancel={onCancel}
+      cancelLabel="Discard"
+      noCard={true}
+      actions={
+        <div className="flex items-center gap-2">
+          <span className={cn(
+            "text-[11px] font-mono font-semibold px-2 py-0.5 rounded",
+            mode === "add" ? "bg-muted/40 text-muted-foreground" : "bg-brand-50 text-brand-700"
+          )}>
+            {mode === "add" ? `ID: ${newEmpId}` : employee?.employeeId}
+          </span>
+          <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" onClick={handleSave}>
+            <Save className="w-3.5 h-3.5" /> Save
+          </Button>
         </div>
-        <span className={cn(
-          "text-[11px] font-mono font-semibold px-2 py-0.5 rounded",
-          mode === "add" ? "bg-muted/40 text-muted-foreground" : "bg-brand-50 text-brand-700"
-        )}>
-          {mode === "add" ? `ID: ${newEmpId}` : employee?.employeeId}
-        </span>
-        <Button variant="outline" size="sm" className="h-7 text-xs px-3" onClick={onCancel}>Discard</Button>
-        <Button size="sm" className="h-7 text-xs px-3 gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" onClick={handleSave}>
-          <Save className="w-3 h-3" /> Save
-        </Button>
-      </div>
-
-      {/* ── Tabs ───────────────────────────────────────────────────────────────── */}
-      <div className="flex-1 px-5 py-4">
+      }
+    >
+      <div className="flex flex-col" style={{ minHeight: "calc(100vh - 104px)" }}>
+        {/* ── Tabs ───────────────────────────────────────────────────────────────── */}
+        <div className="flex-1 px-5 py-4">
         <Tabs defaultValue="personal" className="w-full">
           <TabsList className="h-8 p-0.5 bg-muted/30 mb-4 inline-flex gap-0.5">
             <TabsTrigger value="personal" className="text-xs h-7 px-4">Personal Details</TabsTrigger>
@@ -1497,7 +1495,8 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
           </TabsContent>
 
         </Tabs>
+        </div>
       </div>
-    </div>
+    </FormContainer>
   );
 }

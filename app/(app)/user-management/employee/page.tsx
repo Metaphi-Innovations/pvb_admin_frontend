@@ -1,29 +1,26 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import {
-  Popover, PopoverContent, PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  Plus, Download, Search, MoreVertical, Eye, Edit2, Trash2,
-  Users, CheckCircle2, XCircle, X, AlertTriangle,
-  SlidersHorizontal, ChevronDown, ChevronsUpDown, Key,
+  Plus, Download, MoreVertical, Eye, Edit2, Trash2,
+  Users, CheckCircle2, XCircle, X, AlertTriangle, Key,
+  Calendar, Clock, MoreHorizontal,
 } from "lucide-react";
 import {
   type Employee,
@@ -32,8 +29,12 @@ import {
   EMPLOYEE_TYPES,
 } from "./employee-data";
 
-// ── Import Department and Role masters ────────────────────────────────────────
-// TODO: Load these from actual masters when available
+// Listing Container and Master Listing Imports
+import { ListingContainer } from "@/components/layout/ListingContainer";
+import { MasterListing } from "@/components/listing/MasterListing";
+import { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
+
+// ── Seed / Temp Master Data ──────────────────────────────────────────────────
 const DEPARTMENTS = [
   { id: 1, name: "Sales" },
   { id: 2, name: "HR" },
@@ -188,7 +189,7 @@ function PasswordResetModal({
               value={state.newPassword}
               onChange={e => onChange("newPassword", e.target.value)}
               placeholder="Enter new password (min 8 chars)"
-              className="h-9 text-sm"
+              className="h-9 text-sm w-full border border-input rounded-md px-3"
             />
             {state.errors.newPassword && (
               <p className="text-xs text-red-500">{state.errors.newPassword}</p>
@@ -201,7 +202,7 @@ function PasswordResetModal({
               value={state.confirmPassword}
               onChange={e => onChange("confirmPassword", e.target.value)}
               placeholder="Re-enter password"
-              className="h-9 text-sm"
+              className="h-9 text-sm w-full border border-input rounded-md px-3"
             />
             {state.errors.confirmPassword && (
               <p className="text-xs text-red-500">{state.errors.confirmPassword}</p>
@@ -238,47 +239,17 @@ function PasswordResetModal({
   );
 }
 
-// ── Sortable Table Header ─────────────────────────────────────────────────────
-type SortKey = "employeeId" | "fullName" | "mobile" | "department" | "role" | "status";
-
-function SortTh({
-  label, col, sortKey, sortDir, onSort, className,
-}: {
-  label: string; col: SortKey; sortKey: SortKey; sortDir: "asc" | "desc";
-  onSort: (col: SortKey) => void; className?: string;
-}) {
-  const active = sortKey === col;
-  return (
-    <th
-      onClick={() => onSort(col)}
-      className={cn(
-        "px-4 py-3 text-left text-xs font-semibold cursor-pointer select-none group whitespace-nowrap",
-        active && "bg-brand-50/60",
-        className,
-      )}>
-      <div className="flex items-center gap-1.5">
-        <span className={active ? "text-brand-700" : "text-foreground"}>{label}</span>
-        {active
-          ? <ChevronDown className={cn("w-3 h-3 text-brand-600 transition-transform", sortDir === "desc" && "rotate-180")} />
-          : <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />}
-      </div>
-    </th>
-  );
-}
-
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function EmployeeListingPage() {
   const router = useRouter();
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [search, setSearch] = useState("");
-  const [filterDepartment, setFilterDepartment] = useState<number[]>([]);
-  const [filterRole, setFilterRole] = useState<number[]>([]);
-  const [filterStatus, setFilterStatus] = useState<string[]>([]);
-  const [filterTerritory, setFilterTerritory] = useState<string[]>([]);
-  const [filterEmployeeType, setFilterEmployeeType] = useState<string[]>([]);
-  const [sortKey, setSortKey] = useState<SortKey>("employeeId");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  // Listing State
+  const [filters, setFilters] = useState<FilterState>({});
+  const [sort, setSort] = useState<SortState>({ key: "employeeId", direction: "asc" });
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   const [toast, setToast] = useState<ToastState | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<{ type: string; employee: Employee } | null>(null);
   const [passwordReset, setPasswordReset] = useState<PasswordResetState>({
@@ -310,8 +281,9 @@ export default function EmployeeListingPage() {
       if (e.status === "archived") return false;
 
       // Search
-      if (search) {
-        const q = search.toLowerCase();
+      const searchVal = filters.search as string;
+      if (searchVal) {
+        const q = searchVal.toLowerCase();
         const matchSearch = [
           e.employeeId,
           e.fullName,
@@ -321,43 +293,57 @@ export default function EmployeeListingPage() {
         if (!matchSearch) return false;
       }
 
-      // Filters
-      if (filterDepartment.length > 0 && !filterDepartment.includes(e.departmentId || 0)) return false;
-      if (filterRole.length > 0 && !filterRole.includes(e.roleId || 0)) return false;
-      if (filterStatus.length > 0 && !filterStatus.includes(e.status)) return false;
-      if (filterTerritory.length > 0 && !filterTerritory.includes(e.territory || "")) return false;
-      if (filterEmployeeType.length > 0 && !filterEmployeeType.includes(e.employeeType || "")) return false;
+      // Department filter
+      const deptIds = (filters.departmentId as string[])?.map(Number) || [];
+      if (deptIds.length > 0 && !deptIds.includes(e.departmentId || 0)) return false;
+
+      // Role filter
+      const roleIds = (filters.roleId as string[])?.map(Number) || [];
+      if (roleIds.length > 0 && !roleIds.includes(e.roleId || 0)) return false;
+
+      // Status filter
+      const statusList = filters.status as string[];
+      if (statusList && statusList.length > 0 && !statusList.includes(e.status)) return false;
+
+      // Territory filter
+      const territoryList = filters.territory as string[];
+      if (territoryList && territoryList.length > 0 && !territoryList.includes(e.territory || "")) return false;
+
+      // Employee Type filter
+      const typeList = filters.employeeType as string[];
+      if (typeList && typeList.length > 0 && !typeList.includes(e.employeeType || "")) return false;
 
       return true;
     });
 
     // Sort
-    result.sort((a, b) => {
-      let aVal: any = a[sortKey];
-      let bVal: any = b[sortKey];
-      if (aVal === undefined) aVal = "";
-      if (bVal === undefined) bVal = "";
+    if (sort.key && sort.direction !== "none") {
+      result = [...result].sort((a, b) => {
+        let aVal: any = a[sort.key as keyof Employee];
+        let bVal: any = b[sort.key as keyof Employee];
+        if (aVal === undefined) aVal = "";
+        if (bVal === undefined) bVal = "";
 
-      if (typeof aVal === "string") {
-        aVal = aVal.toLowerCase();
-        bVal = (bVal as string).toLowerCase();
-      }
+        if (typeof aVal === "string") {
+          aVal = aVal.toLowerCase();
+          bVal = (bVal as string).toLowerCase();
+        }
 
-      if (aVal < bVal) return sortDir === "asc" ? -1 : 1;
-      if (aVal > bVal) return sortDir === "asc" ? 1 : -1;
-      return 0;
-    });
+        if (aVal < bVal) return sort.direction === "asc" ? -1 : 1;
+        if (aVal > bVal) return sort.direction === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
 
     return result;
-  }, [employees, search, filterDepartment, filterRole, filterStatus, filterTerritory, filterEmployeeType, sortKey, sortDir]);
+  }, [employees, filters, sort]);
 
-  // Pagination
-  const perPage = 10;
-  const totalPages = Math.ceil(filtered.length / perPage);
-  const start = (page - 1) * perPage;
-  const visibleEmployees = filtered.slice(start, start + perPage);
+  const paginated = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
 
-  // KPI cards
+  // KPI cards stats
   const stats = useMemo(() => {
     const all = employees.filter(e => e.status !== "archived");
     return {
@@ -368,35 +354,7 @@ export default function EmployeeListingPage() {
     };
   }, [employees]);
 
-  const handleSort = (col: SortKey) => {
-    if (sortKey === col) {
-      setSortDir(d => d === "asc" ? "desc" : "asc");
-    } else {
-      setSortKey(col);
-      setSortDir("asc");
-    }
-  };
-
-  const toggleFilter = (value: any, setter: (v: any[]) => void, current: any[]) => {
-    if (current.includes(value)) {
-      setter(current.filter(v => v !== value));
-    } else {
-      setter([...current, value]);
-    }
-  };
-
-  const clearAllFilters = () => {
-    setFilterDepartment([]);
-    setFilterRole([]);
-    setFilterStatus([]);
-    setFilterTerritory([]);
-    setFilterEmployeeType([]);
-    setSearch("");
-    setPage(1);
-  };
-
   const handleStatusToggle = (emp: Employee) => {
-    const newStatus = emp.status === "active" ? "inactive" : "active";
     setConfirmTarget({ type: "status", employee: emp });
   };
 
@@ -480,36 +438,134 @@ export default function EmployeeListingPage() {
     setToast({ msg: `Exported ${filtered.length} employees`, type: "success" });
   };
 
-  const hasActiveFilters = filterDepartment.length > 0 || filterRole.length > 0 || filterStatus.length > 0
-    || filterTerritory.length > 0 || filterEmployeeType.length > 0 || search;
+  const columns: ColumnConfig<Employee>[] = [
+    {
+      key: "employeeId",
+      header: "User ID",
+      sortable: true,
+      render: (val, row) => (
+        <span className="font-mono font-semibold text-brand-700">{row.employeeId}</span>
+      ),
+    },
+    {
+      key: "fullName",
+      header: "Name",
+      sortable: true,
+      render: (val, row) => (
+        <div>
+          <p className="font-semibold truncate text-foreground">{row.fullName}</p>
+          <p className="text-[11px] text-muted-foreground truncate">{row.email}</p>
+        </div>
+      ),
+    },
+    {
+      key: "mobile",
+      header: "Mobile",
+      render: (val, row) => (
+        <span className="text-xs text-foreground">{row.mobile}</span>
+      ),
+    },
+    {
+      key: "departmentId",
+      header: "Department",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: DEPARTMENTS.map(d => ({ label: d.name, value: String(d.id) })),
+      render: (val, row) => (
+        <span className="text-xs text-foreground">{row.department}</span>
+      ),
+    },
+    {
+      key: "roleId",
+      header: "Role",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: ROLES.map(r => ({ label: r.name, value: String(r.id) })),
+      render: (val, row) => (
+        <span className="text-xs text-foreground">{row.role}</span>
+      ),
+    },
+    {
+      key: "territory",
+      header: "Territory",
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: TERRITORIES.map(t => ({ label: t, value: t })),
+      render: (val, row) => (
+        <span className="text-xs text-foreground">{row.territory}</span>
+      ),
+    },
+    {
+      key: "employeeType",
+      header: "Employee Type",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: EMPLOYEE_TYPES.map(t => ({ label: t, value: t })),
+      render: (val, row) => (
+        <span className="text-xs text-foreground">{row.employeeType || "—"}</span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: [
+        { label: "Active", value: "active" },
+        { label: "Inactive", value: "inactive" },
+        { label: "Draft", value: "draft" },
+      ],
+      render: (val, row) => <StatusPill status={row.status} />,
+    },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      sticky: true,
+      render: (val, row) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="p-1.5 hover:bg-muted rounded-md transition-colors">
+              <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44 z-[200]">
+            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
+              Actions
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => router.push(`/user-management/employee/${row.id}`)} className="cursor-pointer">
+              <Eye className="w-3.5 h-3.5 mr-2" /> View
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push(`/user-management/employee/${row.id}/edit`)} className="cursor-pointer">
+              <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => handleStatusToggle(row)} className="cursor-pointer">
+              {row.status === "active" ? "Deactivate" : "Activate"}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handlePasswordReset(row)} className="cursor-pointer">
+              <Key className="w-3.5 h-3.5 mr-2" /> Reset Password
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => handleDelete(row)} className="cursor-pointer text-red-600 focus:bg-red-50 focus:text-red-600">
+              <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ];
 
   return (
-    <AppLayout>
-      <div className="space-y-5">
-        {/* ── Header ──────────────────────────────────────────────────────────────────── */}
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-foreground">User</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Manage organizational users</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              onClick={handleExport}>
-              <Download className="w-3.5 h-3.5" /> Export
-            </Button>
-            <Button
-              size="sm"
-              className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-              onClick={() => router.push("/user-management/employee/add")}>
-              <Plus className="w-3.5 h-3.5" /> Add User
-            </Button>
-          </div>
-        </div>
-
-        {/* ── KPI Cards ───────────────────────────────────────────────────────────────── */}
+    <ListingContainer
+      title="User"
+      titleIcon={Users}
+      metrics={
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center flex-shrink-0">
@@ -539,328 +595,30 @@ export default function EmployeeListingPage() {
             </div>
           </div>
         </div>
-
-        {/* ── Toolbar ─────────────────────────────────────────────────────────────────── */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 p-3 rounded-xl border border-border bg-white">
-            <Search className="w-4 h-4 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search by User ID, Name, Mobile, or Email…"
-              value={search}
-              onChange={e => { setSearch(e.target.value); setPage(1); }}
-              className="flex-1 border-0 h-8 text-sm bg-transparent focus-visible:ring-0 placeholder:text-muted-foreground"
-            />
-
-            {/* Filter Popover */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <button className={cn(
-                  "h-8 px-2.5 text-xs border rounded-lg inline-flex items-center gap-1.5 font-medium transition-colors",
-                  hasActiveFilters
-                    ? "border-brand-400 bg-brand-50 text-brand-700"
-                    : "border-border text-muted-foreground hover:bg-muted",
-                )}>
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
-                  Filter
-                  {hasActiveFilters && (
-                    <span className="w-4 h-4 text-[10px] bg-brand-600 text-white rounded-full inline-flex items-center justify-center font-bold">
-                      {(filterDepartment.length || 0) + (filterRole.length || 0) + (filterStatus.length || 0) + (filterTerritory.length || 0) + (filterEmployeeType.length || 0)}
-                    </span>
-                  )}
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="w-56 p-0">
-                <div className="space-y-3 p-3">
-                  {/* Department filter */}
-                  <div>
-                    <p className="text-xs font-semibold text-foreground mb-2">Department</p>
-                    <div className="space-y-1.5">
-                      {DEPARTMENTS.map(d => (
-                        <label key={d.id} className="flex items-center gap-2.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 rounded accent-brand-600"
-                            checked={filterDepartment.includes(d.id)}
-                            onChange={() => toggleFilter(d.id, setFilterDepartment, filterDepartment)}
-                          />
-                          <span className="text-xs text-foreground">{d.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Role filter */}
-                  <div className="border-t border-border pt-3">
-                    <p className="text-xs font-semibold text-foreground mb-2">Role</p>
-                    <div className="space-y-1.5">
-                      {ROLES.map(r => (
-                        <label key={r.id} className="flex items-center gap-2.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 rounded accent-brand-600"
-                            checked={filterRole.includes(r.id)}
-                            onChange={() => toggleFilter(r.id, setFilterRole, filterRole)}
-                          />
-                          <span className="text-xs text-foreground">{r.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Status filter */}
-                  <div className="border-t border-border pt-3">
-                    <p className="text-xs font-semibold text-foreground mb-2">Status</p>
-                    <div className="space-y-1.5">
-                      {["active", "inactive", "draft"].map(s => (
-                        <label key={s} className="flex items-center gap-2.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 rounded accent-brand-600"
-                            checked={filterStatus.includes(s)}
-                            onChange={() => toggleFilter(s, setFilterStatus, filterStatus)}
-                          />
-                          <span className="text-xs text-foreground capitalize">{s}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Territory filter */}
-                  <div className="border-t border-border pt-3">
-                    <p className="text-xs font-semibold text-foreground mb-2">Territory</p>
-                    <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                      {TERRITORIES.map(t => (
-                        <label key={t} className="flex items-center gap-2.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 rounded accent-brand-600"
-                            checked={filterTerritory.includes(t)}
-                            onChange={() => toggleFilter(t, setFilterTerritory, filterTerritory)}
-                          />
-                          <span className="text-xs text-foreground">{t}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* User Type filter */}
-                  <div className="border-t border-border pt-3">
-                    <p className="text-xs font-semibold text-foreground mb-2">User Type</p>
-                    <div className="space-y-1.5">
-                      {EMPLOYEE_TYPES.map(et => (
-                        <label key={et} className="flex items-center gap-2.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 rounded accent-brand-600"
-                            checked={filterEmployeeType.includes(et)}
-                            onChange={() => toggleFilter(et, setFilterEmployeeType, filterEmployeeType)}
-                          />
-                          <span className="text-xs text-foreground">{et}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {hasActiveFilters && (
-                    <div className="border-t border-border pt-2">
-                      <button
-                        onClick={clearAllFilters}
-                        className="text-xs text-brand-600 hover:underline font-medium">
-                        Clear all filters
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          {/* Active filter chips */}
-          {hasActiveFilters && (
-            <div className="flex items-center flex-wrap gap-2">
-              {search && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium">
-                  📝 {search}
-                  <button onClick={() => { setSearch(""); setPage(1); }}><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              {filterDepartment.map(deptId => {
-                const dept = DEPARTMENTS.find(d => d.id === deptId);
-                return (
-                  <span key={`dept-${deptId}`} className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium">
-                    {dept?.name}
-                    <button onClick={() => setFilterDepartment(filterDepartment.filter(d => d !== deptId))}><X className="w-3 h-3" /></button>
-                  </span>
-                );
-              })}
-              {filterRole.map(roleId => {
-                const role = ROLES.find(r => r.id === roleId);
-                return (
-                  <span key={`role-${roleId}`} className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium">
-                    {role?.name}
-                    <button onClick={() => setFilterRole(filterRole.filter(r => r !== roleId))}><X className="w-3 h-3" /></button>
-                  </span>
-                );
-              })}
-              {filterStatus.map(s => (
-                <span key={`status-${s}`} className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium">
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
-                  <button onClick={() => setFilterStatus(filterStatus.filter(st => st !== s))}><X className="w-3 h-3" /></button>
-                </span>
-              ))}
-              {filterTerritory.map(t => (
-                <span key={`territory-${t}`} className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium">
-                  {t}
-                  <button onClick={() => setFilterTerritory(filterTerritory.filter(ter => ter !== t))}><X className="w-3 h-3" /></button>
-                </span>
-              ))}
-              {filterEmployeeType.map(et => (
-                <span key={`type-${et}`} className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium">
-                  {et}
-                  <button onClick={() => setFilterEmployeeType(filterEmployeeType.filter(e => e !== et))}><X className="w-3 h-3" /></button>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* ── Table ───────────────────────────────────────────────────────────────────── */}
-        <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/40 border-b border-border">
-                  <SortTh label="User ID" col="employeeId" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="flex-[1.2]" />
-                  <SortTh label="Name" col="fullName" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="flex-[1.4]" />
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap flex-1">Mobile</th>
-                  <SortTh label="Department" col="department" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="flex-1" />
-                  <SortTh label="Role" col="role" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="flex-[1.2]" />
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap flex-1">Territory</th>
-                  <SortTh label="Status" col="status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="flex-1" />
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap flex-0.8">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleEmployees.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-16 text-center">
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                          <Users className="w-5 h-5 text-muted-foreground" />
-                        </div>
-                        <p className="text-sm font-medium text-foreground">
-                          {filtered.length === 0 && search || hasActiveFilters ? "No employees match your filters" : "No employees yet"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {filtered.length === 0 && search || hasActiveFilters ? "Try adjusting your search or filters" : "Start by adding your first employee"}
-                        </p>
-                        {(filtered.length === 0 && !search && !hasActiveFilters) && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs mt-2"
-                            onClick={() => router.push("/user-management/employee/add")}>
-                            <Plus className="w-3.5 h-3.5 mr-1" /> Add User
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  visibleEmployees.map(emp => (
-                    <tr key={emp.id} className="border-b border-border/60 hover:bg-muted/20 transition-colors group">
-                      <td className="px-4 py-2 text-xs font-mono font-semibold text-brand-700 whitespace-nowrap flex-[1.2]">{emp.employeeId}</td>
-                      <td className="px-4 py-2 text-xs text-foreground flex-[1.4] min-w-0">
-                        <div>
-                          <p className="font-semibold truncate">{emp.fullName}</p>
-                          <p className="text-[11px] text-muted-foreground truncate">{emp.email}</p>
-                        </div>
-                      </td>
-                      <td className="px-4 py-2 text-xs text-foreground whitespace-nowrap flex-1">{emp.mobile}</td>
-                      <td className="px-4 py-2 text-xs text-foreground whitespace-nowrap flex-1">{emp.department}</td>
-                      <td className="px-4 py-2 text-xs text-foreground whitespace-nowrap flex-[1.2]">{emp.role}</td>
-                      <td className="px-4 py-2 text-xs text-foreground whitespace-nowrap flex-1">{emp.territory}</td>
-                      <td className="px-4 py-2 text-xs whitespace-nowrap flex-1"><StatusPill status={emp.status} /></td>
-                      <td className="px-4 py-2 text-xs whitespace-nowrap flex-0.8">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto">
-                              <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-44">
-                            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
-                              Actions
-                            </DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <button
-                              onClick={() => router.push(`/user-management/employee/${emp.id}`)}
-                              className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted rounded-sm transition-colors">
-                              <Eye className="w-3.5 h-3.5" /> View
-                            </button>
-                            <button
-                              onClick={() => router.push(`/user-management/employee/${emp.id}/edit`)}
-                              className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted rounded-sm transition-colors">
-                              <Edit2 className="w-3.5 h-3.5" /> Edit
-                            </button>
-                            <DropdownMenuSeparator />
-                            <button
-                              onClick={() => handleStatusToggle(emp)}
-                              className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted rounded-sm transition-colors">
-                              {emp.status === "active" ? "Deactivate" : "Activate"}
-                            </button>
-                            <button
-                              onClick={() => handlePasswordReset(emp)}
-                              className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted rounded-sm transition-colors">
-                              <Key className="w-3.5 h-3.5" /> Reset Password
-                            </button>
-                            <DropdownMenuSeparator />
-                            <button
-                              onClick={() => handleDelete(emp)}
-                              className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-sm transition-colors">
-                              <Trash2 className="w-3.5 h-3.5" /> Delete
-                            </button>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Table Footer */}
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/20">
-            <p className="text-[11px] text-muted-foreground">
-              Showing <span className="font-medium text-foreground">{Math.min(start + perPage, filtered.length)}</span> of{" "}
-              <span className="font-medium text-foreground">{filtered.length}</span> records
-            </p>
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 px-3 text-xs"
-                disabled={page === 1}
-                onClick={() => setPage(p => Math.max(1, p - 1))}>
-                ← Previous
-              </Button>
-              <span className="text-xs text-muted-foreground">Page {page} of {totalPages}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 px-3 text-xs"
-                disabled={page === totalPages}
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}>
-                Next →
-              </Button>
-            </div>
-          </div>
-        </div>
+      }
+    >
+      <div>
+        <MasterListing<Employee>
+          columns={columns}
+          data={paginated}
+          totalRecords={filtered.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          onSortChange={setSort}
+          onFilterChange={setFilters}
+          emptyMessage="users"
+          searchPlaceholder="Search by User ID, Name, Mobile, or Email…"
+          onAdd={() => router.push("/user-management/employee/add")}
+          addLabel="Add User"
+          onExport={handleExport}
+          currentFilters={filters}
+          currentSort={sort}
+        />
       </div>
 
-      {/* ── Dialogs ──────────────────────────────────────────────────────────────────── */}
+      {/* ── Dialogs ── */}
       <ConfirmDialog
         open={confirmTarget?.type === "status"}
         onClose={() => setConfirmTarget(null)}
@@ -887,8 +645,7 @@ export default function EmployeeListingPage() {
         onClose={() => setPasswordReset({ ...passwordReset, open: false })}
       />
 
-      {/* Toast */}
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-    </AppLayout>
+    </ListingContainer>
   );
 }

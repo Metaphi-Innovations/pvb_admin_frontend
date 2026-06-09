@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Check, ChevronsUpDown, AlertCircle, Search, Info } from "lucide-react";
 import type { Customer } from "@/app/(app)/masters/customers/customer-data";
 import type { Employee } from "@/app/(app)/user-management/employee/employee-data";
+import { loadWarehouses, type WarehouseMaster } from "@/app/(app)/masters/warehouse/warehouse-data";
 import ProductLinesEditor from "./ProductLinesEditor";
 import CustomerInfoDialog from "./CustomerInfoDialog";
 import {
@@ -33,6 +34,8 @@ export interface SalesOrderFormValues {
   deliveryDate: string;
   status: OrderStatus;
   lineItems: SalesOrderLineItem[];
+  warehouseId?: number | null;
+  warehouseName?: string;
 }
 
 function SearchableDropdown<T extends { id: number }>({
@@ -199,6 +202,7 @@ export function validateSalesOrderForm(form: SalesOrderFormValues): Record<strin
   const e: Record<string, string> = {};
   if (!form.customerId) e.customerId = "Customer is required";
   if (!form.salesManId) e.salesManId = "Salesman is required";
+  if (!form.warehouseId) e.warehouseId = "Warehouse is required";
   if (!form.orderDate) e.orderDate = "Order date is required";
   if (!form.deliveryDate) e.deliveryDate = "Delivery date is required";
   if (form.lineItems.length === 0) e.lineItems = "Add at least one product";
@@ -323,6 +327,10 @@ export default function SalesOrderForm({
 }: SalesOrderFormProps) {
   const [customerInfoOpen, setCustomerInfoOpen] = useState(false);
 
+  const warehouses = useMemo(() => {
+    return loadWarehouses().filter(w => w.status === "active");
+  }, []);
+
   const set = <K extends keyof SalesOrderFormValues>(key: K, val: SalesOrderFormValues[K]) =>
     onChange({ ...form, [key]: val });
 
@@ -410,6 +418,19 @@ export default function SalesOrderForm({
               placeholder="Select salesman…"
               error={errors.salesManId}
               getLabel={s => `${s.employeeId} — ${s.fullName}`}
+            />
+          </div>
+
+          <div className="space-y-1 md:col-span-2">
+            <SearchableDropdown<WarehouseMaster>
+              label="Source Warehouse"
+              required
+              value={form.warehouseId ?? null}
+              onChange={id => set("warehouseId", id)}
+              options={warehouses}
+              placeholder="Select warehouse…"
+              error={errors.warehouseId}
+              getLabel={w => `${w.warehouseCode} — ${w.warehouseName}`}
             />
           </div>
 
