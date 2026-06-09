@@ -227,7 +227,10 @@ export default function WarehouseListPage() {
       filterType: "dropdown",
       filterOptions: OPERATED_BY_OPTIONS.map(v => ({ label: v, value: v })),
       width: "110px",
-      render: (val, row) => row.operatedBy || "—",
+      render: (val, row) =>
+        row.operatedBy === "C&F Agent" && row.customerType
+          ? `C&F Agent (${row.customerType})`
+          : (row.operatedBy || "—"),
     },
     {
       key: "status",
