@@ -1,9 +1,9 @@
-﻿"use client";
+"use client";
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -346,35 +346,15 @@ export default function AddUserPage() {
     : ROLES;
 
   return (
-    <AppLayout noPadding>
-      <div className="flex flex-col h-full">
-
-        {/* ── Sticky Header ── */}
-        <div className="sticky top-0 z-10 bg-white border-b border-border px-5 py-3 flex items-center gap-3 flex-shrink-0">
-          <button
-            onClick={() => router.push("/user-management/user")}
-            className="w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
-          >
-            <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-          </button>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-0.5">
-              <span>User Management</span>
-              <span>/</span>
-              <span>User</span>
-              <span>/</span>
-              <span className="text-foreground font-medium">Add User</span>
-            </div>
-            <h2 className="text-sm font-semibold text-foreground leading-none">Add New User</h2>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => router.push("/user-management/user")}
-          >
-            Discard
-          </Button>
+    <FormContainer
+      title="Add New User"
+      description="User Management → User → Add User"
+      onBack={() => router.push("/user-management/user")}
+      onCancel={() => router.push("/user-management/user")}
+      cancelLabel="Discard"
+      noCard={true}
+      actions={
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -391,7 +371,9 @@ export default function AddUserPage() {
             <Save className="w-3.5 h-3.5" /> Save &amp; Publish
           </Button>
         </div>
-
+      }
+    >
+      <div className="flex flex-col" style={{ height: "calc(100vh - 104px)" }}>
         {/* ── Body ── */}
         <div className="flex flex-1 overflow-hidden">
 
@@ -793,6 +775,6 @@ export default function AddUserPage() {
 
         </div>
       </div>
-    </AppLayout>
+    </FormContainer>
   );
 }

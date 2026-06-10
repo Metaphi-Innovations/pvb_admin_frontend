@@ -25,7 +25,7 @@ function buildPIHtml(order: SalesOrder): string {
         <td style="padding:6px 8px;border:1px solid #e5e7eb">${line.productCode} — ${line.productName}</td>
         <td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right">${line.quantity}</td>
         <td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right">${formatRupee(line.unitPrice)}</td>
-        <td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right">${formatRupee(line.discount)}</td>
+        <td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right">${line.discount}%</td>
         <td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right">${formatRupee(line.gstAmount)}</td>
         <td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right;font-weight:600">${formatRupee(line.lineTotal)}</td>
       </tr>
@@ -89,7 +89,7 @@ function buildPIHtml(order: SalesOrder): string {
         <th>Product</th>
         <th style="text-align:right">Qty</th>
         <th style="text-align:right">Unit Price</th>
-        <th style="text-align:right">Discount</th>
+        <th style="text-align:right">Discount (%)</th>
         <th style="text-align:right">GST</th>
         <th style="text-align:right">Line Total</th>
       </tr>

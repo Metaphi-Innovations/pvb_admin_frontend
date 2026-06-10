@@ -2,6 +2,7 @@
 
 import { loadCustomers, getCustomersForTransactionDropdown } from "@/app/(app)/masters/customers/customer-data";
 import { loadEmployees, type Employee } from "@/app/(app)/user-management/employee/employee-data";
+import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
 
 /** Orders above this amount require approval on submit (not draft). */
 export const ORDER_APPROVAL_THRESHOLD = 10_000;
@@ -216,7 +217,7 @@ function buildSeedLineItems(orderId: number, lineCount: number): SalesOrderLineI
   for (let i = 0; i < lineCount; i++) {
     const product = products[(orderId + i) % products.length];
     const quantity = 4 + ((orderId + i * 3) % 18);
-    const discount = i === 0 ? 0 : ((orderId + i) % 4) * 75;
+    const discount = i === 0 ? 0 : ((orderId + i) % 4) * 5;
     const gstAmount = computeGstAmount(quantity, product.sellingPrice, discount, product.gstRate);
     lines.push(recalculateLineItem({
       id: `line-seed-${orderId}-${i}`,
@@ -354,12 +355,14 @@ export function parseGstRate(gstRate: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-export function calculateLineSubtotal(quantity: number, unitPrice: number, discount: number): number {
-  return Math.max(0, quantity * unitPrice - discount);
+export function calculateLineSubtotal(quantity: number, unitPrice: number, discountPercent: number): number {
+  const subtotalBeforeDiscount = quantity * unitPrice;
+  const discountAmount = subtotalBeforeDiscount * (discountPercent / 100);
+  return Math.max(0, subtotalBeforeDiscount - discountAmount);
 }
 
-export function calculateLineTotal(quantity: number, unitPrice: number, discount: number, gstAmount: number): number {
-  return calculateLineSubtotal(quantity, unitPrice, discount) + Math.max(0, gstAmount);
+export function calculateLineTotal(quantity: number, unitPrice: number, discountPercent: number, gstAmount: number): number {
+  return calculateLineSubtotal(quantity, unitPrice, discountPercent) + Math.max(0, gstAmount);
 }
 
 export function recalculateLineItem(line: SalesOrderLineItem): SalesOrderLineItem {
@@ -386,8 +389,10 @@ export function calculateOrderTotalsSummary(lines: SalesOrderLineItem[]): OrderT
   let totalGst = 0;
 
   for (const line of lines) {
-    subtotalBeforeDiscount += line.quantity * line.unitPrice;
-    totalItemDiscounts += line.discount;
+    const lineSubtotalBeforeDiscount = line.quantity * line.unitPrice;
+    const lineDiscount = lineSubtotalBeforeDiscount * (line.discount / 100);
+    subtotalBeforeDiscount += lineSubtotalBeforeDiscount;
+    totalItemDiscounts += lineDiscount;
     netTotal += calculateLineSubtotal(line.quantity, line.unitPrice, line.discount);
     totalGst += line.gstAmount;
   }
@@ -401,8 +406,8 @@ export function calculateOrderTotalsSummary(lines: SalesOrderLineItem[]): OrderT
   };
 }
 
-export function computeGstAmount(quantity: number, unitPrice: number, discount: number, gstRate: string): number {
-  const subtotal = calculateLineSubtotal(quantity, unitPrice, discount);
+export function computeGstAmount(quantity: number, unitPrice: number, discountPercent: number, gstRate: string): number {
+  const subtotal = calculateLineSubtotal(quantity, unitPrice, discountPercent);
   const rate = parseGstRate(gstRate);
   return Math.round(subtotal * (rate / 100) * 100) / 100;
 }
@@ -713,6 +718,8 @@ export function orderToFormValues(order: SalesOrder): {
   deliveryDate: string;
   status: OrderStatus;
   lineItems: SalesOrderLineItem[];
+  warehouseId?: number | null;
+  warehouseName?: string;
 } {
   const hydrated = hydrateOrderLineItems(order);
   return {
@@ -722,6 +729,8 @@ export function orderToFormValues(order: SalesOrder): {
     deliveryDate: hydrated.deliveryDate,
     status: hydrated.status,
     lineItems: hydrated.lineItems.length > 0 ? hydrated.lineItems : [createEmptyLineItem()],
+    warehouseId: hydrated.warehouseId ?? null,
+    warehouseName: hydrated.warehouseName ?? "",
   };
 }
 
@@ -733,14 +742,18 @@ export function buildOrderFromForm(
     deliveryDate: string;
     status: OrderStatus;
     lineItems: SalesOrderLineItem[];
+    warehouseId?: number | null;
+    warehouseName?: string;
   },
   existing: Partial<SalesOrder> & { soNumber: string },
   asDraft: boolean,
 ): SalesOrder | null {
   const customers = getCustomersForTransactionDropdown();
   const salesmen = getSalesmenForOrders();
+  const warehouses = loadWarehouses();
   const customer = customers.find(c => c.id === form.customerId);
   const salesman = salesmen.find(s => s.id === form.salesManId);
+  const warehouse = warehouses.find(w => w.id === form.warehouseId);
   if (!customer || !salesman) return null;
 
   const totalAmount = calculateOrderTotalsSummary(form.lineItems).grandTotal;
@@ -786,8 +799,8 @@ export function buildOrderFromForm(
     packingListId: existing.packingListId,
     packingListNumber: existing.packingListNumber,
     packingStatus: existing.packingStatus,
-    warehouseId: existing.warehouseId,
-    warehouseName: existing.warehouseName,
+    warehouseId: warehouse?.id ?? undefined,
+    warehouseName: warehouse?.warehouseName ?? "",
   };
 }
 
@@ -861,12 +874,12 @@ export function splitSalesOrderFromForm(
       return { error: `Split quantity cannot exceed available quantity for ${line.productName || "product"}` };
     }
     const ratio = splitQty / line.quantity;
-    const splitDiscount = Math.round(line.discount * ratio * 100) / 100;
+    const splitDiscount = line.discount;
     const splitGst = Math.round(line.gstAmount * ratio * 100) / 100;
 
     const remainQty = line.quantity - splitQty;
     if (remainQty > 0) {
-      const remainDiscount = Math.round((line.discount - splitDiscount) * 100) / 100;
+      const remainDiscount = line.discount;
       const remainGst = Math.round((line.gstAmount - splitGst) * 100) / 100;
       updatedOriginalLines.push(recalculateLineItem({
         ...line,

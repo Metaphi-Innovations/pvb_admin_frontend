@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Save, CheckCircle2, XCircle } from "lucide-react";
 import SalesOrderForm, {
@@ -128,32 +128,29 @@ export default function EditSalesOrderPage() {
 
   if (!form) {
     return (
-      <AppLayout>
+      <FormContainer
+        title="Edit Sales Order"
+        description="Sales → Orders → Edit Order"
+        onBack={() => router.push("/sales/orders")}
+        onCancel={() => router.push("/sales/orders")}
+        cancelLabel="Discard"
+        noCard={true}
+      >
         <p className="text-sm text-muted-foreground p-4">Loading order…</p>
-      </AppLayout>
+      </FormContainer>
     );
   }
 
   return (
-    <AppLayout noPadding>
-      <div className="flex flex-col h-full">
-        <div className="sticky top-0 z-10 bg-white border-b border-border px-5 py-2.5 flex items-center gap-2 flex-shrink-0">
-          <button
-            type="button"
-            onClick={() => router.push("/sales/orders")}
-            className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
-          >
-            <ArrowLeft className="w-3.5 h-3.5 text-muted-foreground" />
-          </button>
-          <h2 className="flex-1 text-sm font-semibold text-foreground">Edit Sales Order</h2>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => router.push("/sales/orders")}
-          >
-            Discard
-          </Button>
+    <FormContainer
+      title="Edit Sales Order"
+      description="Sales → Orders → Edit Order"
+      onBack={() => router.push("/sales/orders")}
+      onCancel={() => router.push("/sales/orders")}
+      cancelLabel="Discard"
+      noCard={true}
+      actions={
+        <div className="flex items-center gap-2">
           {form.status === "draft" && (
             <Button
               variant="outline"
@@ -172,22 +169,20 @@ export default function EditSalesOrderPage() {
             <Save className="w-3.5 h-3.5" /> Save Changes
           </Button>
         </div>
-
-        <div className="flex-1 overflow-y-auto px-5 py-4 bg-muted/10">
-          <SalesOrderForm
-            mode="edit"
-            orderNumber={orderNumber}
-            form={form}
-            onChange={setForm}
-            errors={errors}
-            customers={customers}
-            salesmen={salesmen}
-            products={products}
-            showStatus
-            auditInfo={auditInfo ?? undefined}
-          />
-        </div>
-      </div>
+      }
+    >
+      <SalesOrderForm
+        mode="edit"
+        orderNumber={orderNumber}
+        form={form}
+        onChange={setForm}
+        errors={errors}
+        customers={customers}
+        salesmen={salesmen}
+        products={products}
+        showStatus
+        auditInfo={auditInfo ?? undefined}
+      />
 
       {toast && (
         <div
@@ -200,6 +195,6 @@ export default function EditSalesOrderPage() {
           {toast.msg}
         </div>
       )}
-    </AppLayout>
+    </FormContainer>
   );
 }

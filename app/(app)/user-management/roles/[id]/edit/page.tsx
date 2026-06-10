@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -359,29 +360,20 @@ export default function EditRolePage() {
   }
 
   return (
-    <AppLayout noPadding>
+    <FormContainer
+      title={`Edit Role — ${original?.roleName ?? "Loading…"}`}
+      description="User Management → Roles → Edit"
+      onBack={() => router.back()}
+      onCancel={() => router.back()}
+      cancelLabel="Discard"
+      noCard={true}
+      actions={
+        <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" onClick={handleSave}>
+          <Save className="w-3.5 h-3.5" /> Save Changes
+        </Button>
+      }
+    >
       <div className="flex flex-col" style={{ height: "calc(100vh - 104px)" }}>
-
-        {/* ── Sticky header ── */}
-        <div className="flex-shrink-0 bg-white border-b border-border px-5 py-3 flex items-center gap-3 z-10">
-          <button onClick={() => router.back()}
-            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors flex-shrink-0">
-            <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-          </button>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold text-foreground">
-              Edit Role — {original?.roleName ?? "Loading…"}
-            </h2>
-            <p className="text-[11px] text-muted-foreground">User Management → Roles → Edit</p>
-          </div>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.back()}>
-            Discard
-          </Button>
-          <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" onClick={handleSave}>
-            <Save className="w-3.5 h-3.5" /> Save Changes
-          </Button>
-        </div>
-
         {/* ── Body ── */}
         <div className="flex flex-1 overflow-hidden">
 
@@ -548,9 +540,9 @@ export default function EditRolePage() {
                 <ArrowLeft className="w-3.5 h-3.5" /> Back to List
               </Button>
             </div>
-          </div>
-        </div>
       </div>
-    </AppLayout>
+    </div>
+  </div>
+</FormContainer>
   );
 }

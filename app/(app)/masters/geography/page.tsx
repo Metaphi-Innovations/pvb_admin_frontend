@@ -379,11 +379,18 @@ function TreeRows(props: {
 }
 
 // ── Main List Page ─────────────────────────────────────────────────────────────
+// ── Listing Container and Master Listing Imports ─────────────────────────────────
+import { ListingContainer } from "@/components/layout/ListingContainer";
+import { MasterListing } from "@/components/listing/MasterListing";
+import { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
+
+// ── Main List Page ─────────────────────────────────────────────────────────────
 export default function GeographyListPage() {
   const router = useRouter();
   const [nodes, setNodes] = useState<GeoNode[]>([]);
-  const [search, setSearch] = useState("");
-  const [filterLevel, setFilterLevel] = useState<GeoLevel | "">("");
+  const [filters, setFilters] = useState<FilterState>({});
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
+
   // Tree expand state — default: Zone nodes expanded
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set([1, 2]));
 
@@ -429,24 +436,56 @@ export default function GeographyListPage() {
     return counts;
   }, [nodes]);
 
-  // Are any filters active?
-  const hasFilters = search.trim() !== "" || filterLevel !== "";
+  const searchVal = (filters.search as string) || "";
+  const filterLevel = (filters.level as string) || "";
+  const hasFilters = searchVal.trim() !== "" || filterLevel !== "";
 
-  // Filtered flat list (used when any filter active)
-  const flatFiltered = useMemo(() => {
-    if (!hasFilters) return [];
-    let r = [...nodes];
-    if (search.trim()) {
-      const t = search.toLowerCase();
-      r = r.filter(n =>
-        n.name.toLowerCase().includes(t) ||
-        n.code.toLowerCase().includes(t) ||
-        (n.pincode && n.pincode.includes(t)),
-      );
+  const setFilterLevel = (lvl: string) => {
+    setFilters(prev => {
+      const next = { ...prev };
+      if (!lvl) {
+        delete next.level;
+      } else {
+        next.level = lvl;
+      }
+      return next;
+    });
+  };
+
+  // Tree expand structure flattened for MasterListing
+  const treeData = useMemo(() => {
+    const result: (GeoNode & { depth: number })[] = [];
+    function traverse(parentId: number | null, depth: number) {
+      const children = nodes.filter(n => n.parentId === parentId);
+      for (const child of children) {
+        result.push({ ...child, depth });
+        if (expandedIds.has(child.id)) {
+          traverse(child.id, depth + 1);
+        }
+      }
     }
-    if (filterLevel) r = r.filter(n => n.level === filterLevel);
-    return r;
-  }, [nodes, search, filterLevel, hasFilters]);
+    traverse(null, 0);
+    return result;
+  }, [nodes, expandedIds]);
+
+  const displayData = useMemo(() => {
+    if (hasFilters) {
+      let r = [...nodes];
+      if (searchVal.trim()) {
+        const t = searchVal.toLowerCase();
+        r = r.filter(n =>
+          n.name.toLowerCase().includes(t) ||
+          n.code.toLowerCase().includes(t) ||
+          (n.pincode && n.pincode.includes(t)),
+        );
+      }
+      if (filterLevel) {
+        r = r.filter(n => n.level === filterLevel);
+      }
+      return r.map(n => ({ ...n, depth: 0 }));
+    }
+    return treeData;
+  }, [nodes, hasFilters, searchVal, filterLevel, treeData]);
 
   // ── Status toggle logic ──────────────────────────────────────────────────────
   const handleToggleStatus = (node: GeoNode) => {
@@ -528,31 +567,142 @@ export default function GeographyListPage() {
     setQuickAdd(prev => ({ ...prev, open: false }));
   };
 
-  const clearFilters = () => { setSearch(""); setFilterLevel(""); };
+  const columns = useMemo<ColumnConfig<GeoNode & { depth: number }>[]>(() => [
+    {
+      key: "name",
+      header: "Geography Name",
+      render: (val, row) => {
+        const hasChildren = nodes.some(n => n.parentId === row.id);
+        const isExpanded = expandedIds.has(row.id);
+        const childLevel = CHILD_LEVEL[row.level];
+        const indentPx = row.depth * 20 + 16;
+
+        if (hasFilters) {
+          const path = getAncestorPath(row, nodes);
+          return (
+            <div className="flex items-center gap-2 min-w-0">
+              <span className={cn("w-2 h-2 rounded-full flex-shrink-0", LEVEL_DOT[row.level])} />
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-xs font-semibold text-foreground truncate">
+                    {row.name}
+                  </span>
+                  {row.code && (
+                    <span className="font-mono text-[10px] font-semibold text-brand-700 bg-brand-50 border border-brand-100 px-1.5 py-px rounded flex-shrink-0">
+                      {row.code}
+                    </span>
+                  )}
+                  {childLevel && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleQuickAdd(row);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity h-5 px-1.5 text-[10px] font-semibold border border-brand-200 text-brand-600 bg-brand-50 hover:bg-brand-100 rounded flex items-center gap-0.5 flex-shrink-0"
+                    >
+                      <Plus className="w-2.5 h-2.5" />
+                      {childLevel}
+                    </button>
+                  )}
+                </div>
+                {path.length > 1 && (
+                  <div className="mt-0.5">
+                    <GeographyBreadcrumb path={path} excludeLast linked />
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div className="flex items-center gap-2 min-w-0" style={{ paddingLeft: indentPx }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (hasChildren) toggleExpand(row.id);
+              }}
+              className={cn(
+                "w-5 h-5 rounded flex items-center justify-center flex-shrink-0 transition-colors",
+                hasChildren
+                  ? "hover:bg-muted text-muted-foreground cursor-pointer"
+                  : "cursor-default opacity-0 pointer-events-none",
+              )}
+            >
+              {hasChildren && (
+                isExpanded
+                  ? <ChevronDown className="w-3.5 h-3.5" />
+                  : <ChevronRight className="w-3.5 h-3.5" />
+              )}
+            </button>
+            <span className={cn("w-2 h-2 rounded-full flex-shrink-0", LEVEL_DOT[row.level])} />
+            <span className="text-xs font-semibold text-foreground truncate">
+              {row.name}
+            </span>
+            {row.code && (
+              <span className="font-mono text-[10px] font-semibold text-brand-700 bg-brand-50 border border-brand-100 px-1.5 py-px rounded flex-shrink-0">
+                {row.code}
+              </span>
+            )}
+            {childLevel && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleQuickAdd(row);
+                }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity h-5 px-1.5 text-[10px] font-semibold border border-brand-200 text-brand-600 bg-brand-50 hover:bg-brand-100 rounded flex items-center gap-0.5 flex-shrink-0"
+              >
+                <Plus className="w-2.5 h-2.5" />
+                {childLevel}
+              </button>
+            )}
+          </div>
+        );
+      }
+    },
+    {
+      key: "level",
+      header: "Level",
+      filterable: true,
+      filterType: "dropdown",
+      width: "120px",
+      filterOptions: LEVELS.map(l => ({ label: l, value: l })),
+      render: (val, row) => <LevelBadge level={row.level} />
+    },
+    {
+      key: "pincode",
+      header: "Pincode",
+      width: "120px",
+      render: (val, row) => {
+        return row.level === "City" && row.pincode ? (
+          <span className="font-mono text-xs text-muted-foreground">{row.pincode}</span>
+        ) : (
+          <span className="text-muted-foreground/30 text-xs">—</span>
+        );
+      }
+    },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      sticky: true,
+      width: "80px",
+      render: (val, row) => (
+        <button
+          onClick={() => handleEdit(row.id)}
+          className="h-7 px-2.5 text-[11px] font-medium border border-border rounded-md hover:bg-muted transition-colors flex items-center gap-1"
+        >
+          <Edit2 className="w-3 h-3" /> Edit
+        </button>
+      )
+    }
+  ], [nodes, expandedIds, hasFilters]);
 
   return (
-    <AppLayout>
-      <div className="space-y-4">
-
-        {/* ── Page header ── */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-[11px] text-muted-foreground mb-0.5">
-              User Management &rsaquo; Geography
-            </p>
-            <h1 className="text-xl font-bold text-foreground">Geography</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Manage the 7-level geography hierarchy</p>
-          </div>
-          <Button
-            size="sm"
-            className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-            onClick={() => router.push("/masters/geography/add")}
-          >
-            <Plus className="w-3.5 h-3.5" /> Add Geography
-          </Button>
-        </div>
-
-        {/* ── Level summary cards ── */}
+    <ListingContainer
+      title="Geography"
+      titleIcon={Globe}
+      metrics={
         <div className="grid grid-cols-7 gap-2">
           {LEVELS.map(level => {
             const cfg = LEVEL_CARD[level];
@@ -578,182 +728,36 @@ export default function GeographyListPage() {
             );
           })}
         </div>
+      }
+    >
+      <div className="space-y-4">
+        <MasterListing<GeoNode & { depth: number }>
+          columns={columns}
+          data={displayData}
+          totalRecords={displayData.length}
+          page={1}
+          pageSize={1000}
+          onPageChange={() => {}}
+          onPageSizeChange={() => {}}
+          onSortChange={setSort}
+          onFilterChange={setFilters}
+          onAdd={() => router.push("/masters/geography/add")}
+          addLabel="Add Geography"
+          emptyMessage="geography nodes"
+          searchPlaceholder="Search name, code, pincode…"
+          currentFilters={filters}
+          currentSort={sort}
+        />
 
-        {/* ── Filter bar ── */}
-        <div className="bg-white rounded-xl border border-border px-4 py-2 flex items-center gap-2 flex-wrap">
-          {/* Search */}
-          <div className="relative flex-1 min-w-[180px] max-w-xs">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Search name, code, pincode…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-8 h-8 text-xs rounded-lg"
-            />
-          </div>
-
-          {/* Level dropdown */}
-          <select
-            value={filterLevel}
-            onChange={e => setFilterLevel(e.target.value as GeoLevel | "")}
-            className="h-8 px-2 text-xs border border-border rounded-lg bg-background text-foreground appearance-none pr-7 cursor-pointer"
-            style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 6px center", backgroundSize: "14px" }}
-          >
-            <option value="">All Levels</option>
-            {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
-          </select>
-
-          {/* Clear filters */}
-          {hasFilters && (
-            <button
-              onClick={clearFilters}
-              className="text-xs text-brand-600 hover:text-brand-700 hover:underline"
-            >
-              Clear Filters
-            </button>
-          )}
-
-          {/* Count */}
-          <p className="ml-auto text-[11px] text-muted-foreground whitespace-nowrap">
-            {hasFilters
-              ? `${flatFiltered.length} result${flatFiltered.length !== 1 ? "s" : ""}`
-              : `${nodes.length} total nodes`
-            }
-          </p>
-        </div>
-
-        {/* ── Table ── */}
-        <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/40 border-b border-border flex">
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground flex-[1.5]">Name</th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-foreground flex-[0.8]">Level</th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-foreground flex-[0.8]">Pincode</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground flex-shrink-0 w-32">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {nodes.length === 0 ? (
-                  /* Loading skeleton */
-                  Array.from({ length: 4 }).map((_, i) => (
-                    <tr key={i} className="border-b border-border">
-                      {Array.from({ length: 3 }).map((_, j) => (
-                        <td key={j} className="px-4 py-3">
-                          <div className="h-3 bg-muted animate-pulse rounded w-24" />
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                ) : hasFilters ? (
-                  /* ── FLAT LIST (filters active) ── */
-                  flatFiltered.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="py-16 text-center">
-                        <div className="flex flex-col items-center gap-2">
-                          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                            <Globe className="w-5 h-5 text-muted-foreground" />
-                          </div>
-                          <p className="text-sm font-medium text-foreground">No results found</p>
-                          <p className="text-xs text-muted-foreground">Try adjusting your filters.</p>
-                          <button onClick={clearFilters} className="text-xs text-brand-600 hover:underline mt-1">
-                            Clear filters
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    flatFiltered.map(node => {
-                      const path = getAncestorPath(node, nodes);
-                      const childLevel = CHILD_LEVEL[node.level];
-                      return (
-                        <tr key={node.id} className="border-b border-border/50 hover:bg-brand-50/30 transition-colors group flex">
-                          {/* Name + breadcrumb */}
-                          <td className="px-4 py-2 flex-[1.5] min-w-0">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className={cn("w-2 h-2 rounded-full flex-shrink-0", LEVEL_DOT[node.level])} />
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                  <span className="text-xs font-semibold text-foreground truncate">
-                                    {node.name}
-                                  </span>
-                                  {node.code && (
-                                    <span className="font-mono text-[10px] font-semibold text-brand-700 bg-brand-50 border border-brand-100 px-1.5 py-px rounded flex-shrink-0">
-                                      {node.code}
-                                    </span>
-                                  )}
-                                  {/* Quick add */}
-                                  {childLevel && (
-                                    <button
-                                      onClick={() => handleQuickAdd(node)}
-                                      className="opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity h-5 px-1.5 text-[10px] font-semibold border border-brand-200 text-brand-600 bg-brand-50 hover:bg-brand-100 rounded flex items-center gap-0.5 flex-shrink-0"
-                                    >
-                                      <Plus className="w-2.5 h-2.5" />
-                                      {childLevel}
-                                    </button>
-                                  )}
-                                </div>
-                                {/* Ancestor breadcrumb */}
-                                {path.length > 1 && (
-                                  <div className="mt-0.5">
-                                    <GeographyBreadcrumb path={path} excludeLast linked />
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-
-                          <td className="px-3 py-2.5 whitespace-nowrap flex-[0.8]">
-                            <LevelBadge level={node.level} />
-                          </td>
-
-                          <td className="px-3 py-2.5 flex-[0.8]">
-                            {node.level === "City" && node.pincode
-                              ? <span className="font-mono text-xs text-muted-foreground">{node.pincode}</span>
-                              : <span className="text-muted-foreground/30 text-xs">—</span>
-                            }
-                          </td>
-
-                          <td className="px-4 py-2 whitespace-nowrap flex-shrink-0 w-32">
-                            <button
-                              onClick={() => handleEdit(node.id)}
-                              className="h-7 px-2.5 text-[11px] font-medium border border-border rounded-md hover:bg-muted transition-colors flex items-center gap-1"
-                            >
-                              <Edit2 className="w-3 h-3" /> Edit
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )
-                ) : (
-                  /* ── TREE VIEW (no filters) ── */
-                  <TreeRows
-                    nodes={nodes}
-                    parentId={null}
-                    depth={0}
-                    expandedIds={expandedIds}
-                    toggleExpand={toggleExpand}
-                    onQuickAdd={handleQuickAdd}
-                    onEdit={handleEdit}
-                    onToggleStatus={handleToggleStatus}
-                    router={router}
-                  />
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Footer note */}
-          <div className="flex items-center gap-2 px-4 py-2.5 border-t border-border bg-muted/20">
+        {/* Footer note */}
+        {!hasFilters && (
+          <div className="flex items-center gap-2 px-4 py-2.5 border border-border rounded-xl bg-muted/20">
             <Layers className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
             <p className="text-[11px] text-muted-foreground">
               Hover over any node to reveal the <strong>quick add</strong> button for its child level.
             </p>
           </div>
-        </div>
-
+        )}
       </div>
 
       {/* ── Quick Add Dialog ── */}
@@ -775,6 +779,6 @@ export default function GeographyListPage() {
       />
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-    </AppLayout>
+    </ListingContainer>
   );
 }
