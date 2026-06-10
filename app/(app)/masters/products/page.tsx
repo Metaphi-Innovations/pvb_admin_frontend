@@ -237,7 +237,7 @@ export default function ProductsPage() {
               <ChevronDown className="w-3 h-3 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-40 bg-white border border-border shadow-md">
+          <DropdownMenuContent align="start" className="w-40 bg-white border shadow-md border-border">
             <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
               Status Actions
             </DropdownMenuLabel>

@@ -409,7 +409,7 @@ export default function SchemeMasterPage() {
           <p className="mt-0.5 text-xs text-muted-foreground">Promotional and pricing schemes</p>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        {/* <div className="grid grid-cols-3 gap-3">
           <MiniKPICard label="Total Schemes" value={records.length} icon={Gift} accent={true} />
           <MiniKPICard
             label="Active"
@@ -423,7 +423,7 @@ export default function SchemeMasterPage() {
             icon={XCircle}
             accent={false}
           />
-        </div>
+        </div> */}
 
         <MasterListing<SchemeRecord>
           columns={columns}

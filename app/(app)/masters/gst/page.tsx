@@ -445,7 +445,7 @@ export default function GSTPage() {
           </p>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        {/* <div className="grid grid-cols-3 gap-3">
           <MiniKPICard label="Total GST Configs" value={records.length} icon={Percent} accent={true} />
           <MiniKPICard
             label="Active"
@@ -459,7 +459,7 @@ export default function GSTPage() {
             icon={XCircle}
             accent={false}
           />
-        </div>
+        </div> */}
 
         <MasterListing<GSTMaster>
           columns={columns}

@@ -10,6 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { SearchableSelect } from "./SearchableSelect";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Button } from "@/components/ui/button";
 import {
   type Customer,
@@ -390,6 +391,11 @@ interface ProductCatalogItem {
   productId: string;
   productName: string;
   sku: string;
+  category?: string;
+  unit?: string;
+  packSize?: string;
+  hsnCode?: string;
+  gstRate?: string;
   mrp: number;
 }
 
@@ -404,69 +410,54 @@ function ProductSelect({
   onSelect: (product: ProductCatalogItem) => void;
   disabled?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const selected = products.find(p => p.productId === value);
-  const filtered = products.filter(
-    p =>
-      p.productName.toLowerCase().includes(search.toLowerCase()) ||
-      p.sku.toLowerCase().includes(search.toLowerCase()) ||
-      p.productId.toLowerCase().includes(search.toLowerCase())
-  );
+  const options = products.map((p) => ({
+    value: p.productId,
+    label: `${p.sku} - ${p.productName}`,
+    sublabel: [
+      p.category ? `Category: ${p.category}` : "",
+      p.unit ? `Unit: ${p.unit}` : "",
+      p.packSize ? `Pack Size: ${p.packSize}` : "",
+      p.hsnCode ? `HSN: ${p.hsnCode}` : "",
+      p.gstRate ? `GST: ${p.gstRate}` : "",
+    ].filter(Boolean).join(" | "),
+    trailing: <span className="text-[10px] text-muted-foreground">MRP: ?{p.mrp}</span>,
+  }));
 
   return (
-    <Popover open={open && !disabled} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          disabled={disabled}
-          className="flex items-center justify-between w-full px-2 text-xs text-left border rounded-lg h-7 border-border bg-background hover:bg-muted/30 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <span className={selected ? "text-foreground truncate" : "text-muted-foreground"}>
-            {selected ? `${selected.sku} — ${selected.productName}` : "Select product…"}
+    <AutocompleteSelect
+      options={options}
+      value={value}
+      onChange={(val) => {
+        const prod = products.find((p) => p.productId === val);
+        if (prod) onSelect(prod);
+      }}
+      placeholder="Select product by name, SKU, or code"
+      searchPlaceholder="Search product..."
+      disabled={disabled}
+      className="h-8 text-xs font-normal"
+      renderTriggerLabel={(selectedOpt) => {
+        const option = Array.isArray(selectedOpt) ? selectedOpt[0] : selectedOpt;
+        if (!option) return "Select product by name, SKU, or code";
+        const prod = products.find((p) => p.productId === option.value);
+        const meta = prod
+          ? [
+              prod.category ? `Category: ${prod.category}` : "",
+              prod.unit ? `Unit: ${prod.unit}` : "",
+              prod.packSize ? `Pack Size: ${prod.packSize}` : "",
+              prod.hsnCode ? `HSN: ${prod.hsnCode}` : "",
+              prod.gstRate ? `GST: ${prod.gstRate}` : "",
+            ].filter(Boolean).join(" | ")
+          : "";
+        return (
+          <span className="flex items-center gap-2 min-w-0">
+            <span className="truncate text-foreground">{option.label}</span>
+            {meta && <span className="truncate text-[10px] text-muted-foreground">{meta}</span>}
           </span>
-          <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-        <div className="p-2 border-b border-border">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Search product…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="h-8 pl-8 text-xs focus-visible:ring-0"
-              autoFocus
-            />
-          </div>
-        </div>
-        <div className="max-h-[200px] overflow-y-auto py-1">
-          {filtered.map(p => (
-            <button
-              key={p.productId}
-              type="button"
-              onClick={() => { onSelect(p); setOpen(false); setSearch(""); }}
-              className={cn(
-                "w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-muted/60",
-                value === p.productId && "bg-brand-50",
-              )}
-            >
-              <span className="flex-shrink-0 font-mono text-brand-700">{p.sku}</span>
-              <span className="flex-1 truncate">{p.productName}</span>
-              <span className="text-[10px] text-muted-foreground">MRP: ₹{p.mrp}</span>
-              {value === p.productId && <Check className="w-3.5 h-3.5 text-brand-600" />}
-            </button>
-          ))}
-          {filtered.length === 0 && (
-            <p className="px-3 py-3 text-xs text-center text-muted-foreground">No products found</p>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
+        );
+      }}
+    />
   );
 }
-
 interface CustomerFormProps {
   form: CustomerFormValues;
   onChange: (form: CustomerFormValues) => void;

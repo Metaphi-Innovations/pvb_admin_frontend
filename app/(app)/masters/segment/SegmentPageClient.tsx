@@ -372,7 +372,7 @@ export default function SegmentMasterPage() {
           <p className="mt-0.5 text-xs text-muted-foreground">Market and customer segments</p>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        {/* <div className="grid grid-cols-3 gap-3">
           <MiniKPICard label="Total Segments" value={records.length} icon={PieChart} accent={true} />
           <MiniKPICard
             label="Active"
@@ -386,7 +386,7 @@ export default function SegmentMasterPage() {
             icon={XCircle}
             accent={false}
           />
-        </div>
+        </div> */}
 
         <MasterListing<SegmentRecord>
           columns={columns}

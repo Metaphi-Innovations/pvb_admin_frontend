@@ -186,11 +186,11 @@ export default function DocumentTypesPage() {
         </div>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-3 gap-3">
+        {/* <div className="grid grid-cols-3 gap-3">
           <MiniKPICard label="Total Document Types" value={total} icon={FileText} accent={true} />
           <MiniKPICard label="Active" value={active} icon={CheckCircle2} accent={false} />
           <MiniKPICard label="Inactive" value={inactive} icon={XCircle} accent={false} />
-        </div>
+        </div> */}
 
         {/* Table Listing */}
         <MasterListing<DocumentTypeMaster>
@@ -223,7 +223,7 @@ export default function DocumentTypesPage() {
           )}
         >
           {toast.msg}
-          <button onClick={() => setToast(null)} className="ml-1 opacity-70 hover:opacity-100 flex-shrink-0">
+          <button onClick={() => setToast(null)} className="flex-shrink-0 ml-1 opacity-70 hover:opacity-100">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>

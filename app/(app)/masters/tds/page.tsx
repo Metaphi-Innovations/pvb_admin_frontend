@@ -422,11 +422,11 @@ export default function TDSPage() {
         </div>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-3 gap-3">
+        {/* <div className="grid grid-cols-3 gap-3">
           <MiniKPICard label="Total TDS Configs" value={totalCount} icon={Percent} accent={true} />
           <MiniKPICard label="Active" value={activeCount} icon={CheckCircle2} accent={false} />
           <MiniKPICard label="Inactive" value={inactiveCount} icon={XCircle} accent={false} />
-        </div>
+        </div> */}
 
         {/* Table Listing */}
         <MasterListing<TDSMaster>
@@ -572,7 +572,7 @@ export default function TDSPage() {
           <DialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-base">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-red-50 border border-red-200">
+                <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 border border-red-200 rounded-lg bg-red-50">
                   <AlertCircle className="w-4 h-4 text-red-500" />
                 </div>
                 Delete TDS

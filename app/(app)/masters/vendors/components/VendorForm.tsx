@@ -4,9 +4,8 @@ import React, { useRef, useState, useMemo, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Download, Eye, Upload, RefreshCw, Search, ChevronsUpDown, Check } from "lucide-react";
+import { Plus, Trash2, Upload, RefreshCw, ChevronsUpDown, Check } from "lucide-react";
 import { CompactToggle } from "./CompactToggle";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { loadProducts } from "../../products/product-data";
 import {
   Field,
@@ -28,6 +27,7 @@ import {
   emptyContact,
   todayStr,
 } from "../vendor-data";
+import { loadDocumentTypes } from "../../document-types/document-type-data";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { cn } from "@/lib/utils";
 import {
@@ -128,6 +128,125 @@ function ProductSelect({
       disabled={disabled}
       className="h-8 text-xs font-normal"
     />
+  );
+}
+
+function DocumentNameField({
+  value,
+  documentTypeId,
+  onChange,
+  readOnly,
+  error,
+}: {
+  value: string;
+  documentTypeId?: string;
+  onChange: (next: { documentName: string; documentTypeId?: string }) => void;
+  readOnly?: boolean;
+  error?: string;
+}) {
+  const activeDocTypes = useMemo(() => loadDocumentTypes().filter((d) => d.status === "Active"), []);
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const filtered = useMemo(() => {
+    const q = value.trim().toLowerCase();
+    if (!q) return activeDocTypes;
+    return activeDocTypes.filter((d) =>
+      d.title.toLowerCase().includes(q) ||
+      d.description.toLowerCase().includes(q) ||
+      d.id.toLowerCase().includes(q),
+    );
+  }, [activeDocTypes, value]);
+  const selected = activeDocTypes.find((d) => d.id === documentTypeId);
+
+  useEffect(() => {
+    if (!open || readOnly) return;
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (target && rootRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, readOnly]);
+
+  return (
+    <div className="space-y-1 relative" ref={rootRef}>
+      <div className="relative">
+        <Input
+          disabled={readOnly}
+          value={value}
+          onChange={(e) => {
+            onChange({ documentName: e.target.value, documentTypeId: undefined });
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onClick={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (!readOnly) {
+              if (e.key === "Escape") setOpen(false);
+              else setOpen(true);
+            }
+          }}
+          className={cn("h-8 text-xs border-border/60 pr-9", error && "border-red-400 focus-visible:ring-red-300")}
+          placeholder="Type or select document type"
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => { if (!readOnly) setOpen(true); }}
+        >
+          <ChevronsUpDown className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      {open && !readOnly && (
+        <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-lg border border-border/60 bg-white shadow-lg">
+          <div className="max-h-56 overflow-y-auto py-1">
+            {filtered.length === 0 ? (
+              <p className="px-3 py-3 text-xs text-muted-foreground">No matching document types</p>
+            ) : (
+              filtered.map((docType) => (
+                <button
+                  key={docType.id}
+                  type="button"
+                  className={cn(
+                    "w-full px-3 py-2 text-left hover:bg-muted/60 flex items-start gap-2",
+                    selected?.id === docType.id && "bg-brand-50",
+                  )}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    onChange({ documentName: docType.title, documentTypeId: docType.id });
+                    setOpen(false);
+                  }}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-xs font-medium text-foreground truncate">{docType.title}</span>
+                      {selected?.id === docType.id && <Check className="w-3 h-3 text-brand-600 shrink-0" />}
+                    </div>
+                    {docType.description && (
+                      <p className="text-[10px] text-muted-foreground truncate mt-0.5">{docType.description}</p>
+                    )}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+      {error && <p className="text-[11px] text-red-500">{error}</p>}
+    </div>
   );
 }
 
@@ -256,24 +375,47 @@ export function VendorForm({
   const addDocumentRow = () => {
     set("documents", [
       ...form.documents,
-      { uid: `d-${Date.now()}`, documentName: "", fileName: "", uploadedAt: "", size: "" },
+      { uid: `d-${Date.now()}`, documentName: "", documentTypeId: undefined, file: undefined, fileUrl: undefined, uploaded: false, fileName: "", uploadedAt: "", size: "" },
     ]);
   };
 
   const uploadDoc = (uid: string, file: File) => {
-    set(
-      "documents",
-      form.documents.map((d) =>
-        d.uid === uid
-          ? {
-              ...d,
-              fileName: file.name,
-              uploadedAt: todayStr(),
-              size: `${Math.max(1, Math.round(file.size / 1024))} KB`,
-            }
-          : d,
-      ),
-    );
+    set("documents", form.documents.map((d) => {
+      if (d.uid !== uid) return d;
+      if (d.fileUrl && d.fileUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(d.fileUrl);
+      }
+      return {
+        ...d,
+        file,
+        fileUrl: URL.createObjectURL(file),
+        uploaded: true,
+        fileName: file.name,
+        uploadedAt: todayStr(),
+        size: `${Math.max(1, Math.round(file.size / 1024))} KB`,
+      };
+    }));
+  };
+
+  const updateDocument = (uid: string, patch: Partial<VendorDocument>) => {
+    set("documents", form.documents.map((d) => (d.uid === uid ? { ...d, ...patch } : d)));
+  };
+
+  const removeDocumentRow = (uid: string) => {
+    const row = form.documents.find((d) => d.uid === uid);
+    if (row?.fileUrl && row.fileUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(row.fileUrl);
+    }
+    set("documents", form.documents.filter((d) => d.uid !== uid));
+  };
+
+  const openFile = (url?: string) => {
+    if (!url) return;
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) return;
+    const isAbsolute = /^https?:\/\//i.test(trimmedUrl) || /^blob:/i.test(trimmedUrl) || /^data:/i.test(trimmedUrl);
+    const safeUrl = isAbsolute ? trimmedUrl : `https://${trimmedUrl}`;
+    window.open(safeUrl, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -729,9 +871,7 @@ export function VendorForm({
                     <tr className="text-left border-b bg-muted/25 border-border/50 text-muted-foreground">
                       <th className="px-3 py-2 font-medium">Document Name</th>
                       <th className="px-3 py-2 font-medium">Upload File</th>
-                      <th className="px-3 py-2 text-center w-14">View</th>
-                      <th className="px-3 py-2 text-center w-14">Download</th>
-                      <th className="w-10 px-3 py-2" />
+                      <th className="w-36 px-3 py-2 text-right" />
                     </tr>
                   </thead>
                   <tbody>
@@ -741,10 +881,14 @@ export function VendorForm({
                         doc={doc}
                         readOnly={readOnly}
                         fileRef={(el) => { fileRefs.current[doc.uid] = el; }}
-                        onNameChange={(name) => set("documents", form.documents.map((d) => (d.uid === doc.uid ? { ...d, documentName: name } : d)))}
+                        onNameChange={(patch) => updateDocument(doc.uid, patch)}
                         onUpload={(file) => uploadDoc(doc.uid, file)}
-                        onDelete={() => set("documents", form.documents.filter((d) => d.uid !== doc.uid))}
-                        onPickFile={() => fileRefs.current[doc.uid]?.click()}
+                        onDelete={() => removeDocumentRow(doc.uid)}
+                        onPickFile={() => {
+                          fileRefs.current[doc.uid]?.click();
+                        }}
+                        onOpenFile={() => openFile(doc.fileUrl)}
+                        canReupload={!!doc.fileName || !!doc.fileUrl || !!doc.uploaded}
                       />
                     ))}
                   </tbody>
@@ -783,46 +927,54 @@ function DocRow({
   onUpload,
   onDelete,
   onPickFile,
+  onOpenFile,
+  canReupload,
 }: {
   doc: VendorDocument;
   readOnly?: boolean;
   fileRef: (el: HTMLInputElement | null) => void;
-  onNameChange: (name: string) => void;
+  onNameChange: (patch: { documentName: string; documentTypeId?: string }) => void;
   onUpload: (file: File) => void;
   onDelete: () => void;
   onPickFile: () => void;
+  onOpenFile: () => void;
+  canReupload: boolean;
 }) {
   return (
     <tr className="border-b border-border/40 last:border-0 hover:bg-muted/10">
       <td className="px-3 py-2">
-        <Input disabled={readOnly} value={doc.documentName} onChange={(e) => onNameChange(e.target.value)} className="h-8 text-xs border-border/60" placeholder="Document name" />
+        <DocumentNameField
+          value={doc.documentName}
+          documentTypeId={doc.documentTypeId}
+          readOnly={readOnly}
+          onChange={onNameChange}
+        />
       </td>
       <td className="px-3 py-2">
         <input type="file" className="hidden" ref={fileRef} onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ""; }} />
-        {readOnly ? (
-          <span className="text-muted-foreground">{doc.fileName || "—"}</span>
+        {doc.fileName ? (
+          <button type="button" className="text-brand-600 hover:underline text-left truncate max-w-[220px]" onClick={onOpenFile}>
+            {doc.fileName}
+          </button>
+        ) : readOnly ? (
+          <span className="text-muted-foreground">???</span>
         ) : (
           <Button type="button" variant="outline" size="sm" className="h-8 text-[11px] max-w-[180px] truncate" onClick={onPickFile}>
             <Upload className="w-3 h-3 mr-1 shrink-0" />
-            {doc.fileName || "Choose File"}
+            Choose File
           </Button>
         )}
       </td>
-      <td className="px-3 py-2 text-center">
-        <button type="button" className="p-1.5 rounded-md hover:bg-muted disabled:opacity-30" disabled={!doc.fileName} title="View">
-          <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-        </button>
-      </td>
-      <td className="px-3 py-2 text-center">
-        <button type="button" className="p-1.5 rounded-md hover:bg-muted disabled:opacity-30" disabled={!doc.fileName} title="Download">
-          <Download className="w-3.5 h-3.5 text-muted-foreground" />
-        </button>
-      </td>
       <td className="px-3 py-2">
         {!readOnly && (
-          <button type="button" className="p-1.5 rounded-md hover:bg-red-50 text-red-600 disabled:opacity-30" disabled={!doc.fileName} onClick={onDelete}>
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center justify-end gap-2">
+            <Button type="button" variant="outline" size="sm" className="h-7 px-2.5 text-[11px]" onClick={onPickFile} disabled={!canReupload}>
+              Reupload
+            </Button>
+            <button type="button" className="p-1.5 rounded-md hover:bg-red-50 text-red-600 disabled:opacity-30" disabled={!doc.fileName} onClick={onDelete}>
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         )}
       </td>
     </tr>

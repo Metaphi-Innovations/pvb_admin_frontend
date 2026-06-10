@@ -373,7 +373,7 @@ export default function FormulationMasterPage() {
           <p className="mt-0.5 text-xs text-muted-foreground">Product formulation types</p>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        {/* <div className="grid grid-cols-3 gap-3">
           <MiniKPICard label="Total Formulations" value={records.length} icon={FlaskConical} accent={true} />
           <MiniKPICard
             label="Active"
@@ -387,7 +387,7 @@ export default function FormulationMasterPage() {
             icon={XCircle}
             accent={false}
           />
-        </div>
+        </div> */}
 
         <MasterListing<FormulationRecord>
           columns={columns}

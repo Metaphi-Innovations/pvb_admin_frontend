@@ -48,7 +48,7 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
         toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
       )}
     >
-      <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+      <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100"><X className="h-3.5 w-3.5" /></button>
     </div>
@@ -208,9 +208,9 @@ export default function CustomerTypesPage() {
           <p className="mt-0.5 text-xs text-muted-foreground">Manage types of customers used in the system</p>
         </div>
 
-        <div className="grid grid-cols-1 gap-3">
+        {/* <div className="grid grid-cols-1 gap-3">
           <MiniKPICard label="Total Customer Types" value={records.length} icon={Users} accent={true} />
-        </div>
+        </div> */}
 
         <MasterListing<CustomerTypeRecord>
           columns={columns}
@@ -245,7 +245,7 @@ export default function CustomerTypesPage() {
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
               Cancel
             </Button>
-            <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" onClick={confirmDelete}>
+            <Button size="sm" className="h-8 text-xs text-white bg-red-600 hover:bg-red-700" onClick={confirmDelete}>
               Delete
             </Button>
           </DialogFooter>

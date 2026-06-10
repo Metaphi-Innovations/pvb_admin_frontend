@@ -373,7 +373,7 @@ export default function UOMPage() {
           <p className="mt-0.5 text-xs text-muted-foreground">Manage units of measure used across products</p>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        {/* <div className="grid grid-cols-3 gap-3">
           <MiniKPICard label="Total Units" value={records.length} icon={Ruler} accent={true} />
           <MiniKPICard
             label="Active"
@@ -387,7 +387,7 @@ export default function UOMPage() {
             icon={XCircle}
             accent={false}
           />
-        </div>
+        </div> */}
 
         <MasterListing<UOMMaster>
           columns={columns}

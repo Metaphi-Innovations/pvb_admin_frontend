@@ -460,7 +460,7 @@ export default function HSNPage() {
           </p>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        {/* <div className="grid grid-cols-3 gap-3">
           <MiniKPICard label="Total HSN Codes" value={records.length} icon={Code2} accent={true} />
           <MiniKPICard
             label="Active"
@@ -474,7 +474,7 @@ export default function HSNPage() {
             icon={XCircle}
             accent={false}
           />
-        </div>
+        </div> */}
 
         <MasterListing<HSNMaster>
           columns={columns}
