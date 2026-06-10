@@ -9,11 +9,13 @@ export function NameCodeDescriptionFields({
   setForm,
   errors,
   labels,
+  codeDisabled = false,
 }: {
   form: { name: string; code: string; description: string };
   setForm: React.Dispatch<React.SetStateAction<{ name: string; code: string; description: string }>>;
   errors: Record<string, string>;
   labels: { name: string; code: string };
+  codeDisabled?: boolean;
 }) {
   return (
     <>
@@ -26,7 +28,9 @@ export function NameCodeDescriptionFields({
       </MasterField>
       <MasterField label={labels.code} required error={errors.code}>
         <Input
-          className={compactInput("font-mono")}
+          disabled={codeDisabled}
+          readOnly={codeDisabled}
+          className={compactInput("font-mono", codeDisabled && "opacity-100 bg-background text-foreground cursor-not-allowed")}
           value={form.code}
           onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
         />

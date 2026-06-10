@@ -462,6 +462,7 @@ export default function FormulationMasterPage() {
                     }
                     errors={{}}
                     labels={{ name: "Formulation Name", code: "Formulation Code" }}
+                    codeDisabled
                   />
                 </MasterFormGrid>
                 {/* <div className="flex items-center justify-between p-3 border rounded-lg border-border bg-muted/20">

@@ -119,8 +119,10 @@ export default function TDSPage() {
   }, [toast]);
 
   const openAdd = () => {
+    const list = loadTDSMasters();
+    const nextCode = `TDS-${String(nextTDSId(list)).padStart(3, "0")}`;
     setForm({
-      tdsCode: "",
+      tdsCode: nextCode,
       tdsRate: 0,
       remarks: "",
       status: "active",
@@ -497,10 +499,15 @@ export default function TDSPage() {
                       TDS Code <span className="text-red-500">*</span>
                     </Label>
                     <Input
+                      disabled
+                      readOnly
                       value={form.tdsCode}
                       onChange={(e) => setFormField("tdsCode", e.target.value)}
                       placeholder="e.g., 194C, 194J"
-                      className={cn("h-8 text-xs", errors.tdsCode && "border-red-400 focus-visible:ring-red-300")}
+                      className={cn(
+                        "h-8 text-xs bg-background text-foreground border-border opacity-100 cursor-not-allowed",
+                        errors.tdsCode && "border-red-400 focus-visible:ring-red-300",
+                      )}
                     />
                     {errors.tdsCode && <p className="text-[11px] text-red-500">{errors.tdsCode}</p>}
                   </div>
