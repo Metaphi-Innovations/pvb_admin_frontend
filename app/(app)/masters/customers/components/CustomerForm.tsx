@@ -474,9 +474,10 @@ interface CustomerFormProps {
   onSetErrors?: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   onClearError: (key: string) => void;
   readOnly?: boolean;
+  isAdd?: boolean;
 }
 
-export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError, readOnly }: CustomerFormProps) {
+export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError, readOnly, isAdd }: CustomerFormProps) {
   const [geoNodes] = useState(() => (typeof window !== "undefined" ? loadGeoNodes() : []));
 
   const [expandedBranches, setExpandedBranches] = useState<Record<number, boolean>>({ 0: true });
@@ -851,23 +852,25 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                     </div>
 
                     {/* GST Master */}
-                    <div className="col-span-2 space-y-1">
-                      <Label className="text-xs font-medium">GST % / GST Code</Label>
-                      <SearchableSelect
-                        value={form.gstMasterId}
-                        onChange={(value) => set("gstMasterId", value)}
-                        options={gstMasters.map((gst) => ({
-                          value: String(gst.id),
-                          label: `${gst.gstId} - ${gst.gstPercentage}%`,
-                          sublabel: gst.gstType,
-                        }))}
-                        placeholder="Select from GST Master..."
-                        searchPlaceholder="Search GST code..."
-                        disabled={readOnly}
-                        error={!!errors.gstMasterId}
-                      />
-                      <FieldError msg={errors.gstMasterId} />
-                    </div>
+                    {!isAdd && (
+                      <div className="col-span-2 space-y-1">
+                        <Label className="text-xs font-medium">GST % / GST Code</Label>
+                        <SearchableSelect
+                          value={form.gstMasterId}
+                          onChange={(value) => set("gstMasterId", value)}
+                          options={gstMasters.map((gst) => ({
+                            value: String(gst.id),
+                            label: `${gst.gstId} - ${gst.gstPercentage}%`,
+                            sublabel: gst.gstType,
+                          }))}
+                          placeholder="Select from GST Master..."
+                          searchPlaceholder="Search GST code..."
+                          disabled={readOnly}
+                          error={!!errors.gstMasterId}
+                        />
+                        <FieldError msg={errors.gstMasterId} />
+                      </div>
+                    )}
                   </>
                 )}
 
@@ -1793,7 +1796,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
   );
 }
 
-export function validateCustomerForm(form: CustomerFormValues): Record<string, string> {
+export function validateCustomerForm(form: CustomerFormValues, isAdd?: boolean): Record<string, string> {
   const e: Record<string, string> = {};
   if (!form.customerName.trim()) e.customerName = "Customer name is required";
   if (!form.customerType) e.customerType = "Customer type is required";
@@ -1803,7 +1806,7 @@ export function validateCustomerForm(form: CustomerFormValues): Record<string, s
   if (form.gstApplicable) {
     if (!form.gstin.trim()) e.gstin = "GSTIN is required when GST is applicable";
     else if (!validateGSTIN(form.gstin)) e.gstin = "Invalid GSTIN format";
-    if (!form.gstMasterId) e.gstMasterId = "Select GST code from master";
+    if (!isAdd && !form.gstMasterId) e.gstMasterId = "Select GST code from master";
   }
   if (form.tdsApplicable && !form.tdsMasterId) e.tdsMasterId = "Select TDS section from master";
   

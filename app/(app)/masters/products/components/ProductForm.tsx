@@ -332,10 +332,10 @@ export function ProductForm({
 
       <div className="pt-1 space-y-5">
         <div>
-            <SectionHead label="Basic Details & Classification" />
-            <div className="grid grid-cols-4 gap-3">
+          <SectionHead label="Basic Details & Classification" />
+          <div className="grid grid-cols-12 gap-3">
               {/* Product Name */}
-              <div className="col-span-2 space-y-1">
+              <div className="col-span-12 md:col-span-5 space-y-1">
                 <Label className="text-xs font-medium">
                   Product Name <span className="text-red-500">*</span>
                 </Label>
@@ -350,7 +350,7 @@ export function ProductForm({
               </div>
 
               {/* Status */}
-              {/* <div className="col-span-1">
+              {/* <div className="col-span-12 md:col-span-2">
                 <AC
                   label="Status"
                   value={form.status}
@@ -361,10 +361,8 @@ export function ProductForm({
                 />
               </div> */}
 
-             
-
               {/* Category */}
-              <div className="col-span-1">
+              <div className="col-span-12 md:col-span-3">
                 <AC
                   label="Category"
                   required
@@ -378,7 +376,7 @@ export function ProductForm({
               </div>
 
               {/* Sub Category
-              <div className="col-span-1">
+              <div className="col-span-12 md:col-span-3">
                 <AC
                   label="Sub Category"
                   required
@@ -392,7 +390,7 @@ export function ProductForm({
               </div> */}
 
               {/* Segment */}
-              <div className="col-span-1">
+              <div className="col-span-12 md:col-span-2">
                 <AC
                   label="Segment"
                   value={form.segment}
@@ -404,7 +402,7 @@ export function ProductForm({
               </div>
 
               {/* Formulation */}
-              <div className="col-span-1">
+              <div className="col-span-12 md:col-span-2">
                 <AC
                   label="Formulation"
                   value={form.formulation}
@@ -414,8 +412,15 @@ export function ProductForm({
                   disabled={readOnly}
                 />
               </div>
-               {/* SKU */}
-              <div className="col-span-1 space-y-1">
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-border/60">
+            <SectionHead label="Pricing & Compliance" />
+            <div className="grid grid-cols-12 gap-3">
+              {/* Row 1 (6 fields, col-span-2 each = 12 columns) */}
+              {/* SKU */}
+              <div className="col-span-12 md:col-span-2 space-y-1">
                 <Label className="text-xs font-medium">
                   SKU <span className="text-red-500">*</span>
                 </Label>
@@ -428,14 +433,72 @@ export function ProductForm({
                 />
                 <FieldError msg={errors.sku} />
               </div>
-            </div>
-          </div>
 
-          <div className="pt-4 border-t border-border/60">
-            <SectionHead label="Pricing & Compliance" />
-            <div className="grid grid-cols-4 gap-3">
+              {/* HSN Code */}
+              <div className="col-span-12 md:col-span-2 space-y-1">
+                <Label className="text-xs font-medium">
+                  HSN Code <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  value={form.hsnCode}
+                  onChange={(e) => set("hsnCode", e.target.value)}
+                  className={cn("font-mono", inputCls("hsnCode"))}
+                  disabled={readOnly}
+                />
+                <FieldError msg={errors.hsnCode} />
+              </div>
+
+              {/* GST Rate */}
+              <div className="col-span-12 md:col-span-2">
+                <AC
+                  label="GST Rate"
+                  value={form.gstRate}
+                  onChange={(value) => set("gstRate", value)}
+                  options={PRODUCT_GST_OPTIONS}
+                  placeholder="Select GST rate..."
+                  disabled={readOnly}
+                />
+              </div>
+
+              {/* Crop Applicable */}
+              <div className="col-span-12 md:col-span-2 space-y-1">
+                <Label className="text-xs font-medium">Crop Applicable</Label>
+                <Input
+                  value={form.cropApplicable}
+                  onChange={(e) => set("cropApplicable", e.target.value)}
+                  placeholder="e.g. Cotton, Paddy"
+                  className={inputCls("cropApplicable")}
+                  disabled={readOnly}
+                />
+              </div>
+
+              {/* Pack Size */}
+              <div className="col-span-12 md:col-span-2 space-y-1">
+                <Label className="text-xs font-medium">Pack Size</Label>
+                <Input
+                  value={form.packSize}
+                  onChange={(e) => set("packSize", e.target.value)}
+                  placeholder="e.g. 500 ML"
+                  className={inputCls("packSize")}
+                  disabled={readOnly}
+                />
+              </div>
+
+              {/* MRP */}
+              <div className="col-span-12 md:col-span-2 space-y-1">
+                <Label className="text-xs font-medium">MRP</Label>
+                <Input
+                  value={form.mrp}
+                  onChange={(e) => decimalInput("mrp", e.target.value)}
+                  className={inputCls("mrp")}
+                  inputMode="decimal"
+                  disabled={readOnly}
+                />
+              </div>
+
+              {/* Row 2 (5 fields: 2 + 3 + 3 + 2 + 2 = 12 columns) */}
               {/* Unit */}
-              <div className="col-span-1">
+              <div className="col-span-12 md:col-span-2">
                 <AC
                   label="Unit"
                   value={form.unit}
@@ -447,7 +510,7 @@ export function ProductForm({
               </div>
 
               {/* Base Unit */}
-              <div className="col-span-1 space-y-1">
+              <div className="col-span-12 md:col-span-3 space-y-1">
                 <Label className="text-xs font-medium">
                   Base Unit <span className="text-red-500">*</span>
                 </Label>
@@ -471,7 +534,7 @@ export function ProductForm({
               </div>
 
               {/* Packaging Unit */}
-              <div className="col-span-1 space-y-1">
+              <div className="col-span-12 md:col-span-3 space-y-1">
                 <Label className="text-xs font-medium">
                   Packaging Unit <span className="text-red-500">*</span>
                 </Label>
@@ -495,7 +558,7 @@ export function ProductForm({
               </div>
 
               {/* Conversion Quantity */}
-              <div className="col-span-1 space-y-1">
+              <div className="col-span-12 md:col-span-2 space-y-1">
                 <Label className="text-xs font-medium">
                   Conversion Qty <span className="text-red-500">*</span>
                 </Label>
@@ -510,70 +573,20 @@ export function ProductForm({
                 <FieldError msg={errors.conversionQuantity} />
               </div>
 
-              {/* Pack Size */}
-              <div className="col-span-1 space-y-1">
-                <Label className="text-xs font-medium">Pack Size</Label>
-                <Input
-                  value={form.packSize}
-                  onChange={(e) => set("packSize", e.target.value)}
-                  placeholder="e.g. 500 ML"
-                  className={inputCls("packSize")}
-                  disabled={readOnly}
-                />
-              </div>
-
-              {/* HSN Code */}
-              <div className="col-span-1 space-y-1">
-                <Label className="text-xs font-medium">
-                  HSN Code <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  value={form.hsnCode}
-                  onChange={(e) => set("hsnCode", e.target.value)}
-                  className={cn("font-mono", inputCls("hsnCode"))}
-                  disabled={readOnly}
-                />
-                <FieldError msg={errors.hsnCode} />
-              </div>
-
-              {/* GST Rate */}
-              <div className="col-span-1">
+              {/* Reorder Level */}
+              <div className="col-span-12 md:col-span-2">
                 <AC
-                  label="GST Rate"
-                  value={form.gstRate}
-                  onChange={(value) => set("gstRate", value)}
-                  options={PRODUCT_GST_OPTIONS}
-                  placeholder="Select GST rate..."
-                  disabled={readOnly}
-                />
-              </div>
-
-              {/* Crop Applicable */}
-              <div className="col-span-1 space-y-1">
-                <Label className="text-xs font-medium">Crop Applicable</Label>
-                <Input
-                  value={form.cropApplicable}
-                  onChange={(e) => set("cropApplicable", e.target.value)}
-                  placeholder="e.g. Cotton, Paddy"
-                  className={inputCls("cropApplicable")}
-                  disabled={readOnly}
-                />
-              </div>
-
-              {/* MRP */}
-              <div className="col-span-1 space-y-1">
-                <Label className="text-xs font-medium">MRP</Label>
-                <Input
-                  value={form.mrp}
-                  onChange={(e) => decimalInput("mrp", e.target.value)}
-                  className={inputCls("mrp")}
-                  inputMode="decimal"
+                  label="Reorder Level"
+                  value={form.reorderLevel}
+                  onChange={(value) => set("reorderLevel", value)}
+                  options={PRODUCT_REORDER_LEVEL_OPTIONS}
+                  placeholder="Select reorder level..."
                   disabled={readOnly}
                 />
               </div>
 
               {/* Cost Price */}
-              {/* <div className="col-span-1 space-y-1">
+              {/* <div className="col-span-12 md:col-span-2 space-y-1">
                 <Label className="text-xs font-medium">Cost Price</Label>
                 <Input
                   value={form.costPrice}
@@ -585,7 +598,7 @@ export function ProductForm({
               </div> */}
 
               {/* Distributor Price */}
-              {/* <div className="col-span-1 space-y-1">
+              {/* <div className="col-span-12 md:col-span-2 space-y-1">
                 <Label className="text-xs font-medium">Distributor Price</Label>
                 <Input
                   value={form.distributorPrice}
@@ -595,18 +608,6 @@ export function ProductForm({
                   disabled={readOnly}
                 />
               </div> */}
-
-              {/* Reorder Level */}
-              <div className="col-span-1">
-                <AC
-                  label="Reorder Level"
-                  value={form.reorderLevel}
-                  onChange={(value) => set("reorderLevel", value)}
-                  options={PRODUCT_REORDER_LEVEL_OPTIONS}
-                  placeholder="Select reorder level..."
-                  disabled={readOnly}
-                />
-              </div>
             </div>
           </div>
 

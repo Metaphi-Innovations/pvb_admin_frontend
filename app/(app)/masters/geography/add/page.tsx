@@ -179,7 +179,7 @@ export default function AddGeographyPage() {
                         : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >
-                    {l}
+                    {l === "City" ? "Pincode" : l}
                   </button>
                 ))}
               </div>
