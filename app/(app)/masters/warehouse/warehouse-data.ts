@@ -10,6 +10,14 @@ export type WarehouseType =
   | "Cold Storage Warehouse";
 export type OperatedBy = "C&F Agent" | "Self";
 
+export interface WarehouseContact {
+  id: string;
+  contactPerson: string;
+  mobileNumber: string;
+  emailAddress: string;
+  isPrimary?: boolean;
+}
+
 export interface WarehouseMaster {
   id: number;
   warehouseCode: string; // Auto Generated, e.g. "WH-0001"
@@ -28,6 +36,8 @@ export interface WarehouseMaster {
   manager: string;
   status: WarehouseStatus;
   operatedBy: OperatedBy;
+  customerType?: string;
+  contacts: WarehouseContact[];
   createdBy: string;
   createdDate: string;
   updatedBy: string;
@@ -161,6 +171,15 @@ const SEED: WarehouseMaster[] = [
     manager: "Suresh Mehta",
     status: "active",
     operatedBy: "Self",
+    contacts: [
+      {
+        id: "CON-1",
+        contactPerson: "Suresh Mehta",
+        mobileNumber: "9876543210",
+        emailAddress: "suresh@pvb.com",
+        isPrimary: true,
+      }
+    ],
     createdBy: "Admin",
     createdDate: "2026-01-10",
     updatedBy: "Admin",
@@ -184,6 +203,15 @@ const SEED: WarehouseMaster[] = [
     manager: "Priya Kulkarni",
     status: "active",
     operatedBy: "Self",
+    contacts: [
+      {
+        id: "CON-1",
+        contactPerson: "Priya Kulkarni",
+        mobileNumber: "9876543211",
+        emailAddress: "priya@pvb.com",
+        isPrimary: true,
+      }
+    ],
     createdBy: "Admin",
     createdDate: "2026-01-15",
     updatedBy: "Admin",
@@ -207,6 +235,16 @@ const SEED: WarehouseMaster[] = [
     manager: "Raju Bhandari",
     status: "active",
     operatedBy: "C&F Agent",
+    customerType: "Distributor",
+    contacts: [
+      {
+        id: "CON-1",
+        contactPerson: "Raju Bhandari",
+        mobileNumber: "9876543212",
+        emailAddress: "raju@pvb.com",
+        isPrimary: true,
+      }
+    ],
     createdBy: "Admin",
     createdDate: "2026-02-01",
     updatedBy: "Admin",
@@ -230,6 +268,16 @@ const SEED: WarehouseMaster[] = [
     manager: "Anil Patil",
     status: "inactive",
     operatedBy: "C&F Agent",
+    customerType: "Dealer",
+    contacts: [
+      {
+        id: "CON-1",
+        contactPerson: "Anil Patil",
+        mobileNumber: "9876543213",
+        emailAddress: "anil@pvb.com",
+        isPrimary: true,
+      }
+    ],
     createdBy: "Admin",
     createdDate: "2026-02-05",
     updatedBy: "Admin",
@@ -253,6 +301,15 @@ const SEED: WarehouseMaster[] = [
     manager: "Mohan Sharma",
     status: "active",
     operatedBy: "Self",
+    contacts: [
+      {
+        id: "CON-1",
+        contactPerson: "Mohan Sharma",
+        mobileNumber: "9876543214",
+        emailAddress: "mohan@pvb.com",
+        isPrimary: true,
+      }
+    ],
     createdBy: "Admin",
     createdDate: "2026-02-10",
     updatedBy: "Admin",
@@ -276,6 +333,16 @@ const SEED: WarehouseMaster[] = [
     manager: "Kavya Reddy",
     status: "under_maintenance",
     operatedBy: "C&F Agent",
+    customerType: "Retailer",
+    contacts: [
+      {
+        id: "CON-1",
+        contactPerson: "Kavya Reddy",
+        mobileNumber: "9876543215",
+        emailAddress: "kavya@pvb.com",
+        isPrimary: true,
+      }
+    ],
     createdBy: "Admin",
     createdDate: "2026-02-15",
     updatedBy: "Admin",
@@ -299,6 +366,15 @@ const SEED: WarehouseMaster[] = [
     manager: "Ramesh Thakur",
     status: "closed",
     operatedBy: "Self",
+    contacts: [
+      {
+        id: "CON-1",
+        contactPerson: "Ramesh Thakur",
+        mobileNumber: "9876543216",
+        emailAddress: "ramesh@pvb.com",
+        isPrimary: true,
+      }
+    ],
     createdBy: "Admin",
     createdDate: "2026-03-01",
     updatedBy: "Admin",
@@ -322,6 +398,15 @@ const SEED: WarehouseMaster[] = [
     manager: "Deepak Gupta",
     status: "active",
     operatedBy: "Self",
+    contacts: [
+      {
+        id: "CON-1",
+        contactPerson: "Deepak Gupta",
+        mobileNumber: "9876543217",
+        emailAddress: "deepak@pvb.com",
+        isPrimary: true,
+      }
+    ],
     createdBy: "Admin",
     createdDate: "2026-03-10",
     updatedBy: "Admin",
@@ -358,16 +443,44 @@ export function loadWarehouses(): WarehouseMaster[] {
   if (typeof window === "undefined") return SEED;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
+    let list: WarehouseMaster[] = [];
     if (!raw) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: SEED_VERSION, data: SEED }));
-      return SEED;
+      list = SEED;
+    } else {
+      const parsed = JSON.parse(raw);
+      if (!parsed.version || parsed.version < SEED_VERSION) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: SEED_VERSION, data: SEED }));
+        list = SEED;
+      } else {
+        list = parsed.data as WarehouseMaster[];
+      }
     }
-    const parsed = JSON.parse(raw);
-    if (!parsed.version || parsed.version < SEED_VERSION) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: SEED_VERSION, data: SEED }));
-      return SEED;
-    }
-    return parsed.data as WarehouseMaster[];
+
+    // Migrate legacy data to ensure contacts array exists and top-level fields match the primary contact
+    const migrated = list.map(w => {
+      let contacts = w.contacts;
+      if (!contacts || contacts.length === 0) {
+        contacts = [
+          {
+            id: "CON-1",
+            contactPerson: w.contactPerson || "",
+            mobileNumber: w.mobileNumber || "",
+            emailAddress: w.emailAddress || "",
+            isPrimary: true
+          }
+        ];
+      }
+      const primary = contacts.find(c => c.isPrimary) || contacts[0];
+      return {
+        ...w,
+        contacts,
+        contactPerson: primary ? primary.contactPerson : (w.contactPerson || ""),
+        mobileNumber: primary ? primary.mobileNumber : (w.mobileNumber || ""),
+        emailAddress: primary ? primary.emailAddress : (w.emailAddress || ""),
+      };
+    });
+    return migrated;
   } catch {
     return SEED;
   }

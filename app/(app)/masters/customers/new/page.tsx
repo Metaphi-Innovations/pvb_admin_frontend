@@ -70,7 +70,7 @@ export default function NewCustomerPage() {
     });
 
   const persist = (asDraft: boolean) => {
-    const e = validateCustomerForm(form);
+    const e = validateCustomerForm(form, true);
     setErrors(e);
     if (Object.keys(e).length > 0) {
       const hasProductErrors = Object.keys(e).some((key) => key.startsWith("product_"));
@@ -176,6 +176,7 @@ export default function NewCustomerPage() {
         errors={errors}
         onSetErrors={setErrors}
         onClearError={clearErr}
+        isAdd={true}
       />
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
