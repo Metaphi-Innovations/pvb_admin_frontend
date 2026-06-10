@@ -1416,7 +1416,7 @@ export function getTerritoriesUnderDistrict(districtId: number, nodes?: GeoNode[
     for (const child of getChildren(parentId, list)) {
       if (child.status !== "active") continue;
       if (child.level === "Territory") result.push(child);
-      else if (child.level !== "City") walk(child.id);
+      else if (child.level !== "Pincode") walk(child.id);
     }
   }
   walk(districtId);
