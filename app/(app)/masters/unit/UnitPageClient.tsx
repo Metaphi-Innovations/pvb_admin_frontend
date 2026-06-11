@@ -48,7 +48,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { MiniKPICard } from "@/components/ui/KPICard";
 import { MasterFormGrid, MasterField, MasterViewRow, compactInput } from "@/components/masters/MasterModule";
@@ -86,7 +85,7 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
         toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
       )}
     >
-      <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+      <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
         <X className="h-3.5 w-3.5" />
@@ -385,12 +384,12 @@ export default function UnitMasterPage() {
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[220px] max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute w-4 h-4 -translate-y-1/2 pointer-events-none left-3 top-1/2 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search unit code, name, symbol..."
-              className="h-8 pl-9 text-xs"
+              className="h-8 text-xs pl-9"
             />
           </div>
           <Popover>
@@ -448,7 +447,7 @@ export default function UnitMasterPage() {
           </Popover>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+        <div className="overflow-hidden bg-white border shadow-sm rounded-xl border-border">
           <div className="overflow-x-auto">
             <table className="min-w-full border-collapse table-fixed w-max">
               <thead>
@@ -517,7 +516,7 @@ export default function UnitMasterPage() {
               <tbody>
                 {paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-xs text-muted-foreground">
+                    <td colSpan={8} className="px-4 py-8 text-xs text-center text-muted-foreground">
                       No records found
                     </td>
                   </tr>
@@ -526,7 +525,7 @@ export default function UnitMasterPage() {
                     <tr
                       key={row.id}
                       onClick={() => openView(row)}
-                      className="align-top transition-colors border-b border-border/60 hover:bg-muted/20 group cursor-pointer"
+                      className="align-top transition-colors border-b cursor-pointer border-border/60 hover:bg-muted/20 group"
                     >
                       <td className="px-4 py-2.5 text-xs font-semibold font-mono text-brand-700 whitespace-nowrap">
                         {row.unitCode}
@@ -557,9 +556,9 @@ export default function UnitMasterPage() {
                           <DropdownMenuTrigger asChild>
                             <button
                               type="button"
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                              className="inline-flex items-center justify-center rounded-md h-7 w-7 text-muted-foreground hover:bg-muted"
                             >
-                              <MoreVertical className="h-4 w-4" />
+                              <MoreVertical className="w-4 h-4" />
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-32 bg-white border shadow-lg border-border">
@@ -577,7 +576,7 @@ export default function UnitMasterPage() {
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => setDeleteTarget(row)}
-                              className="flex items-center gap-2 cursor-pointer text-red-600 focus:text-red-700"
+                              className="flex items-center gap-2 text-red-600 cursor-pointer focus:text-red-700"
                             >
                               <Trash2 className="h-3.5 w-3.5" /> Delete
                             </DropdownMenuItem>
@@ -645,7 +644,7 @@ export default function UnitMasterPage() {
         <SheetContent>
           <SheetHeader>
             <div className="flex items-start gap-3 pr-8">
-              <div className="w-9 h-9 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center">
+              <div className="flex items-center justify-center border w-9 h-9 rounded-xl bg-brand-50 border-brand-100">
                 <Ruler className="w-4 h-4 text-brand-600" />
               </div>
               <div>
@@ -660,14 +659,14 @@ export default function UnitMasterPage() {
           <SheetBody>
             {sheetMode === "view" && active ? (
               <div className="space-y-4">
-                <div className="rounded-lg border border-border/60 bg-muted/10 px-3">
+                <div className="px-3 border rounded-lg border-border/60 bg-muted/10">
                   <MasterViewRow label="Unit Name" value={active.unitName} />
                   <MasterViewRow label="Unit Code" value={<span className="font-mono">{active.unitCode}</span>} />
                   <MasterViewRow label="Symbol" value={<span className="font-mono">{active.symbol}</span>} />
                   <MasterViewRow label="Description" value={active.description || "—"} />
                   <MasterViewRow label="Status" value={active.status === "active" ? "Active" : "Inactive"} />
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-xs pt-2 border-t">
+                <div className="grid grid-cols-2 gap-3 pt-2 text-xs border-t">
                   <div>
                     <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
                     <p className="font-medium">{active.createdBy}</p>
@@ -693,8 +692,10 @@ export default function UnitMasterPage() {
                   </MasterField>
                   <MasterField label="Unit Code" required>
                     <Input
-                      className={compactInput("font-mono")}
+                      className={compactInput("font-mono opacity-100 bg-background text-foreground cursor-not-allowed")}
                       value={form.unitCode}
+                      disabled
+                      readOnly
                       onChange={(e) => setForm((f) => ({ ...f, unitCode: e.target.value.toUpperCase() }))}
                     />
                   </MasterField>
@@ -714,18 +715,6 @@ export default function UnitMasterPage() {
                     />
                   </MasterField>
                 </MasterFormGrid>
-                <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/20">
-                  <div>
-                    <p className="text-xs font-medium">Status</p>
-                    <p className="text-[11px] text-muted-foreground">{form.status === "active" ? "Active" : "Inactive"}</p>
-                  </div>
-                  <Switch
-                    checked={form.status === "active"}
-                    onCheckedChange={(checked) =>
-                      setForm((prev) => ({ ...prev, status: checked ? "active" : "inactive" }))
-                    }
-                  />
-                </div>
               </div>
             )}
           </SheetBody>
@@ -738,7 +727,7 @@ export default function UnitMasterPage() {
                 </Button>
                 <Button
                   size="sm"
-                  className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
                   onClick={() => active && openEdit(active)}
                 >
                   Edit
@@ -751,7 +740,7 @@ export default function UnitMasterPage() {
                 </Button>
                 <Button
                   size="sm"
-                  className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
                   onClick={persist}
                 >
                   Save
@@ -774,7 +763,7 @@ export default function UnitMasterPage() {
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
               Cancel
             </Button>
-            <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" onClick={confirmDelete}>
+            <Button size="sm" className="h-8 text-xs text-white bg-red-600 hover:bg-red-700" onClick={confirmDelete}>
               Delete
             </Button>
           </DialogFooter>

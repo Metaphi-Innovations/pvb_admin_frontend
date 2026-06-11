@@ -7,7 +7,6 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   ArrowLeft, Save, Check, ChevronsUpDown, AlertCircle,
@@ -308,7 +307,6 @@ export default function AddUserPage() {
     territoryAccess: [] as string[],
     password: "",
     confirmPassword: "",
-    status: "active",
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -336,7 +334,7 @@ export default function AddUserPage() {
 
   const handleSave = (asDraft = false) => {
     if (!validate()) return;
-    console.log("Creating user:", { ...form, status: asDraft ? "inactive" : form.status });
+    console.log("Creating user:", { ...form, status: asDraft ? "inactive" : "active" });
     router.push("/user-management/user");
   };
 
@@ -666,43 +664,6 @@ export default function AddUserPage() {
                   >
                     Discard
                   </Button>
-                </div>
-              </div>
-
-              <div className="border-t border-border" />
-
-              {/* Status */}
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
-                  Status
-                </p>
-                <div className="rounded-lg border border-border bg-muted/20 p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-medium text-foreground">
-                        {form.status === "active" ? "Active" : "Inactive"}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {form.status === "active" ? "Can log in immediately" : "Account disabled"}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={form.status === "active"}
-                      onCheckedChange={v => set("status", v ? "active" : "inactive")}
-                    />
-                  </div>
-                  <div className={cn(
-                    "mt-2.5 flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-md",
-                    form.status === "active"
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "bg-slate-100 text-slate-600",
-                  )}>
-                    <span className={cn(
-                      "w-1.5 h-1.5 rounded-full flex-shrink-0",
-                      form.status === "active" ? "bg-emerald-500" : "bg-slate-400",
-                    )} />
-                    {form.status === "active" ? "Active" : "Inactive"}
-                  </div>
                 </div>
               </div>
 

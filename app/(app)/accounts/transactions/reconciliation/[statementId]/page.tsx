@@ -1,10 +1,6 @@
-import ReconciliationEntriesPageClient from "../../../bank-reconciliation/ReconciliationEntriesPageClient";
+import { redirect } from "next/navigation";
+import { ACCOUNTS_HOME_HREF } from "@/lib/accounts/accounts-nav";
 
-export default function BankReconciliationEntriesPage({
-  params,
-}: {
-  params: { statementId: string };
-}) {
-  const id = parseInt(params.statementId, 10);
-  return <ReconciliationEntriesPageClient statementId={Number.isFinite(id) ? id : 0} />;
+export default function LegacyRedirect() {
+  redirect(ACCOUNTS_HOME_HREF);
 }

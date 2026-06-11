@@ -1,5 +1,7 @@
 "use client";
 
-import { createLazyClientPage } from "@/lib/createLazyClientPage";
+import ChartOfAccountsPageClient from "./ChartOfAccountsPageClient";
 
-export default createLazyClientPage(() => import("./ChartOfAccountsPageClient"));
+export default function ChartOfAccountsPage() {
+  return <ChartOfAccountsPageClient />;
+}

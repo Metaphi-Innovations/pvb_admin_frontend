@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, Save, XCircle } from "lucide-react";
@@ -11,6 +11,7 @@ import {
   loadCustomerTypes,
   saveCustomerTypes,
   nextCustomerTypeId,
+  generateCustomerTypeCode,
   type CustomerTypeRecord,
 } from "../customer-type-data";
 import {
@@ -25,6 +26,11 @@ export default function AddCustomerTypePage() {
   const [form, setForm] = useState<CustomerTypeFormValues>(DEFAULT_CUSTOMER_TYPE_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+
+  useEffect(() => {
+    const list = loadCustomerTypes();
+    setForm((prev) => ({ ...prev, customerTypeCode: generateCustomerTypeCode(list) }));
+  }, []);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -45,9 +51,11 @@ export default function AddCustomerTypePage() {
     const list = loadCustomerTypes();
     const newRecord: CustomerTypeRecord = {
       id: nextCustomerTypeId(list),
+      customerTypeCode: form.customerTypeCode.trim() || generateCustomerTypeCode(list),
       customerType: form.customerType.trim(),
       description: form.description.trim(),
       documentTypes: form.documentTypes || [],
+      status: "active",
     };
 
     saveCustomerTypes([...list, newRecord]);
