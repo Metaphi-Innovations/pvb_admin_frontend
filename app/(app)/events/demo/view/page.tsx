@@ -3,8 +3,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, ChevronRight, Star, X } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Star } from "lucide-react";
 import { type DemoRecord, SEED, VIEW_DEMO_STORAGE_KEY } from "../demo-data";
 
 function formatList(values: string[]) {
@@ -59,7 +60,7 @@ function InfoField({
   return (
     <div className={cn("space-y-1.5", className)}>
       <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
-      <div className="min-h-[36px] rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-sm">
+      <div className="min-h-[36px] rounded-lg border border-border bg-white px-3 py-2 text-xs text-foreground shadow-sm">
         {value}
       </div>
     </div>
@@ -125,13 +126,20 @@ export default function DemoViewPage() {
       <div className="space-y-4">
         <section className="rounded-xl border border-border bg-white shadow-sm">
           <div className="flex items-start justify-between gap-4 px-5 py-4">
-            <div>
-              <h1 className="text-base font-semibold text-foreground">
+            <div className="flex min-w-0 items-center gap-3">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 flex-shrink-0 rounded-lg hover:bg-muted"
+                onClick={handleCloseView}
+                aria-label="Back to demo listing"
+              >
+                <ArrowLeft className="h-4 w-4 text-muted-foreground" />
+              </Button>
+              <h1 className="truncate text-base font-semibold text-foreground">
                 {viewRecord?.demoCode} - Demo Details
               </h1>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
-                View-only demonstration details and feedback outcomes
-              </p>
             </div>
             <div className="flex items-center gap-1.5">
               <button
@@ -155,18 +163,10 @@ export default function DemoViewPage() {
                   "inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted",
                   currentRecordIndex < 0 || currentRecordIndex >= records.length - 1
                     ? "cursor-not-allowed opacity-40"
-                    : "hover:text-foreground",
+                  : "hover:text-foreground",
                 )}
               >
                 <ChevronRight className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={handleCloseView}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-              >
-                <X className="h-4 w-4" />
-                <span className="sr-only">Close</span>
               </button>
             </div>
           </div>

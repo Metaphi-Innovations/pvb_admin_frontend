@@ -443,8 +443,35 @@ export const SEED: Distributor[] = [
   },
 ];
 
+export const DISTRIBUTORS_STORAGE_KEY = "database:distributors";
+export const VIEW_DISTRIBUTOR_STORAGE_KEY = "distributor:view-id";
+
 export function loadDistributors(): Distributor[] {
-  return SEED;
+  if (typeof window === "undefined") {
+    return SEED.map((distributor) => ({ ...distributor }));
+  }
+
+  try {
+    const storedDistributors = window.localStorage.getItem(DISTRIBUTORS_STORAGE_KEY);
+    if (!storedDistributors) {
+      return SEED.map((distributor) => ({ ...distributor }));
+    }
+
+    const parsedDistributors = JSON.parse(storedDistributors);
+    if (!Array.isArray(parsedDistributors)) {
+      return SEED.map((distributor) => ({ ...distributor }));
+    }
+
+    return parsedDistributors as Distributor[];
+  } catch {
+    return SEED.map((distributor) => ({ ...distributor }));
+  }
 }
 
-export const VIEW_DISTRIBUTOR_STORAGE_KEY = "distributor:view-id";
+export function saveDistributors(distributors: Distributor[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(DISTRIBUTORS_STORAGE_KEY, JSON.stringify(distributors));
+}

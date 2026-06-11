@@ -2,17 +2,10 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Popover,
   PopoverContent,
@@ -27,69 +20,46 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { AuthService } from "@/services/auth.service";
-import { MasterListing } from "@/components/listing/MasterListing";
-import { applyFilters } from "@/components/listing/filter-utils";
 import {
-  ActionItemConfig,
-  ColumnConfig,
-  FilterState,
-  SortState,
-} from "@/components/listing/types";
-import {
-  CalendarDays,
   CalendarRange,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
-  Download,
-  Edit,
-  Eye,
-  MapPin,
-  MoreVertical,
-  Plus,
-  Search,
-  Users,
+  Save,
   X,
 } from "lucide-react";
 import {
   type GeoLevel,
   type GeoNode,
   loadGeoNodes,
-} from "../../masters/geography/geo-data";
+} from "../../../masters/geography/geo-data";
 import {
   type Employee,
   loadEmployees,
-} from "../../user-management/employee/employee-data";
+} from "../../../user-management/employee/employee-data";
 import {
   type Customer,
   loadCustomers,
-} from "../../masters/customers/customer-data";
+} from "../../../masters/customers/customer-data";
 import {
   type Distributor,
   loadDistributors,
-} from "../../database/distributor/distributor-data";
-
+} from "../../../database/distributor/distributor-data";
 import {
   type Event,
   type LocationSelection,
   EVENTS_STORAGE_KEY,
-  VIEW_EVENT_STORAGE_KEY,
   SEED,
-  STATUS_CFG,
-  TYPE_COLORS,
-  formatDateRange,
   formatTimeDisplay,
-} from "./event-data";
+} from "../event-data";
 
 interface MultiSelectOption {
   id: number;
   label: string;
   helper?: string;
 }
-
-// LocationSelection imported from event-data
 
 interface EventFormState {
   title: string;
@@ -105,24 +75,9 @@ type EventFormErrors = Partial<
   Record<"title" | "selectedDates" | "time" | "attendees" | GeoLevel, string>
 >;
 
-type EventListRow = Event & {
-  locationText: string;
-};
-
-function handleScrollableWheel(event: React.WheelEvent<HTMLElement>) {
-  const current = event.currentTarget;
-  if (current.scrollHeight <= current.clientHeight) return;
-
-  const atTop = current.scrollTop <= 0;
-  const atBottom = current.scrollTop + current.clientHeight >= current.scrollHeight - 1;
-  const scrollingUp = event.deltaY < 0;
-  const scrollingDown = event.deltaY > 0;
-
-  if ((scrollingUp && atTop) || (scrollingDown && atBottom)) return;
-
-  event.preventDefault();
-  event.stopPropagation();
-  current.scrollTop += event.deltaY;
+interface ToastState {
+  msg: string;
+  type: "success" | "error";
 }
 
 const FARMER_NAMES = [
@@ -155,7 +110,6 @@ const FARMER_OPTIONS: MultiSelectOption[] = FARMER_NAMES.map((label, index) => (
 }));
 
 const CUSTOMER_DISTRIBUTOR_ID_OFFSET = 100000;
-const PER_PAGE = 10;
 
 const LOCATION_LEVELS: GeoLevel[] = [
   "Zone",
@@ -177,6 +131,23 @@ const LOCATION_PARENT: Record<GeoLevel, GeoLevel | null> = {
   City: "Locality",
 };
 
+function handleScrollableWheel(event: React.WheelEvent<HTMLElement>) {
+  const current = event.currentTarget;
+  if (current.scrollHeight <= current.clientHeight) return;
+
+  const atTop = current.scrollTop <= 0;
+  const atBottom =
+    current.scrollTop + current.clientHeight >= current.scrollHeight - 1;
+  const scrollingUp = event.deltaY < 0;
+  const scrollingDown = event.deltaY > 0;
+
+  if ((scrollingUp && atTop) || (scrollingDown && atBottom)) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  current.scrollTop += event.deltaY;
+}
+
 function todayIso() {
   return toIsoDate(new Date());
 }
@@ -193,7 +164,29 @@ function getInitialFormState(): EventFormState {
   };
 }
 
-// formatDateRange imported from event-data
+function loadEvents() {
+  if (typeof window === "undefined") {
+    return SEED;
+  }
+
+  const storedEvents = window.sessionStorage.getItem(EVENTS_STORAGE_KEY);
+  if (!storedEvents) {
+    return SEED;
+  }
+
+  try {
+    const parsed = JSON.parse(storedEvents) as Event[];
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : SEED;
+  } catch {
+    window.sessionStorage.removeItem(EVENTS_STORAGE_KEY);
+    return SEED;
+  }
+}
+
+function saveEvents(events: Event[]) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(events));
+}
 
 function parseIsoDate(value: string) {
   const [year, month, day] = value.split("-").map(Number);
@@ -245,35 +238,13 @@ function getScheduledDateSummary(selectedDates: string[]) {
   return `${scheduledDates.length} event days selected`;
 }
 
-function getEventScheduledDates(event: Event) {
-  return sortIsoDates(
-    event.scheduledDates?.length
-      ? event.scheduledDates
-      : [event.startDate, event.endDate].filter(Boolean),
-  );
-}
-
-function formatScheduledDatesList(event: Event) {
-  const dates = getEventScheduledDates(event);
-  if (dates.length === 0) return "-";
-  return dates.map(formatDisplayDate).join(", ");
-}
-
-function formatListOrDash(values: string[]) {
-  return values.length > 0 ? values.join(", ") : "-";
-}
-
-function formatTitleCase(value: string) {
-  return value
-    .split(/[\s-]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
 function getCalendarGrid(viewMonth: Date, minDate: string) {
   const monthStart = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
-  const monthEnd = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0);
+  const monthEnd = new Date(
+    viewMonth.getFullYear(),
+    viewMonth.getMonth() + 1,
+    0,
+  );
   const startOffset = monthStart.getDay();
   const totalDays = monthEnd.getDate();
 
@@ -281,7 +252,11 @@ function getCalendarGrid(viewMonth: Date, minDate: string) {
     const dayNumber = index - startOffset + 1;
     if (dayNumber < 1 || dayNumber > totalDays) return null;
 
-    const date = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), dayNumber);
+    const date = new Date(
+      viewMonth.getFullYear(),
+      viewMonth.getMonth(),
+      dayNumber,
+    );
     const isoDate = toIsoDate(date);
     return {
       isoDate,
@@ -290,8 +265,6 @@ function getCalendarGrid(viewMonth: Date, minDate: string) {
     };
   });
 }
-
-// formatTimeDisplay imported from event-data
 
 function parseTimeValue(value?: string) {
   if (!value) {
@@ -320,49 +293,54 @@ function buildTimeValue(hour: string, minute: string, meridiem: "AM" | "PM") {
   let hours24 = hourNumber % 12;
   if (meridiem === "PM") hours24 += 12;
 
-  return `${String(hours24).padStart(2, "0")}:${String(minuteNumber).padStart(2, "0")}`;
+  return `${String(hours24).padStart(2, "0")}:${String(minuteNumber).padStart(
+    2,
+    "0",
+  )}`;
 }
 
 function sortByLabel<T extends { label: string }>(items: T[]) {
-  return [...items].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+  return [...items].sort((a, b) =>
+    a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+  );
+}
+
+function Toast({
+  toast,
+  onDismiss,
+}: {
+  toast: ToastState;
+  onDismiss: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "fixed right-5 top-5 z-[100] flex items-center gap-2.5 rounded-xl px-4 py-3 text-sm font-medium text-white shadow-xl",
+        toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
+      )}
+    >
+      {toast.msg}
+      <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
 }
 
 function SectionCard({
   title,
-  // subtitle,
   children,
 }: {
   title: string;
-  // subtitle: string;
   children: React.ReactNode;
 }) {
   return (
     <section className="rounded-xl border border-border bg-white shadow-sm">
       <div className="border-b border-border px-4 py-3">
         <p className="text-sm font-semibold text-foreground">{title}</p>
-        {/* <p className="mt-0.5 text-[11px] text-muted-foreground">{subtitle}</p> */}
       </div>
       <div className="space-y-4 px-4 py-4">{children}</div>
     </section>
-  );
-}
-
-function InfoField({
-  label,
-  value,
-  className,
-}: {
-  label: string;
-  value: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn("space-y-1.5", className)}>
-      <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
-      <div className="min-h-[36px] rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-sm">
-        {value}
-      </div>
-    </div>
   );
 }
 
@@ -383,7 +361,9 @@ function MultiSelectPopover({
   onClear: () => void;
   error?: string;
 }) {
-  const selectedOptions = options.filter((option) => selectedIds.includes(option.id));
+  const selectedOptions = options.filter((option) =>
+    selectedIds.includes(option.id),
+  );
   const summary =
     selectedOptions.length === 0
       ? placeholder
@@ -392,28 +372,39 @@ function MultiSelectPopover({
         : `${selectedOptions.length} selected`;
 
   return (
-    <div className="w-full space-y-1.5 md:max-w-[340px] md:justify-self-start">
+    <div className="w-full space-y-1.5">
       <Label className="text-xs font-medium text-foreground">{label}</Label>
       <Popover>
         <PopoverTrigger asChild>
           <button
             type="button"
             className={cn(
-              "flex h-9 w-full items-center justify-between rounded-lg border border-border bg-white px-3 text-sm text-left",
+              "flex h-9 w-full items-center justify-between rounded-lg border border-border bg-white px-3 text-left text-xs",
               "transition-colors hover:bg-muted/20 focus:outline-none focus:ring-2 focus:ring-brand-300",
               error && "border-red-400 focus:ring-red-300",
             )}
           >
-            <span className={cn(selectedOptions.length === 0 && "text-muted-foreground")}>{summary}</span>
+            <span
+              className={cn(
+                selectedOptions.length === 0 && "text-muted-foreground",
+              )}
+            >
+              {summary}
+            </span>
             <ChevronDown className="h-4 w-4 text-muted-foreground" />
           </button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-[300px] max-h-[min(320px,var(--radix-popover-content-available-height))] overflow-hidden p-0">
+        <PopoverContent
+          align="start"
+          className="max-h-[min(320px,var(--radix-popover-content-available-height))] w-[var(--radix-popover-trigger-width)] min-w-[var(--radix-popover-trigger-width)] max-w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-xl border border-border bg-white p-0 shadow-lg"
+        >
           <div className="border-b border-border px-3 py-2">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold text-foreground">{label}</p>
-                <p className="text-[11px] text-muted-foreground">{selectedOptions.length} selected</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {selectedOptions.length} selected
+                </p>
               </div>
               {selectedOptions.length > 0 && (
                 <button
@@ -431,7 +422,9 @@ function MultiSelectPopover({
             onWheelCapture={handleScrollableWheel}
           >
             {options.length === 0 ? (
-              <div className="px-2 py-3 text-xs text-muted-foreground">No options available</div>
+              <div className="px-2 py-3 text-xs text-muted-foreground">
+                No options available
+              </div>
             ) : (
               options.map((option) => {
                 const checked = selectedIds.includes(option.id);
@@ -454,9 +447,13 @@ function MultiSelectPopover({
                       <Check className="h-3 w-3" />
                     </span>
                     <span className="min-w-0">
-                      <span className="block text-xs font-medium text-foreground">{option.label}</span>
+                      <span className="block text-xs font-medium text-foreground">
+                        {option.label}
+                      </span>
                       {option.helper && (
-                        <span className="block text-[11px] text-muted-foreground">{option.helper}</span>
+                        <span className="block text-[11px] text-muted-foreground">
+                          {option.helper}
+                        </span>
                       )}
                     </span>
                   </button>
@@ -486,7 +483,13 @@ function MultiDatePopover({
 }) {
   const [viewMonth, setViewMonth] = useState(() => {
     const firstSelectedDate = sortIsoDates(selectedDates)[0];
-    return firstSelectedDate ? new Date(parseIsoDate(firstSelectedDate).getFullYear(), parseIsoDate(firstSelectedDate).getMonth(), 1) : new Date();
+    return firstSelectedDate
+      ? new Date(
+          parseIsoDate(firstSelectedDate).getFullYear(),
+          parseIsoDate(firstSelectedDate).getMonth(),
+          1,
+        )
+      : new Date();
   });
 
   useEffect(() => {
@@ -497,7 +500,9 @@ function MultiDatePopover({
 
     if (selectedDates.length === 1) {
       const selectedMonth = parseIsoDate(selectedDates[0]);
-      setViewMonth(new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1));
+      setViewMonth(
+        new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1),
+      );
     }
   }, [selectedDates]);
 
@@ -510,7 +515,7 @@ function MultiDatePopover({
   const calendarDays = getCalendarGrid(viewMonth, minDate);
 
   return (
-    <div className="w-full space-y-1.5 md:max-w-[340px] md:justify-self-start">
+    <div className="w-full space-y-1.5">
       <Label className="text-xs font-medium text-foreground">
         {label} <span className="text-red-500">*</span>
       </Label>
@@ -519,21 +524,33 @@ function MultiDatePopover({
           <button
             type="button"
             className={cn(
-              "flex h-9 w-full items-center justify-between rounded-lg border border-border bg-white px-3 text-sm text-left",
+              "flex h-9 w-full items-center justify-between rounded-lg border border-border bg-white px-3 text-left text-xs",
               "transition-colors hover:bg-muted/20 focus:outline-none focus:ring-2 focus:ring-brand-300",
               error && "border-red-400 focus:ring-red-300",
             )}
           >
-            <span className={cn("truncate", selectedDates.length === 0 && "text-muted-foreground")}>{summary}</span>
+            <span
+              className={cn(
+                "truncate",
+                selectedDates.length === 0 && "text-muted-foreground",
+              )}
+            >
+              {summary}
+            </span>
             <CalendarRange className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
           </button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-[320px] p-0">
+        <PopoverContent
+          align="start"
+          className="w-[320px] p-0"
+        >
           <div className="border-b border-border px-3 py-3">
             <div className="flex items-center justify-between gap-2">
               <div>
                 <p className="text-xs font-semibold text-foreground">{label}</p>
-                <p className="text-[11px] text-muted-foreground">{getScheduledDateSummary(selectedDates)}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {getScheduledDateSummary(selectedDates)}
+                </p>
               </div>
               {selectedDates.length > 0 && (
                 <button
@@ -556,7 +573,9 @@ function MultiDatePopover({
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <p className="text-xs font-semibold text-foreground">{formatMonthLabel(viewMonth)}</p>
+              <p className="text-xs font-semibold text-foreground">
+                {formatMonthLabel(viewMonth)}
+              </p>
               <button
                 type="button"
                 onClick={() => setViewMonth((current) => shiftMonth(current, 1))}
@@ -568,7 +587,10 @@ function MultiDatePopover({
 
             <div className="mb-2 grid grid-cols-7 gap-1">
               {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((labelValue) => (
-                <div key={labelValue} className="py-1 text-center text-[11px] font-medium text-muted-foreground">
+                <div
+                  key={labelValue}
+                  className="py-1 text-center text-[11px] font-medium text-muted-foreground"
+                >
                   {labelValue}
                 </div>
               ))}
@@ -584,10 +606,16 @@ function MultiDatePopover({
                     onClick={() => onToggleDate(day.isoDate)}
                     className={cn(
                       "inline-flex h-9 items-center justify-center rounded-md border text-xs font-medium transition-colors",
-                      day.disabled && "cursor-not-allowed border-transparent text-muted-foreground/50",
-                      !day.disabled && !scheduledSet.has(day.isoDate) && "border-transparent text-foreground hover:border-border hover:bg-muted/30",
-                      scheduledSet.has(day.isoDate) && !anchorSet.has(day.isoDate) && "border-brand-200 bg-brand-50 text-brand-700",
-                      anchorSet.has(day.isoDate) && "border-brand-600 bg-brand-600 text-white hover:bg-brand-700",
+                      day.disabled &&
+                        "cursor-not-allowed border-transparent text-muted-foreground/50",
+                      !day.disabled &&
+                        !scheduledSet.has(day.isoDate) &&
+                        "border-transparent text-foreground hover:border-border hover:bg-muted/30",
+                      scheduledSet.has(day.isoDate) &&
+                        !anchorSet.has(day.isoDate) &&
+                        "border-brand-200 bg-brand-50 text-brand-700",
+                      anchorSet.has(day.isoDate) &&
+                        "border-brand-600 bg-brand-600 text-white hover:bg-brand-700",
                     )}
                   >
                     {day.dayNumber}
@@ -647,11 +675,17 @@ function TimeSelectField({
   const [open, setOpen] = useState(false);
   const currentParts = useMemo(() => parseTimeValue(value), [value]);
   const hourOptions = useMemo(
-    () => Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0")),
+    () =>
+      Array.from({ length: 12 }, (_, index) =>
+        String(index + 1).padStart(2, "0"),
+      ),
     [],
   );
   const minuteOptions = useMemo(
-    () => Array.from({ length: 60 }, (_, index) => String(index).padStart(2, "0")),
+    () =>
+      Array.from({ length: 60 }, (_, index) =>
+        String(index).padStart(2, "0"),
+      ),
     [],
   );
 
@@ -666,7 +700,7 @@ function TimeSelectField({
   };
 
   return (
-    <div className="w-full space-y-1.5 md:max-w-[340px] md:justify-self-start">
+    <div className="w-full space-y-1.5">
       <Label className="text-xs font-medium text-foreground">
         {label} <span className="text-red-500">*</span>
       </Label>
@@ -675,25 +709,29 @@ function TimeSelectField({
           <button
             type="button"
             className={cn(
-              "flex h-9 w-full items-center justify-between rounded-lg border border-border bg-white px-3 text-left text-sm shadow-sm",
+              "flex h-9 w-full items-center justify-between rounded-lg border border-border bg-white px-3 text-left text-xs shadow-sm",
               "transition-colors hover:bg-muted/20 focus:outline-none focus:ring-2 focus:ring-brand-300",
               "data-[state=open]:border-brand-500 data-[state=open]:ring-2 data-[state=open]:ring-brand-200",
               error && "border-red-400 focus:ring-red-300",
             )}
           >
-            <span className={cn(!value && "text-muted-foreground")}>{value ? formatTimeDisplay(value) : "Select time"}</span>
+            <span className={cn(!value && "text-muted-foreground")}>
+              {value ? formatTimeDisplay(value) : "Select time"}
+            </span>
             <Clock className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
           </button>
         </PopoverTrigger>
         <PopoverContent
           align="start"
-          className="w-[300px] max-h-[min(360px,var(--radix-popover-content-available-height))] overflow-hidden rounded-xl border border-border bg-white p-0 shadow-lg"
+          className="max-h-[min(360px,var(--radix-popover-content-available-height))] w-[300px] overflow-hidden rounded-xl border border-border bg-white p-0 shadow-lg"
         >
           <div className="border-b border-border px-4 py-3">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[11px] font-medium text-foreground">{label}</p>
-                <p className="mt-1 text-sm font-medium text-brand-700">{formatTimeDisplay(value || "09:00")}</p>
+                <p className="mt-1 text-sm font-medium text-brand-700">
+                  {formatTimeDisplay(value || "09:00")}
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 {value && (
@@ -718,7 +756,9 @@ function TimeSelectField({
           </div>
           <div className="grid grid-cols-[1fr_1fr_88px] gap-3 px-4 py-4">
             <div className="space-y-2">
-              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Hour</p>
+              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Hour
+              </p>
               <div
                 className="max-h-[min(11rem,calc(var(--radix-popover-content-available-height)-150px))] space-y-1 overflow-y-auto overscroll-contain rounded-lg border border-border bg-muted/10 p-1 pr-1"
                 onWheelCapture={handleScrollableWheel}
@@ -742,7 +782,9 @@ function TimeSelectField({
             </div>
 
             <div className="space-y-2">
-              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Minute</p>
+              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Minute
+              </p>
               <div
                 className="max-h-[min(11rem,calc(var(--radix-popover-content-available-height)-150px))] space-y-1 overflow-y-auto overscroll-contain rounded-lg border border-border bg-muted/10 p-1 pr-1"
                 onWheelCapture={handleScrollableWheel}
@@ -766,7 +808,9 @@ function TimeSelectField({
             </div>
 
             <div className="space-y-2">
-              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Period</p>
+              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Period
+              </p>
               <div className="space-y-1 rounded-lg border border-border bg-muted/10 p-1">
                 {(["AM", "PM"] as const).map((option) => (
                   <button
@@ -787,7 +831,12 @@ function TimeSelectField({
             </div>
           </div>
           <div className="flex items-center justify-end border-t border-border px-4 py-3">
-            <Button type="button" size="sm" className="h-8 px-3 text-[11px]" onClick={() => setOpen(false)}>
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 px-3 text-[11px]"
+              onClick={() => setOpen(false)}
+            >
               Done
             </Button>
           </div>
@@ -816,16 +865,18 @@ function LocationSelectField({
   onChange: (value?: number) => void;
 }) {
   return (
-    <div className="w-full space-y-1.5 md:max-w-[340px] md:justify-self-start">
+    <div className="w-full space-y-1.5">
       <Label className="text-xs font-medium text-foreground">{label}</Label>
       <Select
         value={value ? String(value) : undefined}
         disabled={disabled}
-        onValueChange={(nextValue) => onChange(nextValue ? Number(nextValue) : undefined)}
+        onValueChange={(nextValue) =>
+          onChange(nextValue ? Number(nextValue) : undefined)
+        }
       >
         <SelectTrigger
           className={cn(
-            "h-9 rounded-lg border-border bg-white text-sm shadow-sm",
+            "h-9 rounded-lg border-border bg-white text-xs shadow-sm",
             "data-[state=open]:border-brand-500 data-[state=open]:ring-2 data-[state=open]:ring-brand-200",
             disabled && "cursor-not-allowed bg-muted/40 text-muted-foreground",
             error && "border-red-400 focus:ring-red-300",
@@ -833,7 +884,7 @@ function LocationSelectField({
         >
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
-        <SelectContent className="!w-[280px] !min-w-[280px]">
+        <SelectContent>
           {options.map((option) => (
             <SelectItem key={option.id} value={String(option.id)}>
               {option.label}
@@ -846,45 +897,25 @@ function LocationSelectField({
   );
 }
 
-export default function EventsPage() {
+export default function CreateEventPage() {
   const router = useRouter();
   const [events, setEvents] = useState<Event[]>(SEED);
-  const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "eventCode", direction: "asc" });
-  const [page, setPage] = useState(1);
-  const [openMenu, setOpenMenu] = useState<number | null>(null);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [form, setForm] = useState<EventFormState>(getInitialFormState);
   const [errors, setErrors] = useState<EventFormErrors>({});
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [geoNodes, setGeoNodes] = useState<GeoNode[]>([]);
   const [users, setUsers] = useState<Employee[]>([]);
   const [distributors, setDistributors] = useState<Distributor[]>([]);
-  const [customerDistributors, setCustomerDistributors] = useState<Customer[]>([]);
+  const [customerDistributors, setCustomerDistributors] = useState<Customer[]>(
+    [],
+  );
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const storedEvents = window.sessionStorage.getItem(EVENTS_STORAGE_KEY);
-    if (!storedEvents) return;
-
-    try {
-      const parsed = JSON.parse(storedEvents) as Event[];
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        setEvents(parsed);
-      }
-    } catch {
-      window.sessionStorage.removeItem(EVENTS_STORAGE_KEY);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.sessionStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(events));
-  }, [events]);
-
-  useEffect(() => {
+    setEvents(loadEvents());
     setGeoNodes(loadGeoNodes().filter((node) => node.status === "active"));
-    setUsers(loadEmployees().filter((employee) => employee.status !== "archived"));
+    setUsers(
+      loadEmployees().filter((employee) => employee.status !== "archived"),
+    );
     setDistributors(loadDistributors());
     setCustomerDistributors(loadCustomers());
   }, []);
@@ -892,7 +923,11 @@ export default function EventsPage() {
   const userOptions = useMemo(
     () =>
       [...users]
-        .sort((a, b) => a.fullName.localeCompare(b.fullName, undefined, { sensitivity: "base" }))
+        .sort((a, b) =>
+          a.fullName.localeCompare(b.fullName, undefined, {
+            sensitivity: "base",
+          }),
+        )
         .map((user) => ({
           id: user.id,
           label: user.fullName,
@@ -919,66 +954,14 @@ export default function EventsPage() {
     [customerDistributors, distributors],
   );
 
-  const eventRows = useMemo<EventListRow[]>(
-    () =>
-      events.map((event) => ({
-        ...event,
-        locationText:
-          event.locationSummary ??
-          [event.venue, event.district, event.state].filter(Boolean).join(", "),
-      })),
-    [events],
-  );
-
-  const filtered = useMemo(() => {
-    let result = [...eventRows];
-
-    if (filters.search) {
-      const query = String(filters.search).trim().toLowerCase();
-      result = result.filter((event) =>
-        [
-          event.title,
-          event.eventCode,
-          event.venue,
-          event.district,
-          event.state,
-          event.locationText,
-          event.organizer,
-        ]
-          .join(" ")
-          .toLowerCase()
-          .includes(query),
-      );
-    }
-
-    result = applyFilters(result, filters);
-
-    if (sort.key && sort.direction !== "none") {
-      result.sort((a, b) => {
-        if (sort.key === "expectedAttendees" || sort.key === "actualAttendees") {
-          const diff = Number(a[sort.key]) - Number(b[sort.key]);
-          return sort.direction === "asc" ? diff : -diff;
-        }
-
-        const aValue = String(a[sort.key as keyof EventListRow] ?? "").toLowerCase();
-        const bValue = String(b[sort.key as keyof EventListRow] ?? "").toLowerCase();
-        return sort.direction === "asc"
-          ? aValue.localeCompare(bValue)
-          : bValue.localeCompare(aValue);
-      });
-    }
-
-    return result;
-  }, [eventRows, filters, sort]);
-
-  const visibleEvents = useMemo(() => {
-    const startOffset = (page - 1) * PER_PAGE;
-    return filtered.slice(startOffset, startOffset + PER_PAGE);
-  }, [filtered, page]);
-
   const attendeeCount =
-    form.selectedUserIds.length + form.selectedFarmerIds.length + form.selectedDistributorIds.length;
-  const scheduledDates = useMemo(() => resolveScheduledDates(form.selectedDates), [form.selectedDates]);
+    form.selectedUserIds.length +
+    form.selectedFarmerIds.length +
+    form.selectedDistributorIds.length;
+  const scheduledDates = useMemo(
+    () => resolveScheduledDates(form.selectedDates),
+    [form.selectedDates],
+  );
 
   const selectedLocationNodes = useMemo(() => {
     const result: Partial<Record<GeoLevel, GeoNode>> = {};
@@ -993,6 +976,11 @@ export default function EventsPage() {
     return result;
   }, [form.location, geoNodes]);
 
+  const nextEventCode = useMemo(() => {
+    const nextId = Math.max(0, ...events.map((event) => event.id)) + 1;
+    return `EVT-${String(nextId).padStart(3, "0")}`;
+  }, [events]);
+
   const getOptionsForLevel = (level: GeoLevel) => {
     const parentLevel = LOCATION_PARENT[level];
 
@@ -1006,28 +994,16 @@ export default function EventsPage() {
 
         return node.parentId === selectedParentId;
       })
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
+      .sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+      )
       .map((node) => ({ id: node.id, label: node.name }));
   };
 
-  const handleOpenCreate = () => {
-    router.push("/events/event/create");
-  };
-
-  const handleViewEvent = (event: Event) => {
-    if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(VIEW_EVENT_STORAGE_KEY, String(event.id));
-    }
-    router.push("/events/event/view");
-  };
-
-  const handleCloseCreate = () => {
-    setIsCreateOpen(false);
-    setForm(getInitialFormState());
-    setErrors({});
-  };
-
-  const setField = <K extends keyof EventFormState>(key: K, value: EventFormState[K]) => {
+  const setField = <K extends keyof EventFormState>(
+    key: K,
+    value: EventFormState[K],
+  ) => {
     setForm((current) => ({ ...current, [key]: value }));
     if (key in errors) {
       setErrors((current) => ({ ...current, [key]: undefined }));
@@ -1104,11 +1080,18 @@ export default function EventsPage() {
     const today = todayIso();
 
     if (!form.title.trim()) nextErrors.title = "Event name is required.";
-    if (form.selectedDates.length === 0) nextErrors.selectedDates = "Select at least one event date.";
-    else if (sortIsoDates(form.selectedDates).some((date) => date < today)) nextErrors.selectedDates = "Past dates are not allowed.";
+    if (form.selectedDates.length === 0) {
+      nextErrors.selectedDates = "Select at least one event date.";
+    } else if (
+      sortIsoDates(form.selectedDates).some((date) => date < today)
+    ) {
+      nextErrors.selectedDates = "Past dates are not allowed.";
+    }
 
     if (!form.time) nextErrors.time = "Time is required.";
-    if (attendeeCount === 0) nextErrors.attendees = "Select at least one attendee.";
+    if (attendeeCount === 0) {
+      nextErrors.attendees = "Select at least one attendee.";
+    }
 
     LOCATION_LEVELS.forEach((level) => {
       if (!form.location[level]) nextErrors[level] = `${level} is required.`;
@@ -1152,8 +1135,19 @@ export default function EventsPage() {
       eventCode,
       title: form.title.trim(),
       type: "training",
-      venue: city?.name || locality?.name || territory?.name || area?.name || region?.name || "Location TBD",
-      district: region?.name || area?.name || territory?.name || locality?.name || "",
+      venue:
+        city?.name ||
+        locality?.name ||
+        territory?.name ||
+        area?.name ||
+        region?.name ||
+        "Location TBD",
+      district:
+        region?.name ||
+        area?.name ||
+        territory?.name ||
+        locality?.name ||
+        "",
       state: state?.name || "",
       startDate,
       endDate,
@@ -1170,426 +1164,141 @@ export default function EventsPage() {
       distributorAttendeeIds: [...form.selectedDistributorIds],
     };
 
-    setEvents((current) => [nextEvent, ...current]);
-    setPage(1);
-    handleCloseCreate();
+    const updatedEvents = [nextEvent, ...events];
+    setEvents(updatedEvents);
+    saveEvents(updatedEvents);
+    setToast({ msg: "Event created successfully.", type: "success" });
+    window.setTimeout(() => router.push("/events/event"), 900);
   };
 
-  const columns = useMemo<ColumnConfig<EventListRow>[]>(
-    () => [
-      {
-        key: "eventCode",
-        header: "Event Code",
-        sortable: true,
-        filterable: true,
-        filterType: "text",
-        width: "120px",
-        render: (_, row) => (
-          <span className="font-mono text-xs font-semibold text-brand-700">
-            {row.eventCode}
-          </span>
-        ),
-      },
-      {
-        key: "title",
-        header: "Event Name",
-        sortable: true,
-        filterable: true,
-        filterType: "text",
-        width: "220px",
-        render: (_, row) => (
-          <p className="text-xs font-semibold text-foreground">{row.title}</p>
-        ),
-      },
-      {
-        key: "locationText",
-        header: "Location",
-        sortable: true,
-        filterable: true,
-        filterType: "text",
-        width: "220px",
-        render: (_, row) => (
-          <span className="block max-w-[220px] truncate" title={row.locationText}>
-            {row.locationText}
-          </span>
-        ),
-      },
-      {
-        key: "startDate",
-        header: "Date",
-        sortable: true,
-        filterable: true,
-        filterType: "date",
-        width: "150px",
-        render: (_, row) => formatDateRange(row.startDate, row.endDate),
-      },
-      {
-        key: "time",
-        header: "Time",
-        sortable: true,
-        filterable: true,
-        filterType: "text",
-        width: "120px",
-        render: (_, row) => (row.time ? formatTimeDisplay(row.time) : "-"),
-      },
-      {
-        key: "organizer",
-        header: "Organizer",
-        sortable: true,
-        filterable: true,
-        filterType: "text",
-        width: "150px",
-      },
-      {
-        key: "expectedAttendees",
-        header: "Expected",
-        sortable: true,
-        width: "100px",
-        align: "left",
-      },
-      {
-        key: "actualAttendees",
-        header: "Actual",
-        sortable: true,
-        width: "120px",
-        align: "left",
-        render: (_, row) => (
-          <span>
-            {row.status === "completed" ? row.actualAttendees : "-"}
-            {row.status === "completed" && (
-              <span
-                className={cn(
-                  "ml-1 text-[10px]",
-                  row.actualAttendees >= row.expectedAttendees
-                    ? "text-emerald-600"
-                    : "text-amber-600",
-                )}
-              >
-                ({Math.round((row.actualAttendees / row.expectedAttendees) * 100)}%)
-              </span>
-            )}
-          </span>
-        ),
-      },
-      {
-        key: "status",
-        header: "Status",
-        sortable: true,
-        filterable: true,
-        filterType: "dropdown",
-        filterOptions: [
-          { label: "Upcoming", value: "upcoming" },
-          { label: "Ongoing", value: "ongoing" },
-          { label: "Completed", value: "completed" },
-          { label: "Cancelled", value: "cancelled" },
-        ],
-        width: "120px",
-        render: (_, row) => (
-          <span
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
-              STATUS_CFG[row.status].bg,
-              STATUS_CFG[row.status].text,
-            )}
-          >
-            <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_CFG[row.status].dot)} />
-            {row.status.charAt(0).toUpperCase() + row.status.slice(1)}
-          </span>
-        ),
-      },
-    ],
-    [],
-  );
-
-  const actions = useMemo<ActionItemConfig<EventListRow>[]>(
-    () => [
-      {
-        label: "View",
-        action: "view",
-        icon: Eye,
-        onClick: (event) => handleViewEvent(event),
-      },
-    ],
-    [],
-  );
-
-  useEffect(() => {
-    setPage(1);
-  }, [filters, sort]);
-
   return (
-    <AppLayout>
+    <FormContainer
+      title="Create Event"
+      description="Events → Event → Create"
+      onBack={() => router.push("/events/event")}
+      noCard
+      actions={
+        <div className="flex items-center gap-2">
+          <span className="rounded bg-brand-50 px-2 py-1.5 font-mono text-[11px] font-semibold text-brand-700">
+            {nextEventCode}
+          </span>
+          <Button
+            variant="outline"
+            className="h-9 rounded-lg text-xs font-semibold"
+            onClick={() => router.push("/events/event")}
+          >
+            Discard
+          </Button>
+          <Button
+            className="h-9 gap-1.5 rounded-lg bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700"
+            onClick={handleCreateEvent}
+          >
+            <Save className="h-4 w-4" /> Create Event
+          </Button>
+        </div>
+      }
+    >
       <div className="space-y-4">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Events</h1>
-          {/* <p className="mt-0.5 text-xs text-muted-foreground">
-            Manage trainings, demos, and farmer events
-          </p> */}
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {[
-            { label: "Total Events", value: events.length, icon: CalendarDays, accent: true },
-            { label: "Upcoming", value: events.filter((event) => event.status === "upcoming").length, icon: Clock },
-            { label: "Completed", value: events.filter((event) => event.status === "completed").length, icon: CalendarDays },
-            { label: "Total Reached", value: events.reduce((sum, event) => sum + event.actualAttendees, 0), icon: Users },
-          ].map(({ label, value, icon: Icon, accent }) => (
-            <div key={label} className="flex items-center gap-3 rounded-xl border border-border bg-white p-3">
-              <div
+        <SectionCard title="Event Information">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            <div className="w-full space-y-1.5">
+              <Label className="text-xs font-medium text-foreground">
+                Event Name <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                value={form.title}
+                onChange={(event) => setField("title", event.target.value)}
+                placeholder="Enter event name"
                 className={cn(
-                  "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg",
-                  accent ? "bg-brand-600" : "bg-muted",
+                  "h-9 text-xs",
+                  errors.title && "border-red-400 focus-visible:ring-red-300",
                 )}
-              >
-                <Icon className={cn("h-4 w-4", accent ? "text-white" : "text-muted-foreground")} />
-              </div>
-              <div>
-                <p className="text-base font-bold leading-none text-foreground">{value}</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">{label}</p>
-              </div>
+              />
+              {errors.title && (
+                <p className="text-[11px] text-red-500">{errors.title}</p>
+              )}
             </div>
-          ))}
-        </div>
 
-        <MasterListing<EventListRow>
-          columns={columns}
-          data={visibleEvents}
-          totalRecords={filtered.length}
-          page={page}
-          pageSize={PER_PAGE}
-          onPageChange={setPage}
-          onSortChange={setSort}
-          onFilterChange={setFilters}
-          actions={actions}
-          onAdd={handleOpenCreate}
-          addLabel="Create Event"
-          onExport={() => {}}
-          emptyMessage="events"
-          searchPlaceholder="Search events..."
-          currentFilters={filters}
-          currentSort={sort}
-        />
+            <MultiDatePopover
+              label="Event Dates"
+              selectedDates={form.selectedDates}
+              onToggleDate={handleToggleDate}
+              onClear={() => setField("selectedDates", [])}
+              error={errors.selectedDates}
+            />
 
-        {false && (
-          <div className="space-y-3">
-          {filtered.map((event) => (
-            <div
-              key={event.id}
-              className="group rounded-xl border border-border bg-white p-4 transition-shadow hover:shadow-sm"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-brand-100 bg-brand-50">
-                    <CalendarDays className="h-5 w-5 text-brand-600" />
-                  </div>
-                  <div>
-                    <div className="mb-0.5 flex items-center gap-2">
-                      <span className="font-mono text-xs font-semibold text-brand-700">{event.eventCode}</span>
-                      <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize", TYPE_COLORS[event.type])}>
-                        {event.type}
-                      </span>
-                      <span
-                        className={cn(
-                          "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
-                          STATUS_CFG[event.status].bg,
-                          STATUS_CFG[event.status].text,
-                        )}
-                      >
-                        <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_CFG[event.status].dot)} />
-                        {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
-                      </span>
-                    </div>
-                    <p className="text-sm font-semibold text-foreground">{event.title}</p>
-                    <div className="mt-1 flex items-center gap-3">
-                      <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                        <MapPin className="h-3 w-3" />
-                        {event.locationSummary ?? [event.venue, event.district, event.state].filter(Boolean).join(", ")}
-                      </span>
-                      <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        {formatDateRange(event.startDate, event.endDate)}
-                        {event.time ? ` · ${formatTimeDisplay(event.time)}` : ""}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setOpenMenu(openMenu === event.id ? null : event.id)}
-                      className="rounded-md p-1.5 opacity-0 transition-all hover:bg-muted group-hover:pointer-events-auto group-hover:opacity-100 pointer-events-none"
-                    >
-                      <MoreVertical className="h-4 w-4 text-muted-foreground" />
-                    </button>
-                    {openMenu === event.id && (
-                      <div className="absolute right-0 top-7 z-50 w-40 rounded-xl border border-border bg-white py-1 shadow-lg">
-                        <button
-                          type="button"
-                          onClick={() => handleViewEvent(event)}
-                          className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
-                        >
-                          <Eye className="h-3.5 w-3.5 text-muted-foreground" /> View
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setOpenMenu(null)}
-                          className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
-                        >
-                          <Edit className="h-3.5 w-3.5 text-muted-foreground" /> Edit
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="mt-3 grid grid-cols-3 gap-3 border-t border-border/50 pt-3">
-                <div>
-                  <p className="text-[11px] text-muted-foreground">Organizer</p>
-                  <p className="text-xs font-semibold text-foreground">{event.organizer}</p>
-                </div>
-                <div>
-                  <p className="text-[11px] text-muted-foreground">Expected Attendees</p>
-                  <p className="text-xs font-semibold text-foreground">{event.expectedAttendees}</p>
-                </div>
-                <div>
-                  <p className="text-[11px] text-muted-foreground">Actual Attendees</p>
-                  <p className="text-xs font-semibold text-foreground">
-                    {event.status === "completed" ? event.actualAttendees : "-"}
-                    {event.status === "completed" && (
-                      <span
-                        className={cn(
-                          "ml-1 text-[10px]",
-                          event.actualAttendees >= event.expectedAttendees ? "text-emerald-600" : "text-amber-600",
-                        )}
-                      >
-                        ({Math.round((event.actualAttendees / event.expectedAttendees) * 100)}%)
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ))}
+            <TimeSelectField
+              label="Time"
+              value={form.time}
+              error={errors.time}
+              onChange={(value) => setField("time", value)}
+            />
           </div>
-        )}
+        </SectionCard>
+
+        <SectionCard title="Attendees">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            <MultiSelectPopover
+              label="Users"
+              placeholder="Select users"
+              options={userOptions}
+              selectedIds={form.selectedUserIds}
+              onToggle={handleToggleUser}
+              onClear={() => setField("selectedUserIds", [])}
+            />
+
+            <MultiSelectPopover
+              label="Farmers"
+              placeholder="Select farmers"
+              options={farmerOptions}
+              selectedIds={form.selectedFarmerIds}
+              onToggle={handleToggleFarmer}
+              onClear={() => setField("selectedFarmerIds", [])}
+            />
+
+            <MultiSelectPopover
+              label="Distributor"
+              placeholder="Select distributors"
+              options={distributorOptions}
+              selectedIds={form.selectedDistributorIds}
+              onToggle={handleToggleDistributor}
+              onClear={() => setField("selectedDistributorIds", [])}
+            />
+          </div>
+          {errors.attendees && (
+            <p className="text-[11px] text-red-500">{errors.attendees}</p>
+          )}
+        </SectionCard>
+
+        <SectionCard title="Location">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {LOCATION_LEVELS.map((level) => {
+              const options = getOptionsForLevel(level);
+              const parentLevel = LOCATION_PARENT[level];
+              const isDisabled = parentLevel ? !form.location[parentLevel] : false;
+
+              return (
+                <LocationSelectField
+                  key={level}
+                  label={level}
+                  value={form.location[level]}
+                  options={options}
+                  placeholder={
+                    parentLevel && !form.location[parentLevel]
+                      ? `Select ${parentLevel} first`
+                      : `Select ${level}`
+                  }
+                  disabled={isDisabled}
+                  error={errors[level]}
+                  onChange={(value) => handleLocationChange(level, value)}
+                />
+              );
+            })}
+          </div>
+        </SectionCard>
       </div>
 
-      <Dialog open={isCreateOpen} onOpenChange={(open) => (open ? setIsCreateOpen(true) : handleCloseCreate())}>
-        <DialogContent className="flex max-h-[calc(100vh-4rem)] w-[min(1120px,calc(100vw-2rem))] max-w-[1120px] flex-col gap-0 overflow-hidden p-0">
-          <DialogHeader className="shrink-0 border-b border-border px-5 py-4">
-            <DialogTitle className="text-base font-semibold text-foreground">Create Event</DialogTitle>
-            {/* <DialogDescription className="pt-0.5 text-[11px] text-muted-foreground">
-              Configure event schedule, attendees, and geography mapping.
-            </DialogDescription> */}
-          </DialogHeader>
-
-          <div className="min-h-0 flex-1 overflow-y-auto bg-muted/20 px-4 py-4">
-            <div className="w-full space-y-4">
-              <SectionCard title="Event Information">
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                  <div className="w-full space-y-1.5 md:max-w-[340px] md:justify-self-start">
-                    <Label className="text-xs font-medium text-foreground">
-                      Event Name <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      value={form.title}
-                      onChange={(event) => setField("title", event.target.value)}
-                      placeholder="Enter event name"
-                      className={cn("h-9 text-sm", errors.title && "border-red-400 focus-visible:ring-red-300")}
-                    />
-                    {errors.title && <p className="text-[11px] text-red-500">{errors.title}</p>}
-                  </div>
-
-                  <MultiDatePopover
-                    label="Event Dates"
-                    selectedDates={form.selectedDates}
-                    onToggleDate={handleToggleDate}
-                    onClear={() => setField("selectedDates", [])}
-                    error={errors.selectedDates}
-                  />
-
-                  <TimeSelectField
-                    label="Time"
-                    value={form.time}
-                    error={errors.time}
-                    onChange={(value) => setField("time", value)}
-                  />
-                </div>
-              </SectionCard>
-
-              <SectionCard title="Attendees">
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                  <MultiSelectPopover
-                    label="Users"
-                    placeholder="Select users"
-                    options={userOptions}
-                    selectedIds={form.selectedUserIds}
-                    onToggle={handleToggleUser}
-                    onClear={() => setField("selectedUserIds", [])}
-                  />
-
-                  <MultiSelectPopover
-                    label="Farmers"
-                    placeholder="Select farmers"
-                    options={farmerOptions}
-                    selectedIds={form.selectedFarmerIds}
-                    onToggle={handleToggleFarmer}
-                    onClear={() => setField("selectedFarmerIds", [])}
-                  />
-
-                  <MultiSelectPopover
-                    label="Distributor"
-                    placeholder="Select distributors"
-                    options={distributorOptions}
-                    selectedIds={form.selectedDistributorIds}
-                    onToggle={handleToggleDistributor}
-                    onClear={() => setField("selectedDistributorIds", [])}
-                  />
-                </div>
-                {errors.attendees && <p className="text-[11px] text-red-500">{errors.attendees}</p>}
-              </SectionCard>
-
-              <SectionCard title="Location">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {LOCATION_LEVELS.map((level) => {
-                    const options = getOptionsForLevel(level);
-                    const parentLevel = LOCATION_PARENT[level];
-                    const isDisabled = parentLevel ? !form.location[parentLevel] : false;
-
-                    return (
-                      <LocationSelectField
-                        key={level}
-                        label={level}
-                        value={form.location[level]}
-                        options={options}
-                        placeholder={parentLevel && !form.location[parentLevel] ? `Select ${parentLevel} first` : `Select ${level}`}
-                        disabled={isDisabled}
-                        error={errors[level]}
-                        onChange={(value) => handleLocationChange(level, value)}
-                      />
-                    );
-                  })}
-                </div>
-              </SectionCard>
-            </div>
-          </div>
-
-          <div className="sticky bottom-0 z-10 flex shrink-0 items-center justify-end border-t border-border bg-white px-5 py-3">
-            {/* <div className="text-[11px] text-muted-foreground">
-              Dates before {todayIso()} are disabled. To Date must be on or after From Date.
-            </div> */}
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" className="h-8 text-xs" onClick={handleCloseCreate}>
-                Cancel
-              </Button>
-              <Button type="button" className="h-8 bg-brand-600 text-xs text-white hover:bg-brand-700" onClick={handleCreateEvent}>
-                Create Event
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </AppLayout>
+      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
+    </FormContainer>
   );
 }
