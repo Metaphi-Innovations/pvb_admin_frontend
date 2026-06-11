@@ -1,6 +1,14 @@
+import {
+  COA_SYSTEM_REVISION,
+  EXPECTED_SYSTEM_NODE_COUNT,
+  SYSTEM_COA_NODES,
+} from "./masters/coa-seed-nodes";
+
 export type RecordStatus = "draft" | "approved" | "rejected" | "posted";
 
 export type AccountType = "Asset" | "Liability" | "Income" | "Expense" | "Equity";
+
+export type CoaNodeLevel = "primary_head" | "account_group" | "sub_group" | "ledger";
 
 export type ErpUsageModule =
   | "procurement"
@@ -13,13 +21,21 @@ export interface ChartOfAccount {
   id: number;
   accountCode: string;
   accountName: string;
+  alias: string;
   accountType: AccountType;
+  nodeLevel: CoaNodeLevel;
   parentAccountId: number | null;
   parentAccount: string;
   description: string;
   status: "active" | "inactive";
   usedIn: ErpUsageModule[];
   isSystem: boolean;
+  openingBalance: number;
+  balanceType: "Debit" | "Credit";
+  gstApplicable: boolean;
+  tdsApplicable: boolean;
+  costCenterApplicable: boolean;
+  bankAccountFlag: boolean;
   createdBy: string;
   updatedBy: string;
 }
@@ -66,180 +82,139 @@ export interface AccountTxn {
   updatedBy: string;
 }
 
-const COA_KEY = "ds_accounts_coa_v2";
+const COA_KEY = "ds_accounts_coa_v9";
+const COA_META_KEY = "ds_accounts_coa_meta";
 const LEDGER_KEY = "ds_accounts_ledgers";
 const TXN_KEY = "ds_accounts_txns";
 
-const COA_SEED: ChartOfAccount[] = [
-  {
-    id: 1,
-    accountCode: "1000",
-    accountName: "Assets",
-    accountType: "Asset",
-    parentAccountId: null,
-    parentAccount: "",
-    description: "System asset group",
-    status: "active",
-    usedIn: [],
-    isSystem: true,
-    createdBy: "System",
-    updatedBy: "System",
-  },
-  {
-    id: 2,
-    accountCode: "2000",
-    accountName: "Liabilities",
-    accountType: "Liability",
-    parentAccountId: null,
-    parentAccount: "",
-    description: "System liability group",
-    status: "active",
-    usedIn: [],
-    isSystem: true,
-    createdBy: "System",
-    updatedBy: "System",
-  },
-  {
-    id: 3,
-    accountCode: "3000",
-    accountName: "Income",
-    accountType: "Income",
-    parentAccountId: null,
-    parentAccount: "",
-    description: "System income group",
-    status: "active",
-    usedIn: [],
-    isSystem: true,
-    createdBy: "System",
-    updatedBy: "System",
-  },
-  {
-    id: 4,
-    accountCode: "4000",
-    accountName: "Expenses",
-    accountType: "Expense",
-    parentAccountId: null,
-    parentAccount: "",
-    description: "System expense group",
-    status: "active",
-    usedIn: [],
-    isSystem: true,
-    createdBy: "System",
-    updatedBy: "System",
-  },
-  {
-    id: 5,
-    accountCode: "5000",
-    accountName: "Equity",
-    accountType: "Equity",
-    parentAccountId: null,
-    parentAccount: "",
-    description: "System equity group",
-    status: "active",
-    usedIn: [],
-    isSystem: true,
-    createdBy: "System",
-    updatedBy: "System",
-  },
-  {
-    id: 10,
-    accountCode: "1010",
-    accountName: "Cash",
-    accountType: "Asset",
-    parentAccountId: 1,
-    parentAccount: "Assets",
-    description: "Cash on hand",
-    status: "active",
-    usedIn: ["payments", "journal"],
-    isSystem: false,
-    createdBy: "Admin",
-    updatedBy: "Admin",
-  },
-  {
-    id: 11,
-    accountCode: "1020",
-    accountName: "Bank",
-    accountType: "Asset",
-    parentAccountId: 1,
-    parentAccount: "Assets",
-    description: "Bank accounts",
-    status: "active",
-    usedIn: ["payments", "journal"],
-    isSystem: false,
-    createdBy: "Admin",
-    updatedBy: "Admin",
-  },
-  {
-    id: 20,
-    accountCode: "2010",
-    accountName: "Vendor Payable",
-    accountType: "Liability",
-    parentAccountId: 2,
-    parentAccount: "Liabilities",
-    description: "Amounts owed to vendors",
-    status: "active",
-    usedIn: ["procurement", "payments"],
-    isSystem: false,
-    createdBy: "Admin",
-    updatedBy: "Admin",
-  },
-  {
-    id: 21,
-    accountCode: "2020",
-    accountName: "Employee Payable",
-    accountType: "Liability",
-    parentAccountId: 2,
-    parentAccount: "Liabilities",
-    description: "Employee reimbursements & claims payable",
-    status: "active",
-    usedIn: ["tada_claims", "payments"],
-    isSystem: false,
-    createdBy: "Admin",
-    updatedBy: "Admin",
-  },
-  {
-    id: 30,
-    accountCode: "3010",
-    accountName: "Sales Income",
-    accountType: "Income",
-    parentAccountId: 3,
-    parentAccount: "Income",
-    description: "Revenue from sales",
-    status: "active",
-    usedIn: ["sales"],
-    isSystem: false,
-    createdBy: "Admin",
-    updatedBy: "Admin",
-  },
-  {
-    id: 40,
-    accountCode: "4010",
-    accountName: "Purchase Expense",
-    accountType: "Expense",
-    parentAccountId: 4,
-    parentAccount: "Expenses",
-    description: "Procurement purchases",
-    status: "active",
-    usedIn: ["procurement"],
-    isSystem: false,
-    createdBy: "Admin",
-    updatedBy: "Admin",
-  },
-  {
-    id: 41,
-    accountCode: "4020",
-    accountName: "Travel Expense",
-    accountType: "Expense",
-    parentAccountId: 4,
-    parentAccount: "Expenses",
-    description: "TA/DA and travel claims",
-    status: "active",
-    usedIn: ["tada_claims", "journal"],
-    isSystem: false,
-    createdBy: "Admin",
-    updatedBy: "Admin",
-  },
+const LEGACY_COA_KEYS = [
+  "ds_accounts_coa",
+  "ds_accounts_coa_v5",
+  "ds_accounts_coa_v6",
+  "ds_accounts_coa_v7",
+  "ds_accounts_coa_v8",
 ];
+
+const COA_SEED: ChartOfAccount[] = [...SYSTEM_COA_NODES];
+
+/** Legacy sample ledgers — never restore from storage */
+const REMOVED_SEED_LEDGER_IDS = new Set([
+  10001, 10002, 10003, 10004, 20001, 30001, 40001, 40002,
+]);
+
+const REMOVED_SEED_LEDGER_NAMES = new Set([
+  "hdfc bank",
+  "icici bank",
+  "customer a",
+  "vendor a",
+  "domestic sales",
+  "office rent",
+  "salary expense",
+  "office cash",
+]);
+
+function normalizeLedger(r: ChartOfAccount): ChartOfAccount {
+  return {
+    ...r,
+    alias: r.alias ?? "",
+    costCenterApplicable: r.costCenterApplicable ?? false,
+    bankAccountFlag: r.bankAccountFlag ?? false,
+    openingBalance: r.openingBalance ?? 0,
+    balanceType: r.balanceType ?? "Debit",
+    gstApplicable: r.gstApplicable ?? false,
+    tdsApplicable: r.tdsApplicable ?? false,
+  };
+}
+
+function isRemovedSeedLedger(record: ChartOfAccount): boolean {
+  if (record.nodeLevel !== "ledger") return false;
+  if (REMOVED_SEED_LEDGER_IDS.has(record.id)) return true;
+  return REMOVED_SEED_LEDGER_NAMES.has(record.accountName.trim().toLowerCase());
+}
+
+/** Leaf sub-group or leaf account group — valid parent for user-created ledgers */
+function canParentHoldLedger(parent: ChartOfAccount, systemNodes: ChartOfAccount[]): boolean {
+  if (parent.nodeLevel === "sub_group") {
+    return !systemNodes.some(
+      (r) => r.parentAccountId === parent.id && r.nodeLevel === "sub_group",
+    );
+  }
+  if (parent.nodeLevel === "account_group") {
+    return !systemNodes.some(
+      (r) => r.parentAccountId === parent.id && r.nodeLevel === "sub_group",
+    );
+  }
+  return false;
+}
+
+function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
+  const mergedSystem = SYSTEM_COA_NODES.map((sys) => ({
+    ...sys,
+    status: "active" as const,
+    isSystem: true,
+    openingBalance: 0,
+  }));
+
+  const systemById = new Map(mergedSystem.map((n) => [n.id, n]));
+  const systemByCode = new Map(mergedSystem.map((n) => [n.accountCode, n]));
+
+  const userLedgers = stored
+    .filter((r) => r.nodeLevel === "ledger" && !r.isSystem && !isRemovedSeedLedger(r))
+    .map((r) => {
+      let parent: ChartOfAccount | undefined;
+      if (r.parentAccountId != null) {
+        parent = systemById.get(r.parentAccountId);
+        if (!parent) {
+          const oldParent = stored.find((s) => s.id === r.parentAccountId);
+          if (oldParent) parent = systemByCode.get(oldParent.accountCode);
+        }
+      }
+      if (!parent || !canParentHoldLedger(parent, mergedSystem)) return null;
+      return normalizeLedger({
+        ...r,
+        parentAccountId: parent.id,
+        parentAccount: parent.accountName,
+        openingBalance: r.openingBalance ?? 0,
+        isSystem: false,
+      });
+    })
+    .filter((r): r is ChartOfAccount => r != null);
+
+  return [...mergedSystem, ...userLedgers];
+}
+
+function readCoaMeta(): { revision: number } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(COA_META_KEY);
+    return raw ? (JSON.parse(raw) as { revision: number }) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCoaMeta() {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(COA_META_KEY, JSON.stringify({ revision: COA_SYSTEM_REVISION }));
+}
+
+function purgeLegacyCoaStorage() {
+  if (typeof window === "undefined") return;
+  for (const key of LEGACY_COA_KEYS) {
+    localStorage.removeItem(key);
+  }
+}
+
+function coaStorageNeedsReset(stored: ChartOfAccount[]): boolean {
+  const meta = readCoaMeta();
+  if (!meta || meta.revision !== COA_SYSTEM_REVISION) return true;
+  const systemCount = stored.filter((r) => r.nodeLevel !== "ledger").length;
+  if (systemCount !== EXPECTED_SYSTEM_NODE_COUNT) return true;
+  if (stored.some((r) => r.nodeLevel === "ledger" && (r.isSystem || isRemovedSeedLedger(r)))) {
+    return true;
+  }
+  return false;
+}
 
 const LEDGER_SEED: Ledger[] = [
   { id: 1, ledgerName: "Main Cash", ledgerCode: "LED-001", accountType: "Asset", linkedAccount: "Cash in Hand", openingBalance: 250000, balanceType: "Debit", currentBalance: 250000, status: "active", createdBy: "Admin", updatedBy: "Admin" },
@@ -271,9 +246,37 @@ function save<T>(key: string, list: T[]) {
   localStorage.setItem(key, JSON.stringify(list));
 }
 
-export const loadChartOfAccounts = () => getOrSeed(COA_KEY, COA_SEED);
-export const saveChartOfAccounts = (list: ChartOfAccount[]) => save(COA_KEY, list);
+export const loadChartOfAccounts = (): ChartOfAccount[] => {
+  if (typeof window !== "undefined") {
+    purgeLegacyCoaStorage();
+  }
+
+  const raw = getOrSeed(COA_KEY, COA_SEED);
+  const source = coaStorageNeedsReset(raw) ? [] : raw;
+  const merged = ensureCoaSystemStructure(source.length ? source : COA_SEED);
+
+  if (typeof window !== "undefined") {
+    save(COA_KEY, merged);
+    writeCoaMeta();
+  }
+
+  return merged;
+};
+
+export const saveChartOfAccounts = (list: ChartOfAccount[]) => {
+  const cleaned = ensureCoaSystemStructure(list);
+  save(COA_KEY, cleaned);
+  writeCoaMeta();
+};
+export const getSystemCoaNodes = () => SYSTEM_COA_NODES;
+
+export function getCoaLedgers(): ChartOfAccount[] {
+  return loadChartOfAccounts().filter((r) => r.nodeLevel === "ledger");
+}
+
+/** @deprecated Use getCoaLedgers() — ledgers live in Chart of Accounts hierarchy */
 export const loadLedgers = () => getOrSeed(LEDGER_KEY, LEDGER_SEED);
+/** @deprecated Use saveChartOfAccounts() */
 export const saveLedgers = (list: Ledger[]) => save(LEDGER_KEY, list);
 export const loadAccountTxns = () => getOrSeed(TXN_KEY, TXN_SEED);
 export const saveAccountTxns = (list: AccountTxn[]) => save(TXN_KEY, list);
@@ -328,6 +331,7 @@ export function postEntryAfterApproval(input: {
   return { posted: true, id };
 }
 
+/** @deprecated Use computeTrialBalanceRows() from @/lib/accounts/ledger-reports */
 export function getTrialBalanceRows() {
   const ledgers = loadLedgers();
   const txns = loadAccountTxns().filter((x) => x.status === "approved" || x.status === "posted");
@@ -349,6 +353,7 @@ export function getTrialBalanceRows() {
   });
 }
 
+/** @deprecated Use computePandLRows() from @/lib/accounts/ledger-reports */
 export function getPandL() {
   const txns = loadAccountTxns().filter((x) => x.status === "approved" || x.status === "posted");
   const income = txns
@@ -360,6 +365,7 @@ export function getPandL() {
   return { income, expense, net: income - expense };
 }
 
+/** @deprecated Use computeBalanceSheetRows() from @/lib/accounts/ledger-reports */
 export function getBalanceSheet() {
   const ledgers = loadLedgers();
   const assets = ledgers

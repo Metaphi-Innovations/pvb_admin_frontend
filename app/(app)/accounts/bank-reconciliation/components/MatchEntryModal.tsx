@@ -27,10 +27,10 @@ import {
   type BankStatementEntry,
   type MatchModule,
 } from "../bank-reconciliation-data";
-import { formatINR } from "../reconciliation-utils";
+import { formatMoneyWithSide } from "@/lib/accounts/money-format";
 import { CreateLedgerModal } from "./CreateLedgerModal";
 import { MatchStatusBadge } from "./MatchStatusBadge";
-import type { Ledger } from "../../data";
+import type { ChartOfAccount } from "../../data";
 
 export function MatchEntryModal({
   entry,
@@ -148,7 +148,9 @@ export function MatchEntryModal({
             <div className="flex justify-between gap-2">
               <span className="text-muted-foreground">Amount</span>
               <span className="font-medium tabular-nums">
-                {entry.debit > 0 ? `Dr ${formatINR(entry.debit)}` : `Cr ${formatINR(entry.credit)}`}
+                {entry.debit > 0
+                  ? formatMoneyWithSide(entry.debit, "Debit")
+                  : formatMoneyWithSide(entry.credit, "Credit")}
               </span>
             </div>
             <p className="text-muted-foreground pt-1">{entry.narration}</p>
@@ -285,9 +287,9 @@ export function MatchEntryModal({
       <CreateLedgerModal
         open={createLedgerOpen}
         onOpenChange={setCreateLedgerOpen}
-        onCreated={(ledger: Ledger) => {
+        onCreated={(ledger: ChartOfAccount) => {
           setLedgerId(String(ledger.id));
-          setLedgerSearch(ledger.ledgerName);
+          setLedgerSearch(ledger.accountName);
         }}
       />
     </>

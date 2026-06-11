@@ -137,7 +137,7 @@ export default function CreditNotesPageClient() {
                       <td className="px-2.5 py-2 text-xs">{r.customerName}</td>
                       <td className="px-2.5 py-2 text-xs font-mono">{r.sourceInvoiceNo || "—"}</td>
                       <td className="px-2.5 py-2 text-xs font-mono">{r.sourceOrderNo || "—"}</td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums font-medium text-brand-700">
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">
                         {formatINR(r.currentCreditAmount)}
                       </td>
                       <td className="px-2.5 py-2">
