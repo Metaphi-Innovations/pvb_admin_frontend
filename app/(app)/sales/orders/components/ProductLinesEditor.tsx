@@ -181,8 +181,8 @@ export default function ProductLinesEditor({
                     { h: "Stock", className: "w-16" },
                     { h: "Qty", className: "w-16" },
                     { h: "Unit Price", className: "min-w-[120px] w-32" },
-                    { h: "Discount", className: "w-24" },
-                    { h: "GST", className: "min-w-[120px] w-20" },
+                    { h: "Discount (%)", className: "w-24" },
+                    { h: "GST % / Amt", className: "min-w-[120px] w-20" },
                     { h: "Item Total", className: "min-w-[100px]" },
                     { h: "", className: "w-16" },
                   ].map(({ h, className }) => (
@@ -198,6 +198,7 @@ export default function ProductLinesEditor({
               <tbody>
                 {lines.map(line => {
                   const isEditing = editingId === line.id;
+                  const product = line.productId ? getProductById(line.productId) : undefined;
                   return (
                     <tr key={line.id} className="border-b border-border/60 hover:bg-muted/10">
                       <td className="px-2 py-1.5 min-w-[180px]">
@@ -245,28 +246,38 @@ export default function ProductLinesEditor({
                       </td>
                       <td className="px-2 py-1.5 w-24">
                         {isEditing ? (
-                          <Input
-                            type="number"
-                            min={0}
-                            value={line.discount || ""}
-                            onChange={e => updateLine(line.id, { discount: Number(e.target.value) || 0 })}
-                            className="h-7 text-xs"
-                          />
+                          <div className="relative flex items-center">
+                            <Input
+                              type="number"
+                              min={0}
+                              max={100}
+                              value={line.discount || ""}
+                              onChange={e => updateLine(line.id, { discount: Number(e.target.value) || 0 })}
+                              className="h-7 text-xs pr-6 w-full"
+                            />
+                            <span className="absolute right-2 text-[10px] text-muted-foreground pointer-events-none">%</span>
+                          </div>
                         ) : (
-                          <span className="text-xs">₹{line.discount.toLocaleString()}</span>
+                          <span className="text-xs">{line.discount}%</span>
                         )}
                       </td>
                       <td className="px-2 py-1.5 min-w-[120px] w-20">
                         {isEditing ? (
-                          <Input
-                            type="number"
-                            min={0}
-                            value={line.gstAmount || ""}
-                            onChange={e => updateLine(line.id, { gstAmount: Number(e.target.value) || 0 })}
-                            className="h-7 text-xs w-full min-w-[100px]"
-                          />
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-[10px] text-muted-foreground font-semibold">{product?.gstRate || "0%"}</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={line.gstAmount || ""}
+                              onChange={e => updateLine(line.id, { gstAmount: Number(e.target.value) || 0 })}
+                              className="h-7 text-xs w-full min-w-[100px]"
+                            />
+                          </div>
                         ) : (
-                          <span className="text-xs">₹{line.gstAmount.toLocaleString()}</span>
+                          <div className="flex flex-col">
+                            <span className="text-[10px] text-muted-foreground font-semibold">{product?.gstRate || "0%"}</span>
+                            <span className="text-xs">₹{line.gstAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
                         )}
                       </td>
                       <td className="px-2 py-1.5">

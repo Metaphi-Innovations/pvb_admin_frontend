@@ -65,6 +65,8 @@ export default function SplitSalesOrderPage() {
       deliveryDate: hydrated.deliveryDate,
       status: hydrated.status === "draft" ? "draft" : "confirmed",
       lineItems: [createEmptyLineItem()],
+      warehouseId: hydrated.warehouseId ?? null,
+      warehouseName: hydrated.warehouseName ?? "",
     });
   }, [id, router]);
 

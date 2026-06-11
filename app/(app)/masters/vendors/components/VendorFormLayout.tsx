@@ -31,7 +31,7 @@ export function VendorFormLayout({
     <AppLayout noPadding>
       <div className="min-h-[calc(100vh-104px)] bg-background flex flex-col">
         <header className="bg-white border-b border-border/70 px-6 py-3 flex-shrink-0 sticky top-0 z-20">
-          <div className="max-w-[1280px] mx-auto w-full flex items-center justify-between gap-4">
+          <div className="w-full flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
               <button
                 type="button"
@@ -65,7 +65,7 @@ export function VendorFormLayout({
             )}
           </div>
           {vendor && (
-            <p className="max-w-[1280px] mx-auto w-full mt-1.5 text-[11px] text-muted-foreground truncate">
+            <p className="w-full mt-1.5 text-[11px] text-muted-foreground truncate">
               {vendor.vendorName}
               {vendor.companyName && vendor.companyName !== vendor.vendorName && (
                 <span className="ml-2 text-foreground/70">· {vendor.companyName}</span>
@@ -75,12 +75,12 @@ export function VendorFormLayout({
         </header>
 
         <div className="flex-1 overflow-y-auto px-6 py-3">
-          <div className="max-w-[1280px] mx-auto w-full">{children}</div>
+          <div className="w-full">{children}</div>
         </div>
 
         {footer && (
           <footer className="flex-shrink-0 border-t border-border/70 bg-white px-6 py-2.5 sticky bottom-0 z-10">
-            <div className="max-w-[1280px] mx-auto flex justify-end gap-2">{footer}</div>
+            <div className="w-full flex justify-end gap-2">{footer}</div>
           </footer>
         )}
       </div>

@@ -147,14 +147,46 @@ export default function WarehouseDetailPage() {
               value={warehouse.capacity?.toLocaleString()}
             />
             <InfoRow label="Operated By" value={warehouse.operatedBy} />
+            {warehouse.operatedBy === "C&F Agent" && (
+              <InfoRow label="Customer Type" value={warehouse.customerType} />
+            )}
             <InfoRow label="Status" value={STATUS_CFG[warehouse.status].label} />
           </DetailCard>
 
           <DetailCard title="Contact Person Details">
-            <InfoRow label="Contact Person" value={warehouse.contactPerson} />
-            <InfoRow label="Mobile Number" value={warehouse.mobileNumber} mono />
-            <InfoRow label="Email Address" value={warehouse.emailAddress} />
-            <InfoRow label="GST Number" value={warehouse.gstNumber} mono />
+            <div className="space-y-3">
+              {(warehouse.contacts || [
+                {
+                  id: "CON-1",
+                  contactPerson: warehouse.contactPerson,
+                  mobileNumber: warehouse.mobileNumber,
+                  emailAddress: warehouse.emailAddress,
+                  isPrimary: true
+                }
+              ]).map((c, idx) => (
+                <div key={c.id || idx} className="pb-2.5 border-b border-border/40 last:border-0 last:pb-0">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-xs font-semibold text-foreground">{c.contactPerson || "—"}</span>
+                    {c.isPrimary && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-brand-50 text-brand-600 border border-brand-200">
+                        Primary
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                    <div>
+                      <span className="font-medium">Mobile:</span> <span className="font-mono text-foreground">{c.mobileNumber || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium">Email:</span> <span className="text-foreground">{c.emailAddress || "—"}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div className="pt-2 border-t border-border/40">
+                <InfoRow label="GST Number" value={warehouse.gstNumber} mono />
+              </div>
+            </div>
           </DetailCard>
 
           <DetailCard title="Address Details">

@@ -200,11 +200,9 @@ export default function ProductDetailPage() {
             <InfoRow label="Category" value={product.category} />
             <InfoRow label="Segment" value={product.segment} />
             <InfoRow label="Formulation" value={product.formulation} />
-            <InfoRow label="Unit" value={product.unit} />
             <InfoRow label="Base Unit" value={product.baseUnit} />
             <InfoRow label="Packaging Unit" value={product.packagingUnit} />
             <InfoRow label="Conversion Quantity" value={product.conversionQuantity !== undefined ? String(product.conversionQuantity) : undefined} />
-            <InfoRow label="Pack Size" value={product.packSize} />
           </DetailCard>
 
           <DetailCard title="Tax & Pricing">
@@ -216,7 +214,6 @@ export default function ProductDetailPage() {
           <DetailCard title="Commercial & Stock">
             <InfoRow label="SKU" value={product.sku} mono />
             <InfoRow label="Crop Applicable" value={product.cropApplicable} />
-            <InfoRow label="Reorder Level" value={product.reorderLevel} />
             <InfoRow label="Status" value={statusCfg.label} />
           </DetailCard>
 

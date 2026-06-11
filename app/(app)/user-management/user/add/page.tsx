@@ -1,13 +1,12 @@
-﻿"use client";
+"use client";
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   ArrowLeft, Save, Check, ChevronsUpDown, AlertCircle,
@@ -308,7 +307,6 @@ export default function AddUserPage() {
     territoryAccess: [] as string[],
     password: "",
     confirmPassword: "",
-    status: "active",
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -336,7 +334,7 @@ export default function AddUserPage() {
 
   const handleSave = (asDraft = false) => {
     if (!validate()) return;
-    console.log("Creating user:", { ...form, status: asDraft ? "inactive" : form.status });
+    console.log("Creating user:", { ...form, status: asDraft ? "inactive" : "active" });
     router.push("/user-management/user");
   };
 
@@ -346,35 +344,15 @@ export default function AddUserPage() {
     : ROLES;
 
   return (
-    <AppLayout noPadding>
-      <div className="flex flex-col h-full">
-
-        {/* ── Sticky Header ── */}
-        <div className="sticky top-0 z-10 bg-white border-b border-border px-5 py-3 flex items-center gap-3 flex-shrink-0">
-          <button
-            onClick={() => router.push("/user-management/user")}
-            className="w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
-          >
-            <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-          </button>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-0.5">
-              <span>User Management</span>
-              <span>/</span>
-              <span>User</span>
-              <span>/</span>
-              <span className="text-foreground font-medium">Add User</span>
-            </div>
-            <h2 className="text-sm font-semibold text-foreground leading-none">Add New User</h2>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => router.push("/user-management/user")}
-          >
-            Discard
-          </Button>
+    <FormContainer
+      title="Add New User"
+      description="User Management → User → Add User"
+      onBack={() => router.push("/user-management/user")}
+      onCancel={() => router.push("/user-management/user")}
+      cancelLabel="Discard"
+      noCard={true}
+      actions={
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -391,7 +369,9 @@ export default function AddUserPage() {
             <Save className="w-3.5 h-3.5" /> Save &amp; Publish
           </Button>
         </div>
-
+      }
+    >
+      <div className="flex flex-col" style={{ height: "calc(100vh - 104px)" }}>
         {/* ── Body ── */}
         <div className="flex flex-1 overflow-hidden">
 
@@ -689,43 +669,6 @@ export default function AddUserPage() {
 
               <div className="border-t border-border" />
 
-              {/* Status */}
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
-                  Status
-                </p>
-                <div className="rounded-lg border border-border bg-muted/20 p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-medium text-foreground">
-                        {form.status === "active" ? "Active" : "Inactive"}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {form.status === "active" ? "Can log in immediately" : "Account disabled"}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={form.status === "active"}
-                      onCheckedChange={v => set("status", v ? "active" : "inactive")}
-                    />
-                  </div>
-                  <div className={cn(
-                    "mt-2.5 flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-md",
-                    form.status === "active"
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "bg-slate-100 text-slate-600",
-                  )}>
-                    <span className={cn(
-                      "w-1.5 h-1.5 rounded-full flex-shrink-0",
-                      form.status === "active" ? "bg-emerald-500" : "bg-slate-400",
-                    )} />
-                    {form.status === "active" ? "Active" : "Inactive"}
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-border" />
-
               {/* Record Info (placeholder for new) */}
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
@@ -793,6 +736,6 @@ export default function AddUserPage() {
 
         </div>
       </div>
-    </AppLayout>
+    </FormContainer>
   );
 }

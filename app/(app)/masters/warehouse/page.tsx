@@ -122,7 +122,7 @@ export default function WarehouseListPage() {
       filterType: "text",
       width: "120px",
       render: (val, row) => (
-        <span className="font-semibold font-mono text-brand-700">{row.warehouseCode}</span>
+        <span className="font-mono font-semibold text-brand-700">{row.warehouseCode}</span>
       ),
     },
     {
@@ -133,7 +133,7 @@ export default function WarehouseListPage() {
       filterType: "text",
       width: "200px",
       render: (val, row) => (
-        <Link href={`/masters/warehouse/${row.id}`} className="font-semibold text-foreground hover:text-brand-700 leading-4">
+        <Link href={`/masters/warehouse/${row.id}`} className="font-semibold leading-4 text-foreground hover:text-brand-700">
           {row.warehouseName}
         </Link>
       ),
@@ -155,24 +155,36 @@ export default function WarehouseListPage() {
     {
       key: "gstNumber",
       header: "GST Number",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
       width: "150px",
       render: (val, row) => <span className="font-mono text-xs text-foreground">{row.gstNumber || "—"}</span>,
     },
     {
       key: "contactPerson",
       header: "Contact Person",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
       width: "140px",
       render: (val, row) => row.contactPerson || "—",
     },
     {
       key: "mobileNumber",
       header: "Mobile",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
       width: "130px",
       render: (val, row) => <span className="font-mono text-xs text-foreground">{row.mobileNumber || "—"}</span>,
     },
     {
       key: "emailAddress",
       header: "Email",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
       width: "180px",
       render: (val, row) => row.emailAddress || "—",
     },
@@ -189,6 +201,10 @@ export default function WarehouseListPage() {
     {
       key: "district",
       header: "District",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: Array.from(new Set(records.map((r) => r.district))).sort().map((v) => ({ label: v, value: v })),
       width: "130px",
       render: (val, row) => row.district || "—",
     },
@@ -197,25 +213,36 @@ export default function WarehouseListPage() {
       header: "City",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: Array.from(new Set(records.map((r) => r.city))).sort().map((v) => ({ label: v, value: v })),
       width: "120px",
       render: (val, row) => row.city || "—",
     },
     {
       key: "pincode",
       header: "Pincode",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
       width: "90px",
       render: (val, row) => <span className="font-mono text-xs text-foreground">{row.pincode || "—"}</span>,
     },
     {
       key: "capacity",
       header: "Capacity",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
       width: "100px",
       render: (val, row) => row.capacity ? row.capacity.toLocaleString("en-IN") : "—",
     },
     {
       key: "manager",
       header: "Manager",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: Array.from(new Set(records.map((r) => r.manager))).sort().map((v) => ({ label: v, value: v })),
       width: "130px",
       render: (val, row) => row.manager || "—",
     },
@@ -227,7 +254,26 @@ export default function WarehouseListPage() {
       filterType: "dropdown",
       filterOptions: OPERATED_BY_OPTIONS.map(v => ({ label: v, value: v })),
       width: "110px",
-      render: (val, row) => row.operatedBy || "—",
+      render: (val, row) =>
+        row.operatedBy === "C&F Agent" && row.customerType
+          ? `C&F Agent (${row.customerType})`
+          : (row.operatedBy || "—"),
+    },
+    {
+      key: "createdBy",
+      header: "Created By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
     },
     {
       key: "status",
@@ -250,7 +296,7 @@ export default function WarehouseListPage() {
               <ChevronDown className="w-3 h-3 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56 bg-white border border-border shadow-lg">
+          <DropdownMenuContent align="start" className="w-56 bg-white border shadow-lg border-border">
             <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
               Status Actions
             </DropdownMenuLabel>
@@ -270,7 +316,7 @@ export default function WarehouseListPage() {
                   <Wrench className="w-3.5 h-3.5" /> Mark as Under Maintenance
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  className="gap-2 text-xs cursor-pointer text-red-700 hover:text-red-900"
+                  className="gap-2 text-xs text-red-700 cursor-pointer hover:text-red-900"
                   onClick={() => handleStatusAction(row, "closed")}
                 >
                   <Lock className="w-3.5 h-3.5" /> Mark as Closed
@@ -292,7 +338,7 @@ export default function WarehouseListPage() {
                   <Wrench className="w-3.5 h-3.5" /> Mark as Under Maintenance
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  className="gap-2 text-xs cursor-pointer text-red-700 hover:text-red-900"
+                  className="gap-2 text-xs text-red-700 cursor-pointer hover:text-red-900"
                   onClick={() => handleStatusAction(row, "closed")}
                 >
                   <Lock className="w-3.5 h-3.5" /> Mark as Closed
@@ -314,7 +360,7 @@ export default function WarehouseListPage() {
                   <XCircle className="w-3.5 h-3.5" /> Deactivate
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  className="gap-2 text-xs cursor-pointer text-red-700 hover:text-red-900"
+                  className="gap-2 text-xs text-red-700 cursor-pointer hover:text-red-900"
                   onClick={() => handleStatusAction(row, "closed")}
                 >
                   <Lock className="w-3.5 h-3.5" /> Mark as Closed
@@ -443,44 +489,44 @@ export default function WarehouseListPage() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3 shadow-sm">
-            <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center flex-shrink-0">
+        {/* <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="flex items-center gap-3 p-3 bg-white border shadow-sm rounded-xl border-border">
+            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-brand-600">
               <WarehouseIcon className="w-4 h-4 text-white" />
             </div>
             <div>
-              <p className="text-base font-bold text-foreground leading-none">{totalCount}</p>
+              <p className="text-base font-bold leading-none text-foreground">{totalCount}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Total Warehouses</p>
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3 shadow-sm">
-            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+          <div className="flex items-center gap-3 p-3 bg-white border shadow-sm rounded-xl border-border">
+            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-muted">
               <CheckCircle2 className="w-4 h-4 text-emerald-500" />
             </div>
             <div>
-              <p className="text-base font-bold text-foreground leading-none">{activeCount}</p>
+              <p className="text-base font-bold leading-none text-foreground">{activeCount}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Active</p>
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3 shadow-sm">
-            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+          <div className="flex items-center gap-3 p-3 bg-white border shadow-sm rounded-xl border-border">
+            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-muted">
               <XCircle className="w-4 h-4 text-slate-400" />
             </div>
             <div>
-              <p className="text-base font-bold text-foreground leading-none">{inactiveCount}</p>
+              <p className="text-base font-bold leading-none text-foreground">{inactiveCount}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Inactive</p>
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3 shadow-sm">
-            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+          <div className="flex items-center gap-3 p-3 bg-white border shadow-sm rounded-xl border-border">
+            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-muted">
               <Wrench className="w-4 h-4 text-amber-500" />
             </div>
             <div>
-              <p className="text-base font-bold text-foreground leading-none">{maintenanceCount}</p>
+              <p className="text-base font-bold leading-none text-foreground">{maintenanceCount}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Under Maintenance</p>
             </div>
           </div>
-        </div>
+        </div> */}
 
         <MasterListing<WarehouseMaster>
           columns={columns}
@@ -510,10 +556,10 @@ export default function WarehouseListPage() {
             if (!open) setConfirmDialog(null);
           }}
         >
-          <DialogContent className="max-w-sm bg-white border border-border shadow-xl rounded-xl">
+          <DialogContent className="max-w-sm bg-white border shadow-xl border-border rounded-xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-base">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 border bg-amber-50 border-amber-200">
+                <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 border rounded-lg bg-amber-50 border-amber-200">
                   <AlertTriangle className="w-4 h-4 text-amber-500" />
                 </div>
                 {confirmDialog.action === "activate"
@@ -548,7 +594,7 @@ export default function WarehouseListPage() {
               </Button>
               <Button
                 size="sm"
-                className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
                 onClick={confirmStatusChange}
               >
                 Confirm
@@ -564,7 +610,7 @@ export default function WarehouseListPage() {
             "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium bg-emerald-600 animate-in slide-in-from-top-2 fade-in-0 duration-300",
           )}
         >
-          <Check className="w-4 h-4 flex-shrink-0" />
+          <Check className="flex-shrink-0 w-4 h-4" />
           {toast.msg}
         </div>
       )}

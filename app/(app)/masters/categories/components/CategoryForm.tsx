@@ -68,7 +68,7 @@ export function CategoryForm({
           />
           {errors.categoryName && <p className="text-[11px] text-red-500">{errors.categoryName}</p>}
         </div>
-        <div className="space-y-1">
+        {/* <div className="space-y-1">
           <Label className="text-xs font-medium">Status</Label>
           <Select value={form.status} onValueChange={(value) => set("status", value as CategoryStatus)} disabled={readOnly}>
             <SelectTrigger className={inputCls("status")}>
@@ -79,7 +79,7 @@ export function CategoryForm({
               <SelectItem value="inactive">Inactive</SelectItem>
             </SelectContent>
           </Select>
-        </div>
+        </div> */}
         <div className="hidden md:block" />
         <div className="space-y-1 md:col-span-2">
           <Label className="text-xs font-medium">Description</Label>

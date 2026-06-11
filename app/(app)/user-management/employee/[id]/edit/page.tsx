@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { CheckCircle2, XCircle, X } from "lucide-react";
 import EmployeeForm from "../../components/EmployeeForm";
 import { type Employee, loadEmployees, saveEmployees } from "../../employee-data";
@@ -65,16 +64,14 @@ export default function EditEmployeePage() {
 
   if (!employee) {
     return (
-      <AppLayout>
-        <div className="flex items-center justify-center h-96">
-          <p className="text-muted-foreground text-sm">Loading user…</p>
-        </div>
-      </AppLayout>
+      <div className="flex items-center justify-center h-96">
+        <p className="text-muted-foreground text-sm">Loading user…</p>
+      </div>
     );
   }
 
   return (
-    <AppLayout>
+    <>
       <EmployeeForm
         mode="edit"
         employee={employee}
@@ -83,6 +80,6 @@ export default function EditEmployeePage() {
         departments={DEPARTMENTS}
       />
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-    </AppLayout>
+    </>
   );
 }

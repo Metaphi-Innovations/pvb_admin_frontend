@@ -57,15 +57,16 @@ export default function AddWarehousePage() {
 			return;
 		}
 		const nextIdVal = nextWarehouseId(records);
+		const primaryContact = form.contacts.find((c) => c.isPrimary) || form.contacts[0];
 		const newRecord: WarehouseMaster = {
 			id: nextIdVal,
 			warehouseCode: generateWarehouseCode(nextIdVal),
 			warehouseName: form.warehouseName,
 			warehouseType: form.warehouseType,
 			gstNumber: form.gstNumber,
-			contactPerson: form.contactPerson,
-			mobileNumber: form.mobileNumber,
-			emailAddress: form.emailAddress,
+			contactPerson: primaryContact ? primaryContact.contactPerson : "",
+			mobileNumber: primaryContact ? primaryContact.mobileNumber : "",
+			emailAddress: primaryContact ? primaryContact.emailAddress : "",
 			address: form.address,
 			state: form.state,
 			district: form.district,
@@ -75,6 +76,8 @@ export default function AddWarehousePage() {
 			manager: form.manager,
 			status: form.status,
 			operatedBy: form.operatedBy,
+			customerType: form.operatedBy === "C&F Agent" ? form.customerType : undefined,
+			contacts: form.contacts,
 			createdBy: "Admin",
 			createdDate: todayStr(),
 			updatedBy: "Admin",

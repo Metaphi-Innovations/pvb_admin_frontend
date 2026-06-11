@@ -134,8 +134,8 @@ export function seedDummyBankReconciliation(force = false): { statementId: numbe
   if (newEntries[matchedIdx]) {
     newEntries[matchedIdx] = {
       ...newEntries[matchedIdx],
-      matchedModule: "expenses",
-      matchedRecordLabel: "EXP-0001 / Sample expense",
+      matchedModule: "journal",
+      matchedRecordLabel: "JRN-0001 / Sample journal entry",
       matchStatus: "matched",
       reconciliationStatus: "matched",
     };

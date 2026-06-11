@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,7 +98,45 @@ function SectionHead({ label, sub }: { label: string; sub?: string }) {
 // ── Autocomplete (searchable dropdown) ───────────────────────────────────────
 
 interface ACOption { label: string; value: string | number; sub?: string }
-interface ApprovalLevel { empId: number | null; name: string; role: string; employeeCode: string }
+interface ApprovalLevel { uid: string; empId: number | null; name: string; role: string; employeeCode: string }
+interface GeoMappingRow {
+  geoZone: string;
+  geoRegion: string;
+  geoArea: string;
+  territory: string;
+  geoLocality: string;
+}
+
+function emptyGeoMapping(): GeoMappingRow {
+  return {
+    geoZone: "",
+    geoRegion: "",
+    geoArea: "",
+    territory: "",
+    geoLocality: "",
+  };
+}
+
+function toGeoMappingRow(mapping?: Partial<GeoMappingRow> | null): GeoMappingRow {
+  return {
+    geoZone: mapping?.geoZone || "",
+    geoRegion: mapping?.geoRegion || "",
+    geoArea: mapping?.geoArea || "",
+    territory: mapping?.territory || "",
+    geoLocality: mapping?.geoLocality || "",
+  };
+}
+
+function makeApprovalLevel(level?: Partial<ApprovalLevel>): ApprovalLevel {
+  return {
+    uid: level?.uid || `approval-${Math.random().toString(36).slice(2, 10)}`,
+    empId: level?.empId ?? null,
+    name: level?.name || "",
+    role: level?.role || "",
+    employeeCode: level?.employeeCode || "",
+  };
+}
+
 function AC({ label, value, onChange, options, placeholder, required, error, disabled, sub }: {
   label: string; value: string | number; onChange: (v: string | number) => void;
   options: ACOption[]; placeholder?: string; required?: boolean; error?: string;
@@ -357,69 +396,117 @@ function PermissionsTab({ perms, onChange, role }: {
   onChange: (p: UserPermissions) => void;
   role?: string;
 }) {
-  const [section, setSection]       = useState<"web"|"mobile">("web");
-  const [openMods, setOpenMods]     = useState<Set<string>>(new Set([PERMISSION_REGISTRY[0].id]));
+  const [section, setSection] = useState<"web" | "mobile">("web");
+  const [openMods, setOpenMods] = useState<Set<string>>(new Set([PERMISSION_REGISTRY[0].id]));
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set([MOBILE_PERMISSION_REGISTRY[0].id]));
 
-  const toggleMod   = (id: string) => setOpenMods(s   => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const toggleGroup = (id: string) => setOpenGroups(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleMod = (id: string) => setOpenMods((s) => {
+    const next = new Set(s);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const toggleGroup = (id: string) => setOpenGroups((s) => {
+    const next = new Set(s);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
-  // ── Getters ──────────────────────────────────────────────────────────────────
   const getSub = (modId: string, subId: string): SubmodulePermission =>
-    (perms.web?.[modId]?.[subId]) || defaultSubPerm();
+    perms.web?.[modId]?.[subId] || defaultSubPerm();
   const getMob = (grpId: string, featId: string): MobileFeaturePermission =>
-    (perms.mobile?.[grpId]?.[featId]) || defaultMobilePerm();
+    perms.mobile?.[grpId]?.[featId] || defaultMobilePerm();
 
-  // ── Setters ──────────────────────────────────────────────────────────────────
   const setSubAction = (modId: string, subId: string, action: WebAction, val: boolean) =>
-    onChange({ ...perms, web: { ...perms.web, [modId]: { ...(perms.web?.[modId]||{}), [subId]: { ...getSub(modId,subId), [action]: val } } } });
+    onChange({ ...perms, web: { ...perms.web, [modId]: { ...(perms.web?.[modId] || {}), [subId]: { ...getSub(modId, subId), [action]: val } } } });
 
   const setMobAction = (grpId: string, featId: string, action: MobileAction, val: boolean) =>
-    onChange({ ...perms, mobile: { ...perms.mobile, [grpId]: { ...(perms.mobile?.[grpId]||{}), [featId]: { ...getMob(grpId,featId), [action]: val } } } });
+    onChange({ ...perms, mobile: { ...perms.mobile, [grpId]: { ...(perms.mobile?.[grpId] || {}), [featId]: { ...getMob(grpId, featId), [action]: val } } } });
 
-  // ── Bulk grant / revoke ───────────────────────────────────────────────────────
   const grantMod = (mod: PermModule) => {
-    const updated = { ...(perms.web||{}) };
+    const updated = { ...(perms.web || {}) };
     updated[mod.id] = {};
-    mod.submodules.forEach(s => { updated[mod.id][s.id] = { view:true,create:true,edit:true,delete:true,approve:true,export:true,import:true }; });
+    mod.submodules.forEach((sub) => {
+      updated[mod.id][sub.id] = {
+        view: sub.actions.includes("view"),
+        create: sub.actions.includes("create"),
+        edit: sub.actions.includes("edit"),
+        delete: sub.actions.includes("delete"),
+        approve: sub.actions.includes("approve"),
+        export: sub.actions.includes("export"),
+        import: sub.actions.includes("import"),
+      };
+    });
     onChange({ ...perms, web: updated });
   };
   const revokeMod = (mod: PermModule) => {
-    const updated = { ...(perms.web||{}) };
+    const updated = { ...(perms.web || {}) };
     updated[mod.id] = {};
-    mod.submodules.forEach(s => { updated[mod.id][s.id] = defaultSubPerm(); });
+    mod.submodules.forEach((sub) => {
+      updated[mod.id][sub.id] = defaultSubPerm();
+    });
     onChange({ ...perms, web: updated });
   };
   const grantGroup = (grp: MobileGroupDef) => {
-    const updated = { ...(perms.mobile||{}) };
+    const updated = { ...(perms.mobile || {}) };
     updated[grp.id] = {};
-    grp.features.forEach(f => { updated[grp.id][f.id] = { view:true,create:true,edit:true,delete:true,approve:true }; });
+    grp.features.forEach((feat) => {
+      updated[grp.id][feat.id] = {
+        view: feat.actions.includes("view"),
+        create: feat.actions.includes("create"),
+        edit: feat.actions.includes("edit"),
+        delete: feat.actions.includes("delete"),
+        approve: feat.actions.includes("approve"),
+      };
+    });
     onChange({ ...perms, mobile: updated });
   };
   const revokeGroup = (grp: MobileGroupDef) => {
-    const updated = { ...(perms.mobile||{}) };
+    const updated = { ...(perms.mobile || {}) };
     updated[grp.id] = {};
-    grp.features.forEach(f => { updated[grp.id][f.id] = defaultMobilePerm(); });
+    grp.features.forEach((feat) => {
+      updated[grp.id][feat.id] = defaultMobilePerm();
+    });
     onChange({ ...perms, mobile: updated });
   };
-  const grantAll  = () => {
-    const f: UserPermissions = { web: {}, mobile: {} };
-    PERMISSION_REGISTRY.forEach(m => { f.web[m.id] = {}; m.submodules.forEach(s => { f.web[m.id][s.id] = { view:true,create:true,edit:true,delete:true,approve:true,export:true,import:true }; }); });
-    MOBILE_PERMISSION_REGISTRY.forEach(g => { f.mobile[g.id] = {}; g.features.forEach(ft => { f.mobile[g.id][ft.id] = { view:true,create:true,edit:true,delete:true,approve:true }; }); });
-    onChange(f);
+  const grantAll = () => {
+    const next: UserPermissions = { web: {}, mobile: {} };
+    PERMISSION_REGISTRY.forEach((mod) => {
+      next.web[mod.id] = {};
+      mod.submodules.forEach((sub) => {
+        next.web[mod.id][sub.id] = {
+          view: sub.actions.includes("view"),
+          create: sub.actions.includes("create"),
+          edit: sub.actions.includes("edit"),
+          delete: sub.actions.includes("delete"),
+          approve: sub.actions.includes("approve"),
+          export: sub.actions.includes("export"),
+          import: sub.actions.includes("import"),
+        };
+      });
+    });
+    MOBILE_PERMISSION_REGISTRY.forEach((grp) => {
+      next.mobile[grp.id] = {};
+      grp.features.forEach((feat) => {
+        next.mobile[grp.id][feat.id] = {
+          view: feat.actions.includes("view"),
+          create: feat.actions.includes("create"),
+          edit: feat.actions.includes("edit"),
+          delete: feat.actions.includes("delete"),
+          approve: feat.actions.includes("approve"),
+        };
+      });
+    });
+    onChange(next);
   };
   const revokeAll = () => onChange(defaultPermissions());
 
-  // ── Status helpers ────────────────────────────────────────────────────────────
   const modHasAny = (mod: PermModule) =>
-    mod.submodules.some(s => ALL_WEB_ACTIONS.some(a => (getSub(mod.id,s.id) as any)[a]));
+    mod.submodules.some((sub) => ALL_WEB_ACTIONS.some((action) => sub.actions.includes(action) && Boolean((getSub(mod.id, sub.id) as any)[action])));
   const groupHasAny = (grp: MobileGroupDef) =>
-    grp.features.some(f => ALL_MOBILE_ACTIONS.some(a => (getMob(grp.id,f.id) as any)[a]));
+    grp.features.some((feat) => ALL_MOBILE_ACTIONS.some((action) => feat.actions.includes(action) && Boolean((getMob(grp.id, feat.id) as any)[action])));
 
   return (
     <div className="space-y-3">
-
-      {/* ── Role defaults banner ─────────────────────────────────────────────── */}
       {role && (
         <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 px-3 py-2.5">
           <div>
@@ -431,31 +518,25 @@ function PermissionsTab({ perms, onChange, role }: {
             </p>
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <Button type="button" variant="outline" size="sm" className="h-7 text-xs"
-              onClick={() => onChange(roleDefaultPermissions(role))}>
+            <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => onChange(roleDefaultPermissions(role))}>
               Load Role Defaults
             </Button>
-            <button type="button" onClick={grantAll}
-              className="text-[10px] font-semibold px-2 py-1 rounded bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors">
+            <button type="button" onClick={grantAll} className="text-[10px] font-semibold px-2 py-1 rounded bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors">
               Grant All
             </button>
-            <button type="button" onClick={revokeAll}
-              className="text-[10px] font-semibold px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
+            <button type="button" onClick={revokeAll} className="text-[10px] font-semibold px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
               Revoke All
             </button>
           </div>
         </div>
       )}
 
-      {/* ── Section switcher ─────────────────────────────────────────────────── */}
       <div className="flex gap-1.5 pb-3 border-b border-border">
-        {([["web","Web Portal","Monitor"],["mobile","Mobile App","Smartphone"]] as const).map(([key, label, Icon]) => (
-          <button key={key} type="button" onClick={() => setSection(key as "web"|"mobile")}
+        {([ ["web", "Web Portal"], ["mobile", "Mobile App"] ] as const).map(([key, label]) => (
+          <button key={key} type="button" onClick={() => setSection(key)}
             className={cn(
               "flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-medium transition-colors border",
-              section === key
-                ? "bg-brand-600 text-white border-brand-600"
-                : "border-border text-muted-foreground hover:bg-muted/40",
+              section === key ? "bg-brand-600 text-white border-brand-600" : "border-border text-muted-foreground hover:bg-muted/40",
             )}>
             {key === "web" ? <Monitor className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
             {label} Permissions
@@ -463,93 +544,60 @@ function PermissionsTab({ perms, onChange, role }: {
         ))}
       </div>
 
-      {/* ── Web Portal ────────────────────────────────────────────────────────── */}
       {section === "web" && (
         <div className="space-y-1.5">
-          {PERMISSION_REGISTRY.map(mod => {
+          {PERMISSION_REGISTRY.map((mod) => {
             const expanded = openMods.has(mod.id);
             const hasAny = modHasAny(mod);
             return (
               <div key={mod.id} className="border border-border rounded-xl overflow-hidden">
-                {/* Module header */}
-                <div
-                  className={cn(
-                    "flex items-center justify-between px-3 py-2.5 cursor-pointer transition-colors select-none",
-                    expanded ? "bg-muted/30 border-b border-border" : hasAny ? "bg-brand-50/50" : "bg-white hover:bg-muted/20",
-                  )}
-                  onClick={() => toggleMod(mod.id)}
-                >
+                <div className={cn(
+                  "flex items-center justify-between px-3 py-2.5 cursor-pointer transition-colors select-none bg-white",
+                  expanded ? "border-b border-border" : hasAny ? "hover:bg-brand-50/40" : "hover:bg-muted/20",
+                )} onClick={() => toggleMod(mod.id)}>
                   <div className="flex items-center gap-2">
                     <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform duration-150", !expanded && "-rotate-90")} />
                     <span className="text-xs font-semibold text-foreground">{mod.label}</span>
-                    <span className="text-[10px] text-muted-foreground">
-                      ({mod.submodules.length} submodule{mod.submodules.length > 1 ? "s" : ""})
-                    </span>
-                    {hasAny && !expanded && (
-                      <span className="text-[9px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-semibold">configured</span>
-                    )}
+                    <span className="text-[10px] text-muted-foreground">({mod.submodules.length} submodule{mod.submodules.length > 1 ? "s" : ""})</span>
+                    {hasAny && !expanded && <span className="text-[9px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-semibold">configured</span>}
                   </div>
-                  <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                    <button type="button" onClick={() => grantMod(mod)}
-                      className="text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors">
+                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    <button type="button" onClick={() => grantMod(mod)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors">
                       Grant All
                     </button>
-                    <button type="button" onClick={() => revokeMod(mod)}
-                      className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
+                    <button type="button" onClick={() => revokeMod(mod)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
                       Revoke All
                     </button>
                   </div>
                 </div>
-
-                {/* Submodule permission table */}
                 {expanded && (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs min-w-[640px]">
-                      <thead>
-                        <tr className="bg-muted/20 border-b border-border/60">
-                          <th className="px-3 py-1.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider w-44">
-                            Submodule
-                          </th>
-                          {ALL_WEB_ACTIONS.map(a => (
-                            <th key={a} className="px-2 py-1.5 text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider w-16">
-                              {WEB_ACTION_LABELS[a]}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {mod.submodules.map((sub, si) => {
-                          const sp = getSub(mod.id, sub.id);
-                          const rowActive = ALL_WEB_ACTIONS.some(a => sub.actions.includes(a) && (sp as any)[a]);
-                          return (
-                            <tr key={sub.id} className={cn(
-                              "border-b border-border/40 last:border-0 transition-colors",
-                              si % 2 === 0 ? "bg-white" : "bg-muted/10",
-                              rowActive && "bg-brand-50/30",
-                            )}>
-                              <td className="px-3 py-2 text-[11px] font-medium text-foreground/80">{sub.label}</td>
-                              {ALL_WEB_ACTIONS.map(action => {
-                                const supported = sub.actions.includes(action);
-                                const checked   = (sp as any)[action] || false;
+                  <div className="space-y-2.5 p-3">
+                    {mod.submodules.map((sub, si) => {
+                      const sp = getSub(mod.id, sub.id);
+                      const actions = ALL_WEB_ACTIONS.filter((action) => sub.actions.includes(action));
+                      const rowActive = actions.some((action) => Boolean((sp as any)[action]));
+                      return (
+                        <div key={sub.id} className={cn("rounded-xl border border-border/60 bg-muted/10 px-3 py-2.5 transition-colors", rowActive && "bg-brand-50/30") }>
+                          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+                            <div className="min-w-0 lg:w-56 lg:flex-shrink-0">
+                              <p className="text-[11px] font-semibold text-foreground">{sub.label}</p>
+                              <p className="text-[10px] text-muted-foreground">Only available permissions are shown</p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 lg:pl-4">
+                              {actions.map((action) => {
+                                const checked = Boolean((sp as any)[action]);
                                 return (
-                                  <td key={action} className="px-2 py-2 text-center">
-                                    {supported ? (
-                                      <input type="checkbox"
-                                        checked={checked}
-                                        onChange={e => setSubAction(mod.id, sub.id, action, e.target.checked)}
-                                        className="w-3.5 h-3.5 rounded accent-brand-600 cursor-pointer"
-                                      />
-                                    ) : (
-                                      <span className="text-border text-[11px] select-none">—</span>
-                                    )}
-                                  </td>
+                                  <label key={action} className={cn("inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-medium cursor-pointer transition-colors", checked ? "border-brand-300 bg-brand-50 text-brand-700" : "border-border text-muted-foreground hover:bg-muted/40") }>
+                                    <input type="checkbox" checked={checked} onChange={(e) => setSubAction(mod.id, sub.id, action, e.target.checked)} className="w-3.5 h-3.5 rounded accent-brand-600 cursor-pointer" />
+                                    <span>{WEB_ACTION_LABELS[action]}</span>
+                                  </label>
                                 );
                               })}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -558,97 +606,64 @@ function PermissionsTab({ perms, onChange, role }: {
         </div>
       )}
 
-      {/* ── Mobile App ───────────────────────────────────────────────────────── */}
       {section === "mobile" && (
         <div className="space-y-1.5">
           <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground px-0.5 pb-1">
             <Info className="w-3 h-3 flex-shrink-0" />
             Mobile permissions primarily apply to field roles: DO, Intern, FMO, TM, ASM, KAM, RSM, ZSM.
           </p>
-          {MOBILE_PERMISSION_REGISTRY.map(grp => {
+          {MOBILE_PERMISSION_REGISTRY.map((grp) => {
             const expanded = openGroups.has(grp.id);
             const hasAny = groupHasAny(grp);
             return (
               <div key={grp.id} className="border border-border rounded-xl overflow-hidden">
-                {/* Group header */}
-                <div
-                  className={cn(
-                    "flex items-center justify-between px-3 py-2.5 cursor-pointer transition-colors select-none",
-                    expanded ? "bg-muted/30 border-b border-border" : hasAny ? "bg-brand-50/50" : "bg-white hover:bg-muted/20",
-                  )}
-                  onClick={() => toggleGroup(grp.id)}
-                >
+                <div className={cn(
+                  "flex items-center justify-between px-3 py-2.5 cursor-pointer transition-colors select-none bg-white",
+                  expanded ? "border-b border-border" : hasAny ? "hover:bg-brand-50/40" : "hover:bg-muted/20",
+                )} onClick={() => toggleGroup(grp.id)}>
                   <div className="flex items-center gap-2">
                     <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform duration-150", !expanded && "-rotate-90")} />
                     <span className="text-xs font-semibold text-foreground">{grp.label}</span>
-                    <span className="text-[10px] text-muted-foreground">
-                      ({grp.features.length} feature{grp.features.length > 1 ? "s" : ""})
-                    </span>
-                    {hasAny && !expanded && (
-                      <span className="text-[9px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-semibold">configured</span>
-                    )}
+                    <span className="text-[10px] text-muted-foreground">({grp.features.length} feature{grp.features.length > 1 ? "s" : ""})</span>
+                    {hasAny && !expanded && <span className="text-[9px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-semibold">configured</span>}
                   </div>
-                  <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                    <button type="button" onClick={() => grantGroup(grp)}
-                      className="text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors">
+                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    <button type="button" onClick={() => grantGroup(grp)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors">
                       Grant All
                     </button>
-                    <button type="button" onClick={() => revokeGroup(grp)}
-                      className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
+                    <button type="button" onClick={() => revokeGroup(grp)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
                       Revoke All
                     </button>
                   </div>
                 </div>
-
-                {/* Feature permission table */}
                 {expanded && (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs min-w-[520px]">
-                      <thead>
-                        <tr className="bg-muted/20 border-b border-border/60">
-                          <th className="px-3 py-1.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider w-52">
-                            Feature
-                          </th>
-                          {ALL_MOBILE_ACTIONS.map(a => (
-                            <th key={a} className="px-2 py-1.5 text-center text-[10px] font-semibold text-muted-foreground uppercase tracking-wider w-16">
-                              {MOBILE_ACTION_LABELS[a]}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {grp.features.map((feat, fi) => {
-                          const fp = getMob(grp.id, feat.id);
-                          const rowActive = ALL_MOBILE_ACTIONS.some(a => feat.actions.includes(a) && (fp as any)[a]);
-                          return (
-                            <tr key={feat.id} className={cn(
-                              "border-b border-border/40 last:border-0 transition-colors",
-                              fi % 2 === 0 ? "bg-white" : "bg-muted/10",
-                              rowActive && "bg-brand-50/30",
-                            )}>
-                              <td className="px-3 py-2 text-[11px] font-medium text-foreground/80">{feat.label}</td>
-                              {ALL_MOBILE_ACTIONS.map(action => {
-                                const supported = feat.actions.includes(action);
-                                const checked   = (fp as any)[action] || false;
+                  <div className="space-y-2.5 p-3">
+                    {grp.features.map((feat, fi) => {
+                      const fp = getMob(grp.id, feat.id);
+                      const actions = ALL_MOBILE_ACTIONS.filter((action) => feat.actions.includes(action));
+                      const rowActive = actions.some((action) => Boolean((fp as any)[action]));
+                      return (
+                        <div key={feat.id} className={cn("rounded-xl border border-border/60 bg-muted/10 px-3 py-2.5 transition-colors", rowActive && "bg-brand-50/30") }>
+                          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+                            <div className="min-w-0 lg:w-56 lg:flex-shrink-0">
+                              <p className="text-[11px] font-semibold text-foreground">{feat.label}</p>
+                              <p className="text-[10px] text-muted-foreground">Only available permissions are shown</p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 lg:pl-4">
+                              {actions.map((action) => {
+                                const checked = Boolean((fp as any)[action]);
                                 return (
-                                  <td key={action} className="px-2 py-2 text-center">
-                                    {supported ? (
-                                      <input type="checkbox"
-                                        checked={checked}
-                                        onChange={e => setMobAction(grp.id, feat.id, action, e.target.checked)}
-                                        className="w-3.5 h-3.5 rounded accent-brand-600 cursor-pointer"
-                                      />
-                                    ) : (
-                                      <span className="text-border text-[11px] select-none">—</span>
-                                    )}
-                                  </td>
+                                  <label key={action} className={cn("inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-medium cursor-pointer transition-colors", checked ? "border-brand-300 bg-brand-50 text-brand-700" : "border-border text-muted-foreground hover:bg-muted/40") }>
+                                    <input type="checkbox" checked={checked} onChange={(e) => setMobAction(grp.id, feat.id, action, e.target.checked)} className="w-3.5 h-3.5 rounded accent-brand-600 cursor-pointer" />
+                                    <span>{MOBILE_ACTION_LABELS[action]}</span>
+                                  </label>
                                 );
                               })}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -660,9 +675,8 @@ function PermissionsTab({ perms, onChange, role }: {
   );
 }
 
-// ── Main Form ─────────────────────────────────────────────────────────────────
 
-// ── Geo helpers ───────────────────────────────────────────────────────────────
+// -- Geo helpers --------------------------------------------------------------
 
 function isDescendantOf(node: GeoNode, ancestorLevel: GeoLevel, ancestorName: string, nodes: GeoNode[]): boolean {
   let cur: GeoNode | undefined = node;
@@ -679,6 +693,23 @@ function isDescendantOf(node: GeoNode, ancestorLevel: GeoLevel, ancestorName: st
 export default function EmployeeForm({ mode, employee, onSave, onCancel, departments }: EmployeeFormProps) {
   const allEmployees = loadEmployees();
   const newEmpId = mode === "add" ? nextEmployeeId(allEmployees) : (employee?.employeeId || "");
+  const initialGeoMappings = (() => {
+    if (employee?.geoMappings?.length) {
+      return employee.geoMappings.map((mapping) => toGeoMappingRow(mapping));
+    }
+    if (employee?.geoZone || employee?.geoRegion || employee?.geoArea || employee?.territory || employee?.geoLocality) {
+      return [
+        toGeoMappingRow({
+          geoZone: employee.geoZone,
+          geoRegion: employee.geoRegion,
+          geoArea: employee.geoArea,
+          territory: employee.territory,
+          geoLocality: employee.geoLocality,
+        }),
+      ];
+    }
+    return [emptyGeoMapping()];
+  })();
 
   const initPerms = migratePermissions(employee?.permissions);
 
@@ -706,6 +737,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
   const [perms, setPerms] = useState<UserPermissions>(initPerms);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [sameAddress, setSameAddress] = useState(false);
+  const [geoMappings, setGeoMappings] = useState<GeoMappingRow[]>(initialGeoMappings);
 
   // ── Dynamic approval chain ──────────────────────────────────────────────────
   const [approvalLevels, setApprovalLevels] = useState<ApprovalLevel[]>(() => {
@@ -713,7 +745,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
     const resolve = (id?: number | null, name?: string, role?: string): ApprovalLevel | null => {
       if (!id) return null;
       const emp = allEmployees.find(e => e.id === id);
-      return { empId: id, name: emp?.fullName || name || "", role: emp?.role || role || "", employeeCode: emp?.employeeId || "" };
+      return makeApprovalLevel({ empId: id, name: emp?.fullName || name || "", role: emp?.role || role || "", employeeCode: emp?.employeeId || "" });
     };
     const l1 = resolve(employee?.approvalLevel1Id, employee?.approvalLevel1Name, employee?.approvalLevel1Role);
     const l2 = resolve(employee?.approvalLevel2Id, employee?.approvalLevel2Name, employee?.approvalLevel2Role);
@@ -722,9 +754,11 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
     if (l2) levels.push(l2);
     if (l3) levels.push(l3);
     // Start with at least one empty row
-    if (levels.length === 0) levels.push({ empId: null, name: "", role: "", employeeCode: "" });
+    if (levels.length === 0) levels.push(makeApprovalLevel());
     return levels;
   });
+  const [draggedApprovalUid, setDraggedApprovalUid] = useState<string | null>(null);
+  const [dragOverApprovalUid, setDragOverApprovalUid] = useState<string | null>(null);
 
   const set = (key: string, value: any) => {
     setFormState(prev => {
@@ -739,9 +773,15 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
         upd.approvalLevel2Id = null; upd.approvalLevel2Name = ""; upd.approvalLevel2Role = "";
         upd.approvalLevel3Id = null; upd.approvalLevel3Name = ""; upd.approvalLevel3Role = "";
         setPerms(initPerms);
+        setGeoMappings([emptyGeoMapping()]);
+        setErrors(prev => Object.fromEntries(Object.entries(prev).filter(([errorKey]) => !errorKey.startsWith("geoMapping_"))));
       }
       if (key === "salesType") {
         upd.roleId = null; upd.role = "";
+        upd.geoZone = ""; upd.geoRegion = ""; upd.geoArea = "";
+        upd.territory = ""; upd.geoLocality = "";
+        setGeoMappings([emptyGeoMapping()]);
+        setErrors(prev => Object.fromEntries(Object.entries(prev).filter(([errorKey]) => !errorKey.startsWith("geoMapping_"))));
       }
       // Cascade geo resets
       if (key === "geoZone") {
@@ -761,6 +801,18 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       return upd;
     });
     setErrors(prev => ({ ...prev, [key]: "" }));
+  };
+
+  const syncPrimaryGeoToForm = (mappings: GeoMappingRow[]) => {
+    const primary = mappings[0] || emptyGeoMapping();
+    setFormState(prev => ({
+      ...prev,
+      geoZone: primary.geoZone,
+      geoRegion: primary.geoRegion,
+      geoArea: primary.geoArea,
+      territory: primary.territory,
+      geoLocality: primary.geoLocality,
+    }));
   };
 
   // ── Derived options ──────────────────────────────────────────────────────────
@@ -812,46 +864,38 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
     return ROLE_GEO_FIELDS[form.role] || [];
   }, [form.roleType, form.role]);
 
-  // ── Geo dropdown options (cascading from Geography Master) ──────────────────
-  const geoZoneOptions = useMemo(() =>
-    geoNodes.filter(n => n.level === "Zone").map(n => ({ label: n.name, value: n.name })),
-  [geoNodes]);
-
-  const geoRegionOptions = useMemo(() => {
-    const nodes = geoNodes.filter(n => n.level === "Region");
-    if (!form.geoZone) return nodes.map(n => ({ label: n.name, value: n.name }));
-    return nodes
-      .filter(n => isDescendantOf(n, "Zone", form.geoZone!, geoNodes))
+  const getGeoOptionsMap = (mapping: GeoMappingRow): Record<string, ACOption[]> => {
+    const zoneOptions = geoNodes
+      .filter(n => n.level === "Zone")
       .map(n => ({ label: n.name, value: n.name }));
-  }, [geoNodes, form.geoZone]);
 
-  const geoAreaOptions = useMemo(() => {
-    const nodes = geoNodes.filter(n => n.level === "Area");
-    if (!form.geoRegion) return nodes.map(n => ({ label: n.name, value: n.name }));
-    return nodes
-      .filter(n => isDescendantOf(n, "Region", form.geoRegion!, geoNodes))
+    const regionOptions = geoNodes
+      .filter(n => n.level === "Region")
+      .filter(n => !mapping.geoZone || isDescendantOf(n, "Zone", mapping.geoZone, geoNodes))
       .map(n => ({ label: n.name, value: n.name }));
-  }, [geoNodes, form.geoRegion]);
 
-  const geoTerritoryOptions = useMemo(() => {
-    const nodes = geoNodes.filter(n => n.level === "Territory");
-    if (!form.geoArea) return nodes.map(n => ({ label: n.name, value: n.name }));
-    return nodes
-      .filter(n => isDescendantOf(n, "Area", form.geoArea!, geoNodes))
+    const areaOptions = geoNodes
+      .filter(n => n.level === "Area")
+      .filter(n => !mapping.geoRegion || isDescendantOf(n, "Region", mapping.geoRegion, geoNodes))
       .map(n => ({ label: n.name, value: n.name }));
-  }, [geoNodes, form.geoArea]);
 
-  const geoLocalityOptions = useMemo(() => {
-    const nodes = geoNodes.filter(n => n.level === "Locality");
-    if (!form.territory) return nodes.map(n => ({ label: n.name, value: n.name }));
-    return nodes
-      .filter(n => isDescendantOf(n, "Territory", form.territory!, geoNodes))
+    const territoryOptions = geoNodes
+      .filter(n => n.level === "Territory")
+      .filter(n => !mapping.geoArea || isDescendantOf(n, "Area", mapping.geoArea, geoNodes))
       .map(n => ({ label: n.name, value: n.name }));
-  }, [geoNodes, form.territory]);
 
-  const geoOptionsMap: Record<string, ACOption[]> = {
-    Zone: geoZoneOptions, Region: geoRegionOptions, Area: geoAreaOptions,
-    Territory: geoTerritoryOptions, Locality: geoLocalityOptions,
+    const localityOptions = geoNodes
+      .filter(n => n.level === "Locality")
+      .filter(n => !mapping.territory || isDescendantOf(n, "Territory", mapping.territory, geoNodes))
+      .map(n => ({ label: n.name, value: n.name }));
+
+    return {
+      Zone: zoneOptions,
+      Region: regionOptions,
+      Area: areaOptions,
+      Territory: territoryOptions,
+      Locality: localityOptions,
+    };
   };
 
   // ── Flexible approval options — ALL active users, hierarchy-suggested first ──
@@ -888,7 +932,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
 
   // ── Approval chain helpers ──────────────────────────────────────────────────
   const addApprovalLevel = () =>
-    setApprovalLevels(prev => [...prev, { empId: null, name: "", role: "", employeeCode: "" }]);
+    setApprovalLevels(prev => [...prev, makeApprovalLevel()]);
 
   const removeApprovalLevel = (idx: number) =>
     setApprovalLevels(prev => prev.filter((_, i) => i !== idx));
@@ -907,6 +951,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
     setApprovalLevels(prev => {
       const arr = [...prev];
       arr[idx] = {
+        uid: arr[idx].uid,
         empId: emp ? emp.id : null,
         name: emp?.fullName || "",
         role: emp?.role || "",
@@ -916,10 +961,77 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
     });
   };
 
+  const reorderApprovalLevels = (fromUid: string, toUid: string) => {
+    if (fromUid === toUid) return;
+    setApprovalLevels((prev) => {
+      const fromIndex = prev.findIndex((level) => level.uid === fromUid);
+      const toIndex = prev.findIndex((level) => level.uid === toUid);
+      if (fromIndex === -1 || toIndex === -1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  };
+
   // ── Geo value map ────────────────────────────────────────────────────────────
   const geoKey: Record<string, keyof Employee> = {
     Zone: "geoZone", Region: "geoRegion", Area: "geoArea",
     Territory: "territory", Locality: "geoLocality",
+  };
+
+  const getGeoMappingErrorKey = (index: number, field: string) => `geoMapping_${index}_${field}`;
+
+  const isGeoMappingComplete = (mapping: GeoMappingRow) =>
+    geoFields.every((field) => {
+      const key = geoKey[field] as keyof GeoMappingRow;
+      return Boolean(mapping[key]?.trim());
+    });
+
+  const setGeoMappingValue = (index: number, key: keyof GeoMappingRow, value: string | number) => {
+    setGeoMappings((prev) => {
+      const next = [...prev];
+      const mapping = { ...next[index], [key]: String(value) };
+
+      if (key === "geoZone") {
+        mapping.geoRegion = "";
+        mapping.geoArea = "";
+        mapping.territory = "";
+        mapping.geoLocality = "";
+      }
+      if (key === "geoRegion") {
+        mapping.geoArea = "";
+        mapping.territory = "";
+        mapping.geoLocality = "";
+      }
+      if (key === "geoArea") {
+        mapping.territory = "";
+        mapping.geoLocality = "";
+      }
+      if (key === "territory") {
+        mapping.geoLocality = "";
+      }
+
+      next[index] = mapping;
+      if (index === 0) syncPrimaryGeoToForm(next);
+      return next;
+    });
+    setErrors((prev) => ({ ...prev, [getGeoMappingErrorKey(index, key)]: "" }));
+  };
+
+  const addGeoMapping = () => {
+    if (!isGeoMappingComplete(geoMappings[geoMappings.length - 1] || emptyGeoMapping())) return;
+    setGeoMappings((prev) => [...prev, emptyGeoMapping()]);
+  };
+
+  const removeGeoMapping = (index: number) => {
+    setGeoMappings((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      const resolved = next.length > 0 ? next : [emptyGeoMapping()];
+      syncPrimaryGeoToForm(resolved);
+      return resolved;
+    });
+    setErrors((prev) => Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith("geoMapping_"))));
   };
 
   // ── Validation ────────────────────────────────────────────────────────────────
@@ -948,9 +1060,13 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
     const emErr = validateMobile(form.emergencyContactMobile || "");
     if (emErr) e.emergencyContactMobile = emErr;
     if (form.roleType === "Field User") {
-      geoFields.forEach(f => {
-        const k = geoKey[f] as string;
-        if (!(form as any)[k]?.trim()) e[k] = "Required";
+      geoMappings.forEach((mapping, index) => {
+        geoFields.forEach((field) => {
+          const key = geoKey[field] as keyof GeoMappingRow;
+          if (!mapping[key]?.trim()) {
+            e[getGeoMappingErrorKey(index, key)] = "Required";
+          }
+        });
       });
     }
     const cErr = validateCircularReporting(form.id || 0, form.reportingManagerId || null, allEmployees);
@@ -999,11 +1115,12 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       reportingManager: rm?.fullName || "",
       status: (form.status as any) || "draft",
       joiningDate: form.joiningDate || now,
-      geoZone: form.geoZone || "",
-      geoRegion: form.geoRegion || "",
-      geoArea: form.geoArea || "",
-      territory: form.territory || "",
-      geoLocality: form.geoLocality || "",
+      geoZone: geoMappings[0]?.geoZone || "",
+      geoRegion: geoMappings[0]?.geoRegion || "",
+      geoArea: geoMappings[0]?.geoArea || "",
+      territory: geoMappings[0]?.territory || "",
+      geoLocality: geoMappings[0]?.geoLocality || "",
+      geoMappings: form.roleType === "Field User" ? geoMappings.map((mapping) => ({ ...mapping })) : [],
       permissions: perms,
       // Approval chain — dynamic levels, save up to 3 for backward compat
       approvalLevel1Id: approvalLevels[0]?.empId || null,
@@ -1033,33 +1150,30 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
   const inp = (key: string) => cn("h-8 text-xs", errors[key] && "border-red-400");
 
   return (
-    <div className="flex flex-col" style={{ minHeight: "calc(100vh - 104px)" }}>
-
-      {/* ── Sticky header ──────────────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-10 bg-white border-b border-border px-4 py-2 flex items-center gap-2.5">
-        <button onClick={onCancel} className="p-1 hover:bg-muted rounded transition-colors">
-          <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-        </button>
-        <div className="flex-1 min-w-0">
-          <h2 className="text-sm font-semibold leading-none">{mode === "add" ? "Add User" : "Edit User"}</h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            User Management → User → {mode === "add" ? "Create" : "Update"}
-          </p>
+    <FormContainer
+      title={mode === "add" ? "Add User" : "Edit User"}
+      description={`User Management → User → ${mode === "add" ? "Create" : "Update"}`}
+      onBack={onCancel}
+      onCancel={onCancel}
+      cancelLabel="Discard"
+      noCard={true}
+      actions={
+        <div className="flex items-center gap-2">
+          <span className={cn(
+            "text-[11px] font-mono font-semibold px-2 py-0.5 rounded",
+            mode === "add" ? "bg-muted/40 text-muted-foreground" : "bg-brand-50 text-brand-700"
+          )}>
+            {mode === "add" ? `ID: ${newEmpId}` : employee?.employeeId}
+          </span>
+          <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" onClick={handleSave}>
+            <Save className="w-3.5 h-3.5" /> Save
+          </Button>
         </div>
-        <span className={cn(
-          "text-[11px] font-mono font-semibold px-2 py-0.5 rounded",
-          mode === "add" ? "bg-muted/40 text-muted-foreground" : "bg-brand-50 text-brand-700"
-        )}>
-          {mode === "add" ? `ID: ${newEmpId}` : employee?.employeeId}
-        </span>
-        <Button variant="outline" size="sm" className="h-7 text-xs px-3" onClick={onCancel}>Discard</Button>
-        <Button size="sm" className="h-7 text-xs px-3 gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" onClick={handleSave}>
-          <Save className="w-3 h-3" /> Save
-        </Button>
-      </div>
-
-      {/* ── Tabs ───────────────────────────────────────────────────────────────── */}
-      <div className="flex-1 px-5 py-4">
+      }
+    >
+      <div className="flex flex-col" style={{ minHeight: "calc(100vh - 104px)" }}>
+        {/* ── Tabs ───────────────────────────────────────────────────────────────── */}
+        <div className="flex-1 px-5 py-4">
         <Tabs defaultValue="personal" className="w-full">
           <TabsList className="h-8 p-0.5 bg-muted/30 mb-4 inline-flex gap-0.5">
             <TabsTrigger value="personal" className="text-xs h-7 px-4">Personal Details</TabsTrigger>
@@ -1278,7 +1392,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
 
                 {/* Role dropdown */}
                 {form.roleType && (form.roleType !== "Field User" || form.salesType) && (
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 gap-3">
                     <AC label="Role" required value={form.roleId || ""}
                       onChange={v => {
                         const allRoles = [...RETAIL_SALES_ROLES, ...INSTITUTIONAL_SALES_ROLES, ...ADMIN_ROLES];
@@ -1290,7 +1404,11 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                           approvalLevel2Id: null, approvalLevel2Name: "", approvalLevel2Role: "",
                           approvalLevel3Id: null, approvalLevel3Name: "", approvalLevel3Role: "",
                         }));
-                        setErrors(prev => ({ ...prev, roleId: "" }));
+                        setGeoMappings([emptyGeoMapping()]);
+                        setErrors(prev => ({
+                          ...Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith("geoMapping_"))),
+                          roleId: "",
+                        }));
                       }}
                       options={roleOptions}
                       placeholder="Select role"
@@ -1303,22 +1421,6 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                       placeholder="Search by name, ID, role… (hierarchy suggested)"
                       error={errors.reportingManagerId} />
 
-                    {/* Status */}
-                    <div className="space-y-1">
-                      <Label className="text-xs font-medium">Status</Label>
-                      <div className="flex gap-1.5 pt-0.5">
-                        {["draft", "active", "inactive"].map(s => (
-                          <label key={s} className={cn(
-                            "flex items-center gap-1.5 cursor-pointer px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors",
-                            form.status === s ? "border-brand-400 bg-brand-50 text-brand-700" : "border-border text-muted-foreground hover:bg-muted/30"
-                          )}>
-                            <input type="radio" name="status" value={s} checked={form.status === s}
-                              onChange={e => set("status", e.target.value)} className="w-3 h-3 accent-brand-600" />
-                            <span className="capitalize">{s}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
                   </div>
                 )}
               </div>
@@ -1341,26 +1443,69 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                   </div>
                 ) : (
                   <>
-                    <div className={cn("grid gap-3", geoFields.length <= 3 ? "grid-cols-3" : "grid-cols-5")}>
-                      {geoFields.map(f => {
-                        const k = geoKey[f] as string;
-                        const opts = geoOptionsMap[f] || [];
-                        const currentVal = (form as any)[k] || "";
+                    <div className="space-y-3">
+                      {geoMappings.map((mapping, index) => {
+                        const optionsMap = getGeoOptionsMap(mapping);
                         return (
-                          <AC key={f} label={f} required
-                            value={currentVal}
-                            onChange={v => set(k, v)}
-                            options={opts}
-                            placeholder={`Select ${f}`}
-                            error={errors[k]}
-                          />
+                          <div key={index} className="rounded-lg border border-border bg-muted/10 p-3">
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-xs font-semibold text-foreground">Mapping {index + 1}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  Complete this geography chain before adding the next one.
+                                </p>
+                              </div>
+                              {geoMappings.length > 1 && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                                  onClick={() => removeGeoMapping(index)}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 mr-1" /> Remove
+                                </Button>
+                              )}
+                            </div>
+
+                            <div className={cn("grid gap-3", geoFields.length <= 3 ? "grid-cols-3" : "grid-cols-5")}>
+                              {geoFields.map((field) => {
+                                const key = geoKey[field] as keyof GeoMappingRow;
+                                return (
+                                  <AC
+                                    key={`${field}-${index}`}
+                                    label={field}
+                                    required
+                                    value={mapping[key] || ""}
+                                    onChange={(value) => setGeoMappingValue(index, key, value)}
+                                    options={optionsMap[field] || []}
+                                    placeholder={`Select ${field}`}
+                                    error={errors[getGeoMappingErrorKey(index, key)]}
+                                  />
+                                );
+                              })}
+                            </div>
+                          </div>
                         );
                       })}
+
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                          <Info className="w-3 h-3 flex-shrink-0" />
+                          Selections are loaded from Geography Master. Choosing a higher level filters the options below it automatically.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={addGeoMapping}
+                          disabled={!isGeoMappingComplete(geoMappings[geoMappings.length - 1] || emptyGeoMapping())}
+                        >
+                          <Plus className="w-3.5 h-3.5 mr-1" /> Add Mapping
+                        </Button>
+                      </div>
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1">
-                      <Info className="w-3 h-3 flex-shrink-0" />
-                      Selections are loaded from Geography Master. Choosing a higher level filters the options below it automatically.
-                    </p>
                   </>
                 )}
               </div>
@@ -1400,13 +1545,47 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                   </div>
 
                   {approvalLevels.map((lvl, i) => (
-                    <div key={i} className={cn(
+                    <div
+                      key={lvl.uid}
+                      draggable
+                      onDragStart={() => {
+                        setDraggedApprovalUid(lvl.uid);
+                        setDragOverApprovalUid(lvl.uid);
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        if (dragOverApprovalUid !== lvl.uid) setDragOverApprovalUid(lvl.uid);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggedApprovalUid) reorderApprovalLevels(draggedApprovalUid, lvl.uid);
+                        setDraggedApprovalUid(null);
+                        setDragOverApprovalUid(null);
+                      }}
+                      onDragEnd={() => {
+                        setDraggedApprovalUid(null);
+                        setDragOverApprovalUid(null);
+                      }}
+                      className={cn(
                       "grid grid-cols-[28px_52px_1fr_52px] gap-2 px-3 py-2.5 items-center",
                       i < approvalLevels.length - 1 && "border-b border-border/60",
                       i % 2 === 0 ? "bg-white" : "bg-muted/10",
+                      draggedApprovalUid === lvl.uid && "opacity-60",
+                      dragOverApprovalUid === lvl.uid && draggedApprovalUid && draggedApprovalUid !== lvl.uid && "ring-2 ring-brand-300 ring-inset bg-brand-50/50",
                     )}>
                       {/* Drag handle (cosmetic) */}
-                      <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 cursor-grab" />
+                      <button
+                        type="button"
+                        draggable
+                        onDragStart={() => {
+                          setDraggedApprovalUid(lvl.uid);
+                          setDragOverApprovalUid(lvl.uid);
+                        }}
+                        className="flex items-center justify-center cursor-grab active:cursor-grabbing"
+                        aria-label={`Drag approval level ${i + 1}`}
+                      >
+                        <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40" />
+                      </button>
 
                       {/* Level badge */}
                       <div className="flex flex-col items-center gap-0.5">
@@ -1461,7 +1640,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                     </p>
                     <div className="space-y-1.5">
                       {approvalLevels.map((lvl, i) => (
-                        <div key={i} className="flex items-center gap-2">
+                        <div key={lvl.uid} className="flex items-center gap-2">
                           <span className="w-4 h-4 rounded-full bg-brand-600 text-white text-[9px] flex items-center justify-center font-bold flex-shrink-0">
                             {i + 1}
                           </span>
@@ -1497,7 +1676,8 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
           </TabsContent>
 
         </Tabs>
+        </div>
       </div>
-    </div>
+    </FormContainer>
   );
 }

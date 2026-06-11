@@ -1,9 +1,8 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AppLayout } from "@/components/layout/AppLayout";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,9 +14,6 @@ import {
   BarChart3,
   Plus,
   Download,
-  Search,
-  SlidersHorizontal,
-  X,
   MoreVertical,
   ChevronDown,
   ChevronsUpDown,
@@ -31,10 +27,12 @@ import {
   FileText,
   Package,
   XCircle,
+  Clock,
 } from "lucide-react";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Pagination } from "@/components/listing/Pagination";
 import { cn } from "@/lib/utils";
+import { ListingContainer } from "@/components/layout/ListingContainer";
+import { MasterListing } from "@/components/listing/MasterListing";
+import type { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
 import CancelOrderDialog from "./components/CancelOrderDialog";
 import PackingListDialog from "./components/PackingListDialog";
 import { downloadProformaInvoice } from "./pi-document";
@@ -164,12 +162,9 @@ export default function SalesOrdersPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [orders, setOrders] = useState<SalesOrder[]>([]);
-  const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<OrderListTab>("pending");
-  const [filterStatus, setFilterStatus] = useState<string[]>([]);
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [sortKey, setSortKey] = useState("orderDate");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [filters, setFilters] = useState<FilterState>({});
+  const [sort, setSort] = useState<SortState>({ key: "orderDate", direction: "desc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
@@ -186,7 +181,7 @@ export default function SalesOrdersPage() {
   useEffect(() => {
     const tab = searchParams.get("tab");
     if (tab === "pending" || tab === "completed" || tab === "approval") {
-      setActiveTab(tab);
+      setActiveTab(tab as OrderListTab);
     }
     const toastType = searchParams.get("toast");
     if (toastType === "approved") setToast({ msg: "Sales order approved successfully.", type: "success" });
@@ -201,35 +196,52 @@ export default function SalesOrdersPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [activeTab, search, filterStatus, pageSize]);
-
-  const handleSort = (key: string) => {
-    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  };
-
-  const toggleStatus = (s: string) => setFilterStatus((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
+  }, [activeTab, filters, pageSize]);
 
   const filtered = useMemo(() => {
     let d = orders.filter((o) => matchesOrderTab(o, activeTab));
-    d = d.filter((o) => {
-      const q = search.toLowerCase();
-      return (
-        !q || o.soNumber.toLowerCase().includes(q) || o.customerName.toLowerCase().includes(q) || o.territory.toLowerCase().includes(q)
+
+    const searchVal = filters.search as string;
+    if (searchVal?.trim()) {
+      const q = searchVal.toLowerCase();
+      d = d.filter(
+        (o) =>
+          o.soNumber.toLowerCase().includes(q) ||
+          o.customerName.toLowerCase().includes(q) ||
+          o.territory.toLowerCase().includes(q)
       );
-    });
-    if (filterStatus.length) d = d.filter((o) => filterStatus.includes(o.status));
-    d = [...d].sort((a, b) => {
-      const av = (a as unknown as Record<string, unknown>)[sortKey];
-      const bv = (b as unknown as Record<string, unknown>)[sortKey];
-      const cmp = String(av ?? "").localeCompare(String(bv ?? ""), undefined, { numeric: true });
-      return sortDir === "asc" ? cmp : -cmp;
-    });
+    }
+
+    const soNumberVal = filters.soNumber as string;
+    if (soNumberVal?.trim()) {
+      d = d.filter((o) => o.soNumber.toLowerCase().includes(soNumberVal.toLowerCase()));
+    }
+
+    const customerVal = filters.customerName as string[];
+    if (customerVal && customerVal.length > 0) {
+      d = d.filter((o) => customerVal.includes(o.customerName));
+    }
+
+    const territoryVal = filters.territory as string[];
+    if (territoryVal && territoryVal.length > 0) {
+      d = d.filter((o) => territoryVal.includes(o.territory));
+    }
+
+    const statusVal = filters.status as string[];
+    if (statusVal && statusVal.length > 0) {
+      d = d.filter((o) => statusVal.includes(o.status));
+    }
+
+    if (sort.key && sort.direction !== "none") {
+      d = [...d].sort((a, b) => {
+        const av = (a as unknown as Record<string, unknown>)[sort.key];
+        const bv = (b as unknown as Record<string, unknown>)[sort.key];
+        const cmp = String(av ?? "").localeCompare(String(bv ?? ""), undefined, { numeric: true });
+        return sort.direction === "asc" ? cmp : -cmp;
+      });
+    }
     return d;
-  }, [orders, activeTab, search, filterStatus, sortKey, sortDir]);
+  }, [orders, activeTab, filters, sort]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
 
@@ -252,23 +264,215 @@ export default function SalesOrdersPage() {
 
   const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
 
-  const handleTabChange = (tab: OrderListTab) => {
-    setActiveTab(tab);
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab as OrderListTab);
     setPage(1);
     router.replace(`/sales/orders?tab=${tab}`, { scroll: false });
   };
 
   const isApprovalTab = activeTab === "approval";
 
-  return (
-    <AppLayout>
-      <div className="space-y-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-bold text-foreground">Sales Orders</h1>
-          </div>
-        </div>
+  const customerOptions = useMemo(() => {
+    return Array.from(new Set(orders.map((o) => o.customerName)))
+      .filter(Boolean)
+      .map((name) => ({ label: name, value: name }));
+  }, [orders]);
 
+  const territoryOptions = useMemo(() => {
+    return Array.from(new Set(orders.map((o) => o.territory)))
+      .filter(Boolean)
+      .map((t) => ({ label: t, value: t }));
+  }, [orders]);
+
+  const columns: ColumnConfig<SalesOrder>[] = [
+    {
+      key: "soNumber",
+      header: "SO Number",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      render: (val, row) => (
+        <div>
+          <span className="font-mono text-xs font-semibold text-brand-700">{row.soNumber}</span>
+          {row.parentOrderNumber && (
+            <p className="text-[10px] text-muted-foreground mt-0.5">Split from {row.parentOrderNumber}</p>
+          )}
+        </div>
+      )
+    },
+    {
+      key: "customerName",
+      header: "Customer",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: customerOptions,
+      render: (val, row) => (
+        <div>
+          <p className="text-xs font-semibold text-foreground">{row.customerName}</p>
+          <p className="text-[11px] text-muted-foreground">{row.customerCode}</p>
+        </div>
+      )
+    },
+    {
+      key: "territory",
+      header: "Territory",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: territoryOptions,
+      render: (val, row) => (
+        <span className="text-xs text-muted-foreground">{row.territory}</span>
+      )
+    },
+    {
+      key: "items",
+      header: "Items",
+      sortable: true,
+      align: "center",
+      render: (val, row) => (
+        <span className="text-xs text-foreground">{row.items}</span>
+      )
+    },
+    {
+      key: "totalAmount",
+      header: "Amount",
+      sortable: true,
+      render: (val, row) => (
+        <span className="text-xs font-semibold text-foreground">₹{row.totalAmount.toLocaleString()}</span>
+      )
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: FILTER_STATUSES.map(s => ({ label: formatOrderStatus(s), value: s })),
+      render: (val, row) => (
+        <div>
+          <StatusPill status={row.status} />
+          {row.packingListNumber && <p className="text-[10px] text-muted-foreground mt-0.5">{row.packingListNumber}</p>}
+        </div>
+      )
+    },
+    {
+      key: "orderDate",
+      header: "Order Date",
+      sortable: true,
+      render: (val, row) => (
+        <span className="text-xs text-muted-foreground">{row.orderDate}</span>
+      )
+    },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      sticky: true,
+      render: (val, row) => {
+        const hydrated = hydrateOrderLineItems(row);
+        const editable = canEditOrder(hydrated);
+        const splittable = canSplitOrder(hydrated);
+        const cancellable = canCancelOrder(hydrated);
+        const piAllowed = canDownloadPI(hydrated);
+        const packingAllowed = canGeneratePackingList(hydrated);
+
+        return isApprovalTab ? (
+          <button
+            type="button"
+            title="View"
+            onClick={() => router.push(`/sales/orders/${row.id}?from=approval`)}
+            className="p-1.5 hover:bg-muted rounded-md transition-colors"
+          >
+            <Eye className="w-4 h-4 text-muted-foreground" />
+          </button>
+        ) : (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-100 ">
+                <MoreVertical className="w-4 h-4 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 z-[200]">
+              <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
+                Actions
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <button
+                type="button"
+                onClick={() => router.push(`/sales/orders/${row.id}`)}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+              >
+                <Eye className="w-3.5 h-3.5 mr-2" /> View
+              </button>
+              <button
+                type="button"
+                disabled={!editable}
+                onClick={() => router.push(`/sales/orders/${row.id}/edit`)}
+                className={cn(
+                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
+                  !editable ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
+                )}
+              >
+                <Edit className="w-3.5 h-3.5 mr-2" /> Edit
+              </button>
+              <button
+                type="button"
+                disabled={!splittable}
+                onClick={() => router.push(`/sales/orders/${row.id}/split`)}
+                className={cn(
+                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
+                  !splittable ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
+                )}
+              >
+                <Split className="w-3.5 h-3.5 mr-2" /> Split Order
+              </button>
+              <button
+                type="button"
+                disabled={!piAllowed}
+                onClick={() => downloadProformaInvoice(hydrated)}
+                className={cn(
+                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
+                  !piAllowed ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
+                )}
+              >
+                <FileText className="w-3.5 h-3.5 mr-2" /> Download PI
+              </button>
+              <button
+                type="button"
+                disabled={!packingAllowed}
+                onClick={() => setPackingOrder(hydrated)}
+                className={cn(
+                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
+                  !packingAllowed ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
+                )}
+              >
+                <Package className="w-3.5 h-3.5 mr-2" /> Generate Packing List
+              </button>
+              <DropdownMenuSeparator />
+              <button
+                type="button"
+                disabled={!cancellable}
+                onClick={() => setCancelOrder(hydrated)}
+                className={cn(
+                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm text-red-600 hover:bg-red-50",
+                  !cancellable && "text-muted-foreground/50 cursor-not-allowed hover:bg-transparent"
+                )}
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-2" /> Cancel Order
+              </button>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      }
+    }
+  ];
+
+  return (
+    <ListingContainer
+      title="Sales Orders"
+      titleIcon={ShoppingBag}
+      metrics={
         <div className="grid grid-cols-4 gap-3">
           {[
             { label: "Total Orders", value: kpi.total, icon: ShoppingBag, accent: true },
@@ -289,237 +493,34 @@ export default function SalesOrdersPage() {
             </div>
           ))}
         </div>
-
-        <div className="flex items-center flex-wrap justify-between">
-          <div className="flex items-center gap-2 min-w-[700px]">
-            <div className="relative flex-1 min-w-[200px] max-w-xs">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-[9px] text-muted-foreground pointer-events-none" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search orders, customers…"
-                className="w-full h-8 pl-8 pr-3 text-xs border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand-300"
-              />
-            </div>
-
-            <div className="relative">
-              <button
-                onClick={() => setFilterOpen((p) => !p)}
-                className={cn(
-                  "h-8 px-2.5 text-xs border rounded-lg inline-flex items-center gap-1.5 font-medium transition-colors",
-                  filterStatus.length
-                    ? "border-brand-400 bg-brand-50 text-brand-700"
-                    : "border-border text-muted-foreground hover:bg-muted",
-                )}
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" /> Filter
-                {filterStatus.length > 0 && (
-                  <span className="w-4 h-4 text-[10px] bg-brand-600 text-white rounded-full inline-flex items-center justify-center font-bold">
-                    {filterStatus.length}
-                  </span>
-                )}
-              </button>
-              {filterOpen && (
-                <div className="absolute top-9 left-0 z-50 bg-white border border-border rounded-xl shadow-lg w-52 p-0">
-                  <div className="px-3 py-2.5 border-b border-border">
-                    <p className="text-xs font-semibold">Filter by Status</p>
-                  </div>
-                  <div className="px-3 py-2.5 space-y-2">
-                    {[...new Set(FILTER_STATUSES)].map((s) => (
-                      <label key={s} className="flex items-center gap-2.5 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="w-4 h-4 rounded accent-brand-600"
-                          checked={filterStatus.includes(s)}
-                          onChange={() => toggleStatus(s)}
-                        />
-                        <span className="text-xs">{formatOrderStatus(s)}</span>
-                      </label>
-                    ))}
-                  </div>
-                  {filterStatus.length > 0 && (
-                    <div className="px-3 py-2 border-t border-border">
-                      <button onClick={() => setFilterStatus([])} className="text-xs text-brand-600 hover:underline">
-                        Clear filter
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            {filterStatus.map((s) => (
-              <span
-                key={s}
-                className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium"
-              >
-                {formatOrderStatus(s as OrderStatus)}{" "}
-                <button onClick={() => toggleStatus(s)}>
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="h-8 px-3 text-xs border border-border rounded-lg inline-flex items-center gap-1.5 font-medium text-muted-foreground hover:bg-muted transition-colors">
-              <Download className="w-3.5 h-3.5" /> Export
-            </button>
-            <Link
-              href="/sales/orders/add"
-              className="h-8 px-3 text-xs rounded-lg inline-flex items-center gap-1.5 font-medium bg-brand-600 hover:bg-brand-700 text-white transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" /> New Order
-            </Link>
-          </div>
-          {/* <p className="text-xs text-muted-foreground ml-auto">{filtered.length} of {orders.length} orders</p> */}
-        </div>
-
-        <Tabs value={activeTab} onValueChange={(v) => handleTabChange(v as OrderListTab)} className="w-full">
-          <TabsList className="w-full justify-start h-auto flex-wrap gap-1 bg-muted/30 p-1 rounded-lg border border-border">
-            <TabsTrigger value="pending" className="text-xs rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              Pending Order
-            </TabsTrigger>
-            <TabsTrigger value="completed" className="text-xs rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              Order Completed
-            </TabsTrigger>
-            <TabsTrigger value="approval" className="text-xs rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm">
-              Approval
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/40 border-b border-border">
-                  <SortTh label="SO Number" colKey="soNumber" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh label="Customer" colKey="customerName" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh label="Territory" colKey="territory" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh label="Items" colKey="items" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh label="Amount" colKey="totalAmount" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh label="Status" colKey="status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <SortTh label="Order Date" colKey="orderDate" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                  <th className="px-4 py-2.5 w-10" />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={8}>
-                      <div className="flex flex-col items-center gap-2 py-16">
-                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                          <BarChart3 className="w-5 h-5 text-muted-foreground" />
-                        </div>
-                        <p className="text-sm font-medium text-foreground">No orders found</p>
-                        <p className="text-xs text-muted-foreground">Try adjusting your search or filters.</p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  paginated.map((order) => {
-                    const hydrated = hydrateOrderLineItems(order);
-                    const editable = canEditOrder(hydrated);
-                    const splittable = canSplitOrder(hydrated);
-                    const cancellable = canCancelOrder(hydrated);
-                    const piAllowed = canDownloadPI(hydrated);
-                    const packingAllowed = canGeneratePackingList(hydrated);
-
-                    return (
-                      <tr key={order.id} className="border-b border-border/60 hover:bg-muted/20 transition-colors group">
-                        <td className="px-4 py-2">
-                          <span className="font-mono text-xs font-semibold text-brand-700">{order.soNumber}</span>
-                          {order.parentOrderNumber && (
-                            <p className="text-[10px] text-muted-foreground mt-0.5">Split from {order.parentOrderNumber}</p>
-                          )}
-                        </td>
-                        <td className="px-4 py-2">
-                          <p className="text-xs font-semibold text-foreground">{order.customerName}</p>
-                          <p className="text-[11px] text-muted-foreground">{order.customerCode}</p>
-                        </td>
-                        <td className="px-4 py-2 text-xs text-muted-foreground">{order.territory}</td>
-                        <td className="px-4 py-2 text-xs text-foreground text-center">{order.items}</td>
-                        <td className="px-4 py-2 text-xs font-semibold text-foreground">₹{order.totalAmount.toLocaleString()}</td>
-                        <td className="px-4 py-2">
-                          <StatusPill status={order.status} />
-                          {order.packingListNumber && <p className="text-[10px] text-muted-foreground mt-0.5">{order.packingListNumber}</p>}
-                        </td>
-                        <td className="px-4 py-2 text-xs text-muted-foreground">{order.orderDate}</td>
-                        <td className="px-4 py-2.5 text-right flex-shrink-0 w-12">
-                          {isApprovalTab ? (
-                            <button
-                              type="button"
-                              title="View"
-                              onClick={() => router.push(`/sales/orders/${order.id}?from=approval`)}
-                              className="p-1.5 hover:bg-muted rounded-md transition-colors"
-                            >
-                              <Eye className="w-4 h-4 text-muted-foreground" />
-                            </button>
-                          ) : (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-100 ">
-                                  <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-48">
-                                <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
-                                  Actions
-                                </DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                <ActionButton icon={Eye} label="View" onClick={() => router.push(`/sales/orders/${order.id}`)} />
-                                <ActionButton
-                                  icon={Edit}
-                                  label="Edit"
-                                  disabled={!editable}
-                                  onClick={() => router.push(`/sales/orders/${order.id}/edit`)}
-                                />
-                                <ActionButton
-                                  icon={Split}
-                                  label="Split Order"
-                                  disabled={!splittable}
-                                  onClick={() => router.push(`/sales/orders/${order.id}/split`)}
-                                />
-                                <ActionButton
-                                  icon={FileText}
-                                  label="Download PI"
-                                  disabled={!piAllowed}
-                                  onClick={() => downloadProformaInvoice(hydrated)}
-                                />
-                                <ActionButton
-                                  icon={Package}
-                                  label="Generate Packing List"
-                                  disabled={!packingAllowed}
-                                  onClick={() => setPackingOrder(hydrated)}
-                                />
-                                <DropdownMenuSeparator />
-                                <ActionButton
-                                  icon={Trash2}
-                                  label="Cancel Order"
-                                  destructive
-                                  disabled={!cancellable}
-                                  onClick={() => setCancelOrder(hydrated)}
-                                />
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-          <Pagination
-            page={page}
-            pageSize={pageSize}
-            totalRecords={filtered.length}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-            onPageJumpError={(msg) => showToast(msg, "error")}
-            recordLabel="records"
-          />
-        </div>
+      }
+      tabs={[
+        { value: "pending", label: "Pending Order" },
+        { value: "completed", label: "Order Completed" },
+        { value: "approval", label: "Approval" },
+      ]}
+      activeTab={activeTab}
+      onTabChange={handleTabChange}
+    >
+      <div>
+        <MasterListing<SalesOrder>
+          columns={columns}
+          data={paginated}
+          totalRecords={filtered.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          onSortChange={setSort}
+          onFilterChange={setFilters}
+          emptyMessage="orders"
+          searchPlaceholder="Search orders, customers…"
+          currentFilters={filters}
+          currentSort={sort}
+          onAdd={() => router.push("/sales/orders/add")}
+          addLabel="New Order"
+          onExport={() => console.log("Exporting sales orders...")}
+        />
       </div>
 
       <CancelOrderDialog
@@ -553,6 +554,7 @@ export default function SalesOrdersPage() {
           {toast.msg}
         </div>
       )}
-    </AppLayout>
+    </ListingContainer>
   );
 }
+

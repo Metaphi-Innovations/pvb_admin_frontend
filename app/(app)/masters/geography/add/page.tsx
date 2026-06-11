@@ -18,7 +18,7 @@ import { LevelBadge } from "../components/LevelBadge";
 const NAME_PLACEHOLDER: Record<GeoLevel, string> = {
   Zone: "e.g. West Zone", State: "e.g. Maharashtra", Region: "e.g. Mumbai Region",
   Area: "e.g. Mumbai Central Area", Territory: "e.g. Dadar-Parel Territory",
-  Locality: "e.g. Dadar Locality", City: "e.g. Dadar",
+  Locality: "e.g. Dadar Locality", Pincode: "e.g. 400014",
 };
 
 // ── Toggle button: Active / Inactive ─────────────────────────────────────────
@@ -86,8 +86,8 @@ export default function AddGeographyPage() {
     if (form.level && PARENT_LEVEL[form.level] !== null && !form.parentId) {
       e.parentId = "Parent is required for this level";
     }
-    if (form.level === "City" && !form.pincode.trim()) {
-      e.pincode = "Pincode is required for City level";
+    if (form.level === "Pincode" && !form.pincode.trim()) {
+      e.pincode = "Pincode is required for Pincode level";
     }
     if (form.pincode && !/^\d{6}$/.test(form.pincode)) {
       e.pincode = "Pincode must be exactly 6 digits";
@@ -155,7 +155,7 @@ export default function AddGeographyPage() {
             </div>
             <div>
               <p className="text-xs font-semibold text-foreground">New Geography Node</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Zone → State → Region → Area → Territory → Locality → City</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Zone → State → Region → Area → Territory → Locality → Pincode</p>
             </div>
           </div>
 
@@ -259,8 +259,8 @@ export default function AddGeographyPage() {
               <p className="text-[11px] text-muted-foreground">Auto-converts to uppercase. Max 10 characters.</p>
             </div>
 
-            {/* 5. Pincode (City only) */}
-            {form.level === "City" && (
+            {/* 5. Pincode (Pincode only) */}
+            {form.level === "Pincode" && (
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium">
                   Pincode <span className="text-red-500">*</span>

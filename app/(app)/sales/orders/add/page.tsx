@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Save, CheckCircle2, XCircle } from "lucide-react";
 import type { Customer } from "@/app/(app)/masters/customers/customer-data";
@@ -40,6 +40,8 @@ export default function AddSalesOrderPage() {
     deliveryDate: "",
     status: "confirmed",
     lineItems: [createEmptyLineItem()],
+    warehouseId: null,
+    warehouseName: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -85,25 +87,15 @@ export default function AddSalesOrderPage() {
   };
 
   return (
-    <AppLayout noPadding>
-      <div className="flex flex-col h-full">
-        <div className="sticky top-0 z-10 bg-white border-b border-border px-5 py-2.5 flex items-center gap-2 flex-shrink-0">
-          <button
-            type="button"
-            onClick={() => router.push("/sales/orders")}
-            className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors flex-shrink-0"
-          >
-            <ArrowLeft className="w-3.5 h-3.5 text-muted-foreground" />
-          </button>
-          <h2 className="flex-1 text-sm font-semibold text-foreground">Add Sales Order</h2>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => router.push("/sales/orders")}
-          >
-            Discard
-          </Button>
+    <FormContainer
+      title="Add Sales Order"
+      description="Sales → Orders → New Order"
+      onBack={() => router.push("/sales/orders")}
+      onCancel={() => router.push("/sales/orders")}
+      cancelLabel="Discard"
+      noCard={true}
+      actions={
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -120,20 +112,18 @@ export default function AddSalesOrderPage() {
             <Save className="w-3.5 h-3.5" /> Submit Order
           </Button>
         </div>
-
-        <div className="flex-1 overflow-y-auto px-5 py-4 bg-muted/10">
-          <SalesOrderForm
-            mode="add"
-            orderNumber={orderNumber}
-            form={form}
-            onChange={setForm}
-            errors={errors}
-            customers={customers}
-            salesmen={salesmen}
-            products={products}
-          />
-        </div>
-      </div>
+      }
+    >
+      <SalesOrderForm
+        mode="add"
+        orderNumber={orderNumber}
+        form={form}
+        onChange={setForm}
+        errors={errors}
+        customers={customers}
+        salesmen={salesmen}
+        products={products}
+      />
 
       {toast && (
         <div
@@ -146,6 +136,6 @@ export default function AddSalesOrderPage() {
           {toast.msg}
         </div>
       )}
-    </AppLayout>
+    </FormContainer>
   );
 }

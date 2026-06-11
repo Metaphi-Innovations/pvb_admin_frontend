@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { loadUOMMasters } from "../../uom/uom-data";
+import { loadHSNMasters } from "../../hsn/hsn-data";
 import {
   type Product,
   type ProductAsset,
@@ -37,11 +38,9 @@ import {
   PRODUCT_CATEGORY_OPTIONS,
   PRODUCT_FORMULATION_OPTIONS,
   PRODUCT_GST_OPTIONS,
-  PRODUCT_REORDER_LEVEL_OPTIONS,
   PRODUCT_SEGMENT_OPTIONS,
   PRODUCT_STATUS_OPTIONS,
   PRODUCT_SUBCATEGORY_OPTIONS,
-  PRODUCT_UNIT_OPTIONS,
   todayStr,
 } from "../product-data";
 
@@ -51,16 +50,13 @@ export interface ProductFormValues {
   subCategory: string;
   segment: string;
   formulation: string;
-  unit: string;
   hsnCode: string;
   gstRate: string;
   sku: string;
   cropApplicable: string;
-  packSize: string;
   mrp: string;
   costPrice: string;
   distributorPrice: string;
-  reorderLevel: string;
   status: ProductStatus;
   baseUnit: string;
   packagingUnit: string;
@@ -73,16 +69,13 @@ export const DEFAULT_PRODUCT_FORM: ProductFormValues = {
   subCategory: "",
   segment: "",
   formulation: "",
-  unit: "",
   hsnCode: "",
-  gstRate: "18%",
+  gstRate: "",
   sku: "",
   cropApplicable: "",
-  packSize: "",
   mrp: "",
   costPrice: "",
   distributorPrice: "",
-  reorderLevel: "medium",
   status: "active",
   baseUnit: "",
   packagingUnit: "",
@@ -96,16 +89,13 @@ export function productToFormValues(product: Product): ProductFormValues {
     subCategory: PRODUCT_SUBCATEGORY_OPTIONS.find((option) => option.label === product.subCategory)?.value ?? "",
     segment: PRODUCT_SEGMENT_OPTIONS.find((option) => option.label === product.segment)?.value ?? "",
     formulation: PRODUCT_FORMULATION_OPTIONS.find((option) => option.label === product.formulation)?.value ?? "",
-    unit: PRODUCT_UNIT_OPTIONS.find((option) => option.label === product.unit)?.value ?? "",
     hsnCode: product.hsnCode,
     gstRate: product.gstRate,
     sku: product.sku,
     cropApplicable: product.cropApplicable,
-    packSize: product.packSize,
     mrp: String(product.mrp),
     costPrice: String(product.costPrice),
     distributorPrice: String(product.distributorPrice),
-    reorderLevel: PRODUCT_REORDER_LEVEL_OPTIONS.find((option) => option.label === product.reorderLevel)?.value ?? "medium",
     status: product.status,
     baseUnit: product.baseUnit ?? "",
     packagingUnit: product.packagingUnit ?? "",
@@ -114,7 +104,7 @@ export function productToFormValues(product: Product): ProductFormValues {
 }
 
 // ── Autocomplete (matches EmployeeForm AC) ────────────────────────────────────
-interface ACOption { label: string; value: string }
+interface ACOption { label: string; value: string; sublabel?: string }
 function AC({ label, value, onChange, options, placeholder, required, error, disabled, searchable = true }: {
   label: string; value: string; onChange: (v: string) => void;
   options: ACOption[]; placeholder?: string; required?: boolean; error?: string;
@@ -122,7 +112,7 @@ function AC({ label, value, onChange, options, placeholder, required, error, dis
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const filtered = q ? options.filter(o => o.label.toLowerCase().includes(q.toLowerCase())) : options;
+  const filtered = q ? options.filter(o => o.label.toLowerCase().includes(q.toLowerCase()) || (o.sublabel && o.sublabel.toLowerCase().includes(q.toLowerCase()))) : options;
   const selected = options.find(o => o.value === value);
   return (
     <div className="space-y-1">
@@ -136,10 +126,23 @@ function AC({ label, value, onChange, options, placeholder, required, error, dis
             disabled ? "opacity-50 cursor-not-allowed bg-muted/30" : "hover:bg-muted/30",
             error && "border-red-400",
           )}>
-            <span className={selected ? "text-foreground" : "text-muted-foreground"}>
+            <span className={cn("truncate flex-1", selected ? "text-foreground" : "text-muted-foreground")}>
               {selected?.label || placeholder || "Select…"}
             </span>
-            <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {selected && !disabled && (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChange("");
+                  }}
+                  className="p-0.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer flex items-center justify-center"
+                >
+                  <X className="w-3 h-3" />
+                </span>
+              )}
+              <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground" />
+            </div>
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
@@ -160,6 +163,9 @@ function AC({ label, value, onChange, options, placeholder, required, error, dis
                   )}>
                   <div className="flex-1 min-w-0">
                     <span className="block truncate">{opt.label}</span>
+                    {opt.sublabel && (
+                      <span className="block text-[10px] text-muted-foreground truncate mt-0.5">{opt.sublabel}</span>
+                    )}
                   </div>
                   {selected?.value === opt.value && <Check className="flex-shrink-0 w-3 h-3 text-brand-600" />}
                 </button>
@@ -223,6 +229,29 @@ export function ProductForm({
   const set = <K extends keyof ProductFormValues>(key: K, value: ProductFormValues[K]) => {
     onChange({ ...form, [key]: value });
     onClearError(key);
+  };
+
+  const hsnMasters = typeof window !== "undefined" ? loadHSNMasters() : [];
+  const hsnOptions = hsnMasters
+    .filter(h => h.status === "active")
+    .map(h => ({
+      value: h.hsnCode,
+      label: h.hsnCode,
+      sublabel: h.hsnDescription,
+    }));
+
+  const handleHSNChange = (hsnCode: string) => {
+    if (!hsnCode) {
+      onChange({ ...form, hsnCode: "", gstRate: "" });
+      onClearError("hsnCode");
+      onClearError("gstRate");
+    } else {
+      const selectedHSN = hsnMasters.find(h => h.hsnCode === hsnCode);
+      const gstRate = selectedHSN ? selectedHSN.gstRate : "";
+      onChange({ ...form, hsnCode, gstRate });
+      onClearError("hsnCode");
+      onClearError("gstRate");
+    }
   };
 
   const inputCls = (key: string) =>
@@ -332,10 +361,10 @@ export function ProductForm({
 
       <div className="pt-1 space-y-5">
         <div>
-            <SectionHead label="Basic Details & Classification" />
-            <div className="grid grid-cols-4 gap-3">
+          <SectionHead label="Basic Details & Classification" />
+          <div className="grid grid-cols-12 gap-3">
               {/* Product Name */}
-              <div className="col-span-2 space-y-1">
+              <div className="col-span-12 space-y-1 md:col-span-5">
                 <Label className="text-xs font-medium">
                   Product Name <span className="text-red-500">*</span>
                 </Label>
@@ -350,7 +379,7 @@ export function ProductForm({
               </div>
 
               {/* Status */}
-              {/* <div className="col-span-1">
+              {/* <div className="col-span-12 md:col-span-2">
                 <AC
                   label="Status"
                   value={form.status}
@@ -361,10 +390,8 @@ export function ProductForm({
                 />
               </div> */}
 
-             
-
               {/* Category */}
-              <div className="col-span-1">
+              <div className="col-span-12 md:col-span-3">
                 <AC
                   label="Category"
                   required
@@ -378,7 +405,7 @@ export function ProductForm({
               </div>
 
               {/* Sub Category
-              <div className="col-span-1">
+              <div className="col-span-12 md:col-span-3">
                 <AC
                   label="Sub Category"
                   required
@@ -392,7 +419,7 @@ export function ProductForm({
               </div> */}
 
               {/* Segment */}
-              <div className="col-span-1">
+              <div className="col-span-12 md:col-span-2">
                 <AC
                   label="Segment"
                   value={form.segment}
@@ -404,7 +431,7 @@ export function ProductForm({
               </div>
 
               {/* Formulation */}
-              <div className="col-span-1">
+              <div className="col-span-12 md:col-span-2">
                 <AC
                   label="Formulation"
                   value={form.formulation}
@@ -414,8 +441,15 @@ export function ProductForm({
                   disabled={readOnly}
                 />
               </div>
-               {/* SKU */}
-              <div className="col-span-1 space-y-1">
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-border/60">
+            <SectionHead label="Pricing & Compliance" />
+            <div className="grid grid-cols-12 gap-3">
+              {/* Row 1 (5 fields: 2 + 3 + 2 + 3 + 2 = 12 columns) */}
+              {/* SKU */}
+              <div className="col-span-12 space-y-1 md:col-span-2">
                 <Label className="text-xs font-medium">
                   SKU <span className="text-red-500">*</span>
                 </Label>
@@ -428,26 +462,60 @@ export function ProductForm({
                 />
                 <FieldError msg={errors.sku} />
               </div>
-            </div>
-          </div>
 
-          <div className="pt-4 border-t border-border/60">
-            <SectionHead label="Pricing & Compliance" />
-            <div className="grid grid-cols-4 gap-3">
-              {/* Unit */}
-              <div className="col-span-1">
+              {/* HSN Code (Searchable dropdown) */}
+              <div className="col-span-12 md:col-span-3">
                 <AC
-                  label="Unit"
-                  value={form.unit}
-                  onChange={(value) => set("unit", value)}
-                  options={PRODUCT_UNIT_OPTIONS}
-                  placeholder="Select unit..."
+                  label="HSN Code"
+                  required
+                  value={form.hsnCode}
+                  onChange={handleHSNChange}
+                  options={hsnOptions}
+                  placeholder="Select HSN code..."
+                  disabled={readOnly}
+                  error={errors.hsnCode}
+                />
+              </div>
+
+              {/* GST Rate (Autofilled & Disabled when HSN selected) */}
+              <div className="col-span-12 md:col-span-2">
+                <AC
+                  label="GST Rate"
+                  value={form.gstRate}
+                  onChange={(value) => set("gstRate", value)}
+                  options={PRODUCT_GST_OPTIONS}
+                  placeholder="Select GST rate..."
+                  disabled={readOnly || !!form.hsnCode}
+                />
+              </div>
+
+              {/* Crop Applicable */}
+              <div className="col-span-12 space-y-1 md:col-span-3">
+                <Label className="text-xs font-medium">Crop Applicable</Label>
+                <Input
+                  value={form.cropApplicable}
+                  onChange={(e) => set("cropApplicable", e.target.value)}
+                  placeholder="e.g. Cotton, Paddy"
+                  className={inputCls("cropApplicable")}
                   disabled={readOnly}
                 />
               </div>
 
+              {/* MRP */}
+              <div className="col-span-12 space-y-1 md:col-span-2">
+                <Label className="text-xs font-medium">MRP</Label>
+                <Input
+                  value={form.mrp}
+                  onChange={(e) => decimalInput("mrp", e.target.value)}
+                  className={inputCls("mrp")}
+                  inputMode="decimal"
+                  disabled={readOnly}
+                />
+              </div>
+
+              {/* Row 2 (3 fields: 4 + 4 + 4 = 12 columns) */}
               {/* Base Unit */}
-              <div className="col-span-1 space-y-1">
+              <div className="col-span-12 space-y-1 md:col-span-4">
                 <Label className="text-xs font-medium">
                   Base Unit <span className="text-red-500">*</span>
                 </Label>
@@ -471,7 +539,7 @@ export function ProductForm({
               </div>
 
               {/* Packaging Unit */}
-              <div className="col-span-1 space-y-1">
+              <div className="col-span-12 space-y-1 md:col-span-4">
                 <Label className="text-xs font-medium">
                   Packaging Unit <span className="text-red-500">*</span>
                 </Label>
@@ -495,7 +563,7 @@ export function ProductForm({
               </div>
 
               {/* Conversion Quantity */}
-              <div className="col-span-1 space-y-1">
+              <div className="col-span-12 space-y-1 md:col-span-4">
                 <Label className="text-xs font-medium">
                   Conversion Qty <span className="text-red-500">*</span>
                 </Label>
@@ -508,104 +576,6 @@ export function ProductForm({
                   disabled={readOnly}
                 />
                 <FieldError msg={errors.conversionQuantity} />
-              </div>
-
-              {/* Pack Size */}
-              <div className="col-span-1 space-y-1">
-                <Label className="text-xs font-medium">Pack Size</Label>
-                <Input
-                  value={form.packSize}
-                  onChange={(e) => set("packSize", e.target.value)}
-                  placeholder="e.g. 500 ML"
-                  className={inputCls("packSize")}
-                  disabled={readOnly}
-                />
-              </div>
-
-              {/* HSN Code */}
-              <div className="col-span-1 space-y-1">
-                <Label className="text-xs font-medium">
-                  HSN Code <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  value={form.hsnCode}
-                  onChange={(e) => set("hsnCode", e.target.value)}
-                  className={cn("font-mono", inputCls("hsnCode"))}
-                  disabled={readOnly}
-                />
-                <FieldError msg={errors.hsnCode} />
-              </div>
-
-              {/* GST Rate */}
-              <div className="col-span-1">
-                <AC
-                  label="GST Rate"
-                  value={form.gstRate}
-                  onChange={(value) => set("gstRate", value)}
-                  options={PRODUCT_GST_OPTIONS}
-                  placeholder="Select GST rate..."
-                  disabled={readOnly}
-                />
-              </div>
-
-              {/* Crop Applicable */}
-              <div className="col-span-1 space-y-1">
-                <Label className="text-xs font-medium">Crop Applicable</Label>
-                <Input
-                  value={form.cropApplicable}
-                  onChange={(e) => set("cropApplicable", e.target.value)}
-                  placeholder="e.g. Cotton, Paddy"
-                  className={inputCls("cropApplicable")}
-                  disabled={readOnly}
-                />
-              </div>
-
-              {/* MRP */}
-              <div className="col-span-1 space-y-1">
-                <Label className="text-xs font-medium">MRP</Label>
-                <Input
-                  value={form.mrp}
-                  onChange={(e) => decimalInput("mrp", e.target.value)}
-                  className={inputCls("mrp")}
-                  inputMode="decimal"
-                  disabled={readOnly}
-                />
-              </div>
-
-              {/* Cost Price */}
-              {/* <div className="col-span-1 space-y-1">
-                <Label className="text-xs font-medium">Cost Price</Label>
-                <Input
-                  value={form.costPrice}
-                  onChange={(e) => decimalInput("costPrice", e.target.value)}
-                  className={inputCls("costPrice")}
-                  inputMode="decimal"
-                  disabled={readOnly}
-                />
-              </div> */}
-
-              {/* Distributor Price */}
-              {/* <div className="col-span-1 space-y-1">
-                <Label className="text-xs font-medium">Distributor Price</Label>
-                <Input
-                  value={form.distributorPrice}
-                  onChange={(e) => decimalInput("distributorPrice", e.target.value)}
-                  className={inputCls("distributorPrice")}
-                  inputMode="decimal"
-                  disabled={readOnly}
-                />
-              </div> */}
-
-              {/* Reorder Level */}
-              <div className="col-span-1">
-                <AC
-                  label="Reorder Level"
-                  value={form.reorderLevel}
-                  onChange={(value) => set("reorderLevel", value)}
-                  options={PRODUCT_REORDER_LEVEL_OPTIONS}
-                  placeholder="Select reorder level..."
-                  disabled={readOnly}
-                />
               </div>
             </div>
           </div>
@@ -635,7 +605,7 @@ export function ProductForm({
                 </div>
 
                 {assetType === "media" ? (
-                  <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/10 px-1 py-1 md:flex-row md:items-center md:justify-between">
+                  <div className="flex flex-col gap-2 px-1 py-1 border rounded-xl border-border bg-muted/10 md:flex-row md:items-center md:justify-between">
                     <input
                       ref={mediaInputRef}
                       type="file"
@@ -667,7 +637,7 @@ export function ProductForm({
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/10 px-3 py-3 md:flex-row md:items-end">
+                  <div className="flex flex-col gap-2 px-3 py-3 border rounded-xl border-border bg-muted/10 md:flex-row md:items-end">
                     <div className="grid flex-1 grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                       <div className="space-y-1">
                         <Label className="text-xs font-medium">Link Title</Label>
@@ -801,8 +771,6 @@ export function formValuesToProduct(
   const subCategory = PRODUCT_SUBCATEGORY_OPTIONS.find((option) => option.value === form.subCategory)?.label ?? "";
   const segment = PRODUCT_SEGMENT_OPTIONS.find((option) => option.value === form.segment)?.label ?? "";
   const formulation = PRODUCT_FORMULATION_OPTIONS.find((option) => option.value === form.formulation)?.label ?? "";
-  const unit = PRODUCT_UNIT_OPTIONS.find((option) => option.value === form.unit)?.label ?? "";
-  const reorderLevel = PRODUCT_REORDER_LEVEL_OPTIONS.find((option) => option.value === form.reorderLevel)?.label ?? "";
 
   return {
     id: base.id,
@@ -812,16 +780,13 @@ export function formValuesToProduct(
     subCategory,
     segment,
     formulation,
-    unit,
     hsnCode: form.hsnCode.trim(),
     gstRate: form.gstRate,
     sku: form.sku.trim().toUpperCase(),
     cropApplicable: form.cropApplicable.trim(),
-    packSize: form.packSize.trim(),
     mrp: Number(form.mrp || 0),
     costPrice: Number(form.costPrice || 0),
     distributorPrice: Number(form.distributorPrice || 0),
-    reorderLevel,
     status: form.status,
     createdBy: base.createdBy ?? "Admin",
     createdDate: base.createdDate ?? todayStr(),
