@@ -223,7 +223,6 @@ export default function CustomerDetailPage() {
 			onBack={() => router.push("/masters/customers")}
 			actions={
 				<div className='flex items-center gap-2'>
-					<StatusPill status={customer.status} />
 					<CustomerStatusControl
 						customer={customer}
 						onStatusChange={updateStatus}
