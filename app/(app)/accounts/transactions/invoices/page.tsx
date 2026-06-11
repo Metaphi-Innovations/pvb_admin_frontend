@@ -1,5 +1,5 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { createLazyClientPage } from "@/lib/createLazyClientPage";
-
-export default createLazyClientPage(() => import("../../invoices/InvoicesPageClient"));
+export default function LegacyRedirect() {
+  redirect("/accounts/vouchers?tab=sales");
+}

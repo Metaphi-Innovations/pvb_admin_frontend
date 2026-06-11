@@ -50,7 +50,7 @@ const LEVEL_CARD: Record<GeoLevel, { bg: string; text: string; border: string }>
   Area: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
   Territory: { bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-200" },
   Locality: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
-  City: { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200" },
+  Pincode: { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200" },
 };
 
 // ── Confirm Dialog ────────────────────────────────────────────────────────────
@@ -133,7 +133,7 @@ function QuickAddDialog({
   const validate = (): boolean => {
     const e: QuickAddErrors = {};
     if (!form.name.trim()) e.name = "Name is required";
-    if (state.childLevel === "City" && form.pincode && !/^[1-9][0-9]{5}$/.test(form.pincode.trim())) {
+    if (state.childLevel === "Pincode" && form.pincode && !/^[1-9][0-9]{5}$/.test(form.pincode.trim())) {
       e.pincode = "Enter a valid 6-digit pincode";
     }
     setErrors(e);
@@ -213,8 +213,8 @@ function QuickAddDialog({
             />
           </div>
 
-          {/* Pincode — only for City */}
-          {state.childLevel === "City" && (
+          {/* Pincode — only for Pincode */}
+          {state.childLevel === "Pincode" && (
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Pincode <span className="text-muted-foreground font-normal">(optional)</span></Label>
               <Input
@@ -320,7 +320,7 @@ function TreeRow({
 
         {/* Pincode */}
         <td className="px-3 py-2.5 flex-[0.8]">
-          {node.level === "City" && node.pincode
+          {node.level === "Pincode" && node.pincode
             ? <span className="font-mono text-xs text-muted-foreground">{node.pincode}</span>
             : <span className="text-muted-foreground/30 text-xs">—</span>
           }
@@ -674,7 +674,7 @@ export default function GeographyListPage() {
       header: "Pincode",
       width: "120px",
       render: (val, row) => {
-        return row.level === "City" && row.pincode ? (
+        return row.level === "Pincode" && row.pincode ? (
           <span className="font-mono text-xs text-muted-foreground">{row.pincode}</span>
         ) : (
           <span className="text-muted-foreground/30 text-xs">—</span>

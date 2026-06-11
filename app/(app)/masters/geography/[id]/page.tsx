@@ -153,7 +153,7 @@ export default function GeographyViewPage() {
               <InfoRow label="Level"><LevelBadge level={node.level} /></InfoRow>
               <InfoRow label="Code" value={node.code || "—"} />
               <InfoRow label="Status"><StatusPill status={node.status} /></InfoRow>
-              {node.level === "City" && (
+              {node.level === "Pincode" && (
                 <InfoRow label="Pincode" value={node.pincode || "—"} />
               )}
               <InfoRow label="Parent">

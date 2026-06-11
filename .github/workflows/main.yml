@@ -2,7 +2,7 @@ name: Frontend Deploy - pvb.dev.metaphi.in
 on:
   push:
     branches:
-      - staging
+      - main
 
 jobs:
   deploy:
@@ -28,5 +28,6 @@ jobs:
         working-directory: /var/www/pvb.dev.metaphi.in
         run: npm i && npm run build
 
-      - name: pm2 restart process
-        run: pm2 restart pvb.dev.metaphi.in
+      - name: pm2 restart
+        run: pm2 restart pvb.uat.metaphi.in
+

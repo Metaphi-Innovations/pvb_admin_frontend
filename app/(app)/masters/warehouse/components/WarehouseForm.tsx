@@ -25,6 +25,7 @@ import {
 	type OperatedBy,
 	type WarehouseContact,
 } from "../warehouse-data";
+import { loadCustomers } from "../../customers/customer-data";
 import { loadCustomerTypes } from "../../customer-types/customer-type-data";
 
 export interface WarehouseFormValues {
@@ -77,6 +78,9 @@ export function validateWarehouseForm(
 		e.warehouseName = "Warehouse Name is required";
 	if (form.pincode.trim() && !/^\d{6}$/.test(form.pincode.trim()))
 		e.pincode = "Enter valid 6-digit pincode";
+	if (form.operatedBy === "C&F Agent" && !form.customerType?.trim()) {
+		e.customerType = "Customer name is required for C&F operated warehouse.";
+	}
 
 	if (!form.contacts || form.contacts.length === 0) {
 		e.contacts = "At least one contact is required";
@@ -115,6 +119,7 @@ function AC({
 	required,
 	error,
 	disabled,
+	emptyMessage,
 }: {
 	label: string;
 	value: string;
@@ -124,6 +129,7 @@ function AC({
 	required?: boolean;
 	error?: string;
 	disabled?: boolean;
+	emptyMessage?: string;
 }) {
 	const [open, setOpen] = useState(false);
 	const [q, setQ] = useState("");
@@ -159,15 +165,18 @@ function AC({
 						)}
 					>
 						<span
-							className={selected ? "text-foreground" : "text-muted-foreground"}
+							className={cn(
+								"truncate mr-1.5",
+								selected ? "text-foreground" : "text-muted-foreground"
+							)}
 						>
-							{selected?.label || placeholder || "Select…"}
+							{selected ? selected.label.split(" — ")[0] : (placeholder || "Select…")}
 						</span>
 						<ChevronsUpDown className='w-3.5 h-3.5 text-muted-foreground flex-shrink-0' />
 					</button>
 				</PopoverTrigger>
 				<PopoverContent
-					className='w-[--radix-popover-trigger-width] p-0'
+					className='w-[--radix-popover-trigger-width] min-w-[280px] p-0'
 					align='start'
 				>
 					<div className='p-1.5 border-b border-border'>
@@ -181,8 +190,8 @@ function AC({
 					</div>
 					<div className='py-1 overflow-y-auto max-h-48'>
 						{filtered.length === 0 ? (
-							<p className='px-3 py-4 text-xs text-center text-muted-foreground'>
-								No options
+							<p className='px-3 py-4 text-xs text-center text-muted-foreground whitespace-pre-line'>
+								{emptyMessage || "No options"}
 							</p>
 						) : (
 							filtered.map((opt) => (
@@ -242,6 +251,39 @@ function SectionHead({ label, sub }: { label: string; sub?: string }) {
 	);
 }
 
+const normalizeCustomerType = (value?: string) =>
+	value?.toLowerCase().replace(/[^a-z0-9]/g, "") ?? "";
+
+const cfCustomerTypeAliases = ["cf", "cnf", "candf", "cfagent", "candfagent"];
+
+const isCustomerCf = (customer: any) => {
+	const directType = customer.customerType;
+	if (!directType) return false;
+
+	const normalizedDirect = normalizeCustomerType(directType);
+	if (cfCustomerTypeAliases.includes(normalizedDirect)) return true;
+
+	// Resolve through Customer Type Master
+	try {
+		const customerTypesList = loadCustomerTypes();
+		const match = customerTypesList.find(ct => {
+			const typeStr = String(directType);
+			return (
+				typeStr === String(ct.id) ||
+				typeStr.toLowerCase() === ct.customerTypeCode?.toLowerCase() ||
+				typeStr.toLowerCase() === ct.customerType?.toLowerCase()
+			);
+		});
+		if (match) {
+			const normalizedMaster = normalizeCustomerType(match.customerType);
+			return cfCustomerTypeAliases.includes(normalizedMaster);
+		}
+	} catch (e) {
+		console.error("Error matching customer type master:", e);
+	}
+	return false;
+};
+
 export function WarehouseForm({
 	form,
 	onChange,
@@ -266,17 +308,39 @@ export function WarehouseForm({
 		return () => clearTimeout(t);
 	}, [toast]);
 
-	const customerTypes = useMemo(() => {
+	const cfCustomers = useMemo(() => {
 		try {
-			return loadCustomerTypes().map((c) => ({
-				value: c.customerType,
-				label: c.customerType,
-			}));
+			const allCustomers = loadCustomers();
+			const filtered = allCustomers.filter((customer) => {
+				// Always include currently selected customer so it shows and prefills
+				if (form.customerType && customer.customerName === form.customerType) {
+					return true;
+				}
+				return isCustomerCf(customer);
+			});
+
+			const options = filtered.map((customer) => {
+				const suffix = (customer.mobile || "").trim() || (customer.gstin || "").trim();
+				return {
+					value: customer.customerName,
+					label: suffix ? `${customer.customerName} — ${suffix}` : customer.customerName,
+				};
+			});
+
+			// If the currently selected customer is not in the list, force add it
+			if (form.customerType && !options.some((o) => o.value === form.customerType)) {
+				options.push({
+					value: form.customerType,
+					label: form.customerType,
+				});
+			}
+
+			return options;
 		} catch (e) {
-			console.error("Failed to load customer types:", e);
+			console.error("Failed to load C&F customers:", e);
 			return [];
 		}
-	}, []);
+	}, [form.customerType]);
 
 	const set = (key: keyof WarehouseFormValues, value: string | boolean) => {
 		const next = { ...form, [key]: value };
@@ -289,6 +353,7 @@ export function WarehouseForm({
 		}
 		if (key === "operatedBy" && value !== "C&F Agent") {
 			next.customerType = "";
+			if (errors.customerType) onClearError("customerType");
 		}
 		onChange(next);
 		if (errors[key]) onClearError(key);
@@ -441,16 +506,24 @@ export function WarehouseForm({
 						/>
 					</div>
 
-					{/* Customer Type (Conditional) */}
+					{/* Customer Name (Conditional) */}
 					{form.operatedBy === "C&F Agent" && (
-						<div className='col-span-2'>
+						<div className='col-span-2 space-y-1'>
 							<AC
-								label='Customer Type'
+								label='Customer Name'
 								value={form.customerType}
 								onChange={(v) => set("customerType", v)}
-								options={customerTypes}
-								placeholder='Select type…'
+								options={cfCustomers}
+								placeholder='Select C&F customer'
+								required={form.operatedBy === "C&F Agent"}
+								error={errors.customerType}
+								emptyMessage='No C&F customers found. Please add a customer with Customer Type C&F.'
 							/>
+							{cfCustomers.length === 0 && (
+								<p className='text-[11px] text-amber-600 mt-1'>
+									No C&F customers found. Please add a customer with Customer Type C&F.
+								</p>
+							)}
 						</div>
 					)}
 

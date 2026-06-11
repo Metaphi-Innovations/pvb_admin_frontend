@@ -1,6 +1,6 @@
 ﻿// ── Geography Master — shared types, seed data, storage helpers ───────────────
 
-export type GeoLevel = "Zone" | "State" | "Region" | "Area" | "Territory" | "Locality" | "City";
+export type GeoLevel = "Zone" | "State" | "Region" | "Area" | "Territory" | "Locality" | "Pincode";
 
 export interface GeoNode {
   id: number;
@@ -15,20 +15,20 @@ export interface GeoNode {
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-export const LEVELS: GeoLevel[] = ["Zone", "State", "Region", "Area", "Territory", "Locality", "City"];
+export const LEVELS: GeoLevel[] = ["Zone", "State", "Region", "Area", "Territory", "Locality", "Pincode"];
 
 export const LEVEL_INDEX: Record<GeoLevel, number> = {
-  Zone: 0, State: 1, Region: 2, Area: 3, Territory: 4, Locality: 5, City: 6,
+  Zone: 0, State: 1, Region: 2, Area: 3, Territory: 4, Locality: 5, Pincode: 6,
 };
 
 export const PARENT_LEVEL: Record<GeoLevel, GeoLevel | null> = {
   Zone: null, State: "Zone", Region: "State",
-  Area: "Region", Territory: "Area", Locality: "Territory", City: "Locality",
+  Area: "Region", Territory: "Area", Locality: "Territory", Pincode: "Locality",
 };
 
 export const CHILD_LEVEL: Record<GeoLevel, GeoLevel | null> = {
   Zone: "State", State: "Region", Region: "Area",
-  Area: "Territory", Territory: "Locality", Locality: "City", City: null,
+  Area: "Territory", Territory: "Locality", Locality: "Pincode", Pincode: null,
 };
 
 // ── Seed data ─────────────────────────────────────────────────────────────────
@@ -74,12 +74,12 @@ export const SEED_NODES: GeoNode[] = [
   { id: 33, level: "Locality",  name: "Borivali East Locality",code: "",  parentId: 25,  pincode: "", status: "active", createdDate: "2024-01-05", updatedDate: "2024-01-05" },
   { id: 34, level: "Locality",  name: "Indiranagar Locality",  code: "",  parentId: 27,  pincode: "", status: "active", createdDate: "2024-01-05", updatedDate: "2024-01-05" },
   { id: 35, level: "Locality",  name: "T. Nagar Locality",     code: "",  parentId: 29,  pincode: "", status: "active", createdDate: "2024-01-05", updatedDate: "2024-01-05" },
-  // Cities
-  { id: 36, level: "City",      name: "Dadar",         code: "",  parentId: 31,  pincode: "400014", status: "active", createdDate: "2024-01-06", updatedDate: "2024-01-06" },
-  { id: 37, level: "City",      name: "Parel",         code: "",  parentId: 32,  pincode: "400012", status: "active", createdDate: "2024-01-06", updatedDate: "2024-01-06" },
-  { id: 38, level: "City",      name: "Borivali East", code: "",  parentId: 33,  pincode: "400066", status: "active", createdDate: "2024-01-06", updatedDate: "2024-01-06" },
-  { id: 39, level: "City",      name: "Indiranagar",   code: "",  parentId: 34,  pincode: "560038", status: "active", createdDate: "2024-01-06", updatedDate: "2024-01-06" },
-  { id: 40, level: "City",      name: "T. Nagar",      code: "",  parentId: 35,  pincode: "600017", status: "active", createdDate: "2024-01-06", updatedDate: "2024-01-06" },
+  // Pincodes
+  { id: 36, level: "Pincode",   name: "Dadar",         code: "",  parentId: 31,  pincode: "400014", status: "active", createdDate: "2024-01-06", updatedDate: "2024-01-06" },
+  { id: 37, level: "Pincode",   name: "Parel",         code: "",  parentId: 32,  pincode: "400012", status: "active", createdDate: "2024-01-06", updatedDate: "2024-01-06" },
+  { id: 38, level: "Pincode",   name: "Borivali East", code: "",  parentId: 33,  pincode: "400066", status: "active", createdDate: "2024-01-06", updatedDate: "2024-01-06" },
+  { id: 39, level: "Pincode",   name: "Indiranagar",   code: "",  parentId: 34,  pincode: "560038", status: "active", createdDate: "2024-01-06", updatedDate: "2024-01-06" },
+  { id: 40, level: "Pincode",   name: "T. Nagar",      code: "",  parentId: 35,  pincode: "600017", status: "active", createdDate: "2024-01-06", updatedDate: "2024-01-06" },
 ];
 
 // ── localStorage helpers ──────────────────────────────────────────────────────

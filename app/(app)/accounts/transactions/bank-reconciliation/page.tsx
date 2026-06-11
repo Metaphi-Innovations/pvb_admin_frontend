@@ -1,5 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
+import { ACCOUNTS_HOME_HREF } from "@/lib/accounts/accounts-nav";
 
-import { createTxnPage } from "../../createTxnPage";
-
-export default createTxnPage("bank_reconciliation", "Bank Reconciliation", "Bank / Ledger");
+export default function LegacyRedirect() {
+  redirect(ACCOUNTS_HOME_HREF);
+}

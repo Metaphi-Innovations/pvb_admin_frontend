@@ -1,6 +1,4 @@
-export function formatINR(n: number): string {
-  return `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-}
+export { formatMoney as formatINR } from "@/lib/accounts/money-format";
 
 export const INVOICES_LIST_PATH = "/accounts/transactions/invoices";
 

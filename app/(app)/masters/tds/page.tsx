@@ -119,8 +119,10 @@ export default function TDSPage() {
   }, [toast]);
 
   const openAdd = () => {
+    const list = loadTDSMasters();
+    const nextCode = `TDS-${String(nextTDSId(list)).padStart(3, "0")}`;
     setForm({
-      tdsCode: "",
+      tdsCode: nextCode,
       tdsRate: 0,
       remarks: "",
       status: "active",
@@ -318,6 +320,22 @@ export default function TDSPage() {
       ),
     },
     {
+      key: "createdBy",
+      header: "Created By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
       key: "status",
       header: "Status",
       sortable: true,
@@ -422,11 +440,11 @@ export default function TDSPage() {
         </div>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-3 gap-3">
+        {/* <div className="grid grid-cols-3 gap-3">
           <MiniKPICard label="Total TDS Configs" value={totalCount} icon={Percent} accent={true} />
           <MiniKPICard label="Active" value={activeCount} icon={CheckCircle2} accent={false} />
           <MiniKPICard label="Inactive" value={inactiveCount} icon={XCircle} accent={false} />
-        </div>
+        </div> */}
 
         {/* Table Listing */}
         <MasterListing<TDSMaster>
@@ -497,10 +515,15 @@ export default function TDSPage() {
                       TDS Code <span className="text-red-500">*</span>
                     </Label>
                     <Input
+                      disabled
+                      readOnly
                       value={form.tdsCode}
                       onChange={(e) => setFormField("tdsCode", e.target.value)}
                       placeholder="e.g., 194C, 194J"
-                      className={cn("h-8 text-xs", errors.tdsCode && "border-red-400 focus-visible:ring-red-300")}
+                      className={cn(
+                        "h-8 text-xs bg-background text-foreground border-border opacity-100 cursor-not-allowed",
+                        errors.tdsCode && "border-red-400 focus-visible:ring-red-300",
+                      )}
                     />
                     {errors.tdsCode && <p className="text-[11px] text-red-500">{errors.tdsCode}</p>}
                   </div>
@@ -572,7 +595,7 @@ export default function TDSPage() {
           <DialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-base">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-red-50 border border-red-200">
+                <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 border border-red-200 rounded-lg bg-red-50">
                   <AlertCircle className="w-4 h-4 text-red-500" />
                 </div>
                 Delete TDS

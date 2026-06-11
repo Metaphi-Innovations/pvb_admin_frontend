@@ -69,6 +69,13 @@ export interface Employee {
   geoArea?: string;
   territory?: string;
   geoLocality?: string;
+  geoMappings?: Array<{
+    geoZone?: string;
+    geoRegion?: string;
+    geoArea?: string;
+    territory?: string;
+    geoLocality?: string;
+  }>;
   // Permissions
   permissions?: UserPermissions;
   // Approval Chain
@@ -243,6 +250,7 @@ export const PERMISSION_REGISTRY: PermModule[] = [
       { id: "journalEntry",   label: "Journal Entry",   actions: ["view","create","edit","delete","approve","export"] },
       { id: "paymentVoucher", label: "Payment Voucher", actions: ["view","create","edit","delete","approve","export"] },
       { id: "receiptVoucher", label: "Receipt Voucher", actions: ["view","create","edit","delete","approve","export"] },
+      { id: "chartOfAccounts", label: "Chart of Accounts", actions: ["view","create","edit","delete","export"] },
       { id: "ledger",         label: "Ledger",          actions: ["view","export"] },
       { id: "outstanding",    label: "Outstanding",     actions: ["view","export"] },
       { id: "accountReports", label: "Reports",         actions: ["view","export"] },

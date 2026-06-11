@@ -8,11 +8,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 export interface DocumentTypeFormValues {
+  documentTypeCode: string;
   title: string;
   description: string;
 }
 
 export const DEFAULT_DOCUMENT_TYPE_FORM: DocumentTypeFormValues = {
+  documentTypeCode: "",
   title: "",
   description: "",
 };
@@ -21,6 +23,9 @@ export function validateDocumentTypeForm(form: DocumentTypeFormValues): Record<s
   const errors: Record<string, string> = {};
   if (!form.title.trim()) {
     errors.title = "Title is required";
+  }
+  if (!form.documentTypeCode.trim()) {
+    errors.documentTypeCode = "Document type code is required";
   }
   return errors;
 }
@@ -60,6 +65,27 @@ export function DocumentTypeForm({
       </div>
 
       <div className="pt-1 space-y-4">
+        {/* Code */}
+        <div className="space-y-1">
+          <Label className="text-xs font-medium">
+            Document Type Code <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            value={form.documentTypeCode}
+            onChange={(e) => set("documentTypeCode", e.target.value.toUpperCase())}
+            placeholder="Auto-generated code"
+            className={cn(inputCls("documentTypeCode"), "font-mono")}
+            disabled={readOnly}
+            readOnly
+          />
+          {errors.documentTypeCode && (
+            <p className="flex items-center gap-1 mt-1 text-[11px] text-red-500">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+              {errors.documentTypeCode}
+            </p>
+          )}
+        </div>
+
         {/* Title */}
         <div className="space-y-1">
           <Label className="text-xs font-medium">
