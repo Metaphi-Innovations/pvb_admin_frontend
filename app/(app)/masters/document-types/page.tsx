@@ -80,6 +80,15 @@ export default function DocumentTypesPage() {
 
   const columns: ColumnConfig<DocumentTypeMaster>[] = [
     {
+      key: "documentTypeCode",
+      header: "Document Type Code",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "180px",
+      render: (val, row) => <span className="font-mono font-semibold text-foreground">{row.documentTypeCode}</span>,
+    },
+    {
       key: "title",
       header: "Title",
       sortable: true,
@@ -100,6 +109,22 @@ export default function DocumentTypesPage() {
       filterType: "text",
       width: "480px",
       render: (val, row) => row.description || "—",
+    },
+    {
+      key: "createdBy",
+      header: "Created By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
     },
     {
       key: "status",
@@ -134,6 +159,7 @@ export default function DocumentTypesPage() {
     if (filters.search) {
       const q = String(filters.search).trim().toLowerCase();
       result = result.filter(r =>
+        r.documentTypeCode.toLowerCase().includes(q) ||
         r.title.toLowerCase().includes(q) ||
         (r.description || "").toLowerCase().includes(q)
       );

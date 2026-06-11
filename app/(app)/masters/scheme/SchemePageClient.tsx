@@ -212,6 +212,22 @@ export default function SchemeMasterPage() {
       width: "110px",
     },
     {
+      key: "createdBy",
+      header: "Created By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
       key: "status",
       header: "Status",
       sortable: true,
@@ -518,13 +534,14 @@ export default function SchemeMasterPage() {
                     </Label>
                     <Input
                       value={sheetMode === "add" ? nextAutoCode : form.schemeCode}
-                      disabled={sheetMode === "edit"}
+                      disabled
+                      readOnly
                       onChange={(e) => {
                         setForm((prev) => ({ ...prev, schemeCode: e.target.value }));
                         setErrors((prev) => ({ ...prev, schemeCode: "", _form: "" }));
                       }}
                       placeholder="e.g., SCH-001"
-                      className="h-8 font-mono text-xs cursor-not-allowed disabled:opacity-50 bg-muted/30"
+                      className="h-8 font-mono text-xs cursor-not-allowed disabled:opacity-100 bg-muted/30"
                     />
                   </div>
 

@@ -320,6 +320,22 @@ export default function TDSPage() {
       ),
     },
     {
+      key: "createdBy",
+      header: "Created By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
       key: "status",
       header: "Status",
       sortable: true,

@@ -7,14 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
   Save,
   AlertCircle,
-  ChevronsUpDown,
-  Check,
 } from "lucide-react";
 import {
   TDSMaster,
@@ -22,63 +19,6 @@ import {
   saveTDSMasters,
   todayStr,
 } from "../../tds-data";
-
-// ── Autocomplete (matches EmployeeForm AC) ────────────────────────────────────
-interface ACOption { label: string; value: string }
-function AC({ label, value, onChange, options, placeholder, required, error, disabled }: {
-  label: string; value: string; onChange: (v: string) => void;
-  options: ACOption[]; placeholder?: string; required?: boolean; error?: string;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
-  const filtered = q ? options.filter(o => o.label.toLowerCase().includes(q.toLowerCase())) : options;
-  const selected = options.find(o => o.value === value);
-  return (
-    <div className="space-y-1">
-      <Label className="text-xs font-medium">
-        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
-      </Label>
-      <Popover open={open && !disabled} onOpenChange={v => { if (!disabled) { setOpen(v); if (!v) setQ(""); } }}>
-        <PopoverTrigger asChild>
-          <button disabled={disabled} className={cn(
-            "w-full h-8 px-2.5 text-xs text-left border border-border rounded-lg bg-background flex items-center justify-between transition-colors",
-            disabled ? "opacity-50 cursor-not-allowed bg-muted/30" : "hover:bg-muted/30",
-            error && "border-red-400",
-          )}>
-            <span className={selected ? "text-foreground" : "text-muted-foreground"}>
-              {selected?.label || placeholder || "Select…"}
-            </span>
-            <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-          <div className="p-1.5 border-b border-border">
-            <Input placeholder="Search…" value={q} onChange={e => setQ(e.target.value)}
-              className="h-7 text-xs focus-visible:ring-0" autoFocus />
-          </div>
-          <div className="max-h-48 overflow-y-auto py-1">
-            {filtered.length === 0
-              ? <p className="px-3 py-4 text-center text-xs text-muted-foreground">No options</p>
-              : filtered.map(opt => (
-                <button key={opt.value} onClick={() => { onChange(opt.value); setOpen(false); setQ(""); }}
-                  className={cn(
-                    "w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-muted/60 transition-colors",
-                    selected?.value === opt.value && "bg-brand-50"
-                  )}>
-                  <div className="flex-1 min-w-0">
-                    <span className="block truncate">{opt.label}</span>
-                  </div>
-                  {selected?.value === opt.value && <Check className="w-3 h-3 text-brand-600 flex-shrink-0" />}
-                </button>
-              ))}
-          </div>
-        </PopoverContent>
-      </Popover>
-      {error && <p className="flex items-center gap-1 text-[11px] text-red-500"><AlertCircle className="w-3 h-3 flex-shrink-0" />{error}</p>}
-    </div>
-  );
-}
 
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
@@ -226,10 +166,12 @@ export default function EditTDSPage() {
                 TDS Code <span className="text-red-500">*</span>
               </Label>
               <Input
+                disabled
+                readOnly
                 value={form.tdsCode}
                 onChange={e => set("tdsCode", e.target.value)}
-                placeholder="e.g., 194C, 194J"
-                className={cn("h-8 text-xs", errors.tdsCode && "border-red-400 focus-visible:ring-red-300")}
+                placeholder="Auto-generated code"
+                className={cn("h-8 text-xs bg-muted/30 text-muted-foreground cursor-not-allowed", errors.tdsCode && "border-red-400 focus-visible:ring-red-300")}
               />
               <FieldError msg={errors.tdsCode} />
             </div>
@@ -249,21 +191,6 @@ export default function EditTDSPage() {
                 className={cn("h-8 text-xs", errors.tdsRate && "border-red-400 focus-visible:ring-red-300")}
               />
               <FieldError msg={errors.tdsRate} />
-            </div>
-
-            {/* Status */}
-            <div className="col-span-1">
-              <AC
-                label="Status"
-                required
-                value={form.status}
-                onChange={v => set("status", v)}
-                options={[
-                  { value: "active", label: "Active" },
-                  { value: "inactive", label: "Inactive" },
-                ]}
-                placeholder="Select status…"
-              />
             </div>
 
             {/* Remarks */}

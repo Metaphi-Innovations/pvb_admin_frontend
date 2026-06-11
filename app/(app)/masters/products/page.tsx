@@ -151,11 +151,6 @@ export default function ProductsPage() {
       width: "220px",
     },
     {
-      key: "unit",
-      header: "Unit",
-      width: "90px",
-    },
-    {
       key: "baseUnit",
       header: "Base Unit",
       width: "110px",
@@ -201,20 +196,25 @@ export default function ProductsPage() {
       render: (val, row) => row.cropApplicable || "—",
     },
     {
-      key: "packSize",
-      header: "Pack Size",
-      width: "110px",
-      render: (val, row) => row.packSize || "—",
-    },
-    {
       key: "mrp",
       header: "MRP",
       width: "120px",
       render: (val, row) => <span className="font-semibold">{formatMoney(row.mrp)}</span>,
     },
     {
-      key: "reorderLevel",
-      header: "Reorder Level",
+      key: "createdBy",
+      header: "Created By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
       width: "120px",
     },
     {
@@ -343,7 +343,6 @@ export default function ProductsPage() {
       "Category",
       "Segment",
       "Formulation",
-      "Unit",
       "Base Unit",
       "Packaging Unit",
       "Conversion Quantity",
@@ -351,9 +350,7 @@ export default function ProductsPage() {
       "GST Rate",
       "SKU",
       "Crop Applicable",
-      "Pack Size",
       "MRP",
-      "Reorder Level",
       "Status",
     ];
 
@@ -363,7 +360,6 @@ export default function ProductsPage() {
       item.category,
       item.segment,
       item.formulation,
-      item.unit,
       item.baseUnit || "",
       item.packagingUnit || "",
       item.conversionQuantity !== undefined ? item.conversionQuantity : "",
@@ -371,9 +367,7 @@ export default function ProductsPage() {
       item.gstRate,
       item.sku,
       item.cropApplicable || "",
-      item.packSize || "",
       item.mrp,
-      item.reorderLevel,
       item.status,
     ]);
 

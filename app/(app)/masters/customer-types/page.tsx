@@ -55,6 +55,34 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
   );
 }
 
+function StatusToggle({
+  record,
+  onToggle,
+}: {
+  record: CustomerTypeRecord;
+  onToggle: (item: CustomerTypeRecord) => void;
+}) {
+  const active = record.status === "active";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(record);
+      }}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+        active
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
+      )}
+      title="Click to toggle status"
+    >
+      {active ? "Active" : "Inactive"}
+    </button>
+  );
+}
+
 export default function CustomerTypesPage() {
   const router = useRouter();
   const [records, setRecords] = useState<CustomerTypeRecord[]>([]);
@@ -77,6 +105,15 @@ export default function CustomerTypesPage() {
 
   const columns: ColumnConfig<CustomerTypeRecord>[] = [
     {
+      key: "customerTypeCode",
+      header: "Customer Type Code",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "180px",
+      render: (val, row) => <span className="font-mono font-medium text-foreground">{row.customerTypeCode}</span>,
+    },
+    {
       key: "customerType",
       header: "Customer Type",
       sortable: true,
@@ -90,6 +127,19 @@ export default function CustomerTypesPage() {
       ),
     },
     {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: [
+        { label: "Active", value: "active" },
+        { label: "Inactive", value: "inactive" },
+      ],
+      width: "120px",
+      render: (val, row) => <StatusToggle record={row} onToggle={toggleStatus} />,
+    },
+    {
       key: "description",
       header: "Description",
       sortable: true,
@@ -97,6 +147,18 @@ export default function CustomerTypesPage() {
       filterType: "text",
       width: "480px",
       render: (val, row) => row.description || "—",
+    },
+    {
+      key: "createdBy",
+      header: "Created By",
+      width: "120px",
+      render: () => "Admin",
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      width: "120px",
+      render: () => "Admin",
     },
   ];
 
@@ -130,6 +192,7 @@ export default function CustomerTypesPage() {
       const q = String(filters.search).trim().toLowerCase();
       result = result.filter(
         (r) =>
+          r.customerTypeCode.toLowerCase().includes(q) ||
           r.customerType.toLowerCase().includes(q) ||
           r.description.toLowerCase().includes(q)
       );
@@ -151,6 +214,14 @@ export default function CustomerTypesPage() {
     return result;
   }, [records, filters, sort]);
 
+  const toggleStatus = (record: CustomerTypeRecord) => {
+    const nextStatus: "active" | "inactive" = record.status === "active" ? "inactive" : "active";
+    const updated = records.map((item) => (item.id === record.id ? { ...item, status: nextStatus } : item));
+    saveCustomerTypes(updated);
+    setRecords(updated);
+    setToast({ msg: `Customer Type status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`, type: "success" });
+  };
+
   const paginated = useMemo(() => {
     const startOffset = (page - 1) * pageSize;
     return filtered.slice(startOffset, startOffset + pageSize);
@@ -171,11 +242,12 @@ export default function CustomerTypesPage() {
 
   const handleExport = () => {
     try {
-      const headers = ["ID", "Customer Type", "Description"];
+      const headers = ["ID", "Customer Type Code", "Customer Type", "Description"];
       const csvRows = [headers.join(",")];
       for (const r of records) {
         const row = [
           r.id,
+          `"${r.customerTypeCode.replace(/"/g, '""')}"`,
           `"${r.customerType.replace(/"/g, '""')}"`,
           `"${r.description.replace(/"/g, '""')}"`,
         ];
@@ -227,7 +299,7 @@ export default function CustomerTypesPage() {
           addLabel="Add Customer Type"
           onExport={handleExport}
           emptyMessage="customer types"
-          searchPlaceholder="Search customer type, description..."
+          searchPlaceholder="Search customer type code, customer type, description..."
           currentFilters={filters}
           currentSort={sort}
         />

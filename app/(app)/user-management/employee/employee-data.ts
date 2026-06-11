@@ -69,6 +69,13 @@ export interface Employee {
   geoArea?: string;
   territory?: string;
   geoLocality?: string;
+  geoMappings?: Array<{
+    geoZone?: string;
+    geoRegion?: string;
+    geoArea?: string;
+    territory?: string;
+    geoLocality?: string;
+  }>;
   // Permissions
   permissions?: UserPermissions;
   // Approval Chain

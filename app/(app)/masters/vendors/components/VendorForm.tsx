@@ -293,10 +293,8 @@ export function VendorForm({
     const parts: string[] = [];
     if (prod.category) parts.push(`Category: ${prod.category}`);
     if (prod.subCategory) parts.push(`Sub Category: ${prod.subCategory}`);
-    if (prod.unit) parts.push(`Unit: ${prod.unit}`);
     if (prod.baseUnit) parts.push(`Base Unit: ${prod.baseUnit}`);
     if (prod.packagingUnit) parts.push(`Packaging Unit: ${prod.packagingUnit}`);
-    if (prod.packSize) parts.push(`Pack Size: ${prod.packSize}`);
     if (prod.hsnCode) parts.push(`HSN: ${prod.hsnCode}`);
     if (prod.gstRate) parts.push(`GST: ${prod.gstRate}`);
     return parts.join(" | ");

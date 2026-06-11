@@ -48,7 +48,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { MiniKPICard } from "@/components/ui/KPICard";
 import { MasterFormGrid, MasterField, MasterViewRow, compactInput } from "@/components/masters/MasterModule";
@@ -693,8 +692,10 @@ export default function UnitMasterPage() {
                   </MasterField>
                   <MasterField label="Unit Code" required>
                     <Input
-                      className={compactInput("font-mono")}
+                      className={compactInput("font-mono opacity-100 bg-background text-foreground cursor-not-allowed")}
                       value={form.unitCode}
+                      disabled
+                      readOnly
                       onChange={(e) => setForm((f) => ({ ...f, unitCode: e.target.value.toUpperCase() }))}
                     />
                   </MasterField>
@@ -714,18 +715,6 @@ export default function UnitMasterPage() {
                     />
                   </MasterField>
                 </MasterFormGrid>
-                <div className="flex items-center justify-between p-3 border rounded-lg border-border bg-muted/20">
-                  <div>
-                    <p className="text-xs font-medium">Status</p>
-                    <p className="text-[11px] text-muted-foreground">{form.status === "active" ? "Active" : "Inactive"}</p>
-                  </div>
-                  <Switch
-                    checked={form.status === "active"}
-                    onCheckedChange={(checked) =>
-                      setForm((prev) => ({ ...prev, status: checked ? "active" : "inactive" }))
-                    }
-                  />
-                </div>
               </div>
             )}
           </SheetBody>

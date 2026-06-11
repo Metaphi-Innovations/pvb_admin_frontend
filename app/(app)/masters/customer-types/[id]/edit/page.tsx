@@ -26,6 +26,7 @@ export default function EditCustomerTypePage() {
     const found = list.find((c) => c.id === Number(id));
     if (!found) return;
     setForm({
+      customerTypeCode: found.customerTypeCode,
       customerType: found.customerType,
       description: found.description,
       documentTypes: found.documentTypes || [],
@@ -52,11 +53,13 @@ export default function EditCustomerTypePage() {
     const list = loadCustomerTypes();
     const updated = list.map((c) =>
       c.id === Number(id)
-        ? {
+          ? {
             ...c,
+            customerTypeCode: form.customerTypeCode,
             customerType: form.customerType.trim(),
             description: form.description.trim(),
             documentTypes: form.documentTypes || [],
+            status: c.status,
           }
         : c,
     );

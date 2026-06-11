@@ -461,6 +461,8 @@ export default function SegmentMasterPage() {
                     }
                     errors={{}}
                     labels={{ name: "Segment Name", code: "Segment Code" }}
+                    codeDisabled
+                    codeFirst
                   />
                 </MasterFormGrid>
                 {/* <div className="flex items-center justify-between p-3 border rounded-lg border-border bg-muted/20">

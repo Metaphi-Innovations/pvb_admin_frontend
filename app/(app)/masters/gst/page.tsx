@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -100,10 +101,8 @@ export default function GSTPage() {
   const [active, setActive] = useState<GSTMaster | null>(null);
   const [form, setForm] = useState({
     gstId: "",
-    gstName: "",
     gstPercentage: 0,
-    gstType: "CGST" as "CGST" | "SGST" | "IGST" | "UTGST",
-    applicableFromDate: todayStr(),
+    remarks: "",
     status: "active" as "active" | "inactive",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -152,15 +151,6 @@ export default function GSTPage() {
       ),
     },
     {
-      key: "gstName",
-      header: "GST Name",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "220px",
-      render: (val, row) => row.gstName,
-    },
-    {
       key: "gstPercentage",
       header: "GST Percentage",
       sortable: true,
@@ -170,27 +160,29 @@ export default function GSTPage() {
       render: (val, row) => `${row.gstPercentage}%`,
     },
     {
-      key: "gstType",
-      header: "GST Type",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: ["CGST", "SGST", "IGST", "UTGST"].map(t => ({ label: t, value: t })),
-      width: "110px",
-    },
-    {
-      key: "applicableFromDate",
-      header: "Applicable From",
+      key: "remarks",
+      header: "Remarks",
       sortable: true,
       filterable: true,
       filterType: "text",
-      width: "150px",
-      render: (val, row) => (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <CalendarDays className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
-          {row.applicableFromDate}
-        </div>
-      ),
+      width: "220px",
+      render: (val, row) => row.remarks || "—",
+    },
+    {
+      key: "createdBy",
+      header: "Created By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
     },
     {
       key: "status",
@@ -239,9 +231,9 @@ export default function GSTPage() {
       const q = String(filters.search).toLowerCase();
       result = result.filter(
         (r) =>
-          r.gstName.toLowerCase().includes(q) ||
-          r.gstType.toLowerCase().includes(q) ||
-          r.gstId.toLowerCase().includes(q)
+          r.gstId.toLowerCase().includes(q) ||
+          String(r.gstPercentage).includes(q) ||
+          (r.remarks || "").toLowerCase().includes(q)
       );
     }
 
@@ -281,10 +273,8 @@ export default function GSTPage() {
     const code = generateGSTCode(nextIdVal);
     setForm({
       gstId: code,
-      gstName: "",
       gstPercentage: 0,
-      gstType: "CGST",
-      applicableFromDate: todayStr(),
+      remarks: "",
       status: "active",
     });
     setErrors({});
@@ -295,10 +285,8 @@ export default function GSTPage() {
   const openEdit = (row: GSTMaster) => {
     setForm({
       gstId: row.gstId,
-      gstName: row.gstName,
       gstPercentage: row.gstPercentage,
-      gstType: row.gstType,
-      applicableFromDate: row.applicableFromDate,
+      remarks: row.remarks || "",
       status: row.status,
     });
     setErrors({});
@@ -330,11 +318,9 @@ export default function GSTPage() {
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
-    if (!form.gstName.trim()) e.gstName = "GST Name is required";
     if (form.gstPercentage === undefined || form.gstPercentage === null || form.gstPercentage < 0) {
       e.gstPercentage = "GST Percentage is required and must be non-negative";
     }
-    if (!form.applicableFromDate) e.applicableFromDate = "Applicable From Date is required";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -348,10 +334,8 @@ export default function GSTPage() {
       const newRecord: GSTMaster = {
         id,
         gstId: form.gstId,
-        gstName: form.gstName,
         gstPercentage: form.gstPercentage,
-        gstType: form.gstType,
-        applicableFromDate: form.applicableFromDate,
+        remarks: form.remarks,
         status: form.status,
         createdBy: "Admin",
         createdDate: todayStr(),
@@ -365,10 +349,8 @@ export default function GSTPage() {
         r.id === active.id
           ? {
               ...r,
-              gstName: form.gstName,
               gstPercentage: form.gstPercentage,
-              gstType: form.gstType,
-              applicableFromDate: form.applicableFromDate,
+              remarks: form.remarks,
               status: form.status,
               updatedBy: "Admin",
               updatedDate: todayStr(),
@@ -395,16 +377,14 @@ export default function GSTPage() {
 
   const handleExport = () => {
     try {
-      const headers = ["ID", "GST ID", "GST Name", "GST Percentage", "GST Type", "Applicable From", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
+      const headers = ["ID", "GST ID", "GST Percentage", "Remarks", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
       const csvRows = [headers.join(",")];
       for (const r of records) {
         const row = [
           r.id,
           `"${r.gstId.replace(/"/g, '""')}"`,
-          `"${r.gstName.replace(/"/g, '""')}"`,
           r.gstPercentage,
-          r.gstType,
-          r.applicableFromDate,
+          `"${(r.remarks || "").replace(/"/g, '""')}"`,
           r.status,
           r.createdBy,
           r.createdDate,
@@ -476,7 +456,7 @@ export default function GSTPage() {
           addLabel="Add GST"
           onExport={handleExport}
           emptyMessage="GST configs"
-          searchPlaceholder="Search GST name or type..."
+          searchPlaceholder="Search GST ID, percentage or remarks..."
           currentFilters={filters}
           currentSort={sort}
         />
@@ -502,11 +482,9 @@ export default function GSTPage() {
             {sheetMode === "view" && active ? (
               <div className="space-y-4">
                 <div className="px-3 border rounded-lg border-border/60 bg-muted/10">
-                  <MasterViewRow label="GST Name" value={active.gstName} />
                   <MasterViewRow label="GST ID" value={<span className="font-mono">{active.gstId}</span>} />
                   <MasterViewRow label="GST Percentage" value={`${active.gstPercentage}%`} />
-                  <MasterViewRow label="GST Type" value={active.gstType} />
-                  <MasterViewRow label="Applicable From Date" value={active.applicableFromDate} />
+                  <MasterViewRow label="Remarks" value={active.remarks || "—"} />
                   <MasterViewRow label="Status" value={active.status === "active" ? "Active" : "Inactive"} />
                 </div>
                 <div className="grid grid-cols-2 gap-3 pt-2 text-xs border-t">
@@ -536,18 +514,6 @@ export default function GSTPage() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs font-medium">
-                      GST Name <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      value={form.gstName}
-                      onChange={(e) => setFormField("gstName", e.target.value)}
-                      placeholder="e.g., Standard IGST"
-                      className={cn("h-8 text-xs", errors.gstName && "border-red-400 focus-visible:ring-red-300")}
-                    />
-                    {errors.gstName && <p className="text-[11px] text-red-500">{errors.gstName}</p>}
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium">
                       GST Percentage <span className="text-red-500">*</span>
                     </Label>
                     <Input
@@ -561,31 +527,15 @@ export default function GSTPage() {
                     />
                     {errors.gstPercentage && <p className="text-[11px] text-red-500">{errors.gstPercentage}</p>}
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium">
-                      GST Type <span className="text-red-500">*</span>
-                    </Label>
-                    <select
-                      value={form.gstType}
-                      onChange={(e) => setFormField("gstType", e.target.value)}
-                      className="w-full h-8 px-2 text-xs border rounded-lg border-border bg-background"
-                    >
-                      {["CGST", "SGST", "IGST", "UTGST"].map((type) => (
-                        <option key={type} value={type}>{type}</option>
-                      ))}
-                    </select>
-                  </div>
                   <div className="space-y-1 sm:col-span-2">
-                    <Label className="text-xs font-medium">
-                      Applicable From Date <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      type="date"
-                      value={form.applicableFromDate}
-                      onChange={(e) => setFormField("applicableFromDate", e.target.value)}
-                      className={cn("h-8 text-xs", errors.applicableFromDate && "border-red-400 focus-visible:ring-red-300")}
+                    <Label className="text-xs font-medium">Remarks</Label>
+                    <Textarea
+                      value={form.remarks}
+                      onChange={(e) => setFormField("remarks", e.target.value)}
+                      placeholder="Enter remarks"
+                      rows={3}
+                      className="text-xs resize-none rounded-lg min-h-[72px]"
                     />
-                    {errors.applicableFromDate && <p className="text-[11px] text-red-500">{errors.applicableFromDate}</p>}
                   </div>
                 </div>
               </div>
