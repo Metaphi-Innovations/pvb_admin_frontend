@@ -34,7 +34,7 @@ import {
 } from "../event-data";
 
 const CUSTOMER_DISTRIBUTOR_ID_OFFSET = 100000;
-const LOCATION_LEVELS: GeoLevel[] = ["Zone", "State", "Region", "Area", "Territory", "Locality", "City"];
+const LOCATION_LEVELS: GeoLevel[] = ["Zone", "State", "Region", "Area", "Territory", "Locality", "Pincode"];
 const FARMER_NAMES = [
   "Ramesh Patel",
   "Suresh Kumar",
@@ -92,7 +92,7 @@ function resolveLocationDisplay(event: Event, geoNodes: GeoNode[]) {
     Area: withSuffix(fallbackDistrict, "Area"),
     Territory: withSuffix(fallbackDistrict, "Territory"),
     Locality: fallbackLocality,
-    City: event.district || event.state || "Event City",
+    Pincode: event.district || event.state || "Event Pincode",
   };
 
   const getNodeName = (level: GeoLevel) => {
@@ -108,7 +108,7 @@ function resolveLocationDisplay(event: Event, geoNodes: GeoNode[]) {
     Area: getNodeName("Area"),
     Territory: getNodeName("Territory"),
     Locality: getNodeName("Locality"),
-    City: getNodeName("City"),
+    Pincode: getNodeName("Pincode"),
   };
 }
 
