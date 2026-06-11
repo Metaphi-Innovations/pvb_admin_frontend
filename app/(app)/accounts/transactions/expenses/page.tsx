@@ -1,5 +1,5 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { createLazyClientPage } from "@/lib/createLazyClientPage";
-
-export default createLazyClientPage(() => import("../../expenses/ExpensesPageClient"));
+export default function LegacyRedirect() {
+  redirect("/accounts/vouchers?tab=journal");
+}

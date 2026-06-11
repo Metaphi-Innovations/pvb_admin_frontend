@@ -18,7 +18,7 @@ import { LevelBadge } from "../../components/LevelBadge";
 const NAME_PLACEHOLDER: Record<GeoLevel, string> = {
   Zone: "e.g. West Zone", State: "e.g. Maharashtra", Region: "e.g. Mumbai Region",
   Area: "e.g. Mumbai Central Area", Territory: "e.g. Dadar-Parel Territory",
-  Locality: "e.g. Dadar Locality", City: "e.g. Dadar",
+  Locality: "e.g. Dadar Locality", Pincode: "e.g. 400014",
 };
 
 // ── Status toggle ─────────────────────────────────────────────────────────────
@@ -94,8 +94,8 @@ export default function EditGeographyPage() {
     if (existing && PARENT_LEVEL[existing.level] !== null && !form.parentId) {
       e.parentId = "Parent is required for this level";
     }
-    if (existing?.level === "City" && !form.pincode.trim()) {
-      e.pincode = "Pincode is required for City level";
+    if (existing?.level === "Pincode" && !form.pincode.trim()) {
+      e.pincode = "Pincode is required for Pincode level";
     }
     if (form.pincode && !/^\d{6}$/.test(form.pincode)) {
       e.pincode = "Pincode must be exactly 6 digits";
@@ -266,8 +266,8 @@ export default function EditGeographyPage() {
               )}
             </div>
 
-            {/* 5. Pincode (City only) */}
-            {existing.level === "City" && (
+            {/* 5. Pincode (Pincode only) */}
+            {existing.level === "Pincode" && (
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium">
                   Pincode <span className="text-red-500">*</span>

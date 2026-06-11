@@ -166,7 +166,7 @@ export default function PurchasePageClient() {
                         )}
                       </td>
                       <td className="px-2.5 py-2 text-xs">{PURCHASE_PAYMENT_STATUS_LABELS[payStatus]}</td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums font-medium text-brand-700">{formatINR(r.grandTotal)}</td>
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.grandTotal)}</td>
                       <td className="px-2.5 py-2">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

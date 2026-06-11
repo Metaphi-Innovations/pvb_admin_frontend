@@ -21,7 +21,11 @@ export interface VendorContact {
 
 export interface VendorDocument {
   uid: string;
+  documentTypeId?: string;
   documentName: string;
+  file?: File;
+  fileUrl?: string;
+  uploaded?: boolean;
   fileName: string;
   uploadedAt: string;
   size: string;
@@ -322,7 +326,10 @@ function migrateLegacy(raw: Record<string, unknown>): Vendor {
         ? (raw.attachments as { uid: string; name: string; docType: string; uploadedAt: string; size: string }[]).map(
             (a) => ({
               uid: a.uid,
+              documentTypeId: undefined,
               documentName: a.docType,
+              fileUrl: undefined,
+              uploaded: true,
               fileName: a.name,
               uploadedAt: a.uploadedAt,
               size: a.size,
@@ -446,7 +453,10 @@ export const DEFAULT_VENDOR_FORM: VendorFormValues = {
   swiftCode: "",
   documents: DEFAULT_DOCUMENT_NAMES.map((name, i) => ({
     uid: `d-${i}`,
+    documentTypeId: undefined,
     documentName: name,
+    fileUrl: undefined,
+    uploaded: false,
     fileName: "",
     uploadedAt: "",
     size: "",
@@ -487,7 +497,10 @@ export function vendorToForm(v: Vendor): VendorFormValues {
       ? v.documents.map((d) => ({ ...d }))
       : DEFAULT_DOCUMENT_NAMES.map((name, i) => ({
           uid: `d-${i}`,
+          documentTypeId: undefined,
           documentName: name,
+          fileUrl: undefined,
+          uploaded: false,
           fileName: "",
           uploadedAt: "",
           size: "",

@@ -72,6 +72,7 @@ export default function CustomerTypeDetailPage() {
         <div className="grid grid-cols-1 gap-3">
           <DetailCard title="Customer Type Info">
             <InfoRow label="Customer Type ID" value={String(customerType.id)} />
+            <InfoRow label="Customer Type Code" value={customerType.customerTypeCode} />
             <InfoRow label="Customer Type" value={customerType.customerType} />
             <InfoRow label="Description" value={customerType.description} />
           </DetailCard>

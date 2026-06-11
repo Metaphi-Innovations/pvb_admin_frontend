@@ -1,5 +1,6 @@
 ﻿import { redirect } from "next/navigation";
+import { JOURNAL_VOUCHER_HREF } from "@/lib/accounts/accounts-nav";
 
-export default function LegacyVouchersRedirect() {
-  redirect("/accounts/transactions/journal");
+export default function VouchersIndexPage() {
+  redirect(JOURNAL_VOUCHER_HREF);
 }

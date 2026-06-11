@@ -1,12 +1,5 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { useParams } from "next/navigation";
-import { createLazyClientPage } from "@/lib/createLazyClientPage";
-
-const LazyView = createLazyClientPage(() => import("../../../expenses/ExpenseViewPageClient"));
-
-export default function ExpenseViewRoute() {
-  const params = useParams();
-  const id = Number(params.id);
-  return <LazyView paymentId={id} />;
+export default function LegacyRedirect() {
+  redirect("/accounts/vouchers?tab=journal");
 }

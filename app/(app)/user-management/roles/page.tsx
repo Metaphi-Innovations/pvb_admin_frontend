@@ -13,7 +13,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  Plus, Download, MoreVertical, Eye, Edit2, Trash2,
+  Plus, Download, MoreVertical, Eye, Edit2,
   Shield, CheckCircle2, XCircle, X, AlertTriangle,
   Clock, MoreHorizontal
 } from "lucide-react";
@@ -324,18 +324,6 @@ export default function RolesPage() {
       render: (val, row) => <GeoBadge level={row.geoLevel} />,
     },
     {
-      key: "approval",
-      header: "Approval",
-      render: (val, row) =>
-        row.approvalChain.length === 0 ? (
-          <span className="text-[11px] text-muted-foreground">Not set</span>
-        ) : (
-          <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-100 font-medium">
-            {row.approvalChain.length} step{row.approvalChain.length > 1 ? "s" : ""}
-          </span>
-        ),
-    },
-    {
       key: "status",
       header: "Status",
       sortable: true,
@@ -397,21 +385,6 @@ export default function RolesPage() {
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => openEdit(row)} className="cursor-pointer">
               <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleQuickToggle(row)} className="cursor-pointer">
-              {row.status === "active" ? (
-                <>
-                  <XCircle className="w-3.5 h-3.5 mr-2 text-amber-500" /> Deactivate
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-3.5 h-3.5 mr-2 text-emerald-500" /> Activate
-                </>
-              )}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => handleDelete(row)} className="cursor-pointer text-red-600 focus:bg-red-50 focus:text-red-600">
-              <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

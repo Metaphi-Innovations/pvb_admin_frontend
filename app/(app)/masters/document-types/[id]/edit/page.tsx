@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import {
   loadDocumentTypes,
   saveDocumentTypes,
+  generateNextDocumentTypeCode,
   todayStr,
   type DocumentTypeMaster,
 } from "../../document-type-data";
@@ -31,6 +32,7 @@ export default function EditDocumentTypePage() {
     const found = list.find((d) => d.id === id);
     if (!found) return;
     setForm({
+      documentTypeCode: found.documentTypeCode || generateNextDocumentTypeCode(list),
       title: found.title,
       description: found.description || "",
     });
@@ -58,6 +60,7 @@ export default function EditDocumentTypePage() {
       d.id === id
         ? {
             ...d,
+            documentTypeCode: form.documentTypeCode,
             title: form.title.trim(),
             description: form.description.trim(),
             updatedBy: "Admin",

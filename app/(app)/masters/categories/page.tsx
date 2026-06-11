@@ -73,7 +73,7 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
         toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
       )}
     >
-      <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+      <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100"><X className="h-3.5 w-3.5" /></button>
     </div>
@@ -160,6 +160,22 @@ export default function CategoryMasterPage() {
       filterable: true,
       filterType: "text",
       width: "320px",
+    },
+    {
+      key: "createdBy",
+      header: "Created By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
     },
     {
       key: "status",
@@ -376,11 +392,11 @@ export default function CategoryMasterPage() {
           <p className="mt-0.5 text-xs text-muted-foreground">Manage product categories used across the masters</p>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        {/* <div className="grid grid-cols-3 gap-3">
           <MiniKPICard label="Total Categories" value={records.length} icon={Folder} accent={true} />
           <MiniKPICard label="Active" value={records.filter((r) => r.status === "active").length} icon={CheckCircle2} accent={false} />
           <MiniKPICard label="Inactive" value={records.filter((r) => r.status === "inactive").length} icon={XCircle} accent={false} />
-        </div>
+        </div> */}
 
         <MasterListing<Category>
           columns={columns}
@@ -407,7 +423,7 @@ export default function CategoryMasterPage() {
         <SheetContent>
           <SheetHeader>
             <div className="flex items-start gap-3 pr-8">
-              <div className="w-9 h-9 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center">
+              <div className="flex items-center justify-center border w-9 h-9 rounded-xl bg-brand-50 border-brand-100">
                 <Folder className="w-4 h-4 text-brand-600" />
               </div>
               <div>
@@ -422,13 +438,13 @@ export default function CategoryMasterPage() {
           <SheetBody>
             {sheetMode === "view" && active ? (
               <div className="space-y-4">
-                <div className="rounded-lg border border-border/60 bg-muted/10 px-3">
+                <div className="px-3 border rounded-lg border-border/60 bg-muted/10">
                   <MasterViewRow label="Category Name" value={active.categoryName} />
                   <MasterViewRow label="Category Code" value={<span className="font-mono">{active.categoryCode}</span>} />
                   <MasterViewRow label="Description" value={active.description || "—"} />
                   <MasterViewRow label="Status" value={active.status === "active" ? "Active" : "Inactive"} />
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-xs pt-2 border-t">
+                <div className="grid grid-cols-2 gap-3 pt-2 text-xs border-t">
                   <div>
                     <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
                     <p className="font-medium">{active.createdBy}</p>
@@ -467,7 +483,7 @@ export default function CategoryMasterPage() {
                 </Button>
                 <Button
                   size="sm"
-                  className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
                   onClick={() => active && openEdit(active)}
                 >
                   Edit
@@ -480,7 +496,7 @@ export default function CategoryMasterPage() {
                 </Button>
                 <Button
                   size="sm"
-                  className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
                   onClick={persist}
                 >
                   Save
@@ -503,7 +519,7 @@ export default function CategoryMasterPage() {
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
               Cancel
             </Button>
-            <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" onClick={confirmDelete}>
+            <Button size="sm" className="h-8 text-xs text-white bg-red-600 hover:bg-red-700" onClick={confirmDelete}>
               Delete
             </Button>
           </DialogFooter>

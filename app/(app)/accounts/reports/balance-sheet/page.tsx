@@ -1,20 +1,35 @@
 "use client";
 
-import { AppLayout } from "@/components/layout/AppLayout";
-import { getBalanceSheet } from "../../data";
+import React, { useMemo } from "react";
+import { formatBalanceAmount } from "@/lib/accounts/money-format";
+import { computeBalanceSheetRows } from "@/lib/accounts/ledger-reports";
+import { AccountingReportPage } from "../../components/AccountingReportPage";
 
 export default function BalanceSheetPage() {
-  const bs = getBalanceSheet();
+  const rows = useMemo(
+    () =>
+      computeBalanceSheetRows().map((r) => ({
+        head: r.head,
+        section: r.section,
+        primaryHead: r.primaryHead,
+        accountGroup: r.accountGroup,
+        balance: formatBalanceAmount(r.balance.amount, r.balance.balanceType),
+      })),
+    [],
+  );
+
   return (
-    <AppLayout>
-      <div className="max-w-[900px] mx-auto space-y-4">
-        <h1 className="text-lg font-semibold">Balance Sheet</h1>
-        <div className="bg-white border border-border/60 rounded-lg p-4 space-y-2 text-sm">
-          <div className="flex justify-between"><span className="text-muted-foreground">Assets</span><span>{bs.assets.toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Liabilities</span><span>{bs.liabilities.toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Equity</span><span>{bs.equity.toFixed(2)}</span></div>
-        </div>
-      </div>
-    </AppLayout>
+    <AccountingReportPage
+      title="Balance Sheet"
+      description="Asset and liability ledger balances from voucher postings"
+      columns={[
+        { key: "head", label: "Ledger" },
+        { key: "section", label: "Section" },
+        { key: "primaryHead", label: "Primary Head" },
+        { key: "accountGroup", label: "Account Group" },
+        { key: "balance", label: "Balance", align: "right", money: true },
+      ]}
+      rows={rows}
+    />
   );
 }

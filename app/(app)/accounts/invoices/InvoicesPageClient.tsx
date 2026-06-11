@@ -212,11 +212,11 @@ export default function InvoicesPageClient() {
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.invoiceDate}</td>
                       <td className="px-2.5 py-2 text-xs">{r.customerName}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.customerMobile || "—"}</td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums">{formatINR(r.subtotal)}</td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums">{formatINR(r.taxAmount)}</td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums font-medium">{formatINR(r.grandTotal)}</td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums text-emerald-700">{formatINR(r.amountReceived)}</td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums text-amber-700">{formatINR(r.balanceAmount)}</td>
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.subtotal)}</td>
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.taxAmount)}</td>
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.grandTotal)}</td>
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.amountReceived)}</td>
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.balanceAmount)}</td>
                       <td className="px-2.5 py-2">
                         <InvoicePaymentStatusBadge status={r.paymentStatus} />
                       </td>

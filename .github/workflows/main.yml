@@ -2,7 +2,7 @@ name: Frontend Deploy - pvb.dev.metaphi.in
 on:
   push:
     branches:
-      - staging
+      - main
 
 jobs:
   deploy:

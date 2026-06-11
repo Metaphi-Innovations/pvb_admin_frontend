@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
@@ -10,6 +10,7 @@ import {
   loadDocumentTypes,
   saveDocumentTypes,
   generateNextId,
+  generateNextDocumentTypeCode,
   todayStr,
   type DocumentTypeMaster,
 } from "../document-type-data";
@@ -25,6 +26,11 @@ export default function AddDocumentTypePage() {
   const [form, setForm] = useState<DocumentTypeFormValues>(DEFAULT_DOCUMENT_TYPE_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+
+  useEffect(() => {
+    const list = loadDocumentTypes();
+    setForm((prev) => ({ ...prev, documentTypeCode: generateNextDocumentTypeCode(list) }));
+  }, []);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -45,6 +51,7 @@ export default function AddDocumentTypePage() {
     const list = loadDocumentTypes();
     const newRecord: DocumentTypeMaster = {
       id: generateNextId(list),
+      documentTypeCode: form.documentTypeCode.trim() || generateNextDocumentTypeCode(list),
       title: form.title.trim(),
       description: form.description.trim(),
       status: "Active",

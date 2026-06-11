@@ -1,3 +1,5 @@
-"use client";
-import { createLazyClientPage } from "@/lib/createLazyClientPage";
-export default createLazyClientPage(() => import("../../debit-notes/DebitNotesPageClient"));
+import { redirect } from "next/navigation";
+
+export default function LegacyRedirect() {
+  redirect("/accounts/vouchers?tab=debit-note");
+}
