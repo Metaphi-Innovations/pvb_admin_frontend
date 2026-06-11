@@ -24,6 +24,7 @@ export interface GrnItem {
   productCode: string;
   orderedQty: number;
   receivedQty: number;
+  poNumber?: string;
 }
 
 export interface GrnBatch {
@@ -33,6 +34,7 @@ export interface GrnBatch {
   mfgDate: string;
   expDate: string;
   quantity: number;
+  poNumber?: string;
 }
 
 export type GrnStatus = "draft" | "submitted" | "qc_pending" | "qc_completed";

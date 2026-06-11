@@ -1,5 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
+import { JOURNAL_VOUCHER_HREF } from "@/lib/accounts/accounts-nav";
 
-import { createTxnPage } from "../../createTxnPage";
-
-export default createTxnPage("journal", "Journal", "Reference / Ledger");
+export default function LegacyJournalPage() {
+  redirect(JOURNAL_VOUCHER_HREF);
+}

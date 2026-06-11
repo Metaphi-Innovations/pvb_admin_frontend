@@ -21,10 +21,24 @@ export interface VendorContact {
 
 export interface VendorDocument {
   uid: string;
+  documentTypeId?: string;
   documentName: string;
+  file?: File;
+  fileUrl?: string;
+  uploaded?: boolean;
   fileName: string;
   uploadedAt: string;
   size: string;
+}
+
+export interface VendorProductMapping {
+  id: string;
+  productId: string;
+  productName: string;
+  sku?: string;
+  mrp?: number;
+  price?: number;
+  status: "Active" | "Inactive";
 }
 
 export interface Vendor {
@@ -61,6 +75,7 @@ export interface Vendor {
   createdDate: string;
   updatedBy: string;
   updatedDate: string;
+  vendorProducts?: VendorProductMapping[];
 }
 
 /** @deprecated Kept for procurement supplier bridge only */
@@ -311,7 +326,10 @@ function migrateLegacy(raw: Record<string, unknown>): Vendor {
         ? (raw.attachments as { uid: string; name: string; docType: string; uploadedAt: string; size: string }[]).map(
             (a) => ({
               uid: a.uid,
+              documentTypeId: undefined,
               documentName: a.docType,
+              fileUrl: undefined,
+              uploaded: true,
               fileName: a.name,
               uploadedAt: a.uploadedAt,
               size: a.size,
@@ -324,6 +342,9 @@ function migrateLegacy(raw: Record<string, unknown>): Vendor {
     createdDate: String(raw.createdDate ?? todayStr()),
     updatedBy: String(raw.updatedBy ?? "Admin"),
     updatedDate: String(raw.updatedDate ?? todayStr()),
+    vendorProducts: Array.isArray(raw.vendorProducts)
+      ? (raw.vendorProducts as VendorProductMapping[])
+      : [],
   };
 }
 
@@ -400,6 +421,7 @@ export interface VendorFormValues {
   swiftCode: string;
   documents: VendorDocument[];
   remarks: string;
+  vendorProducts: VendorProductMapping[];
 }
 
 export const DEFAULT_VENDOR_FORM: VendorFormValues = {
@@ -431,12 +453,16 @@ export const DEFAULT_VENDOR_FORM: VendorFormValues = {
   swiftCode: "",
   documents: DEFAULT_DOCUMENT_NAMES.map((name, i) => ({
     uid: `d-${i}`,
+    documentTypeId: undefined,
     documentName: name,
+    fileUrl: undefined,
+    uploaded: false,
     fileName: "",
     uploadedAt: "",
     size: "",
   })),
   remarks: "",
+  vendorProducts: [],
 };
 
 export function vendorToForm(v: Vendor): VendorFormValues {
@@ -471,12 +497,16 @@ export function vendorToForm(v: Vendor): VendorFormValues {
       ? v.documents.map((d) => ({ ...d }))
       : DEFAULT_DOCUMENT_NAMES.map((name, i) => ({
           uid: `d-${i}`,
+          documentTypeId: undefined,
           documentName: name,
+          fileUrl: undefined,
+          uploaded: false,
           fileName: "",
           uploadedAt: "",
           size: "",
         })),
     remarks: v.remarks,
+    vendorProducts: v.vendorProducts ? v.vendorProducts.map((p) => ({ ...p })) : [],
   };
 }
 
@@ -520,6 +550,7 @@ export function formToVendor(
     swiftCode: form.swiftCode.trim(),
     documents: form.documents,
     remarks: form.remarks.trim(),
+    vendorProducts: form.vendorProducts || [],
   };
 }
 
@@ -532,5 +563,22 @@ export function validateVendorForm(form: VendorFormValues): string | null {
   if (form.accountNumber && form.accountNumber !== form.confirmAccountNumber) {
     return "Account number and confirmation do not match.";
   }
+
+  // Validate product mappings
+  const selectedProductIds = new Set<string>();
+  for (let i = 0; i < (form.vendorProducts || []).length; i++) {
+    const p = form.vendorProducts[i];
+    if (!p.productId || !p.productName.trim()) {
+      return `Product is required at row ${i + 1}.`;
+    }
+    if (selectedProductIds.has(p.productId)) {
+      return `Duplicate product mapping: ${p.productName} is selected multiple times.`;
+    }
+    selectedProductIds.add(p.productId);
+    if (p.price === undefined || p.price === null || isNaN(p.price) || p.price <= 0) {
+      return `Price must be greater than 0 for product "${p.productName || p.productId}" at row ${i + 1}.`;
+    }
+  }
+
   return null;
 }

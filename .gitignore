@@ -1,10 +1,13 @@
 /.next
 /node_modules
+node_modules/
 .env
 .env.local
 *.tsbuildinfo
 /.env
 AGENTS.md
+.github
+/.github 
 
 # Never commit real bank statements
 samples/*.csv

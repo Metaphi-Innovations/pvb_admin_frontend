@@ -92,27 +92,6 @@ export default function RoleDetailSheet({ open, onClose, role, onEdit }: RoleDet
             </div>
           </div>
 
-          {/* Approval Chain */}
-          <div>
-            <SectionHeading icon={CheckSquare} label="Approval Chain" />
-            {role.approvalChain.length === 0 ? (
-              <div className="bg-muted/20 rounded-xl border border-border/50 px-4 py-3">
-                <p className="text-xs text-muted-foreground italic">No approval chain configured</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {role.approvalChain.map((step, i) => (
-                  <div key={step.uid} className="flex items-center gap-2.5 p-2.5 rounded-lg border border-border bg-muted/20">
-                    <span className="w-5 h-5 rounded-full bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">
-                      {i + 1}
-                    </span>
-                    <span className="text-xs font-medium text-foreground">{step.roleName}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
           {/* Audit */}
           <div>
             <SectionHeading icon={Activity} label="Audit Trail" />

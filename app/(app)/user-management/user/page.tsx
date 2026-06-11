@@ -183,7 +183,6 @@ function BasicDetailsTab() {
     reportingManager: "Admin",
     stateAccess: "Maharashtra, Gujarat",
     territoryAccess: "Mumbai, Pune",
-    status: "active",
   });
 
   return (
@@ -259,12 +258,6 @@ function BasicDetailsTab() {
               onChange={e => setForm({ ...form, reportingManager: e.target.value })}
               className="h-9 text-sm rounded-lg"
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Status</Label>
-            <div className="h-9 flex items-center px-3 border border-border rounded-lg bg-muted/30">
-              <span className="text-xs font-medium">{form.status === "active" ? "Active" : "Inactive"}</span>
-            </div>
           </div>
         </div>
       </div>

@@ -164,7 +164,7 @@ const LOCATION_LEVELS: GeoLevel[] = [
   "Area",
   "Territory",
   "Locality",
-  "City",
+  "Pincode",
 ];
 
 const LOCATION_PARENT: Record<GeoLevel, GeoLevel | null> = {
@@ -174,7 +174,7 @@ const LOCATION_PARENT: Record<GeoLevel, GeoLevel | null> = {
   Area: "Region",
   Territory: "Area",
   Locality: "Territory",
-  City: "Locality",
+  Pincode: "Locality",
 };
 
 function todayIso() {
@@ -1132,11 +1132,11 @@ export default function EventsPage() {
     const area = selectedLocationNodes.Area;
     const territory = selectedLocationNodes.Territory;
     const locality = selectedLocationNodes.Locality;
-    const city = selectedLocationNodes.City;
+    const pincode = selectedLocationNodes.Pincode;
     const currentUser = AuthService.getUserData();
     const organizerName = currentUser?.username || currentUser?.email || "Admin";
     const locationSummary = [
-      city?.name,
+      pincode?.name,
       locality?.name,
       territory?.name,
       area?.name,
@@ -1152,7 +1152,7 @@ export default function EventsPage() {
       eventCode,
       title: form.title.trim(),
       type: "training",
-      venue: city?.name || locality?.name || territory?.name || area?.name || region?.name || "Location TBD",
+      venue: pincode?.name || locality?.name || territory?.name || area?.name || region?.name || "Location TBD",
       district: region?.name || area?.name || territory?.name || locality?.name || "",
       state: state?.name || "",
       startDate,

@@ -38,14 +38,24 @@ export default function EditWarehousePage() {
       router.push("/masters/warehouse");
       return;
     }
+    let contacts = found.contacts;
+    if (!contacts || contacts.length === 0) {
+      contacts = [
+        {
+          id: "CON-1",
+          contactPerson: found.contactPerson || "",
+          mobileNumber: found.mobileNumber || "",
+          emailAddress: found.emailAddress || "",
+          isPrimary: true
+        }
+      ];
+    }
+
     setRecord(found);
     setForm({
       warehouseName: found.warehouseName,
       warehouseType: found.warehouseType,
       gstNumber: found.gstNumber,
-      contactPerson: found.contactPerson,
-      mobileNumber: found.mobileNumber,
-      emailAddress: found.emailAddress,
       address: found.address,
       state: found.state,
       district: found.district,
@@ -55,6 +65,8 @@ export default function EditWarehousePage() {
       manager: found.manager,
       status: found.status,
       operatedBy: found.operatedBy,
+      customerType: found.customerType || "",
+      contacts: contacts,
     });
   }, [id, router]);
 
@@ -81,6 +93,7 @@ export default function EditWarehousePage() {
       return;
     }
     const records = loadWarehouses();
+    const primaryContact = form.contacts.find((c) => c.isPrimary) || form.contacts[0];
     const updated = records.map(r =>
       r.id === id
         ? {
@@ -88,9 +101,9 @@ export default function EditWarehousePage() {
             warehouseName: form.warehouseName,
             warehouseType: form.warehouseType,
             gstNumber: form.gstNumber,
-            contactPerson: form.contactPerson,
-            mobileNumber: form.mobileNumber,
-            emailAddress: form.emailAddress,
+            contactPerson: primaryContact ? primaryContact.contactPerson : "",
+            mobileNumber: primaryContact ? primaryContact.mobileNumber : "",
+            emailAddress: primaryContact ? primaryContact.emailAddress : "",
             address: form.address,
             state: form.state,
             district: form.district,
@@ -100,6 +113,8 @@ export default function EditWarehousePage() {
             manager: form.manager,
             status: form.status,
             operatedBy: form.operatedBy,
+            customerType: form.operatedBy === "C&F Agent" ? form.customerType : undefined,
+            contacts: form.contacts,
             updatedBy: "Admin",
             updatedDate: todayStr(),
           }

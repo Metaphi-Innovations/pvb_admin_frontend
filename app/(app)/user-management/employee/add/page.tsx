@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { CheckCircle2, XCircle, X } from "lucide-react";
 import EmployeeForm from "../components/EmployeeForm";
 import { type Employee, loadEmployees, saveEmployees } from "../employee-data";
@@ -51,7 +50,7 @@ export default function AddEmployeePage() {
   };
 
   return (
-    <AppLayout>
+    <>
       <EmployeeForm
         mode="add"
         onSave={handleSave}
@@ -59,6 +58,6 @@ export default function AddEmployeePage() {
         departments={DEPARTMENTS}
       />
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-    </AppLayout>
+    </>
   );
 }

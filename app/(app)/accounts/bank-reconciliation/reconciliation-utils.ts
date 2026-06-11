@@ -5,13 +5,7 @@ export const RECONCILIATION_BREADCRUMB = [
 
 export const RECONCILIATION_LIST_PATH = "/accounts/transactions/reconciliation";
 
-export function formatINR(n: number): string {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(n);
-}
+export { formatMoney as formatINR } from "@/lib/accounts/money-format";
 
 export const MONTH_NAMES = [
   "January",

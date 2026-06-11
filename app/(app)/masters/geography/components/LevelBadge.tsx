@@ -8,7 +8,7 @@ const LEVEL_STYLES: Record<GeoLevel, string> = {
   Area:      "bg-amber-50 text-amber-700 border border-amber-200",
   Territory: "bg-orange-50 text-orange-700 border border-orange-200",
   Locality:  "bg-rose-50 text-rose-700 border border-rose-200",
-  City:      "bg-slate-100 text-slate-600 border border-slate-200",
+  Pincode:   "bg-slate-100 text-slate-600 border border-slate-200",
 };
 
 export const LEVEL_DOT: Record<GeoLevel, string> = {
@@ -18,7 +18,7 @@ export const LEVEL_DOT: Record<GeoLevel, string> = {
   Area:      "bg-amber-500",
   Territory: "bg-orange-500",
   Locality:  "bg-rose-500",
-  City:      "bg-slate-400",
+  Pincode:   "bg-slate-400",
 };
 
 interface LevelBadgeProps {

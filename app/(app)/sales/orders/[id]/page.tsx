@@ -31,6 +31,7 @@ import {
   canApproveOrder,
   formatApprovalStatus,
   resolveApprovalStatus,
+  getProductById,
 } from "../orders-data";
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
@@ -306,8 +307,8 @@ export default function ViewSalesOrderPage() {
                   <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Stock</th>
                   <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Qty</th>
                   <th className="px-4 py-2.5 text-right text-xs font-semibold">Unit Price</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-semibold w-20">Discount</th>
-                  <th className="px-4 py-2.5 text-right text-xs font-semibold w-20">GST</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-semibold w-20">Discount (%)</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">GST % / Amt</th>
                   <th className="px-4 py-2.5 text-right text-xs font-semibold">Line Total</th>
                 </tr>
               </thead>
@@ -316,20 +317,28 @@ export default function ViewSalesOrderPage() {
                   <tr>
                     <td colSpan={7} className="px-4 py-8 text-center text-xs text-muted-foreground">No product lines</td>
                   </tr>
-                ) : order.lineItems.map(line => (
-                  <tr key={line.id} className="border-b border-border/60">
-                    <td className="px-4 py-2">
-                      <p className="text-xs font-semibold text-foreground">{line.productName || "—"}</p>
-                      <p className="text-[11px] font-mono text-brand-700">{line.productCode}</p>
-                    </td>
-                    <td className="px-4 py-2 text-xs text-right tabular-nums">{line.productId ? line.availableStock : "—"}</td>
-                    <td className="px-4 py-2 text-xs text-right tabular-nums">{line.quantity}</td>
-                    <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(line.unitPrice)}</td>
-                    <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(line.discount)}</td>
-                    <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(line.gstAmount)}</td>
-                    <td className="px-4 py-2 text-xs text-right font-semibold tabular-nums">{formatRupee(line.lineTotal)}</td>
-                  </tr>
-                ))}
+                ) : order.lineItems.map(line => {
+                  const product = line.productId ? getProductById(line.productId) : undefined;
+                  return (
+                    <tr key={line.id} className="border-b border-border/60">
+                      <td className="px-4 py-2">
+                        <p className="text-xs font-semibold text-foreground">{line.productName || "—"}</p>
+                        <p className="text-[11px] font-mono text-brand-700">{line.productCode}</p>
+                      </td>
+                      <td className="px-4 py-2 text-xs text-right tabular-nums">{line.productId ? line.availableStock : "—"}</td>
+                      <td className="px-4 py-2 text-xs text-right tabular-nums">{line.quantity}</td>
+                      <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(line.unitPrice)}</td>
+                      <td className="px-4 py-2 text-xs text-right tabular-nums">{line.discount}%</td>
+                      <td className="px-4 py-2 text-xs text-right tabular-nums">
+                        <div className="flex flex-col items-end">
+                          <span className="text-[10px] text-muted-foreground font-semibold">{product?.gstRate || "0%"}</span>
+                          <span>{formatRupee(line.gstAmount)}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-xs text-right font-semibold tabular-nums">{formatRupee(line.lineTotal)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

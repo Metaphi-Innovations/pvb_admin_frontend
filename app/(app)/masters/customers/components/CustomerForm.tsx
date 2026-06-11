@@ -6,10 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CompactToggle } from "@/app/(app)/masters/vendors/components/CompactToggle";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { SearchableSelect } from "./SearchableSelect";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Button } from "@/components/ui/button";
 import {
   type Customer,
@@ -390,6 +392,11 @@ interface ProductCatalogItem {
   productId: string;
   productName: string;
   sku: string;
+  category?: string;
+  unit?: string;
+  packSize?: string;
+  hsnCode?: string;
+  gstRate?: string;
   mrp: number;
 }
 
@@ -404,69 +411,54 @@ function ProductSelect({
   onSelect: (product: ProductCatalogItem) => void;
   disabled?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const selected = products.find(p => p.productId === value);
-  const filtered = products.filter(
-    p =>
-      p.productName.toLowerCase().includes(search.toLowerCase()) ||
-      p.sku.toLowerCase().includes(search.toLowerCase()) ||
-      p.productId.toLowerCase().includes(search.toLowerCase())
-  );
+  const options = products.map((p) => ({
+    value: p.productId,
+    label: `${p.sku} - ${p.productName}`,
+    sublabel: [
+      p.category ? `Category: ${p.category}` : "",
+      p.unit ? `Unit: ${p.unit}` : "",
+      p.packSize ? `Pack Size: ${p.packSize}` : "",
+      p.hsnCode ? `HSN: ${p.hsnCode}` : "",
+      p.gstRate ? `GST: ${p.gstRate}` : "",
+    ].filter(Boolean).join(" | "),
+    trailing: <span className="text-[10px] text-muted-foreground">MRP: ?{p.mrp}</span>,
+  }));
 
   return (
-    <Popover open={open && !disabled} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          disabled={disabled}
-          className="flex items-center justify-between w-full px-2 text-xs text-left border rounded-lg h-7 border-border bg-background hover:bg-muted/30 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <span className={selected ? "text-foreground truncate" : "text-muted-foreground"}>
-            {selected ? `${selected.sku} — ${selected.productName}` : "Select product…"}
+    <AutocompleteSelect
+      options={options}
+      value={value}
+      onChange={(val) => {
+        const prod = products.find((p) => p.productId === val);
+        if (prod) onSelect(prod);
+      }}
+      placeholder="Select product by name, SKU, or code"
+      searchPlaceholder="Search product..."
+      disabled={disabled}
+      className="h-8 text-xs font-normal"
+      renderTriggerLabel={(selectedOpt) => {
+        const option = Array.isArray(selectedOpt) ? selectedOpt[0] : selectedOpt;
+        if (!option) return "Select product by name, SKU, or code";
+        const prod = products.find((p) => p.productId === option.value);
+        const meta = prod
+          ? [
+              prod.category ? `Category: ${prod.category}` : "",
+              prod.unit ? `Unit: ${prod.unit}` : "",
+              prod.packSize ? `Pack Size: ${prod.packSize}` : "",
+              prod.hsnCode ? `HSN: ${prod.hsnCode}` : "",
+              prod.gstRate ? `GST: ${prod.gstRate}` : "",
+            ].filter(Boolean).join(" | ")
+          : "";
+        return (
+          <span className="flex items-center min-w-0 gap-2">
+            <span className="truncate text-foreground">{option.label}</span>
+            {meta && <span className="truncate text-[10px] text-muted-foreground">{meta}</span>}
           </span>
-          <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-        <div className="p-2 border-b border-border">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Search product…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="h-8 pl-8 text-xs focus-visible:ring-0"
-              autoFocus
-            />
-          </div>
-        </div>
-        <div className="max-h-[200px] overflow-y-auto py-1">
-          {filtered.map(p => (
-            <button
-              key={p.productId}
-              type="button"
-              onClick={() => { onSelect(p); setOpen(false); setSearch(""); }}
-              className={cn(
-                "w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-muted/60",
-                value === p.productId && "bg-brand-50",
-              )}
-            >
-              <span className="flex-shrink-0 font-mono text-brand-700">{p.sku}</span>
-              <span className="flex-1 truncate">{p.productName}</span>
-              <span className="text-[10px] text-muted-foreground">MRP: ₹{p.mrp}</span>
-              {value === p.productId && <Check className="w-3.5 h-3.5 text-brand-600" />}
-            </button>
-          ))}
-          {filtered.length === 0 && (
-            <p className="px-3 py-3 text-xs text-center text-muted-foreground">No products found</p>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
+        );
+      }}
+    />
   );
 }
-
 interface CustomerFormProps {
   form: CustomerFormValues;
   onChange: (form: CustomerFormValues) => void;
@@ -474,9 +466,10 @@ interface CustomerFormProps {
   onSetErrors?: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   onClearError: (key: string) => void;
   readOnly?: boolean;
+  isAdd?: boolean;
 }
 
-export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError, readOnly }: CustomerFormProps) {
+export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError, readOnly, isAdd }: CustomerFormProps) {
   const [geoNodes] = useState(() => (typeof window !== "undefined" ? loadGeoNodes() : []));
 
   const [expandedBranches, setExpandedBranches] = useState<Record<number, boolean>>({ 0: true });
@@ -670,7 +663,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
   return (
     <div className="w-full">
       <Tabs defaultValue="basic" className="w-full">
-        <TabsList className="mb-4 w-full">
+        <TabsList className="w-full mb-4">
           <TabsTrigger value="basic" className="text-xs">Basic Details</TabsTrigger>
           <TabsTrigger value="branch" className="text-xs">Branch</TabsTrigger>
           <TabsTrigger value="commercial" className="text-xs">Bank & Commercial</TabsTrigger>
@@ -682,9 +675,9 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
           <div className="space-y-6">
             <div>
               <SectionHead label="Basic Information" />
-              <div className="grid grid-cols-6 gap-6">
+              <div className="grid items-start grid-cols-12 gap-3">
                 {/* Customer Name */}
-                <div className="col-span-2 space-y-1">
+                <div className="col-span-12 space-y-1 md:col-span-3">
                   <Label className="text-xs font-medium">Customer Name <span className="text-red-500">*</span></Label>
                   <Input
                     value={form.customerName}
@@ -697,7 +690,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                 </div>
 
                 {/* Mobile Number */}
-                <div className="col-span-1 space-y-1">
+                <div className="col-span-12 space-y-1 md:col-span-2">
                   <Label className="text-xs font-medium">Mobile Number <span className="text-red-500">*</span></Label>
                   <div className="flex gap-1.5">
                     <CountryCodePicker
@@ -719,7 +712,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                 </div>
 
                 {/* Email Address */}
-                <div className="col-span-2 space-y-1">
+                <div className="col-span-12 space-y-1 md:col-span-3">
                   <Label className="text-xs font-medium">Email Address</Label>
                   <Input
                     type="email"
@@ -733,7 +726,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                 </div>
 
                 {/* Customer Type */}
-                <div className="col-span-1 space-y-1">
+                <div className="col-span-12 space-y-1 md:col-span-2">
                   <Label className="text-xs font-medium">Customer Type <span className="text-red-500">*</span></Label>
                   <SearchableSelect
                     value={form.customerType}
@@ -782,7 +775,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                 </div>
 
                 {/* Sales Man */}
-                <div className="col-span-2 space-y-1">
+                <div className="col-span-12 space-y-1 md:col-span-2">
                   <Label className="text-xs font-medium">Sales Man</Label>
                   <SearchableSelect
                     value={form.salesManId}
@@ -792,12 +785,12 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                     searchPlaceholder="Search sales person..."
                     disabled={readOnly}
                   />
-                  <p className="text-[11px] text-muted-foreground mt-0.5">Only active users are listed</p>
+                  <p className="mt-0.5 min-h-[16px] text-[11px] text-muted-foreground">Only active users are listed</p>
                 </div>
 
                 {/* Block Reason */}
                 {form.status === "blocked" && (
-                  <div className="col-span-4 space-y-1">
+                  <div className="col-span-12 space-y-1">
                     <Label className="text-xs font-medium">Block Reason <span className="text-red-500">*</span></Label>
                     <Textarea
                       value={form.blockReason}
@@ -815,83 +808,133 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
 
             <div className="pt-5 border-t border-border/60">
               <SectionHead label="Tax & Registration" />
-              <div className="grid grid-cols-6 gap-3">
+              
+              
+
+              {/* Row 2+: Registration Fields & Conditional Fields */}
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                {/* CIB Regn # */}
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">CIB Regn #</Label>
+                  <Input
+                    value={form.cibRegn}
+                    onChange={(e) => set("cibRegn", e.target.value)}
+                    disabled={readOnly}
+                    className="h-8 text-xs"
+                  />
+                </div>
+
+                {/* FCO Regn # */}
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">FCO Regn #</Label>
+                  <Input
+                    value={form.fcoRegn}
+                    onChange={(e) => set("fcoRegn", e.target.value)}
+                    disabled={readOnly}
+                    className="h-8 text-xs"
+                  />
+                </div>
+
+                {/* TAN # */}
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">TAN #</Label>
+                  <Input
+                    value={form.tan}
+                    onChange={(e) => set("tan", e.target.value)}
+                    className={inputCls("tan")}
+                    disabled={readOnly}
+                  />
+                </div>
+
+                {/* FSSAI # */}
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">FSSAI #</Label>
+                  <Input
+                    value={form.fssai}
+                    onChange={(e) => set("fssai", e.target.value)}
+                    disabled={readOnly}
+                    className="h-8 text-xs"
+                  />
+                </div>
+                {/* Row 1: Toggle Fields */}
+              <div className="grid grid-cols-1 gap-3 mb-4 md:grid-cols-2">
                 {/* GST Applicable */}
-                <div className="col-span-2 space-y-1">
+                <div className="space-y-1">
                   <Label className="text-xs font-medium">GST Applicable</Label>
-                  <SearchableSelect
-                    value={form.gstApplicable ? "yes" : "no"}
-                    onChange={(value) => {
-                      const yes = value === "yes";
+                  <CompactToggle
+                    checked={form.gstApplicable}
+                    onCheckedChange={(yes) =>
                       onChange({
                         ...form,
                         gstApplicable: yes,
                         gstin: yes ? form.gstin : "",
                         gstMasterId: yes ? form.gstMasterId : "",
-                      });
-                    }}
-                    options={YES_NO_OPTIONS}
+                      })
+                    }
                     disabled={readOnly}
+                    activeLabel="Yes"
+                    inactiveLabel="No"
                   />
                 </div>
 
-                {/* GSTIN */}
-                {form.gstApplicable && (
-                  <>
-                    <div className="col-span-2 space-y-1">
-                      <Label className="text-xs font-medium">GSTIN <span className="text-red-500">*</span></Label>
-                      <Input
-                        value={form.gstin}
-                        onChange={(e) => set("gstin", e.target.value.toUpperCase())}
-                        placeholder="27AABCU9603R1ZX"
-                        className={cn("font-mono", inputCls("gstin"))}
-                        disabled={readOnly}
-                      />
-                      <FieldError msg={errors.gstin} />
-                    </div>
-
-                    {/* GST Master */}
-                    <div className="col-span-2 space-y-1">
-                      <Label className="text-xs font-medium">GST % / GST Code</Label>
-                      <SearchableSelect
-                        value={form.gstMasterId}
-                        onChange={(value) => set("gstMasterId", value)}
-                        options={gstMasters.map((gst) => ({
-                          value: String(gst.id),
-                          label: `${gst.gstId} - ${gst.gstPercentage}%`,
-                          sublabel: gst.gstType,
-                        }))}
-                        placeholder="Select from GST Master..."
-                        searchPlaceholder="Search GST code..."
-                        disabled={readOnly}
-                        error={!!errors.gstMasterId}
-                      />
-                      <FieldError msg={errors.gstMasterId} />
-                    </div>
-                  </>
-                )}
-
                 {/* TDS Applicable */}
-                <div className="col-span-2 space-y-1">
+                <div className="space-y-1">
                   <Label className="text-xs font-medium">TDS Applicable</Label>
-                  <SearchableSelect
-                    value={form.tdsApplicable ? "yes" : "no"}
-                    onChange={(value) => {
-                      const yes = value === "yes";
+                  <CompactToggle
+                    checked={form.tdsApplicable}
+                    onCheckedChange={(yes) =>
                       onChange({
                         ...form,
                         tdsApplicable: yes,
                         tdsMasterId: yes ? form.tdsMasterId : "",
-                      });
-                    }}
-                    options={YES_NO_OPTIONS}
+                      })
+                    }
                     disabled={readOnly}
+                    activeLabel="Yes"
+                    inactiveLabel="No"
                   />
                 </div>
+              </div>
 
-                {/* TDS Master */}
+                {/* Conditional: GSTIN (when GST Applicable is ON) */}
+                {form.gstApplicable && (
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">GSTIN <span className="text-red-500">*</span></Label>
+                    <Input
+                      value={form.gstin}
+                      onChange={(e) => set("gstin", e.target.value.toUpperCase())}
+                      placeholder="27AABCU9603R1ZX"
+                      className={cn("font-mono", inputCls("gstin"))}
+                      disabled={readOnly}
+                    />
+                    <FieldError msg={errors.gstin} />
+                  </div>
+                )}
+
+                {/* Conditional: GST Master (when GST Applicable is ON and not Add mode) */}
+                {form.gstApplicable && !isAdd && (
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">GST % / GST Code</Label>
+                    <SearchableSelect
+                      value={form.gstMasterId}
+                      onChange={(value) => set("gstMasterId", value)}
+                      options={gstMasters.map((gst) => ({
+                        value: String(gst.id),
+                        label: `${gst.gstId} - ${gst.gstPercentage}%`,
+                        sublabel: gst.remarks,
+                      }))}
+                      placeholder="Select from GST Master..."
+                      searchPlaceholder="Search GST code..."
+                      disabled={readOnly || !form.gstApplicable}
+                      error={!!errors.gstMasterId}
+                    />
+                    <FieldError msg={errors.gstMasterId} />
+                  </div>
+                )}
+
+                {/* Conditional: TDS Master (when TDS Applicable is ON) */}
                 {form.tdsApplicable && (
-                  <div className="col-span-2 space-y-1">
+                  <div className="space-y-1">
                     <Label className="text-xs font-medium">TDS % / TDS Section</Label>
                     <SearchableSelect
                       value={form.tdsMasterId}
@@ -908,47 +951,6 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                     <FieldError msg={errors.tdsMasterId} />
                   </div>
                 )}
-
-                {/* Other Registration Numbers */}
-                <div className="col-span-2 space-y-1">
-                  <Label className="text-xs font-medium">CIB Regn #</Label>
-                  <Input
-                    value={form.cibRegn}
-                    onChange={(e) => set("cibRegn", e.target.value)}
-                    disabled={readOnly}
-                    className="h-8 text-xs"
-                  />
-                </div>
-
-                <div className="col-span-2 space-y-1">
-                  <Label className="text-xs font-medium">FCO Regn #</Label>
-                  <Input
-                    value={form.fcoRegn}
-                    onChange={(e) => set("fcoRegn", e.target.value)}
-                    disabled={readOnly}
-                    className="h-8 text-xs"
-                  />
-                </div>
-
-                <div className="col-span-2 space-y-1">
-                  <Label className="text-xs font-medium">TAN #</Label>
-                  <Input
-                    value={form.tan}
-                    onChange={(e) => set("tan", e.target.value)}
-                    className={inputCls("tan")}
-                    disabled={readOnly}
-                  />
-                </div>
-
-                <div className="col-span-2 space-y-1">
-                  <Label className="text-xs font-medium">FSSAI #</Label>
-                  <Input
-                    value={form.fssai}
-                    onChange={(e) => set("fssai", e.target.value)}
-                    disabled={readOnly}
-                    className="h-8 text-xs"
-                  />
-                </div>
               </div>
             </div>
           </div>
@@ -1006,7 +1008,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
             </div>
 
             {/* Bank Details Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-3 mt-4 pt-4 border-t border-border/60">
+            <div className="grid grid-cols-1 pt-4 mt-4 border-t md:grid-cols-2 gap-x-3 gap-y-3 border-border/60">
               {/* Account Holder Name */}
               <div className="space-y-1">
                 <Label className="text-xs font-medium text-foreground">Account Holder Name</Label>
@@ -1591,13 +1593,13 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                                 <p className="text-xs italic text-muted-foreground">Please select a Customer Type in Basic Details to view documents.</p>
                               ) : (
                                 <>
-                                  <div className="overflow-x-auto rounded-lg border border-border/50">
+                                  <div className="overflow-x-auto border rounded-lg border-border/50">
                                     <table className="w-full text-xs min-w-[640px]">
                                       <thead>
-                                        <tr className="bg-muted/25 border-b border-border/50 text-muted-foreground text-left">
+                                        <tr className="text-left border-b bg-muted/25 border-border/50 text-muted-foreground">
                                           <th className="px-3 py-2 font-medium">Document Name</th>
                                           <th className="px-3 py-2 font-medium">Upload File</th>
-                                          <th className="px-3 py-2 w-10" />
+                                          <th className="w-10 px-3 py-2" />
                                         </tr>
                                       </thead>
                                     <tbody>
@@ -1667,7 +1669,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                                                 <Button
                                                   type="button"
                                                   variant="ghost"
-                                                  className="h-8 w-8 p-0 rounded-md hover:bg-red-50 text-red-600 disabled:opacity-30 disabled:hover:bg-transparent"
+                                                  className="w-8 h-8 p-0 text-red-600 rounded-md hover:bg-red-50 disabled:opacity-30 disabled:hover:bg-transparent"
                                                   disabled={!isAttached && doc.required}
                                                   onClick={() => {
                                                     if (doc.required) {
@@ -1711,7 +1713,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
                                       type="button"
                                       variant="outline"
                                       size="sm"
-                                      className="h-8 text-xs mt-1 border-dashed"
+                                      className="h-8 mt-1 text-xs border-dashed"
                                       onClick={() => {
                                         const updatedBranches = [...form.branches];
                                         updatedBranches[bIdx].documents = [
@@ -1793,7 +1795,7 @@ export function CustomerForm({ form, onChange, errors, onSetErrors, onClearError
   );
 }
 
-export function validateCustomerForm(form: CustomerFormValues): Record<string, string> {
+export function validateCustomerForm(form: CustomerFormValues, isAdd?: boolean): Record<string, string> {
   const e: Record<string, string> = {};
   if (!form.customerName.trim()) e.customerName = "Customer name is required";
   if (!form.customerType) e.customerType = "Customer type is required";
@@ -1803,7 +1805,7 @@ export function validateCustomerForm(form: CustomerFormValues): Record<string, s
   if (form.gstApplicable) {
     if (!form.gstin.trim()) e.gstin = "GSTIN is required when GST is applicable";
     else if (!validateGSTIN(form.gstin)) e.gstin = "Invalid GSTIN format";
-    if (!form.gstMasterId) e.gstMasterId = "Select GST code from master";
+    if (!isAdd && !form.gstMasterId) e.gstMasterId = "Select GST code from master";
   }
   if (form.tdsApplicable && !form.tdsMasterId) e.tdsMasterId = "Select TDS section from master";
   

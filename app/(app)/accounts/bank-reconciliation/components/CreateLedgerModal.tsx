@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,11 +11,18 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { CoaParentGroupSelector } from "../../masters/chart-of-accounts/components/CoaParentGroupSelector";
+import { loadChartOfAccounts, type AccountType, type ChartOfAccount } from "../../data";
 import { createLedgerQuick } from "../bank-reconciliation-data";
-import type { AccountType, Ledger } from "../../data";
 
-const ACCOUNT_TYPES: AccountType[] = ["Asset", "Liability", "Income", "Expense", "Equity"];
+const ACCOUNT_TYPES: AccountType[] = ["Asset", "Liability", "Income", "Expense"];
 
 export function CreateLedgerModal({
   open,
@@ -24,22 +31,31 @@ export function CreateLedgerModal({
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onCreated: (ledger: Ledger) => void;
+  onCreated: (ledger: ChartOfAccount) => void;
 }) {
+  const records = useMemo(() => loadChartOfAccounts(), [open]);
+
   const [name, setName] = useState("");
   const [accountType, setAccountType] = useState<AccountType>("Expense");
-  const [linkedAccount, setLinkedAccount] = useState("Miscellaneous");
+  const [parentGroupId, setParentGroupId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSave = () => {
     if (!name.trim()) return;
-    const ledger = createLedgerQuick({
-      ledgerName: name.trim(),
-      accountType,
-      linkedAccount: linkedAccount.trim() || "Miscellaneous",
-    });
-    onCreated(ledger);
-    setName("");
-    onOpenChange(false);
+    try {
+      const ledger = createLedgerQuick({
+        ledgerName: name.trim(),
+        accountType,
+        parentGroupId: parentGroupId ?? undefined,
+      });
+      onCreated(ledger);
+      setName("");
+      setParentGroupId(null);
+      setError(null);
+      onOpenChange(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not create ledger.");
+    }
   };
 
   return (
@@ -48,10 +64,19 @@ export function CreateLedgerModal({
         <DialogHeader>
           <DialogTitle className="text-sm">Create Ledger</DialogTitle>
         </DialogHeader>
+        <p className="text-[11px] text-muted-foreground -mt-2">
+          Ledgers are the only user-created level. Select a valid Sub-Group parent.
+        </p>
+        {error && <p className="text-xs text-red-600">{error}</p>}
         <div className="space-y-3 py-1">
           <div className="space-y-1">
             <Label className="text-xs">Ledger Name</Label>
-            <Input className="h-8 text-xs" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Bank Charges" />
+            <Input
+              className="h-8 text-xs"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Bank Charges"
+            />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Account Type</Label>
@@ -69,15 +94,24 @@ export function CreateLedgerModal({
             </Select>
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">Linked Account (group)</Label>
-            <Input className="h-8 text-xs" value={linkedAccount} onChange={(e) => setLinkedAccount(e.target.value)} />
+            <Label className="text-xs">Parent Group / Sub-Group</Label>
+            <CoaParentGroupSelector
+              records={records}
+              value={parentGroupId}
+              onChange={setParentGroupId}
+            />
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={handleSave} disabled={!name.trim()}>
+          <Button
+            size="sm"
+            className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+            onClick={handleSave}
+            disabled={!name.trim()}
+          >
             Save Ledger
           </Button>
         </DialogFooter>

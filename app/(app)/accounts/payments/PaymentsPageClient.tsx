@@ -82,7 +82,7 @@ export default function PaymentsPageClient() {
       <div className="max-w-[1680px] mx-auto space-y-3">
         <PageHeader
           title="Payments"
-          description="Process and track outgoing payments for purchases, expenses, and approved TA/DA claims."
+          description="Process and track outgoing payments for purchases and approved TA/DA claims."
           breadcrumbs={PAYMENTS_BREADCRUMB}
           actions={
             <div className="flex items-center gap-2">
@@ -208,9 +208,9 @@ export default function PaymentsPageClient() {
                         )}
                       </td>
                       <td className="px-2.5 py-2 text-xs font-mono">{r.sourceReferenceNo || "—"}</td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums">{formatINR(r.approvedAmount)}</td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums">{formatINR(r.paidAmount)}</td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums font-medium text-amber-700">{formatINR(r.balanceAmount)}</td>
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.approvedAmount)}</td>
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.paidAmount)}</td>
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.balanceAmount)}</td>
                       <td className="px-2.5 py-2">
                         <PaymentStatusBadge status={r.paymentStatus} />
                       </td>

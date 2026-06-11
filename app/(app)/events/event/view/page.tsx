@@ -73,7 +73,7 @@ function resolveLocationDisplay(event: Event, geoNodes: GeoNode[]) {
     Area: withSuffix(fallbackDistrict, "Area"),
     Territory: withSuffix(fallbackDistrict, "Territory"),
     Locality: fallbackLocality,
-    City: event.district || event.state || "Event City",
+    Pincode: event.district || event.state || "Event Pincode",
   };
 
   const getNodeName = (level: GeoLevel) => {
@@ -89,7 +89,7 @@ function resolveLocationDisplay(event: Event, geoNodes: GeoNode[]) {
     Area: getNodeName("Area"),
     Territory: getNodeName("Territory"),
     Locality: getNodeName("Locality"),
-    City: getNodeName("City"),
+    Pincode: getNodeName("Pincode"),
   };
 }
 

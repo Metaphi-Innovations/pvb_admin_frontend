@@ -17,8 +17,8 @@ export default function GenerateGrnPage() {
 
   // Header Info
   const [grnNo, setGrnNo] = useState("");
-  const [selectedPoNo, setSelectedPoNo] = useState("");
   const [vendor, setVendor] = useState("");
+  const [selectedPoNos, setSelectedPoNos] = useState<string[]>([]);
   const [warehouse, setWarehouse] = useState("Central Warehouse");
   const [grnDate, setGrnDate] = useState(new Date().toISOString().split("T")[0]);
 
@@ -33,45 +33,74 @@ export default function GenerateGrnPage() {
     setGrnNo(`GRN-2024-${nextNum.toString().padStart(3, "0")}`);
   }, []);
 
+  // Vendor list based on Mock POs
+  const vendors = useMemo(() => {
+    const unique = new Set(MOCK_POS.map((po) => po.vendorName));
+    return Array.from(unique);
+  }, []);
+
+  // POs filtered by selected vendor
+  const availablePos = useMemo(() => {
+    if (!vendor) return [];
+    return MOCK_POS.filter((po) => po.vendorName === vendor);
+  }, [vendor]);
+
+  // Sync Vendor Selection
+  const handleVendorChange = (selectedVendor: string) => {
+    setVendor(selectedVendor);
+    setSelectedPoNos([]);
+    setItems([]);
+    setBatches([]);
+  };
+
   // Sync PO Selection
-  const handlePoChange = (poNum: string) => {
-    setSelectedPoNo(poNum);
-    const po = MOCK_POS.find((p) => p.poNumber === poNum);
-    if (po) {
-      setVendor(po.vendorName);
-      // Map ordered products to items detail list
-      setItems(
-        po.items.map((it) => ({
-          productId: it.productId,
-          productName: it.productName,
-          productCode: it.productCode,
-          orderedQty: it.orderedQty,
-          receivedQty: it.orderedQty, // default received to ordered
-        }))
-      );
+  const handlePoChange = (poNums: string[]) => {
+    setSelectedPoNos(poNums);
+    const pos = MOCK_POS.filter((p) => poNums.includes(p.poNumber));
+    if (pos.length > 0) {
+      // Map ordered products to items detail list (keeping them separated by PO)
+      const listItems: GrnItem[] = [];
+      pos.forEach((po) => {
+        po.items.forEach((it) => {
+          listItems.push({
+            productId: it.productId,
+            productName: it.productName,
+            productCode: it.productCode,
+            orderedQty: it.orderedQty,
+            receivedQty: it.orderedQty,
+            poNumber: po.poNumber,
+          });
+        });
+      });
+      setItems(listItems);
+
       // Set single default empty batch row using first product
-      setBatches([
-        {
-          productId: po.items[0].productId,
-          productName: po.items[0].productName,
-          batchNumber: "",
-          mfgDate: "",
-          expDate: "",
-          quantity: po.items[0].orderedQty,
-        },
-      ]);
+      if (listItems.length > 0) {
+        setBatches([
+          {
+            productId: listItems[0].productId,
+            productName: listItems[0].productName,
+            batchNumber: "",
+            mfgDate: "",
+            expDate: "",
+            quantity: listItems[0].receivedQty,
+            poNumber: listItems[0].poNumber,
+          },
+        ]);
+      } else {
+        setBatches([]);
+      }
     } else {
-      setVendor("");
       setItems([]);
       setBatches([]);
     }
   };
 
   // Handle updates to item received quantities
-  const handleItemQtyChange = (productId: string, val: string) => {
+  const handleItemQtyChange = (productId: string, poNumber: string, val: string) => {
     const qty = Math.max(0, parseInt(val) || 0);
     setItems((prev) =>
-      prev.map((it) => (it.productId === productId ? { ...it, receivedQty: qty } : it))
+      prev.map((it) => (it.productId === productId && it.poNumber === poNumber ? { ...it, receivedQty: qty } : it))
     );
   };
 
@@ -87,6 +116,7 @@ export default function GenerateGrnPage() {
         mfgDate: "",
         expDate: "",
         quantity: 0,
+        poNumber: items[0].poNumber,
       },
     ]);
   };
@@ -103,11 +133,13 @@ export default function GenerateGrnPage() {
         if (i !== idx) return b;
         
         if (field === "productId") {
-          const prod = items.find((it) => it.productId === val);
+          const [prodId, poNum] = val.split("::");
+          const prod = items.find((it) => it.productId === prodId && it.poNumber === poNum);
           return {
             ...b,
-            productId: val,
+            productId: prodId,
             productName: prod ? prod.productName : "",
+            poNumber: poNum,
           };
         }
         
@@ -121,8 +153,12 @@ export default function GenerateGrnPage() {
 
   // Save/Submit Form Action
   const handleSubmit = (status: GrnStatus) => {
-    if (!selectedPoNo) {
-      alert("Please select a Purchase Order.");
+    if (!vendor) {
+      alert("Please select a Vendor.");
+      return;
+    }
+    if (selectedPoNos.length === 0) {
+      alert("Please select at least one Purchase Order.");
       return;
     }
     if (!warehouse) {
@@ -142,15 +178,15 @@ export default function GenerateGrnPage() {
       return;
     }
 
-    // Verify batch quantities sum matches items received quantities sum for each item
+    // Verify batch quantities sum matches items received quantities sum for each item (matching by productId and poNumber)
     for (const it of items) {
       const batchSum = batches
-        .filter((b) => b.productId === it.productId)
+        .filter((b) => b.productId === it.productId && b.poNumber === it.poNumber)
         .reduce((sum, b) => sum + (Number(b.quantity) || 0), 0);
         
       if (batchSum !== it.receivedQty && status === "qc_pending") {
         alert(
-          `Total batch quantity (${batchSum}) allocated for ${it.productName} does not match total received quantity (${it.receivedQty}).`
+          `Total batch quantity (${batchSum}) allocated for ${it.productName} (${it.poNumber}) does not match total received quantity (${it.receivedQty}).`
         );
         return;
       }
@@ -159,7 +195,7 @@ export default function GenerateGrnPage() {
     const newRecord: GrnRecord = {
       id: `grn-${Date.now()}`,
       grnNo,
-      poNumber: selectedPoNo,
+      poNumber: selectedPoNos.join(", "),
       vendorName: vendor,
       warehouse,
       grnDate,
@@ -209,23 +245,29 @@ export default function GenerateGrnPage() {
             className="h-8 text-xs font-mono font-bold bg-muted/30"
           />
 
-          <Field label="PO Number">
+          <Field label="Vendor">
             <AutocompleteSelect
-              options={MOCK_POS.map((po) => ({ value: po.poNumber, label: po.poNumber }))}
-              value={selectedPoNo}
-              onChange={handlePoChange}
-              placeholder="Select PO..."
-              searchPlaceholder="Search PO..."
+              options={vendors.map((v) => ({ value: v, label: v }))}
+              value={vendor}
+              onChange={handleVendorChange}
+              placeholder="Select Vendor..."
+              searchPlaceholder="Search Vendor..."
               className="h-8 text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none"
             />
           </Field>
 
-          <TextField
-            label="Vendor"
-            value={vendor}
-            readOnly
-            className="h-8 text-xs bg-muted/30 font-medium"
-          />
+          <Field label="PO Number">
+            <AutocompleteSelect
+              options={availablePos.map((po) => ({ value: po.poNumber, label: po.poNumber }))}
+              value={selectedPoNos}
+              onChange={handlePoChange}
+              placeholder="Select PO(s)..."
+              searchPlaceholder="Search PO..."
+              multiple={true}
+              disabled={!vendor}
+              className="h-8 text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none"
+            />
+          </Field>
 
           <Field label="Warehouse Destination">
             <AutocompleteSelect
@@ -259,21 +301,25 @@ export default function GenerateGrnPage() {
       <FormSection title="Section 2: Ordered Items Summary">
         {items.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-4">
-            Select a Purchase Order to view items details list.
+            Select a vendor and at least one Purchase Order to view items details list.
           </p>
         ) : (
           <div className="border border-border rounded-lg overflow-hidden">
             <table className="w-full">
               <thead>
                 <tr className="bg-muted/40 border-b border-border">
+                  <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground w-36">PO Number</th>
                   <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground">Product</th>
                   <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-36">Ordered Qty</th>
                   <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-36">Received Qty</th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((it) => (
-                  <tr key={it.productId} className="border-b border-border/50">
+                {items.map((it, idx) => (
+                  <tr key={`${it.productId}-${it.poNumber}-${idx}`} className="border-b border-border/50">
+                    <td className="px-4 py-2 text-xs font-mono font-bold text-muted-foreground">
+                      {it.poNumber}
+                    </td>
                     <td className="px-4 py-2 text-xs font-semibold text-foreground">
                       {it.productName}
                       <span className="block text-[10px] text-muted-foreground font-mono">{it.productCode}</span>
@@ -283,7 +329,7 @@ export default function GenerateGrnPage() {
                       <Input
                         type="number"
                         value={it.receivedQty}
-                        onChange={(e) => handleItemQtyChange(it.productId, e.target.value)}
+                        onChange={(e) => handleItemQtyChange(it.productId, it.poNumber || "", e.target.value)}
                         className="h-8 text-xs text-center w-24 mx-auto"
                       />
                     </td>
@@ -339,8 +385,11 @@ export default function GenerateGrnPage() {
                     <tr key={idx} className="border-b border-border/50">
                       <td className="px-4 py-2 text-xs">
                          <AutocompleteSelect
-                           options={items.map((it) => ({ value: it.productId, label: it.productName }))}
-                           value={b.productId}
+                           options={items.map((it) => ({
+                             value: `${it.productId}::${it.poNumber}`,
+                             label: `${it.productName} (${it.poNumber})`
+                           }))}
+                           value={`${b.productId}::${b.poNumber}`}
                            onChange={(val) => handleBatchUpdate(idx, "productId", val)}
                            placeholder="Select product..."
                            searchPlaceholder="Search product..."

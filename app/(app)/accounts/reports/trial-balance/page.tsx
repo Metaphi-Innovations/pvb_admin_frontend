@@ -1,39 +1,39 @@
 "use client";
 
-import { AppLayout } from "@/components/layout/AppLayout";
-import { getTrialBalanceRows } from "../../data";
+import React, { useMemo } from "react";
+import { formatBalanceAmount, formatMoney } from "@/lib/accounts/money-format";
+import { computeTrialBalanceRows } from "@/lib/accounts/ledger-reports";
+import { AccountingReportPage } from "../../components/AccountingReportPage";
 
 export default function TrialBalancePage() {
-  const rows = getTrialBalanceRows();
+  const rows = useMemo(
+    () =>
+      computeTrialBalanceRows().map((r) => ({
+        ledger: r.ledger,
+        primaryHead: r.primaryHead,
+        group: `${r.accountGroup} › ${r.subGroup}`,
+        opening: formatBalanceAmount(r.opening, r.openingBalanceType),
+        debit: formatMoney(r.debit),
+        credit: formatMoney(r.credit),
+        closing: formatBalanceAmount(r.closing.amount, r.closing.balanceType),
+      })),
+    [],
+  );
+
   return (
-    <AppLayout>
-      <div className="max-w-[1200px] mx-auto space-y-4">
-        <h1 className="text-lg font-semibold">Trial Balance</h1>
-        <div className="bg-white border border-border/60 rounded-lg overflow-x-auto">
-          <table className="w-full min-w-[900px] text-sm">
-            <thead className="bg-muted/20 border-b border-border/60">
-              <tr>
-                <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">Ledger</th>
-                <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">Opening Balance</th>
-                <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">Debit</th>
-                <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">Credit</th>
-                <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">Closing Balance</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.ledger} className="border-b border-border/40 last:border-0 h-11">
-                  <td className="px-3 py-2 text-xs">{r.ledger}</td>
-                  <td className="px-3 py-2 text-xs">{r.opening.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-xs">{r.debit.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-xs">{r.credit.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-xs font-semibold">{r.closing.toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </AppLayout>
+    <AccountingReportPage
+      title="Trial Balance"
+      description="Ledger-wise trial balance from voucher postings (Primary Head → Group → Sub-Group → Ledger)"
+      columns={[
+        { key: "ledger", label: "Ledger" },
+        { key: "primaryHead", label: "Primary Head" },
+        { key: "group", label: "Group Path" },
+        { key: "opening", label: "Opening", align: "right", money: true },
+        { key: "debit", label: "Debit", align: "right", money: true },
+        { key: "credit", label: "Credit", align: "right", money: true },
+        { key: "closing", label: "Closing", align: "right", money: true },
+      ]}
+      rows={rows}
+    />
   );
 }

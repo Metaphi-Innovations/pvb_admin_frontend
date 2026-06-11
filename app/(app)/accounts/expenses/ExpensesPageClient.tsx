@@ -169,13 +169,13 @@ export default function ExpensesPageClient() {
                       <td className="px-2.5 py-2 text-xs font-mono text-muted-foreground">{r.employeeCode}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.claimDate}</td>
                       <td className="px-2.5 py-2 text-xs">{r.categoryName}</td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums">{formatINR(r.claimedAmount)}</td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums text-emerald-700">{formatINR(r.approvedAmount)}</td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums text-amber-800">
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.claimedAmount)}</td>
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.approvedAmount)}</td>
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">
                         {getRejectedAmount(r) > 0 ? formatINR(getRejectedAmount(r)) : "—"}
                       </td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums">{formatINR(r.paidAmount)}</td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums font-medium text-amber-700">
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.paidAmount)}</td>
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">
                         {formatINR(getPendingPaymentAmount(r))}
                       </td>
                       <td className="px-2.5 py-2">
