@@ -80,6 +80,15 @@ export default function DocumentTypesPage() {
 
   const columns: ColumnConfig<DocumentTypeMaster>[] = [
     {
+      key: "documentTypeCode",
+      header: "Document Type Code",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "180px",
+      render: (val, row) => <span className="font-mono font-semibold text-foreground">{row.documentTypeCode}</span>,
+    },
+    {
       key: "title",
       header: "Title",
       sortable: true,
@@ -100,6 +109,22 @@ export default function DocumentTypesPage() {
       filterType: "text",
       width: "480px",
       render: (val, row) => row.description || "—",
+    },
+    {
+      key: "createdBy",
+      header: "Created By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
     },
     {
       key: "status",
@@ -134,6 +159,7 @@ export default function DocumentTypesPage() {
     if (filters.search) {
       const q = String(filters.search).trim().toLowerCase();
       result = result.filter(r =>
+        r.documentTypeCode.toLowerCase().includes(q) ||
         r.title.toLowerCase().includes(q) ||
         (r.description || "").toLowerCase().includes(q)
       );
@@ -186,11 +212,11 @@ export default function DocumentTypesPage() {
         </div>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-3 gap-3">
+        {/* <div className="grid grid-cols-3 gap-3">
           <MiniKPICard label="Total Document Types" value={total} icon={FileText} accent={true} />
           <MiniKPICard label="Active" value={active} icon={CheckCircle2} accent={false} />
           <MiniKPICard label="Inactive" value={inactive} icon={XCircle} accent={false} />
-        </div>
+        </div> */}
 
         {/* Table Listing */}
         <MasterListing<DocumentTypeMaster>
@@ -223,7 +249,7 @@ export default function DocumentTypesPage() {
           )}
         >
           {toast.msg}
-          <button onClick={() => setToast(null)} className="ml-1 opacity-70 hover:opacity-100 flex-shrink-0">
+          <button onClick={() => setToast(null)} className="flex-shrink-0 ml-1 opacity-70 hover:opacity-100">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>

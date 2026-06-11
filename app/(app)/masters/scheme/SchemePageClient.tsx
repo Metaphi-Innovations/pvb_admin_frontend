@@ -212,6 +212,22 @@ export default function SchemeMasterPage() {
       width: "110px",
     },
     {
+      key: "createdBy",
+      header: "Created By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
       key: "status",
       header: "Status",
       sortable: true,
@@ -409,7 +425,7 @@ export default function SchemeMasterPage() {
           <p className="mt-0.5 text-xs text-muted-foreground">Promotional and pricing schemes</p>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        {/* <div className="grid grid-cols-3 gap-3">
           <MiniKPICard label="Total Schemes" value={records.length} icon={Gift} accent={true} />
           <MiniKPICard
             label="Active"
@@ -423,7 +439,7 @@ export default function SchemeMasterPage() {
             icon={XCircle}
             accent={false}
           />
-        </div>
+        </div> */}
 
         <MasterListing<SchemeRecord>
           columns={columns}
@@ -518,13 +534,14 @@ export default function SchemeMasterPage() {
                     </Label>
                     <Input
                       value={sheetMode === "add" ? nextAutoCode : form.schemeCode}
-                      disabled={sheetMode === "edit"}
+                      disabled
+                      readOnly
                       onChange={(e) => {
                         setForm((prev) => ({ ...prev, schemeCode: e.target.value }));
                         setErrors((prev) => ({ ...prev, schemeCode: "", _form: "" }));
                       }}
                       placeholder="e.g., SCH-001"
-                      className="h-8 font-mono text-xs cursor-not-allowed disabled:opacity-50 bg-muted/30"
+                      className="h-8 font-mono text-xs cursor-not-allowed disabled:opacity-100 bg-muted/30"
                     />
                   </div>
 

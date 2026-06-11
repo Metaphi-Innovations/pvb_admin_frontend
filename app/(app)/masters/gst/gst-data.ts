@@ -4,10 +4,8 @@ export interface GSTMaster {
   id: number;
   gstId: string;             // Auto Generated, e.g., "GST-0001"
   gstCode?: string;          // Optional code field compatible with CustomerInfoDialog
-  gstName: string;           // Text
   gstPercentage: number;     // Decimal
-  gstType: "CGST" | "SGST" | "IGST" | "UTGST"; // Dropdown
-  applicableFromDate: string; // Date (YYYY-MM-DD)
+  remarks?: string;          // Optional remarks/remark field
   status: "active" | "inactive";
   createdBy: string;
   createdDate: string;       // YYYY-MM-DD
@@ -20,10 +18,8 @@ const SEED_GST: GSTMaster[] = [
     id: 1,
     gstId: "GST-0001",
     gstCode: "GST-0001",
-    gstName: "Zero GST CGST",
     gstPercentage: 0.0,
-    gstType: "CGST",
-    applicableFromDate: "2026-01-01",
+    remarks: "Zero rate basic GST",
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-01-10",
@@ -34,10 +30,8 @@ const SEED_GST: GSTMaster[] = [
     id: 2,
     gstId: "GST-0002",
     gstCode: "GST-0002",
-    gstName: "Essential SGST",
     gstPercentage: 2.5,
-    gstType: "SGST",
-    applicableFromDate: "2026-01-01",
+    remarks: "Essential goods rate",
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-01-12",
@@ -48,10 +42,8 @@ const SEED_GST: GSTMaster[] = [
     id: 3,
     gstId: "GST-0003",
     gstCode: "GST-0003",
-    gstName: "Standard IGST",
     gstPercentage: 18.0,
-    gstType: "IGST",
-    applicableFromDate: "2026-01-01",
+    remarks: "Standard rate for services and manufacturing",
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-01-15",

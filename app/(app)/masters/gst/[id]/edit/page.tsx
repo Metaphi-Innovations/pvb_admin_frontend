@@ -6,6 +6,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, Save, AlertCircle, ChevronsUpDown, Check } from "lucide-react";
@@ -99,10 +100,8 @@ export default function EditGSTPage() {
 
   const [record, setRecord] = useState<GSTMaster | null>(null);
   const [form, setForm] = useState({
-    gstName: "",
     gstPercentage: 0,
-    gstType: "CGST" as "CGST" | "SGST" | "IGST" | "UTGST",
-    applicableFromDate: "",
+    remarks: "",
     status: "active" as "active" | "inactive",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -116,10 +115,8 @@ export default function EditGSTPage() {
     }
     setRecord(found);
     setForm({
-      gstName: found.gstName,
       gstPercentage: found.gstPercentage,
-      gstType: found.gstType,
-      applicableFromDate: found.applicableFromDate,
+      remarks: found.remarks || "",
       status: found.status,
     });
   }, [id, router]);
@@ -137,11 +134,9 @@ export default function EditGSTPage() {
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
-    if (!form.gstName.trim()) e.gstName = "GST Name is required";
     if (form.gstPercentage === undefined || form.gstPercentage === null || form.gstPercentage < 0) {
       e.gstPercentage = "GST Percentage is required and must be non-negative";
     }
-    if (!form.applicableFromDate) e.applicableFromDate = "Applicable From Date is required";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -153,10 +148,8 @@ export default function EditGSTPage() {
       r.id === id
         ? {
             ...r,
-            gstName: form.gstName,
             gstPercentage: form.gstPercentage,
-            gstType: form.gstType,
-            applicableFromDate: form.applicableFromDate,
+            remarks: form.remarks,
             status: form.status,
             updatedBy: "Admin",
             updatedDate: todayStr(),
@@ -213,7 +206,7 @@ export default function EditGSTPage() {
           <SectionHead label="GST Details" />
           <div className="grid grid-cols-4 gap-3">
             {/* GST ID (Read Only) */}
-            <div className="col-span-1 space-y-1">
+            <div className="col-span-2 space-y-1">
               <Label className="text-xs font-medium">GST ID</Label>
               <Input
                 value={record.gstId}
@@ -222,37 +215,8 @@ export default function EditGSTPage() {
               />
             </div>
 
-            {/* Status */}
-            <div className="col-span-1">
-              <AC
-                label="Status"
-                required
-                value={form.status}
-                onChange={v => set("status", v)}
-                options={[
-                  { value: "active", label: "Active" },
-                  { value: "inactive", label: "Inactive" },
-                ]}
-                placeholder="Select status…"
-              />
-            </div>
-
-            {/* GST Name */}
-            <div className="col-span-2 space-y-1">
-              <Label className="text-xs font-medium">
-                GST Name <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                value={form.gstName}
-                onChange={e => set("gstName", e.target.value)}
-                placeholder="e.g., Standard IGST"
-                className={cn("h-8 text-xs", errors.gstName && "border-red-400 focus-visible:ring-red-300")}
-              />
-              <FieldError msg={errors.gstName} />
-            </div>
-
             {/* GST Percentage */}
-            <div className="col-span-1 space-y-1">
+            <div className="col-span-2 space-y-1">
               <Label className="text-xs font-medium">
                 GST Percentage <span className="text-red-500">*</span>
               </Label>
@@ -268,35 +232,16 @@ export default function EditGSTPage() {
               <FieldError msg={errors.gstPercentage} />
             </div>
 
-            {/* GST Type */}
-            <div className="col-span-1">
-              <AC
-                label="GST Type"
-                required
-                value={form.gstType}
-                onChange={v => set("gstType", v)}
-                options={[
-                  { value: "CGST", label: "CGST" },
-                  { value: "SGST", label: "SGST" },
-                  { value: "IGST", label: "IGST" },
-                  { value: "UTGST", label: "UTGST" },
-                ]}
-                placeholder="Select type…"
+            {/* Remarks */}
+            <div className="col-span-4 space-y-1">
+              <Label className="text-xs font-medium">Remarks</Label>
+              <Textarea
+                value={form.remarks}
+                onChange={e => set("remarks", e.target.value)}
+                placeholder="Enter remarks"
+                rows={3}
+                className="text-xs resize-none rounded-lg min-h-[72px]"
               />
-            </div>
-
-            {/* Applicable From Date */}
-            <div className="col-span-2 space-y-1">
-              <Label className="text-xs font-medium">
-                Applicable From Date <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                type="date"
-                value={form.applicableFromDate}
-                onChange={e => set("applicableFromDate", e.target.value)}
-                className={cn("h-8 text-xs", errors.applicableFromDate && "border-red-400 focus-visible:ring-red-300")}
-              />
-              <FieldError msg={errors.applicableFromDate} />
             </div>
           </div>
         </div>

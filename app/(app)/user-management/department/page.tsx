@@ -59,8 +59,8 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
       toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
     )}>
       {toast.type === "success"
-        ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-        : <XCircle      className="w-4 h-4 flex-shrink-0" />}
+        ? <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
+        : <XCircle      className="flex-shrink-0 w-4 h-4" />}
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
         <X className="w-3.5 h-3.5" />
@@ -123,7 +123,7 @@ function KpiCard({ label, value, icon: Icon, accent }: {
   label: string; value: number; icon: React.ElementType; accent?: boolean;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
+    <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
       <div className={cn(
         "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
         accent ? "bg-brand-600" : "bg-muted",
@@ -131,7 +131,7 @@ function KpiCard({ label, value, icon: Icon, accent }: {
         <Icon className={cn("w-4 h-4", accent ? "text-white" : "text-muted-foreground")} />
       </div>
       <div>
-        <p className="text-base font-bold text-foreground leading-none">{value}</p>
+        <p className="text-base font-bold leading-none text-foreground">{value}</p>
         <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{label}</p>
       </div>
     </div>
@@ -299,7 +299,7 @@ export default function DepartmentPage() {
       sortable: true,
       render: (val, row) => (
         <button
-          className="text-xs font-semibold text-foreground hover:text-brand-600 transition-colors text-left"
+          className="text-xs font-semibold text-left transition-colors text-foreground hover:text-brand-600"
           onClick={() => setViewDept(row)}
         >
           {row.name}
@@ -380,7 +380,7 @@ export default function DepartmentPage() {
             <DropdownMenuItem onClick={() => openEdit(row)} className="cursor-pointer">
               <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleQuickToggle(row)} className="cursor-pointer">
+            {/* <DropdownMenuItem onClick={() => handleQuickToggle(row)} className="cursor-pointer">
               {row.status === "active" ? (
                 <>
                   <XCircle className="w-3.5 h-3.5 mr-2 text-amber-500" /> Deactivate
@@ -390,11 +390,11 @@ export default function DepartmentPage() {
                   <CheckCircle2 className="w-3.5 h-3.5 mr-2 text-emerald-500" /> Activate
                 </>
               )}
-            </DropdownMenuItem>
+            </DropdownMenuItem> */}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => handleDelete(row)} className="cursor-pointer text-red-600 focus:bg-red-50 focus:text-red-600">
+            {/* <DropdownMenuItem onClick={() => handleDelete(row)} className="text-red-600 cursor-pointer focus:bg-red-50 focus:text-red-600">
               <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
-            </DropdownMenuItem>
+            </DropdownMenuItem> */}
           </DropdownMenuContent>
         </DropdownMenu>
       ),

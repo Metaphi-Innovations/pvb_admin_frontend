@@ -33,16 +33,13 @@ export interface Product {
   subCategory: string;
   segment: string;
   formulation: string;
-  unit: string;
   hsnCode: string;
   gstRate: string;
   sku: string;
   cropApplicable: string;
-  packSize: string;
   mrp: number;
   costPrice: number;
   distributorPrice: number;
-  reorderLevel: string;
   status: ProductStatus;
   createdBy: string;
   createdDate: string;
@@ -180,16 +177,13 @@ const SEED_PRODUCTS: Product[] = [
     subCategory: "",
     segment: "Premium",
     formulation: "Powder",
-    unit: "Packet",
     hsnCode: "1209",
     gstRate: "0%",
     sku: "SEED-CORN-001",
     cropApplicable: "Corn",
-    packSize: "1 KG",
     mrp: 1450,
     costPrice: 0,
     distributorPrice: 0,
-    reorderLevel: "Medium",
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-01-10",
@@ -204,7 +198,7 @@ const SEED_PRODUCTS: Product[] = [
         type: "media",
         mediaKind: "image",
         name: "dharitri-hybrid-corn-gold.jpg",
-        url: "https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=1200&q=80",
+        url: "https://images.unsplash.com/photo-1464226184884-fa280b77c399?auto=format&fit=crop&w=1200&q=80",
         uploaded: true,
         createdAt: "2026-06-03",
       },
@@ -246,16 +240,13 @@ const SEED_PRODUCTS: Product[] = [
     subCategory: "",
     segment: "Commercial",
     formulation: "Powder",
-    unit: "KG",
     hsnCode: "3105",
     gstRate: "5%",
     sku: "FERT-WSF-019",
     cropApplicable: "Vegetables",
-    packSize: "25 KG",
     mrp: 1325,
     costPrice: 0,
     distributorPrice: 0,
-    reorderLevel: "High",
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-01-18",
@@ -284,16 +275,13 @@ const SEED_PRODUCTS: Product[] = [
     subCategory: "",
     segment: "Retail",
     formulation: "Emulsifiable Concentrate (EC)",
-    unit: "Bottle",
     hsnCode: "3808",
     gstRate: "18%",
     sku: "PEST-EC-221",
     cropApplicable: "Cotton",
-    packSize: "500 ML",
     mrp: 680,
     costPrice: 0,
     distributorPrice: 0,
-    reorderLevel: "Medium",
     status: "inactive",
     createdBy: "Admin",
     createdDate: "2026-02-03",
@@ -312,16 +300,13 @@ const SEED_PRODUCTS: Product[] = [
     subCategory: "",
     segment: "Institutional",
     formulation: "Suspension",
-    unit: "Liter",
     hsnCode: "3002",
     gstRate: "12%",
     sku: "BIO-SUS-104",
     cropApplicable: "Paddy",
-    packSize: "1 Liter",
     mrp: 890,
     costPrice: 0,
     distributorPrice: 0,
-    reorderLevel: "Low",
     status: "draft",
     createdBy: "Admin",
     createdDate: "2026-02-16",
@@ -345,16 +330,13 @@ function migrateProduct(raw: Record<string, unknown>): Product {
     subCategory: p.subCategory ?? "",
     segment: p.segment ?? "",
     formulation: p.formulation ?? "",
-    unit: p.unit ?? "",
     hsnCode: p.hsnCode ?? "",
     gstRate: p.gstRate ?? "18%",
     sku: p.sku ?? "",
     cropApplicable: p.cropApplicable ?? "",
-    packSize: p.packSize ?? "",
     mrp: Number(p.mrp ?? 0),
     costPrice: Number(p.costPrice ?? 0),
     distributorPrice: Number(p.distributorPrice ?? 0),
-    reorderLevel: p.reorderLevel ?? "Medium",
     status: (p.status as ProductStatus) ?? "active",
     createdBy: p.createdBy ?? "Admin",
     createdDate: p.createdDate ?? todayStr(),
