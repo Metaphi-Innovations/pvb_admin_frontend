@@ -46,6 +46,11 @@ export default function CategoryPageClient() {
         recordFromForm: formToCategory,
         validate: (f) => validateCategoryForm(f),
         setCodeOnForm: (f, code) => ({ ...f, categoryCode: code }),
+        auditColumnVariant: "product",
+        auditColumnHeaders: {
+          created: "Created",
+          updated: "Updated",
+        },
         renderFormFields: ({ form, setForm, errors }) => (
           <MasterFormGrid>
             <NameCodeDescriptionFields

@@ -338,7 +338,7 @@ export default function EmployeeDetailPage() {
 
   return (
     <AppLayout>
-      <div className="max-w-[800px] mx-auto space-y-5">
+      <div className="space-y-5 w-full">
         {/* Header */}
         <div className="flex items-start gap-4">
           <Button

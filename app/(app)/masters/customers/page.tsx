@@ -37,6 +37,21 @@ import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 
+function AuditCell({
+  name,
+  date,
+}: {
+  name?: string;
+  date?: string;
+}) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[11px] font-semibold leading-4 text-brand-700">{name || "—"}</p>
+      <p className="text-[10px] font-mono leading-3 text-muted-foreground">{date || "—"}</p>
+    </div>
+  );
+}
+
 function KpiCard({
   label,
   value,
@@ -135,6 +150,15 @@ export default function CustomersPage() {
 
   const columns: ColumnConfig<Customer>[] = [
     {
+      key: "customerCode",
+      header: "Customer Code",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "130px",
+      render: (val, row) => <span className="font-mono text-xs text-brand-700">{row.customerCode}</span>,
+    },
+    {
       key: "customerName",
       header: "Customer Name",
       sortable: true,
@@ -145,15 +169,11 @@ export default function CustomersPage() {
         <div>
           {perms.canView ? (
             <Link href={`/masters/customers/${row.id}`} className="block group/name">
-              <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">
-                {row.customerName}
-              </p>
-              <p className="font-mono text-[10px] text-brand-700 mt-0.5 leading-3">{row.customerCode}</p>
+              <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">{row.customerName}</p>
             </Link>
           ) : (
             <div>
               <p className="text-xs font-semibold leading-4 text-foreground">{row.customerName}</p>
-              <p className="font-mono text-[10px] text-brand-700 mt-0.5 leading-3">{row.customerCode}</p>
             </div>
           )}
         </div>
@@ -244,22 +264,6 @@ export default function CustomersPage() {
       render: (val, row) => formatCreditLimit(row.creditLimit),
     },
     {
-      key: "createdBy",
-      header: "Created By",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-    },
-    {
-      key: "updatedBy",
-      header: "Updated By",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-    },
-    {
       key: "status",
       header: "Status",
       sortable: true,
@@ -280,7 +284,7 @@ export default function CustomersPage() {
               <ChevronDown className="w-3 h-3 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-44 bg-white border border-border shadow-md">
+          <DropdownMenuContent align="start" className="bg-white border shadow-md w-44 border-border">
             <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
               Status Actions
             </DropdownMenuLabel>
@@ -326,6 +330,24 @@ export default function CustomersPage() {
           </DropdownMenuContent>
         </DropdownMenu>
       ),
+    },
+    {
+      key: "createdBy",
+      header: "Created",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => <AuditCell name={row.createdBy} date={row.createdDate} />,
+    },
+    {
+      key: "updatedBy",
+      header: "Updated",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => <AuditCell name={row.updatedBy} date={row.updatedDate} />,
     },
   ];
 
@@ -394,6 +416,46 @@ export default function CustomersPage() {
     return filtered.slice(startOffset, startOffset + pageSize);
   }, [filtered, page, pageSize]);
 
+  const handleExport = () => {
+    const rows = filtered.map((row) => ({
+      "Customer Name": row.customerName,
+      "Customer Code": row.customerCode,
+      "Mobile Number": formatMobile(row.countryCode, row.mobile),
+      "Email Address": row.email || "",
+      GSTIN: row.gstin || "",
+      "Customer Type": CUSTOMER_TYPE_LABELS[row.customerType] ?? row.customerType,
+      Address: row.address || "",
+      State: row.stateName || "",
+      District: row.districtName || "",
+      Territory: row.territoryName || "",
+      "Credit Limit": formatCreditLimit(row.creditLimit),
+      Status: row.status,
+      "Created By": row.createdBy || "",
+      "Updated By": row.updatedBy || "",
+    }));
+
+    const headers = Object.keys(rows[0] || {});
+    const csv = [
+      headers.join(","),
+      ...rows.map((row) =>
+        headers
+          .map((header) => {
+            const value = String(row[header as keyof typeof row] ?? "");
+            return `"${value.replace(/"/g, '""')}"`;
+          })
+          .join(","),
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `customer-master-${todayStr()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   useEffect(() => {
     setPage(1);
   }, [filters, sort, pageSize]);
@@ -453,6 +515,7 @@ export default function CustomersPage() {
           actions={actions}
           onAdd={perms.canCreate ? handleAdd : undefined}
           addLabel="Add Customer"
+          onExport={handleExport}
           emptyMessage="customers"
           searchPlaceholder="Search name, mobile, state…"
           currentFilters={filters}

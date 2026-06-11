@@ -57,17 +57,31 @@ function KpiCard({
   );
 }
 
-function StatusBadge({ status }: { status: ProductStatus }) {
-  const cfg = {
-    active: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    inactive: "border-slate-200 bg-slate-100 text-slate-700",
-    draft: "border-amber-200 bg-amber-50 text-amber-700",
-  }[status];
-
+function StatusToggle({
+  record,
+  onToggle,
+}: {
+  record: Product;
+  onToggle: (id: number, status: ProductStatus) => void;
+}) {
+  const active = record.status === "active";
   return (
-    <Badge variant="outline" className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium", cfg)}>
-      {status === "draft" ? "Draft" : status === "active" ? "Active" : "Inactive"}
-    </Badge>
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggle(record.id, active ? "inactive" : "active");
+      }}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+        active
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
+      )}
+    >
+      {active ? "Active" : "Inactive"}
+    </button>
   );
 }
 
@@ -98,7 +112,7 @@ export default function ProductsPage() {
   const columns: ColumnConfig<Product>[] = [
     {
       key: "productId",
-      header: "Product ID",
+      header: "Product Code",
       sortable: true,
       filterable: true,
       filterType: "text",
@@ -115,12 +129,9 @@ export default function ProductsPage() {
       filterType: "text",
       width: "220px",
       render: (val, row) => (
-        <div>
-          <Link href={`/masters/products/${row.id}`} className="block group/name">
-            <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">{row.productName}</p>
-            <p className="font-mono text-[10px] text-muted-foreground mt-0.5 leading-3">{row.sku}</p>
-          </Link>
-        </div>
+        <Link href={`/masters/products/${row.id}`} className="block group/name">
+          <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">{row.productName}</p>
+        </Link>
       ),
     },
     {
@@ -202,22 +213,6 @@ export default function ProductsPage() {
       render: (val, row) => <span className="font-semibold">{formatMoney(row.mrp)}</span>,
     },
     {
-      key: "createdBy",
-      header: "Created By",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-    },
-    {
-      key: "updatedBy",
-      header: "Updated By",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-    },
-    {
       key: "status",
       header: "Status",
       sortable: true,
@@ -226,54 +221,38 @@ export default function ProductsPage() {
       filterOptions: [
         { label: "Active", value: "active" },
         { label: "Inactive", value: "inactive" },
-        { label: "Draft", value: "draft" },
       ],
       width: "110px",
       render: (val, row) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className="inline-flex items-center gap-1.5 focus:outline-none">
-              <StatusBadge status={row.status} />
-              <ChevronDown className="w-3 h-3 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-40 bg-white border shadow-md border-border">
-            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
-              Status Actions
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {row.status === "active" && (
-              <>
-                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(row.id, "inactive")}>
-                  <UserX className="w-3.5 h-3.5" /> Deactivate
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(row.id, "draft")}>
-                  <Package className="w-3.5 h-3.5" /> Mark as Draft
-                </DropdownMenuItem>
-              </>
-            )}
-            {row.status === "inactive" && (
-              <>
-                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(row.id, "active")}>
-                  <UserCheck className="w-3.5 h-3.5" /> Activate
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(row.id, "draft")}>
-                  <Package className="w-3.5 h-3.5" /> Mark as Draft
-                </DropdownMenuItem>
-              </>
-            )}
-            {row.status === "draft" && (
-              <>
-                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(row.id, "active")}>
-                  <UserCheck className="w-3.5 h-3.5" /> Activate
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(row.id, "inactive")}>
-                  <UserX className="w-3.5 h-3.5" /> Deactivate
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <StatusToggle record={row} onToggle={updateStatus} />
+      ),
+    },
+    {
+      key: "createdDate",
+      header: "Created",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => (
+        <div>
+          <p className="text-[11px] font-semibold leading-4 text-brand-700">{row.createdBy}</p>
+          <p className="text-[10px] font-mono leading-3 text-muted-foreground">{row.createdDate}</p>
+        </div>
+      ),
+    },
+    {
+      key: "updatedDate",
+      header: "Updated",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => (
+        <div>
+          <p className="text-[11px] font-semibold leading-4 text-brand-700">{row.updatedBy}</p>
+          <p className="text-[10px] font-mono leading-3 text-muted-foreground">{row.updatedDate}</p>
+        </div>
       ),
     },
   ];
@@ -338,7 +317,7 @@ export default function ProductsPage() {
 
   const handleExport = () => {
     const headers = [
-      "Product ID",
+      "Product Code",
       "Product Name",
       "Category",
       "Segment",
@@ -396,7 +375,6 @@ export default function ProductsPage() {
   const total = records.length;
   const active = records.filter((item) => item.status === "active").length;
   const inactive = records.filter((item) => item.status === "inactive").length;
-  const draft = records.filter((item) => item.status === "draft").length;
 
   return (
     <AppLayout>
@@ -406,11 +384,10 @@ export default function ProductsPage() {
           <p className="text-xs text-muted-foreground mt-0.5">Manage product catalogue, compliance, and pricing</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <KpiCard label="Total Products" value={total} icon={Package} accent />
           <KpiCard label="Active" value={active} icon={CheckCircle2} color="bg-emerald-50" />
           <KpiCard label="Inactive" value={inactive} icon={XCircle} color="bg-slate-100" />
-          <KpiCard label="Draft" value={draft} icon={Package} color="bg-amber-50" />
         </div>
 
         <MasterListing<Product>
