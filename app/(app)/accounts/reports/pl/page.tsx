@@ -1,23 +1,48 @@
 "use client";
 
-import { AppLayout } from "@/components/layout/AppLayout";
-import { getPandL } from "../../data";
+import React, { useMemo } from "react";
+import { formatBalanceAmount, formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
+import { computePandLRows } from "@/lib/accounts/ledger-reports";
+import { cn } from "@/lib/utils";
+import { AccountingReportPage } from "../../components/AccountingReportPage";
 
 export default function PLPage() {
-  const pl = getPandL();
+  const { rows, net } = useMemo(() => {
+    const { rows: data, net: netProfit } = computePandLRows();
+    return {
+      rows: data.map((r) => ({
+        head: r.head,
+        type: r.type,
+        primaryHead: r.primaryHead,
+        accountGroup: r.accountGroup,
+        amount: formatBalanceAmount(r.amount.amount, r.amount.balanceType),
+      })),
+      net: netProfit,
+    };
+  }, []);
+
   return (
-    <AppLayout>
-      <div className="max-w-[900px] mx-auto space-y-4">
-        <h1 className="text-lg font-semibold">P&amp;L</h1>
-        <div className="bg-white border border-border/60 rounded-lg p-4 space-y-2 text-sm">
-          <div className="flex justify-between"><span className="text-muted-foreground">Income</span><span>{pl.income.toFixed(2)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Expenses</span><span>{pl.expense.toFixed(2)}</span></div>
-          <div className="border-t border-border/60 pt-2 flex justify-between font-semibold">
-            <span>Net Profit / Loss</span>
-            <span className={pl.net >= 0 ? "text-emerald-700" : "text-red-700"}>{pl.net.toFixed(2)}</span>
-          </div>
-        </div>
-      </div>
-    </AppLayout>
+    <AccountingReportPage
+      title="Profit & Loss"
+      description="Income and expense ledgers with closing balances from voucher postings"
+      columns={[
+        { key: "head", label: "Ledger" },
+        { key: "type", label: "Type" },
+        { key: "primaryHead", label: "Primary Head" },
+        { key: "accountGroup", label: "Account Group" },
+        { key: "amount", label: "Amount", align: "right", money: true },
+      ]}
+      rows={rows}
+      footer={
+        <tr>
+          <td colSpan={4} className="px-4 py-3.5 text-xs font-semibold text-right">
+            Net Profit / Loss
+          </td>
+          <td className={cn("px-4 py-3.5 text-xs text-right font-semibold", MONEY_AMOUNT_CLASS)}>
+            {formatMoney(Math.abs(net))} {net >= 0 ? "Cr" : "Dr"}
+          </td>
+        </tr>
+      }
+    />
   );
 }

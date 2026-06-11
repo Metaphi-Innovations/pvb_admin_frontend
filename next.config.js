@@ -35,9 +35,7 @@ const nextConfig = {
       { source: "/accounts/transactions/purchase-return", destination: "/accounts/transactions/debit-notes", permanent: false },
       { source: "/accounts/transactions/payment", destination: "/accounts/transactions/payments", permanent: false },
       { source: "/accounts/transactions/bank-reconciliation", destination: "/accounts/transactions/reconciliation", permanent: false },
-      { source: "/accounts/masters/chart-of-accounts", destination: "/accounts", permanent: false },
-      { source: "/accounts/masters/ledgers", destination: "/accounts", permanent: false },
-      { source: "/accounts/ledger", destination: "/accounts", permanent: false },
+      { source: "/accounts/ledger", destination: "/accounts/masters/ledgers", permanent: false },
       { source: "/accounts/outstanding", destination: "/accounts/reports/trial-balance", permanent: false },
     ];
   },

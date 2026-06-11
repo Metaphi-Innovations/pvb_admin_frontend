@@ -20,7 +20,7 @@ export function AccountsFormLayout({
   footer?: React.ReactNode;
 }) {
   const router = useRouter();
-  const backHref = breadcrumb[breadcrumb.length - 1]?.href ?? "/accounts/transactions/expenses";
+  const backHref = breadcrumb[breadcrumb.length - 1]?.href ?? "/accounts";
 
   return (
     <AppLayout noPadding>

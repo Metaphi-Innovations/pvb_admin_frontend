@@ -199,7 +199,7 @@ export default function DebitNotesPageClient() {
                       <td className="px-2.5 py-2 text-xs font-mono">{r.sourceGrnNo || "—"}</td>
                       <td className="px-2.5 py-2 text-xs font-mono">{r.sourceQcNo || "—"}</td>
                       <td className="px-2.5 py-2 text-xs tabular-nums">{totalRejectedQtyFromLines(r.lineItems) || "—"}</td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums font-medium text-brand-700">{formatINR(r.currentDebitAmount)}</td>
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.currentDebitAmount)}</td>
                       <td className="px-2.5 py-2"><NoteWorkflowBadge status={r.status} /></td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.createdBy}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.updatedBy}</td>

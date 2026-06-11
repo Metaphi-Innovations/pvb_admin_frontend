@@ -15,9 +15,8 @@ import {
   Settings2,
   Receipt,
   Warehouse,
-  ArrowLeftRight,
-  PieChart,
 } from "lucide-react";
+import { accountsMegaMenuGroups } from "@/lib/accounts/accounts-nav";
 
 export interface NavChild {
   label: string;
@@ -155,35 +154,9 @@ export const NAV_ITEMS: NavItem[] = [
     id: "accounts",
     label: "Accounts",
     icon: Wallet,
-    href: "/accounts",
+    href: "/accounts/masters/chart-of-accounts",
     menuLayout: "sidebar",
-    groupedChildren: [
-      {
-        label: "Transactions",
-        description: "Invoices, payments, journals and other accounting entries.",
-        icon: ArrowLeftRight,
-        children: [
-          { label: "Invoices", href: "/accounts/transactions/invoices" },
-          { label: "Credit Notes", href: "/accounts/transactions/credit-notes" },
-          { label: "Purchase", href: "/accounts/transactions/purchase" },
-          { label: "Debit Notes", href: "/accounts/transactions/debit-notes" },
-          { label: "Expenses", href: "/accounts/transactions/expenses" },
-          { label: "Payments", href: "/accounts/transactions/payments" },
-          { label: "Reconciliation", href: "/accounts/transactions/reconciliation" },
-          { label: "Journal", href: "/accounts/transactions/journal" },
-        ],
-      },
-      {
-        label: "Reports",
-        description: "Financial reporting and summaries.",
-        icon: PieChart,
-        children: [
-          { label: "Trial Balance", href: "/accounts/reports/trial-balance" },
-          { label: "P&L", href: "/accounts/reports/pl" },
-          { label: "Balance Sheet", href: "/accounts/reports/balance-sheet" },
-        ],
-      },
-    ],
+    groupedChildren: accountsMegaMenuGroups(),
   },
   {
     id: "database",

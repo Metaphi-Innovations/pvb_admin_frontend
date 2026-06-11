@@ -227,9 +227,9 @@ export default function ReconciliationEntriesPageClient({ statementId }: { state
                       <td className="px-2.5 py-2 text-xs max-w-[200px] truncate" title={e.narration}>
                         {e.narration}
                       </td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums">{e.debit > 0 ? formatINR(e.debit) : "—"}</td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums">{e.credit > 0 ? formatINR(e.credit) : "—"}</td>
-                      <td className="px-2.5 py-2 text-xs tabular-nums text-muted-foreground">
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{e.debit > 0 ? formatINR(e.debit) : "—"}</td>
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{e.credit > 0 ? formatINR(e.credit) : "—"}</td>
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums text-muted-foreground">
                         {e.balance > 0 ? formatINR(e.balance) : "—"}
                       </td>
                       <td className="px-2.5 py-2 text-xs font-mono">{e.referenceNo || "—"}</td>

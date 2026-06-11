@@ -1,7 +1,6 @@
 import { ACCOUNTS_CURRENT_USER, ACCOUNTS_PAYMENT_ADMIN } from "@/lib/accounts/config";
 import type { ClaimApprovalTrailEntry, ClaimAttachment } from "@/app/(app)/hr/claims/tada/tada-claim-data";
 import { loadTadaClaims, type TadaClaim } from "@/app/(app)/hr/claims/tada/tada-claim-data";
-import { loadExpenses } from "../expenses/expense-data";
 import {
   getPurchaseInvoiceById,
   loadPurchaseInvoices,
@@ -86,7 +85,6 @@ const LEGACY_EXPENSE_KEY = "ds_accounts_finance_payments_v1";
 
 export const SOURCE_TYPE_OPTIONS: { value: PaymentSourceType; label: string }[] = [
   { value: "purchase", label: "Purchase Invoice" },
-  { value: "expense", label: "Expense" },
   { value: "tada_claim", label: "TA/DA Claim" },
   { value: "vendor_adjustment", label: "Vendor Adjustment" },
   { value: "manual", label: "Manual Payment" },
@@ -94,10 +92,12 @@ export const SOURCE_TYPE_OPTIONS: { value: PaymentSourceType; label: string }[] 
 
 function normalizeSourceType(type: string): PaymentSourceType {
   if (type === "vendor_payment") return "vendor_adjustment";
+  if (type === "expense") return "expense";
   return (SOURCE_TYPE_OPTIONS.some((o) => o.value === type) ? type : "manual") as PaymentSourceType;
 }
 
 export function sourceTypeLabel(type: PaymentSourceType | string): string {
+  if (type === "expense") return "Journal (legacy)";
   const t = normalizeSourceType(type);
   return SOURCE_TYPE_OPTIONS.find((o) => o.value === t)?.label ?? t;
 }
@@ -384,63 +384,6 @@ export function syncPayablesFromPurchases(existing: CompanyPaymentRecord[]): Com
   return [...list, ...Array.from(byRef.values())].map(normalizeCompanyPayment);
 }
 
-function expenseToRecord(
-  exp: ReturnType<typeof loadExpenses>[0],
-  existing?: CompanyPaymentRecord,
-): CompanyPaymentRecord {
-  const approved = exp.approvedAmount > 0 ? exp.approvedAmount : exp.claimedAmount;
-  const base: CompanyPaymentRecord = {
-    id: existing?.id ?? 0,
-    paymentNo: existing?.paymentNo ?? "",
-    paymentDate: existing?.paymentDate ?? exp.expenseDate,
-    paidToType: "employee",
-    paidTo: exp.employeeName,
-    sourceType: "expense",
-    sourceModuleLabel: "Accounts — Expenses",
-    sourceReferenceNo: exp.expenseNumber,
-    employeeOrVendor: exp.employeeName,
-    claimedAmount: exp.claimedAmount,
-    approvedAmount: approved,
-    paidAmount: 0,
-    balanceAmount: 0,
-    paymentStatus: "payment_pending",
-    installments: existing?.installments ?? [],
-    sourceDocumentId: exp.id,
-    effectivePayableAmount: approved,
-    activity: existing?.activity ?? [],
-    createdBy: existing?.createdBy ?? ACCOUNTS_CURRENT_USER,
-    updatedBy: ACCOUNTS_CURRENT_USER,
-    createdAt: existing?.createdAt ?? new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  return normalizeCompanyPayment(base);
-}
-
-export function syncPayablesFromExpenses(existing: CompanyPaymentRecord[]): CompanyPaymentRecord[] {
-  const approved = loadExpenses().filter((e) => e.status === "approved");
-  const byRef = new Map(
-    existing
-      .filter((r) => r.sourceType === "expense")
-      .map((r) => [r.sourceReferenceNo, normalizeCompanyPayment(r)]),
-  );
-  let nextId = existing.length ? Math.max(...existing.map((r) => r.id)) + 1 : 1;
-  const list = existing.filter((r) => r.sourceType !== "expense");
-
-  for (const exp of approved) {
-    const key = exp.expenseNumber;
-    if (byRef.has(key)) {
-      byRef.set(key, expenseToRecord(exp, byRef.get(key)));
-    } else {
-      const paymentNo = nextPaymentNo([...list, ...Array.from(byRef.values())]);
-      const rec = expenseToRecord(exp);
-      rec.id = nextId++;
-      rec.paymentNo = paymentNo;
-      byRef.set(key, rec);
-    }
-  }
-  return [...list, ...Array.from(byRef.values())].map(normalizeCompanyPayment);
-}
-
 export function syncPayablesFromHr(existing: CompanyPaymentRecord[]): CompanyPaymentRecord[] {
   const approved = loadTadaClaims().filter((c) => c.status === "approved" || c.status === "paid");
   const byRef = new Map(existing.map((r) => [`tada_claim:${r.sourceReferenceNo}`, normalizeCompanyPayment(r)]));
@@ -472,7 +415,6 @@ export function loadCompanyPayments(): CompanyPaymentRecord[] {
     existing = migrateLegacyOnce(existing);
     let synced = syncPayablesFromHr(existing);
     synced = syncPayablesFromPurchases(synced);
-    synced = syncPayablesFromExpenses(synced);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(synced));
     return synced;
   } catch {
@@ -553,24 +495,6 @@ export function listPayableReferenceOptions(sourceType: PaymentSourceType): Paya
     });
   }
 
-  if (sourceType === "expense") {
-    return loadExpenses()
-      .filter((e) => e.status === "approved")
-      .map((e) => {
-        const approved = e.approvedAmount > 0 ? e.approvedAmount : e.claimedAmount;
-        const existing = loadCompanyPayments().find(
-          (p) => p.sourceType === "expense" && p.sourceReferenceNo === e.expenseNumber,
-        );
-        const balance = existing ? getBalanceAmount(existing) : approved;
-        return {
-          value: e.expenseNumber,
-          label: e.expenseNumber,
-          sub: `${e.employeeName} · ${approved} · Balance ${balance}`,
-          documentId: e.id,
-        };
-      });
-  }
-
   return [];
 }
 
@@ -605,28 +529,6 @@ export function lookupPayableSource(
       approvedAmount: approved,
       balanceAmount: Math.max(0, approved - paid),
       sourceDocumentId: inv.id,
-    };
-  }
-
-  if (type === "expense") {
-    const exp = loadExpenses().find((e) => e.expenseNumber === ref);
-    if (!exp || exp.status !== "approved") return null;
-    const approved = exp.approvedAmount > 0 ? exp.approvedAmount : exp.claimedAmount;
-    const existing = loadCompanyPayments().find(
-      (p) => p.sourceType === "expense" && p.sourceReferenceNo === ref,
-    );
-    const paid = existing?.paidAmount ?? 0;
-    return {
-      sourceReferenceNo: ref,
-      sourceType: "expense",
-      sourceModuleLabel: "Accounts — Expenses",
-      paidToType: "employee",
-      paidTo: exp.employeeName,
-      employeeOrVendor: exp.employeeName,
-      claimedAmount: exp.claimedAmount,
-      approvedAmount: approved,
-      balanceAmount: Math.max(0, approved - paid),
-      sourceDocumentId: exp.id,
     };
   }
 

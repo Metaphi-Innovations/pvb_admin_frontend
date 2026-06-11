@@ -1,15 +1,22 @@
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
 import {
+  getCoaLedgers,
   loadAccountTxns,
-  loadLedgers,
+  loadChartOfAccounts,
   nextId,
-  saveLedgers,
+  saveChartOfAccounts,
   type AccountType,
-  type Ledger,
+  type ChartOfAccount,
 } from "../data";
+import {
+  formToLedger,
+  generateLedgerCode,
+  getValidLedgerParents,
+  validateLedgerForm,
+  type LedgerFormValues,
+} from "../masters/chart-of-accounts/chart-of-accounts-data";
 import { loadCompanyPayments } from "../payments/payments-data";
 import { loadPurchaseInvoices } from "../purchase-invoices/purchase-invoices-data";
-import { loadExpenses } from "../expenses/expense-data";
 import { loadInvoices } from "../invoices/invoices-data";
 import { loadCreditNotes } from "../credit-notes/credit-notes-data";
 import { loadDebitNotes } from "../debit-notes/debit-notes-data";
@@ -20,7 +27,6 @@ export type MatchModule =
   | "payments"
   | "purchase"
   | "sales"
-  | "expenses"
   | "journal"
   | "credit_note"
   | "debit_note"
@@ -30,7 +36,6 @@ export const MATCH_MODULE_OPTIONS: { value: MatchModule; label: string }[] = [
   { value: "payments", label: "Payments" },
   { value: "purchase", label: "Purchase" },
   { value: "sales", label: "Sales" },
-  { value: "expenses", label: "Expenses" },
   { value: "journal", label: "Journal" },
   { value: "credit_note", label: "Credit Note" },
   { value: "debit_note", label: "Debit Note" },
@@ -597,15 +602,6 @@ export function searchModuleRecords(module: MatchModule, query: string): ModuleR
           label: i.invoiceNo,
           sub: i.customerName,
         }));
-    case "expenses":
-      return loadExpenses()
-        .filter((e) => match(e.expenseNumber, e.employeeName))
-        .slice(0, 40)
-        .map((e) => ({
-          id: e.id,
-          label: e.expenseNumber,
-          sub: `${e.employeeName} · ${e.categoryName}`,
-        }));
     case "journal":
       return loadAccountTxns()
         .filter((t) => t.txnType === "journal" && match(t.number, t.party))
@@ -638,8 +634,9 @@ export function searchModuleRecords(module: MatchModule, query: string): ModuleR
   }
 }
 
-export function matchModuleLabel(module: MatchModule | ""): string {
+export function matchModuleLabel(module: MatchModule | "" | string): string {
   if (!module) return "—";
+  if (module === "expenses") return "Journal";
   return MATCH_MODULE_OPTIONS.find((o) => o.value === module)?.label ?? module;
 }
 
@@ -736,35 +733,61 @@ export function resetEntryMatch(entryId: number): BankStatementEntry | null {
   return entries[idx];
 }
 
+function defaultParentForAccountType(
+  records: ChartOfAccount[],
+  accountType: AccountType,
+): number | null {
+  const parents = getValidLedgerParents(records);
+  const preferredNames: Partial<Record<AccountType, string[]>> = {
+    Asset: ["Bank Accounts", "Cash-in-Hand", "Other Current Assets"],
+    Liability: ["Other Current Liabilities", "Trade Payables / Sundry Creditors"],
+    Income: ["Miscellaneous Income", "Sales"],
+    Expense: ["Miscellaneous Expenses", "Bank Charges"],
+    Equity: ["Other Current Liabilities"],
+  };
+  const names = preferredNames[accountType] ?? ["Miscellaneous Expenses"];
+  for (const name of names) {
+    const match = parents.find((p) => p.accountName === name);
+    if (match) return match.id;
+  }
+  return parents.find((p) => p.accountType === accountType)?.id ?? parents[0]?.id ?? null;
+}
+
+/** Creates a COA ledger under a valid sub-group — the only user-creatable hierarchy level */
 export function createLedgerQuick(input: {
   ledgerName: string;
   accountType: AccountType;
-  linkedAccount?: string;
-}): Ledger {
-  const list = loadLedgers();
-  const id = nextId(list);
-  const ledger: Ledger = {
-    id,
+  parentGroupId?: number;
+}): ChartOfAccount {
+  const records = loadChartOfAccounts();
+  const parentGroupId = input.parentGroupId ?? defaultParentForAccountType(records, input.accountType);
+  const form: LedgerFormValues = {
     ledgerName: input.ledgerName.trim(),
-    ledgerCode: `LED-${String(id).padStart(3, "0")}`,
-    accountType: input.accountType,
-    linkedAccount: input.linkedAccount ?? "Miscellaneous",
-    openingBalance: 0,
-    balanceType: input.accountType === "Liability" || input.accountType === "Income" ? "Credit" : "Debit",
-    currentBalance: 0,
+    alias: "",
+    parentGroupId,
+    openingBalance: "0",
+    balanceType:
+      input.accountType === "Liability" || input.accountType === "Income" ? "Credit" : "Debit",
+    gstApplicable: false,
+    tdsApplicable: false,
+    costCenterApplicable: false,
+    bankAccountFlag: input.accountType === "Asset",
     status: "active",
-    createdBy: ACCOUNTS_CURRENT_USER,
-    updatedBy: ACCOUNTS_CURRENT_USER,
   };
-  list.push(ledger);
-  saveLedgers(list);
+  const err = validateLedgerForm(form, records);
+  if (err) throw new Error(err);
+  const ledgers = getCoaLedgers();
+  const id = nextId(ledgers);
+  const ledger = formToLedger(form, id, generateLedgerCode(records), records);
+  const next = [...records, ledger];
+  saveChartOfAccounts(next);
   return ledger;
 }
 
 export function ledgerSearchOptions(query: string): { id: number; label: string }[] {
   const q = query.trim().toLowerCase();
-  return loadLedgers()
-    .filter((l) => l.status === "active" && (!q || l.ledgerName.toLowerCase().includes(q)))
+  return getCoaLedgers()
+    .filter((l) => l.status === "active" && (!q || l.accountName.toLowerCase().includes(q)))
     .slice(0, 50)
-    .map((l) => ({ id: l.id, label: l.ledgerName }));
+    .map((l) => ({ id: l.id, label: l.accountName }));
 }

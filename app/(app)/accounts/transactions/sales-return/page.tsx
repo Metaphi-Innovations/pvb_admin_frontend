@@ -1,5 +1,5 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { createTxnPage } from "../../createTxnPage";
-
-export default createTxnPage("sales_return", "Sales Return", "Customer");
+export default function LegacyRedirect() {
+  redirect("/accounts/vouchers?tab=sales");
+}
