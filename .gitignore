@@ -6,8 +6,8 @@ node_modules/
 *.tsbuildinfo
 /.env
 AGENTS.md
-.github
-/.github 
+.github/
+.github/workflows/main.yml
 
 # Never commit real bank statements
 samples/*.csv
