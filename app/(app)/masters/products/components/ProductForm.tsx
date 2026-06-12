@@ -496,7 +496,7 @@ export function ProductForm({
 			<div className='pt-1 space-y-5 ' >
 				<div>
 					<SectionHead label='Basic Details & Classification' />
-					<div className='grid grid-cols-12 gap-5'>
+					<div className='grid grid-cols-12 gap-5 md:gap-x-10'>
 						{/* Product Name */}
 						<div className='col-span-12 space-y-1 md:col-span-2'>
 							<Label className='text-xs font-medium'>
@@ -525,7 +525,7 @@ export function ProductForm({
               </div> */}
 
 						{/* Category */}
-						<div className='col-span-12 md:col-span-2'>
+						<div className='col-span-12 md:col-span-2 md:gap-x-10'>
 							<AC
 								label='Category'
 								required
@@ -553,7 +553,7 @@ export function ProductForm({
               </div> */}
 
 						{/* Segment */}
-						<div className='col-span-12 md:col-span-2'>
+						<div className='col-span-12 md:col-span-2 md:gap-x-10'>
 							<AC
 								label='Segment'
 								value={form.segment}

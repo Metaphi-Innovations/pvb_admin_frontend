@@ -686,6 +686,21 @@ export function CustomerForm({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [form.districtId]);
 
+	useEffect(() => {
+		onSetErrors?.((prev) => {
+			const next = { ...prev };
+			let changed = false;
+			Object.keys(next).forEach((key) => {
+				if (key.startsWith("product_")) {
+					delete next[key];
+					changed = true;
+				}
+			});
+			return changed ? next : prev;
+		});
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [form.customerProducts]);
+
 	const setProductFieldError = (index: number, msg: string) => {
 		onSetErrors?.((prev) => ({
 			...prev,
@@ -767,13 +782,30 @@ export function CustomerForm({
 			customerProducts: nextRows,
 		});
 		setBulkProductIds([]);
-		showToast(`${addedCount} product${addedCount === 1 ? "" : "s"} added.`, "success");
+		showToast(
+			`${addedCount} product${addedCount === 1 ? "" : "s"} added.`,
+			"success",
+		);
 	};
 
 	const updateProductRow = (
 		id: string,
 		patch: Partial<CustomerProductMapping>,
 	) => {
+		if (patch.productId) {
+			const isDuplicate = (form.customerProducts || []).some(
+				(p) => p.id !== id && p.productId === patch.productId,
+			);
+			if (isDuplicate) {
+				const rowIndex = (form.customerProducts || []).findIndex((p) => p.id === id);
+				if (rowIndex !== -1) {
+					setProductFieldError(rowIndex, "Duplicate product mapping is not allowed.");
+				}
+				showToast("This product is already mapped.", "error");
+				return;
+			}
+		}
+
 		const updated = (form.customerProducts || []).map((p) => {
 			if (p.id !== id) return p;
 			return { ...p, ...patch };
@@ -838,138 +870,141 @@ export function CustomerForm({
 					<div className='space-y-6'>
 						<div>
 							<SectionHead label='Basic Information' />
-							<div className='grid items-start grid-cols-12 gap-3'>
-								{/* Customer Name */}
-								<div className='col-span-12 space-y-1 md:col-span-2'>
-									<Label className='text-xs font-medium'>
-										Customer Name <span className='text-red-500'>*</span>
-									</Label>
-									<Input
-										value={form.customerName}
-										onChange={(e) => set("customerName", e.target.value)}
-										placeholder='e.g. Agro Solutions Pvt Ltd'
-										className={inputCls("customerName")}
-										disabled={readOnly}
-									/>
-									<FieldError msg={errors.customerName} />
-								</div>
-
-								{/* Mobile Number */}
-								<div className='col-span-12 space-y-1 md:col-span-2'>
-									<Label className='text-xs font-medium'>
-										Mobile Number <span className='text-red-500'>*</span>
-									</Label>
-									<div className='flex gap-1.5'>
-										<CountryCodePicker
-											value={form.countryCode}
-											onChange={(value) => set("countryCode", value)}
-											disabled={readOnly}
-											hasError={!!errors.mobile}
-										/>
+							<div className='space-y-4 w-full'>
+								<div className='flex flex-col md:flex-row items-start justify-between gap-4 w-full'>
+									{/* Customer Name */}
+									<div className='w-full md:w-[18%] space-y-1'>
+										<Label className='text-xs font-medium'>
+											Customer Name <span className='text-red-500'>*</span>
+										</Label>
 										<Input
-											value={form.mobile}
-											onChange={(e) =>
-												set(
-													"mobile",
-													e.target.value.replace(/\D/g, "").slice(0, 10),
-												)
-											}
-											placeholder='10-digit mobile'
-											className={cn("flex-1", inputCls("mobile"))}
-											inputMode='numeric'
+											value={form.customerName}
+											onChange={(e) => set("customerName", e.target.value)}
+											placeholder='e.g. Agro Solutions Pvt Ltd'
+											className={inputCls("customerName")}
 											disabled={readOnly}
 										/>
+										<FieldError msg={errors.customerName} />
 									</div>
-									<FieldError msg={errors.mobile} />
-								</div>
 
-								{/* Email Address */}
-								<div className='col-span-12 space-y-1 md:col-span-2'>
-									<Label className='text-xs font-medium'>Email Address</Label>
-									<Input
-										type='email'
-										value={form.email}
-										onChange={(e) => set("email", e.target.value)}
-										placeholder='email@company.com'
-										className={inputCls("email")}
-										disabled={readOnly}
-									/>
-									<FieldError msg={errors.email} />
-								</div>
+									{/* Mobile Number */}
+									<div className='w-full md:w-[18%] space-y-1'>
+										<Label className='text-xs font-medium'>
+											Mobile Number <span className='text-red-500'>*</span>
+										</Label>
+										<div className='flex gap-1.5'>
+											<CountryCodePicker
+												value={form.countryCode}
+												onChange={(value) => set("countryCode", value)}
+												disabled={readOnly}
+												hasError={!!errors.mobile}
+											/>
+											<Input
+												value={form.mobile}
+												onChange={(e) =>
+													set(
+														"mobile",
+														e.target.value.replace(/\D/g, "").slice(0, 10),
+													)
+												}
+												placeholder='10-digit mobile'
+												className={cn("flex-1", inputCls("mobile"))}
+												inputMode='numeric'
+												disabled={readOnly}
+											/>
+										</div>
+										<FieldError msg={errors.mobile} />
+									</div>
 
-								{/* Customer Type */}
-								<div className='col-span-12 space-y-1 md:col-span-2'>
-									<Label className='text-xs font-medium'>
-										Customer Type <span className='text-red-500'>*</span>
-									</Label>
-									<SearchableSelect
-										value={form.customerType}
-										onChange={(value) => {
-											const ct = customerTypes.find(
-												(c) =>
-													c.customerType.toLowerCase() === value.toLowerCase(),
-											);
-											const docs = ct
-												? ct.documentTypes.map((d) => ({
-														documentTypeId: d.id,
-														documentName: d.documentName,
-														required: true as const,
-													}))
-												: [];
+									{/* Email Address */}
+									<div className='w-full md:w-[18%] space-y-1'>
+										<Label className='text-xs font-medium'>Email Address</Label>
+										<Input
+											type='email'
+											value={form.email}
+											onChange={(e) => set("email", e.target.value)}
+											placeholder='email@company.com'
+											className={inputCls("email")}
+											disabled={readOnly}
+										/>
+										<FieldError msg={errors.email} />
+									</div>
 
-											const branchDocs = getDocumentsForCustomerType(value);
-											const updatedBranches = form.branches.map((b) => ({
-												...b,
-												documents: branchDocs.map((d) => {
-													const existing = b.documents.find(
-														(bd) =>
-															bd.documentName.toLowerCase() ===
-															d.documentName.toLowerCase(),
-													);
-													return {
-														...d,
-														fileName: existing?.fileName,
-														fileUrl: existing?.fileUrl,
-														file: existing?.file,
-													};
-												}),
-											}));
+									{/* Customer Type */}
+									<div className='w-full md:w-[18%] space-y-1'>
+										<Label className='text-xs font-medium'>
+											Customer Type <span className='text-red-500'>*</span>
+										</Label>
+										<SearchableSelect
+											value={form.customerType}
+											onChange={(value) => {
+												const ct = customerTypes.find(
+													(c) =>
+														c.customerType.toLowerCase() ===
+														value.toLowerCase(),
+												);
+												const docs = ct
+													? ct.documentTypes.map((d) => ({
+															documentTypeId: d.id,
+															documentName: d.documentName,
+															required: true as const,
+														}))
+													: [];
 
-											onChange({
-												...form,
-												customerType: value,
-												requiredDocuments: docs,
-												branches: updatedBranches,
-											});
-											onClearError("customerType");
-										}}
-										options={customerTypeOptions}
-										placeholder='Select type...'
-										disabled={readOnly}
-										error={!!errors.customerType}
-									/>
-									<FieldError msg={errors.customerType} />
-								</div>
+												const branchDocs = getDocumentsForCustomerType(value);
+												const updatedBranches = form.branches.map((b) => ({
+													...b,
+													documents: branchDocs.map((d) => {
+														const existing = b.documents.find(
+															(bd) =>
+																bd.documentName.toLowerCase() ===
+																d.documentName.toLowerCase(),
+														);
+														return {
+															...d,
+															fileName: existing?.fileName,
+															fileUrl: existing?.fileUrl,
+															file: existing?.file,
+														};
+													}),
+												}));
 
-								{/* Sales Man */}
-								<div className='col-span-12 space-y-1 md:col-span-2'>
-									<Label className='text-xs font-medium'>Sales Man</Label>
-									<SearchableSelect
-										value={form.salesManId}
-										onChange={(value) => set("salesManId", value)}
-										options={salesOptions}
-										placeholder='Search by name, ID, mobile, role...'
-										searchPlaceholder='Search sales person...'
-										disabled={readOnly}
-									/>
-									<p className='mt-0.5 min-h-[16px] text-[11px] text-muted-foreground'>
-										Only active users are listed
-									</p>
+												onChange({
+													...form,
+													customerType: value,
+													requiredDocuments: docs,
+													branches: updatedBranches,
+												});
+												onClearError("customerType");
+											}}
+											options={customerTypeOptions}
+											placeholder='Select type...'
+											disabled={readOnly}
+											error={!!errors.customerType}
+										/>
+										<FieldError msg={errors.customerType} />
+									</div>
+
+									{/* Sales Man */}
+									<div className='w-full md:w-[18%] space-y-1'>
+										<Label className='text-xs font-medium'>Sales Man</Label>
+										<SearchableSelect
+											value={form.salesManId}
+											onChange={(value) => set("salesManId", value)}
+											options={salesOptions}
+											placeholder='Search by name, ID, mobile, role...'
+											searchPlaceholder='Search sales person...'
+											disabled={readOnly}
+										/>
+										<p className='mt-0.5 min-h-[16px] text-[11px] text-muted-foreground'>
+											Only active users are listed
+										</p>
+									</div>
 								</div>
 
 								{/* Block Reason */}
 								{form.status === "blocked" && (
-									<div className='col-span-12 space-y-1'>
+									<div className='w-full space-y-1'>
 										<Label className='text-xs font-medium'>
 											Block Reason <span className='text-red-500'>*</span>
 										</Label>
@@ -1057,7 +1092,6 @@ export function CustomerForm({
 											inactiveLabel='No'
 										/>
 									</div>
-									
 
 									{/* TDS Applicable */}
 									<div className='space-y-1'>
@@ -1080,25 +1114,25 @@ export function CustomerForm({
 									</div>
 								</div>
 
-                {/* Conditional: GSTIN (when GST Applicable is ON) */}
-									{form.gstApplicable && (
-										<div className='space-y-1'>
-											<Label className='text-xs font-medium'>
-												GSTIN <span className='text-red-500'>*</span>
-											</Label>
-											<Input
-												value={form.gstin}
-												onChange={(e) =>
-													set("gstin", e.target.value.toUpperCase())
-												}
-												placeholder='27AABCU9603R1ZX'
-												className={cn("font-mono", inputCls("gstin"))}
-												disabled={readOnly}
-											/>
-											<FieldError msg={errors.gstin} />
-										</div>
-									)}
-                  {/* Conditional: GST Master (when GST Applicable is ON and not Add mode) */}
+								{/* Conditional: GSTIN (when GST Applicable is ON) */}
+								{form.gstApplicable && (
+									<div className='space-y-1'>
+										<Label className='text-xs font-medium'>
+											GSTIN <span className='text-red-500'>*</span>
+										</Label>
+										<Input
+											value={form.gstin}
+											onChange={(e) =>
+												set("gstin", e.target.value.toUpperCase())
+											}
+											placeholder='27AABCU9603R1ZX'
+											className={cn("font-mono", inputCls("gstin"))}
+											disabled={readOnly}
+										/>
+										<FieldError msg={errors.gstin} />
+									</div>
+								)}
+								{/* Conditional: GST Master (when GST Applicable is ON and not Add mode) */}
 								{form.gstApplicable && !isAdd && (
 									<div className='space-y-1'>
 										<Label className='text-xs font-medium'>
@@ -1120,8 +1154,6 @@ export function CustomerForm({
 										<FieldError msg={errors.gstMasterId} />
 									</div>
 								)}
-
-								
 
 								{/* Conditional: TDS Master (when TDS Applicable is ON) */}
 								{form.tdsApplicable && (
@@ -1318,22 +1350,7 @@ export function CustomerForm({
 				{/* ── TAB 4: PRODUCT MAPPING ── */}
 				<TabsContent value='product' className='mt-0 space-y-5'>
 					<div>
-						<div className='flex items-center justify-between pb-3 mb-4 border-b border-border/60'>
-							<div>
-								{/* <SectionHead label="Product Mappings" sub="Map products and custom prices for this customer" /> */}
-							</div>
-							{!readOnly && (
-								<Button
-									type='button'
-									variant='outline'
-									size='sm'
-									className='gap-1 text-xs h-7'
-									onClick={addProductRow}
-								>
-									<Plus className='w-3 h-3' /> Add Product
-								</Button>
-							)}
-						</div>
+
 
 						{!readOnly && (
 							<div className='mb-4 rounded-lg border border-border bg-muted/20 p-3'>

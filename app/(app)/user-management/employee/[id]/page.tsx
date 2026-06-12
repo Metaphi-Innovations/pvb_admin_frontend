@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -17,31 +18,65 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   AlertTriangle, ArrowLeft, Edit2, Key, Trash2, MoreVertical,
-  CheckCircle2, XCircle, X, User,
+  CheckCircle2, XCircle, X, User, Info, Building2, ShieldAlert,
+  MapPin, UserCheck, Check, HelpCircle, Monitor, Smartphone, ChevronDown
 } from "lucide-react";
 import {
   type Employee,
   loadEmployees, saveEmployees, todayStr,
+  PERMISSION_REGISTRY, MOBILE_PERMISSION_REGISTRY,
+  migratePermissions,
+  type UserPermissions, type WebAction, type MobileAction,
+  type SubmodulePermission, type MobileFeaturePermission
 } from "../employee-data";
 
 // ── Status Configuration ──────────────────────────────────────────────────────
-const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
-  active:   { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
-  inactive: { bg: "bg-slate-100",  text: "text-slate-600",   dot: "bg-slate-400"   },
-  draft:    { bg: "bg-blue-50",    text: "text-blue-700",    dot: "bg-blue-500"    },
-  archived: { bg: "bg-red-50",     text: "text-red-700",     dot: "bg-red-400"     },
+const STATUS_CFG: Record<string, { bg: string; text: string; dot: string; label: string }> = {
+  active:   { bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", dot: "bg-emerald-500", label: "Active" },
+  inactive: { bg: "bg-slate-100 border-slate-200",  text: "text-slate-600",   dot: "bg-slate-400",   label: "Inactive" },
+  draft:    { bg: "bg-blue-50 border-blue-200",    text: "text-blue-700",    dot: "bg-blue-500",    label: "Draft" },
+  archived: { bg: "bg-red-50 border-red-200",     text: "text-red-700",     dot: "bg-red-400",     label: "Archived" },
 };
 
-function StatusPill({ status }: { status: string }) {
+function StatusBadge({ status }: { status: string }) {
   const cfg = STATUS_CFG[status] ?? STATUS_CFG.inactive;
   return (
     <span className={cn(
-      "inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium",
-      cfg.bg, cfg.text,
+      "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold border",
+      cfg.bg, cfg.text
     )}>
-      <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+      <span className={cn("h-1.5 w-1.5 rounded-full flex-shrink-0", cfg.dot)} />
+      {cfg.label}
     </span>
+  );
+}
+
+// ── Detail Field Row ─────────────────────────────────────────────────────────
+function DetailField({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value?: React.ReactNode;
+  mono?: boolean;
+}) {
+  const displayVal =
+    value !== undefined && value !== null && value !== "" ? value : "—";
+  return (
+    <div className='py-2 space-y-1 border-b border-border/50 last:border-0'>
+      <span className='text-[10px] font-semibold text-muted-foreground uppercase tracking-wider'>
+        {label}
+      </span>
+      <div
+        className={cn(
+          "text-xs font-semibold text-foreground break-all",
+          mono && "font-mono"
+        )}
+      >
+        {displayVal}
+      </div>
+    </div>
   );
 }
 
@@ -86,14 +121,14 @@ function ConfirmDialog({
             </div>
             {title}
           </DialogTitle>
-          <DialogDescription className="pt-1">{description}</DialogDescription>
+          <DialogDescription className="pt-1 text-xs">{description}</DialogDescription>
         </DialogHeader>
         <div className="flex items-center justify-end gap-2 pt-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs font-semibold" onClick={onClose}>Cancel</Button>
           <Button
             size="sm"
-            className={cn("h-8 text-xs gap-1.5",
-              destructive ? "bg-red-600 hover:bg-red-700 text-white" : "bg-brand-600 hover:bg-brand-700 text-white")}
+            className={cn("h-8 text-xs font-semibold gap-1.5 text-white",
+              destructive ? "bg-red-600 hover:bg-red-700" : "bg-brand-600 hover:bg-brand-700")}
             onClick={() => { onConfirm(); onClose(); }}>
             {confirmLabel}
           </Button>
@@ -120,10 +155,9 @@ function PasswordResetModal({
   onReset: () => void;
   onClose: () => void;
 }) {
-  const { Input } = require("@/components/ui/input");
-
+  const [showPwd, setShowPwd] = useState(false);
   const handleGeneratePassword = () => {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
     let password = "";
     for (let i = 0; i < 12; i++) {
       password += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -136,60 +170,74 @@ function PasswordResetModal({
     <Dialog open={state.open} onOpenChange={onClose}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <Key className="w-4 h-4 text-blue-600" />
+          <DialogTitle className="flex items-center gap-2 text-base font-bold">
+            <Key className="w-4 h-4 text-brand-600" />
             Reset Password
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-4 pt-1">
           <div className="space-y-1.5">
-            <label className="text-xs font-medium">New Password *</label>
-            <Input
-              type="password"
-              value={state.newPassword}
-              onChange={(e: any) => onChange("newPassword", e.target.value)}
-              placeholder="Enter new password (min 8 chars)"
-              className="h-9 text-sm"
-            />
+            <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">New Password *</label>
+            <div className="relative">
+              <input
+                type={showPwd ? "text" : "password"}
+                value={state.newPassword}
+                onChange={(e) => onChange("newPassword", e.target.value)}
+                placeholder="Enter new password (min 8 chars)"
+                className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-semibold focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-500"
+              />
+            </div>
             {state.errors.newPassword && (
-              <p className="text-xs text-red-500">{state.errors.newPassword}</p>
+              <p className="text-[10px] text-red-500 font-semibold">{state.errors.newPassword}</p>
             )}
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-medium">Confirm Password *</label>
-            <Input
-              type="password"
+            <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Confirm Password *</label>
+            <input
+              type={showPwd ? "text" : "password"}
               value={state.confirmPassword}
-              onChange={(e: any) => onChange("confirmPassword", e.target.value)}
+              onChange={(e) => onChange("confirmPassword", e.target.value)}
               placeholder="Re-enter password"
-              className="h-9 text-sm"
+              className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-semibold focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-500"
             />
             {state.errors.confirmPassword && (
-              <p className="text-xs text-red-500">{state.errors.confirmPassword}</p>
+              <p className="text-[10px] text-red-500 font-semibold">{state.errors.confirmPassword}</p>
             )}
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full h-8 text-xs"
-            onClick={handleGeneratePassword}>
-            Generate Random Password
-          </Button>
-          <label className="flex items-center gap-2 cursor-pointer">
+          <div className="flex items-center justify-between gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs font-semibold"
+              onClick={handleGeneratePassword}>
+              Generate Password
+            </Button>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showPwd}
+                onChange={(e) => setShowPwd(e.target.checked)}
+                className="w-3.5 h-3.5 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+              />
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Show</span>
+            </label>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer pt-1">
             <input
               type="checkbox"
               checked={state.sendEmail}
-              onChange={(e: any) => onChange("sendEmail", e.target.checked)}
-              className="w-4 h-4 rounded accent-brand-600"
+              onChange={(e) => onChange("sendEmail", e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
             />
-            <span className="text-xs text-foreground">Send password to employee email</span>
+            <span className="text-xs font-semibold text-foreground">Send password to employee email</span>
           </label>
         </div>
         <div className="flex items-center justify-end gap-2 pt-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs font-semibold" onClick={onClose}>Cancel</Button>
           <Button
             size="sm"
-            className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+            className="h-8 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white"
             onClick={onReset}>
             Reset Password
           </Button>
@@ -199,12 +247,129 @@ function PasswordResetModal({
   );
 }
 
-// ── Info Row Component ────────────────────────────────────────────────────────
-function InfoRow({ label, value }: { label: string; value: string | JSX.Element }) {
+// ── Read-only Permissions Breakdown Component ─────────────────────────────────
+function ReadOnlyPermissionsView({ permissions }: { permissions?: UserPermissions }) {
+  const [section, setSection] = useState<"web" | "mobile">("web");
+  const perms = migratePermissions(permissions);
+
+  const getSub = (modId: string, subId: string): SubmodulePermission =>
+    perms.web?.[modId]?.[subId] || { view: false, create: false, edit: false, delete: false, approve: false, export: false, import: false };
+  const getMob = (grpId: string, featId: string): MobileFeaturePermission =>
+    perms.mobile?.[grpId]?.[featId] || { view: false, create: false, edit: false, delete: false, approve: false };
+
+  const ALL_WEB_ACTIONS: WebAction[] = ["view", "create", "edit", "delete", "approve", "export", "import"];
+  const ALL_MOBILE_ACTIONS: MobileAction[] = ["view", "create", "edit", "delete", "approve"];
+  const WEB_ACTION_LABELS: Record<WebAction, string> = { view: "View", create: "Create", edit: "Edit", delete: "Delete", approve: "Approve", export: "Export", import: "Import" };
+  const MOBILE_ACTION_LABELS: Record<MobileAction, string> = { view: "View", create: "Create", edit: "Edit", delete: "Delete", approve: "Approve" };
+
   return (
-    <div className="flex items-start justify-between py-2.5 px-3 border-b border-border/60 last:border-b-0">
-      <span className="text-[11px] text-muted-foreground font-medium">{label}</span>
-      <span className="text-xs text-foreground font-medium text-right">{value}</span>
+    <div className="space-y-4">
+      <div className="flex gap-1.5 pb-3 border-b border-border">
+        {([ ["web", "Web Portal"], ["mobile", "Mobile App"] ] as const).map(([key, label]) => (
+          <button key={key} type="button" onClick={() => setSection(key)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-semibold transition-colors border",
+              section === key ? "bg-brand-600 text-white border-brand-600" : "border-border text-muted-foreground hover:bg-muted/40",
+            )}>
+            {key === "web" ? <Monitor className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {section === "web" && (
+        <div className="space-y-3">
+          {PERMISSION_REGISTRY.map((mod) => {
+            const hasAny = mod.submodules.some((sub) => {
+              const sp = getSub(mod.id, sub.id);
+              return ALL_WEB_ACTIONS.some((act) => sub.actions.includes(act) && (sp as any)[act]);
+            });
+
+            if (!hasAny) return null;
+
+            return (
+              <div key={mod.id} className="overflow-hidden border border-border rounded-xl bg-white shadow-sm p-4">
+                <h4 className="text-xs font-bold text-foreground mb-3 flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
+                  {mod.label}
+                </h4>
+                <div className="space-y-2">
+                  {mod.submodules.map((sub) => {
+                    const sp = getSub(mod.id, sub.id);
+                    const activeActions = ALL_WEB_ACTIONS.filter((act) => sub.actions.includes(act) && (sp as any)[act]);
+                    if (activeActions.length === 0) return null;
+
+                    return (
+                      <div key={sub.id} className="flex flex-col gap-1.5 py-2 border-b border-border/50 last:border-0 sm:flex-row sm:items-center justify-between">
+                        <span className="text-xs font-semibold text-foreground min-w-[150px]">{sub.label}</span>
+                        <div className="flex flex-wrap gap-1">
+                          {activeActions.map((act) => (
+                            <span key={act} className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-brand-50 text-brand-700 border border-brand-100">
+                              {WEB_ACTION_LABELS[act]}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+          {!PERMISSION_REGISTRY.some((mod) => mod.submodules.some((sub) => ALL_WEB_ACTIONS.some((act) => sub.actions.includes(act) && (getSub(mod.id, sub.id) as any)[act]))) && (
+            <div className="text-xs font-medium text-center text-muted-foreground p-8 bg-white border rounded-xl">
+              No Web Portal permissions granted.
+            </div>
+          )}
+        </div>
+      )}
+
+      {section === "mobile" && (
+        <div className="space-y-3">
+          {MOBILE_PERMISSION_REGISTRY.map((grp) => {
+            const hasAny = grp.features.some((feat) => {
+              const fp = getMob(grp.id, feat.id);
+              return ALL_MOBILE_ACTIONS.some((act) => feat.actions.includes(act) && (fp as any)[act]);
+            });
+
+            if (!hasAny) return null;
+
+            return (
+              <div key={grp.id} className="overflow-hidden border border-border rounded-xl bg-white shadow-sm p-4">
+                <h4 className="text-xs font-bold text-foreground mb-3 flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
+                  {grp.label}
+                </h4>
+                <div className="space-y-2">
+                  {grp.features.map((feat) => {
+                    const fp = getMob(grp.id, feat.id);
+                    const activeActions = ALL_MOBILE_ACTIONS.filter((act) => feat.actions.includes(act) && (fp as any)[act]);
+                    if (activeActions.length === 0) return null;
+
+                    return (
+                      <div key={feat.id} className="flex flex-col gap-1.5 py-2 border-b border-border/50 last:border-0 sm:flex-row sm:items-center justify-between">
+                        <span className="text-xs font-semibold text-foreground min-w-[150px]">{feat.label}</span>
+                        <div className="flex flex-wrap gap-1">
+                          {activeActions.map((act) => (
+                            <span key={act} className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-brand-50 text-brand-700 border border-brand-100">
+                              {MOBILE_ACTION_LABELS[act]}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+          {!MOBILE_PERMISSION_REGISTRY.some((grp) => grp.features.some((feat) => ALL_MOBILE_ACTIONS.some((act) => feat.actions.includes(act) && (getMob(grp.id, feat.id) as any)[act]))) && (
+            <div className="text-xs font-medium text-center text-muted-foreground p-8 bg-white border rounded-xl">
+              No Mobile App permissions granted.
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -217,6 +382,7 @@ export default function EmployeeDetailPage() {
 
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [activeSubTab, setActiveSubTab] = useState("overview");
   const [confirmTarget, setConfirmTarget] = useState<{ type: string; employee: Employee } | null>(null);
   const [passwordReset, setPasswordReset] = useState<PasswordResetState>({
     open: false,
@@ -237,7 +403,6 @@ export default function EmployeeDetailPage() {
     }
   }, [employeeId, router]);
 
-  // Auto-dismiss toast
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 3200);
@@ -246,7 +411,6 @@ export default function EmployeeDetailPage() {
 
   const handleStatusToggle = () => {
     if (!employee) return;
-    const newStatus = employee.status === "active" ? "inactive" : "active";
     setConfirmTarget({ type: "status", employee });
   };
 
@@ -261,7 +425,7 @@ export default function EmployeeDetailPage() {
     );
     saveEmployees(updated);
     setEmployee(updated.find(e => e.id === employee.id) || null);
-    setToast({ msg: `Employee ${newStatus === "active" ? "activated" : "deactivated"}`, type: "success" });
+    setToast({ msg: `User ${newStatus === "active" ? "activated" : "deactivated"}`, type: "success" });
     setConfirmTarget(null);
   };
 
@@ -320,7 +484,7 @@ export default function EmployeeDetailPage() {
     }
 
     setToast({
-      msg: `Password reset successfully. Temp password: ${passwordReset.newPassword}`,
+      msg: `Password reset successfully.`,
       type: "success",
     });
     setPasswordReset({ open: false, newPassword: "", confirmPassword: "", sendEmail: false, errors: {} });
@@ -330,46 +494,45 @@ export default function EmployeeDetailPage() {
     return (
       <AppLayout>
         <div className="flex items-center justify-center h-96">
-          <p className="text-muted-foreground">Loading employee...</p>
+          <p className="text-muted-foreground text-sm font-semibold">Loading user...</p>
         </div>
       </AppLayout>
     );
   }
 
+  const tabs = [
+    { id: "overview", label: "Overview", icon: Info },
+    { id: "role_dept", label: "Role & Department", icon: Building2 },
+    { id: "permissions", label: "Permissions & Access", icon: UserCheck },
+  ];
+
   return (
     <AppLayout>
-      <div className="space-y-5 w-full">
-        {/* Header */}
-        <div className="flex items-start gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 px-2 -ml-2"
-            onClick={() => router.push("/user-management/employee")}>
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <div className="flex-1">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center flex-shrink-0">
-                <User className="w-5 h-5 text-brand-600" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-foreground">{employee.fullName}</h1>
-                <p className="text-xs text-muted-foreground mt-0.5">{employee.employeeId} • {employee.email}</p>
-              </div>
-              <StatusPill status={employee.status} />
-            </div>
+      <div className="w-full space-y-6">
+        {/* ── HEADER SECTION ── */}
+        <div className="flex flex-col gap-4 pb-5 border-b sm:flex-row sm:items-center sm:justify-between border-border/80">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="icon"
+              className="w-8 h-8 rounded-lg hover:bg-muted border-border"
+              onClick={() => router.push("/user-management/employee")}>
+              <ArrowLeft className="w-4 h-4 text-muted-foreground" />
+            </Button>
+            <h1 className="text-base font-bold text-foreground">User Details</h1>
           </div>
+
           <div className="flex items-center gap-2">
             <Button
+              variant="outline"
               size="sm"
-              className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-              onClick={() => router.push(`/user-management/employee/${employee.id}/edit`)}>
-              <Edit2 className="w-3.5 h-3.5" /> Edit
+              className="h-9 text-xs font-semibold gap-1.5 border-border hover:bg-muted"
+              onClick={handleStatusToggle}>
+              {employee.status === "active" ? "Deactivate" : "Activate"}
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 px-2">
+                <Button variant="outline" size="sm" className="h-9 px-2.5">
                   <MoreVertical className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -379,103 +542,318 @@ export default function EmployeeDetailPage() {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <button
-                  onClick={handleStatusToggle}
-                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted rounded-sm transition-colors">
-                  {employee.status === "active" ? "Deactivate" : "Activate"}
-                </button>
-                <button
                   onClick={handlePasswordReset}
-                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted rounded-sm transition-colors">
-                  <Key className="w-3.5 h-3.5" /> Reset Password
+                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted rounded-sm transition-colors text-left font-medium">
+                  <Key className="w-3.5 h-3.5 text-muted-foreground" /> Reset Password
                 </button>
                 <DropdownMenuSeparator />
                 <button
                   onClick={handleDelete}
-                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-sm transition-colors">
-                  <Trash2 className="w-3.5 h-3.5" /> Delete
+                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-red-650 hover:bg-red-50 rounded-sm transition-colors text-left font-semibold">
+                  <Trash2 className="w-3.5 h-3.5" /> Delete User
                 </button>
               </DropdownMenuContent>
             </DropdownMenu>
+
+            <Link href={`/user-management/employee/${employee.id}/edit`}>
+              <Button
+                size="sm"
+                className="h-9 gap-1.5 bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700 rounded-lg shadow-sm">
+                <Edit2 className="w-3.5 h-3.5" /> Edit User
+              </Button>
+            </Link>
           </div>
         </div>
 
-        {/* Content Cards */}
-        <div className="grid grid-cols-3 gap-3">
-          {/* Personal Details */}
-          <div className="border border-border rounded-xl bg-white p-3.5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2.5">Personal Details</p>
-            <div className="space-y-0">
-              <InfoRow label="Full Name" value={employee.fullName} />
-              <InfoRow label="Email" value={employee.email} />
-              <InfoRow label="Mobile" value={employee.mobile} />
-              {employee.alternativeMobile && <InfoRow label="Alt Mobile" value={employee.alternativeMobile} />}
-              <InfoRow label="Blood Group" value={employee.bloodGroup} />
+        {/* ── TOP SUMMARY CARD & KPI BLOCKS ── */}
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          {/* Profile Summary Card */}
+          <div className="flex flex-col justify-between p-5 bg-white border shadow-sm lg:col-span-2 rounded-xl border-border">
+            <div className="flex items-start gap-4">
+              <div className="flex items-center justify-center flex-shrink-0 w-12 h-12 text-lg font-bold border rounded-full bg-brand-50 border-brand-100 text-brand-600">
+                {employee.fullName.charAt(0).toUpperCase()}
+              </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base font-bold text-foreground">
+                    {employee.fullName}
+                  </h2>
+                  <span className="font-mono text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-md">
+                    {employee.employeeId}
+                  </span>
+                  <StatusBadge status={employee.status} />
+                </div>
+                <div className="flex flex-wrap items-center text-xs gap-x-4 gap-y-1 text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <span className="font-semibold text-foreground">Role:</span>
+                    {employee.role || "—"}
+                  </span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1">
+                    <span className="font-semibold text-foreground">Email:</span>
+                    {employee.email || "—"}
+                  </span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1">
+                    <span className="font-semibold text-foreground">Mobile:</span>
+                    {employee.mobile ? `${employee.countryCode || "+91"} ${employee.mobile}` : "—"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center pt-1 text-xs gap-x-4 gap-y-1 text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <span className="font-semibold text-foreground">Department:</span>
+                    {employee.department || "—"}
+                  </span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1">
+                    <span className="font-semibold text-foreground">Type:</span>
+                    {employee.employeeType || "—"}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Work Details */}
-          <div className="border border-border rounded-xl bg-white p-3.5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2.5">Work Details</p>
-            <div className="space-y-0">
-              <InfoRow label="User ID" value={<span className="font-mono text-brand-700">{employee.employeeId}</span>} />
-              <InfoRow label="Department" value={employee.department} />
-              <InfoRow label="Role Type" value={employee.roleType || "—"} />
-              <InfoRow label="Role" value={employee.role} />
-              <InfoRow label="Joining Date" value={employee.joiningDate} />
-              <InfoRow label="Status" value={<StatusPill status={employee.status} />} />
+          {/* 4 Compact KPI blocks */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col justify-between p-4 bg-white border shadow-sm rounded-xl border-border">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Role Type
+              </p>
+              <p className="mt-1 text-xs font-bold text-foreground truncate">
+                {employee.roleType || "—"}
+              </p>
             </div>
-          </div>
 
-          {/* Reporting & Geography */}
-          <div className="border border-border rounded-xl bg-white p-3.5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2.5">Reporting & Geography</p>
-            <div className="space-y-0">
-              <InfoRow label="Reporting Manager" value={employee.reportingManager || "None"} />
-              {employee.geoState && <InfoRow label="State" value={employee.geoState} />}
-              {employee.geoRegion && <InfoRow label="Region" value={employee.geoRegion} />}
-              {employee.geoArea && <InfoRow label="Area" value={employee.geoArea} />}
-              {employee.territory && <InfoRow label="Territory" value={employee.territory} />}
-              {employee.geoLocality && <InfoRow label="Locality" value={employee.geoLocality} />}
-              {!employee.geoState && !employee.territory && (
-                <p className="text-xs text-muted-foreground italic py-1">No geography mapping</p>
-              )}
+            <div className="flex flex-col justify-between p-4 bg-white border shadow-sm rounded-xl border-border">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Department
+              </p>
+              <p className="mt-1 text-xs font-bold text-foreground truncate">
+                {employee.department || "—"}
+              </p>
             </div>
-          </div>
 
-          {/* Address */}
-          <div className="border border-border rounded-xl bg-white p-3.5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2.5">Address</p>
-            <div className="space-y-0">
-              {employee.permanentAddress && <InfoRow label="Permanent" value={employee.permanentAddress} />}
-              {employee.correspondenceAddress && <InfoRow label="Correspondence" value={employee.correspondenceAddress} />}
-              {employee.relativeName && <InfoRow label="Relative" value={employee.relativeName} />}
-              {!employee.permanentAddress && !employee.correspondenceAddress && (
-                <p className="text-xs text-muted-foreground italic py-1">No address on record</p>
-              )}
+            <div className="flex flex-col justify-between p-4 bg-white border shadow-sm rounded-xl border-border">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Joined Date
+              </p>
+              <p className="mt-1 text-xs font-bold text-foreground truncate">
+                {employee.joiningDate || "—"}
+              </p>
             </div>
-          </div>
 
-          {/* Emergency Contact */}
-          <div className="border border-border rounded-xl bg-white p-3.5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2.5">Emergency Contact</p>
-            <div className="space-y-0">
-              <InfoRow label="Name" value={employee.emergencyContactName} />
-              <InfoRow label="Mobile" value={employee.emergencyContactMobile} />
-              <InfoRow label="Relation" value={employee.emergencyContactRelation} />
+            <div className="flex flex-col justify-between p-4 bg-white border shadow-sm rounded-xl border-border">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Manager
+              </p>
+              <p className="mt-1 text-xs font-bold text-foreground truncate">
+                {employee.reportingManager || "None"}
+              </p>
             </div>
           </div>
+        </div>
 
-          {/* Record Info */}
-          <div className="border border-border rounded-xl bg-white p-3.5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2.5">Record Info</p>
-            <div className="space-y-0">
-              <InfoRow label="Created By" value={employee.createdBy} />
-              <InfoRow label="Created Date" value={employee.createdDate} />
-              <InfoRow label="Updated By" value={employee.updatedBy} />
-              <InfoRow label="Updated Date" value={employee.updatedDate} />
-              {employee.remarks && <InfoRow label="Remarks" value={employee.remarks} />}
-            </div>
+        {/* ── UNDERLINE TAB NAVIGATION ── */}
+        <div className="border-b border-border">
+          <div className="flex gap-6">
+            {tabs.map((t) => {
+              const active = activeSubTab === t.id;
+              const Icon = t.icon;
+              return (
+                <button
+                  key={t.id}
+                  className={cn(
+                    "pb-3 text-xs font-semibold border-b-2 transition-colors focus:outline-none flex items-center gap-1.5",
+                    active
+                      ? "border-brand-600 text-brand-600 font-bold"
+                      : "border-transparent text-muted-foreground hover:text-foreground",
+                  )}
+                  onClick={() => setActiveSubTab(t.id)}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
+        </div>
+
+        {/* ── TAB CONTENT ── */}
+        <div className="w-full">
+          {/* TAB 1: OVERVIEW */}
+          {activeSubTab === "overview" && (
+            <div className="space-y-5">
+              <div className="p-6 space-y-6 bg-white border shadow-sm rounded-xl border-border">
+                {/* Section 1: Personal Information */}
+                <div className="space-y-3">
+                  <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
+                    Personal Information
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1">
+                    <DetailField label="First Name" value={employee.firstName} />
+                    <DetailField label="Last Name" value={employee.lastName} />
+                    <DetailField label="Full Name" value={employee.fullName} />
+                    <DetailField label="Gender" value={employee.gender} />
+                    <DetailField label="DOB" value={employee.dob} />
+                    <DetailField label="Blood Group" value={employee.bloodGroup} />
+                  </div>
+                </div>
+
+                {/* Section 2: Contact Details */}
+                <div className="pt-2 space-y-3">
+                  <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
+                    Contact Details
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1">
+                    <DetailField label="Mobile Number" value={employee.mobile ? `${employee.countryCode || "+91"} ${employee.mobile}` : "—"} mono />
+                    <DetailField label="Alternative Mobile" value={employee.alternativeMobile} mono />
+                    <DetailField label="Email Address" value={employee.email} />
+                    <DetailField label="Current Address" value={employee.currentAddress || employee.address} />
+                    <DetailField label="Permanent Address" value={employee.permanentAddress} />
+                  </div>
+                </div>
+
+                {/* Section 3: Account Details */}
+                <div className="pt-2 space-y-3">
+                  <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
+                    Account Details
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1">
+                    <DetailField label="Username / Login ID" value={employee.employeeId} mono />
+                    <DetailField label="Status" value={<StatusBadge status={employee.status} />} />
+                    <DetailField label="Created Date" value={employee.createdDate} />
+                    <DetailField label="Created By" value={employee.createdBy} />
+                    <DetailField label="Updated Date" value={employee.updatedDate} />
+                    <DetailField label="Updated By" value={employee.updatedBy} />
+                    <DetailField label="Last Status Change" value={employee.lastStatusChange} />
+                    {employee.remarks && <DetailField label="Remarks" value={employee.remarks} />}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: ROLE & DEPARTMENT */}
+          {activeSubTab === "role_dept" && (
+            <div className="space-y-5">
+              <div className="p-6 space-y-6 bg-white border shadow-sm rounded-xl border-border">
+                {/* Section 1: Role & Department Details */}
+                <div className="space-y-3">
+                  <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
+                    Role & Department Details
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1">
+                    <DetailField label="Role Type" value={employee.roleType} />
+                    <DetailField label="Role" value={employee.role} />
+                    <DetailField label="Department" value={employee.department} />
+                    <DetailField label="Designation" value={employee.designation || employee.role} />
+                    <DetailField label="Employee Type" value={employee.employeeType} />
+                    {employee.salesType && <DetailField label="Sales Type" value={employee.salesType} />}
+                    <DetailField label="Joining Date" value={employee.joiningDate} />
+                    <DetailField label="Reporting Manager" value={employee.reportingManager || "None"} />
+                  </div>
+                </div>
+
+                {/* Section 2: Geography Mappings */}
+                <div className="pt-2 space-y-3">
+                  <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
+                    Geography Mappings
+                  </h3>
+                  {employee.geoZone || employee.geoRegion || employee.geoArea || employee.territory || employee.geoLocality || (employee.geoMappings && employee.geoMappings.length > 0) ? (
+                    <div className="overflow-x-auto border border-border rounded-lg bg-white">
+                      <table className="w-full text-xs text-left border-collapse">
+                        <thead>
+                          <tr className="font-semibold border-b border-border bg-slate-50 text-muted-foreground">
+                            <th className="px-4 py-2">Zone</th>
+                            <th className="px-4 py-2">Region</th>
+                            <th className="px-4 py-2">Area</th>
+                            <th className="px-4 py-2">Territory</th>
+                            <th className="px-4 py-2">Locality</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {employee.geoMappings && employee.geoMappings.length > 0 ? (
+                            employee.geoMappings.map((geo, idx) => (
+                              <tr key={idx} className="border-b border-border/60 last:border-0 hover:bg-slate-50/50 font-medium">
+                                <td className="px-4 py-2">{geo.geoZone || "—"}</td>
+                                <td className="px-4 py-2">{geo.geoRegion || "—"}</td>
+                                <td className="px-4 py-2">{geo.geoArea || "—"}</td>
+                                <td className="px-4 py-2">{geo.territory || "—"}</td>
+                                <td className="px-4 py-2">{geo.geoLocality || "—"}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr className="border-b border-border/60 last:border-0 font-medium">
+                              <td className="px-4 py-2">{employee.geoZone || "—"}</td>
+                              <td className="px-4 py-2">{employee.geoRegion || "—"}</td>
+                              <td className="px-4 py-2">{employee.geoArea || "—"}</td>
+                              <td className="px-4 py-2">{employee.territory || "—"}</td>
+                              <td className="px-4 py-2">{employee.geoLocality || "—"}</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic pl-1">No geography mapping assigned to this user.</p>
+                  )}
+                </div>
+
+                {/* Section 3: Emergency Contact Details */}
+                <div className="pt-2 space-y-3">
+                  <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
+                    Emergency Contact Details
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1">
+                    <DetailField label="Contact Name" value={employee.emergencyContactName} />
+                    <DetailField label="Mobile Number" value={employee.emergencyContactMobile} mono />
+                    <DetailField label="Relation" value={employee.emergencyContactRelation} />
+                    {employee.emergencyContactAddress && <DetailField label="Address" value={employee.emergencyContactAddress} />}
+                  </div>
+                </div>
+
+                {/* Section 4: Approval Chain Details */}
+                {(employee.approvalLevel1Id || employee.approvalLevel2Id || employee.approvalLevel3Id) && (
+                  <div className="pt-2 space-y-3">
+                    <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
+                      Approval Chain Details
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {employee.approvalLevel1Id && (
+                        <div className="p-3.5 border border-border rounded-xl bg-slate-50/50 space-y-1">
+                          <span className="text-[10px] font-bold text-brand-600 uppercase tracking-wider">Level 1 Approver</span>
+                          <p className="text-xs font-bold text-foreground">{employee.approvalLevel1Name}</p>
+                          <p className="text-[10px] text-muted-foreground font-semibold">{employee.approvalLevel1Role}</p>
+                        </div>
+                      )}
+                      {employee.approvalLevel2Id && (
+                        <div className="p-3.5 border border-border rounded-xl bg-slate-50/50 space-y-1">
+                          <span className="text-[10px] font-bold text-brand-600 uppercase tracking-wider">Level 2 Approver</span>
+                          <p className="text-xs font-bold text-foreground">{employee.approvalLevel2Name}</p>
+                          <p className="text-[10px] text-muted-foreground font-semibold">{employee.approvalLevel2Role}</p>
+                        </div>
+                      )}
+                      {employee.approvalLevel3Id && (
+                        <div className="p-3.5 border border-border rounded-xl bg-slate-50/50 space-y-1">
+                          <span className="text-[10px] font-bold text-brand-600 uppercase tracking-wider">Level 3 Approver</span>
+                          <p className="text-xs font-bold text-foreground">{employee.approvalLevel3Name}</p>
+                          <p className="text-[10px] text-muted-foreground font-semibold">{employee.approvalLevel3Role}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: PERMISSIONS & ACCESS */}
+          {activeSubTab === "permissions" && (
+            <div className="p-6 bg-white border shadow-sm rounded-xl border-border">
+              <ReadOnlyPermissionsView permissions={employee.permissions} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -494,7 +872,7 @@ export default function EmployeeDetailPage() {
         onClose={() => setConfirmTarget(null)}
         onConfirm={confirmDelete}
         title="Archive User"
-        description={`Are you sure you want to archive ${employee?.fullName}? This action can be undone.`}
+        description={`Are you sure you want to archive ${employee?.fullName}? This action will change their status to Archived.`}
         confirmLabel="Archive"
         destructive
       />

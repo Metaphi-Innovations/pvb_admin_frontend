@@ -1209,7 +1209,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
             {/* Basic Info */}
             <div>
               <SectionHead label="Basic Information" />
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-7 gap-3">
 
                 {/* Full Name */}
                 <Field label="First Name" required error={errors.firstName}>
@@ -1317,19 +1317,25 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
             {/* Emergency Contact */}
             <div className="pt-4 border-t border-border/60">
               <SectionHead label="Emergency Contact" />
-              <div className="grid grid-cols-3 gap-3">
-                <Field label="Contact Name" required error={errors.emergencyContactName}>
-                  <Input value={form.emergencyContactName || ""} onChange={e => set("emergencyContactName", e.target.value)}
-                    placeholder="Full name" className={inp("emergencyContactName")} />
-                </Field>
-                <AC label="Relationship" value={form.emergencyContactRelation || "Spouse"}
-                  onChange={v => set("emergencyContactRelation", v)}
-                  options={RELATIONS.map(r => ({ label: r, value: r }))} />
-                <Field label="Contact Number" required error={errors.emergencyContactMobile}>
-                  <Input value={form.emergencyContactMobile || ""} onChange={e => set("emergencyContactMobile", e.target.value)}
-                    placeholder="10-digit mobile" maxLength={10} className={inp("emergencyContactMobile")} />
-                </Field>
-                <div className="col-span-3">
+              <div className="grid grid-cols-12 gap-3">
+                <div className="col-span-2 ">
+                  <Field label="Contact Name" required error={errors.emergencyContactName}>
+                    <Input value={form.emergencyContactName || ""} onChange={e => set("emergencyContactName", e.target.value)}
+                      placeholder="Full name" className={inp("emergencyContactName")} />
+                  </Field>
+                </div>
+                <div className="col-span-2">
+                  <AC label="Relationship" value={form.emergencyContactRelation || "Spouse"}
+                    onChange={v => set("emergencyContactRelation", v)}
+                    options={RELATIONS.map(r => ({ label: r, value: r }))} />
+                </div>
+                <div className="col-span-2">
+                  <Field label="Contact Number" required error={errors.emergencyContactMobile}>
+                    <Input value={form.emergencyContactMobile || ""} onChange={e => set("emergencyContactMobile", e.target.value)}
+                      placeholder="10-digit mobile" maxLength={10} className={inp("emergencyContactMobile")} />
+                  </Field>
+                </div>
+                <div className="col-span-6 col-start-1">
                   <Field label="Emergency Contact Address">
                     <Textarea value={form.emergencyContactAddress || ""} onChange={e => set("emergencyContactAddress", e.target.value)}
                       placeholder="Emergency contact's home address" rows={2} className="text-xs resize-none" />
@@ -1341,8 +1347,8 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
             {/* Address Details */}
             <div className="pt-4 border-t border-border/60">
               <SectionHead label="Address Details" />
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
+              <div className="grid grid-cols-12 gap-3">
+                <div className="col-span-12 space-y-1 md:col-span-4">
                   <Label className="text-xs font-medium">Current Address</Label>
                   <Textarea value={form.currentAddress || ""} onChange={e => {
                     set("currentAddress", e.target.value);
@@ -1350,7 +1356,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                   }}
                     placeholder="Current / residential address" rows={3} className="text-xs resize-none" />
                 </div>
-                <div className="space-y-1">
+                <div className="col-span-12 space-y-1 md:col-span-4">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs font-medium">Permanent Address</Label>
                     <label className="flex items-center gap-1.5 cursor-pointer">

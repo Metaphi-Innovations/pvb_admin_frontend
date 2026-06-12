@@ -1180,17 +1180,7 @@ export function VendorForm({
 								title='Product Mappings'
 								subtitle='Select products and enter vendor-specific purchase prices.'
 							/>
-							{!readOnly && (
-								<Button
-									type='button'
-									variant='outline'
-									size='sm'
-									className='h-8 gap-1 text-xs border-dashed animate-none'
-									onClick={addProductRow}
-								>
-									<Plus className='w-3.5 h-3.5 mr-1' /> Add Product
-								</Button>
-							)}
+							{/* Button removed to keep only the autocomplete Add Selected panel */}
 						</div>
 
 						{!readOnly && (
