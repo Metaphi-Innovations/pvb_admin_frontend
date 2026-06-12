@@ -25,13 +25,26 @@ export function POFormLayout({
   headerActions,
 }: POFormLayoutProps) {
   const router = useRouter();
-  const title = mode === "create" ? "Create Purchase Order" : mode === "edit" ? "Edit Purchase Order" : "Purchase Order";
+  const title =
+    mode === "create"
+      ? "Add Purchase Order"
+      : mode === "edit"
+        ? "Edit Purchase Order"
+        : "Purchase Order";
+  const description =
+    mode === "create"
+      ? "Procurement > Purchase Order > Add"
+      : mode === "edit"
+        ? "Procurement > Purchase Order > Edit"
+        : poNumber
+          ? `Procurement > Purchase Order > ${poNumber}`
+          : "Procurement > Purchase Order";
   const defaultBack = mode === "create" ? "/procurement/purchase-orders" : backHref ?? "/procurement/purchase-orders";
 
   return (
     <FormContainer
       title={title}
-      description={poNumber ? `PO Number: ${poNumber}` : "New Purchase Order"}
+      description={description}
       onBack={() => router.push(defaultBack)}
       actions={
         <div className="flex items-center gap-2">

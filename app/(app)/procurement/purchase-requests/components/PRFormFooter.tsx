@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Send, Save } from "lucide-react";
-import { ProcButton } from "../../design/proc-design";
+import { Button } from "@/components/ui/button";
 
 export function PRFormFooter({
   readOnly,
@@ -10,28 +10,36 @@ export function PRFormFooter({
   onSaveDraft,
   onSubmit,
   showSubmit = true,
+  saveLabel = "Save Purchase Request",
 }: {
   readOnly?: boolean;
   onCancel: () => void;
   onSaveDraft?: () => void;
   onSubmit?: () => void;
   showSubmit?: boolean;
+  saveLabel?: string;
 }) {
   if (readOnly) {
-    return <ProcButton variant="outline" onClick={onCancel}>Back to list</ProcButton>;
+    return (
+      <Button variant="outline" className="h-9 rounded-lg text-xs font-semibold" onClick={onCancel}>
+        Back to list
+      </Button>
+    );
   }
   return (
     <>
-      <ProcButton variant="outline" onClick={onCancel}>Discard</ProcButton>
+      <Button variant="outline" className="h-9 rounded-lg text-xs font-semibold" onClick={onCancel}>
+        Discard
+      </Button>
       {onSaveDraft && (
-        <ProcButton variant="outline" onClick={onSaveDraft}>
-          <Save className="w-3.5 h-3.5 mr-1.5" /> Save Draft
-        </ProcButton>
+        <Button className="h-9 gap-1.5 rounded-lg bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700" onClick={onSaveDraft}>
+          <Save className="h-3.5 w-3.5" /> {saveLabel}
+        </Button>
       )}
       {showSubmit && onSubmit && (
-        <ProcButton variant="primary" onClick={onSubmit}>
-          <Send className="w-3.5 h-3.5 mr-1.5" /> Submit PR
-        </ProcButton>
+        <Button variant="outline" className="h-9 gap-1.5 rounded-lg text-xs font-semibold" onClick={onSubmit}>
+          <Send className="h-3.5 w-3.5" /> Submit PR
+        </Button>
       )}
     </>
   );

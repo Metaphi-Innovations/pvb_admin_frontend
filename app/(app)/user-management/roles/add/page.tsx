@@ -29,9 +29,9 @@ function SectionCard({ icon: Icon, title, subtitle, children, optional }: {
   optional?: boolean;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+    <div className="overflow-hidden bg-white border shadow-sm rounded-xl border-border">
       <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-muted/20">
-        <div className="w-8 h-8 rounded-lg bg-brand-50 border border-brand-100 flex items-center justify-center flex-shrink-0">
+        <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 border rounded-lg bg-brand-50 border-brand-100">
           <Icon className="w-4 h-4 text-brand-600" />
         </div>
         <div className="flex-1">
@@ -90,7 +90,7 @@ function SearchableDropdown<T extends { id: number; name?: string; roleName?: st
             <span className={selected ? "text-foreground" : "text-muted-foreground"}>
               {selected ? labelFn(selected) : placeholder}
             </span>
-            <ChevronsUpDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <ChevronsUpDown className="flex-shrink-0 w-4 h-4 text-muted-foreground" />
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
@@ -101,13 +101,13 @@ function SearchableDropdown<T extends { id: number; name?: string; roleName?: st
                 placeholder="Search…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="h-8 text-xs pl-8"
+                className="h-8 pl-8 text-xs"
               />
             </div>
           </div>
           <div className="max-h-[200px] overflow-y-auto py-1">
             {filtered.length === 0 ? (
-              <p className="px-3 py-4 text-xs text-muted-foreground text-center">No options found</p>
+              <p className="px-3 py-4 text-xs text-center text-muted-foreground">No options found</p>
             ) : (
               filtered.map((item) => (
                 <button
@@ -131,7 +131,7 @@ function SearchableDropdown<T extends { id: number; name?: string; roleName?: st
         </PopoverContent>
       </Popover>
       {error && (
-        <p className="text-xs text-red-500 flex items-center gap-1">
+        <p className="flex items-center gap-1 text-xs text-red-500">
           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
           {error}
         </p>
@@ -147,11 +147,11 @@ function GeoLevelDropdown({ value, onChange }: { value: GeoLevel; onChange: (v: 
       <Label className="text-xs font-medium">Geography Level</Label>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <button className="w-full h-9 px-3 text-sm text-left border border-border rounded-lg bg-background flex items-center justify-between hover:bg-muted/30 transition-colors">
+          <button className="flex items-center justify-between w-full px-3 text-sm text-left transition-colors border rounded-lg h-9 border-border bg-background hover:bg-muted/30">
             <span className={value === "None" ? "text-muted-foreground" : "text-foreground"}>
               {value === "None" ? "None (non-field role)" : value}
             </span>
-            <ChevronsUpDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <ChevronsUpDown className="flex-shrink-0 w-4 h-4 text-muted-foreground" />
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
@@ -253,14 +253,14 @@ export default function AddRolePage() {
   return (
     <FormContainer
       title="Add Role"
-      description="User Management â†’ Roles â†’ New Role"
+      description="User Management → Roles → New Role"
       onBack={() => router.back()}
       onCancel={() => router.back()}
       cancelLabel="Discard"
       noCard={true}
       actions={
         <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" onClick={handleSave}>
-          <span className="w-3.5 h-3.5" /> Save Role
+          <Check className="w-3.5 h-3.5" /> Save Role
         </Button>
       }
     >

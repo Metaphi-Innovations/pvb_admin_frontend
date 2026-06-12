@@ -16,6 +16,7 @@ export interface WarehouseContact {
   mobileNumber: string;
   emailAddress: string;
   isPrimary?: boolean;
+  mobileCountryCode?: string;
 }
 
 export interface WarehouseMaster {

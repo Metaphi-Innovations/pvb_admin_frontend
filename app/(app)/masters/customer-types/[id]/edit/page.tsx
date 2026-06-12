@@ -51,6 +51,7 @@ export default function EditCustomerTypePage() {
     }
 
     const list = loadCustomerTypes();
+    const today = new Date().toISOString().slice(0, 10);
     const updated = list.map((c) =>
       c.id === Number(id)
           ? {
@@ -60,6 +61,8 @@ export default function EditCustomerTypePage() {
             description: form.description.trim(),
             documentTypes: form.documentTypes || [],
             status: c.status,
+            updatedBy: "Admin",
+            updatedDate: today,
           }
         : c,
     );

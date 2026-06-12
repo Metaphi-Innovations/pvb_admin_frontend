@@ -49,6 +49,7 @@ export default function AddCustomerTypePage() {
     }
 
     const list = loadCustomerTypes();
+    const today = new Date().toISOString().slice(0, 10);
     const newRecord: CustomerTypeRecord = {
       id: nextCustomerTypeId(list),
       customerTypeCode: form.customerTypeCode.trim() || generateCustomerTypeCode(list),
@@ -56,6 +57,10 @@ export default function AddCustomerTypePage() {
       description: form.description.trim(),
       documentTypes: form.documentTypes || [],
       status: "active",
+      createdBy: "Admin",
+      createdDate: today,
+      updatedBy: "Admin",
+      updatedDate: today,
     };
 
     saveCustomerTypes([...list, newRecord]);
