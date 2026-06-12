@@ -118,6 +118,15 @@ function StatusToggle({
 	);
 }
 
+function AuditCell({ name, date }: { name: string; date?: string }) {
+	return (
+		<div className="space-y-0.5">
+			<p className="text-[11px] font-semibold leading-4 text-brand-700">{name}</p>
+			{date ? <p className="text-[10px] font-mono leading-3 text-muted-foreground">{date}</p> : null}
+		</div>
+	);
+}
+
 
 
 export default function HSNPage() {
@@ -205,9 +214,7 @@ export default function HSNPage() {
 			filterType: "text",
 			width: "140px",
 			render: (val, row) => (
-				<span className='font-mono font-bold text-foreground'>
-					{row.hsnCode}
-				</span>
+				<span className="font-mono text-xs text-brand-700">{row.hsnCode}</span>
 			),
 		},
 		{
@@ -217,7 +224,9 @@ export default function HSNPage() {
 			filterable: true,
 			filterType: "text",
 			width: "320px",
-			render: (val, row) => row.hsnDescription,
+			render: (val, row) => (
+				<span className="text-xs font-semibold text-foreground">{row.hsnDescription}</span>
+			),
 		},
 		{
 			key: "gstRate",
@@ -229,22 +238,6 @@ export default function HSNPage() {
 			width: "120px",
 		},
 
-		{
-			key: "createdBy",
-			header: "Created By",
-			sortable: true,
-			filterable: true,
-			filterType: "text",
-			width: "120px",
-		},
-		{
-			key: "updatedBy",
-			header: "Updated By",
-			sortable: true,
-			filterable: true,
-			filterType: "text",
-			width: "120px",
-		},
 		{
 			key: "status",
 			header: "Status",
@@ -259,6 +252,24 @@ export default function HSNPage() {
 			render: (val, row) => (
 				<StatusToggle record={row} onToggle={toggleStatus} />
 			),
+		},
+		{
+			key: "createdBy",
+			header: "Created",
+			sortable: true,
+			filterable: true,
+			filterType: "text",
+			width: "120px",
+			render: (val, row) => <AuditCell name={row.createdBy} date={row.createdDate} />,
+		},
+		{
+			key: "updatedBy",
+			header: "Updated",
+			sortable: true,
+			filterable: true,
+			filterType: "text",
+			width: "120px",
+			render: (val, row) => <AuditCell name={row.updatedBy} date={row.updatedDate} />,
 		},
 	];
 

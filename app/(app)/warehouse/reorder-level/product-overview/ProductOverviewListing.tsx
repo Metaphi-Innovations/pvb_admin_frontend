@@ -7,6 +7,7 @@ import { Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { ReorderLevel } from "../types";
+import Link from "next/link";
 import { PRODUCT_OPTIONS, WAREHOUSE_OPTIONS, STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
 
 interface ProductOverviewListingProps {
@@ -16,7 +17,7 @@ interface ProductOverviewListingProps {
 function StatusBadge({ status }: { status: string }) {
   const cfg = STATUS_BADGE_CONFIG[status] || { bg: "bg-slate-100 text-slate-600 border-slate-200", dot: "bg-slate-400" };
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-semibold border ${cfg.bg}`}>
+    <span className={`inline-flex items-center gap-1.5 text-[11px] px-2.5 py-0.5 rounded-full font-semibold border ${cfg.bg}`}>
       <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
       {status}
     </span>
@@ -79,8 +80,9 @@ export function ProductOverviewListing({ allRecords }: ProductOverviewListingPro
     key: key as keyof ReorderLevel,
     header,
     sortable: true,
-    align: "center" as const,
+    align: "right" as const,
     width: w,
+    render: (val) => <span className="font-mono text-xs tabular-nums">{val}</span>
   });
 
   const columns: ColumnConfig<ReorderLevel>[] = [
@@ -91,6 +93,15 @@ export function ProductOverviewListing({ allRecords }: ProductOverviewListingPro
       filterable: true,
       filterType: "dropdown",
       filterOptions: PRODUCT_OPTIONS,
+      width: "160px",
+      render: (val, row) => (
+        <Link
+          href={`/warehouse/reorder-level/view/${row.id}`}
+          className="text-xs font-bold text-foreground hover:underline"
+        >
+          {val}
+        </Link>
+      )
     },
     {
       key: "warehouse",
@@ -99,6 +110,7 @@ export function ProductOverviewListing({ allRecords }: ProductOverviewListingPro
       filterable: true,
       filterType: "dropdown",
       filterOptions: WAREHOUSE_OPTIONS,
+      width: "150px",
     },
     numCol("currentStock", "Current Stock"),
     numCol("reservedStock", "Reserved Stock", "130px"),
