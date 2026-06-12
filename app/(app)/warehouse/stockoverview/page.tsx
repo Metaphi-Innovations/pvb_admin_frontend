@@ -72,7 +72,7 @@ export default function StockOverviewPage() {
       title="Stock Overview Dashboard"
       titleIcon={Boxes}
       metrics={
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <MiniKPICard label="Total Stock" value={stats.totalStock} icon={Boxes} accent={true} />
           <MiniKPICard label="QC Passed Stock" value={stats.qcPassedQty} icon={CheckCircle2} accent={false} />
           <MiniKPICard label="Rejected Stock" value={stats.rejectedQty} icon={XCircle} accent={false} />
@@ -81,66 +81,44 @@ export default function StockOverviewPage() {
           <MiniKPICard label="Expired Stock" value={stats.expired} icon={ShieldAlert} accent={false} />
         </div>
       }
-    >
-      {/* Tabs Container */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
-          <TabsList className="bg-muted/50 p-0.5 border border-border/60 rounded-xl inline-flex">
-            <TabsTrigger
-              value="qc-passed"
-              className="text-xs font-semibold px-4 py-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-brand-700"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
-              QC Passed Stock
-            </TabsTrigger>
-            <TabsTrigger
-              value="rejected"
-              className="text-xs font-semibold px-4 py-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-brand-700"
-            >
-              <XCircle className="w-3.5 h-3.5 mr-1.5" />
-              Rejected Stock
-            </TabsTrigger>
-            <TabsTrigger
-              value="grn-pending"
-              className="text-xs font-semibold px-4 py-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-brand-700"
-            >
-              <Clock className="w-3.5 h-3.5 mr-1.5" />
-              GRN Pending Stock
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Warehouse Dropdown */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-muted-foreground">Warehouse:</span>
-            <AutocompleteSelect
-              options={[
-                { value: "All", label: "All Warehouses" },
-                ...WAREHOUSE_OPTIONS
-              ]}
-              value={selectedWarehouse}
-              onChange={setSelectedWarehouse}
-              placeholder="All Warehouses"
-              searchPlaceholder="Search warehouse..."
-              className="h-9 w-[200px] text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none"
-            />
-          </div>
+      tabs={[
+        { value: "qc-passed", label: "QC Passed Stock", icon: CheckCircle2 },
+        { value: "rejected", label: "Rejected Stock", icon: XCircle },
+        { value: "grn-pending", label: "GRN Pending Stock", icon: Clock }
+      ]}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      actions={
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-muted-foreground">Warehouse:</span>
+          <AutocompleteSelect
+            options={[
+              { value: "All", label: "All Warehouses" },
+              ...WAREHOUSE_OPTIONS
+            ]}
+            value={selectedWarehouse}
+            onChange={setSelectedWarehouse}
+            placeholder="All Warehouses"
+            searchPlaceholder="Search warehouse..."
+            className="h-8 w-[180px] text-xs py-1 px-2.5 rounded-lg border-border bg-white"
+          />
         </div>
+      }
+    >
+      {/* TAB 1: QC Passed Stock */}
+      <TabsContent value="qc-passed" className="mt-0 outline-none">
+        <QcPassedListing qcPassedForWarehouse={qcPassedForWarehouse} />
+      </TabsContent>
 
-        {/* TAB 1: QC Passed Stock */}
-        <TabsContent value="qc-passed" className="mt-0 outline-none">
-          <QcPassedListing qcPassedForWarehouse={qcPassedForWarehouse} />
-        </TabsContent>
+      {/* TAB 2: Rejected Stock */}
+      <TabsContent value="rejected" className="mt-0 outline-none">
+        <RejectedListing rejectedForWarehouse={rejectedForWarehouse} />
+      </TabsContent>
 
-        {/* TAB 2: Rejected Stock */}
-        <TabsContent value="rejected" className="mt-0 outline-none">
-          <RejectedListing rejectedForWarehouse={rejectedForWarehouse} />
-        </TabsContent>
-
-        {/* TAB 3: GRN Pending Stock */}
-        <TabsContent value="grn-pending" className="mt-0 outline-none">
-          <GrnPendingListing grnPendingForWarehouse={grnPendingForWarehouse} />
-        </TabsContent>
-      </Tabs>
+      {/* TAB 3: GRN Pending Stock */}
+      <TabsContent value="grn-pending" className="mt-0 outline-none">
+        <GrnPendingListing grnPendingForWarehouse={grnPendingForWarehouse} />
+      </TabsContent>
     </ListingContainer>
   );
 }

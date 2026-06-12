@@ -151,6 +151,32 @@ export function formatCreditPeriod(v: Vendor): string {
 }
 
 /** Mock GST lookup — replace with API when integrated */
+export function validateVendorMobile(v: string): boolean {
+  return /^[6-9][0-9]{9}$/.test(v.trim());
+}
+
+export function validateVendorEmail(v: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+}
+
+export function validateVendorGSTIN(v: string): boolean {
+  return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(
+    v.trim().toUpperCase(),
+  );
+}
+
+export function validateVendorPAN(v: string): boolean {
+  return /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(v.trim().toUpperCase());
+}
+
+export function validateVendorIFSC(v: string): boolean {
+  return /^[A-Z]{4}0[A-Z0-9]{6}$/.test(v.trim().toUpperCase());
+}
+
+export function validateVendorPincode(v: string): boolean {
+  return /^[1-9][0-9]{5}$/.test(v.trim());
+}
+
 export function fetchGstDetails(gstin: string): {
   legalCompanyName: string;
   billingAddress: Partial<VendorAddress>;
@@ -451,16 +477,7 @@ export const DEFAULT_VENDOR_FORM: VendorFormValues = {
   confirmAccountNumber: "",
   ifscCode: "",
   swiftCode: "",
-  documents: DEFAULT_DOCUMENT_NAMES.map((name, i) => ({
-    uid: `d-${i}`,
-    documentTypeId: undefined,
-    documentName: name,
-    fileUrl: undefined,
-    uploaded: false,
-    fileName: "",
-    uploadedAt: "",
-    size: "",
-  })),
+  documents: [],
   remarks: "",
   vendorProducts: [],
 };
@@ -495,16 +512,7 @@ export function vendorToForm(v: Vendor): VendorFormValues {
     swiftCode: v.swiftCode,
     documents: v.documents.length
       ? v.documents.map((d) => ({ ...d }))
-      : DEFAULT_DOCUMENT_NAMES.map((name, i) => ({
-          uid: `d-${i}`,
-          documentTypeId: undefined,
-          documentName: name,
-          fileUrl: undefined,
-          uploaded: false,
-          fileName: "",
-          uploadedAt: "",
-          size: "",
-        })),
+      : [],
     remarks: v.remarks,
     vendorProducts: v.vendorProducts ? v.vendorProducts.map((p) => ({ ...p })) : [],
   };
@@ -557,11 +565,39 @@ export function formToVendor(
 export function validateVendorForm(form: VendorFormValues): string | null {
   if (!form.vendorName.trim()) return "Vendor name is required.";
   if (!form.mobile.trim()) return "Mobile number is required.";
-  if (form.gstApplicable && form.gstNumber.trim().length !== 15) {
-    return "Enter a valid 15-character GSTIN.";
+  if (!validateVendorMobile(form.mobile)) {
+    return "Enter a valid 10-digit mobile number.";
+  }
+  if (form.email.trim() && !validateVendorEmail(form.email)) {
+    return "Enter a valid email address.";
+  }
+  if (form.gstApplicable && !validateVendorGSTIN(form.gstNumber)) {
+    return "Enter a valid GSTIN.";
+  }
+  if (form.panNumber.trim() && !validateVendorPAN(form.panNumber)) {
+    return "Enter a valid PAN number.";
+  }
+  if (
+    form.billingAddress.pincode.trim() &&
+    !validateVendorPincode(form.billingAddress.pincode)
+  ) {
+    return "Enter a valid 6-digit billing pincode.";
+  }
+  if (form.ifscCode.trim() && !validateVendorIFSC(form.ifscCode)) {
+    return "Enter a valid IFSC code.";
   }
   if (form.accountNumber && form.accountNumber !== form.confirmAccountNumber) {
     return "Account number and confirmation do not match.";
+  }
+
+  for (let i = 0; i < form.contacts.length; i++) {
+    const contact = form.contacts[i];
+    if (contact.mobile.trim() && !validateVendorMobile(contact.mobile)) {
+      return `Enter a valid 10-digit mobile number for contact row ${i + 1}.`;
+    }
+    if (contact.email.trim() && !validateVendorEmail(contact.email)) {
+      return `Enter a valid email address for contact row ${i + 1}.`;
+    }
   }
 
   // Validate product mappings

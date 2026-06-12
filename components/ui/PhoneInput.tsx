@@ -62,7 +62,7 @@ export function PhoneInput({
           disabled={disabled}
         >
           <SelectTrigger
-            className="h-8 w-[88px] shrink-0 text-table font-medium bg-white"
+            className="h-8 w-[120px] shrink-0 text-table font-medium bg-white"
             aria-label="Country code"
           >
             <SelectValue />
@@ -70,7 +70,7 @@ export function PhoneInput({
           <SelectContent>
             {PHONE_COUNTRY_CODES.map((c) => (
               <SelectItem key={c.value} value={c.value} className="text-xs">
-                {c.label}
+                {c.label} ({c.country})
               </SelectItem>
             ))}
           </SelectContent>

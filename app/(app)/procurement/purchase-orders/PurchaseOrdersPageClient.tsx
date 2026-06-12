@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
@@ -29,10 +30,10 @@ import {
 import { formatCurrency } from "@/lib/procurement/utils";
 import { Toast } from "../components/ProcurementUI";
 import { ProcurementApprovalModal } from "../components/ProcurementApprovalModal";
-import { ProcBadge, ProcAvatar, HighlightText } from "../design/proc-design";
+import { ProcAvatar, HighlightText } from "../design/proc-design";
 import { useFlashToast } from "../hooks/useFlashToast";
 import { applySearch, sortRows, type SortDir } from "../hooks/useListingFilters";
-import { StackedCell, formatListingDate } from "../components/listing/ListingCells";
+import { formatListingDate } from "../components/listing/ListingCells";
 import {
   type PurchaseOrder,
   loadPurchaseOrders,
@@ -73,6 +74,30 @@ const TABS: { value: TabId; label: string }[] = [
   { value: "approved", label: "Approved" },
   { value: "rejected", label: "Rejected" },
 ];
+
+const STATUS_CFG: Record<string, { bg: string; text: string; dot: string; label: string }> = {
+  draft: { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-400", label: "Draft" },
+  pending_approval: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-500", label: "Pending Approval" },
+  approved: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Approved" },
+  rejected: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-500", label: "Rejected" },
+  invoice_uploaded: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Invoice Uploaded" },
+  short_closed: { bg: "bg-purple-50", text: "text-purple-700", dot: "bg-purple-500", label: "Short Closed" },
+  closed: { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-400", label: "Closed" },
+  cancelled: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-500", label: "Cancelled" },
+};
+
+function StatusPill({ status }: { status: string }) {
+  const cfg = STATUS_CFG[status] ?? { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-400", label: status };
+  return (
+    <span className={cn(
+      "inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full font-medium border whitespace-nowrap",
+      cfg.bg, cfg.text,
+    )}>
+      <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
+      {cfg.label}
+    </span>
+  );
+}
 
 export default function PurchaseOrdersPageClient() {
   const router = useRouter();
@@ -207,10 +232,12 @@ export default function PurchaseOrdersPageClient() {
       header: "PO No.",
       sortable: true,
       render: (val, row) => (
-        <StackedCell
-          primary={<HighlightText text={row.poNumber} query={(filters.search as string) || ""} />}
-          secondary={formatListingDate(row.poDate)}
-        />
+        <div>
+          <p className="font-semibold text-brand-700 text-xs">
+            <HighlightText text={row.poNumber} query={(filters.search as string) || ""} />
+          </p>
+          <p className="text-[11px] text-muted-foreground">{formatListingDate(row.poDate)}</p>
+        </div>
       ),
     },
     {
@@ -221,15 +248,13 @@ export default function PurchaseOrdersPageClient() {
       filterType: "dropdown",
       filterOptions: suppliers.map(s => ({ label: s, value: s })),
       render: (val, row) => (
-        <StackedCell
-          primary={
-            <span className="inline-flex items-center gap-2">
-              <ProcAvatar name={row.supplierName} />
-              <HighlightText text={row.supplierName} query={(filters.search as string) || ""} />
-            </span>
-          }
-          secondary={getVendorSecondaryLine(row)}
-        />
+        <div className="py-1">
+          <span className="inline-flex items-center gap-2 text-xs text-foreground font-medium">
+            <ProcAvatar name={row.supplierName} />
+            <HighlightText text={row.supplierName} query={(filters.search as string) || ""} />
+          </span>
+          <p className="text-[11px] text-muted-foreground mt-0.5">{getVendorSecondaryLine(row)}</p>
+        </div>
       ),
     },
     {
@@ -240,7 +265,7 @@ export default function PurchaseOrdersPageClient() {
       filterType: "dropdown",
       filterOptions: prRefs.map(p => ({ label: p, value: p })),
       render: (val, row) => (
-        <span className="text-[13px] text-[#6B80A0] py-2">
+        <span className="text-xs text-muted-foreground py-1">
           {row.sourcePrNumber ? <HighlightText text={row.sourcePrNumber} query={(filters.search as string) || ""} /> : "—"}
         </span>
       ),
@@ -250,7 +275,7 @@ export default function PurchaseOrdersPageClient() {
       header: "Items",
       sortable: true,
       render: (val, row) => (
-        <span className="text-[13px] tabular-nums text-[#3D5473] py-2">
+        <span className="text-xs tabular-nums text-foreground py-1">
           {getPOTotalItems(row)}
         </span>
       ),
@@ -260,7 +285,7 @@ export default function PurchaseOrdersPageClient() {
       header: "PO Amount",
       sortable: true,
       render: (val, row) => (
-        <span className="text-[13px] font-semibold tabular-nums text-[#0A1628] py-2">
+        <span className="text-xs font-semibold tabular-nums text-foreground py-1">
           {formatCurrency(row.summary.grandTotal)}
         </span>
       ),
@@ -304,7 +329,7 @@ export default function PurchaseOrdersPageClient() {
         { label: "Closed", value: "closed" },
         { label: "Cancelled", value: "cancelled" },
       ],
-      render: (val, row) => <ProcBadge status={row.status} />,
+      render: (val, row) => <StatusPill status={row.status} />,
     },
     {
       key: "followUp",
@@ -325,58 +350,58 @@ export default function PurchaseOrdersPageClient() {
       render: (val, row) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="p-1.5 rounded-md hover:bg-brand-50">
-              <MoreHorizontal className="w-4 h-4 text-[#6B80A0]" />
+            <button className="p-1.5 hover:bg-muted rounded-md transition-colors">
+              <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48 z-[400]">
-            <DropdownMenuItem onClick={() => router.push(`/procurement/purchase-orders/${row.id}`)}>
+            <DropdownMenuItem onClick={() => router.push(`/procurement/purchase-orders/${row.id}`)} className="cursor-pointer">
               <Eye className="w-3.5 h-3.5 mr-2" /> View
             </DropdownMenuItem>
             {["draft", "rejected"].includes(row.status) && (
-              <DropdownMenuItem onClick={() => router.push(`/procurement/purchase-orders/${row.id}/edit`)}>
+              <DropdownMenuItem onClick={() => router.push(`/procurement/purchase-orders/${row.id}/edit`)} className="cursor-pointer">
                 <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
               </DropdownMenuItem>
             )}
             {row.status === "draft" && (
-              <DropdownMenuItem onClick={() => { updateOne(submitPO(row)); setToast({ msg: "PO submitted.", type: "success" }); }}>
+              <DropdownMenuItem onClick={() => { updateOne(submitPO(row)); setToast({ msg: "PO submitted.", type: "success" }); }} className="cursor-pointer">
                 <Send className="w-3.5 h-3.5 mr-2" /> Submit
               </DropdownMenuItem>
             )}
             {row.status === "pending_approval" && (
               <>
-                <DropdownMenuItem onClick={() => { setApprovalTarget(row); setApprovalAction("approve"); setApprovalOpen(true); }}>
+                <DropdownMenuItem onClick={() => { setApprovalTarget(row); setApprovalAction("approve"); setApprovalOpen(true); }} className="cursor-pointer">
                   <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Approve
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => { setApprovalTarget(row); setApprovalAction("reject"); setApprovalOpen(true); }}>
+                <DropdownMenuItem onClick={() => { setApprovalTarget(row); setApprovalAction("reject"); setApprovalOpen(true); }} className="cursor-pointer">
                   <XCircle className="w-3.5 h-3.5 mr-2" /> Reject
                 </DropdownMenuItem>
               </>
             )}
             {canUploadPOInvoice(row) && (
-              <DropdownMenuItem onClick={() => openUpload(row, row.status === "invoice_uploaded")}>
+              <DropdownMenuItem onClick={() => openUpload(row, row.status === "invoice_uploaded")} className="cursor-pointer">
                 <Upload className="w-3.5 h-3.5 mr-2" /> Upload Invoice
               </DropdownMenuItem>
             )}
             {canAddPOFollowUp(row) && (
-              <DropdownMenuItem onClick={() => { setFollowUpTarget(row); setFollowUpOpen(true); }}>
+              <DropdownMenuItem onClick={() => { setFollowUpTarget(row); setFollowUpOpen(true); }} className="cursor-pointer">
                 <MessageSquare className="w-3.5 h-3.5 mr-2" /> Add Follow-up
               </DropdownMenuItem>
             )}
             {canShortClosePO(row) && (
-              <DropdownMenuItem onClick={() => { setShortCloseTarget(row); setShortCloseOpen(true); }}>
+              <DropdownMenuItem onClick={() => { setShortCloseTarget(row); setShortCloseOpen(true); }} className="cursor-pointer">
                 <Scissors className="w-3.5 h-3.5 mr-2" /> Short Close PO
               </DropdownMenuItem>
             )}
             {["approved", "invoice_uploaded"].includes(row.status) && (
-              <DropdownMenuItem onClick={() => { updateOne(closePO(row)); setToast({ msg: "PO closed.", type: "success" }); }}>
+              <DropdownMenuItem onClick={() => { updateOne(closePO(row)); setToast({ msg: "PO closed.", type: "success" }); }} className="cursor-pointer">
                 Close PO
               </DropdownMenuItem>
             )}
             {!["closed", "cancelled", "short_closed"].includes(row.status) && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-red-600" onClick={() => { updateOne(cancelPO(row)); setToast({ msg: "PO cancelled.", type: "success" }); }}>
+                <DropdownMenuItem className="text-red-600 cursor-pointer" onClick={() => { updateOne(cancelPO(row)); setToast({ msg: "PO cancelled.", type: "success" }); }}>
                   Cancel PO
                 </DropdownMenuItem>
               </>
@@ -414,6 +439,7 @@ export default function PurchaseOrdersPageClient() {
           addLabel="Create PO"
           emptyMessage="purchase orders"
           searchPlaceholder="Search PO no., PR no., supplier…"
+          onExport={() => exportPOListingCsv(filtered)}
           currentFilters={filters}
           currentSort={sort}
         />
