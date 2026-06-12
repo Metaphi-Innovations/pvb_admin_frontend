@@ -22,6 +22,21 @@ import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 
+function AuditCell({
+  name,
+  date,
+}: {
+  name?: string;
+  date?: string;
+}) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[11px] font-semibold leading-4 text-brand-700">{name || "—"}</p>
+      <p className="text-[10px] font-mono leading-3 text-muted-foreground">{date || "—"}</p>
+    </div>
+  );
+}
+
 function StatusToggle({ record, onToggle }: { record: DocumentTypeMaster; onToggle: (item: DocumentTypeMaster) => void }) {
   const active = record.status === "Active";
   return (
@@ -86,7 +101,7 @@ export default function DocumentTypesPage() {
       filterable: true,
       filterType: "text",
       width: "180px",
-      render: (val, row) => <span className="font-mono font-semibold text-foreground">{row.documentTypeCode}</span>,
+      render: (val, row) => <span className="font-mono text-xs text-brand-700">{row.documentTypeCode}</span>,
     },
     {
       key: "title",
@@ -96,7 +111,7 @@ export default function DocumentTypesPage() {
       filterType: "text",
       width: "280px",
       render: (val, row) => (
-        <span className="font-semibold text-foreground">
+        <span className="text-xs font-semibold text-foreground">
           {row.title}
         </span>
       ),
@@ -109,22 +124,6 @@ export default function DocumentTypesPage() {
       filterType: "text",
       width: "480px",
       render: (val, row) => row.description || "—",
-    },
-    {
-      key: "createdBy",
-      header: "Created By",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-    },
-    {
-      key: "updatedBy",
-      header: "Updated By",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
     },
     {
       key: "status",
@@ -140,6 +139,24 @@ export default function DocumentTypesPage() {
       render: (val, row) => (
         <StatusToggle record={row} onToggle={toggleStatus} />
       ),
+    },
+    {
+      key: "createdBy",
+      header: "Created",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => <AuditCell name={row.createdBy} date={row.createdDate} />,
+    },
+    {
+      key: "updatedBy",
+      header: "Updated",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => <AuditCell name={row.updatedBy} date={row.updatedDate} />,
     },
   ];
 
@@ -192,6 +209,38 @@ export default function DocumentTypesPage() {
     return filtered.slice(start, start + pageSize);
   }, [filtered, page, pageSize]);
 
+  const handleExport = () => {
+    const rows = filtered.map((row) => ({
+      "Document Type Code": row.documentTypeCode,
+      Title: row.title,
+      Description: row.description || "",
+      Status: row.status,
+      "Created By": row.createdBy || "",
+      "Updated By": row.updatedBy || "",
+    }));
+
+    const headers = Object.keys(rows[0] || {});
+    const csv = [
+      headers.join(","),
+      ...rows.map((row) =>
+        headers
+          .map((header) => {
+            const value = String(row[header as keyof typeof row] ?? "");
+            return `"${value.replace(/"/g, '""')}"`;
+          })
+          .join(","),
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `document-types-${todayStr()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   useEffect(() => {
     setPage(1);
   }, [filters, sort, pageSize]);
@@ -231,6 +280,7 @@ export default function DocumentTypesPage() {
           onFilterChange={setFilters}
           actions={actions}
           onAdd={() => router.push("/masters/document-types/add")}
+          onExport={handleExport}
           addLabel="Add Document Type"
           emptyMessage="document types"
           searchPlaceholder="Search document type..."

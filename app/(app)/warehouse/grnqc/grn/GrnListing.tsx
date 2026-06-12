@@ -9,6 +9,7 @@ import { getQcRecords } from "../qc/mock-data";
 import { GrnRecord } from "./types";
 import { QcRecord } from "../qc/types";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 type GrnListingRow = GrnRecord & {
   receivedQty: number;
@@ -100,13 +101,72 @@ export function GrnListing() {
 
   // GRN Column Configurations
   const grnColumns: ColumnConfig<GrnListingRow>[] = [
-    { key: "grnNo", header: "GRN No", sortable: true, filterable: true, filterType: "text", width: "130px" },
-    { key: "poNumber", header: "PO No.", sortable: true, filterable: true, filterType: "text", width: "120px" },
-    { key: "vendorName", header: "Vendor", sortable: true, filterable: true, filterType: "text" },
-    { key: "receivedQty", header: "Received Qty", sortable: true, align: "right", width: "110px" },
-    { key: "acceptedQty", header: "Accepted Qty", sortable: true, align: "right", width: "110px" },
-    { key: "rejectedQty", header: "Rejected Qty", sortable: true, align: "right", width: "110px" },
-    { key: "grnDate", header: "GRN Date", sortable: true, filterable: true, filterType: "date", width: "140px" },
+    {
+      key: "grnNo",
+      header: "GRN No",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "130px",
+      render: (val, row) => (
+        <Link href={`/warehouse/grnqc/grn/view/${row.id}`} className="block group/name">
+          <span className="font-mono text-xs font-semibold text-brand-700 group-hover/name:text-brand-800">{row.grnNo}</span>
+        </Link>
+      ),
+    },
+    {
+      key: "poNumber",
+      header: "PO No.",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => (
+        <span className="font-mono text-xs text-foreground">{row.poNumber}</span>
+      ),
+    },
+    {
+      key: "vendorName",
+      header: "Vendor",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "130px",
+      render: (val, row) => <span className="text-xs text-foreground">{row.vendorName}</span>,
+    },
+    {
+      key: "receivedQty",
+      header: "Received Qty",
+      sortable: true,
+      align: "right",
+      width: "110px",
+      render: (val) => <span className="text-xs font-medium tabular-nums text-foreground">{val != null ? val.toLocaleString() : "—"}</span>,
+    },
+    {
+      key: "acceptedQty",
+      header: "Accepted Qty",
+      sortable: true,
+      align: "right",
+      width: "110px",
+      render: (val) => <span className="text-xs font-medium tabular-nums text-foreground">{val != null ? val.toLocaleString() : "—"}</span>,
+    },
+    {
+      key: "rejectedQty",
+      header: "Rejected Qty",
+      sortable: true,
+      align: "right",
+      width: "110px",
+      render: (val) => <span className="text-xs font-medium tabular-nums text-foreground">{val != null ? val.toLocaleString() : "—"}</span>,
+    },
+    {
+      key: "grnDate",
+      header: "GRN Date",
+      sortable: true,
+      filterable: true,
+      filterType: "date",
+      width: "140px",
+      render: (val, row) => <span className="text-xs text-foreground">{row.grnDate}</span>,
+    },
     {
       key: "status",
       header: "Status",
@@ -121,9 +181,9 @@ export function GrnListing() {
       ],
       width: "135px",
       render: (val: any) => {
-        const cfg = GRN_STATUS_CONFIG[val as keyof typeof GRN_STATUS_CONFIG] || { bg: "bg-slate-100 text-slate-700", label: "Unknown" };
+        const cfg = GRN_STATUS_CONFIG[val as keyof typeof GRN_STATUS_CONFIG] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Unknown" };
         return (
-          <span className={`inline-flex items-center text-xs px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
             {cfg.label}
           </span>
         );

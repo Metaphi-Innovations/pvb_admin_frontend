@@ -70,6 +70,26 @@ export interface MasterModuleConfig<T extends BaseMasterRecord, F> {
   getCodeFromForm?: (form: F) => string;
   setCodeOnForm?: (form: F, code: string) => F;
   hideColumnSelection?: boolean;
+  auditColumnVariant?: "plain" | "product";
+  auditColumnHeaders?: {
+    created: string;
+    updated: string;
+  };
+}
+
+function AuditCell({
+  name,
+  date,
+}: {
+  name?: string;
+  date?: string;
+}) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[11px] font-semibold leading-4 text-brand-700">{name || "—"}</p>
+      <p className="text-[10px] font-mono leading-3 text-muted-foreground">{date || "—"}</p>
+    </div>
+  );
 }
 
 export function MasterModule<T extends BaseMasterRecord, F>({
@@ -95,6 +115,11 @@ export function MasterModule<T extends BaseMasterRecord, F>({
     renderViewDetails,
     setCodeOnForm,
     hideColumnSelection,
+    auditColumnVariant = "plain",
+    auditColumnHeaders = {
+      created: "Created By",
+      updated: "Updated By",
+    },
   } = config;
 
   const { data: loadedRecords, ready } = useDeferredLoad(
@@ -231,18 +256,24 @@ export function MasterModule<T extends BaseMasterRecord, F>({
       },
       {
         key: "createdBy",
-        header: "Created By",
+        header: auditColumnHeaders.created,
         sortable: true,
-        render: (v: unknown) => <span className="text-muted-foreground text-xs">{String(v)}</span>,
+        render:
+          auditColumnVariant === "product"
+            ? (_: unknown, row: T) => <AuditCell name={row.createdBy} date={row.createdAt} />
+            : (v: unknown) => <span className="text-muted-foreground text-xs">{String(v)}</span>,
       },
       {
         key: "updatedBy",
-        header: "Updated By",
+        header: auditColumnHeaders.updated,
         sortable: true,
-        render: (v: unknown) => <span className="text-muted-foreground text-xs">{String(v)}</span>,
+        render:
+          auditColumnVariant === "product"
+            ? (_: unknown, row: T) => <AuditCell name={row.updatedBy} date={row.updatedAt} />
+            : (v: unknown) => <span className="text-muted-foreground text-xs">{String(v)}</span>,
       },
     ],
-    [columns, toggleStatus],
+    [auditColumnHeaders.created, auditColumnHeaders.updated, auditColumnVariant, columns, toggleStatus],
   );
 
   const tableActions = useMemo(
