@@ -10,8 +10,9 @@ import {
 	PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import { cn } from "@/lib/utils";
-import { AlertCircle, ChevronsUpDown, Check, XCircle } from "lucide-react";
+import { AlertCircle, ChevronsUpDown, Check, XCircle, ChevronDown } from "lucide-react";
 import {
 	WAREHOUSE_TYPES,
 	WAREHOUSE_STATUSES,
@@ -27,6 +28,65 @@ import {
 } from "../warehouse-data";
 import { loadCustomers } from "../../customers/customer-data";
 import { loadCustomerTypes } from "../../customer-types/customer-type-data";
+
+const PHONE_COUNTRY_CODES = [
+	{ code: "+91", label: "🇮🇳 +91 (India)" },
+	{ code: "+1", label: "🇺🇸 +1 (USA)" },
+	{ code: "+44", label: "🇬🇧 +44 (UK)" },
+	{ code: "+971", label: "🇦🇪 +971 (UAE)" },
+	{ code: "+65", label: "🇸🇬 +65 (Singapore)" },
+];
+
+function CountryCodePicker({
+	value,
+	onChange,
+	disabled,
+	hasError,
+}: {
+	value: string;
+	onChange: (v: string) => void;
+	disabled?: boolean;
+	hasError?: boolean;
+}) {
+	const [open, setOpen] = useState(false);
+	return (
+		<Popover open={open && !disabled} onOpenChange={setOpen}>
+			<PopoverTrigger asChild disabled={disabled}>
+				<button
+					type='button'
+					disabled={disabled}
+					className={cn(
+						"h-8 px-2 text-xs border border-border rounded-lg bg-background flex items-center gap-1 hover:bg-muted/30 transition-colors flex-shrink-0",
+						hasError && "border-red-400",
+						disabled && "opacity-50 pointer-events-none bg-muted/30",
+					)}
+				>
+					<span className='font-medium text-foreground'>{value}</span>
+					<ChevronDown className='w-3 h-3 text-muted-foreground' />
+				</button>
+			</PopoverTrigger>
+			<PopoverContent align='start' className='p-1 bg-white w-52'>
+				{PHONE_COUNTRY_CODES.map((cc) => (
+					<button
+						key={cc.code}
+						type='button'
+						onClick={() => {
+							onChange(cc.code);
+							setOpen(false);
+						}}
+						className={cn(
+							"w-full text-left px-2.5 py-1.5 text-xs rounded hover:bg-muted/60 transition-colors flex items-center justify-between",
+							value === cc.code && "bg-brand-50 text-brand-700",
+						)}
+					>
+						{cc.label}
+						{value === cc.code && <Check className='w-3 h-3 text-brand-600' />}
+					</button>
+				))}
+			</PopoverContent>
+		</Popover>
+	);
+}
 
 export interface WarehouseFormValues {
 	warehouseName: string;
@@ -66,9 +126,16 @@ export const INITIAL_FORM: WarehouseFormValues = {
 			mobileNumber: "",
 			emailAddress: "",
 			isPrimary: true,
+			mobileCountryCode: "+91",
 		},
 	],
 };
+
+function validateWarehouseGST(v: string): boolean {
+	return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(
+		v.trim().toUpperCase(),
+	);
+}
 
 export function validateWarehouseForm(
 	form: WarehouseFormValues,
@@ -76,6 +143,8 @@ export function validateWarehouseForm(
 	const e: Record<string, string> = {};
 	if (!form.warehouseName.trim())
 		e.warehouseName = "Warehouse Name is required";
+	if (form.gstNumber.trim() && !validateWarehouseGST(form.gstNumber))
+		e.gstNumber = "Enter a valid GST number";
 	if (form.pincode.trim() && !/^\d{6}$/.test(form.pincode.trim()))
 		e.pincode = "Enter valid 6-digit pincode";
 	if (form.operatedBy === "C&F Agent" && !form.customerType?.trim()) {
@@ -190,7 +259,7 @@ function AC({
 					</div>
 					<div className='py-1 overflow-y-auto max-h-48'>
 						{filtered.length === 0 ? (
-							<p className='px-3 py-4 text-xs text-center text-muted-foreground whitespace-pre-line'>
+							<p className='px-3 py-4 text-xs text-center whitespace-pre-line text-muted-foreground'>
 								{emptyMessage || "No options"}
 							</p>
 						) : (
@@ -392,6 +461,7 @@ export function WarehouseForm({
 				mobileNumber: "",
 				emailAddress: "",
 				isPrimary: false,
+				mobileCountryCode: "+91",
 			},
 		];
 		onChange({ ...form, contacts: newContacts });
@@ -444,9 +514,9 @@ export function WarehouseForm({
 				/>
 				<div className='grid grid-cols-12 gap-3'>
 					{/* Warehouse Code */}
-					<div className='col-span-2 space-y-1'>
+					<div className='col-span-1 space-y-1'>
 						<Label className='text-xs font-medium'>
-							Warehouse Code (Auto Generated)
+							Warehouse Code
 						</Label>
 						<Input
 							value={warehouseCode}
@@ -458,7 +528,7 @@ export function WarehouseForm({
 					{/* Warehouse Name */}
 					<div
 						className={cn(
-							form.operatedBy === "C&F Agent" ? "col-span-2" : "col-span-3",
+							form.operatedBy === "C&F Agent" ? "col-span-2" : "col-span-2",
 							"space-y-1",
 						)}
 					>
@@ -477,7 +547,7 @@ export function WarehouseForm({
 					{/* Warehouse Type */}
 					<div
 						className={cn(
-							form.operatedBy === "C&F Agent" ? "col-span-2" : "col-span-3",
+							form.operatedBy === "C&F Agent" ? "col-span-2" : "col-span-2",
 						)}
 					>
 						<AC
@@ -534,9 +604,10 @@ export function WarehouseForm({
 							value={form.gstNumber}
 							onChange={(e) => set("gstNumber", e.target.value.toUpperCase())}
 							placeholder='e.g., 27AABCT1234F1ZA'
-							className='h-8 font-mono text-xs'
+							className={cn("h-8 font-mono text-xs", errors.gstNumber && "border-red-400 focus-visible:ring-red-300")}
 							maxLength={15}
 						/>
+						<FieldError msg={errors.gstNumber} />
 					</div>
 				</div>
 			</div>
@@ -567,7 +638,7 @@ export function WarehouseForm({
 							>
 								<div className='grid items-end grid-cols-1 gap-3 md:grid-cols-12'>
 									{/* Contact Person */}
-									<div className='col-span-1 space-y-1 md:col-span-4'>
+									<div className='col-span-1 space-y-1 md:col-span-2'>
 										<Label className='text-xs font-medium'>
 											Contact Person <span className='text-red-500'>*</span>
 										</Label>
@@ -586,31 +657,33 @@ export function WarehouseForm({
 									</div>
 
 									{/* Mobile Number */}
-									<div className='col-span-1 space-y-1 md:col-span-3'>
+									<div className='col-span-1 space-y-1 md:col-span-2'>
 										<Label className='text-xs font-medium'>
 											Mobile Number <span className='text-red-500'>*</span>
 										</Label>
-										<Input
-											value={contact.mobileNumber}
-											onChange={(e) =>
-												updateContact(
-													index,
-													"mobileNumber",
-													e.target.value.replace(/\D/g, ""),
-												)
-											}
-											placeholder='e.g., 9876543210'
-											maxLength={10}
-											className={cn(
-												"h-8 text-xs",
-												mobErr && "border-red-400 focus-visible:ring-red-300",
-											)}
-										/>
+										<div className='flex gap-1.5'>
+											<CountryCodePicker
+												value={contact.mobileCountryCode || "+91"}
+												onChange={(v) =>
+													updateContact(index, "mobileCountryCode", v)
+												}
+												hasError={!!mobErr}
+											/>
+											<Input
+												value={contact.mobileNumber}
+												onChange={(e) =>
+													updateContact(index, "mobileNumber", e.target.value.replace(/\D/g, "").slice(0, 10))
+												}
+												placeholder='10-digit mobile'
+												className={cn("flex-1 h-8 text-xs", mobErr && "border-red-400 focus-visible:ring-red-300")}
+												inputMode='numeric'
+											/>
+										</div>
 										<FieldError msg={mobErr} />
 									</div>
 
 									{/* Email Address */}
-									<div className='col-span-1 space-y-1 md:col-span-3'>
+									<div className='col-span-1 space-y-1 md:col-span-2'>
 										<Label className='text-xs font-medium'>Email Address</Label>
 										<Input
 											value={contact.emailAddress}
@@ -695,21 +768,24 @@ export function WarehouseForm({
 					label='Address & Location Details'
 					sub='Warehouse location and postal address'
 				/>
+
 				<div className='grid grid-cols-12 gap-3'>
 					{/* Address Textarea */}
-					<div className='col-span-12 space-y-1'>
+					<div className='col-span-5 space-y-1 '>
 						<Label className='text-xs font-medium'>Address</Label>
 						<Textarea
 							value={form.address}
 							onChange={(e) => set("address", e.target.value)}
 							placeholder='Street address, building, area...'
 							rows={2}
-							className='text-xs resize-none rounded-lg min-h-[38px]'
+							className='text-xs resize-none rounded-lg min-h-[100px]'
 						/>
 					</div>
+				</div>
 
+				<div className='grid grid-cols-12 gap-3 mt-2'>
 					{/* State */}
-					<div className='col-span-3'>
+					<div className='col-span-2'>
 						<AC
 							label='State'
 							value={form.state}
@@ -723,7 +799,7 @@ export function WarehouseForm({
 					</div>
 
 					{/* District */}
-					<div className='col-span-3'>
+					<div className='col-span-2'>
 						<AC
 							label='District'
 							value={form.district}
@@ -739,7 +815,7 @@ export function WarehouseForm({
 					</div>
 
 					{/* City */}
-					<div className='col-span-3'>
+					<div className='col-span-2'>
 						<AC
 							label='City'
 							value={form.city}
@@ -755,7 +831,7 @@ export function WarehouseForm({
 					</div>
 
 					{/* Pincode */}
-					<div className='col-span-3 space-y-1'>
+					<div className='col-span-2 space-y-1'>
 						<Label className='text-xs font-medium'>Pincode</Label>
 						<Input
 							value={form.pincode}
@@ -779,7 +855,7 @@ export function WarehouseForm({
 				/>
 				<div className='grid grid-cols-12 gap-3'>
 					{/* Capacity */}
-					<div className='col-span-3 space-y-1'>
+					<div className='col-span-2 space-y-1'>
 						<Label className='text-xs font-medium'>Capacity (sq.ft)</Label>
 						<Input
 							value={form.capacity}
@@ -791,7 +867,7 @@ export function WarehouseForm({
 					</div>
 
 					{/* Manager */}
-					<div className='col-span-3'>
+					<div className='col-span-2'>
 						<AC
 							label='Manager'
 							value={form.manager}

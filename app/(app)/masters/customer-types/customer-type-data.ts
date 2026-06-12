@@ -13,6 +13,10 @@ export interface CustomerTypeRecord {
   description: string;
   documentTypes: CustomerTypeDocument[];
   status: "active" | "inactive";
+  createdBy: string;
+  createdDate: string;
+  updatedBy: string;
+  updatedDate: string;
 }
 
 export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
@@ -22,6 +26,10 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
     customerType: "Farmer",
     description: "Standard farm customer",
     status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-01-10",
+    updatedBy: "Admin",
+    updatedDate: "2026-01-10",
     documentTypes: [
       { id: "DOC-001", documentTypeId: "DT-005", documentName: "Aadhaar Card" },
       { id: "DOC-002", documentTypeId: "DT-010", documentName: "Bank Account Details with Cancelled Cheque" },
@@ -33,6 +41,10 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
     customerType: "Distributor",
     description: "Wholesale distributor partner",
     status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-01-12",
+    updatedBy: "Admin",
+    updatedDate: "2026-01-12",
     documentTypes: [
       { id: "DOC-001", documentTypeId: "DT-001", documentName: "Letter of Interest" },
       { id: "DOC-002", documentTypeId: "DT-011", documentName: "Audited Financial Statements" },
@@ -47,6 +59,10 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
     customerType: "Dealer",
     description: "Registered dealer merchant",
     status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-01-14",
+    updatedBy: "Admin",
+    updatedDate: "2026-01-14",
     documentTypes: [
       { id: "DOC-001", documentTypeId: "DT-003", documentName: "GST Registration Copy" },
       { id: "DOC-002", documentTypeId: "DT-006", documentName: "Fertilizer License" },
@@ -59,6 +75,10 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
     customerType: "Retailer",
     description: "Direct retail store outlet",
     status: "inactive",
+    createdBy: "Admin",
+    createdDate: "2026-01-16",
+    updatedBy: "Admin",
+    updatedDate: "2026-01-16",
     documentTypes: [
       { id: "DOC-001", documentTypeId: "DT-008", documentName: "Shop & Establishment Registration Certificate" },
     ],
@@ -69,6 +89,10 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
     customerType: "C&F",
     description: "Carrying and Forwarding agent",
     status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-01-18",
+    updatedBy: "Admin",
+    updatedDate: "2026-01-18",
     documentTypes: [
       { id: "DOC-001", documentTypeId: "DT-003", documentName: "GST Registration Copy" },
       { id: "DOC-002", documentTypeId: "DT-014", documentName: "Godown/Storage Facility Proof" },
@@ -81,6 +105,10 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
     customerType: "CBBO",
     description: "Cluster Based Business Organization",
     status: "inactive",
+    createdBy: "Admin",
+    createdDate: "2026-01-20",
+    updatedBy: "Admin",
+    updatedDate: "2026-01-20",
     documentTypes: [
       { id: "DOC-001", documentTypeId: "DT-011", documentName: "Audited Financial Statements" },
     ],
@@ -91,6 +119,10 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
     customerType: "FPO",
     description: "Farmer Producer Organization",
     status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-01-22",
+    updatedBy: "Admin",
+    updatedDate: "2026-01-22",
     documentTypes: [
       { id: "DOC-001", documentTypeId: "DT-001", documentName: "Letter of Interest" },
       { id: "DOC-002", documentTypeId: "DT-002", documentName: "FPO Registration Certificate" },
@@ -127,7 +159,25 @@ export function loadCustomerTypes(): CustomerTypeRecord[] {
       return CUSTOMER_TYPE_SEED;
     }
     if (firstRecord && !("status" in firstRecord)) {
-      const migrated = parsed.map((item, idx) => ({ ...item, status: CUSTOMER_TYPE_SEED[idx]?.status ?? "active" }));
+      const migrated = parsed.map((item, idx) => ({
+        ...item,
+        status: CUSTOMER_TYPE_SEED[idx]?.status ?? "active",
+        createdBy: CUSTOMER_TYPE_SEED[idx]?.createdBy ?? "Admin",
+        createdDate: CUSTOMER_TYPE_SEED[idx]?.createdDate ?? "2026-01-10",
+        updatedBy: CUSTOMER_TYPE_SEED[idx]?.updatedBy ?? "Admin",
+        updatedDate: CUSTOMER_TYPE_SEED[idx]?.updatedDate ?? "2026-01-10",
+      }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+      return migrated;
+    }
+    if (firstRecord && !("createdDate" in firstRecord)) {
+      const migrated = parsed.map((item, idx) => ({
+        ...item,
+        createdBy: CUSTOMER_TYPE_SEED[idx]?.createdBy ?? "Admin",
+        createdDate: CUSTOMER_TYPE_SEED[idx]?.createdDate ?? "2026-01-10",
+        updatedBy: CUSTOMER_TYPE_SEED[idx]?.updatedBy ?? "Admin",
+        updatedDate: CUSTOMER_TYPE_SEED[idx]?.updatedDate ?? "2026-01-10",
+      }));
       localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
       return migrated;
     }

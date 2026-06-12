@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Plus, Search, Check, ChevronsUpDown, Trash2, Pencil, AlertCircle,
 } from "lucide-react";
@@ -28,14 +29,25 @@ interface ProductLinesEditorProps {
 function ProductSelect({
   products,
   value,
-  onSelect,
+  onSelectMultiple,
 }: {
   products: ProductCatalogItem[];
   value: number | null;
-  onSelect: (product: ProductCatalogItem) => void;
+  onSelectMultiple: (selectedProducts: ProductCatalogItem[]) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [checkedIds, setCheckedIds] = useState<number[]>([]);
+
+  const handleOpenChange = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (isOpen) {
+      setCheckedIds(value ? [value] : []);
+    } else {
+      setSearch("");
+    }
+  };
+
   const selected = products.find(p => p.id === value);
   const filtered = products.filter(
     p =>
@@ -43,8 +55,21 @@ function ProductSelect({
       p.code.toLowerCase().includes(search.toLowerCase()),
   );
 
+  const toggleProduct = (id: number) => {
+    setCheckedIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleDone = () => {
+    setOpen(false);
+    setSearch("");
+    const selectedProds = products.filter(p => checkedIds.includes(p.id));
+    onSelectMultiple(selectedProds);
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -69,25 +94,62 @@ function ProductSelect({
           </div>
         </div>
         <div className="max-h-[200px] overflow-y-auto py-1">
-          {filtered.map(p => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => { onSelect(p); setOpen(false); setSearch(""); }}
-              className={cn(
-                "w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-muted/60",
-                value === p.id && "bg-brand-50",
-              )}
-            >
-              <span className="font-mono text-brand-700 flex-shrink-0">{p.code}</span>
-              <span className="flex-1 truncate">{p.name}</span>
-              <span className="text-[10px] text-muted-foreground">Stock: {p.stock}</span>
-              {value === p.id && <Check className="w-3.5 h-3.5 text-brand-600" />}
-            </button>
-          ))}
+          {filtered.length > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  const allSelected = checkedIds.length === filtered.length;
+                  setCheckedIds(allSelected ? [] : filtered.map(p => p.id));
+                }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-semibold text-brand-600 hover:bg-muted/60 rounded-md text-left"
+              >
+                <Checkbox
+                  checked={checkedIds.length === filtered.length}
+                  className="w-3.5 h-3.5 flex-shrink-0"
+                />
+                Select All
+              </button>
+              <div className="border-t border-border my-1" />
+            </>
+          )}
+          {filtered.map(p => {
+            const isChecked = checkedIds.includes(p.id);
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => toggleProduct(p.id)}
+                className={cn(
+                  "w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-muted/60",
+                  isChecked && "bg-brand-50",
+                )}
+              >
+                <Checkbox
+                  checked={isChecked}
+                  className="w-3.5 h-3.5 flex-shrink-0 pointer-events-none"
+                />
+                <span className="font-mono text-brand-700 flex-shrink-0">{p.code}</span>
+                <span className="flex-1 truncate">{p.name}</span>
+                <span className="text-[10px] text-muted-foreground">Stock: {p.stock}</span>
+              </button>
+            );
+          })}
           {filtered.length === 0 && (
             <p className="px-3 py-3 text-xs text-muted-foreground text-center">No products found</p>
           )}
+        </div>
+        <div className="border-t border-border p-1.5 flex items-center justify-between bg-muted/20">
+          <span className="text-[10px] text-muted-foreground">
+            {checkedIds.length} selected
+          </span>
+          <button
+            type="button"
+            onClick={handleDone}
+            className="text-xs text-brand-600 hover:text-brand-700 font-semibold px-2 py-0.5 rounded border border-brand-200 bg-white"
+          >
+            Done
+          </button>
         </div>
       </PopoverContent>
     </Popover>
@@ -101,8 +163,10 @@ export default function ProductLinesEditor({
   error,
 }: ProductLinesEditorProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const updateLine = (id: string, patch: Partial<SalesOrderLineItem>) => {
+    setLocalError(null);
     onChange(
       lines.map(line => {
         if (line.id !== id) return line;
@@ -134,27 +198,58 @@ export default function ProductLinesEditor({
   };
 
   const addLine = () => {
+    if (lines.length > 0) {
+      const lastLine = lines[lines.length - 1];
+      if (!lastLine.productId || lastLine.quantity <= 0 || lastLine.unitPrice < 0) {
+        setLocalError("Please complete the current product row before adding another.");
+        return;
+      }
+    }
+    setLocalError(null);
     const newLine = createEmptyLineItem();
     onChange([...lines, newLine]);
     setEditingId(newLine.id);
   };
 
   const removeLine = (id: string) => {
+    setLocalError(null);
     onChange(lines.filter(l => l.id !== id));
     if (editingId === id) setEditingId(null);
   };
 
-  const handleProductSelect = (lineId: string, product: ProductCatalogItem) => {
-    onChange(
-      lines.map(line =>
-        line.id === lineId ? applyProductToLine(line, product) : line,
-      ),
-    );
+  const handleProductSelectMultiple = (lineId: string, selectedProducts: ProductCatalogItem[]) => {
+    setLocalError(null);
+    if (selectedProducts.length === 0) return;
+
+    const lineIndex = lines.findIndex(l => l.id === lineId);
+    if (lineIndex === -1) return;
+
+    const newLines = [...lines];
+    
+    // First selected product updates the current row
+    const p1 = selectedProducts[0];
+    newLines[lineIndex] = applyProductToLine(newLines[lineIndex], p1);
+    
+    // Additional selected products are added as new lines
+    for (let i = 1; i < selectedProducts.length; i++) {
+      const p = selectedProducts[i];
+      let newLine = createEmptyLineItem();
+      newLine.productId = p.id;
+      newLine = applyProductToLine(newLine, p);
+      newLines.push(newLine);
+    }
+    
+    onChange(newLines);
   };
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-end">
+      <div className="flex flex-col items-end gap-1">
+        {localError && (
+          <span className="text-xs text-red-500 font-medium flex items-center gap-1">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {localError}
+          </span>
+        )}
         <Button
           type="button"
           variant="outline"
@@ -182,7 +277,7 @@ export default function ProductLinesEditor({
                     { h: "Qty", className: "w-16" },
                     { h: "Unit Price", className: "min-w-[120px] w-32" },
                     { h: "Discount (%)", className: "w-24" },
-                    { h: "GST % / Amt", className: "min-w-[120px] w-20" },
+                    { h: "GST % / Amt", className: "min-w-[140px] w-24" },
                     { h: "Item Total", className: "min-w-[100px]" },
                     { h: "", className: "w-16" },
                   ].map(({ h, className }) => (
@@ -202,11 +297,13 @@ export default function ProductLinesEditor({
                   return (
                     <tr key={line.id} className="border-b border-border/60 hover:bg-muted/10">
                       <td className="px-2 py-1.5 min-w-[180px]">
-                        <ProductSelect
-                          products={products}
-                          value={line.productId}
-                          onSelect={p => handleProductSelect(line.id, p)}
-                        />
+                        <div className={cn(localError && !line.productId && "rounded-lg border border-red-400 p-0.5 animate-pulse bg-red-50/20")}>
+                          <ProductSelect
+                            products={products}
+                            value={line.productId}
+                            onSelectMultiple={selectedProds => handleProductSelectMultiple(line.id, selectedProds)}
+                          />
+                        </div>
                       </td>
                       <td className="px-2 py-1.5">
                         <span
@@ -225,10 +322,10 @@ export default function ProductLinesEditor({
                             min={0}
                             value={line.quantity || ""}
                             onChange={e => updateLine(line.id, { quantity: Number(e.target.value) || 0 })}
-                            className="h-7 text-xs"
+                            className={cn("h-7 text-xs", localError && line.quantity <= 0 && "border-red-400 focus-visible:ring-red-400 bg-red-50/10")}
                           />
                         ) : (
-                          <span className="text-xs">{line.quantity}</span>
+                          <span className={cn("text-xs", localError && line.quantity <= 0 && "text-red-500 font-semibold")}>{line.quantity}</span>
                         )}
                       </td>
                       <td className="px-2 py-1.5 min-w-[120px] w-32">
@@ -238,10 +335,10 @@ export default function ProductLinesEditor({
                             min={0}
                             value={line.unitPrice || ""}
                             onChange={e => updateLine(line.id, { unitPrice: Number(e.target.value) || 0 })}
-                            className="h-7 text-xs w-full min-w-[100px]"
+                            className={cn("h-7 text-xs w-full min-w-[100px]", localError && line.unitPrice < 0 && "border-red-400 focus-visible:ring-red-400 bg-red-50/10")}
                           />
                         ) : (
-                          <span className="text-xs whitespace-nowrap">₹{line.unitPrice.toLocaleString()}</span>
+                          <span className={cn("text-xs whitespace-nowrap", localError && line.unitPrice < 0 && "text-red-500 font-semibold")}>₹{line.unitPrice.toLocaleString()}</span>
                         )}
                       </td>
                       <td className="px-2 py-1.5 w-24">
@@ -261,22 +358,22 @@ export default function ProductLinesEditor({
                           <span className="text-xs">{line.discount}%</span>
                         )}
                       </td>
-                      <td className="px-2 py-1.5 min-w-[120px] w-20">
+                      <td className="px-2 py-1.5 min-w-[140px] w-24">
                         {isEditing ? (
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-[10px] text-muted-foreground font-semibold">{product?.gstRate || "0%"}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-muted-foreground font-semibold shrink-0">{product?.gstRate || "0%"}</span>
                             <Input
                               type="number"
                               min={0}
                               value={line.gstAmount || ""}
                               onChange={e => updateLine(line.id, { gstAmount: Number(e.target.value) || 0 })}
-                              className="h-7 text-xs w-full min-w-[100px]"
+                              className="h-7 text-xs w-full min-w-[80px]"
                             />
                           </div>
                         ) : (
-                          <div className="flex flex-col">
-                            <span className="text-[10px] text-muted-foreground font-semibold">{product?.gstRate || "0%"}</span>
-                            <span className="text-xs">₹{line.gstAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-muted-foreground font-semibold shrink-0">{product?.gstRate || "0%"}</span>
+                            <span className="text-xs whitespace-nowrap">₹{line.gstAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                           </div>
                         )}
                       </td>

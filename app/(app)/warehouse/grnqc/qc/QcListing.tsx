@@ -7,6 +7,7 @@ import { Eye } from "lucide-react";
 import { getQcRecords } from "./mock-data";
 import { QcRecord } from "./types";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 const QC_STATUS_CONFIG = {
   pending: { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Pending" },
@@ -73,13 +74,75 @@ export function QcListing() {
 
   // QC Column Configurations
   const qcColumns: ColumnConfig<QcRecord>[] = [
-    { key: "qcNo", header: "QC No", sortable: true, filterable: true, filterType: "text", width: "130px" },
-    { key: "grnNo", header: "GRN No.", sortable: true, filterable: true, filterType: "text", width: "130px" },
-    { key: "poNumber", header: "PO No.", sortable: true, filterable: true, filterType: "text", width: "120px" },
-    { key: "vendorName", header: "Vendor", sortable: true, filterable: true, filterType: "text" },
-    { key: "inspectionDate", header: "Inspection Date", sortable: true, filterable: true, filterType: "date", width: "145px" },
-    { key: "totalAcceptedQty", header: "Total Accepted Qty", sortable: true, align: "right", width: "140px" },
-    { key: "totalRejectedQty", header: "Total Rejected Qty", sortable: true, align: "right", width: "140px" },
+    {
+      key: "qcNo",
+      header: "QC No",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "130px",
+      render: (val, row) => (
+        <Link href={`/warehouse/grnqc/qc/view/${row.id}`} className="block group/name">
+          <span className="font-mono text-xs font-semibold text-brand-700 group-hover/name:text-brand-800">{row.qcNo}</span>
+        </Link>
+      ),
+    },
+    {
+      key: "grnNo",
+      header: "GRN No.",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "130px",
+      render: (val, row) => (
+        <span className="font-mono text-xs text-foreground">{row.grnNo}</span>
+      ),
+    },
+    {
+      key: "poNumber",
+      header: "PO No.",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => (
+        <span className="font-mono text-xs text-foreground">{row.poNumber || "—"}</span>
+      ),
+    },
+    {
+      key: "vendorName",
+      header: "Vendor",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "130px",
+      render: (val, row) => <span className="text-xs text-foreground">{row.vendorName}</span>,
+    },
+    {
+      key: "inspectionDate",
+      header: "Inspection Date",
+      sortable: true,
+      filterable: true,
+      filterType: "date",
+      width: "145px",
+      render: (val, row) => <span className="text-xs text-foreground">{row.inspectionDate}</span>,
+    },
+    {
+      key: "totalAcceptedQty",
+      header: "Total Accepted Qty",
+      sortable: true,
+      align: "right",
+      width: "140px",
+      render: (val) => <span className="text-xs font-medium tabular-nums text-foreground">{val != null ? val.toLocaleString() : "—"}</span>,
+    },
+    {
+      key: "totalRejectedQty",
+      header: "Total Rejected Qty",
+      sortable: true,
+      align: "right",
+      width: "140px",
+      render: (val) => <span className="text-xs font-medium tabular-nums text-foreground">{val != null ? val.toLocaleString() : "—"}</span>,
+    },
     {
       key: "status",
       header: "Status",
@@ -94,7 +157,7 @@ export function QcListing() {
       render: (val: any) => {
         const cfg = QC_STATUS_CONFIG[val as keyof typeof QC_STATUS_CONFIG] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Unknown" };
         return (
-          <span className={`inline-flex items-center text-xs px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
             {cfg.label}
           </span>
         );

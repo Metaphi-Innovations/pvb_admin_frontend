@@ -39,6 +39,7 @@ export interface Employee {
   fullName: string;
   email: string;                // Unique
   mobile: string;               // 10-digit, unique
+  password?: string;
   countryCode?: string;         // e.g. "+91"
   alternativeMobile?: string;
   bloodGroup: "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-" | "Unknown";

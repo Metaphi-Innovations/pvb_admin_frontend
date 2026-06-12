@@ -63,6 +63,15 @@ function StatusBadge({ status }: { status: WarehouseStatus }) {
   );
 }
 
+function AuditCell({ name, date }: { name: string; date?: string }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[11px] font-semibold leading-4 text-brand-700">{name}</p>
+      {date ? <p className="text-[10px] font-mono leading-3 text-muted-foreground">{date}</p> : null}
+    </div>
+  );
+}
+
 export default function WarehouseListPage() {
   const router = useRouter();
   const [records, setRecords] = useState<WarehouseMaster[]>([]);
@@ -122,7 +131,7 @@ export default function WarehouseListPage() {
       filterType: "text",
       width: "120px",
       render: (val, row) => (
-        <span className="font-mono font-semibold text-brand-700">{row.warehouseCode}</span>
+        <span className="font-mono text-xs text-brand-700">{row.warehouseCode}</span>
       ),
     },
     {
@@ -133,8 +142,8 @@ export default function WarehouseListPage() {
       filterType: "text",
       width: "200px",
       render: (val, row) => (
-        <Link href={`/masters/warehouse/${row.id}`} className="font-semibold leading-4 text-foreground hover:text-brand-700">
-          {row.warehouseName}
+        <Link href={`/masters/warehouse/${row.id}`} className="block group/name">
+          <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">{row.warehouseName}</p>
         </Link>
       ),
     },
@@ -260,22 +269,6 @@ export default function WarehouseListPage() {
           : (row.operatedBy || "—"),
     },
     {
-      key: "createdBy",
-      header: "Created By",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-    },
-    {
-      key: "updatedBy",
-      header: "Updated By",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-    },
-    {
       key: "status",
       header: "Status",
       sortable: true,
@@ -386,6 +379,24 @@ export default function WarehouseListPage() {
           </DropdownMenuContent>
         </DropdownMenu>
       ),
+    },
+    {
+      key: "createdBy",
+      header: "Created",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => <AuditCell name={row.createdBy} date={row.createdDate} />,
+    },
+    {
+      key: "updatedBy",
+      header: "Updated",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => <AuditCell name={row.updatedBy} date={row.updatedDate} />,
     },
   ];
 

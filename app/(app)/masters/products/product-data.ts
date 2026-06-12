@@ -1,6 +1,6 @@
 "use client";
 
-export type ProductStatus = "active" | "inactive" | "draft";
+export type ProductStatus = "active" | "inactive";
 
 export type ProductAssetMediaKind = "image" | "video" | "pdf" | "document" | "spreadsheet";
 
@@ -163,7 +163,6 @@ export const PRODUCT_REORDER_LEVEL_OPTIONS = [
 export const PRODUCT_STATUS_OPTIONS = [
   { value: "active", label: "Active" },
   { value: "inactive", label: "Inactive" },
-  { value: "draft", label: "Draft" },
 ] as const;
 
 const STORAGE_KEY = "ds_products";
@@ -307,7 +306,7 @@ const SEED_PRODUCTS: Product[] = [
     mrp: 890,
     costPrice: 0,
     distributorPrice: 0,
-    status: "draft",
+    status: "inactive",
     createdBy: "Admin",
     createdDate: "2026-02-16",
     updatedBy: "Admin",

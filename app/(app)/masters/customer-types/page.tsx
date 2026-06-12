@@ -35,6 +35,21 @@ import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 
+function AuditCell({
+  name,
+  date,
+}: {
+  name?: string;
+  date?: string;
+}) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[11px] font-semibold leading-4 text-brand-700">{name || "—"}</p>
+      <p className="text-[10px] font-mono leading-3 text-muted-foreground">{date || "—"}</p>
+    </div>
+  );
+}
+
 interface ToastState {
   msg: string;
   type: "success" | "error";
@@ -127,6 +142,15 @@ export default function CustomerTypesPage() {
       ),
     },
     {
+      key: "description",
+      header: "Description",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "480px",
+      render: (val, row) => row.description || "—",
+    },
+    {
       key: "status",
       header: "Status",
       sortable: true,
@@ -140,25 +164,22 @@ export default function CustomerTypesPage() {
       render: (val, row) => <StatusToggle record={row} onToggle={toggleStatus} />,
     },
     {
-      key: "description",
-      header: "Description",
+      key: "createdDate",
+      header: "Created",
       sortable: true,
       filterable: true,
       filterType: "text",
-      width: "480px",
-      render: (val, row) => row.description || "—",
+      width: "120px",
+      render: (val, row) => <AuditCell name={row.createdBy} date={row.createdDate} />,
     },
     {
-      key: "createdBy",
-      header: "Created By",
+      key: "updatedDate",
+      header: "Updated",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
       width: "120px",
-      render: () => "Admin",
-    },
-    {
-      key: "updatedBy",
-      header: "Updated By",
-      width: "120px",
-      render: () => "Admin",
+      render: (val, row) => <AuditCell name={row.updatedBy} date={row.updatedDate} />,
     },
   ];
 
@@ -216,7 +237,11 @@ export default function CustomerTypesPage() {
 
   const toggleStatus = (record: CustomerTypeRecord) => {
     const nextStatus: "active" | "inactive" = record.status === "active" ? "inactive" : "active";
-    const updated = records.map((item) => (item.id === record.id ? { ...item, status: nextStatus } : item));
+    const updated = records.map((item) =>
+      item.id === record.id
+        ? { ...item, status: nextStatus, updatedBy: "Admin", updatedDate: new Date().toISOString().slice(0, 10) }
+        : item,
+    );
     saveCustomerTypes(updated);
     setRecords(updated);
     setToast({ msg: `Customer Type status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`, type: "success" });

@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
@@ -17,10 +18,10 @@ import {
 import { Eye, Edit2, Send, CheckCircle2, XCircle, ShoppingCart, Plus, MoreHorizontal } from "lucide-react";
 import { Toast } from "../components/ProcurementUI";
 import { ProcurementApprovalModal } from "../components/ProcurementApprovalModal";
-import { ProcBadge, ProcAvatar, HighlightText } from "../design/proc-design";
+import { ProcAvatar, HighlightText } from "../design/proc-design";
 import { useFlashToast } from "../hooks/useFlashToast";
 import { applySearch, sortRows, type SortDir } from "../hooks/useListingFilters";
-import { StackedCell, formatListingDate } from "../components/listing/ListingCells";
+import { formatListingDate } from "../components/listing/ListingCells";
 import {
   getPRApprovalStatus,
   getPRPoConversionStatus,
@@ -51,6 +52,30 @@ const TABS: { value: TabId; label: string }[] = [
   { value: "approved", label: "Approved" },
   { value: "rejected", label: "Rejected" },
 ];
+
+const STATUS_CFG: Record<string, { bg: string; text: string; dot: string; label: string }> = {
+  draft: { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-400", label: "Draft" },
+  pending_approval: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-500", label: "Pending Approval" },
+  pending: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-500", label: "Pending" },
+  approved: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Approved" },
+  rejected: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-500", label: "Rejected" },
+  pending_po: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-500", label: "Pending PO" },
+  partially_converted: { bg: "bg-blue-50", text: "text-blue-700", dot: "bg-blue-500", label: "Partially Converted" },
+  fully_converted: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Fully Converted" },
+};
+
+function StatusPill({ status }: { status: string }) {
+  const cfg = STATUS_CFG[status] ?? { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-400", label: status };
+  return (
+    <span className={cn(
+      "inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full font-medium border whitespace-nowrap",
+      cfg.bg, cfg.text,
+    )}>
+      <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
+      {cfg.label}
+    </span>
+  );
+}
 
 export default function PurchaseRequestsPage() {
   const router = useRouter();
@@ -170,10 +195,12 @@ export default function PurchaseRequestsPage() {
       header: "PR No.",
       sortable: true,
       render: (val, row) => (
-        <StackedCell
-          primary={<HighlightText text={row.prNumber} query={(filters.search as string) || ""} />}
-          secondary={formatListingDate(row.prDate)}
-        />
+        <div>
+          <p className="font-semibold text-brand-700 text-xs">
+            <HighlightText text={row.prNumber} query={(filters.search as string) || ""} />
+          </p>
+          <p className="text-[11px] text-muted-foreground">{formatListingDate(row.prDate)}</p>
+        </div>
       ),
     },
     {
@@ -184,7 +211,7 @@ export default function PurchaseRequestsPage() {
       filterType: "dropdown",
       filterOptions: requesters.map(r => ({ label: r, value: r })),
       render: (val, row) => (
-        <span className="inline-flex items-center gap-2 text-[13px] text-[#0A1628] py-2">
+        <span className="inline-flex items-center gap-2 text-xs text-foreground font-medium py-1">
           <ProcAvatar name={row.requestedBy} />
           <HighlightText text={row.requestedBy} query={(filters.search as string) || ""} />
         </span>
@@ -197,7 +224,7 @@ export default function PurchaseRequestsPage() {
       filterable: true,
       filterType: "date",
       render: (val, row) => (
-        <span className="text-[13px] text-[#6B80A0] tabular-nums py-2">
+        <span className="text-xs text-muted-foreground tabular-nums py-1">
           {row.requiredByDate ? formatListingDate(row.requiredByDate) : "—"}
         </span>
       ),
@@ -207,7 +234,7 @@ export default function PurchaseRequestsPage() {
       header: "Items",
       sortable: true,
       render: (val, row) => (
-        <span className="text-[13px] tabular-nums text-[#3D5473] py-2">
+        <span className="text-xs tabular-nums text-foreground py-1">
           {getPRTotalItems(row)}
         </span>
       ),
@@ -217,7 +244,7 @@ export default function PurchaseRequestsPage() {
       header: "Total Qty",
       sortable: true,
       render: (val, row) => (
-        <span className="text-[13px] tabular-nums text-[#3D5473] py-2">
+        <span className="text-xs tabular-nums text-foreground py-1">
           {getPRTotalQuantity(row)}
         </span>
       ),
@@ -236,14 +263,14 @@ export default function PurchaseRequestsPage() {
       ],
       render: (val, row) => {
         const approvalStatus = getPRApprovalStatus(row);
-        return <ProcBadge status={approvalStatus} />;
+        return <StatusPill status={approvalStatus} />;
       },
     },
     {
       key: "currentApprover",
       header: "Current Approver",
       render: (val, row) => (
-        <span className="text-[13px] text-[#6B80A0] py-2">
+        <span className="text-xs text-muted-foreground py-1">
           {getPRCurrentApprover(row)}
         </span>
       ),
@@ -261,7 +288,7 @@ export default function PurchaseRequestsPage() {
       ],
       render: (val, row) => {
         const poStatus = getPRPoConversionStatus(row);
-        return <ProcBadge status={poStatus} />;
+        return <StatusPill status={poStatus} />;
       },
     },
     {
@@ -275,22 +302,24 @@ export default function PurchaseRequestsPage() {
         return (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="p-1.5 rounded-md hover:bg-brand-50">
-                <MoreHorizontal className="w-4 h-4 text-[#6B80A0]" />
+              <button className="p-1.5 hover:bg-muted rounded-md transition-colors">
+                <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44 z-[400]">
-              <DropdownMenuLabel className="text-[10px]">Actions</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => router.push(`/procurement/purchase-requests/${row.id}`)}>
+              <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">Actions</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => router.push(`/procurement/purchase-requests/${row.id}`)} className="cursor-pointer">
                 <Eye className="w-3.5 h-3.5 mr-2" /> View
               </DropdownMenuItem>
               {["draft", "rejected"].includes(approvalStatus) && (
-                <DropdownMenuItem onClick={() => router.push(`/procurement/purchase-requests/${row.id}/edit`)}>
+                <DropdownMenuItem onClick={() => router.push(`/procurement/purchase-requests/${row.id}/edit`)} className="cursor-pointer">
                   <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
                 </DropdownMenuItem>
               )}
               {approvalStatus === "draft" && (
                 <DropdownMenuItem
+                  className="cursor-pointer"
                   onClick={() => {
                     const updated = submitPR(row);
                     savePurchaseRequests(loadPurchaseRequests().map((p) => (p.id === updated.id ? updated : p)));
@@ -303,10 +332,10 @@ export default function PurchaseRequestsPage() {
               )}
               {approvalStatus === "pending_approval" && (
                 <>
-                  <DropdownMenuItem onClick={() => { setApprovalTarget(row); setApprovalAction("approve"); setApprovalOpen(true); }}>
+                  <DropdownMenuItem onClick={() => { setApprovalTarget(row); setApprovalAction("approve"); setApprovalOpen(true); }} className="cursor-pointer">
                     <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Approve
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => { setApprovalTarget(row); setApprovalAction("reject"); setApprovalOpen(true); }}>
+                  <DropdownMenuItem onClick={() => { setApprovalTarget(row); setApprovalAction("reject"); setApprovalOpen(true); }} className="cursor-pointer">
                     <XCircle className="w-3.5 h-3.5 mr-2" /> Reject
                   </DropdownMenuItem>
                 </>
@@ -314,7 +343,7 @@ export default function PurchaseRequestsPage() {
               {approvalStatus === "approved" && poStatus !== "fully_converted" && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => router.push(`/procurement/purchase-orders/new?prId=${row.id}`)}>
+                  <DropdownMenuItem onClick={() => router.push(`/procurement/purchase-orders/new?prId=${row.id}`)} className="cursor-pointer">
                     <ShoppingCart className="w-3.5 h-3.5 mr-2" /> Create PO
                   </DropdownMenuItem>
                 </>
@@ -353,6 +382,7 @@ export default function PurchaseRequestsPage() {
           addLabel="Create PR"
           emptyMessage="purchase requests"
           searchPlaceholder="Search PR no., requester, remarks…"
+          onExport={undefined}
           currentFilters={filters}
           currentSort={sort}
         />
