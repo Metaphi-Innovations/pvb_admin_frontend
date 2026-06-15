@@ -168,7 +168,7 @@ export const PAYMENT_TERMS_OPTIONS = [
 	{ value: "net-90", label: "Net 90 Days" },
 ];
 
-const STORAGE_KEY = "ds_customers";
+const STORAGE_KEY = "ds_customers_v4";
 
 const SEED_CUSTOMERS: Customer[] = [
 	{
@@ -207,6 +207,9 @@ const SEED_CUSTOMERS: Customer[] = [
 		bankBranchAddress: "FC Road, Pune",
 		bankAccountNo: "50100234567890",
 		ifscCode: "HDFC0001234",
+		accountHolderName: "Agro Solutions Private Limited",
+		branch: "FC Road Branch",
+		swiftCode: "HDFCINBBXXX",
 		createdBy: "Admin",
 		createdDate: "2024-01-10",
 		updatedBy: "Admin",
@@ -221,6 +224,158 @@ const SEED_CUSTOMERS: Customer[] = [
 				reason: "New customer onboarded",
 			},
 		],
+		branches: [
+			{
+				branchName: "Mumbai Corporate Office",
+				isMain: true,
+				billingAddress: {
+					address: "456 Corporate Towers, Bandra Kurla Complex",
+					city: "Mumbai",
+					state: "Maharashtra",
+					pincode: "400051",
+				},
+				shippingAddress: {
+					address: "Plot 12, BKC Logistics Zone",
+					city: "Mumbai",
+					state: "Maharashtra",
+					pincode: "400051",
+				},
+				documents: [
+					{
+						documentName: "Shop Act License",
+						required: true,
+						fileName: "shop_act_mumbai.pdf",
+						fileUrl: "/mock-documents/shop_act.pdf",
+					},
+					{
+						documentName: "GST Certificate",
+						required: true,
+						fileName: "gst_cert_mumbai.pdf",
+						fileUrl: "/mock-documents/gst_cert.pdf",
+					},
+				],
+			},
+			{
+				branchName: "Pune Warehouse Branch",
+				isMain: false,
+				billingAddress: {
+					address: "123 Market Road, Shivaji Nagar",
+					city: "Pune",
+					state: "Maharashtra",
+					pincode: "411004",
+				},
+				shippingAddress: {
+					address: "123 Market Road, Shivaji Nagar",
+					city: "Pune",
+					state: "Maharashtra",
+					pincode: "411004",
+				},
+				documents: [
+					{
+						documentName: "Rent Agreement",
+						required: false,
+						fileName: "pune_rent_agreement.pdf",
+						fileUrl: "/mock-documents/rent_agreement.pdf",
+					},
+				],
+			},
+		],
+		products: [
+			{
+				id: "m-1",
+				productId: "prod-1",
+				productName: "Organic Neem Fertilizer",
+				sku: "FERT-NEEM-1KG",
+				mrp: 350,
+				price: 280,
+				discountType: "Percentage",
+				discountValue: 20,
+				status: "Active",
+			},
+			{
+				id: "m-2",
+				productId: "prod-2",
+				productName: "Urea Premium Blend",
+				sku: "FERT-UREA-50KG",
+				mrp: 1200,
+				price: 1080,
+				discountType: "Flat",
+				discountValue: 120,
+				status: "Active",
+			},
+			{
+				id: "m-3",
+				productId: "prod-3",
+				productName: "NPK Booster Spray",
+				sku: "FERT-NPK-500ML",
+				mrp: 450,
+				price: 450,
+				discountType: "Percentage",
+				discountValue: 0,
+				status: "Inactive",
+			},
+		],
+		customerProducts: [
+			{
+				id: "m-1",
+				productId: "prod-1",
+				productName: "Organic Neem Fertilizer",
+				sku: "FERT-NEEM-1KG",
+				mrp: 350,
+				price: 280,
+				discountType: "Percentage",
+				discountValue: 20,
+				status: "Active",
+			},
+			{
+				id: "m-2",
+				productId: "prod-2",
+				productName: "Urea Premium Blend",
+				sku: "FERT-UREA-50KG",
+				mrp: 1200,
+				price: 1080,
+				discountType: "Flat",
+				discountValue: 120,
+				status: "Active",
+			},
+			{
+				id: "m-3",
+				productId: "prod-3",
+				productName: "NPK Booster Spray",
+				sku: "FERT-NPK-500ML",
+				mrp: 450,
+				price: 450,
+				discountType: "Percentage",
+				discountValue: 0,
+				status: "Inactive",
+			},
+		],
+		documents: {
+			requiredDocuments: [
+				{
+					documentTypeId: "doc-gst",
+					documentName: "GST Registration Certificate",
+					required: true,
+					fileName: "gst_certificate.pdf",
+					fileUrl: "/mock-documents/gst_cert.pdf",
+				},
+				{
+					documentTypeId: "doc-pan",
+					documentName: "PAN Card copy",
+					required: true,
+					fileName: "pan_card_copy.pdf",
+					fileUrl: "/mock-documents/pan_card.pdf",
+				},
+			],
+			additionalDocuments: [
+				{
+					id: "doc-add-1",
+					title: "Partnership Deed / Incorporation Certificate",
+					fileName: "inc_cert.pdf",
+					fileUrl: "/mock-documents/inc_cert.pdf",
+				},
+			],
+		},
 	},
 	{
 		id: 1001,

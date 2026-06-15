@@ -395,7 +395,7 @@ export default function PRViewPage() {
 											label='Required By Date'
 											value={pr.requiredByDate}
 										/>
-										<DetailField label='Department / Warehouse' value='—' />
+										{/* <DetailField label='Department / Warehouse' value='—' /> */}
 										<DetailField
 											label='Status'
 											value={<StatusBadge status={pr.status} />}
