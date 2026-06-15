@@ -6,6 +6,22 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { Check, ChevronsUpDown, X, Search } from "lucide-react";
 
+function handleScrollableWheel(event: React.WheelEvent<HTMLElement>) {
+  const current = event.currentTarget;
+  if (current.scrollHeight <= current.clientHeight) return;
+
+  const atTop = current.scrollTop <= 0;
+  const atBottom = current.scrollTop + current.clientHeight >= current.scrollHeight - 1;
+  const scrollingUp = event.deltaY < 0;
+  const scrollingDown = event.deltaY > 0;
+
+  if ((scrollingUp && atTop) || (scrollingDown && atBottom)) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  current.scrollTop += event.deltaY;
+}
+
 // Option item configuration interface
 export interface AutocompleteOption {
   value: string;
@@ -102,13 +118,17 @@ export function AutocompleteSelect({
           type="button"
           disabled={disabled}
           className={cn(
-            "w-full flex items-center justify-between px-3 py-2 border bg-white cursor-pointer",
+            "flex w-full cursor-pointer items-center justify-between border border-border bg-white px-3 py-2 text-left shadow-sm",
             "transition-colors select-none text-left focus:outline-none",
             !className?.includes("h-") && "h-9",
-            !className?.includes("text-") && "text-sm",
-            !className?.includes("rounded-") && "rounded-input",
-            open && !error ? "border-brand-400 ring-1 ring-brand-400" : "",
-            error ? "border-red-400 ring-1 ring-red-200" : !open ? "border-border hover:border-brand-300" : "",
+            !className?.includes("text-") && "text-xs",
+            !className?.includes("rounded-") && "rounded-lg",
+            open && !error ? "border-brand-500 ring-2 ring-brand-200" : "",
+            error
+              ? "border-red-400 ring-1 ring-red-200"
+              : !open
+                ? "hover:bg-muted/20 hover:border-brand-300"
+                : "",
             disabled ? "opacity-50 cursor-not-allowed bg-muted/30" : "",
             className
           )}
@@ -120,35 +140,38 @@ export function AutocompleteSelect({
         </button>
       </PopoverTrigger>
       <PopoverContent
-        className="p-0 w-[var(--radix-popover-trigger-width)] rounded-lg shadow-lg border border-border bg-white"
+        className="w-[var(--radix-popover-trigger-width)] min-w-[var(--radix-popover-trigger-width)] max-w-[var(--radix-popover-trigger-width)] rounded-xl border border-border bg-white p-0 shadow-lg"
         align="start"
         sideOffset={4}
       >
         {/* Search Input */}
-        <div className="p-1.5 border-b border-border">
+        <div className="border-b border-border p-2">
           <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-[5px] text-muted-foreground pointer-events-none" />
+            <Search className="pointer-events-none absolute left-2.5 top-[9px] h-3.5 w-3.5 text-muted-foreground" />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder={searchPlaceholder}
               autoFocus
-              className="w-full pl-8 pr-3 py-1 text-xs focus:outline-none bg-transparent"
+              className="h-8 w-full rounded-lg border border-border bg-muted/10 pl-8 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-200"
             />
             {q && (
               <button
                 type="button"
                 onClick={() => setQ("")}
-                className="absolute right-2 top-[5px]"
+                className="absolute right-2 top-[7px] rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
               >
-                <X className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+                <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
         </div>
 
         {/* Options List */}
-        <div className="max-h-40 overflow-y-auto p-1">
+        <div
+          className="max-h-[min(18rem,var(--radix-popover-content-available-height))] overflow-y-auto overscroll-contain p-1.5"
+          onWheelCapture={handleScrollableWheel}
+        >
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center py-4 gap-1">
               <Search className="w-4 h-4 text-muted-foreground" />
@@ -184,8 +207,8 @@ export function AutocompleteSelect({
                   disabled={opt.disabled}
                   onClick={() => handleSelect(opt.value)}
                   className={cn(
-                    "w-full flex items-center gap-2 px-2 py-1 text-xs text-left rounded-md transition-colors",
-                    "hover:bg-muted/60 disabled:opacity-40 disabled:cursor-not-allowed",
+                    "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors",
+                    "hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-40",
                     isSelected(opt.value) && "bg-brand-50"
                   )}
                 >
@@ -216,14 +239,14 @@ export function AutocompleteSelect({
         </div>
 
         {multiple && (
-          <div className="border-t border-border p-1.5 flex items-center justify-between">
+          <div className="flex items-center justify-between border-t border-border px-2.5 py-2">
             <span className="text-[10px] text-muted-foreground">
               {Array.isArray(value) ? value.length : 0} of {options.length} selected
             </span>
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="text-xs text-brand-600 hover:text-brand-700 font-medium"
+              className="text-[11px] font-medium text-brand-600 hover:text-brand-700"
             >
               Done
             </button>

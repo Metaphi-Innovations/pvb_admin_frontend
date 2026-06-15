@@ -69,7 +69,10 @@ export function FilterPopover({ column, value, onChange }: FilterPopoverProps) {
           <Filter className="w-3.5 h-3.5" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-60 p-3 space-y-3">
+      <PopoverContent
+        align="start"
+        className="w-60 space-y-3 rounded-xl border border-border bg-white p-3 shadow-lg"
+      >
         <div className="flex items-center justify-between border-b pb-2">
           <span className="text-xs font-semibold text-foreground">Filter by {column.header}</span>
           {isFiltered && (
@@ -93,7 +96,7 @@ export function FilterPopover({ column, value, onChange }: FilterPopoverProps) {
                 value={tempText}
                 onChange={(e) => setTempText(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleApplyText()}
-                className="pl-8 h-8 text-xs"
+                className="h-9 rounded-lg border-border bg-white pl-8 text-xs shadow-sm"
               />
             </div>
             <div className="flex items-center justify-end gap-2 pt-1">
@@ -126,6 +129,7 @@ export function FilterPopover({ column, value, onChange }: FilterPopoverProps) {
               }}
               placeholder="Select option..."
               searchPlaceholder={`Search ${column.header.toLowerCase()}...`}
+              className="h-9 rounded-lg border-border bg-white text-xs shadow-sm"
             />
             <div className="flex items-center justify-end gap-2 pt-1 border-t">
               <Button
