@@ -2,11 +2,9 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppLayout } from "@/components/layout/AppLayout";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RecordDetailPage } from "@/components/record-detail";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, MapPin, Users } from "lucide-react";
 import {
   type GeoLevel,
   type GeoNode,
@@ -415,59 +413,90 @@ export default function EventViewPage() {
     router.push("/events/event");
   };
 
-  return (
-    <AppLayout>
-      <div className="space-y-4">
-        <section className="rounded-xl border border-border bg-white shadow-sm">
-          <div className="flex items-start justify-between gap-4 px-5 py-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 flex-shrink-0 rounded-lg hover:bg-muted"
-                onClick={handleCloseView}
-                aria-label="Back to event listing"
-              >
-                <ArrowLeft className="h-4 w-4 text-muted-foreground" />
-              </Button>
-              <h1 className="truncate text-base font-semibold text-foreground">
-                {viewEvent?.eventCode} - Event Details
-              </h1>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                aria-label="Previous event"
-                disabled={currentEventIndex <= 0}
-                onClick={() => handleStepViewEvent(-1)}
-                className={cn(
-                  "inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted",
-                  currentEventIndex <= 0 ? "cursor-not-allowed opacity-40" : "hover:text-foreground",
-                )}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                aria-label="Next event"
-                disabled={currentEventIndex < 0 || currentEventIndex >= events.length - 1}
-                onClick={() => handleStepViewEvent(1)}
-                className={cn(
-                  "inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted",
-                  currentEventIndex < 0 || currentEventIndex >= events.length - 1
-                    ? "cursor-not-allowed opacity-40"
-                  : "hover:text-foreground",
-                )}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        </section>
+  if (!viewEvent || !locationDisplay) {
+    return (
+      <RecordDetailPage
+        listHref="/events/event"
+        listLabel="Events"
+        recordName="Event Details"
+        statusLabel="Loading"
+        statusVariant="neutral"
+      >
+        <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading event...</div>
+      </RecordDetailPage>
+    );
+  }
 
-        {viewEvent && locationDisplay && (
-          <>
+  const statusVariant =
+    viewEvent.status === "completed" ? "active" :
+    viewEvent.status === "cancelled" ? "blocked" : "neutral";
+
+  return (
+    <RecordDetailPage
+      listHref="/events/event"
+      listLabel="Events"
+      recordName={viewEvent.title}
+      recordCode={viewEvent.eventCode}
+      statusLabel={formatTitleCase(viewEvent.status)}
+      statusVariant={statusVariant}
+      typeBadge={
+        <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold", TYPE_COLORS[viewEvent.type])}>
+          {formatTitleCase(viewEvent.type)}
+        </span>
+      }
+      metaItems={[
+        { icon: Calendar, label: formatDateRange(viewEvent.startDate, viewEvent.endDate) },
+        { icon: MapPin, label: locationDisplay.Locality },
+        { icon: Users, label: viewEvent.organizer || "—" },
+      ]}
+      headerActions={
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            aria-label="Previous event"
+            disabled={currentEventIndex <= 0}
+            onClick={() => handleStepViewEvent(-1)}
+            className={cn(
+              "inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted",
+              currentEventIndex <= 0 ? "cursor-not-allowed opacity-40" : "hover:text-foreground",
+            )}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            aria-label="Next event"
+            disabled={currentEventIndex < 0 || currentEventIndex >= events.length - 1}
+            onClick={() => handleStepViewEvent(1)}
+            className={cn(
+              "inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted",
+              currentEventIndex < 0 || currentEventIndex >= events.length - 1
+                ? "cursor-not-allowed opacity-40"
+                : "hover:text-foreground",
+            )}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      }
+      sidebar={{
+        summary: [
+          { label: "Expected Attendees", value: viewEvent.expectedAttendees, highlight: true },
+          { label: "Actual Attendees", value: viewEvent.actualAttendees },
+          { label: "Users Invited", value: viewEvent.userAttendeeIds?.length ?? 0 },
+          { label: "Farmers Invited", value: viewEvent.farmerAttendeeIds?.length ?? 0 },
+          { label: "Distributors Invited", value: viewEvent.distributorAttendeeIds?.length ?? 0 },
+        ],
+        quickActions: [
+          {
+            label: "Back to List",
+            onClick: handleCloseView,
+            variant: "outline",
+          },
+        ],
+      }}
+    >
+      <>
             <SectionCard title="Event Information">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <InfoField label="Event Name" value={viewEvent.title} />
@@ -562,8 +591,6 @@ export default function EventViewPage() {
               </div>
             </SectionCard>
           </>
-        )}
-      </div>
-    </AppLayout>
+    </RecordDetailPage>
   );
 }

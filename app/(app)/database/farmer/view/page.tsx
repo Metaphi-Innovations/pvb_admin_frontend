@@ -2,11 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppLayout } from "@/components/layout/AppLayout";
-import { Button } from "@/components/ui/button";
+import { RecordDetailPage } from "@/components/record-detail";
 import { cn } from "@/lib/utils";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { VendorTabBar } from "../../../masters/vendors/components/VendorFormLayout";
 import {
   ArrowLeft,
   ChevronLeft,
@@ -14,6 +11,7 @@ import {
   ImageIcon,
   Leaf,
   MapPin,
+  Phone,
   Store,
   User,
 } from "lucide-react";
@@ -295,195 +293,194 @@ export default function FarmerViewPage() {
     router.push("/database/farmer");
   };
 
+  if (!viewFarmer) {
+    return (
+      <RecordDetailPage
+        listHref="/database/farmer"
+        listLabel="Farmers"
+        recordName="Farmer Details"
+        statusLabel="Loading"
+        statusVariant="neutral"
+      >
+        <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading farmer...</div>
+      </RecordDetailPage>
+    );
+  }
+
   return (
-    <AppLayout>
-      {viewFarmer && (
-        <Tabs
-          value={activeTab}
-          onValueChange={(value) =>
-            setActiveTab(value as "farmer-details" | "crop-land" | "product")
-          }
-          className="space-y-4"
-        >
-          <section className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
-            <div className="relative border-b border-border px-5 py-3">
-              <div
-                className={cn(
-                  "flex items-center gap-3",
-                  canNavigateRecords ? "pr-24" : "pr-0",
-                )}
-              >
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-lg hover:bg-muted"
-                  onClick={handleCloseView}
-                  aria-label="Back to farmer listing"
-                >
-                  <ArrowLeft className="h-4 w-4 text-muted-foreground" />
-                </Button>
-                <h1 className="text-sm font-semibold tracking-tight text-foreground">
-                  Farmer Details
-                </h1>
+    <RecordDetailPage
+      listHref="/database/farmer"
+      listLabel="Farmers"
+      recordName={viewFarmer.name}
+      statusLabel="Active"
+      statusVariant="active"
+      metaItems={[
+        { icon: MapPin, label: viewFarmer.village },
+        { icon: Phone, label: viewFarmer.phoneNumber },
+      ]}
+      tabs={[
+        { value: "farmer-details", label: "Farmer Details" },
+        { value: "crop-land", label: "Crop and Land Details" },
+        { value: "product", label: "Product Details" },
+      ]}
+      activeTab={activeTab}
+      onTabChange={(value) => setActiveTab(value as "farmer-details" | "crop-land" | "product")}
+      headerActions={
+        canNavigateRecords ? (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => handleStepViewFarmer(-1)}
+              disabled={currentViewFarmerIndex <= 0}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Previous farmer"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleStepViewFarmer(1)}
+              disabled={currentViewFarmerIndex < 0 || currentViewFarmerIndex >= farmers.length - 1}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Next farmer"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        ) : undefined
+      }
+      sidebar={{
+        summary: [
+          { label: "Farmland Size", value: viewFarmer.farmlandSize, highlight: true },
+          { label: "Current Crop", value: viewFarmer.currentCrop },
+          { label: "Owned / Leased", value: getOwnedLeasedSummary(viewFarmer) },
+          { label: "District", value: viewFarmer.district },
+          { label: "State", value: viewFarmer.state },
+        ],
+        quickActions: [
+          {
+            label: "Back to List",
+            onClick: handleCloseView,
+            variant: "outline",
+          },
+        ],
+      }}
+    >
+      {activeTab === "farmer-details" && (
+        <div className="space-y-4">
+            <SectionBlock icon={User} title="Farmer Basic Details" subtitle="Identity, family, contact, and demographics">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+                <div className="lg:row-span-2">
+                  <FarmerPhoto farmer={viewFarmer} />
+                </div>
+                <ReadOnlyField label="Farmer Name" value={viewFarmer.name} />
+                <ReadOnlyField label="Farmer Father's Name" value={viewFarmer.fatherName} />
+                <ReadOnlyField label="Age" value={viewFarmer.age} />
+                <ReadOnlyField label="Gender" value={viewFarmer.gender} />
+                <ReadOnlyField label="Phone Number" value={viewFarmer.phoneNumber} mono />
               </div>
-              <div className="absolute right-4 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1.5">
-                {canNavigateRecords && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => handleStepViewFarmer(-1)}
-                      disabled={currentViewFarmerIndex <= 0}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-                      aria-label="Previous farmer"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleStepViewFarmer(1)}
-                      disabled={
-                        currentViewFarmerIndex < 0 ||
-                        currentViewFarmerIndex >= farmers.length - 1
-                      }
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-                      aria-label="Next farmer"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </>
-                )}
+            </SectionBlock>
+
+            <SectionBlock icon={MapPin} title="Address & Geography Details" subtitle="Village, location, and farm coordinates">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <ReadOnlyField label="Village" value={viewFarmer.village} />
+                <ReadOnlyField label="Town" value={viewFarmer.town} />
+                <ReadOnlyField label="City" value={viewFarmer.city} />
+                <ReadOnlyField label="District" value={viewFarmer.district} />
+                <ReadOnlyField label="State" value={viewFarmer.state} />
+                <ReadOnlyField label="Pincode" value={viewFarmer.pincode} mono />
+                <ReadOnlyField label="Lat-long" value={viewFarmer.latLong} mono />
               </div>
-            </div>
-          </section>
-
-          <section className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
-            <VendorTabBar
-              tabs={FARMER_TABS}
-              active={activeTab}
-              onChange={(value) =>
-                setActiveTab(value as "farmer-details" | "crop-land" | "product")
-              }
-            />
-
-            <div className="px-4 py-4 md:px-5 md:py-4">
-              <TabsContent value="farmer-details" className="m-0 space-y-4">
-                <SectionBlock
-                  icon={User}
-                  title="Farmer Basic Details"
-                  subtitle="Identity, family, contact, and demographics"
-                >
-                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-                    <div className="lg:row-span-2">
-                      <FarmerPhoto farmer={viewFarmer} />
-                    </div>
-                    <ReadOnlyField label="Farmer Name" value={viewFarmer.name} />
-                    <ReadOnlyField
-                      label="Farmer Father's Name"
-                      value={viewFarmer.fatherName}
-                    />
-                    <ReadOnlyField label="Age" value={viewFarmer.age} />
-                    <ReadOnlyField label="Gender" value={viewFarmer.gender} />
-                    <ReadOnlyField
-                      label="Phone Number"
-                      value={viewFarmer.phoneNumber}
-                      mono
-                    />
-                  </div>
-                </SectionBlock>
-
-                <SectionBlock
-                  icon={MapPin}
-                  title="Address & Geography Details"
-                  subtitle="Village, location, and farm coordinates"
-                >
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <ReadOnlyField label="Village" value={viewFarmer.village} />
-                    <ReadOnlyField label="Town" value={viewFarmer.town} />
-                    <ReadOnlyField label="City" value={viewFarmer.city} />
-                    <ReadOnlyField label="District" value={viewFarmer.district} />
-                    <ReadOnlyField label="State" value={viewFarmer.state} />
-                    <ReadOnlyField label="Pincode" value={viewFarmer.pincode} mono />
-                    <ReadOnlyField label="Lat-long" value={viewFarmer.latLong} mono />
-                  </div>
-                </SectionBlock>
-              </TabsContent>
-
-              <TabsContent value="crop-land" className="m-0 space-y-4">
-                <SectionBlock
-                  icon={Leaf}
-                  title="Crop & Land Details"
-                  subtitle="Landholding and cultivation information"
-                >
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                    <ReadOnlyField
-                      label="Total Size of Farmland"
-                      value={viewFarmer.farmlandSize}
-                    />
-                    <ReadOnlyField
-                      label="Owned"
-                      value={formatArea(ownershipTotals.ownedTotal)}
-                    />
-                    <ReadOnlyField
-                      label="Leased"
-                      value={formatArea(ownershipTotals.leasedTotal)}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <ChipField
-                      label="Current Crop Grown Summary"
-                      items={currentCropSummary}
-                    />
-                    <ChipField
-                      label="Crop Rotation"
-                      items={cropRotationSummary}
-                    />
-                  </div>
-                </SectionBlock>
-              </TabsContent>
-
-              <TabsContent value="product" className="m-0 space-y-4">
-                <SectionBlock
-                  icon={Store}
-                  title="Product Details"
-                  subtitle="Usage patterns, brand recall, and field issues"
-                >
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <ReadOnlyField
-                      label="Chemical Percentage"
-                      value={chemicalBiologicalSplit.chemical}
-                    />
-                    <ReadOnlyField
-                      label="Biological Percentage"
-                      value={chemicalBiologicalSplit.biological}
-                    />
-                    <ChipField
-                      label="Which Brand Product He Uses"
-                      items={brandProductUsesChips}
-                    />
-                    <ChipField
-                      label="Brands and Product He Recall"
-                      items={brandsRecallChips}
-                    />
-                    <ReadOnlyField
-                      label="Currently Struggling With Which Problem"
-                      value={viewFarmer.currentProblem}
-                      multiline
-                      className="lg:col-span-2"
-                    />
-                    <ChipField
-                      label="Major Diseases / Pest Encountered in His Farm"
-                      items={majorDiseasesChips}
-                      className="lg:col-span-2"
-                    />
-                  </div>
-                </SectionBlock>
-              </TabsContent>
-            </div>
-          </section>
-        </Tabs>
+            </SectionBlock>
+        </div>
       )}
-    </AppLayout>
+
+      {activeTab === "crop-land" && (
+        <div className="space-y-4">
+            <SectionBlock icon={Leaf} title="Crop & Land Details" subtitle="Landholding and cultivation information">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <ReadOnlyField label="Total Size of Farmland" value={viewFarmer.farmlandSize} />
+                <ReadOnlyField label="Owned / Leased Summary" value={getOwnedLeasedSummary(viewFarmer)} />
+                <ReadOnlyField label="Current Crop Grown Summary" value={viewFarmer.currentCrop} className="lg:col-span-2" />
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <div>
+                  <p className="text-xs font-semibold text-foreground">Crop Portfolio</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    Multiple crop records linked to this farmer
+                  </p>
+                </div>
+
+                <div className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/40">
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap">Type</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap">Category</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap">Produce / Crop Name</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap">Land Size</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap">Owned / Leased</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap">Crop Rotation</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {viewFarmer.cropEntries.map((entry, index) => (
+                          <tr key={`${entry.produceCropName}-${index}`} className="border-b border-border/60 last:border-b-0">
+                            <td className="px-4 py-2 text-xs text-foreground whitespace-nowrap">{entry.type}</td>
+                            <td className="px-4 py-2 text-xs text-foreground whitespace-nowrap">{entry.category}</td>
+                            <td className="px-4 py-2 text-xs text-foreground whitespace-nowrap">{entry.produceCropName}</td>
+                            <td className="px-4 py-2 text-xs text-foreground whitespace-nowrap">{entry.landSize}</td>
+                            <td className="px-4 py-2 text-xs text-foreground whitespace-nowrap">{entry.ownershipType}</td>
+                            <td className="px-4 py-2 text-xs text-foreground whitespace-nowrap">{entry.cropRotation}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </SectionBlock>
+        </div>
+      )}
+
+      {activeTab === "product" && (
+        <div className="space-y-4">
+            <SectionBlock icon={Store} title="Product Details" subtitle="Usage patterns, brand recall, and field issues">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <ReadOnlyField
+                  label="Chemical / Biological / Percentage"
+                  value={viewFarmer.chemicalBiologicalPercentage}
+                  multiline
+                  className="lg:col-span-2"
+                />
+                <ReadOnlyField
+                  label="Which Brand Product He Uses"
+                  value={viewFarmer.brandProductUses}
+                  multiline
+                />
+                <ReadOnlyField
+                  label="Brands and Product He Recall"
+                  value={viewFarmer.brandsRecall}
+                  multiline
+                />
+                <ReadOnlyField
+                  label="Currently Struggling With Which Problem"
+                  value={viewFarmer.currentProblem}
+                  multiline
+                  className="lg:col-span-2"
+                />
+                <ReadOnlyField
+                  label="Major Diseases / Pest Encountered in His Farm"
+                  value={viewFarmer.majorDiseases}
+                  multiline
+                  className="lg:col-span-2"
+                />
+              </div>
+            </SectionBlock>
+        </div>
+      )}
+    </RecordDetailPage>
   );
 }

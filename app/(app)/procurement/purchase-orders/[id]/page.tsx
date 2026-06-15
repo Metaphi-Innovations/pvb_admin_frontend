@@ -3,15 +3,12 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { Edit2, Send, CheckCircle2, FileText, Upload, Scissors } from "lucide-react";
 import {
-	Edit2,
-	Send,
-	CheckCircle2,
-	FileText,
-	Upload,
-	Scissors,
-} from "lucide-react";
+  RecordDetailPage,
+  type RecordDetailSidebarProps,
+  type RecordDetailTab,
+} from "@/components/record-detail";
 import { UploadVendorInvoiceDialog } from "../components/UploadVendorInvoiceDialog";
 import { ShortClosePOModal } from "../components/ShortClosePOModal";
 import {
@@ -22,53 +19,59 @@ import { POIntegrationTabs } from "../components/POIntegrationTabs";
 import { VendorFollowUpPanel } from "../components/VendorFollowUpPanel";
 import { ProcurementApprovalModal } from "../../components/ProcurementApprovalModal";
 import { Toast } from "../../components/ProcurementUI";
-import {
-	PurchaseOrderForm,
-	poToFormValues,
-} from "../components/PurchaseOrderForm";
-import { POFormLayout } from "../components/POFormLayout";
+import { PurchaseOrderForm, poToFormValues } from "../components/PurchaseOrderForm";
 import { ProcButton } from "../../design/proc-design";
 import {
-	getPOById,
-	loadPurchaseOrders,
-	savePurchaseOrders,
-	submitPO,
-	approvePO,
-	rejectPO,
-	closePO,
-	cancelPO,
+  getPOById,
+  loadPurchaseOrders,
+  savePurchaseOrders,
+  submitPO,
+  approvePO,
+  rejectPO,
+  closePO,
+  cancelPO,
+  PO_STATUS_CFG,
+  type POStatus,
 } from "../po-data";
-import { canShortClosePO } from "../po-qty";
+import { canShortClosePO, getPOQtySummary } from "../po-qty";
 import { canUploadPOInvoice } from "../po-invoice-utils";
 
-export default function PODetailPage() {
-	const params = useParams();
-	const router = useRouter();
-	const id = Number(params.id);
-	const [po, setPo] = useState<any>(undefined);
-	const [loading, setLoading] = useState(true);
-	const [uploadOpen, setUploadOpen] = useState(false);
-	const [uploadReplace, setUploadReplace] = useState(false);
-	const [approvalOpen, setApprovalOpen] = useState(false);
-	const [shortCloseOpen, setShortCloseOpen] = useState(false);
+const PO_TABS: RecordDetailTab[] = [
+  { value: "overview", label: "Overview" },
+  { value: "integration", label: "Integration" },
+  { value: "follow-up", label: "Follow-up" },
+];
 
-	useEffect(() => {
-		if (typeof window !== "undefined") {
-			const uploadParam = new URLSearchParams(window.location.search).get("upload");
-			if (uploadParam === "1") {
-				setUploadOpen(true);
-			}
-		}
-	}, []);
-	const [approvalAction, setApprovalAction] = useState<"approve" | "reject">(
-		"approve",
-	);
-	const [invoiceTick, setInvoiceTick] = useState(0);
-	const [followUpTick, setFollowUpTick] = useState(0);
-	const [toast, setToast] = useState<{
-		msg: string;
-		type: "success" | "error";
-	} | null>(null);
+function poStatusVariant(status: POStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
+  if (status === "approved" || status === "invoice_uploaded") return "active";
+  if (status === "draft") return "draft";
+  if (status === "rejected" || status === "cancelled") return "blocked";
+  if (status === "pending_approval") return "neutral";
+  return "inactive";
+}
+
+function poApprovalTone(status: POStatus): "pending" | "approved" | "rejected" | "neutral" {
+  if (status === "pending_approval") return "pending";
+  if (["approved", "invoice_uploaded", "short_closed", "closed"].includes(status)) return "approved";
+  if (status === "rejected" || status === "cancelled") return "rejected";
+  return "neutral";
+}
+
+export default function PODetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const id = Number(params.id);
+  const [po, setPo] = useState(getPOById(id));
+  const [activeTab, setActiveTab] = useState("overview");
+  const [uploadOpen, setUploadOpen] = useState(searchParams.get("upload") === "1");
+  const [uploadReplace, setUploadReplace] = useState(false);
+  const [approvalOpen, setApprovalOpen] = useState(false);
+  const [shortCloseOpen, setShortCloseOpen] = useState(false);
+  const [approvalAction, setApprovalAction] = useState<"approve" | "reject">("approve");
+  const [invoiceTick, setInvoiceTick] = useState(0);
+  const [followUpTick, setFollowUpTick] = useState(0);
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
 	const refreshInvoices = useCallback(() => setInvoiceTick((t) => t + 1), []);
 
@@ -77,43 +80,12 @@ export default function PODetailPage() {
 		setLoading(false);
 	}, [id, invoiceTick, followUpTick]);
 
-	useEffect(() => {
-		if (typeof window === "undefined") return;
-		if (window.location.hash === "#follow-up-history") {
-			const t = window.setTimeout(() => {
-				document
-					.getElementById("follow-up-history")
-					?.scrollIntoView({ behavior: "smooth", block: "start" });
-			}, 300);
-			return () => window.clearTimeout(t);
-		}
-		if (window.location.hash === "#vendor-invoice") {
-			const t = window.setTimeout(() => {
-				document
-					.getElementById("vendor-invoice")
-					?.scrollIntoView({ behavior: "smooth", block: "start" });
-			}, 300);
-			return () => window.clearTimeout(t);
-		}
-		if (window.location.hash === "#three-way-match") {
-			const t = window.setTimeout(() => {
-				document
-					.getElementById("three-way-match")
-					?.scrollIntoView({ behavior: "smooth", block: "start" });
-			}, 300);
-			return () => window.clearTimeout(t);
-		}
-	}, [id, followUpTick, invoiceTick]);
-
-	if (loading) {
-		return (
-			<AppLayout>
-				<div className='flex items-center justify-center h-96'>
-					<p className='text-sm font-semibold text-muted-foreground'>Loading...</p>
-				</div>
-			</AppLayout>
-		);
-	}
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash;
+    if (hash === "#follow-up-history") setActiveTab("follow-up");
+    if (hash === "#vendor-invoice" || hash === "#three-way-match") setActiveTab("integration");
+  }, [id, followUpTick, invoiceTick]);
 
 	if (!po) {
 		return (
@@ -128,10 +100,11 @@ export default function PODetailPage() {
 		);
 	}
 
-	const canUploadInvoice = canUploadPOInvoice(po);
-	const submittedDate =
-		po.activity.find((a: any) => a.action.toLowerCase().includes("submit"))?.date ??
-		po.updatedDate;
+  const canUploadInvoice = canUploadPOInvoice(po);
+  const submittedDate = po.activity.find((a) => a.action.toLowerCase().includes("submit"))?.date ?? po.updatedDate;
+  const qtySummary = getPOQtySummary(po);
+  const formatRupee = (n: number) =>
+    `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 	const update = (updated: typeof po, redirectToast?: string) => {
 		savePurchaseOrders(
@@ -144,146 +117,121 @@ export default function PODetailPage() {
 		setPo(updated);
 	};
 
-	const headerActions = (
-		<>
-			{["draft", "rejected"].includes(po.status) && (
-				<ProcButton
-					variant='outline'
-					size='sm'
-					onClick={() =>
-						router.push(`/procurement/purchase-orders/${po.id}/edit`)
-					}
-				>
-					<Edit2 className='w-3.5 h-3.5' /> Edit
-				</ProcButton>
-			)}
-			{po.status === "draft" && (
-				<ProcButton
-					variant='success'
-					size='sm'
-					onClick={() => update(submitPO(po), "po-submitted")}
-				>
-					<Send className='w-3.5 h-3.5' /> Submit
-				</ProcButton>
-			)}
-			{po.status === "pending_approval" && (
-				<>
-					<ProcButton
-						variant='success'
-						size='sm'
-						onClick={() => {
-							setApprovalAction("approve");
-							setApprovalOpen(true);
-						}}
-					>
-						<CheckCircle2 className='w-3.5 h-3.5' /> Approve
-					</ProcButton>
-					<ProcButton
-						variant='danger'
-						size='sm'
-						onClick={() => {
-							setApprovalAction("reject");
-							setApprovalOpen(true);
-						}}
-					>
-						Reject
-					</ProcButton>
-				</>
-			)}
-			{canUploadInvoice && (
-				<ProcButton
-					variant='primary'
-					size='sm'
-					onClick={() => {
-						setUploadReplace(po.status === "invoice_uploaded");
-						setUploadOpen(true);
-					}}
-				>
-					<Upload className='w-3.5 h-3.5' /> Upload Invoice
-				</ProcButton>
-			)}
-			{canShortClosePO(po) && (
-				<ProcButton
-					variant='outline'
-					size='sm'
-					onClick={() => setShortCloseOpen(true)}
-				>
-					<Scissors className='w-3.5 h-3.5' /> Short Close PO
-				</ProcButton>
-			)}
-			{["approved", "invoice_uploaded"].includes(po.status) && (
-				<ProcButton
-					variant='outline'
-					size='sm'
-					onClick={() => update(closePO(po), "po-saved")}
-				>
-					Close PO
-				</ProcButton>
-			)}
-			{!["closed", "cancelled", "short_closed"].includes(po.status) && (
-				<ProcButton
-					variant='danger'
-					size='sm'
-					onClick={() => update(cancelPO(po), "po-saved")}
-				>
-					Cancel
-				</ProcButton>
-			)}
-			<ProcButton variant='outline' size='sm'>
-				<FileText className='w-3.5 h-3.5' /> PDF
-			</ProcButton>
-		</>
-	);
+  const headerActions = (
+    <>
+      {["draft", "rejected"].includes(po.status) && (
+        <ProcButton variant="outline" size="sm" onClick={() => router.push(`/procurement/purchase-orders/${po.id}/edit`)}>
+          <Edit2 className="w-3.5 h-3.5" /> Edit
+        </ProcButton>
+      )}
+      {po.status === "draft" && (
+        <ProcButton variant="success" size="sm" onClick={() => update(submitPO(po), "po-submitted")}>
+          <Send className="w-3.5 h-3.5" /> Submit
+        </ProcButton>
+      )}
+      {po.status === "pending_approval" && (
+        <>
+          <ProcButton variant="success" size="sm" onClick={() => { setApprovalAction("approve"); setApprovalOpen(true); }}>
+            <CheckCircle2 className="w-3.5 h-3.5" /> Approve
+          </ProcButton>
+          <ProcButton variant="danger" size="sm" onClick={() => { setApprovalAction("reject"); setApprovalOpen(true); }}>
+            Reject
+          </ProcButton>
+        </>
+      )}
+      {canUploadInvoice && (
+        <ProcButton variant="primary" size="sm" onClick={() => { setUploadReplace(po.status === "invoice_uploaded"); setUploadOpen(true); }}>
+          <Upload className="w-3.5 h-3.5" /> Upload Invoice
+        </ProcButton>
+      )}
+      {canShortClosePO(po) && (
+        <ProcButton variant="outline" size="sm" onClick={() => setShortCloseOpen(true)}>
+          <Scissors className="w-3.5 h-3.5" /> Short Close PO
+        </ProcButton>
+      )}
+      {["approved", "invoice_uploaded"].includes(po.status) && (
+        <ProcButton variant="outline" size="sm" onClick={() => update(closePO(po), "po-saved")}>Close PO</ProcButton>
+      )}
+      {!["closed", "cancelled", "short_closed"].includes(po.status) && (
+        <ProcButton variant="danger" size="sm" onClick={() => update(cancelPO(po), "po-saved")}>Cancel</ProcButton>
+      )}
+      <ProcButton variant="outline" size="sm"><FileText className="w-3.5 h-3.5" /> PDF</ProcButton>
+    </>
+  );
 
-	return (
-		<>
-			<POFormLayout
-				mode='view'
-				poNumber={po.poNumber}
-				status={po.status}
-				backHref='/procurement/purchase-orders'
-				headerActions={headerActions}
-			>
-				<div className='grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-4 items-start'>
-					<div className='space-y-4 min-w-0'>
-						<POQtySummaryCard po={po} />
-						<POIntegrationTabs
-							po={po}
-							refreshKey={invoiceTick}
-							onUpload={() => {
-								setUploadReplace(false);
-								setUploadOpen(true);
-							}}
-							onReplace={() => {
-								setUploadReplace(true);
-								setUploadOpen(true);
-							}}
-						/>
-						<PurchaseOrderForm
-							form={poToFormValues(po)}
-							onChange={() => {}}
-							poNumber={po.poNumber}
-							readOnly
-							status={po.status}
-							submittedDate={submittedDate}
-						/>
-						<POClosureInformation po={po} />
-					</div>
-					<VendorFollowUpPanel
-						po={po}
-						onPOUpdated={(updated) => {
-							savePurchaseOrders(
-								loadPurchaseOrders().map((p) =>
-									p.id === updated.id ? updated : p,
-								),
-							);
-							setPo(updated);
-							setFollowUpTick((t) => t + 1);
-						}}
-						onToast={(msg) => setToast({ msg, type: "success" })}
-					/>
-				</div>
-			</POFormLayout>
+  const sidebar: RecordDetailSidebarProps = {
+    summary: [
+      { label: "Supplier", value: po.supplierName },
+      { label: "PO Date", value: po.poDate },
+      { label: "Reference", value: po.referenceNumber || "—" },
+      { label: "Grand Total", value: formatRupee(po.summary.grandTotal), highlight: true },
+      { label: "Ordered Qty", value: String(qtySummary.orderedQty) },
+      { label: "Pending Qty", value: String(qtySummary.pendingQty) },
+    ],
+    activity: [...po.activity].reverse().map((a, i) => ({
+      id: `${a.date}-${i}`,
+      title: a.action,
+      subtitle: a.note ? `${a.by} · ${a.note}` : a.by,
+      date: a.date,
+    })),
+    approval: [
+      {
+        label: "Status",
+        value: PO_STATUS_CFG[po.status]?.label ?? po.status,
+        tone: poApprovalTone(po.status),
+      },
+    ],
+  };
+
+  return (
+    <>
+      <RecordDetailPage
+        listHref="/procurement/purchase-orders"
+        listLabel="Purchase Orders"
+        recordName="Purchase Order"
+        recordCode={po.poNumber}
+        statusLabel={PO_STATUS_CFG[po.status]?.label ?? po.status}
+        statusVariant={poStatusVariant(po.status)}
+        tabs={PO_TABS}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        headerActions={headerActions}
+        sidebar={sidebar}
+      >
+        {activeTab === "overview" && (
+          <div className="space-y-4">
+            <POQtySummaryCard po={po} />
+            <PurchaseOrderForm
+              form={poToFormValues(po)}
+              onChange={() => {}}
+              poNumber={po.poNumber}
+              readOnly
+              status={po.status}
+              submittedDate={submittedDate}
+            />
+            <POClosureInformation po={po} />
+          </div>
+        )}
+        {activeTab === "integration" && (
+          <POIntegrationTabs
+            po={po}
+            refreshKey={invoiceTick}
+            onUpload={() => { setUploadReplace(false); setUploadOpen(true); }}
+            onReplace={() => { setUploadReplace(true); setUploadOpen(true); }}
+          />
+        )}
+        {activeTab === "follow-up" && (
+          <VendorFollowUpPanel
+            po={po}
+            onPOUpdated={(updated) => {
+              savePurchaseOrders(loadPurchaseOrders().map((p) => (p.id === updated.id ? updated : p)));
+              setPo(updated);
+              setFollowUpTick((t) => t + 1);
+            }}
+            onToast={(msg) => setToast({ msg, type: "success" })}
+          />
+        )}
+      </RecordDetailPage>
 
 			<UploadVendorInvoiceDialog
 				open={uploadOpen}
