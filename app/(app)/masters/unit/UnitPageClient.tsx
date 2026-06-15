@@ -32,15 +32,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetBody,
-  SheetFooter,
-} from "@/components/ui/sheet";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -50,7 +41,8 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { MiniKPICard } from "@/components/ui/KPICard";
-import { MasterFormGrid, MasterField, MasterViewRow, compactInput } from "@/components/masters/MasterModule";
+import { MasterFormGrid, MasterField, compactInput } from "@/components/masters/MasterModule";
+import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
 import {
   DEFAULT_UNIT_FORM,
   formToUnit,
@@ -640,116 +632,68 @@ export default function UnitMasterPage() {
         </div>
       </div>
 
-      <Sheet open={sheetMode !== null} onOpenChange={(o) => !o && closeSheet()}>
-        <SheetContent>
-          <SheetHeader>
-            <div className="flex items-start gap-3 pr-8">
-              <div className="flex items-center justify-center border w-9 h-9 rounded-xl bg-brand-50 border-brand-100">
-                <Ruler className="w-4 h-4 text-brand-600" />
-              </div>
-              <div>
-                <SheetTitle className="text-base">{sheetTitle}</SheetTitle>
-                <SheetDescription className="text-xs">
-                  {sheetMode === "view" ? "Read-only details" : "Compact unit form"}
-                </SheetDescription>
-              </div>
-            </div>
-          </SheetHeader>
-
-          <SheetBody>
-            {sheetMode === "view" && active ? (
-              <div className="space-y-4">
-                <div className="px-3 border rounded-lg border-border/60 bg-muted/10">
-                  <MasterViewRow label="Unit Name" value={active.unitName} />
-                  <MasterViewRow label="Unit Code" value={<span className="font-mono">{active.unitCode}</span>} />
-                  <MasterViewRow label="Symbol" value={<span className="font-mono">{active.symbol}</span>} />
-                  <MasterViewRow label="Description" value={active.description || "—"} />
-                  <MasterViewRow label="Status" value={active.status === "active" ? "Active" : "Inactive"} />
-                </div>
-                <div className="grid grid-cols-2 gap-3 pt-2 text-xs border-t">
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
-                    <p className="font-medium">{active.createdBy}</p>
-                    <p className="text-muted-foreground">{active.createdAt}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase">Updated By</p>
-                    <p className="font-medium">{active.updatedBy}</p>
-                    <p className="text-muted-foreground">{active.updatedAt}</p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
-                <MasterFormGrid>
-                  <MasterField label="Unit Name" required>
-                    <Input
-                      className={compactInput()}
-                      value={form.unitName}
-                      onChange={(e) => setForm((f) => ({ ...f, unitName: e.target.value }))}
-                    />
-                  </MasterField>
-                  <MasterField label="Unit Code" required>
-                    <Input
-                      className={compactInput("font-mono opacity-100 bg-background text-foreground cursor-not-allowed")}
-                      value={form.unitCode}
-                      disabled
-                      readOnly
-                      onChange={(e) => setForm((f) => ({ ...f, unitCode: e.target.value.toUpperCase() }))}
-                    />
-                  </MasterField>
-                  <MasterField label="Symbol" required>
-                    <Input
-                      className={compactInput("font-mono")}
-                      value={form.symbol}
-                      onChange={(e) => setForm((f) => ({ ...f, symbol: e.target.value.toUpperCase() }))}
-                      placeholder="KG, L, PKT"
-                    />
-                  </MasterField>
-                  <MasterField label="Description" className="sm:col-span-2">
-                    <Textarea
-                      className="text-xs min-h-[72px] resize-none"
-                      value={form.description}
-                      onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                    />
-                  </MasterField>
-                </MasterFormGrid>
-              </div>
-            )}
-          </SheetBody>
-
-          <SheetFooter>
-            {sheetMode === "view" ? (
-              <>
-                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
-                  Back
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
-                  onClick={() => active && openEdit(active)}
-                >
-                  Edit
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
-                  onClick={persist}
-                >
-                  Save
-                </Button>
-              </>
-            )}
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+      <MasterListingSheets
+        sheetMode={sheetMode}
+        active={active}
+        onClose={closeSheet}
+        onEdit={() => active && openEdit(active)}
+        onSave={persist}
+        sheetTitle={sheetTitle}
+        icon={Ruler}
+        viewDrawer={
+          active
+            ? buildSimpleMasterViewDrawer<UnitRecord>({
+                drawerTitle: "Unit",
+                getRecordCode: (r) => r.unitCode,
+                basicInfo: (r) => [
+                  { label: "Unit Name", value: r.unitName },
+                  { label: "Unit Code", value: r.unitCode, mono: true },
+                  { label: "Symbol", value: r.symbol, mono: true },
+                ],
+                description: (r) => r.description,
+                showDescription: true,
+              })(active)
+            : { title: "Unit", basicInfo: [] }
+        }
+        formContent={
+          <div className="space-y-4">
+            {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
+            <MasterFormGrid>
+              <MasterField label="Unit Name" required>
+                <Input
+                  className={compactInput()}
+                  value={form.unitName}
+                  onChange={(e) => setForm((f) => ({ ...f, unitName: e.target.value }))}
+                />
+              </MasterField>
+              <MasterField label="Unit Code" required>
+                <Input
+                  className={compactInput("font-mono opacity-100 bg-background text-foreground cursor-not-allowed")}
+                  value={form.unitCode}
+                  disabled
+                  readOnly
+                  onChange={(e) => setForm((f) => ({ ...f, unitCode: e.target.value.toUpperCase() }))}
+                />
+              </MasterField>
+              <MasterField label="Symbol" required>
+                <Input
+                  className={compactInput("font-mono")}
+                  value={form.symbol}
+                  onChange={(e) => setForm((f) => ({ ...f, symbol: e.target.value.toUpperCase() }))}
+                  placeholder="KG, L, PKT"
+                />
+              </MasterField>
+              <MasterField label="Description" className="sm:col-span-2">
+                <Textarea
+                  className="text-xs min-h-[72px] resize-none"
+                  value={form.description}
+                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                />
+              </MasterField>
+            </MasterFormGrid>
+          </div>
+        }
+      />
 
       <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <DialogContent className="max-w-sm">

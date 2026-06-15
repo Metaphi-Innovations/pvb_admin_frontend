@@ -16,15 +16,6 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetBody,
-  SheetFooter,
-} from "@/components/ui/sheet";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -35,7 +26,8 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { MiniKPICard } from "@/components/ui/KPICard";
-import { MasterFormGrid, MasterViewRow } from "@/components/masters/MasterModule";
+import { MasterFormGrid } from "@/components/masters/MasterModule";
+import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
 import {
   Select,
   SelectContent,
@@ -462,240 +454,166 @@ export default function SchemeMasterPage() {
         />
       </div>
 
-      <Sheet open={sheetMode !== null} onOpenChange={(o) => !o && closeSheet()}>
-        <SheetContent>
-          <SheetHeader>
-            <div className="flex items-start gap-3 pr-8">
-              <div className="flex items-center justify-center border w-9 h-9 rounded-xl bg-brand-50 border-brand-100">
-                <Gift className="w-4 h-4 text-brand-600" />
+      <MasterListingSheets
+        sheetMode={sheetMode}
+        active={active}
+        onClose={closeSheet}
+        onEdit={() => active && openEdit(active)}
+        onSave={persist}
+        sheetTitle={sheetTitle}
+        icon={Gift}
+        viewDrawer={
+          active
+            ? buildSimpleMasterViewDrawer<SchemeRecord>({
+                drawerTitle: "Scheme",
+                getRecordCode: (r) => r.schemeCode,
+                basicInfo: (r) => [
+                  { label: "Scheme Name", value: r.schemeName },
+                  { label: "Scheme Code", value: r.schemeCode, mono: true },
+                  { label: "Discount Type", value: r.discountType },
+                  {
+                    label: r.discountType === "Percentage" ? "Percentage" : "Flat Discount Amount",
+                    value: r.discountType === "Percentage" ? `${r.percentage}%` : `₹${r.flatDiscountAmount}`,
+                  },
+                  { label: "Start Date", value: r.startDate || "—" },
+                  { label: "End Date", value: r.endDate || "—" },
+                ],
+                description: (r) => r.description,
+                showDescription: true,
+              })(active)
+            : { title: "Scheme", basicInfo: [] }
+        }
+        formContent={
+          <div className="space-y-4">
+            {errors._form && <p className="text-xs font-semibold text-red-600">{errors._form}</p>}
+            <MasterFormGrid>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs font-medium">
+                  Scheme Name <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  value={form.schemeName}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, schemeName: e.target.value }));
+                    setErrors((prev) => ({ ...prev, schemeName: "", _form: "" }));
+                  }}
+                  placeholder="e.g., Monsoon Discount"
+                  className="h-8 text-xs"
+                />
               </div>
-              <div>
-                <SheetTitle className="text-base">{sheetTitle}</SheetTitle>
-                <SheetDescription className="text-xs">
-                  {sheetMode === "view" ? "Read-only details" : "Compact scheme form"}
-                </SheetDescription>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs font-medium">
+                  Scheme Code <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  value={sheetMode === "add" ? nextAutoCode : form.schemeCode}
+                  disabled
+                  readOnly
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, schemeCode: e.target.value }));
+                    setErrors((prev) => ({ ...prev, schemeCode: "", _form: "" }));
+                  }}
+                  placeholder="e.g., SCH-001"
+                  className="h-8 font-mono text-xs cursor-not-allowed disabled:opacity-100 bg-muted/30"
+                />
               </div>
-            </div>
-          </SheetHeader>
-
-          <SheetBody>
-            {sheetMode === "view" && active ? (
-              <div className="space-y-4">
-                <div className="px-3 border rounded-lg border-border/60 bg-muted/10">
-                  <MasterViewRow label="Scheme Name" value={active.schemeName} />
-                  <MasterViewRow label="Scheme Code" value={<span className="font-mono">{active.schemeCode}</span>} />
-                  <MasterViewRow label="Discount Type" value={active.discountType} />
-                  <MasterViewRow
-                    label={active.discountType === "Percentage" ? "Percentage" : "Flat Discount Amount"}
-                    value={active.discountType === "Percentage" ? `${active.percentage}%` : `₹${active.flatDiscountAmount}`}
-                  />
-                  <MasterViewRow label="Start Date" value={active.startDate || "—"} />
-                  <MasterViewRow label="End Date" value={active.endDate || "—"} />
-                  <MasterViewRow label="Description" value={active.description || "—"} />
-                  <MasterViewRow label="Status" value={active.status === "active" ? "Active" : "Inactive"} />
-                </div>
-                <div className="grid grid-cols-2 gap-3 pt-2 text-xs border-t">
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
-                    <p className="font-medium">{active.createdBy}</p>
-                    <p className="text-muted-foreground">{active.createdAt}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase">Updated By</p>
-                    <p className="font-medium">{active.updatedBy}</p>
-                    <p className="text-muted-foreground">{active.updatedAt}</p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {errors._form && <p className="text-xs font-semibold text-red-600">{errors._form}</p>}
-                <MasterFormGrid>
-                  {/* Scheme Name */}
-                  <div className="col-span-2 space-y-1">
-                    <Label className="text-xs font-medium">
-                      Scheme Name <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      value={form.schemeName}
-                      onChange={(e) => {
-                        setForm((prev) => ({ ...prev, schemeName: e.target.value }));
-                        setErrors((prev) => ({ ...prev, schemeName: "", _form: "" }));
-                      }}
-                      placeholder="e.g., Monsoon Discount"
-                      className="h-8 text-xs"
-                    />
-                  </div>
-
-                  {/* Scheme Code */}
-                  <div className="col-span-2 space-y-1">
-                    <Label className="text-xs font-medium">
-                      Scheme Code <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      value={sheetMode === "add" ? nextAutoCode : form.schemeCode}
-                      disabled
-                      readOnly
-                      onChange={(e) => {
-                        setForm((prev) => ({ ...prev, schemeCode: e.target.value }));
-                        setErrors((prev) => ({ ...prev, schemeCode: "", _form: "" }));
-                      }}
-                      placeholder="e.g., SCH-001"
-                      className="h-8 font-mono text-xs cursor-not-allowed disabled:opacity-100 bg-muted/30"
-                    />
-                  </div>
-
-                  {/* Discount Type */}
-                  <div className="col-span-2 space-y-1">
-                    <Label className="text-xs font-medium">
-                      Discount Type <span className="text-red-500">*</span>
-                    </Label>
-                    <Select
-                      value={form.discountType}
-                      onValueChange={(v: DiscountType) => {
-                        setForm((prev) => ({
-                          ...prev,
-                          discountType: v,
-                          percentage: v === "Percentage" ? prev.percentage : "",
-                          flatDiscountAmount: v === "Flat" ? prev.flatDiscountAmount : "",
-                        }));
-                        setErrors((prev) => ({ ...prev, _form: "" }));
-                      }}
-                    >
-                      <SelectTrigger className="h-8 text-xs bg-white">
-                        <SelectValue placeholder="Select discount type" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white border shadow-lg border-border">
-                        <SelectItem value="Percentage" className="text-xs">Percentage</SelectItem>
-                        <SelectItem value="Flat" className="text-xs">Flat</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Conditional Discount Value Input */}
-                  {form.discountType === "Percentage" ? (
-                    <div className="col-span-2 space-y-1">
-                      <Label className="text-xs font-medium">
-                        Percentage (%) <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        type="number"
-                        step="any"
-                        value={form.percentage}
-                        onChange={(e) => {
-                          setForm((prev) => ({ ...prev, percentage: e.target.value }));
-                          setErrors((prev) => ({ ...prev, percentage: "", _form: "" }));
-                        }}
-                        placeholder="e.g., 10"
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                  ) : (
-                    <div className="col-span-2 space-y-1">
-                      <Label className="text-xs font-medium">
-                        Flat Discount Amount (₹) <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        type="number"
-                        step="any"
-                        value={form.flatDiscountAmount}
-                        onChange={(e) => {
-                          setForm((prev) => ({ ...prev, flatDiscountAmount: e.target.value }));
-                          setErrors((prev) => ({ ...prev, flatDiscountAmount: "", _form: "" }));
-                        }}
-                        placeholder="e.g., 500"
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                  )}
-
-                  {/* Start Date */}
-                  <div className="col-span-2 space-y-1 sm:col-span-1">
-                    <Label className="text-xs font-medium">Start Date</Label>
-                    <Input
-                      type="date"
-                      value={form.startDate}
-                      onChange={(e) => {
-                        setForm((prev) => ({ ...prev, startDate: e.target.value }));
-                        setErrors((prev) => ({ ...prev, _form: "" }));
-                      }}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-
-                  {/* End Date */}
-                  <div className="col-span-2 space-y-1 sm:col-span-1">
-                    <Label className="text-xs font-medium">End Date</Label>
-                    <Input
-                      type="date"
-                      value={form.endDate}
-                      onChange={(e) => {
-                        setForm((prev) => ({ ...prev, endDate: e.target.value }));
-                        setErrors((prev) => ({ ...prev, _form: "" }));
-                      }}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-
-                  {/* Description */}
-                  <div className="col-span-2 space-y-1">
-                    <Label className="text-xs font-medium">Description</Label>
-                    <Textarea
-                      value={form.description}
-                      onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-                      placeholder="e.g., monsoon scheme rules"
-                      className="text-xs min-h-[72px] resize-none"
-                    />
-                  </div>
-                </MasterFormGrid>
-
-                {/* <div className="flex items-center justify-between p-3 border rounded-lg border-border bg-muted/20">
-                  <div>
-                    <p className="text-xs font-medium">Status</p>
-                    <p className="text-[11px] text-muted-foreground">{form.status === "active" ? "Active" : "Inactive"}</p>
-                  </div>
-                  <Switch
-                    checked={form.status === "active"}
-                    onCheckedChange={(checked) =>
-                      setForm((prev) => ({ ...prev, status: checked ? "active" : "inactive" }))
-                    }
-                  />
-                </div> */}
-              </div>
-            )}
-          </SheetBody>
-
-          <SheetFooter>
-            {sheetMode === "view" ? (
-              <>
-                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
-                  Back
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
-                  onClick={() => active && openEdit(active)}
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs font-medium">
+                  Discount Type <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={form.discountType}
+                  onValueChange={(v: DiscountType) => {
+                    setForm((prev) => ({
+                      ...prev,
+                      discountType: v,
+                      percentage: v === "Percentage" ? prev.percentage : "",
+                      flatDiscountAmount: v === "Flat" ? prev.flatDiscountAmount : "",
+                    }));
+                    setErrors((prev) => ({ ...prev, _form: "" }));
+                  }}
                 >
-                  Edit
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
-                  onClick={persist}
-                >
-                  Save
-                </Button>
-              </>
-            )}
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+                  <SelectTrigger className="h-8 text-xs bg-white">
+                    <SelectValue placeholder="Select discount type" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border shadow-lg border-border">
+                    <SelectItem value="Percentage" className="text-xs">Percentage</SelectItem>
+                    <SelectItem value="Flat" className="text-xs">Flat</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {form.discountType === "Percentage" ? (
+                <div className="col-span-2 space-y-1">
+                  <Label className="text-xs font-medium">
+                    Percentage (%) <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={form.percentage}
+                    onChange={(e) => {
+                      setForm((prev) => ({ ...prev, percentage: e.target.value }));
+                      setErrors((prev) => ({ ...prev, percentage: "", _form: "" }));
+                    }}
+                    placeholder="e.g., 10"
+                    className="h-8 text-xs"
+                  />
+                </div>
+              ) : (
+                <div className="col-span-2 space-y-1">
+                  <Label className="text-xs font-medium">
+                    Flat Discount Amount (₹) <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={form.flatDiscountAmount}
+                    onChange={(e) => {
+                      setForm((prev) => ({ ...prev, flatDiscountAmount: e.target.value }));
+                      setErrors((prev) => ({ ...prev, flatDiscountAmount: "", _form: "" }));
+                    }}
+                    placeholder="e.g., 500"
+                    className="h-8 text-xs"
+                  />
+                </div>
+              )}
+              <div className="col-span-2 space-y-1 sm:col-span-1">
+                <Label className="text-xs font-medium">Start Date</Label>
+                <Input
+                  type="date"
+                  value={form.startDate}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, startDate: e.target.value }));
+                    setErrors((prev) => ({ ...prev, _form: "" }));
+                  }}
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="col-span-2 space-y-1 sm:col-span-1">
+                <Label className="text-xs font-medium">End Date</Label>
+                <Input
+                  type="date"
+                  value={form.endDate}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, endDate: e.target.value }));
+                    setErrors((prev) => ({ ...prev, _form: "" }));
+                  }}
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs font-medium">Description</Label>
+                <Textarea
+                  value={form.description}
+                  onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+                  placeholder="e.g., monsoon scheme rules"
+                  className="text-xs min-h-[72px] resize-none"
+                />
+              </div>
+            </MasterFormGrid>
+          </div>
+        }
+      />
 
       <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <DialogContent className="max-w-sm">

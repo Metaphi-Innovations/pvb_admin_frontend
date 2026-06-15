@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { RecordDetailPage } from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -11,13 +11,14 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  AlertTriangle, ArrowLeft, Edit2, Key, Trash2, MoreVertical,
-  CheckCircle2, XCircle, X, User,
+  AlertTriangle, Edit2, Key, Trash2,
+  CheckCircle2, XCircle, X, User, Mail, Phone,
 } from "lucide-react";
 import {
   type Employee,
@@ -328,79 +329,72 @@ export default function EmployeeDetailPage() {
 
   if (!employee) {
     return (
-      <AppLayout>
+      <RecordDetailPage
+        listHref="/user-management/employee"
+        listLabel="Employees"
+        recordName="Employee Details"
+        statusLabel="Loading"
+        statusVariant="neutral"
+      >
         <div className="flex items-center justify-center h-96">
           <p className="text-muted-foreground">Loading employee...</p>
         </div>
-      </AppLayout>
+      </RecordDetailPage>
     );
   }
 
-  return (
-    <AppLayout>
-      <div className="max-w-[800px] mx-auto space-y-5">
-        {/* Header */}
-        <div className="flex items-start gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 px-2 -ml-2"
-            onClick={() => router.push("/user-management/employee")}>
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <div className="flex-1">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center flex-shrink-0">
-                <User className="w-5 h-5 text-brand-600" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-foreground">{employee.fullName}</h1>
-                <p className="text-xs text-muted-foreground mt-0.5">{employee.employeeId} • {employee.email}</p>
-              </div>
-              <StatusPill status={employee.status} />
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-              onClick={() => router.push(`/user-management/employee/${employee.id}/edit`)}>
-              <Edit2 className="w-3.5 h-3.5" /> Edit
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 px-2">
-                  <MoreVertical className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
-                  Actions
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <button
-                  onClick={handleStatusToggle}
-                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted rounded-sm transition-colors">
-                  {employee.status === "active" ? "Deactivate" : "Activate"}
-                </button>
-                <button
-                  onClick={handlePasswordReset}
-                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted rounded-sm transition-colors">
-                  <Key className="w-3.5 h-3.5" /> Reset Password
-                </button>
-                <DropdownMenuSeparator />
-                <button
-                  onClick={handleDelete}
-                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-sm transition-colors">
-                  <Trash2 className="w-3.5 h-3.5" /> Delete
-                </button>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
+  const statusVariant =
+    employee.status === "active" ? "active" :
+    employee.status === "draft" ? "draft" :
+    employee.status === "archived" ? "blocked" : "inactive";
 
-        {/* Content Cards */}
-        <div className="grid grid-cols-3 gap-3">
+  return (
+    <>
+      <RecordDetailPage
+        listHref="/user-management/employee"
+        listLabel="Employees"
+        recordName={employee.fullName}
+        recordCode={employee.employeeId}
+        statusLabel={employee.status.charAt(0).toUpperCase() + employee.status.slice(1)}
+        statusVariant={statusVariant}
+        metaItems={[
+          { icon: Mail, label: employee.email },
+          { icon: Phone, label: employee.mobile },
+        ]}
+        active={employee.status === "active"}
+        onActiveChange={() => handleStatusToggle()}
+        onEdit={() => router.push(`/user-management/employee/${employee.id}/edit`)}
+        moreActions={[
+          {
+            label: "Reset Password",
+            onClick: handlePasswordReset,
+          },
+          {
+            label: "Archive User",
+            onClick: handleDelete,
+            destructive: true,
+          },
+        ]}
+        sidebar={{
+          summary: [
+            { label: "Department", value: employee.department, highlight: true },
+            { label: "Role", value: employee.role },
+            { label: "Joining Date", value: employee.joiningDate },
+            { label: "Reporting Manager", value: employee.reportingManager || "None" },
+            { label: "Created", value: employee.createdDate },
+            { label: "Updated", value: employee.updatedDate },
+          ],
+          quickActions: [
+            {
+              label: "Reset Password",
+              icon: Key,
+              onClick: handlePasswordReset,
+              variant: "outline",
+            },
+          ],
+        }}
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {/* Personal Details */}
           <div className="border border-border rounded-xl bg-white p-3.5">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2.5">Personal Details</p>
@@ -477,7 +471,7 @@ export default function EmployeeDetailPage() {
             </div>
           </div>
         </div>
-      </div>
+      </RecordDetailPage>
 
       {/* Dialogs */}
       <ConfirmDialog
@@ -508,6 +502,6 @@ export default function EmployeeDetailPage() {
 
       {/* Toast */}
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-    </AppLayout>
+    </>
   );
 }

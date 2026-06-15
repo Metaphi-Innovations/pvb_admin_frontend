@@ -43,8 +43,25 @@ import {
   type MasterStatus,
 } from "@/lib/masters/common";
 import { Eye, Pencil, Trash2, type LucideIcon } from "lucide-react";
+import {
+  MasterRecordDrawer,
+  masterAuditFromRecord,
+  MASTER_DRAWER_CLASS,
+  type MasterDrawerField,
+  type MasterDrawerAuditInfo,
+} from "./MasterRecordDrawer";
 
 export type SheetMode = "add" | "edit" | "view" | null;
+
+export interface MasterViewConfig<T extends BaseMasterRecord> {
+  /** Drawer title — defaults to module title without " Master" suffix */
+  drawerTitle?: string;
+  getRecordCode?: (record: T) => string | undefined;
+  basicInfo: (record: T) => MasterDrawerField[];
+  description?: (record: T) => string | null | undefined;
+  showDescription?: boolean;
+  auditInfo?: (record: T) => MasterDrawerAuditInfo;
+}
 
 export interface MasterModuleConfig<T extends BaseMasterRecord, F> {
   title: string;
@@ -66,7 +83,9 @@ export interface MasterModuleConfig<T extends BaseMasterRecord, F> {
     mode: "add" | "edit";
     errors: Record<string, string>;
   }) => React.ReactNode;
-  renderViewDetails: (record: T) => React.ReactNode;
+  /** @deprecated Prefer viewConfig for structured drawer layout */
+  renderViewDetails?: (record: T) => React.ReactNode;
+  viewConfig?: MasterViewConfig<T>;
   getCodeFromForm?: (form: F) => string;
   setCodeOnForm?: (form: F, code: string) => F;
   hideColumnSelection?: boolean;
@@ -93,6 +112,7 @@ export function MasterModule<T extends BaseMasterRecord, F>({
     validate,
     renderFormFields,
     renderViewDetails,
+    viewConfig,
     setCodeOnForm,
     hideColumnSelection,
   } = config;
@@ -262,6 +282,8 @@ export function MasterModule<T extends BaseMasterRecord, F>({
   const sheetTitle =
     sheetMode === "add" ? `Add ${title.replace(/ Master$/, "")}` : sheetMode === "edit" ? `Edit ${title.replace(/ Master$/, "")}` : `View ${title.replace(/ Master$/, "")}`;
 
+  const drawerTitle = viewConfig?.drawerTitle ?? title.replace(/ Master$/, "");
+
   return (
     <AppLayout>
       <PageShell>
@@ -347,8 +369,33 @@ export function MasterModule<T extends BaseMasterRecord, F>({
           />
         )}
 
-        <Sheet open={sheetMode !== null} onOpenChange={(o) => !o && closeSheet()}>
-          <SheetContent>
+        <MasterRecordDrawer
+          open={sheetMode === "view" && !!active}
+          onOpenChange={(o) => !o && closeSheet()}
+          onClose={closeSheet}
+          onEdit={() => active && openEdit(active)}
+          title={drawerTitle}
+          icon={Icon}
+          recordCode={active ? viewConfig?.getRecordCode?.(active) ?? undefined : undefined}
+          status={active?.status}
+          basicInfo={active && viewConfig ? viewConfig.basicInfo(active) : []}
+          description={
+            active && viewConfig?.description
+              ? viewConfig.description(active) ?? undefined
+              : undefined
+          }
+          showDescription={viewConfig?.showDescription ?? !!viewConfig?.description}
+          auditInfo={
+            active
+              ? viewConfig?.auditInfo?.(active) ?? masterAuditFromRecord(active)
+              : undefined
+          }
+        >
+          {active && renderViewDetails && !viewConfig ? renderViewDetails(active) : null}
+        </MasterRecordDrawer>
+
+        <Sheet open={sheetMode === "add" || sheetMode === "edit"} onOpenChange={(o) => !o && closeSheet()}>
+          <SheetContent className={MASTER_DRAWER_CLASS}>
             <SheetHeader>
               <div className="flex items-start gap-3 pr-8">
                 <div className="w-9 h-9 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center">
@@ -356,77 +403,40 @@ export function MasterModule<T extends BaseMasterRecord, F>({
                 </div>
                 <div>
                   <SheetTitle className="text-base">{sheetTitle}</SheetTitle>
-                  <SheetDescription className="text-xs">
-                    {sheetMode === "view" ? "Read-only details" : "Compact master form"}
-                  </SheetDescription>
+                  <SheetDescription className="text-xs">Compact master form</SheetDescription>
                 </div>
               </div>
             </SheetHeader>
 
             <SheetBody>
-              {sheetMode === "view" && active ? (
-                <div className="space-y-4">
-                  {renderViewDetails(active)}
-                  <div className="grid grid-cols-2 gap-3 text-xs pt-2 border-t">
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
-                      <p className="font-medium">{active.createdBy}</p>
-                      <p className="text-muted-foreground">{active.createdAt}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase">Updated By</p>
-                      <p className="font-medium">{active.updatedBy}</p>
-                      <p className="text-muted-foreground">{active.updatedAt}</p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
-                  {renderFormFields({
-                    form,
-                    setForm,
-                    mode: sheetMode === "add" ? "add" : "edit",
-                    errors,
-                  })}
-                  <StatusField
-                    active={(form as { status?: MasterStatus }).status === "active"}
-                    onChange={(v) =>
-                      setForm((f) => ({ ...f, status: v ? "active" : "inactive" }))
-                    }
-                  />
-                </div>
-              )}
+              <div className="space-y-4">
+                {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
+                {renderFormFields({
+                  form,
+                  setForm,
+                  mode: sheetMode === "add" ? "add" : "edit",
+                  errors,
+                })}
+                <StatusField
+                  active={(form as { status?: MasterStatus }).status === "active"}
+                  onChange={(v) =>
+                    setForm((f) => ({ ...f, status: v ? "active" : "inactive" }))
+                  }
+                />
+              </div>
             </SheetBody>
 
             <SheetFooter>
-              {sheetMode === "view" ? (
-                <>
-                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
-                    Back
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
-                    onClick={() => active && openEdit(active)}
-                  >
-                    Edit
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
-                    Cancel
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
-                    onClick={persist}
-                  >
-                    Save
-                  </Button>
-                </>
-              )}
+              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                onClick={persist}
+              >
+                Save
+              </Button>
             </SheetFooter>
           </SheetContent>
         </Sheet>

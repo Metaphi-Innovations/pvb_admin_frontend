@@ -1,5 +1,7 @@
-import { redirect } from "next/navigation";
+import InvoiceViewPageClient from "../../../invoices/InvoiceViewPageClient";
 
-export default function LegacyRedirect() {
-  redirect("/accounts/vouchers?tab=sales");
+type PageProps = { params: { id: string } };
+
+export default function InvoiceViewPage({ params }: PageProps) {
+  return <InvoiceViewPageClient invoiceId={Number(params.id)} />;
 }

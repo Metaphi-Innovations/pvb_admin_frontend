@@ -300,7 +300,7 @@ export default function RolesPage() {
       render: (val, row) => (
         <button
           className="text-xs font-semibold text-foreground hover:text-brand-600 transition-colors text-left"
-          onClick={() => setViewRole(row)}
+          onClick={() => router.push(`/user-management/roles/${row.id}`)}
         >
           {row.roleName}
         </button>
@@ -380,7 +380,7 @@ export default function RolesPage() {
               Actions
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setViewRole(row)} className="cursor-pointer">
+            <DropdownMenuItem onClick={() => router.push(`/user-management/roles/${row.id}`)} className="cursor-pointer">
               <Eye className="w-3.5 h-3.5 mr-2" /> View
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => openEdit(row)} className="cursor-pointer">

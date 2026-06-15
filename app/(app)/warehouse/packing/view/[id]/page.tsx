@@ -1,16 +1,24 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { FormContainer } from "@/components/layout/FormContainer";
+import { RecordDetailPage } from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
 import {
-  ArrowLeft, Calendar, Building, Package, Tag, AlertCircle,
-  Layers, CheckSquare, ShieldAlert, FileText, ClipboardCheck, User
+  Calendar, Building, AlertCircle,
+  Package, FileText, ClipboardCheck, User
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getPackingUnionById } from "../../services";
 import { PackingRecordUnion } from "../../types";
 import { STATUS_BADGE_CONFIG } from "../../constants";
+
+function packingStatusVariant(status: string): "active" | "inactive" | "draft" | "blocked" | "neutral" {
+  const s = status.toLowerCase();
+  if (s.includes("done") || s.includes("complete") || s.includes("packed")) return "active";
+  if (s.includes("ready") || s.includes("pending")) return "draft";
+  if (s.includes("cancel")) return "blocked";
+  return "neutral";
+}
 
 export default function ViewPackingDetailsPage({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -25,7 +33,13 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
 
   if (!unionRecord) {
     return (
-      <FormContainer title="Packing Details" onBack={() => router.push("/warehouse/packing")}>
+      <RecordDetailPage
+        listHref="/warehouse/packing"
+        listLabel="Packing"
+        recordName="Packing Record Not Found"
+        statusLabel="Not Found"
+        statusVariant="blocked"
+      >
         <div className="max-w-[800px] mx-auto text-center py-12 space-y-4">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
           <h1 className="text-base font-bold text-foreground">Packing Record Not Found</h1>
@@ -34,24 +48,47 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
             Go Back
           </Button>
         </div>
-      </FormContainer>
+      </RecordDetailPage>
     );
   }
 
   const { type, data } = unionRecord;
   const statusCfg = STATUS_BADGE_CONFIG[data.status] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: data.status };
+  const rowData = data as unknown as Record<string, unknown>;
 
   return (
-    <FormContainer
-      title={type === "order" ? `Sales Order: ${(data as any).salesOrderNo}` : `Packing: ${(data as any).packingNo}`}
-      description="Packing Details and batch lists"
-      onBack={() => router.push("/warehouse/packing")}
-      actions={
-        <span className={`inline-flex items-center text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${statusCfg.bg}`}>
-          {statusCfg.label}
-        </span>
+    <RecordDetailPage
+      listHref="/warehouse/packing"
+      listLabel="Packing"
+      recordName={
+        type === "order"
+          ? String(rowData.customer ?? "Sales Order")
+          : String(rowData.packingNo ?? "Packing")
       }
-      noCard={true}
+      recordCode={type === "order" ? String(rowData.salesOrderNo ?? "") : String(rowData.packingNo ?? "")}
+      statusLabel={statusCfg.label}
+      statusVariant={packingStatusVariant(data.status)}
+      metaItems={[
+        { icon: Building, label: data.warehouse },
+        ...(type === "order"
+          ? [{ icon: Calendar, label: String(rowData.orderDate ?? "") }]
+          : [{ icon: User, label: String(rowData.packedBy ?? "") }]),
+      ]}
+      sidebar={{
+        summary: [
+          ...(type === "order"
+            ? [
+                { label: "Customer", value: String(rowData.customer ?? "—") },
+                { label: "Order Amount", value: `₹${Number(rowData.orderAmount ?? 0).toLocaleString("en-IN")}`, highlight: true },
+                { label: "Delivery Date", value: String(rowData.deliveryDate ?? "—") },
+              ]
+            : [
+                { label: "Sales Order", value: String(rowData.salesOrderNo ?? "—") },
+                { label: "Customer", value: String(rowData.customer ?? "—") },
+                { label: "Packing Date", value: String(rowData.packingDate ?? "—"), highlight: true },
+              ]),
+        ],
+      }}
     >
       <div className="space-y-6">
 
@@ -221,6 +258,6 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
           </div>
         )}
       </div>
-    </FormContainer>
+    </RecordDetailPage>
   );
 }

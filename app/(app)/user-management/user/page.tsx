@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import React, { useState, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -397,6 +398,7 @@ function PermissionsTab() {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function UserPage() {
+  const router = useRouter();
   const [users, setUsers] = useState<User[]>(SEED);
 
   return (
@@ -445,7 +447,11 @@ export default function UserPage() {
                   Actions
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <button className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm">
+                <button
+                  type="button"
+                  onClick={() => router.push("/user-management/user/1")}
+                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+                >
                   <Eye className="w-3.5 h-3.5" /> View
                 </button>
                 <button className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm">

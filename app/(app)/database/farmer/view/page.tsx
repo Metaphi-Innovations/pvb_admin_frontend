@@ -2,18 +2,17 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { RecordDetailPage } from "@/components/record-detail";
 import { cn } from "@/lib/utils";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ChevronLeft,
   ChevronRight,
   ImageIcon,
   Leaf,
   MapPin,
+  Phone,
   Store,
   User,
-  X,
 } from "lucide-react";
 import { type Farmer, SEED, VIEW_FARMER_STORAGE_KEY } from "../farmer-data";
 
@@ -156,72 +155,81 @@ export default function FarmerViewPage() {
     router.push("/database/farmer");
   };
 
+  if (!viewFarmer) {
+    return (
+      <RecordDetailPage
+        listHref="/database/farmer"
+        listLabel="Farmers"
+        recordName="Farmer Details"
+        statusLabel="Loading"
+        statusVariant="neutral"
+      >
+        <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading farmer...</div>
+      </RecordDetailPage>
+    );
+  }
+
   return (
-    <AppLayout>
-      {viewFarmer && (
-        <Tabs
-          value={activeTab}
-          onValueChange={(value) => setActiveTab(value as "farmer-details" | "crop-land" | "product")}
-          className="space-y-4"
-        >
-          <section className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
-            <div className="relative border-b border-border px-5 py-3">
-              <div className={cn("space-y-0.5", canNavigateRecords ? "pr-32" : "pr-10")}>
-                <h1 className="text-sm font-semibold text-foreground">Farmer Details</h1>
-              </div>
-              <div className="absolute right-4 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1.5">
-                {canNavigateRecords && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => handleStepViewFarmer(-1)}
-                      disabled={currentViewFarmerIndex <= 0}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-                      aria-label="Previous farmer"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleStepViewFarmer(1)}
-                      disabled={currentViewFarmerIndex < 0 || currentViewFarmerIndex >= farmers.length - 1}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-                      aria-label="Next farmer"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </>
-                )}
-                <button
-                  type="button"
-                  onClick={handleCloseView}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                >
-                  <X className="h-4 w-4" />
-                  <span className="sr-only">Close</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="px-4 py-2.5">
-              <TabsList className="h-9 rounded-lg bg-muted/70 p-1">
-                <TabsTrigger value="farmer-details" className="h-7 gap-1.5 px-3 text-xs">
-                  <User className="h-3.5 w-3.5" />
-                  Farmer Details
-                </TabsTrigger>
-                <TabsTrigger value="crop-land" className="h-7 gap-1.5 px-3 text-xs">
-                  <Leaf className="h-3.5 w-3.5" />
-                  Crop and Land Details
-                </TabsTrigger>
-                <TabsTrigger value="product" className="h-7 gap-1.5 px-3 text-xs">
-                  <Store className="h-3.5 w-3.5" />
-                  Product Details
-                </TabsTrigger>
-              </TabsList>
-            </div>
-          </section>
-
-          <TabsContent value="farmer-details" className="m-0 space-y-4">
+    <RecordDetailPage
+      listHref="/database/farmer"
+      listLabel="Farmers"
+      recordName={viewFarmer.name}
+      statusLabel="Active"
+      statusVariant="active"
+      metaItems={[
+        { icon: MapPin, label: viewFarmer.village },
+        { icon: Phone, label: viewFarmer.phoneNumber },
+      ]}
+      tabs={[
+        { value: "farmer-details", label: "Farmer Details" },
+        { value: "crop-land", label: "Crop and Land Details" },
+        { value: "product", label: "Product Details" },
+      ]}
+      activeTab={activeTab}
+      onTabChange={(value) => setActiveTab(value as "farmer-details" | "crop-land" | "product")}
+      headerActions={
+        canNavigateRecords ? (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => handleStepViewFarmer(-1)}
+              disabled={currentViewFarmerIndex <= 0}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Previous farmer"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleStepViewFarmer(1)}
+              disabled={currentViewFarmerIndex < 0 || currentViewFarmerIndex >= farmers.length - 1}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Next farmer"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        ) : undefined
+      }
+      sidebar={{
+        summary: [
+          { label: "Farmland Size", value: viewFarmer.farmlandSize, highlight: true },
+          { label: "Current Crop", value: viewFarmer.currentCrop },
+          { label: "Owned / Leased", value: getOwnedLeasedSummary(viewFarmer) },
+          { label: "District", value: viewFarmer.district },
+          { label: "State", value: viewFarmer.state },
+        ],
+        quickActions: [
+          {
+            label: "Back to List",
+            onClick: handleCloseView,
+            variant: "outline",
+          },
+        ],
+      }}
+    >
+      {activeTab === "farmer-details" && (
+        <div className="space-y-4">
             <SectionBlock icon={User} title="Farmer Basic Details" subtitle="Identity, family, contact, and demographics">
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
                 <div className="lg:row-span-2">
@@ -246,9 +254,11 @@ export default function FarmerViewPage() {
                 <ReadOnlyField label="Lat-long" value={viewFarmer.latLong} mono />
               </div>
             </SectionBlock>
-          </TabsContent>
+        </div>
+      )}
 
-          <TabsContent value="crop-land" className="m-0 space-y-4">
+      {activeTab === "crop-land" && (
+        <div className="space-y-4">
             <SectionBlock icon={Leaf} title="Crop & Land Details" subtitle="Landholding and cultivation information">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <ReadOnlyField label="Total Size of Farmland" value={viewFarmer.farmlandSize} />
@@ -294,9 +304,11 @@ export default function FarmerViewPage() {
                 </div>
               </div>
             </SectionBlock>
-          </TabsContent>
+        </div>
+      )}
 
-          <TabsContent value="product" className="m-0 space-y-4">
+      {activeTab === "product" && (
+        <div className="space-y-4">
             <SectionBlock icon={Store} title="Product Details" subtitle="Usage patterns, brand recall, and field issues">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <ReadOnlyField
@@ -329,9 +341,8 @@ export default function FarmerViewPage() {
                 />
               </div>
             </SectionBlock>
-          </TabsContent>
-        </Tabs>
+        </div>
       )}
-    </AppLayout>
+    </RecordDetailPage>
   );
 }

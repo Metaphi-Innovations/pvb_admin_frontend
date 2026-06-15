@@ -1,49 +1,32 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Edit2, Eye, FileText, Link2, Package, UserCheck, UserX } from "lucide-react";
-import { FormContainer } from "@/components/layout/FormContainer";
+import { AppLayout } from "@/components/layout/AppLayout";
+import {
+  RecordDetailPage,
+  RecordKvRow,
+  RecordSectionCard,
+  RecordStatusPill,
+} from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Clock, FileText, IndianRupee, Package, Pencil, Tag } from "lucide-react";
 import { formatMoney, loadProducts, saveProducts, type Product, type ProductStatus } from "../product-data";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-const STATUS_CFG: Record<ProductStatus, { bg: string; text: string; dot: string; label: string }> = {
-  active: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Active" },
-  inactive: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400", label: "Inactive" },
-  draft: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-500", label: "Draft" },
+const STATUS_LABEL: Record<ProductStatus, string> = {
+  active: "Active",
+  inactive: "Inactive",
+  draft: "Draft",
 };
 
-function InfoRow({ label, value, mono }: { label: string; value?: string; mono?: boolean }) {
-  return (
-    <div className="flex items-start justify-between gap-4 border-b border-border/60 px-3 py-2.5 last:border-0">
-      <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
-      <span className={cn("text-right text-xs font-medium text-foreground", mono && "font-mono")}>{value ? value : "-"}</span>
-    </div>
-  );
-}
-
-function StatusPill({ status }: { status: ProductStatus }) {
-  const cfg = STATUS_CFG[status];
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium", cfg.bg, cfg.text)}>
-      <span className={cn("h-1.5 w-1.5 rounded-full", cfg.dot)} />
-      {cfg.label}
-    </span>
-  );
-}
-
-function DetailCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-border bg-white p-3.5">
-      <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{title}</p>
-      <div>{children}</div>
-    </div>
-  );
-}
+const STATUS_VARIANT: Record<ProductStatus, "active" | "inactive" | "draft"> = {
+  active: "active",
+  inactive: "inactive",
+  draft: "draft",
+};
 
 function MediaSection({ product }: { product: Product }) {
   const [selectedItem, setSelectedItem] = useState<{ src: string; name: string } | null>(null);
@@ -133,12 +116,18 @@ export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [product, setProduct] = useState<Product | null>(null);
   const [records, setRecords] = useState<Product[]>([]);
+  const [activeTab, setActiveTab] = useState("overview");
 
   useEffect(() => {
     const list = loadProducts();
     setRecords(list);
     setProduct(list.find((item) => item.id === Number(id)) ?? null);
   }, [id]);
+
+  const mediaCount = useMemo(
+    () => (product?.assets ?? product?.mediaItems ?? []).length,
+    [product],
+  );
 
   const updateStatus = (status: ProductStatus) => {
     if (!product) return;
@@ -154,84 +143,159 @@ export default function ProductDetailPage() {
 
   if (!product) {
     return (
-      <div className="py-16 text-center">
-        <p className="text-sm text-muted-foreground">Product not found.</p>
-        <Link href="/masters/products" className="text-xs text-brand-600 hover:underline mt-2 inline-block">
-          Back to listing
-        </Link>
-      </div>
+      <AppLayout>
+        <div className="py-16 text-center">
+          <p className="text-sm text-muted-foreground">Product not found.</p>
+          <Link href="/masters/products" className="text-xs text-brand-600 hover:underline mt-2 inline-block">
+            Back to listing
+          </Link>
+        </div>
+      </AppLayout>
     );
   }
 
-  const statusCfg = STATUS_CFG[product.status];
+  const tabs = [
+    { value: "overview", label: "Overview" },
+    ...(mediaCount > 0 ? [{ value: "media", label: "Media", count: mediaCount }] : []),
+  ];
+
+  const kpis = [
+    {
+      icon: Tag,
+      iconBg: "#EEF3FB",
+      iconColor: "#0C3F8A",
+      value: product.category || "—",
+      label: "Category",
+    },
+    {
+      icon: Package,
+      iconBg: "#E6F7EF",
+      iconColor: "#1E9E61",
+      value: product.sku || "—",
+      label: "SKU",
+    },
+    {
+      icon: IndianRupee,
+      iconBg: "#FFFBEB",
+      iconColor: "#D97706",
+      value: formatMoney(product.mrp),
+      label: "MRP",
+    },
+    {
+      icon: FileText,
+      iconBg: "#F5F3FF",
+      iconColor: "#7C3AED",
+      value: product.hsnCode || "—",
+      label: "HSN Code",
+    },
+  ];
+
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case "overview":
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <RecordSectionCard title="Product Details" icon={Package} accent="blue">
+              <RecordKvRow label="Product ID" value={product.productId} mono copy />
+              <RecordKvRow label="Product Name" value={product.productName} highlight />
+              <RecordKvRow label="Category" value={product.category} />
+              <RecordKvRow label="Segment" value={product.segment} />
+              <RecordKvRow label="Formulation" value={product.formulation} />
+              <RecordKvRow label="Base Unit" value={product.baseUnit} />
+              <RecordKvRow label="Packaging Unit" value={product.packagingUnit} />
+              <RecordKvRow
+                label="Conversion Quantity"
+                value={product.conversionQuantity !== undefined ? String(product.conversionQuantity) : undefined}
+                isLast
+              />
+            </RecordSectionCard>
+
+            <RecordSectionCard title="Tax & Pricing" icon={IndianRupee} accent="orange">
+              <RecordKvRow label="HSN Code" value={product.hsnCode} mono copy />
+              <RecordKvRow label="GST Rate" value={product.gstRate} />
+              <RecordKvRow label="MRP" value={formatMoney(product.mrp)} amount highlight isLast />
+            </RecordSectionCard>
+
+            <RecordSectionCard title="Commercial & Stock" icon={Tag} accent="green">
+              <RecordKvRow label="SKU" value={product.sku} mono copy />
+              <RecordKvRow label="Crop Applicable" value={product.cropApplicable} />
+              <RecordKvRow
+                label="Status"
+                value={
+                  <RecordStatusPill
+                    label={STATUS_LABEL[product.status]}
+                    variant={STATUS_VARIANT[product.status]}
+                  />
+                }
+                isLast
+              />
+            </RecordSectionCard>
+
+            <RecordSectionCard title="Audit Details" icon={Clock} accent="slate">
+              <RecordKvRow label="Created By" value={product.createdBy} />
+              <RecordKvRow label="Created Date" value={product.createdDate} />
+              <RecordKvRow label="Updated By" value={product.updatedBy} />
+              <RecordKvRow label="Updated Date" value={product.updatedDate} isLast />
+            </RecordSectionCard>
+          </div>
+        );
+
+      case "media":
+        return (
+          <RecordSectionCard title="Media & Assets" icon={FileText} accent="purple">
+            <MediaSection product={product} />
+          </RecordSectionCard>
+        );
+
+      default:
+        return null;
+    }
+  };
 
   return (
-    <FormContainer
-      title={product.productName}
-      description={`${product.productId} • ${product.category || "No category"} • ${product.sku || "No SKU"}`}
-      onBack={() => router.push("/masters/products")}
-      actions={
-        <div className="flex items-center gap-2">
-          <StatusPill status={product.status} />
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 text-xs font-semibold rounded-lg gap-1.5"
-            onClick={() => updateStatus(product.status === "active" ? "inactive" : "active")}
-          >
-            {product.status === "active" ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
-            {product.status === "active" ? "Deactivate" : "Activate"}
-          </Button>
-          <Link href={`/masters/products/${product.id}/edit`}>
-            <Button size="sm" className="h-9 gap-1.5 bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700 rounded-lg">
-              <Edit2 className="w-3.5 h-3.5" /> Edit
-            </Button>
-          </Link>
-        </div>
+    <RecordDetailPage
+      listHref="/masters/products"
+      listLabel="Products"
+      recordName={product.productName}
+      recordCode={product.productId}
+      statusLabel={STATUS_LABEL[product.status]}
+      statusVariant={STATUS_VARIANT[product.status]}
+      metaItems={[
+        { label: product.category || "No category", icon: Tag },
+        { label: product.sku || "No SKU", icon: Package },
+      ]}
+      kpis={kpis}
+      tabs={tabs}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      active={product.status === "active"}
+      onActiveChange={
+        product.status !== "draft"
+          ? (on) => updateStatus(on ? "active" : "inactive")
+          : undefined
       }
-      noCard={true}
+      toggleDisabled={product.status === "draft"}
+      onEdit={() => router.push(`/masters/products/${product.id}/edit`)}
+      sidebar={{
+        quickActions: [
+          {
+            label: "Edit Product",
+            icon: Pencil,
+            onClick: () => router.push(`/masters/products/${product.id}/edit`),
+            variant: "primary",
+          },
+        ],
+        summary: [
+          { label: "Category", value: product.category || "—", highlight: true },
+          { label: "SKU", value: product.sku || "—" },
+          { label: "MRP", value: formatMoney(product.mrp) },
+          { label: "GST Rate", value: product.gstRate || "—" },
+          { label: "Created", value: product.createdDate },
+          { label: "Updated", value: product.updatedDate },
+        ],
+      }}
     >
-      <div className="max-w-[800px] mx-auto space-y-5">
-        {/* Details Cards */}
-        <div className="grid grid-cols-2 gap-3">
-          <DetailCard title="Product Details">
-            <InfoRow label="Product ID" value={product.productId} mono />
-            <InfoRow label="Product Name" value={product.productName} />
-            <InfoRow label="Category" value={product.category} />
-            <InfoRow label="Segment" value={product.segment} />
-            <InfoRow label="Formulation" value={product.formulation} />
-            <InfoRow label="Base Unit" value={product.baseUnit} />
-            <InfoRow label="Packaging Unit" value={product.packagingUnit} />
-            <InfoRow label="Conversion Quantity" value={product.conversionQuantity !== undefined ? String(product.conversionQuantity) : undefined} />
-          </DetailCard>
-
-          <DetailCard title="Tax & Pricing">
-            <InfoRow label="HSN Code" value={product.hsnCode} mono />
-            <InfoRow label="GST Rate" value={product.gstRate} />
-            <InfoRow label="MRP" value={formatMoney(product.mrp)} />
-          </DetailCard>
-
-          <DetailCard title="Commercial & Stock">
-            <InfoRow label="SKU" value={product.sku} mono />
-            <InfoRow label="Crop Applicable" value={product.cropApplicable} />
-            <InfoRow label="Status" value={statusCfg.label} />
-          </DetailCard>
-
-          <DetailCard title="Audit Details">
-            <InfoRow label="Created By" value={product.createdBy} />
-            <InfoRow label="Created Date" value={product.createdDate} />
-            <InfoRow label="Updated By" value={product.updatedBy} />
-            <InfoRow label="Updated Date" value={product.updatedDate} />
-          </DetailCard>
-        </div>
-
-        {(product.assets ?? product.mediaItems ?? []).length > 0 && (
-          <DetailCard title="Media">
-            <MediaSection product={product} />
-          </DetailCard>
-        )}
-      </div>
-    </FormContainer>
+      {renderTabContent()}
+    </RecordDetailPage>
   );
 }
-

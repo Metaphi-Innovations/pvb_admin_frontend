@@ -23,19 +23,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetBody,
-  SheetFooter,
-} from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { MasterViewRow } from "@/components/masters/MasterModule";
+import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
 import {
   TDSMaster,
   loadTDSMasters,
@@ -468,126 +459,78 @@ export default function TDSPage() {
         />
       </div>
 
-      <Sheet open={sheetMode !== null} onOpenChange={(o) => !o && closeSheet()}>
-        <SheetContent>
-          <SheetHeader>
-            <div className="flex items-start gap-3 pr-8">
-              <div className="flex items-center justify-center border w-9 h-9 rounded-xl bg-brand-50 border-brand-100">
-                <Percent className="w-4 h-4 text-brand-600" />
+      <MasterListingSheets
+        sheetMode={sheetMode}
+        active={active}
+        onClose={closeSheet}
+        onEdit={() => active && openEdit(active)}
+        onSave={persist}
+        sheetTitle={sheetTitle}
+        icon={Percent}
+        viewDrawer={
+          active
+            ? buildSimpleMasterViewDrawer<TDSMaster>({
+                drawerTitle: "TDS",
+                getRecordCode: (r) => r.tdsCode,
+                basicInfo: (r) => [
+                  { label: "TDS Code", value: r.tdsCode, mono: true },
+                  { label: "TDS Rate (%)", value: `${r.tdsRate}%` },
+                ],
+                description: (r) => r.remarks,
+                showDescription: true,
+              })(active)
+            : { title: "TDS", basicInfo: [] }
+        }
+        formContent={
+          <div className="space-y-4">
+            {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">
+                  TDS Code <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  disabled
+                  readOnly
+                  value={form.tdsCode}
+                  onChange={(e) => setFormField("tdsCode", e.target.value)}
+                  placeholder="e.g., 194C, 194J"
+                  className={cn(
+                    "h-8 text-xs bg-background text-foreground border-border opacity-100 cursor-not-allowed",
+                    errors.tdsCode && "border-red-400 focus-visible:ring-red-300",
+                  )}
+                />
+                {errors.tdsCode && <p className="text-[11px] text-red-500">{errors.tdsCode}</p>}
               </div>
-              <div>
-                <SheetTitle className="text-base">{sheetTitle}</SheetTitle>
-                <SheetDescription className="text-xs">
-                  {sheetMode === "view" ? "Read-only details" : "Compact TDS form"}
-                </SheetDescription>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">
+                  TDS Rate (%) <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  type="number"
+                  value={form.tdsRate}
+                  onChange={(e) => setFormField("tdsRate", parseFloat(e.target.value) || 0)}
+                  placeholder="e.g., 1, 5, 10"
+                  step="0.01"
+                  min="0"
+                  className={cn("h-8 text-xs", errors.tdsRate && "border-red-400 focus-visible:ring-red-300")}
+                />
+                {errors.tdsRate && <p className="text-[11px] text-red-500">{errors.tdsRate}</p>}
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label className="text-xs font-medium">Remarks</Label>
+                <Textarea
+                  value={form.remarks}
+                  onChange={(e) => setFormField("remarks", e.target.value)}
+                  placeholder="Optional notes..."
+                  rows={3}
+                  className="text-xs rounded-lg resize-none min-h-[72px]"
+                />
               </div>
             </div>
-          </SheetHeader>
-
-          <SheetBody>
-            {sheetMode === "view" && active ? (
-              <div className="space-y-4">
-                <div className="px-3 border rounded-lg border-border/60 bg-muted/10">
-                  <MasterViewRow label="TDS Code" value={<span className="font-mono">{active.tdsCode}</span>} />
-                  <MasterViewRow label="TDS Rate (%)" value={`${active.tdsRate}%`} />
-                  <MasterViewRow label="Remarks" value={active.remarks || "—"} />
-                  <MasterViewRow label="Status" value={active.status === "active" ? "Active" : "Inactive"} />
-                </div>
-                <div className="grid grid-cols-2 gap-3 pt-2 text-xs border-t">
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
-                    <p className="font-medium">{active.createdBy}</p>
-                    <p className="text-muted-foreground">{active.createdDate}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase">Updated By</p>
-                    <p className="font-medium">{active.updatedBy}</p>
-                    <p className="text-muted-foreground">{active.updatedDate}</p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium">
-                      TDS Code <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      disabled
-                      readOnly
-                      value={form.tdsCode}
-                      onChange={(e) => setFormField("tdsCode", e.target.value)}
-                      placeholder="e.g., 194C, 194J"
-                      className={cn(
-                        "h-8 text-xs bg-background text-foreground border-border opacity-100 cursor-not-allowed",
-                        errors.tdsCode && "border-red-400 focus-visible:ring-red-300",
-                      )}
-                    />
-                    {errors.tdsCode && <p className="text-[11px] text-red-500">{errors.tdsCode}</p>}
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium">
-                      TDS Rate (%) <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      type="number"
-                      value={form.tdsRate}
-                      onChange={(e) => setFormField("tdsRate", parseFloat(e.target.value) || 0)}
-                      placeholder="e.g., 1, 5, 10"
-                      step="0.01"
-                      min="0"
-                      className={cn("h-8 text-xs", errors.tdsRate && "border-red-400 focus-visible:ring-red-300")}
-                    />
-                    {errors.tdsRate && <p className="text-[11px] text-red-500">{errors.tdsRate}</p>}
-                  </div>
-                  <div className="space-y-1 sm:col-span-2">
-                    <Label className="text-xs font-medium">Remarks</Label>
-                    <Textarea
-                      value={form.remarks}
-                      onChange={(e) => setFormField("remarks", e.target.value)}
-                      placeholder="Optional notes..."
-                      rows={3}
-                      className="text-xs rounded-lg resize-none min-h-[72px]"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-          </SheetBody>
-
-          <SheetFooter>
-            {sheetMode === "view" ? (
-              <>
-                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
-                  Back
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
-                  onClick={() => active && openEdit(active)}
-                >
-                  Edit
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
-                  onClick={persist}
-                >
-                  Save
-                </Button>
-              </>
-            )}
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+          </div>
+        }
+      />
 
       {/* Confirm Delete Dialog */}
       {deleteTarget && (
