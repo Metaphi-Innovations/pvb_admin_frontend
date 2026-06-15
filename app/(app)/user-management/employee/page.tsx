@@ -20,7 +20,7 @@ import {
 import {
   Plus, Download, MoreVertical, Eye, Edit2, Trash2,
   Users, CheckCircle2, XCircle, X, AlertTriangle, Key,
-  Calendar, Clock, MoreHorizontal,
+  Calendar, Clock, MoreHorizontal, ChevronDown, FileText,
 } from "lucide-react";
 import {
   type Employee,
@@ -77,6 +77,21 @@ function StatusPill({ status }: { status: string }) {
       cfg.bg, cfg.text,
     )}>
       <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const cfg = {
+    active: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    inactive: "border-slate-200 bg-slate-100 text-slate-700",
+    draft: "border-blue-200 bg-blue-50 text-blue-700",
+    archived: "border-red-200 bg-red-50 text-red-700",
+  }[status] ?? "border-slate-200 bg-slate-100 text-slate-700";
+
+  return (
+    <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium border inline-flex items-center justify-center whitespace-nowrap", cfg)}>
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
   );
@@ -251,7 +266,7 @@ export default function EmployeeListingPage() {
   const [pageSize, setPageSize] = useState(10);
 
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [confirmTarget, setConfirmTarget] = useState<{ type: string; employee: Employee } | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<{ type: string; employee: Employee; nextStatus?: "active" | "inactive" | "draft" } | null>(null);
   const [passwordReset, setPasswordReset] = useState<PasswordResetState>({
     open: false,
     employee: null,
@@ -354,22 +369,22 @@ export default function EmployeeListingPage() {
     };
   }, [employees]);
 
-  const handleStatusToggle = (emp: Employee) => {
-    setConfirmTarget({ type: "status", employee: emp });
+  const handleStatusAction = (emp: Employee, nextStatus: "active" | "inactive" | "draft") => {
+    setConfirmTarget({ type: "status", employee: emp, nextStatus });
   };
 
   const confirmStatusChange = () => {
-    if (!confirmTarget || confirmTarget.type !== "status") return;
+    if (!confirmTarget || confirmTarget.type !== "status" || !confirmTarget.nextStatus) return;
     const emp = confirmTarget.employee;
-    const newStatus = emp.status === "active" ? "inactive" : "active";
+    const nextStatus = confirmTarget.nextStatus;
     const updated = employees.map(e =>
       e.id === emp.id
-        ? { ...e, status: newStatus as any, updatedBy: "Admin", updatedDate: todayStr(), lastStatusChange: todayStr() }
+        ? { ...e, status: nextStatus as any, updatedBy: "Admin", updatedDate: todayStr(), lastStatusChange: todayStr() }
         : e
     );
     setEmployees(updated);
     saveEmployees(updated);
-    setToast({ msg: `Employee ${newStatus === "active" ? "activated" : "deactivated"}`, type: "success" });
+    setToast({ msg: `Employee status updated to ${nextStatus.charAt(0).toUpperCase() + nextStatus.slice(1)} successfully`, type: "success" });
     setConfirmTarget(null);
   };
 
@@ -519,7 +534,46 @@ export default function EmployeeListingPage() {
         { label: "Inactive", value: "inactive" },
         { label: "Draft", value: "draft" },
       ],
-      render: (val, row) => <StatusPill status={row.status} />,
+      render: (val, row) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className="inline-flex items-center gap-1.5 focus:outline-none pt-0.5">
+              <StatusBadge status={row.status} />
+              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-48 bg-white border shadow-lg border-border z-[200]">
+            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
+              Status Actions
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {row.status !== "active" && (
+              <DropdownMenuItem
+                className="gap-2 text-xs cursor-pointer text-emerald-700 hover:text-emerald-900"
+                onClick={() => handleStatusAction(row, "active")}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" /> Activate
+              </DropdownMenuItem>
+            )}
+            {row.status !== "inactive" && (
+              <DropdownMenuItem
+                className="gap-2 text-xs cursor-pointer text-slate-700 hover:text-slate-900"
+                onClick={() => handleStatusAction(row, "inactive")}
+              >
+                <XCircle className="w-3.5 h-3.5" /> Deactivate
+              </DropdownMenuItem>
+            )}
+            {row.status !== "draft" && (
+              <DropdownMenuItem
+                className="gap-2 text-xs cursor-pointer text-blue-700 hover:text-blue-900"
+                onClick={() => handleStatusAction(row, "draft")}
+              >
+                <FileText className="w-3.5 h-3.5" /> Mark Draft
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
     },
     {
       key: "actions",
@@ -545,7 +599,7 @@ export default function EmployeeListingPage() {
               <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => handleStatusToggle(row)} className="cursor-pointer">
+            <DropdownMenuItem onClick={() => handleStatusAction(row, row.status === "active" ? "inactive" : "active")} className="cursor-pointer">
               {row.status === "active" ? "Deactivate" : "Activate"}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handlePasswordReset(row)} className="cursor-pointer">
@@ -623,9 +677,27 @@ export default function EmployeeListingPage() {
         open={confirmTarget?.type === "status"}
         onClose={() => setConfirmTarget(null)}
         onConfirm={confirmStatusChange}
-        title={confirmTarget?.employee?.status === "active" ? "Deactivate Employee" : "Activate Employee"}
-        description={`Are you sure you want to ${confirmTarget?.employee?.status === "active" ? "deactivate" : "activate"} ${confirmTarget?.employee?.fullName}?`}
-        confirmLabel={confirmTarget?.employee?.status === "active" ? "Deactivate" : "Activate"}
+        title={
+          confirmTarget?.nextStatus === "active"
+            ? "Activate Employee"
+            : confirmTarget?.nextStatus === "inactive"
+            ? "Deactivate Employee"
+            : "Mark as Draft"
+        }
+        description={`Are you sure you want to ${
+          confirmTarget?.nextStatus === "active"
+            ? "activate"
+            : confirmTarget?.nextStatus === "inactive"
+            ? "deactivate"
+            : "mark as draft"
+        } ${confirmTarget?.employee?.fullName}?`}
+        confirmLabel={
+          confirmTarget?.nextStatus === "active"
+            ? "Activate"
+            : confirmTarget?.nextStatus === "inactive"
+            ? "Deactivate"
+            : "Mark Draft"
+        }
       />
 
       <ConfirmDialog

@@ -258,12 +258,12 @@ export default function ProductDetailPage() {
 										{product.category || "—"}
 									</span>
 									<span>•</span>
-									<span className='flex items-center gap-1'>
+									{/* <span className='flex items-center gap-1'>
 										<span className='font-semibold text-foreground'>
 											Sub Category:
 										</span>
 										{product.subCategory || "—"}
-									</span>
+									</span> */}
 								</div>
 								<div className='flex flex-wrap items-center pt-1 text-xs gap-x-4 gap-y-1 text-muted-foreground'>
 									<span className='flex items-center gap-1'>
@@ -387,7 +387,7 @@ export default function ProductDetailPage() {
 									</h3>
 									<div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1'>
 										<DetailField label='Category' value={product.category} />
-										<DetailField label='Sub Category' value={product.subCategory} />
+										{/* <DetailField label='Sub Category' value={product.subCategory} /> */}
 										<DetailField label='Segment' value={product.segment} />
 										<DetailField label='Formulation' value={product.formulation} />
 									</div>
@@ -486,20 +486,20 @@ export default function ProductDetailPage() {
 												className='p-4 space-y-3 bg-white border shadow-sm rounded-xl border-border'
 											>
 												<div className='flex items-start justify-between gap-3'>
-													<div className='flex min-w-0 items-start gap-3'>
-														<div className='flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/20 text-brand-600 flex-shrink-0'>
+													<div className='flex items-start min-w-0 gap-3'>
+														<div className='flex items-center justify-center flex-shrink-0 overflow-hidden border rounded-lg h-9 w-9 border-border bg-muted/20 text-brand-600'>
 															{isImage && url ? (
 																<img
 																	src={url}
 																	alt={item.name}
-																	className='h-full w-full object-cover'
+																	className='object-cover w-full h-full'
 																/>
 															) : (
-																<FileText className='h-4 w-4 text-muted-foreground' />
+																<FileText className='w-4 h-4 text-muted-foreground' />
 															)}
 														</div>
 														<div className='min-w-0'>
-															<p className='truncate text-xs font-semibold text-foreground'>
+															<p className='text-xs font-semibold truncate text-foreground'>
 																{item.title || item.name}
 															</p>
 															<p className='truncate text-[10px] text-muted-foreground mt-0.5'>

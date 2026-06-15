@@ -374,6 +374,15 @@ export default function WarehouseDetailPage() {
 											value={formattedCapacity}
 										/>
 										<DetailField label='Manager' value={warehouse.manager} />
+									</div>
+								</div>
+
+								{/* Section 4: System Information */}
+								<div className='pt-2 space-y-3'>
+									<h3 className='pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground'>
+										System Information
+									</h3>
+									<div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1'>
 										<DetailField label='Status' value={formatStatus(warehouse.status)} />
 										<DetailField
 											label='Created By'
@@ -394,7 +403,7 @@ export default function WarehouseDetailPage() {
 									</div>
 								</div>
 
-								{/* Section 4: C&F Customer Details */}
+								{/* Section 5: C&F Customer Details */}
 								{warehouse.operatedBy === "C&F Agent" && (
 									<div className='pt-2 space-y-3'>
 										<h3 className='pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground'>
