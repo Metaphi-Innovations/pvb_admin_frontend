@@ -2,11 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppLayout } from "@/components/layout/AppLayout";
-import { Button } from "@/components/ui/button";
+import { RecordDetailPage } from "@/components/record-detail";
 import { cn } from "@/lib/utils";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { VendorTabBar } from "../../../masters/vendors/components/VendorFormLayout";
 import {
   ArrowLeft,
   Building2,
@@ -15,6 +12,7 @@ import {
   Globe,
   Handshake,
   MapPin,
+  Phone,
   Store,
   User,
 } from "lucide-react";
@@ -136,164 +134,124 @@ export default function DistributorViewPage() {
     router.push("/database/distributor");
   };
 
+  if (!viewDistributor) {
+    return (
+      <RecordDetailPage
+        listHref="/database/distributor"
+        listLabel="Distributors"
+        recordName="Distributor Details"
+        statusLabel="Loading"
+        statusVariant="neutral"
+      >
+        <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading distributor...</div>
+      </RecordDetailPage>
+    );
+  }
+
   return (
-    <AppLayout>
-      {viewDistributor && (
-        <Tabs
-          value={activeTab}
-          onValueChange={(value) => setActiveTab(value as "distributor-details" | "location-details" | "business-details")}
-          className="space-y-4"
-        >
-          <section className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
-            <div className="relative border-b border-border px-5 py-3">
-              <div className={cn("flex items-center gap-3", canNavigateRecords ? "pr-24" : "pr-0")}>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-lg hover:bg-muted"
-                  onClick={handleCloseView}
-                  aria-label="Back to distributor listing"
-                >
-                  <ArrowLeft className="h-4 w-4 text-muted-foreground" />
-                </Button>
-                <h1 className="text-sm font-semibold tracking-tight text-foreground">
-                  Distributor Details
-                </h1>
+    <RecordDetailPage
+      listHref="/database/distributor"
+      listLabel="Distributors"
+      recordName={viewDistributor.firmName}
+      statusLabel="Active"
+      statusVariant="active"
+      metaItems={[
+        { icon: User, label: viewDistributor.contactPersonName },
+        { icon: Phone, label: viewDistributor.phoneNumber },
+        { icon: MapPin, label: viewDistributor.city },
+      ]}
+      tabs={[
+        { value: "distributor-details", label: "Distributor Details" },
+        { value: "location-details", label: "Location Details" },
+        { value: "business-details", label: "Business Details" },
+      ]}
+      activeTab={activeTab}
+      onTabChange={(value) => setActiveTab(value as "distributor-details" | "location-details" | "business-details")}
+      headerActions={
+        canNavigateRecords ? (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => handleStepViewDistributor(-1)}
+              disabled={currentViewDistributorIndex <= 0}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Previous distributor"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleStepViewDistributor(1)}
+              disabled={currentViewDistributorIndex < 0 || currentViewDistributorIndex >= distributors.length - 1}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Next distributor"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        ) : undefined
+      }
+      sidebar={{
+        summary: [
+          { label: "Category", value: viewDistributor.distributorCategory, highlight: true },
+          { label: "Annual Turnover", value: viewDistributor.annualTurnover },
+          { label: "Business Potential", value: viewDistributor.annualBusinessPotential },
+          { label: "Farmer Network", value: viewDistributor.farmerNetwork },
+          { label: "Years in Business", value: `${viewDistributor.yearsInBusiness} Years` },
+        ],
+        quickActions: [
+          {
+            label: "Back to List",
+            onClick: handleCloseView,
+            variant: "outline",
+          },
+        ],
+      }}
+    >
+      {activeTab === "distributor-details" && (
+        <div className="space-y-4">
+            <SectionBlock icon={Building2} title="Distributor Basic Details" subtitle="Firm identity and primary contact information">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <ReadOnlyField label="Firm Name" value={viewDistributor.firmName} />
+                <ReadOnlyField label="Contact Person Name" value={viewDistributor.contactPersonName} />
+                <ReadOnlyField label="Gender" value={viewDistributor.gender} />
+                <ReadOnlyField label="Phone Number" value={viewDistributor.phoneNumber} mono />
+                <ReadOnlyField label="Years in Business" value={`${viewDistributor.yearsInBusiness} Years`} />
               </div>
-              <div className="absolute right-4 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1.5">
-                {canNavigateRecords && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => handleStepViewDistributor(-1)}
-                      disabled={currentViewDistributorIndex <= 0}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-                      aria-label="Previous distributor"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleStepViewDistributor(1)}
-                      disabled={currentViewDistributorIndex < 0 || currentViewDistributorIndex >= distributors.length - 1}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-                      aria-label="Next distributor"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          </section>
-
-          <section className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
-            <VendorTabBar
-              tabs={DISTRIBUTOR_TABS}
-              active={activeTab}
-              onChange={(value) =>
-                setActiveTab(
-                  value as "distributor-details" | "location-details" | "business-details",
-                )
-              }
-            />
-
-            <div className="px-4 py-4 md:px-5 md:py-4">
-              <TabsContent value="distributor-details" className="m-0 space-y-4">
-                <SectionBlock
-                  icon={Building2}
-                  title="Distributor Basic Details"
-                  subtitle="Firm identity and primary contact information"
-                >
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <ReadOnlyField label="Firm Name" value={viewDistributor.firmName} />
-                    <ReadOnlyField
-                      label="Contact Person Name"
-                      value={viewDistributor.contactPersonName}
-                    />
-                    <ReadOnlyField label="Gender" value={viewDistributor.gender} />
-                    <ReadOnlyField
-                      label="Phone Number"
-                      value={viewDistributor.phoneNumber}
-                      mono
-                    />
-                    <ReadOnlyField
-                      label="Years in Business"
-                      value={`${viewDistributor.yearsInBusiness} Years`}
-                    />
-                  </div>
-                </SectionBlock>
-              </TabsContent>
-
-              <TabsContent value="location-details" className="m-0 space-y-4">
-                <SectionBlock
-                  icon={Globe}
-                  title="Address & Geography Details"
-                  subtitle="Address hierarchy and coordinates"
-                >
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <ReadOnlyField
-                      label="Address"
-                      value={viewDistributor.address}
-                      multiline
-                      className="lg:col-span-2"
-                    />
-                    <ReadOnlyField label="Village" value={viewDistributor.village} />
-                    <ReadOnlyField label="Town" value={viewDistributor.town} />
-                    <ReadOnlyField label="City" value={viewDistributor.city} />
-                    <ReadOnlyField label="District" value={viewDistributor.district} />
-                    <ReadOnlyField label="State" value={viewDistributor.state} />
-                    <ReadOnlyField
-                      label="Pincode"
-                      value={viewDistributor.pincode}
-                      mono
-                    />
-                    <ReadOnlyField
-                      label="Lat-long"
-                      value={viewDistributor.latLong}
-                      mono
-                    />
-                  </div>
-                </SectionBlock>
-              </TabsContent>
-
-              <TabsContent value="business-details" className="m-0 space-y-4">
-                <SectionBlock
-                  icon={Handshake}
-                  title="Business Details"
-                  subtitle="Commercial profile, market reach, and category"
-                >
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <ReadOnlyField
-                      label="Companies He Is Dealing In"
-                      value={viewDistributor.companiesDealingIn}
-                      multiline
-                      className="lg:col-span-2"
-                    />
-                    <ReadOnlyField
-                      label="Annual Turnover"
-                      value={viewDistributor.annualTurnover}
-                    />
-                    <ReadOnlyField
-                      label="Annual Business He Can Do for Us"
-                      value={viewDistributor.annualBusinessPotential}
-                    />
-                    <ReadOnlyField
-                      label="Farmer Network"
-                      value={viewDistributor.farmerNetwork}
-                    />
-                    <ReadOnlyField
-                      label="Distributor Category"
-                      value={viewDistributor.distributorCategory}
-                    />
-                  </div>
-                </SectionBlock>
-              </TabsContent>
-            </div>
-          </section>
-        </Tabs>
+            </SectionBlock>
+        </div>
       )}
-    </AppLayout>
+
+      {activeTab === "location-details" && (
+        <div className="space-y-4">
+            <SectionBlock icon={Globe} title="Address & Geography Details" subtitle="Address hierarchy and coordinates">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <ReadOnlyField label="Address" value={viewDistributor.address} multiline className="lg:col-span-2" />
+                <ReadOnlyField label="Village" value={viewDistributor.village} />
+                <ReadOnlyField label="Town" value={viewDistributor.town} />
+                <ReadOnlyField label="City" value={viewDistributor.city} />
+                <ReadOnlyField label="District" value={viewDistributor.district} />
+                <ReadOnlyField label="State" value={viewDistributor.state} />
+                <ReadOnlyField label="Pincode" value={viewDistributor.pincode} mono />
+                <ReadOnlyField label="Lat-long" value={viewDistributor.latLong} mono />
+              </div>
+            </SectionBlock>
+        </div>
+      )}
+
+      {activeTab === "business-details" && (
+        <div className="space-y-4">
+            <SectionBlock icon={Handshake} title="Business Details" subtitle="Commercial profile, market reach, and category">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <ReadOnlyField label="Companies He Is Dealing In" value={viewDistributor.companiesDealingIn} multiline className="lg:col-span-2" />
+                <ReadOnlyField label="Annual Turnover" value={viewDistributor.annualTurnover} />
+                <ReadOnlyField label="Annual Business He Can Do for Us" value={viewDistributor.annualBusinessPotential} />
+                <ReadOnlyField label="Farmer Network" value={viewDistributor.farmerNetwork} />
+                <ReadOnlyField label="Distributor Category" value={viewDistributor.distributorCategory} />
+              </div>
+            </SectionBlock>
+        </div>
+      )}
+    </RecordDetailPage>
   );
 }

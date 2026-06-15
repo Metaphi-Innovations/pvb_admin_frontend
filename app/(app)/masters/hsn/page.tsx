@@ -13,15 +13,6 @@ import {
 	DialogDescription,
 	DialogFooter,
 } from "@/components/ui/dialog";
-import {
-	Sheet,
-	SheetContent,
-	SheetDescription,
-	SheetHeader,
-	SheetTitle,
-	SheetBody,
-	SheetFooter,
-} from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -52,7 +43,7 @@ import {
 } from "./hsn-data";
 import { loadGSTMasters } from "../gst/gst-data";
 import { MiniKPICard } from "@/components/ui/KPICard";
-import { MasterViewRow } from "@/components/masters/MasterModule";
+import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
 
 import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
@@ -546,187 +537,97 @@ export default function HSNPage() {
 				/>
 			</div>
 
-			<Sheet open={sheetMode !== null} onOpenChange={(o) => !o && closeSheet()}>
-				<SheetContent>
-					<SheetHeader>
-						<div className='flex items-start gap-3 pr-8'>
-							<div className='flex items-center justify-center border w-9 h-9 rounded-xl bg-brand-50 border-brand-100'>
-								<Code2 className='w-4 h-4 text-brand-600' />
+			<MasterListingSheets
+				sheetMode={sheetMode}
+				active={active}
+				onClose={closeSheet}
+				onEdit={() => active && openEdit(active)}
+				onSave={persist}
+				sheetTitle={sheetTitle}
+				icon={Code2}
+				viewDrawer={
+					active
+						? buildSimpleMasterViewDrawer<HSNMaster>({
+								drawerTitle: "HSN",
+								getRecordCode: (r) => r.hsnCode,
+								basicInfo: (r) => [
+									{ label: "HSN Code", value: r.hsnCode, mono: true },
+									{ label: "GST Rate", value: r.gstRate },
+								],
+								description: (r) => r.hsnDescription,
+								showDescription: true,
+							})(active)
+						: { title: "HSN", basicInfo: [] }
+				}
+				formContent={
+					<div className='space-y-4'>
+						{errors._form && (
+							<p className='text-xs text-red-600'>{errors._form}</p>
+						)}
+						<div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+							<div className='space-y-1'>
+								<Label className='text-xs font-medium'>
+									HSN Code <span className='text-red-500'>*</span>
+								</Label>
+								<Input
+									value={form.hsnCode}
+									disabled
+									readOnly
+									className='h-8 text-xs cursor-not-allowed bg-muted/30 text-muted-foreground'
+								/>
 							</div>
-							<div>
-								<SheetTitle className='text-base'>{sheetTitle}</SheetTitle>
-								<SheetDescription className='text-xs'>
-									{sheetMode === "view"
-										? "Read-only details"
-										: "Compact HSN form"}
-								</SheetDescription>
+							<div className='space-y-1'>
+								<Label className='text-xs font-medium'>
+									GST Rate <span className='text-red-500'>*</span>
+								</Label>
+								<Select
+									value={form.gstRate}
+									onValueChange={(v) => setFormField("gstRate", v)}
+								>
+									<SelectTrigger className={cn("h-8 text-xs bg-background w-full", errors.gstRate && "border-red-400 focus:ring-red-300")}>
+										<SelectValue placeholder='Select GST rate…' />
+									</SelectTrigger>
+									<SelectContent className='bg-white border shadow-lg border-border z-[350]'>
+										{gstRatesList.map((rate) => (
+											<SelectItem key={rate} value={rate} className='text-xs'>
+												{rate}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+								{errors.gstRate && (
+									<p className='text-[11px] text-red-500'>
+										{errors.gstRate}
+									</p>
+								)}
+							</div>
+							<div className='space-y-1 sm:col-span-2'>
+								<Label className='text-xs font-medium'>
+									HSN Description <span className='text-red-500'>*</span>
+								</Label>
+								<Textarea
+									value={form.hsnDescription}
+									onChange={(e) =>
+										setFormField("hsnDescription", e.target.value)
+									}
+									placeholder='Describe this HSN code...'
+									rows={3}
+									className={cn(
+										"text-xs rounded-lg resize-none min-h-[72px]",
+										errors.hsnDescription &&
+											"border-red-400 focus-visible:ring-red-300",
+									)}
+								/>
+								{errors.hsnDescription && (
+									<p className='text-[11px] text-red-500'>
+										{errors.hsnDescription}
+									</p>
+								)}
 							</div>
 						</div>
-					</SheetHeader>
-
-					<SheetBody>
-						{sheetMode === "view" && active ? (
-							<div className='space-y-4'>
-								<div className='px-3 border rounded-lg border-border/60 bg-muted/10'>
-									<MasterViewRow
-										label='HSN Code'
-										value={<span className='font-mono'>{active.hsnCode}</span>}
-									/>
-									<MasterViewRow
-										label='HSN Description'
-										value={active.hsnDescription}
-									/>
-									<MasterViewRow label='GST Rate' value={active.gstRate} />
-
-									<MasterViewRow
-										label='Status'
-										value={active.status === "active" ? "Active" : "Inactive"}
-									/>
-								</div>
-								<div className='grid grid-cols-2 gap-3 pt-2 text-xs border-t'>
-									<div>
-										<p className='text-[10px] text-muted-foreground uppercase'>
-											Created By
-										</p>
-										<p className='font-medium'>{active.createdBy}</p>
-										<p className='text-muted-foreground'>
-											{active.createdDate}
-										</p>
-									</div>
-									<div>
-										<p className='text-[10px] text-muted-foreground uppercase'>
-											Updated By
-										</p>
-										<p className='font-medium'>{active.updatedBy}</p>
-										<p className='text-muted-foreground'>
-											{active.updatedDate}
-										</p>
-									</div>
-								</div>
-							</div>
-						) : (
-							<div className='space-y-4'>
-								{errors._form && (
-									<p className='text-xs text-red-600'>{errors._form}</p>
-								)}
-								<div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
-									<div className='space-y-1'>
-										<Label className='text-xs font-medium'>
-											HSN Code <span className='text-red-500'>*</span>
-										</Label>
-										<Input
-											value={form.hsnCode}
-											disabled
-											readOnly
-											className='h-8 text-xs cursor-not-allowed bg-muted/30 text-muted-foreground'
-										/>
-									</div>
-									<div className='space-y-1'>
-										<Label className='text-xs font-medium'>
-											GST Rate <span className='text-red-500'>*</span>
-										</Label>
-										<Select
-											value={form.gstRate}
-											onValueChange={(v) => setFormField("gstRate", v)}
-										>
-											<SelectTrigger className={cn("h-8 text-xs bg-background w-full", errors.gstRate && "border-red-400 focus:ring-red-300")}>
-												<SelectValue placeholder='Select GST rate…' />
-											</SelectTrigger>
-											<SelectContent className='bg-white border shadow-lg border-border z-[350]'>
-												{gstRatesList.map((rate) => (
-													<SelectItem key={rate} value={rate} className='text-xs'>
-														{rate}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-										{errors.gstRate && (
-											<p className='text-[11px] text-red-500'>
-												{errors.gstRate}
-											</p>
-										)}
-									</div>
-									<div className='space-y-1 sm:col-span-2'>
-										<Label className='text-xs font-medium'>
-											HSN Description <span className='text-red-500'>*</span>
-										</Label>
-										<Textarea
-											value={form.hsnDescription}
-											onChange={(e) =>
-												setFormField("hsnDescription", e.target.value)
-											}
-											placeholder='Describe this HSN code...'
-											rows={3}
-											className={cn(
-												"text-xs rounded-lg resize-none min-h-[72px]",
-												errors.hsnDescription &&
-													"border-red-400 focus-visible:ring-red-300",
-											)}
-										/>
-										{errors.hsnDescription && (
-											<p className='text-[11px] text-red-500'>
-												{errors.hsnDescription}
-											</p>
-										)}
-									</div>
-								</div>
-								{/* <div className="flex items-center justify-between p-3 mt-4 border rounded-lg border-border bg-muted/20">
-                  <div>
-                    <p className="text-xs font-medium">Status</p>
-                    <p className="text-[11px] text-muted-foreground">{form.status === "active" ? "Active" : "Inactive"}</p>
-                  </div>
-                  <Switch
-                    checked={form.status === "active"}
-                    onCheckedChange={(checked) =>
-                      setFormField("status", checked ? "active" : "inactive")
-                    }
-                  />
-                </div> */}
-							</div>
-						)}
-					</SheetBody>
-
-					<SheetFooter>
-						{sheetMode === "view" ? (
-							<>
-								<Button
-									variant='outline'
-									size='sm'
-									className='h-8 text-xs'
-									onClick={closeSheet}
-								>
-									Back
-								</Button>
-								<Button
-									size='sm'
-									className='h-8 text-xs text-white bg-brand-600 hover:bg-brand-700'
-									onClick={() => active && openEdit(active)}
-								>
-									Edit
-								</Button>
-							</>
-						) : (
-							<>
-								<Button
-									variant='outline'
-									size='sm'
-									className='h-8 text-xs'
-									onClick={closeSheet}
-								>
-									Cancel
-								</Button>
-								<Button
-									size='sm'
-									className='h-8 text-xs text-white bg-brand-600 hover:bg-brand-700'
-									onClick={persist}
-								>
-									Save
-								</Button>
-							</>
-						)}
-					</SheetFooter>
-				</SheetContent>
-			</Sheet>
+					</div>
+				}
+			/>
 
 			<Dialog
 				open={!!deleteTarget}
