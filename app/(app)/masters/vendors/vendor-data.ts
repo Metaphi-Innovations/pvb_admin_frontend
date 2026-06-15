@@ -196,7 +196,7 @@ export function fetchGstDetails(gstin: string): {
   };
 }
 
-const STORAGE_KEY = "ds_vendor_masters_v3";
+const STORAGE_KEY = "ds_vendor_masters_v4";
 
 const SEED: Vendor[] = [
   {
@@ -242,13 +242,52 @@ const SEED: Vendor[] = [
     accountNumber: "50100234567890",
     ifscCode: "HDFC0001234",
     swiftCode: "",
-    documents: [],
     remarks: "",
     status: "active",
     createdBy: "Admin",
     createdDate: "2024-01-05",
     updatedBy: "Admin",
     updatedDate: "2024-01-05",
+    vendorProducts: [
+      {
+        id: "vp-1",
+        productId: "prod-1",
+        productName: "Organic Neem Fertilizer",
+        sku: "FERT-NEEM-1KG",
+        mrp: 350,
+        price: 250,
+        status: "Active",
+      },
+      {
+        id: "vp-2",
+        productId: "prod-2",
+        productName: "Urea Premium Blend",
+        sku: "FERT-UREA-50KG",
+        mrp: 1200,
+        price: 950,
+        status: "Active",
+      },
+    ],
+    documents: [
+      {
+        uid: "doc-gst",
+        documentName: "GST Certificate",
+        fileName: "gst_certificate_chem.pdf",
+        uploadedAt: "2024-01-05",
+        size: "1.2 MB",
+        uploaded: true,
+        fileUrl: "/mock-documents/gst_cert.pdf",
+      },
+      {
+        uid: "doc-pan",
+        documentName: "PAN Copy",
+        fileName: "pan_card_agro.pdf",
+        uploadedAt: "2024-01-05",
+        size: "450 KB",
+        uploaded: true,
+        fileUrl: "/mock-documents/pan_card.pdf",
+      },
+    ],
   },
   {
     id: 2,

@@ -125,16 +125,25 @@ const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   archived: { bg: "bg-red-50",     text: "text-red-700",     dot: "bg-red-400"     },
 };
 
-function StatusPill({ status }: { status: string }) {
-  const cfg = STATUS_CFG[status] ?? STATUS_CFG.inactive;
+function StatusToggle({ record, onToggle }: { record: Department; onToggle: (item: Department) => void }) {
+  const active = record.status === "active";
   return (
-    <span className={cn(
-      "inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium",
-      cfg.bg, cfg.text,
-    )}>
-      <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
-      {status.charAt(0).toUpperCase() + status.slice(1)}
-    </span>
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggle(record);
+      }}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+        active
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
+      )}
+    >
+      {active ? "Active" : "Inactive"}
+    </button>
   );
 }
 
@@ -278,6 +287,16 @@ export default function DepartmentPage() {
     closeSheet();
   };
 
+  const toggleStatus = (dept: Department) => {
+    const nextStatus = dept.status === "active" ? "inactive" : "active";
+    setDepartments(p => p.map(d =>
+      d.id === dept.id
+        ? { ...d, status: nextStatus, updatedBy: "Admin", updatedDate: todayStr(), lastStatusChange: todayStr() }
+        : d,
+    ));
+    showToast(`Department status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`);
+  };
+
   const handleQuickToggle = (dept: Department) => {
     setConfirmTarget({ type: "toggle-status", dept });
   };
@@ -354,7 +373,7 @@ export default function DepartmentPage() {
         { label: "Active", value: "active" },
         { label: "Inactive", value: "inactive" },
       ],
-      render: (val, row) => <StatusPill status={row.status} />,
+      render: (val, row) => <StatusToggle record={row} onToggle={toggleStatus} />,
     },
     {
       key: "createdDate",
