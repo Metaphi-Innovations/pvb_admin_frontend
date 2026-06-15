@@ -413,6 +413,7 @@ export default function PRViewPage() {
 										{pr.approvedBy && (
 											<DetailField label='Approved By' value={pr.approvedBy} />
 										)}
+										<DetailField label="" value=" "></DetailField>
 									</div>
 								</div>
 

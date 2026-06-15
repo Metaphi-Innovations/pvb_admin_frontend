@@ -255,7 +255,7 @@ export default function WarehouseDetailPage() {
 							<p className='text-[10px] font-bold uppercase tracking-wider text-muted-foreground'>
 								Operated By
 							</p>
-							<p className='mt-1 text-xs font-bold text-foreground truncate'>
+							<p className='mt-1 text-xs font-bold truncate text-foreground'>
 								{warehouse.operatedBy || "—"}
 							</p>
 						</div>
@@ -273,7 +273,7 @@ export default function WarehouseDetailPage() {
 							<p className='text-[10px] font-bold uppercase tracking-wider text-muted-foreground'>
 								Manager
 							</p>
-							<p className='mt-1 text-xs font-bold text-foreground truncate'>
+							<p className='mt-1 text-xs font-bold truncate text-foreground'>
 								{warehouse.manager || "—"}
 							</p>
 						</div>
@@ -339,6 +339,7 @@ export default function WarehouseDetailPage() {
 											value={warehouse.gstNumber}
 											mono
 										/>
+										<DetailField label="" value=" "></DetailField>
 									</div>
 								</div>
 
@@ -360,6 +361,7 @@ export default function WarehouseDetailPage() {
 											value={warehouse.pincode}
 											mono
 										/>
+										<DetailField label="" value=" "></DetailField>
 									</div>
 								</div>
 
@@ -374,6 +376,7 @@ export default function WarehouseDetailPage() {
 											value={formattedCapacity}
 										/>
 										<DetailField label='Manager' value={warehouse.manager} />
+										<DetailField label="" value=" "></DetailField>
 									</div>
 								</div>
 
@@ -400,6 +403,7 @@ export default function WarehouseDetailPage() {
 											label='Updated Date'
 											value={warehouse.updatedDate}
 										/>
+										<DetailField label="" value=" "></DetailField>
 									</div>
 								</div>
 
@@ -447,7 +451,7 @@ export default function WarehouseDetailPage() {
 													<span className='text-[10px] font-bold text-muted-foreground uppercase tracking-wider'>
 														Mobile Number
 													</span>
-													<p className='font-mono font-semibold text-foreground mt-1'>
+													<p className='mt-1 font-mono font-semibold text-foreground'>
 														{contact.mobileCountryCode || "+91"} {contact.mobileNumber}
 													</p>
 												</div>
@@ -456,7 +460,7 @@ export default function WarehouseDetailPage() {
 													<span className='text-[10px] font-bold text-muted-foreground uppercase tracking-wider'>
 														Email Address
 													</span>
-													<p className='font-semibold text-foreground mt-1'>
+													<p className='mt-1 font-semibold text-foreground'>
 														{contact.emailAddress || "—"}
 													</p>
 												</div>

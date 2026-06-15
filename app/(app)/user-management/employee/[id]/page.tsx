@@ -697,6 +697,7 @@ export default function EmployeeDetailPage() {
                     <DetailField label="Gender" value={employee.gender} />
                     <DetailField label="DOB" value={employee.dob} />
                     <DetailField label="Blood Group" value={employee.bloodGroup} />
+                    <DetailField label="" value=" "></DetailField>
                   </div>
                 </div>
 
@@ -711,6 +712,7 @@ export default function EmployeeDetailPage() {
                     <DetailField label="Email Address" value={employee.email} />
                     <DetailField label="Current Address" value={employee.currentAddress || employee.address} />
                     <DetailField label="Permanent Address" value={employee.permanentAddress} />
+                    <DetailField label="" value=" "></DetailField>
                   </div>
                 </div>
 
@@ -728,6 +730,7 @@ export default function EmployeeDetailPage() {
                     <DetailField label="Updated By" value={employee.updatedBy} />
                     <DetailField label="Last Status Change" value={employee.lastStatusChange} />
                     {employee.remarks && <DetailField label="Remarks" value={employee.remarks} />}
+                    <DetailField label="" value=" "></DetailField>
                   </div>
                 </div>
               </div>
@@ -752,6 +755,7 @@ export default function EmployeeDetailPage() {
                     {employee.salesType && <DetailField label="Sales Type" value={employee.salesType} />}
                     <DetailField label="Joining Date" value={employee.joiningDate} />
                     <DetailField label="Reporting Manager" value={employee.reportingManager || "None"} />
+                    <DetailField label="" value=" "></DetailField>
                   </div>
                 </div>
 
@@ -810,6 +814,7 @@ export default function EmployeeDetailPage() {
                     <DetailField label="Mobile Number" value={employee.emergencyContactMobile} mono />
                     <DetailField label="Relation" value={employee.emergencyContactRelation} />
                     {employee.emergencyContactAddress && <DetailField label="Address" value={employee.emergencyContactAddress} />}
+                    <DetailField label="" value=" "></DetailField>
                   </div>
                 </div>
 

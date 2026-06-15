@@ -158,25 +158,6 @@ export default function DepartmentForm({ open, onClose, onSave, dept, employees,
             />
           </div>
 
-          {/* Status & Remarks */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1.5">
-                Status
-              </label>
-              <select
-                value={formData.status}
-                onChange={(e) => handleChange("status", e.target.value)}
-                className="w-full px-2.5 h-8 text-xs border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white"
-              >
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="archived">Archived</option>
-              </select>
-            </div>
-            <div />
-          </div>
-
           {/* Remarks */}
           <div>
             <label className="block text-xs font-medium text-foreground mb-1.5">

@@ -108,8 +108,8 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
       toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
     )}>
       {toast.type === "success"
-        ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-        : <XCircle className="w-4 h-4 flex-shrink-0" />}
+        ? <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
+        : <XCircle className="flex-shrink-0 w-4 h-4" />}
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
         <X className="w-3.5 h-3.5" />
@@ -204,7 +204,7 @@ function PasswordResetModal({
               value={state.newPassword}
               onChange={e => onChange("newPassword", e.target.value)}
               placeholder="Enter new password (min 8 chars)"
-              className="h-9 text-sm w-full border border-input rounded-md px-3"
+              className="w-full px-3 text-sm border rounded-md h-9 border-input"
             />
             {state.errors.newPassword && (
               <p className="text-xs text-red-500">{state.errors.newPassword}</p>
@@ -217,7 +217,7 @@ function PasswordResetModal({
               value={state.confirmPassword}
               onChange={e => onChange("confirmPassword", e.target.value)}
               placeholder="Re-enter password"
-              className="h-9 text-sm w-full border border-input rounded-md px-3"
+              className="w-full px-3 text-sm border rounded-md h-9 border-input"
             />
             {state.errors.confirmPassword && (
               <p className="text-xs text-red-500">{state.errors.confirmPassword}</p>
@@ -565,7 +565,7 @@ export default function EmployeeListingPage() {
             )}
             {row.status !== "draft" && (
               <DropdownMenuItem
-                className="gap-2 text-xs cursor-pointer text-blue-700 hover:text-blue-900"
+                className="gap-2 text-xs text-blue-700 cursor-pointer hover:text-blue-900"
                 onClick={() => handleStatusAction(row, "draft")}
               >
                 <FileText className="w-3.5 h-3.5" /> Mark Draft
@@ -598,17 +598,14 @@ export default function EmployeeListingPage() {
             <DropdownMenuItem onClick={() => router.push(`/user-management/employee/${row.id}/edit`)} className="cursor-pointer">
               <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => handleStatusAction(row, row.status === "active" ? "inactive" : "active")} className="cursor-pointer">
-              {row.status === "active" ? "Deactivate" : "Activate"}
-            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handlePasswordReset(row)} className="cursor-pointer">
               <Key className="w-3.5 h-3.5 mr-2" /> Reset Password
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => handleDelete(row)} className="cursor-pointer text-red-600 focus:bg-red-50 focus:text-red-600">
+            <DropdownMenuItem onClick={() => handleDelete(row)} className="text-red-600 cursor-pointer focus:bg-red-50 focus:text-red-600">
               <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
             </DropdownMenuItem>
+            
           </DropdownMenuContent>
         </DropdownMenu>
       ),
@@ -621,30 +618,30 @@ export default function EmployeeListingPage() {
       titleIcon={Users}
       metrics={
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center flex-shrink-0">
+          <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
+            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-brand-600">
               <Users className="w-4 h-4 text-white" />
             </div>
             <div>
-              <p className="text-base font-bold text-foreground leading-none">{stats.total}</p>
+              <p className="text-base font-bold leading-none text-foreground">{stats.total}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Total Users</p>
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center flex-shrink-0">
+          <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
+            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-600">
               <CheckCircle2 className="w-4 h-4 text-white" />
             </div>
             <div>
-              <p className="text-base font-bold text-foreground leading-none">{stats.active}</p>
+              <p className="text-base font-bold leading-none text-foreground">{stats.active}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Active</p>
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-slate-400 flex items-center justify-center flex-shrink-0">
+          <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
+            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-slate-400">
               <XCircle className="w-4 h-4 text-white" />
             </div>
             <div>
-              <p className="text-base font-bold text-foreground leading-none">{stats.inactive + stats.draft}</p>
+              <p className="text-base font-bold leading-none text-foreground">{stats.inactive + stats.draft}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Inactive / Draft</p>
             </div>
           </div>

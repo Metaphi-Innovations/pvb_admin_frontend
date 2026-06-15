@@ -373,10 +373,11 @@ export default function ProductDetailPage() {
 											value={product.sku}
 											mono
 										/>
-										<DetailField
+										<DetailField label="" value=" "></DetailField>
+										{/* <DetailField
 											label='Status'
 											value={<StatusBadge status={product.status} />}
-										/>
+										/> */}
 									</div>
 								</div>
 
@@ -390,6 +391,7 @@ export default function ProductDetailPage() {
 										{/* <DetailField label='Sub Category' value={product.subCategory} /> */}
 										<DetailField label='Segment' value={product.segment} />
 										<DetailField label='Formulation' value={product.formulation} />
+										<DetailField label="" value=" "></DetailField>	
 									</div>
 								</div>
 
@@ -416,6 +418,7 @@ export default function ProductDetailPage() {
 											label='Crop Applicable'
 											value={product.cropApplicable}
 										/>
+										<DetailField label="" value=" "></DetailField>
 									</div>
 								</div>
 
@@ -435,6 +438,7 @@ export default function ProductDetailPage() {
 													: "—"
 											}
 										/>
+										<DetailField label="" value=" "></DetailField>
 									</div>
 								</div>
 
@@ -460,6 +464,7 @@ export default function ProductDetailPage() {
 											label='Updated Date'
 											value={product.updatedDate}
 										/>
+										<DetailField label="" value=" "></DetailField>
 									</div>
 								</div>
 							</div>

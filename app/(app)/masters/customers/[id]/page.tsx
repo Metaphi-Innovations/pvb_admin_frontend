@@ -472,6 +472,7 @@ export default function CustomerDetailPage() {
 													: "—"
 											}
 										/>
+										<DetailField label="" value=" "></DetailField>
 									</div>
 								</div>
 
@@ -499,6 +500,7 @@ export default function CustomerDetailPage() {
 											value={customer.pincode}
 											mono
 										/>
+										<DetailField label="" value=" "></DetailField>
 									</div>
 								</div>
 
@@ -543,6 +545,7 @@ export default function CustomerDetailPage() {
 										<DetailField label='CIB Regn #' value={customer.cibRegn} />
 										<DetailField label='FCO Regn #' value={customer.fcoRegn} />
 										<DetailField label='FSSAI #' value={customer.fssai} />
+										<DetailField label="" value=" "></DetailField>
 									</div>
 								</div>
 
@@ -557,6 +560,7 @@ export default function CustomerDetailPage() {
 											value={formatCreditLimit(customer.creditLimit)}
 										/>
 										<DetailField label='Payment Terms' value={payLabel} />
+										<DetailField label="" value=" "></DetailField>
 									</div>
 								</div>
 
@@ -586,6 +590,7 @@ export default function CustomerDetailPage() {
 											label='Status Changes'
 											value={customer.statusHistory.length}
 										/>
+										<DetailField label="" value=" "></DetailField>
 									</div>
 								</div>
 							</div>

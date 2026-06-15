@@ -244,15 +244,15 @@ export default function ViewSalesOrderPage() {
 
         {/* Approval Actions Alert */}
         {showApprovalActions && (
-          <div className="bg-white rounded-xl border border-border shadow-sm p-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="p-4 bg-white border shadow-sm rounded-xl border-border">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-xs font-semibold text-foreground">Approval Required</p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
                   Review order details below and approve or reject this sales order.
                 </p>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center flex-shrink-0 gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -329,7 +329,7 @@ export default function ViewSalesOrderPage() {
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                 Order Date
               </p>
-              <p className="mt-1 text-xs font-bold text-foreground truncate">
+              <p className="mt-1 text-xs font-bold truncate text-foreground">
                 {order.orderDate || "—"}
               </p>
             </div>
@@ -338,7 +338,7 @@ export default function ViewSalesOrderPage() {
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                 Delivery Date
               </p>
-              <p className="mt-1 text-xs font-bold text-foreground truncate">
+              <p className="mt-1 text-xs font-bold truncate text-foreground">
                 {order.deliveryDate || "—"}
               </p>
             </div>
@@ -347,7 +347,7 @@ export default function ViewSalesOrderPage() {
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                 Total Products
               </p>
-              <p className="mt-1 text-xs font-bold text-foreground truncate">
+              <p className="mt-1 text-xs font-bold truncate text-foreground">
                 {order.lineItems.length}
               </p>
             </div>
@@ -356,7 +356,7 @@ export default function ViewSalesOrderPage() {
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                 Grand Total
               </p>
-              <p className="mt-1 text-xs font-bold text-emerald-650 truncate font-mono">
+              <p className="mt-1 font-mono text-xs font-bold truncate text-emerald-650">
                 {formatRupee(order.totalAmount)}
               </p>
             </div>
@@ -394,7 +394,7 @@ export default function ViewSalesOrderPage() {
           {activeSubTab === "overview" && (
             <div className="space-y-5">
               {/* Card 1: Sales Order Information */}
-              <div className="p-6 bg-white border shadow-sm rounded-xl border-border space-y-4">
+              <div className="p-6 space-y-4 bg-white border shadow-sm rounded-xl border-border">
                 <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
                   Sales Order Information
                 </h3>
@@ -447,11 +447,12 @@ export default function ViewSalesOrderPage() {
                   <DetailField label="Created Date" value={order.createdDate} />
                   <DetailField label="Updated By" value={order.updatedBy} />
                   <DetailField label="Updated Date" value={order.updatedDate} />
+                  <DetailField label="" value=" "></DetailField>
                 </div>
               </div>
 
               {/* Card 2: Customer Details */}
-              <div className="p-6 bg-white border shadow-sm rounded-xl border-border space-y-4">
+              <div className="p-6 space-y-4 bg-white border shadow-sm rounded-xl border-border">
                 <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
                   Customer Details
                 </h3>
@@ -461,6 +462,7 @@ export default function ViewSalesOrderPage() {
                   <DetailField label="Territory" value={order.territory} />
                   <DetailField label="Salesman ID" value={order.salesManId} mono />
                   <DetailField label="Salesman Name" value={order.salesManName} />
+                  <DetailField label="" value=" "></DetailField>
                 </div>
               </div>
             </div>
@@ -469,45 +471,45 @@ export default function ViewSalesOrderPage() {
           {/* TAB 2: PRODUCTS */}
           {activeSubTab === "products" && (
             <div className="space-y-5">
-              <div className="p-6 bg-white border shadow-sm rounded-xl border-border space-y-4">
+              <div className="p-6 space-y-4 bg-white border shadow-sm rounded-xl border-border">
                 <h3 className="pb-1 text-xs font-bold tracking-wider uppercase border-b text-foreground">
                   Product Details
                 </h3>
-                <div className="overflow-x-auto border border-border rounded-lg bg-white">
+                <div className="overflow-x-auto bg-white border rounded-lg border-border">
                   <table className="w-full text-xs text-left border-collapse min-w-[900px]">
                     <thead>
                       <tr className="font-semibold border-b border-border bg-slate-50 text-muted-foreground">
-                        <th className="px-4 py-2 w-12 text-center">Sr.</th>
+                        <th className="w-12 px-4 py-2 text-center">Sr.</th>
                         <th className="px-4 py-2">Product</th>
                         <th className="px-4 py-2 w-28">SKU/Code</th>
-                        <th className="px-4 py-2 w-24 text-right">Stock</th>
-                        <th className="px-4 py-2 w-24 text-right">Qty</th>
-                        <th className="px-4 py-2 w-28 text-right">Unit Price</th>
-                        <th className="px-4 py-2 w-20 text-right">Discount</th>
-                        <th className="px-4 py-2 w-32 text-right">GST % / Amt</th>
-                        <th className="px-4 py-2 w-32 text-right">Line Total</th>
+                        <th className="w-24 px-4 py-2 text-right">Stock</th>
+                        <th className="w-24 px-4 py-2 text-right">Qty</th>
+                        <th className="px-4 py-2 text-right w-28">Unit Price</th>
+                        <th className="w-20 px-4 py-2 text-right">Discount</th>
+                        <th className="w-32 px-4 py-2 text-right">GST % / Amt</th>
+                        <th className="w-32 px-4 py-2 text-right">Line Total</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/60">
                       {order.lineItems.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className="px-4 py-8 text-center text-xs text-muted-foreground font-semibold">No products added.</td>
+                          <td colSpan={9} className="px-4 py-8 text-xs font-semibold text-center text-muted-foreground">No products added.</td>
                         </tr>
                       ) : (
                         order.lineItems.map((line, idx) => {
                           const product = line.productId ? getProductById(line.productId) : undefined;
                           return (
-                            <tr key={line.id} className="hover:bg-slate-50/50 font-medium">
+                            <tr key={line.id} className="font-medium hover:bg-slate-50/50">
                               <td className="px-4 py-2 text-center text-muted-foreground">{idx + 1}</td>
                               <td className="px-4 py-2">
                                 <p className="font-semibold text-foreground">{line.productName || "—"}</p>
                               </td>
-                              <td className="px-4 py-2 font-mono text-brand-700 font-semibold">{line.productCode}</td>
-                              <td className="px-4 py-2 text-right font-mono text-muted-foreground">{line.productId ? line.availableStock : "—"}</td>
-                              <td className="px-4 py-2 text-right font-mono">{line.quantity}</td>
-                              <td className="px-4 py-2 text-right font-mono">{formatRupee(line.unitPrice)}</td>
-                              <td className="px-4 py-2 text-right font-mono">{line.discount}%</td>
-                              <td className="px-4 py-2 text-right font-mono">
+                              <td className="px-4 py-2 font-mono font-semibold text-brand-700">{line.productCode}</td>
+                              <td className="px-4 py-2 font-mono text-right text-muted-foreground">{line.productId ? line.availableStock : "—"}</td>
+                              <td className="px-4 py-2 font-mono text-right">{line.quantity}</td>
+                              <td className="px-4 py-2 font-mono text-right">{formatRupee(line.unitPrice)}</td>
+                              <td className="px-4 py-2 font-mono text-right">{line.discount}%</td>
+                              <td className="px-4 py-2 font-mono text-right">
                                 <div className="flex flex-col items-end">
                                   <span className="text-[10px] text-muted-foreground font-semibold">{product?.gstRate || "0%"}</span>
                                   <span>{formatRupee(line.gstAmount)}</span>
@@ -523,8 +525,8 @@ export default function ViewSalesOrderPage() {
                 </div>
 
                 {/* Amount Summary Cards */}
-                <div className="pt-4 flex flex-col md:flex-row md:justify-end">
-                  <div className="w-full md:w-80 border border-border rounded-xl bg-slate-50/40 p-4 space-y-2">
+                <div className="flex flex-col pt-4 md:flex-row md:justify-end">
+                  <div className="w-full p-4 space-y-2 border md:w-80 border-border rounded-xl bg-slate-50/40">
                     <h4 className="text-xs font-bold text-foreground border-b pb-1.5 uppercase tracking-wider">Amount Summary</h4>
                     <div className="flex justify-between text-xs font-semibold text-muted-foreground">
                       <span>Subtotal (Before Discount)</span>
@@ -544,7 +546,7 @@ export default function ViewSalesOrderPage() {
                       <span>Total GST</span>
                       <span className="font-mono text-foreground">{formatRupee(totals.totalGst)}</span>
                     </div>
-                    <div className="flex justify-between text-sm font-bold text-foreground border-t pt-2 mt-1">
+                    <div className="flex justify-between pt-2 mt-1 text-sm font-bold border-t text-foreground">
                       <span>Grand Total</span>
                       <span className="font-mono text-brand-700">{formatRupee(totals.grandTotal)}</span>
                     </div>

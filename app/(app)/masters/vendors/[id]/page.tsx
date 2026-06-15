@@ -370,6 +370,7 @@ export default function VendorDetailPage() {
 											label='Tags'
 											value={vendor.tags}
 										/>
+										<DetailField label="" value=" "></DetailField>
 									</div>
 								</div>
 
@@ -391,6 +392,7 @@ export default function VendorDetailPage() {
 											value={vendor.billingAddress?.pincode}
 											mono
 										/>
+										<DetailField label="" value=" "></DetailField>
 									</div>
 								</div>
 
@@ -422,6 +424,7 @@ export default function VendorDetailPage() {
 											value={vendor.panNumber}
 											mono
 										/>
+										<DetailField label="" value=" "></DetailField>
 									</div>
 								</div>
 
@@ -450,6 +453,7 @@ export default function VendorDetailPage() {
 											label='TCS Applicable'
 											value={vendor.tcsApplicable ? "Yes" : "No"}
 										/>
+										<DetailField label="" value=" "></DetailField>
 									</div>
 								</div>
 
@@ -479,6 +483,7 @@ export default function VendorDetailPage() {
 											label='Remarks'
 											value={vendor.remarks}
 										/>
+										<DetailField label="" value=" "></DetailField>
 									</div>
 								</div>
 							</div>
@@ -516,6 +521,7 @@ export default function VendorDetailPage() {
 										label='SWIFT Code'
 										value={vendor.swiftCode}
 									/>
+									<DetailField label="" value=" "></DetailField>
 								</div>
 							</div>
 						</div>
@@ -545,7 +551,7 @@ export default function VendorDetailPage() {
 													<span className='text-[10px] font-bold text-muted-foreground uppercase tracking-wider'>
 														Mobile
 													</span>
-													<p className='font-mono font-semibold text-foreground mt-1'>
+													<p className='mt-1 font-mono font-semibold text-foreground'>
 														{contact.countryCode || "+91"} {contact.mobile}
 													</p>
 												</div>
@@ -554,7 +560,7 @@ export default function VendorDetailPage() {
 													<span className='text-[10px] font-bold text-muted-foreground uppercase tracking-wider'>
 														Email
 													</span>
-													<p className='font-semibold text-foreground mt-1'>
+													<p className='mt-1 font-semibold text-foreground'>
 														{contact.email || "—"}
 													</p>
 												</div>
@@ -706,7 +712,7 @@ export default function VendorDetailPage() {
 										<h3 className='pb-2 text-sm font-bold border-b text-foreground'>
 											Remarks & Notes
 										</h3>
-										<p className='text-xs font-medium text-foreground leading-relaxed whitespace-pre-wrap'>
+										<p className='text-xs font-medium leading-relaxed whitespace-pre-wrap text-foreground'>
 											{vendor.remarks?.trim() || "No remarks provided."}
 										</p>
 									</div>
