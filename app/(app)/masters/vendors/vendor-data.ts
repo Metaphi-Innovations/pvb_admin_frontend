@@ -151,6 +151,32 @@ export function formatCreditPeriod(v: Vendor): string {
 }
 
 /** Mock GST lookup — replace with API when integrated */
+export function validateVendorMobile(v: string): boolean {
+  return /^[6-9][0-9]{9}$/.test(v.trim());
+}
+
+export function validateVendorEmail(v: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+}
+
+export function validateVendorGSTIN(v: string): boolean {
+  return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(
+    v.trim().toUpperCase(),
+  );
+}
+
+export function validateVendorPAN(v: string): boolean {
+  return /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(v.trim().toUpperCase());
+}
+
+export function validateVendorIFSC(v: string): boolean {
+  return /^[A-Z]{4}0[A-Z0-9]{6}$/.test(v.trim().toUpperCase());
+}
+
+export function validateVendorPincode(v: string): boolean {
+  return /^[1-9][0-9]{5}$/.test(v.trim());
+}
+
 export function fetchGstDetails(gstin: string): {
   legalCompanyName: string;
   billingAddress: Partial<VendorAddress>;
@@ -170,7 +196,7 @@ export function fetchGstDetails(gstin: string): {
   };
 }
 
-const STORAGE_KEY = "ds_vendor_masters_v3";
+const STORAGE_KEY = "ds_vendor_masters_v4";
 
 const SEED: Vendor[] = [
   {
@@ -216,13 +242,52 @@ const SEED: Vendor[] = [
     accountNumber: "50100234567890",
     ifscCode: "HDFC0001234",
     swiftCode: "",
-    documents: [],
     remarks: "",
     status: "active",
     createdBy: "Admin",
     createdDate: "2024-01-05",
     updatedBy: "Admin",
     updatedDate: "2024-01-05",
+    vendorProducts: [
+      {
+        id: "vp-1",
+        productId: "prod-1",
+        productName: "Organic Neem Fertilizer",
+        sku: "FERT-NEEM-1KG",
+        mrp: 350,
+        price: 250,
+        status: "Active",
+      },
+      {
+        id: "vp-2",
+        productId: "prod-2",
+        productName: "Urea Premium Blend",
+        sku: "FERT-UREA-50KG",
+        mrp: 1200,
+        price: 950,
+        status: "Active",
+      },
+    ],
+    documents: [
+      {
+        uid: "doc-gst",
+        documentName: "GST Certificate",
+        fileName: "gst_certificate_chem.pdf",
+        uploadedAt: "2024-01-05",
+        size: "1.2 MB",
+        uploaded: true,
+        fileUrl: "/mock-documents/gst_cert.pdf",
+      },
+      {
+        uid: "doc-pan",
+        documentName: "PAN Copy",
+        fileName: "pan_card_agro.pdf",
+        uploadedAt: "2024-01-05",
+        size: "450 KB",
+        uploaded: true,
+        fileUrl: "/mock-documents/pan_card.pdf",
+      },
+    ],
   },
   {
     id: 2,
@@ -451,16 +516,7 @@ export const DEFAULT_VENDOR_FORM: VendorFormValues = {
   confirmAccountNumber: "",
   ifscCode: "",
   swiftCode: "",
-  documents: DEFAULT_DOCUMENT_NAMES.map((name, i) => ({
-    uid: `d-${i}`,
-    documentTypeId: undefined,
-    documentName: name,
-    fileUrl: undefined,
-    uploaded: false,
-    fileName: "",
-    uploadedAt: "",
-    size: "",
-  })),
+  documents: [],
   remarks: "",
   vendorProducts: [],
 };
@@ -495,16 +551,7 @@ export function vendorToForm(v: Vendor): VendorFormValues {
     swiftCode: v.swiftCode,
     documents: v.documents.length
       ? v.documents.map((d) => ({ ...d }))
-      : DEFAULT_DOCUMENT_NAMES.map((name, i) => ({
-          uid: `d-${i}`,
-          documentTypeId: undefined,
-          documentName: name,
-          fileUrl: undefined,
-          uploaded: false,
-          fileName: "",
-          uploadedAt: "",
-          size: "",
-        })),
+      : [],
     remarks: v.remarks,
     vendorProducts: v.vendorProducts ? v.vendorProducts.map((p) => ({ ...p })) : [],
   };
@@ -557,11 +604,39 @@ export function formToVendor(
 export function validateVendorForm(form: VendorFormValues): string | null {
   if (!form.vendorName.trim()) return "Vendor name is required.";
   if (!form.mobile.trim()) return "Mobile number is required.";
-  if (form.gstApplicable && form.gstNumber.trim().length !== 15) {
-    return "Enter a valid 15-character GSTIN.";
+  if (!validateVendorMobile(form.mobile)) {
+    return "Enter a valid 10-digit mobile number.";
+  }
+  if (form.email.trim() && !validateVendorEmail(form.email)) {
+    return "Enter a valid email address.";
+  }
+  if (form.gstApplicable && !validateVendorGSTIN(form.gstNumber)) {
+    return "Enter a valid GSTIN.";
+  }
+  if (form.panNumber.trim() && !validateVendorPAN(form.panNumber)) {
+    return "Enter a valid PAN number.";
+  }
+  if (
+    form.billingAddress.pincode.trim() &&
+    !validateVendorPincode(form.billingAddress.pincode)
+  ) {
+    return "Enter a valid 6-digit billing pincode.";
+  }
+  if (form.ifscCode.trim() && !validateVendorIFSC(form.ifscCode)) {
+    return "Enter a valid IFSC code.";
   }
   if (form.accountNumber && form.accountNumber !== form.confirmAccountNumber) {
     return "Account number and confirmation do not match.";
+  }
+
+  for (let i = 0; i < form.contacts.length; i++) {
+    const contact = form.contacts[i];
+    if (contact.mobile.trim() && !validateVendorMobile(contact.mobile)) {
+      return `Enter a valid 10-digit mobile number for contact row ${i + 1}.`;
+    }
+    if (contact.email.trim() && !validateVendorEmail(contact.email)) {
+      return `Enter a valid email address for contact row ${i + 1}.`;
+    }
   }
 
   // Validate product mappings

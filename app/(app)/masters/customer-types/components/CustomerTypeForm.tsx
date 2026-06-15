@@ -238,40 +238,51 @@ export function CustomerTypeForm({
 
           {/* Document Checklist Table */}
           <div className="overflow-hidden bg-white border rounded-lg border-border">
-            <table className="min-w-full divide-y table-fixed divide-border">
+            <table className="w-full divide-y table-fixed divide-border">
+              <colgroup>
+                <col style={{ width: "50px" }} />
+                <col style={{ width: "60%" }} />
+                <col />
+              </colgroup>
               <thead className="bg-muted/40">
                 <tr>
-                  <th className="w-12 px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">Sr.</th>
-                  <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">Document Details</th>
-                  {!readOnly && <th className="w-20 px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground">Action</th>}
+                  <th style={{ width: "50px" }} className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">Sr.</th>
+                  <th style={{ width: "60%" }} className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">Document Details</th>
+                  {!readOnly ? (
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold text-muted-foreground">Action</th>
+                  ) : (
+                    <th className="px-3 py-2 text-[11px] font-semibold text-muted-foreground"></th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
                 {!form.documentTypes || form.documentTypes.length === 0 ? (
                   <tr>
-                    <td colSpan={readOnly ? 2 : 3} className="px-3 py-6 text-xs text-center text-muted-foreground">
+                    <td colSpan={3} className="px-3 py-6 text-xs text-center text-muted-foreground">
                       No documents added yet.
                     </td>
                   </tr>
                 ) : (
                   form.documentTypes.map((doc, idx) => (
                     <tr key={doc.id} className="transition-colors hover:bg-muted/10">
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground font-medium">{idx + 1}</td>
-                      <td className="px-3 py-2.5 text-xs text-foreground font-medium break-words whitespace-normal font-mono">
+                      <td style={{ width: "50px" }} className="px-3 py-2.5 text-xs text-muted-foreground font-medium">{idx + 1}</td>
+                      <td style={{ width: "60%" }} className="px-3 py-2.5 text-xs text-foreground font-medium truncate max-w-0 font-mono" title={doc.documentName}>
                         {doc.documentName}
                       </td>
-                      {!readOnly && (
-                        <td className="px-3 py-2 text-center">
+                      {!readOnly ? (
+                        <td className="px-3 py-2 text-right">
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
                             onClick={() => handleRemoveDocument(doc.id)}
-                            className="w-6 h-6 p-0 text-red-600 rounded-md hover:text-red-700 hover:bg-red-50"
+                            className="w-6 h-6 p-0 text-red-600 rounded-md hover:text-red-700 hover:bg-red-50 inline-flex items-center justify-center"
                           >
                             <X className="w-3.5 h-3.5" />
                           </Button>
                         </td>
+                      ) : (
+                        <td className="px-3 py-2.5"></td>
                       )}
                     </tr>
                   ))

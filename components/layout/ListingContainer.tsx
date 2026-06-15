@@ -33,14 +33,14 @@ export function ListingContainer({
 }: ListingContainerProps) {
 
   const tabList = tabs && tabs.length > 0 && (
-    <TabsList className="bg-muted/50 p-0.5 border border-border/60 rounded-xl inline-flex h-auto">
+    <TabsList>
       {tabs.map((tab) => {
         const Icon = tab.icon;
         return (
           <TabsTrigger
             key={tab.value}
             value={tab.value}
-            className="text-xs font-semibold px-4 py-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-brand-700"
+            className="text-xs"
           >
             {Icon && <Icon className="w-3.5 h-3.5 mr-1.5" />}
             {tab.label}

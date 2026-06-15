@@ -79,6 +79,15 @@ function StatusToggle({ record, onToggle }: { record: GSTMaster; onToggle: (item
   );
 }
 
+function AuditCell({ name, date }: { name: string; date?: string }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[11px] font-semibold leading-4 text-brand-700">{name}</p>
+      {date ? <p className="text-[10px] font-mono leading-3 text-muted-foreground">{date}</p> : null}
+    </div>
+  );
+}
+
 export default function GSTPage() {
   const [records, setRecords] = useState<GSTMaster[]>([]);
   const [filters, setFilters] = useState<FilterState>({});
@@ -138,7 +147,7 @@ export default function GSTPage() {
       filterType: "text",
       width: "100px",
       render: (val, row) => (
-        <span className="font-mono font-semibold text-brand-700">{row.gstId}</span>
+        <span className="font-mono text-xs text-brand-700">{row.gstId}</span>
       ),
     },
     {
@@ -148,7 +157,9 @@ export default function GSTPage() {
       filterable: true,
       filterType: "text",
       width: "140px",
-      render: (val, row) => `${row.gstPercentage}%`,
+      render: (val, row) => (
+        <span className="text-xs font-semibold text-foreground">{row.gstPercentage}%</span>
+      ),
     },
     {
       key: "remarks",
@@ -158,22 +169,6 @@ export default function GSTPage() {
       filterType: "text",
       width: "220px",
       render: (val, row) => row.remarks || "—",
-    },
-    {
-      key: "createdBy",
-      header: "Created By",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-    },
-    {
-      key: "updatedBy",
-      header: "Updated By",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
     },
     {
       key: "status",
@@ -189,6 +184,24 @@ export default function GSTPage() {
       render: (val, row) => (
         <StatusToggle record={row} onToggle={toggleStatus} />
       ),
+    },
+    {
+      key: "createdBy",
+      header: "Created",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => <AuditCell name={row.createdBy} date={row.createdDate} />,
+    },
+    {
+      key: "updatedBy",
+      header: "Updated",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => <AuditCell name={row.updatedBy} date={row.updatedDate} />,
     },
   ];
 

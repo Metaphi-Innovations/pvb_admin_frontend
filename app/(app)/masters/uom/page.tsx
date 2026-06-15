@@ -144,6 +144,9 @@ export default function UOMPage() {
       filterable: true,
       filterType: "text",
       width: "110px",
+      render: (val, row) => (
+        <span className="font-mono text-xs text-brand-700">{row.uomId}</span>
+      ),
     },
     {
       key: "unitName",
@@ -152,6 +155,9 @@ export default function UOMPage() {
       filterable: true,
       filterType: "text",
       width: "220px",
+      render: (val, row) => (
+        <span className="text-xs font-semibold text-foreground">{row.unitName}</span>
+      ),
     },
     {
       key: "shortName",
@@ -160,22 +166,6 @@ export default function UOMPage() {
       filterable: true,
       filterType: "text",
       width: "130px",
-    },
-    {
-      key: "createdBy",
-      header: "Created By",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-    },
-    {
-      key: "updatedBy",
-      header: "Updated By",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
     },
     {
       key: "status",
@@ -190,6 +180,34 @@ export default function UOMPage() {
       width: "100px",
       render: (val, row) => (
         <StatusToggle record={row} onToggle={toggleStatus} />
+      ),
+    },
+    {
+      key: "createdDate",
+      header: "Created",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => (
+        <div>
+          <p className="text-[11px] font-semibold leading-4 text-brand-700">{row.createdBy}</p>
+          <p className="text-[10px] font-mono leading-3 text-muted-foreground">{row.createdDate}</p>
+        </div>
+      ),
+    },
+    {
+      key: "updatedDate",
+      header: "Updated",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => (
+        <div>
+          <p className="text-[11px] font-semibold leading-4 text-brand-700">{row.updatedBy}</p>
+          <p className="text-[10px] font-mono leading-3 text-muted-foreground">{row.updatedDate}</p>
+        </div>
       ),
     },
   ];

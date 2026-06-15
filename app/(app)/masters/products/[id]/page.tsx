@@ -129,17 +129,22 @@ export default function ProductDetailPage() {
     [product],
   );
 
-  const updateStatus = (status: ProductStatus) => {
-    if (!product) return;
-    const updated = records.map((item) =>
-      item.id === product.id
-        ? { ...item, status, updatedBy: "Admin", updatedDate: new Date().toISOString().slice(0, 10) }
-        : item,
-    );
-    setRecords(updated);
-    saveProducts(updated);
-    setProduct(updated.find((item) => item.id === product.id) ?? null);
-  };
+	const updateStatus = (status: ProductStatus) => {
+		if (!product) return;
+		const updated = records.map((item) =>
+			item.id === product.id
+				? {
+						...item,
+						status,
+						updatedBy: "Admin",
+						updatedDate: new Date().toISOString().slice(0, 10),
+					}
+				: item,
+		);
+		setRecords(updated);
+		saveProducts(updated);
+		setProduct(updated.find((item) => item.id === product.id) ?? null);
+	};
 
   if (!product) {
     return (

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { RecordDetailPage } from "@/components/record-detail";
 import { cn } from "@/lib/utils";
 import {
+  ArrowLeft,
   Building2,
   ChevronLeft,
   ChevronRight,
@@ -16,6 +17,7 @@ import {
   User,
 } from "lucide-react";
 import {
+  SEED,
   type Distributor,
   loadDistributors,
   VIEW_DISTRIBUTOR_STORAGE_KEY,
@@ -63,10 +65,10 @@ function ReadOnlyField({
 }) {
   return (
     <div className={cn("space-y-1.5", className)}>
-      <p className="text-xs font-medium text-foreground">{label}</p>
+      <p className="text-xs font-semibold tracking-tight text-foreground">{label}</p>
       <div
         className={cn(
-          "min-h-9 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-foreground",
+          "min-h-9 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-foreground",
           multiline ? "flex items-start leading-5" : "flex items-center",
           mono && "font-mono text-xs font-semibold text-brand-700",
         )}
@@ -77,11 +79,21 @@ function ReadOnlyField({
   );
 }
 
+const DISTRIBUTOR_TABS = [
+  { id: "distributor-details", label: "Distributor Details" },
+  { id: "location-details", label: "Location Details" },
+  { id: "business-details", label: "Business Details" },
+] as const;
+
 export default function DistributorViewPage() {
   const router = useRouter();
-  const [distributors] = useState<Distributor[]>(loadDistributors());
+  const [distributors, setDistributors] = useState<Distributor[]>(SEED);
   const [viewDistributor, setViewDistributor] = useState<Distributor | null>(null);
   const [activeTab, setActiveTab] = useState<"distributor-details" | "location-details" | "business-details">("distributor-details");
+
+  useEffect(() => {
+    setDistributors(loadDistributors());
+  }, []);
 
   useEffect(() => {
     let selectedDistributor: Distributor | undefined;

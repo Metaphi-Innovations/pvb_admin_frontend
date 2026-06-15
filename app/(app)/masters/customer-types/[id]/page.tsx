@@ -17,10 +17,10 @@ export default function CustomerTypeDetailPage() {
   const [customerType, setCustomerType] = useState<CustomerTypeRecord | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
 
-  useEffect(() => {
-    const list = loadCustomerTypes();
-    setCustomerType(list.find((c) => c.id === Number(id)) ?? null);
-  }, [id]);
+	useEffect(() => {
+		const list = loadCustomerTypes();
+		setCustomerType(list.find((c) => c.id === Number(id)) ?? null);
+	}, [id]);
 
   if (!customerType) {
     return (

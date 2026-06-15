@@ -25,6 +25,7 @@ export default function GenerateGrnPage() {
   // Dynamic lists
   const [items, setItems] = useState<GrnItem[]>([]);
   const [batches, setBatches] = useState<GrnBatch[]>([]);
+  const [batchError, setBatchError] = useState<string | null>(null);
 
   // Generate Unique GRN Code on Load
   useEffect(() => {
@@ -107,6 +108,16 @@ export default function GenerateGrnPage() {
   // Add empty batch row
   const addBatchRow = () => {
     if (items.length === 0) return;
+
+    if (batches.length > 0) {
+      const lastBatch = batches[batches.length - 1];
+      if (!lastBatch.productId || !lastBatch.batchNumber || lastBatch.quantity <= 0) {
+        setBatchError("Please complete the current batch row before adding another.");
+        return;
+      }
+    }
+
+    setBatchError(null);
     setBatches((prev) => [
       ...prev,
       {
@@ -123,11 +134,13 @@ export default function GenerateGrnPage() {
 
   // Remove batch row
   const removeBatchRow = (idx: number) => {
+    setBatchError(null);
     setBatches((prev) => prev.filter((_, i) => i !== idx));
   };
 
   // Handle batch field update
   const handleBatchUpdate = (idx: number, field: keyof GrnBatch, val: any) => {
+    setBatchError(null);
     setBatches((prev) =>
       prev.map((b, i) => {
         if (i !== idx) return b;
@@ -346,9 +359,16 @@ export default function GenerateGrnPage() {
       {/* Section 3 : Batch Details */}
       <div className="space-y-4">
         <div className="flex justify-between items-center border-b pb-2">
-          <h2 className="text-xs font-bold text-foreground uppercase tracking-wider">
-            Section 3: Lot Batch Configuration
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xs font-bold text-foreground uppercase tracking-wider">
+              Section 3: Lot Batch Configuration
+            </h2>
+            {batchError && (
+              <span className="text-xs text-red-500 font-medium flex items-center gap-1 animate-pulse">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {batchError}
+              </span>
+            )}
+          </div>
           {items.length > 0 && (
             <Button
               type="button"

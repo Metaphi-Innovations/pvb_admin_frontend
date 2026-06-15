@@ -190,39 +190,53 @@ export function CustomerStatusControl({
 
   return (
     <div className="flex items-center gap-2">
-      <Switch
-        checked={customer.status === "active"}
-        onCheckedChange={handleToggle}
-        aria-label={customer.status === "active" ? "Active" : "Inactive"}
-      />
       <Popover>
         <PopoverTrigger asChild>
           <button
             type="button"
             className={cn(
-              "inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md font-medium",
+              "inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium border border-border/80 bg-white hover:bg-muted/30 transition-colors shadow-sm",
               cfg.bg,
               cfg.text,
             )}
           >
+            <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
             {cfg.label}
-            <ChevronDown className="w-3 h-3 opacity-50" />
+            <ChevronDown className="w-3 h-3 opacity-60 ml-0.5" />
           </button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-44 p-1">
+        <PopoverContent align="start" className="w-44 p-1 rounded-xl border border-border bg-white shadow-md z-[300]">
+          {customer.status !== "active" && (
+            <button
+              type="button"
+              className="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-muted/60 font-medium"
+              onClick={() => handlePickStatus("active")}
+            >
+              Mark Active
+            </button>
+          )}
+          {customer.status !== "inactive" && (
+            <button
+              type="button"
+              className="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-muted/60 font-medium"
+              onClick={() => handlePickStatus("inactive")}
+            >
+              Mark Inactive
+            </button>
+          )}
           <button
             type="button"
-            className="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-muted/60 text-red-600"
-            onClick={() => handlePickStatus("blocked")}
-          >
-            Block customer…
-          </button>
-          <button
-            type="button"
-            className="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-muted/60"
+            className="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-muted/60 font-medium"
             onClick={() => handlePickStatus("draft")}
           >
             Mark as Draft
+          </button>
+          <button
+            type="button"
+            className="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-muted/60 text-red-600 font-medium border-t border-border/50 mt-1 pt-1.5"
+            onClick={() => handlePickStatus("blocked")}
+          >
+            Block Customer…
           </button>
         </PopoverContent>
       </Popover>

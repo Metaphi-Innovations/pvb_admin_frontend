@@ -1,4 +1,4 @@
-﻿// ── Employee Master — types, seed data, validation, and storage helpers ──────
+// ── Employee Master — types, seed data, validation, and storage helpers ──────
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -39,6 +39,7 @@ export interface Employee {
   fullName: string;
   email: string;                // Unique
   mobile: string;               // 10-digit, unique
+  password?: string;
   countryCode?: string;         // e.g. "+91"
   alternativeMobile?: string;
   bloodGroup: "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-" | "Unknown";
@@ -559,19 +560,59 @@ export function validateCircularReporting(
 
 export const SEED_EMPLOYEES: Employee[] = [
   {
-    id: 1, employeeId: "EMP-0001", firstName: "Rajesh", lastName: "Kumar",
-    fullName: "Rajesh Kumar", email: "rajesh.kumar@paramverse.bio",
-    mobile: "9876543210", countryCode: "+91", bloodGroup: "B+", gender: "Male",
-    dob: "1985-05-15", employeeType: "Full-time",
-    departmentId: 1, department: "Sales", roleType: "Field User",
-    salesType: "Retail Sales", roleId: 106, role: "RSM",
-    geoZone: "West", geoRegion: "Mumbai", territory: "Mumbai Region",
-    emergencyContactName: "Priya Kumar", emergencyContactMobile: "9876543215",
+    id: 1,
+    employeeId: "EMP-0001",
+    firstName: "Rajesh",
+    lastName: "Kumar",
+    fullName: "Rajesh Kumar",
+    email: "rajesh.kumar@paramverse.bio",
+    mobile: "9876543210",
+    countryCode: "+91",
+    alternativeMobile: "9988776655",
+    bloodGroup: "B+",
+    gender: "Male",
+    dob: "1985-05-15",
+    employeeType: "Full-time",
+    departmentId: 1,
+    department: "Sales",
+    roleType: "Field User",
+    salesType: "Retail Sales",
+    roleId: 106,
+    role: "RSM",
+    geoZone: "West",
+    geoRegion: "Mumbai",
+    territory: "Mumbai Region",
+    emergencyContactName: "Priya Kumar",
+    emergencyContactMobile: "9876543215",
     emergencyContactRelation: "Spouse",
+    emergencyContactAddress: "123 Business Park, Mumbai 400001",
     currentAddress: "123 Business Park, Mumbai 400001",
-    reportingManagerId: null, reportingManager: "", status: "active",
-    joiningDate: "2018-03-20", createdBy: "Admin", createdDate: "2024-01-10",
-    updatedBy: "Admin", updatedDate: "2024-01-10", lastStatusChange: "2024-01-10",
+    permanentAddress: "Flat 101, Star Heights, FC Road, Pune 411004",
+    geoMappings: [
+      {
+        geoZone: "West",
+        geoRegion: "Mumbai",
+        geoArea: "Central Mumbai",
+        territory: "Mumbai Region",
+        geoLocality: "Dadar",
+      }
+    ],
+    approvalLevel1Id: 4,
+    approvalLevel1Name: "Priya Patel",
+    approvalLevel1Role: "HR Manager",
+    approvalLevel2Id: 5,
+    approvalLevel2Name: "Arjun Verma",
+    approvalLevel2Role: "Accounts Manager",
+    permissions: fullPermissions(),
+    reportingManagerId: null,
+    reportingManager: "",
+    status: "active",
+    joiningDate: "2018-03-20",
+    createdBy: "Admin",
+    createdDate: "2024-01-10",
+    updatedBy: "Admin",
+    updatedDate: "2024-01-10",
+    lastStatusChange: "2024-01-10",
   },
   {
     id: 2, employeeId: "EMP-0002", firstName: "Anjali", lastName: "Sharma",
@@ -714,7 +755,7 @@ export const SEED_EMPLOYEES: Employee[] = [
 // ── localStorage Helpers ──────────────────────────────────────────────────────
 
 const EMPLOYEE_KEY = "ds_employees";
-const EMPLOYEE_VERSION = 2;
+const EMPLOYEE_VERSION = 3;
 
 interface StoredEmployeeData {
   version: number;

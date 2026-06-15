@@ -3,7 +3,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,9 +15,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  Plus, Download, MoreVertical, Eye, Edit2, Trash2,
+  Plus, Eye, Edit2, Trash2,
   Building2, CheckCircle2, XCircle, X, AlertTriangle,
-  Calendar, Clock, MoreHorizontal,
+  Clock, MoreHorizontal,
 } from "lucide-react";
 import DepartmentSheet, { type Department } from "./components/DepartmentSheet";
 import DepartmentDetailSheet from "./components/DepartmentDetailSheet";
@@ -118,20 +117,68 @@ function ConfirmDialog({ open, onClose, onConfirm, title, description, confirmLa
   );
 }
 
-// ── KPI Card ──────────────────────────────────────────────────────────────────
-function KpiCard({ label, value, icon: Icon, accent }: {
-  label: string; value: number; icon: React.ElementType; accent?: boolean;
-}) {
+// ── Status Configuration ──────────────────────────────────────────────────────
+const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
+  active:   { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
+  inactive: { bg: "bg-slate-100",  text: "text-slate-600",   dot: "bg-slate-400"   },
+  draft:    { bg: "bg-blue-50",    text: "text-blue-700",    dot: "bg-blue-500"    },
+  archived: { bg: "bg-red-50",     text: "text-red-700",     dot: "bg-red-400"     },
+};
+
+function StatusToggle({ record, onToggle }: { record: Department; onToggle: (item: Department) => void }) {
+  const active = record.status === "active";
   return (
-    <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggle(record);
+      }}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+        active
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
+      )}
+    >
+      {active ? "Active" : "Inactive"}
+    </button>
+  );
+}
+
+function AuditCell({ name, date }: { name?: string; date?: string }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[11px] font-semibold leading-4 text-brand-700">
+        {name || "—"}
+      </p>
+      <p className="text-[10px] font-mono leading-3 text-muted-foreground">
+        {date || "—"}
+      </p>
+    </div>
+  );
+}
+
+// ── KPI Card ──────────────────────────────────────────────────────────────────
+interface KpiCardProps {
+  label: string;
+  value: number;
+  icon: React.ElementType;
+  bgClass?: string;
+}
+
+function KpiCard({ label, value, icon: Icon, bgClass = "bg-brand-600" }: KpiCardProps) {
+  return (
+    <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
       <div className={cn(
         "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-        accent ? "bg-brand-600" : "bg-muted",
+        bgClass,
       )}>
-        <Icon className={cn("w-4 h-4", accent ? "text-white" : "text-muted-foreground")} />
+        <Icon className="w-4 h-4 text-white" />
       </div>
       <div>
-        <p className="text-base font-bold leading-none text-foreground">{value}</p>
+        <p className="text-base font-bold text-foreground leading-none">{value}</p>
         <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{label}</p>
       </div>
     </div>
@@ -240,6 +287,16 @@ export default function DepartmentPage() {
     closeSheet();
   };
 
+  const toggleStatus = (dept: Department) => {
+    const nextStatus = dept.status === "active" ? "inactive" : "active";
+    setDepartments(p => p.map(d =>
+      d.id === dept.id
+        ? { ...d, status: nextStatus, updatedBy: "Admin", updatedDate: todayStr(), lastStatusChange: todayStr() }
+        : d,
+    ));
+    showToast(`Department status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`);
+  };
+
   const handleQuickToggle = (dept: Department) => {
     setConfirmTarget({ type: "toggle-status", dept });
   };
@@ -316,46 +373,17 @@ export default function DepartmentPage() {
         { label: "Active", value: "active" },
         { label: "Inactive", value: "inactive" },
       ],
-      render: (val, row) => (
-        <Switch
-          checked={row.status === "active"}
-          onCheckedChange={() => handleQuickToggle(row)}
-        />
-      ),
+      render: (val, row) => <StatusToggle record={row} onToggle={toggleStatus} />,
     },
     {
       key: "createdDate",
-      header: "Created",
-      render: (val, row) => (
-        <div className="flex items-start gap-2">
-          <div className="w-6 h-6 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <Calendar className="w-3 h-3 text-blue-500" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[11px] text-muted-foreground leading-tight truncate">
-              By <span className="font-medium text-foreground">{row.createdBy}</span> on{" "}
-              <span className="font-medium text-foreground">{row.createdDate}</span>
-            </p>
-          </div>
-        </div>
-      ),
+      header: "Created By",
+      render: (val, row) => <AuditCell name={row.createdBy} date={row.createdDate} />,
     },
     {
       key: "updatedDate",
       header: "Updated",
-      render: (val, row) => (
-        <div className="flex items-start gap-2">
-          <div className="w-6 h-6 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <Clock className="w-3 h-3 text-amber-500" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[11px] text-muted-foreground leading-tight truncate">
-              By <span className="font-medium text-foreground">{row.updatedBy}</span> on{" "}
-              <span className="font-medium text-foreground">{row.updatedDate}</span>
-            </p>
-          </div>
-        </div>
-      ),
+      render: (val, row) => <AuditCell name={row.updatedBy} date={row.updatedDate} />,
     },
     {
       key: "actions",
@@ -380,21 +408,14 @@ export default function DepartmentPage() {
             <DropdownMenuItem onClick={() => openEdit(row)} className="cursor-pointer">
               <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
             </DropdownMenuItem>
-            {/* <DropdownMenuItem onClick={() => handleQuickToggle(row)} className="cursor-pointer">
-              {row.status === "active" ? (
-                <>
-                  <XCircle className="w-3.5 h-3.5 mr-2 text-amber-500" /> Deactivate
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-3.5 h-3.5 mr-2 text-emerald-500" /> Activate
-                </>
-              )}
-            </DropdownMenuItem> */}
             <DropdownMenuSeparator />
-            {/* <DropdownMenuItem onClick={() => handleDelete(row)} className="text-red-600 cursor-pointer focus:bg-red-50 focus:text-red-600">
+            <DropdownMenuItem onClick={() => handleQuickToggle(row)} className="cursor-pointer">
+              {row.status === "active" ? "Deactivate" : "Activate"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => handleDelete(row)} className="cursor-pointer text-red-600 focus:bg-red-50 focus:text-red-600">
               <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
-            </DropdownMenuItem> */}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       ),
@@ -407,9 +428,9 @@ export default function DepartmentPage() {
       titleIcon={Building2}
       metrics={
         <div className="grid grid-cols-3 gap-3">
-          <KpiCard label="Total Departments" value={summary.total}    icon={Building2}    accent />
-          <KpiCard label="Active"            value={summary.active}   icon={CheckCircle2}        />
-          <KpiCard label="Inactive"          value={summary.inactive} icon={XCircle}             />
+          <KpiCard label="Total Departments" value={summary.total}    icon={Building2}    bgClass="bg-brand-600" />
+          <KpiCard label="Active"            value={summary.active}   icon={CheckCircle2} bgClass="bg-emerald-600" />
+          <KpiCard label="Inactive"          value={summary.inactive} icon={XCircle}      bgClass="bg-slate-400" />
         </div>
       }
     >
@@ -428,7 +449,7 @@ export default function DepartmentPage() {
           searchPlaceholder="Search department…"
           onAdd={openAdd}
           addLabel="Add Department"
-          onExport={() => {}}
+          onExport={undefined}
           currentFilters={filters}
           currentSort={sort}
         />

@@ -23,6 +23,10 @@ import {
   loadDistributors,
 } from "../../../database/distributor/distributor-data";
 import {
+  type Farmer,
+  SEED as FARMER_SEED,
+} from "../../../database/farmer/farmer-data";
+import {
   type Event,
   EVENTS_STORAGE_KEY,
   VIEW_EVENT_STORAGE_KEY,
@@ -34,29 +38,8 @@ import {
 } from "../event-data";
 
 const CUSTOMER_DISTRIBUTOR_ID_OFFSET = 100000;
-const LOCATION_LEVELS: GeoLevel[] = ["Zone", "State", "Region", "Area", "Territory", "Locality", "Pincode"];
-const FARMER_NAMES = [
-  "Ramesh Patel",
-  "Suresh Kumar",
-  "Mahesh Singh",
-  "Prakash Rao",
-  "Rajan Verma",
-  "Haridas Patil",
-  "Gopal Nair",
-  "Bharat Das",
-  "Lakshmi Reddy",
-  "Sunita Chauhan",
-  "Devendra Yadav",
-  "Manjunath Gowda",
-  "Pooja Jat",
-  "Ajay Boro",
-  "Rekha Pawar",
-  "Tsering Namgyal",
-  "Imran Sheikh",
-  "Nirmala Sahu",
-  "Joseph Mathew",
-  "Kavita Solanki",
-] as const;
+const LOCATION_LEVELS: GeoLevel[] = ["Zone", "State", "Region", "Area", "Territory", "Locality", "City"];
+type AttendanceTab = "users" | "farmers" | "distributors";
 
 function formatTitleCase(value: string) {
   return value
@@ -64,10 +47,6 @@ function formatTitleCase(value: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-}
-
-function formatListOrDash(values: string[]) {
-  return values.length > 0 ? values.join(", ") : "-";
 }
 
 function withSuffix(value: string, suffix: string) {
@@ -141,8 +120,81 @@ function InfoField({
   return (
     <div className={cn("space-y-1.5", className)}>
       <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
-      <div className="min-h-[36px] rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-sm">
+      <div className="min-h-[36px] rounded-lg border border-border bg-white px-3 py-2 text-xs text-foreground shadow-sm">
         {value}
+      </div>
+    </div>
+  );
+}
+
+interface AttendanceColumn<T> {
+  header: string;
+  cell: (row: T) => React.ReactNode;
+  className?: string;
+}
+
+function AttendanceTable<T>({
+  rows,
+  columns,
+  emptyMessage,
+  getRowKey,
+}: {
+  rows: T[];
+  columns: AttendanceColumn<T>[];
+  emptyMessage: string;
+  getRowKey: (row: T, index: number) => string;
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-border bg-muted/40">
+              {columns.map((column) => (
+                <th
+                  key={column.header}
+                  className={cn(
+                    "px-4 py-3 text-left text-xs font-semibold whitespace-nowrap text-foreground",
+                    column.className,
+                  )}
+                >
+                  {column.header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={columns.length}
+                  className="px-4 py-6 text-center text-xs text-muted-foreground"
+                >
+                  {emptyMessage}
+                </td>
+              </tr>
+            ) : (
+              rows.map((row, index) => (
+                <tr
+                  key={getRowKey(row, index)}
+                  className="border-b border-border/60 last:border-b-0"
+                >
+                  {columns.map((column) => (
+                    <td
+                      key={column.header}
+                      className={cn(
+                        "px-4 py-2 text-xs align-top text-foreground whitespace-nowrap",
+                        column.className,
+                      )}
+                    >
+                      {column.cell(row)}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -156,6 +208,8 @@ export default function EventViewPage() {
   const [users, setUsers] = useState<Employee[]>([]);
   const [distributors, setDistributors] = useState<Distributor[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [activeAttendanceTab, setActiveAttendanceTab] =
+    useState<AttendanceTab>("users");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -190,50 +244,156 @@ export default function EventViewPage() {
     setViewEvent(selectedEvent ?? events[0] ?? null);
   }, [events]);
 
+  useEffect(() => {
+    setActiveAttendanceTab("users");
+  }, [viewEvent?.id]);
+
   const currentEventIndex = useMemo(
     () => (viewEvent ? events.findIndex((event) => event.id === viewEvent.id) : -1),
     [events, viewEvent],
-  );
-  const userLabelMap = useMemo(
-    () => new Map(users.map((user) => [user.id, user.fullName])),
-    [users],
-  );
-  const farmerLabelMap = useMemo(
-    () => new Map<number, string>(FARMER_NAMES.map((name, index) => [index + 1, name])),
-    [],
-  );
-  const distributorLabelMap = useMemo(
-    () =>
-      new Map([
-        ...distributors.map((distributor) => [distributor.id, distributor.firmName] as const),
-        ...customers.map((customer) => [CUSTOMER_DISTRIBUTOR_ID_OFFSET + customer.id, customer.customerName] as const),
-      ]),
-    [customers, distributors],
   );
   const locationDisplay = useMemo(
     () => (viewEvent ? resolveLocationDisplay(viewEvent, geoNodes) : null),
     [geoNodes, viewEvent],
   );
-  const viewEventUsers = useMemo(
+  const farmerMap = useMemo(
+    () => new Map<number, Farmer>(FARMER_SEED.map((farmer) => [farmer.id, farmer])),
+    [],
+  );
+  const distributorMap = useMemo(
+    () =>
+      new Map<number, Distributor>(
+        distributors.map((distributor) => [distributor.id, distributor]),
+      ),
+    [distributors],
+  );
+  const customerDistributorMap = useMemo(
+    () =>
+      new Map<number, Customer>(
+        customers.map((customer) => [customer.id, customer]),
+      ),
+    [customers],
+  );
+  const userAttendanceRows = useMemo(
     () =>
       (viewEvent?.userAttendeeIds ?? [])
-        .map((id) => userLabelMap.get(id))
-        .filter((value): value is string => Boolean(value)),
-    [userLabelMap, viewEvent],
+        .map((id) => users.find((user) => user.id === id))
+        .filter((user): user is Employee => Boolean(user)),
+    [users, viewEvent],
   );
-  const viewEventFarmers = useMemo(
+  const farmerAttendanceRows = useMemo(
     () =>
       (viewEvent?.farmerAttendeeIds ?? [])
-        .map((id) => farmerLabelMap.get(id))
-        .filter((value): value is string => Boolean(value)),
-    [farmerLabelMap, viewEvent],
+        .map((id) => farmerMap.get(id))
+        .filter((farmer): farmer is Farmer => Boolean(farmer)),
+    [farmerMap, viewEvent],
   );
-  const viewEventDistributors = useMemo(
+  const distributorAttendanceRows = useMemo(
     () =>
       (viewEvent?.distributorAttendeeIds ?? [])
-        .map((id) => distributorLabelMap.get(id))
-        .filter((value): value is string => Boolean(value)),
-    [distributorLabelMap, viewEvent],
+        .map((id) => {
+          if (id >= CUSTOMER_DISTRIBUTOR_ID_OFFSET) {
+            const customer = customerDistributorMap.get(id - CUSTOMER_DISTRIBUTOR_ID_OFFSET);
+            if (!customer) return null;
+
+            return {
+              key: `customer-${customer.id}`,
+              name: customer.customerName,
+              mobile: customer.mobile || "-",
+              district: customer.districtName || "-",
+              state: customer.stateName || "-",
+              source: "Customer Master",
+              detail: customer.customerType || "-",
+            };
+          }
+
+          const distributor = distributorMap.get(id);
+          if (!distributor) return null;
+
+          return {
+            key: `distributor-${distributor.id}`,
+            name: distributor.firmName,
+            mobile: distributor.phoneNumber || "-",
+            district: distributor.district || "-",
+            state: distributor.state || "-",
+            source: "Distributor Listing",
+            detail: distributor.distributorCategory || "-",
+          };
+        })
+        .filter(
+          (
+            distributor,
+          ): distributor is {
+            key: string;
+            name: string;
+            mobile: string;
+            district: string;
+            state: string;
+            source: string;
+            detail: string;
+          } => Boolean(distributor),
+        ),
+    [customerDistributorMap, distributorMap, viewEvent],
+  );
+  const userAttendanceColumns = useMemo<AttendanceColumn<Employee>[]>(
+    () => [
+      {
+        header: "User ID",
+        cell: (user) => (
+          <span className="font-mono font-semibold text-brand-700">
+            {user.employeeId}
+          </span>
+        ),
+      },
+      { header: "User Name", cell: (user) => user.fullName },
+      { header: "Role", cell: (user) => user.role || "-" },
+      { header: "Department", cell: (user) => user.department || "-" },
+      { header: "Mobile", cell: (user) => user.mobile || "-", className: "font-mono" },
+      {
+        header: "Status",
+        cell: (user) => formatTitleCase(user.status),
+      },
+    ],
+    [],
+  );
+  const farmerAttendanceColumns = useMemo<AttendanceColumn<Farmer>[]>(
+    () => [
+      {
+        header: "Farmer ID",
+        cell: (farmer) => (
+          <span className="font-mono font-semibold text-brand-700">
+            {`FMR-${String(farmer.id).padStart(3, "0")}`}
+          </span>
+        ),
+      },
+      { header: "Farmer Name", cell: (farmer) => farmer.name },
+      { header: "Mobile", cell: (farmer) => farmer.phoneNumber, className: "font-mono" },
+      { header: "Village", cell: (farmer) => farmer.village },
+      { header: "District", cell: (farmer) => farmer.district },
+      { header: "Current Crop", cell: (farmer) => farmer.currentCrop },
+    ],
+    [],
+  );
+  const distributorAttendanceColumns = useMemo<
+    AttendanceColumn<{
+      key: string;
+      name: string;
+      mobile: string;
+      district: string;
+      state: string;
+      source: string;
+      detail: string;
+    }>[]
+  >(
+    () => [
+      { header: "Name", cell: (row) => row.name },
+      { header: "Mobile", cell: (row) => row.mobile, className: "font-mono" },
+      { header: "District", cell: (row) => row.district },
+      { header: "State", cell: (row) => row.state },
+      { header: "Source", cell: (row) => row.source },
+      { header: "Category / Type", cell: (row) => row.detail },
+    ],
+    [],
   );
 
   const handleStepViewEvent = (direction: -1 | 1) => {
@@ -375,23 +535,52 @@ export default function EventViewPage() {
             </SectionCard>
 
             <SectionCard title="Attendance">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-                <InfoField label="Expected Attendees" value={viewEvent.expectedAttendees} />
-                <InfoField label="Actual Attendees" value={viewEvent.actualAttendees} />
-                <InfoField label="Users Invited" value={viewEvent.userAttendeeIds?.length ?? 0} />
-                <InfoField label="Farmers Invited" value={viewEvent.farmerAttendeeIds?.length ?? 0} />
-                <InfoField label="Distributors Invited" value={viewEvent.distributorAttendeeIds?.length ?? 0} />
-              </div>
+              <Tabs
+                value={activeAttendanceTab}
+                onValueChange={(value) =>
+                  setActiveAttendanceTab(value as AttendanceTab)
+                }
+                className="space-y-4"
+              >
+                <TabsList className="w-full gap-0 overflow-x-auto">
+                  <TabsTrigger value="users" className="text-xs">
+                    {`Users (${userAttendanceRows.length})`}
+                  </TabsTrigger>
+                  <TabsTrigger value="farmers" className="text-xs">
+                    {`Farmers (${farmerAttendanceRows.length})`}
+                  </TabsTrigger>
+                  <TabsTrigger value="distributors" className="text-xs">
+                    {`Distributors (${distributorAttendanceRows.length})`}
+                  </TabsTrigger>
+                </TabsList>
 
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <InfoField label="Users" value={formatListOrDash(viewEventUsers)} />
-                <InfoField label="Farmers" value={formatListOrDash(viewEventFarmers)} />
-                <InfoField
-                  label="Distributors"
-                  value={formatListOrDash(viewEventDistributors)}
-                  className="lg:col-span-2"
-                />
-              </div>
+                <TabsContent value="users" className="m-0">
+                  <AttendanceTable
+                    rows={userAttendanceRows}
+                    columns={userAttendanceColumns}
+                    emptyMessage="No users linked to this event."
+                    getRowKey={(user) => String(user.id)}
+                  />
+                </TabsContent>
+
+                <TabsContent value="farmers" className="m-0">
+                  <AttendanceTable
+                    rows={farmerAttendanceRows}
+                    columns={farmerAttendanceColumns}
+                    emptyMessage="No farmers linked to this event."
+                    getRowKey={(farmer) => String(farmer.id)}
+                  />
+                </TabsContent>
+
+                <TabsContent value="distributors" className="m-0">
+                  <AttendanceTable
+                    rows={distributorAttendanceRows}
+                    columns={distributorAttendanceColumns}
+                    emptyMessage="No distributors linked to this event."
+                    getRowKey={(row) => row.key}
+                  />
+                </TabsContent>
+              </Tabs>
             </SectionCard>
 
             <SectionCard title="Location">

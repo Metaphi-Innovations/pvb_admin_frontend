@@ -59,7 +59,7 @@ function InfoField({
   return (
     <div className={cn("space-y-1.5", className)}>
       <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
-      <div className="min-h-[36px] rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-sm">
+      <div className="min-h-[36px] rounded-lg border border-border bg-white px-3 py-2 text-xs text-foreground shadow-sm">
         {value}
       </div>
     </div>

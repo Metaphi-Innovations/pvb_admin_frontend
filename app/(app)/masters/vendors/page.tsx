@@ -37,6 +37,21 @@ import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 
+function AuditCell({
+  name,
+  date,
+}: {
+  name?: string;
+  date?: string;
+}) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[11px] font-semibold leading-4 text-brand-700">{name || "—"}</p>
+      <p className="text-[10px] font-mono leading-3 text-muted-foreground">{date || "—"}</p>
+    </div>
+  );
+}
+
 interface ToastState {
   msg: string;
   type: "success" | "error";
@@ -123,6 +138,17 @@ export default function VendorMasterPage() {
 
   const columns: ColumnConfig<Vendor>[] = [
     {
+      key: "vendorCode",
+      header: "Vendor Code",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => (
+        <span className="font-mono text-xs text-brand-700">{row.vendorCode}</span>
+      ),
+    },
+    {
       key: "vendorName",
       header: "Vendor Name",
       sortable: true,
@@ -130,16 +156,13 @@ export default function VendorMasterPage() {
       filterType: "text",
       width: "180px",
       render: (val, row) => (
-        <div>
-          <button
-            type="button"
-            className="font-medium text-[13px] text-brand-700 hover:underline text-left"
-            onClick={() => router.push(`/masters/vendors/${row.id}`)}
-          >
-            {row.vendorName}
-          </button>
-          <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{row.vendorCode}</p>
-        </div>
+        <button
+          type="button"
+          className="block group/name text-left w-full"
+          onClick={() => router.push(`/masters/vendors/${row.id}`)}
+        >
+          <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">{row.vendorName}</p>
+        </button>
       ),
     },
     {
@@ -210,21 +233,21 @@ export default function VendorMasterPage() {
     },
     {
       key: "createdBy",
-      header: "Created By",
+      header: "Created",
       sortable: true,
       filterable: true,
       filterType: "text",
       width: "110px",
-      render: (val, row) => row.createdBy || "—",
+      render: (val, row) => <AuditCell name={row.createdBy} date={row.createdDate} />,
     },
     {
       key: "updatedBy",
-      header: "Updated By",
+      header: "Updated",
       sortable: true,
       filterable: true,
       filterType: "text",
       width: "110px",
-      render: (val, row) => row.updatedBy || "—",
+      render: (val, row) => <AuditCell name={row.updatedBy} date={row.updatedDate} />,
     },
   ];
 
@@ -295,6 +318,42 @@ export default function VendorMasterPage() {
     return filtered.slice(startOffset, startOffset + pageSize);
   }, [filtered, page, pageSize]);
 
+  const handleExport = () => {
+    const rows = filtered.map((row) => ({
+      "Vendor Name": row.vendorName,
+      "Vendor Code": row.vendorCode,
+      "Company Name": row.companyName || "",
+      "Mobile Number": `${row.mobileCountryCode} ${row.mobile || ""}`.trim(),
+      "Email ID": row.email || "",
+      GSTIN: row.gstApplicable ? row.gstNumber || "" : "",
+      "Credit Period": formatCreditPeriod(row),
+      Status: row.status,
+      "Created By": row.createdBy || "",
+      "Updated By": row.updatedBy || "",
+    }));
+
+    const headers = Object.keys(rows[0] || {});
+    const csv = [
+      headers.join(","),
+      ...rows.map((row) =>
+        headers
+          .map((header) => {
+            const value = String(row[header as keyof typeof row] ?? "");
+            return `"${value.replace(/"/g, '""')}"`;
+          })
+          .join(","),
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `vendor-master-${todayStr()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   useEffect(() => {
     setPage(1);
   }, [filters, sort, pageSize]);
@@ -326,6 +385,7 @@ export default function VendorMasterPage() {
           actions={actions}
           onAdd={() => router.push("/masters/vendors/new")}
           addLabel="Create Vendor"
+          onExport={handleExport}
           emptyMessage="vendors"
           searchPlaceholder="Search name, company, mobile, GSTIN…"
           currentFilters={filters}

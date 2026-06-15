@@ -80,6 +80,7 @@ export default function ViewSalesOrderPage() {
   const [packingOpen, setPackingOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [activeSubTab, setActiveSubTab] = useState("overview");
 
   const refresh = () => {
     const o = getOrderById(id);

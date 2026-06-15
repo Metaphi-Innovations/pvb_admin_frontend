@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuItem
@@ -13,7 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  Plus, Download, MoreVertical, Eye, Edit2,
+  Plus, Eye, Edit2, Trash2,
   Shield, CheckCircle2, XCircle, X, AlertTriangle,
   Clock, MoreHorizontal
 } from "lucide-react";
@@ -158,22 +157,65 @@ function ConfirmDialog({ open, onClose, config }: ConfirmDialogProps) {
   );
 }
 
+// ── Status Configuration ──────────────────────────────────────────────────────
+const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
+  active:   { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
+  inactive: { bg: "bg-slate-100",  text: "text-slate-600",   dot: "bg-slate-400"   },
+  draft:    { bg: "bg-blue-50",    text: "text-blue-700",    dot: "bg-blue-500"    },
+  archived: { bg: "bg-red-50",     text: "text-red-700",     dot: "bg-red-400"     },
+};
+
+function StatusToggle({ record, onToggle }: { record: Role; onToggle: (item: Role) => void }) {
+  const active = record.status === "active";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggle(record);
+      }}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+        active
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
+      )}
+    >
+      {active ? "Active" : "Inactive"}
+    </button>
+  );
+}
+
+function AuditCell({ name, date }: { name?: string; date?: string }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[11px] font-semibold leading-4 text-brand-700">
+        {name || "—"}
+      </p>
+      <p className="text-[10px] font-mono leading-3 text-muted-foreground">
+        {date || "—"}
+      </p>
+    </div>
+  );
+}
+
 // ── KPI Card ─────────────────────────────────────────────────────────────────
 interface KpiCardProps {
   label: string;
   value: number;
   icon: React.ElementType;
-  accent?: boolean;
+  bgClass?: string;
 }
 
-function KpiCard({ label, value, icon: Icon, accent }: KpiCardProps) {
+function KpiCard({ label, value, icon: Icon, bgClass = "bg-brand-600" }: KpiCardProps) {
   return (
     <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
       <div className={cn(
         "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-        accent ? "bg-brand-600" : "bg-muted",
+        bgClass,
       )}>
-        <Icon className={cn("w-4 h-4", accent ? "text-white" : "text-muted-foreground")} />
+        <Icon className="w-4 h-4 text-white" />
       </div>
       <div>
         <p className="text-base font-bold text-foreground leading-none">{value}</p>
@@ -256,6 +298,23 @@ export default function RolesPage() {
   const openAdd  = () => router.push("/user-management/roles/add");
   const openEdit = (role: Role) => router.push("/user-management/roles/" + role.id + "/edit");
 
+  const toggleStatus = (role: Role) => {
+    const nextStatus = role.status === "active" ? "inactive" : "active";
+    const count = MOCK_USER_COUNTS[role.id] ?? 0;
+    if (nextStatus === "inactive" && count > 0) {
+      showToast("Cannot deactivate: " + count + " user(s) assigned to this role", "error");
+      return;
+    }
+    const next = roles.map(r =>
+      r.id === role.id
+        ? { ...r, status: nextStatus, updatedBy: "Admin", updatedDate: todayStr() }
+        : r,
+    ) as Role[];
+    setRoles(next);
+    saveRoles(next);
+    showToast("Role status updated to " + (nextStatus === "active" ? "Active" : "Inactive"));
+  };
+
   const handleQuickToggle = (role: Role) => setConfirmTarget({ kind: "toggle-status", role });
   const handleDelete      = (role: Role) => {
     const count = MOCK_USER_COUNTS[role.id] ?? 0;
@@ -333,35 +392,17 @@ export default function RolesPage() {
         { label: "Active", value: "active" },
         { label: "Inactive", value: "inactive" },
       ],
-      render: (val, row) => (
-        <Switch
-          checked={row.status === "active"}
-          onCheckedChange={() => handleQuickToggle(row)}
-        />
-      ),
+      render: (val, row) => <StatusToggle record={row} onToggle={toggleStatus} />,
     },
     {
       key: "createdBy",
       header: "Created By",
-      render: (val, row) => (
-        <p className="text-[11px] text-muted-foreground">
-          {row.createdBy} · {row.createdDate}
-        </p>
-      ),
+      render: (val, row) => <AuditCell name={row.createdBy} date={row.createdDate} />,
     },
     {
       key: "updatedDate",
       header: "Updated",
-      render: (val, row) => (
-        <div className="flex items-start gap-2">
-          <div className="w-6 h-6 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <Clock className="w-3 h-3 text-amber-500" />
-          </div>
-          <p className="text-[11px] text-muted-foreground leading-tight">
-            {row.updatedBy} · {row.updatedDate}
-          </p>
-        </div>
-      ),
+      render: (val, row) => <AuditCell name={row.updatedBy} date={row.updatedDate} />,
     },
     {
       key: "actions",
@@ -372,7 +413,7 @@ export default function RolesPage() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="p-1.5 hover:bg-muted rounded-md transition-colors">
-              <MoreVertical className="w-4 h-4 text-muted-foreground" />
+              <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44 z-[200]">
@@ -386,6 +427,14 @@ export default function RolesPage() {
             <DropdownMenuItem onClick={() => openEdit(row)} className="cursor-pointer">
               <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => handleQuickToggle(row)} className="cursor-pointer">
+              {row.status === "active" ? "Deactivate" : "Activate"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => handleDelete(row)} className="cursor-pointer text-red-600 focus:bg-red-50 focus:text-red-600">
+              <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       ),
@@ -398,9 +447,9 @@ export default function RolesPage() {
       titleIcon={Shield}
       metrics={
         <div className="grid grid-cols-3 gap-3">
-          <KpiCard label="Total Roles" value={total}    icon={Shield}       accent />
-          <KpiCard label="Active"      value={active}   icon={CheckCircle2}        />
-          <KpiCard label="Inactive"    value={inactive} icon={XCircle}             />
+          <KpiCard label="Total Roles" value={total}    icon={Shield}       bgClass="bg-brand-600" />
+          <KpiCard label="Active"      value={active}   icon={CheckCircle2} bgClass="bg-emerald-600" />
+          <KpiCard label="Inactive"    value={inactive} icon={XCircle}      bgClass="bg-slate-400" />
         </div>
       }
     >
@@ -419,7 +468,7 @@ export default function RolesPage() {
           searchPlaceholder="Search role or department…"
           onAdd={openAdd}
           addLabel="Add Role"
-          onExport={() => {}}
+          onExport={undefined}
           currentFilters={filters}
           currentSort={sort}
         />

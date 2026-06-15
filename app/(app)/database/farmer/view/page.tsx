@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { RecordDetailPage } from "@/components/record-detail";
 import { cn } from "@/lib/utils";
 import {
+  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   ImageIcon,
@@ -16,7 +17,7 @@ import {
 } from "lucide-react";
 import { type Farmer, SEED, VIEW_FARMER_STORAGE_KEY } from "../farmer-data";
 
-function getOwnedLeasedSummary(farmer: Farmer) {
+function getOwnedLeasedTotals(farmer: Farmer) {
   const ownedTotal = farmer.cropEntries
     .filter((entry) => entry.ownershipType === "Owned")
     .reduce((sum, entry) => sum + Number.parseFloat(entry.landSize), 0);
@@ -24,10 +25,61 @@ function getOwnedLeasedSummary(farmer: Farmer) {
     .filter((entry) => entry.ownershipType === "Leased")
     .reduce((sum, entry) => sum + Number.parseFloat(entry.landSize), 0);
 
-  const parts: string[] = [];
-  if (ownedTotal > 0) parts.push(`${ownedTotal} Owned`);
-  if (leasedTotal > 0) parts.push(`${leasedTotal} Leased`);
-  return parts.join(" + ") || farmer.ownershipType;
+  return { ownedTotal, leasedTotal };
+}
+
+function formatArea(value: number) {
+  const formatted = Number.isInteger(value) ? String(value) : value.toFixed(1);
+  return `${formatted} Acres`;
+}
+
+function getCurrentCropSummary(farmer: Farmer) {
+  return Array.from(
+    new Set(
+      farmer.cropEntries
+        .map((entry) => entry.produceCropName.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function getCropRotationSummary(farmer: Farmer) {
+  return Array.from(
+    new Set(
+      farmer.cropEntries
+        .flatMap((entry) =>
+          entry.cropRotation
+            .split(/->|→/)
+            .map((part) => part.trim())
+            .filter(Boolean),
+        )
+        .filter(
+          (part) =>
+            !["fallow", "parcel based"].includes(part.toLowerCase()),
+        ),
+    ),
+  );
+}
+
+function splitChipItems(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function getChemicalBiologicalSplit(value: string) {
+  const chemicalMatch = value.match(/Chemical\s*([0-9]+%?)/i);
+  const biologicalMatch = value.match(/Biological\s*([0-9]+%?)/i);
+
+  return {
+    chemical: chemicalMatch?.[1] ?? "-",
+    biological: biologicalMatch?.[1] ?? "-",
+  };
 }
 
 function SectionBlock({
@@ -72,15 +124,51 @@ function ReadOnlyField({
 }) {
   return (
     <div className={cn("space-y-1.5", className)}>
-      <p className="text-xs font-medium text-foreground">{label}</p>
+      <p className="text-xs font-semibold tracking-tight text-foreground">{label}</p>
       <div
         className={cn(
-          "min-h-9 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-foreground",
+          "min-h-9 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-foreground",
           multiline ? "flex items-start leading-5" : "flex items-center",
           mono && "font-mono text-xs font-semibold text-brand-700",
         )}
       >
         {value}
+      </div>
+    </div>
+  );
+}
+
+function ChipField({
+  label,
+  items,
+  className,
+}: {
+  label: string;
+  items: string[];
+  className?: string;
+}) {
+  return (
+    <div className={cn("space-y-1.5", className)}>
+      <p className="text-xs font-semibold tracking-tight text-foreground">
+        {label}
+      </p>
+      <div className="min-h-9 rounded-lg border border-border bg-muted/30 px-3 py-2">
+        {items.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {items.map((item) => (
+              <span
+                key={item}
+                className="inline-flex items-center rounded-full border border-brand-200 bg-brand-50 px-2 py-1 text-[11px] font-medium text-brand-700"
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="flex min-h-5 items-center text-xs text-muted-foreground">
+            -
+          </div>
+        )}
       </div>
     </div>
   );
@@ -96,7 +184,7 @@ function FarmerPhoto({ farmer }: { farmer: Farmer }) {
 
   return (
     <div className="space-y-1.5">
-      <p className="text-xs font-medium text-foreground">Farmer Photo</p>
+      <p className="text-xs font-semibold tracking-tight text-foreground">Farmer Photo</p>
       <div className="flex h-[156px] flex-col items-center justify-center gap-2 rounded-xl border border-border bg-brand-50/70">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-600 text-lg font-bold text-white shadow-sm">
           {initials}
@@ -110,17 +198,27 @@ function FarmerPhoto({ farmer }: { farmer: Farmer }) {
   );
 }
 
+const FARMER_TABS = [
+  { id: "farmer-details", label: "Farmer Details" },
+  { id: "crop-land", label: "Crop and Land Details" },
+  { id: "product", label: "Product Details" },
+] as const;
+
 export default function FarmerViewPage() {
   const router = useRouter();
   const [farmers] = useState<Farmer[]>(SEED);
   const [viewFarmer, setViewFarmer] = useState<Farmer | null>(null);
-  const [activeTab, setActiveTab] = useState<"farmer-details" | "crop-land" | "product">("farmer-details");
+  const [activeTab, setActiveTab] = useState<
+    "farmer-details" | "crop-land" | "product"
+  >("farmer-details");
 
   useEffect(() => {
     let selectedFarmer: Farmer | undefined;
     if (typeof window !== "undefined") {
       const selectedId = window.sessionStorage.getItem(VIEW_FARMER_STORAGE_KEY);
-      selectedFarmer = farmers.find((farmer) => String(farmer.id) === selectedId);
+      selectedFarmer = farmers.find(
+        (farmer) => String(farmer.id) === selectedId,
+      );
     }
 
     setViewFarmer(selectedFarmer ?? farmers[0] ?? null);
@@ -133,10 +231,47 @@ export default function FarmerViewPage() {
   }, [viewFarmer?.id]);
 
   const currentViewFarmerIndex = useMemo(
-    () => (viewFarmer ? farmers.findIndex((farmer) => farmer.id === viewFarmer.id) : -1),
+    () =>
+      viewFarmer
+        ? farmers.findIndex((farmer) => farmer.id === viewFarmer.id)
+        : -1,
     [farmers, viewFarmer],
   );
   const canNavigateRecords = activeTab === "farmer-details";
+  const ownershipTotals = useMemo(
+    () =>
+      viewFarmer
+        ? getOwnedLeasedTotals(viewFarmer)
+        : { ownedTotal: 0, leasedTotal: 0 },
+    [viewFarmer],
+  );
+  const currentCropSummary = useMemo(
+    () => (viewFarmer ? getCurrentCropSummary(viewFarmer) : []),
+    [viewFarmer],
+  );
+  const cropRotationSummary = useMemo(
+    () => (viewFarmer ? getCropRotationSummary(viewFarmer) : []),
+    [viewFarmer],
+  );
+  const chemicalBiologicalSplit = useMemo(
+    () =>
+      viewFarmer
+        ? getChemicalBiologicalSplit(viewFarmer.chemicalBiologicalPercentage)
+        : { chemical: "-", biological: "-" },
+    [viewFarmer],
+  );
+  const brandProductUsesChips = useMemo(
+    () => (viewFarmer ? splitChipItems(viewFarmer.brandProductUses) : []),
+    [viewFarmer],
+  );
+  const brandsRecallChips = useMemo(
+    () => (viewFarmer ? splitChipItems(viewFarmer.brandsRecall) : []),
+    [viewFarmer],
+  );
+  const majorDiseasesChips = useMemo(
+    () => (viewFarmer ? splitChipItems(viewFarmer.majorDiseases) : []),
+    [viewFarmer],
+  );
 
   const handleStepViewFarmer = (direction: -1 | 1) => {
     if (currentViewFarmerIndex < 0) return;
@@ -145,7 +280,10 @@ export default function FarmerViewPage() {
     if (!nextFarmer) return;
 
     if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(VIEW_FARMER_STORAGE_KEY, String(nextFarmer.id));
+      window.sessionStorage.setItem(
+        VIEW_FARMER_STORAGE_KEY,
+        String(nextFarmer.id),
+      );
     }
     setViewFarmer(nextFarmer);
     router.push("/database/farmer/view");

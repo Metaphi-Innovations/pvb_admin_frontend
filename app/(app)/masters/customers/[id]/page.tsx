@@ -40,17 +40,17 @@ import {
   Wallet,
 } from "lucide-react";
 import {
-  type Customer,
-  type CustomerStatus,
-  loadCustomers,
-  saveCustomers,
-  todayStr,
-  CUSTOMER_TYPE_LABELS,
-  PAYMENT_TERMS_OPTIONS,
-  formatMobile,
-  formatCreditLimit,
-  getActiveGSTMasters,
-  getActiveTDSMasters,
+	type Customer,
+	type CustomerStatus,
+	loadCustomers,
+	saveCustomers,
+	todayStr,
+	CUSTOMER_TYPE_LABELS,
+	PAYMENT_TERMS_OPTIONS,
+	formatMobile,
+	formatCreditLimit,
+	getActiveGSTMasters,
+	getActiveTDSMasters,
 } from "../customer-data";
 import { readCustomerPermissions } from "../customer-permissions";
 import { loadOrders } from "@/app/(app)/sales/orders/orders-data";
@@ -143,12 +143,12 @@ export default function CustomerDetailPage() {
     fileName: string;
   } | null>(null);
 
-  useEffect(() => {
-    setPerms(readCustomerPermissions());
-    const list = loadCustomers();
-    setRecords(list);
-    setCustomer(list.find((c) => c.id === Number(id)) ?? null);
-  }, [id]);
+	useEffect(() => {
+		setPerms(readCustomerPermissions());
+		const list = loadCustomers();
+		setRecords(list);
+		setCustomer(list.find((c) => c.id === Number(id)) ?? null);
+	}, [id]);
 
   const orders = useMemo(() => {
     if (!customer) return [];

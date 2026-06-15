@@ -11,10 +11,12 @@ import {
 } from "@/components/record-detail";
 import { Clock, Mail, MapPin, Pencil, Phone, User, Warehouse } from "lucide-react";
 import {
-  type WarehouseMaster,
-  type WarehouseStatus,
-  loadWarehouses,
+	type WarehouseMaster,
+	type WarehouseStatus,
+	loadWarehouses,
+	formatStatus,
 } from "../warehouse-data";
+import { AppLayout } from "@/components/layout/AppLayout";
 
 const STATUS_LABEL: Record<WarehouseStatus, string> = {
   active: "Active",
@@ -36,10 +38,10 @@ export default function WarehouseDetailPage() {
   const [warehouse, setWarehouse] = useState<WarehouseMaster | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
 
-  useEffect(() => {
-    const list = loadWarehouses();
-    setWarehouse(list.find((w) => w.id === Number(id)) ?? null);
-  }, [id]);
+	useEffect(() => {
+		const list = loadWarehouses();
+		setWarehouse(list.find((w) => w.id === Number(id)) ?? null);
+	}, [id]);
 
   if (!warehouse) {
     return (

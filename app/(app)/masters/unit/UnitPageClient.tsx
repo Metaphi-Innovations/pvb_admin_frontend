@@ -107,6 +107,15 @@ function StatusToggle({ record, onToggle }: { record: UnitRecord; onToggle: (ite
   );
 }
 
+function AuditCell({ name, date }: { name: string; date?: string }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[11px] font-semibold leading-4 text-brand-700">{name}</p>
+      {date ? <p className="text-[10px] font-mono leading-3 text-muted-foreground">{date}</p> : null}
+    </div>
+  );
+}
+
 function SortTh({
   label,
   colKey,
@@ -477,7 +486,15 @@ export default function UnitMasterPage() {
                     className="w-[320px]"
                   />
                   <SortTh
-                    label="Created By"
+                    label="Status"
+                    colKey="status"
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                    className="w-[110px]"
+                  />
+                  <SortTh
+                    label="Created"
                     colKey="createdBy"
                     sortKey={sortKey}
                     sortDir={sortDir}
@@ -485,20 +502,12 @@ export default function UnitMasterPage() {
                     className="w-[130px]"
                   />
                   <SortTh
-                    label="Updated By"
+                    label="Updated"
                     colKey="updatedBy"
                     sortKey={sortKey}
                     sortDir={sortDir}
                     onSort={handleSort}
                     className="w-[130px]"
-                  />
-                  <SortTh
-                    label="Status"
-                    colKey="status"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={handleSort}
-                    className="w-[110px]"
                   />
                   <th className="sticky right-0 z-30 w-[80px] min-w-[80px] h-11 px-3 text-left text-[13px] font-semibold whitespace-nowrap bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]">
                     Actions
@@ -531,14 +540,14 @@ export default function UnitMasterPage() {
                       <td className="px-3 py-2.5 text-xs text-foreground whitespace-nowrap font-medium">
                         {row.description || "—"}
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
-                        {row.createdBy}
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
-                        {row.updatedBy}
-                      </td>
                       <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                         <StatusToggle record={row} onToggle={toggleStatus} />
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                        <AuditCell name={row.createdBy} date={row.createdAt} />
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                        <AuditCell name={row.updatedBy} date={row.updatedAt} />
                       </td>
                       <td
                         className="sticky right-0 z-20 w-[80px] min-w-[80px] px-3 py-2.5 bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]"

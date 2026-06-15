@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Edit2, Send, CheckCircle2, FileText, Upload, Scissors } from "lucide-react";
 import {
@@ -11,7 +11,10 @@ import {
 } from "@/components/record-detail";
 import { UploadVendorInvoiceDialog } from "../components/UploadVendorInvoiceDialog";
 import { ShortClosePOModal } from "../components/ShortClosePOModal";
-import { POClosureInformation, POQtySummaryCard } from "../components/POClosureSection";
+import {
+	POClosureInformation,
+	POQtySummaryCard,
+} from "../components/POClosureSection";
 import { POIntegrationTabs } from "../components/POIntegrationTabs";
 import { VendorFollowUpPanel } from "../components/VendorFollowUpPanel";
 import { ProcurementApprovalModal } from "../../components/ProcurementApprovalModal";
@@ -70,11 +73,12 @@ export default function PODetailPage() {
   const [followUpTick, setFollowUpTick] = useState(0);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
-  const refreshInvoices = useCallback(() => setInvoiceTick((t) => t + 1), []);
+	const refreshInvoices = useCallback(() => setInvoiceTick((t) => t + 1), []);
 
-  useEffect(() => {
-    setPo(getPOById(id));
-  }, [id, invoiceTick, followUpTick]);
+	useEffect(() => {
+		setPo(getPOById(id));
+		setLoading(false);
+	}, [id, invoiceTick, followUpTick]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -83,14 +87,18 @@ export default function PODetailPage() {
     if (hash === "#vendor-invoice" || hash === "#three-way-match") setActiveTab("integration");
   }, [id, followUpTick, invoiceTick]);
 
-  if (!po) {
-    return (
-      <div className="p-8 text-sm text-[#6B80A0]">
-        Purchase order not found.{" "}
-        <Link href="/procurement/purchase-orders" className="text-brand-600">Back</Link>
-      </div>
-    );
-  }
+	if (!po) {
+		return (
+			<AppLayout>
+				<div className='p-8 text-sm text-[#6B80A0]'>
+					Purchase order not found.{" "}
+					<Link href='/procurement/purchase-orders' className='text-brand-600'>
+						Back
+					</Link>
+				</div>
+			</AppLayout>
+		);
+	}
 
   const canUploadInvoice = canUploadPOInvoice(po);
   const submittedDate = po.activity.find((a) => a.action.toLowerCase().includes("submit"))?.date ?? po.updatedDate;
@@ -98,14 +106,16 @@ export default function PODetailPage() {
   const formatRupee = (n: number) =>
     `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  const update = (updated: typeof po, redirectToast?: string) => {
-    savePurchaseOrders(loadPurchaseOrders().map((p) => (p.id === updated.id ? updated : p)));
-    if (redirectToast) {
-      router.push(`/procurement/purchase-orders?toast=${redirectToast}`);
-      return;
-    }
-    setPo(updated);
-  };
+	const update = (updated: typeof po, redirectToast?: string) => {
+		savePurchaseOrders(
+			loadPurchaseOrders().map((p) => (p.id === updated.id ? updated : p)),
+		);
+		if (redirectToast) {
+			router.push(`/procurement/purchase-orders?toast=${redirectToast}`);
+			return;
+		}
+		setPo(updated);
+	};
 
   const headerActions = (
     <>
@@ -223,41 +233,43 @@ export default function PODetailPage() {
         )}
       </RecordDetailPage>
 
-      <UploadVendorInvoiceDialog
-        open={uploadOpen}
-        onClose={() => setUploadOpen(false)}
-        po={po}
-        replaceMode={uploadReplace}
-        onSaved={() => {
-          refreshInvoices();
-          setPo(getPOById(id));
-          setToast({ msg: "Vendor invoice saved.", type: "success" });
-        }}
-      />
+			<UploadVendorInvoiceDialog
+				open={uploadOpen}
+				onClose={() => setUploadOpen(false)}
+				po={po}
+				replaceMode={uploadReplace}
+				onSaved={() => {
+					refreshInvoices();
+					setPo(getPOById(id));
+					setToast({ msg: "Vendor invoice saved.", type: "success" });
+				}}
+			/>
 
-      <ShortClosePOModal
-        open={shortCloseOpen}
-        onOpenChange={setShortCloseOpen}
-        po={po}
-        onConfirm={(updated) => update(updated, "po-short-closed")}
-      />
+			<ShortClosePOModal
+				open={shortCloseOpen}
+				onOpenChange={setShortCloseOpen}
+				po={po}
+				onConfirm={(updated) => update(updated, "po-short-closed")}
+			/>
 
-      <ProcurementApprovalModal
-        open={approvalOpen}
-        onOpenChange={setApprovalOpen}
-        documentNo={po.poNumber}
-        documentLabel="Purchase Order"
-        action={approvalAction}
-        onConfirm={(remarks) => {
-          update(
-            approvalAction === "approve" ? approvePO(po) : rejectPO(po, remarks),
-            approvalAction === "approve" ? "po-approved" : "po-rejected",
-          );
-          setApprovalOpen(false);
-        }}
-      />
+			<ProcurementApprovalModal
+				open={approvalOpen}
+				onOpenChange={setApprovalOpen}
+				documentNo={po.poNumber}
+				documentLabel='Purchase Order'
+				action={approvalAction}
+				onConfirm={(remarks) => {
+					update(
+						approvalAction === "approve"
+							? approvePO(po)
+							: rejectPO(po, remarks),
+						approvalAction === "approve" ? "po-approved" : "po-rejected",
+					);
+					setApprovalOpen(false);
+				}}
+			/>
 
-      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-    </>
-  );
+			{toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
+		</>
+	);
 }

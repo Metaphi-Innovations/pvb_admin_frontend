@@ -13,6 +13,7 @@ import {
   AlertCircle, ChevronsUpDown, Check, ArrowLeft, Save, MapPin,
   Shield, Info, ChevronDown, ChevronUp, Plus, Trash2, GripVertical,
   Monitor, Smartphone,
+  Eye, EyeOff, Lock,
 } from "lucide-react";
 import { loadGeoNodes, type GeoNode, type GeoLevel } from "@/app/(app)/masters/geography/geo-data";
 import {
@@ -39,6 +40,11 @@ interface EmployeeFormProps {
   departments: Array<{ id: number; name: string }>;
 }
 
+type EmployeeFormState = Partial<Employee> & {
+  password?: string;
+  confirmPassword?: string;
+};
+
 // ── Country Code Picker ───────────────────────────────────────────────────────
 function CountryCodePicker({ value, onChange, hasError }: { value: string; onChange: (v: string) => void; hasError?: boolean }) {
   const [open, setOpen] = useState(false);
@@ -53,7 +59,7 @@ function CountryCodePicker({ value, onChange, hasError }: { value: string; onCha
           <ChevronDown className="w-3 h-3 text-muted-foreground" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-52 p-1">
+      <PopoverContent align="start" className="p-1 w-52">
         {COUNTRY_CODES.map(cc => (
           <button key={cc.code} type="button" onClick={() => { onChange(cc.code); setOpen(false); }}
             className={cn(
@@ -80,8 +86,8 @@ function Field({ label, required, error, helper, children }: {
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </Label>
       {children}
-      {error && <p className="text-[11px] text-red-500 flex items-center gap-1"><AlertCircle className="w-3 h-3 flex-shrink-0" />{error}</p>}
-      {helper && !error && <p className="text-[11px] text-muted-foreground">{helper}</p>}
+      {error && <p className="text-[10px] leading-tight text-red-500 flex items-center gap-1"><AlertCircle className="flex-shrink-0 w-2.5 h-2.5" />{error}</p>}
+      {helper && !error && <p className="text-[10px] leading-tight text-muted-foreground">{helper}</p>}
     </div>
   );
 }
@@ -167,11 +173,11 @@ function AC({ label, value, onChange, options, placeholder, required, error, dis
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
           <div className="p-1.5 border-b border-border">
             <Input placeholder="Search…" value={q} onChange={e => setQ(e.target.value)}
-              className="h-7 text-xs focus-visible:ring-0" autoFocus />
+              className="text-xs h-7 focus-visible:ring-0" autoFocus />
           </div>
-          <div className="max-h-48 overflow-y-auto py-1">
+          <div className="py-1 overflow-y-auto max-h-48">
             {filtered.length === 0
-              ? <p className="px-3 py-4 text-center text-xs text-muted-foreground">No options</p>
+              ? <p className="px-3 py-4 text-xs text-center text-muted-foreground">No options</p>
               : filtered.map(opt => (
                 <button key={opt.value} onClick={() => { onChange(opt.value); setOpen(false); setQ(""); }}
                   className={cn(
@@ -182,7 +188,7 @@ function AC({ label, value, onChange, options, placeholder, required, error, dis
                     <span className="block truncate">{opt.label}</span>
                     {opt.sub && <span className="text-[10px] text-muted-foreground">{opt.sub}</span>}
                   </div>
-                  {selected?.value === opt.value && <Check className="w-3 h-3 text-brand-600 flex-shrink-0" />}
+                  {selected?.value === opt.value && <Check className="flex-shrink-0 w-3 h-3 text-brand-600" />}
                 </button>
               ))}
           </div>
@@ -302,7 +308,7 @@ function HierarchyInfoCard({ roleType, salesType, role, geoFields, accent }: Hie
   if (roleType === "Admin User") {
     return (
       <div className={cn("rounded-lg border px-3 py-2.5 text-xs", accent.bg, accent.border, accent.text)}>
-        <p className="font-semibold mb-1">Admin User</p>
+        <p className="mb-1 font-semibold">Admin User</p>
         <p className="leading-relaxed">
           Organisation-wide access within their department.{" "}
           <strong>No geography mapping required.</strong> Only a reporting manager can be assigned.
@@ -359,7 +365,7 @@ function HierarchyInfoCard({ roleType, salesType, role, geoFields, accent }: Hie
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">Selected Role</p>
               <p className={cn("font-semibold text-[11px]", accent.text)}>
                 {roleObj?.fullName || role}{" "}
-                <span className="opacity-60 font-normal">({role})</span>
+                <span className="font-normal opacity-60">({role})</span>
               </p>
             </div>
             <div>
@@ -518,7 +524,7 @@ function PermissionsTab({ perms, onChange, role }: {
             </p>
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => onChange(roleDefaultPermissions(role))}>
+            <Button type="button" variant="outline" size="sm" className="text-xs h-7" onClick={() => onChange(roleDefaultPermissions(role))}>
               Load Role Defaults
             </Button>
             <button type="button" onClick={grantAll} className="text-[10px] font-semibold px-2 py-1 rounded bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors">
@@ -550,7 +556,7 @@ function PermissionsTab({ perms, onChange, role }: {
             const expanded = openMods.has(mod.id);
             const hasAny = modHasAny(mod);
             return (
-              <div key={mod.id} className="border border-border rounded-xl overflow-hidden">
+              <div key={mod.id} className="overflow-hidden border border-border rounded-xl">
                 <div className={cn(
                   "flex items-center justify-between px-3 py-2.5 cursor-pointer transition-colors select-none bg-white",
                   expanded ? "border-b border-border" : hasAny ? "hover:bg-brand-50/40" : "hover:bg-muted/20",
@@ -609,14 +615,14 @@ function PermissionsTab({ perms, onChange, role }: {
       {section === "mobile" && (
         <div className="space-y-1.5">
           <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground px-0.5 pb-1">
-            <Info className="w-3 h-3 flex-shrink-0" />
+            <Info className="flex-shrink-0 w-3 h-3" />
             Mobile permissions primarily apply to field roles: DO, Intern, FMO, TM, ASM, KAM, RSM, ZSM.
           </p>
           {MOBILE_PERMISSION_REGISTRY.map((grp) => {
             const expanded = openGroups.has(grp.id);
             const hasAny = groupHasAny(grp);
             return (
-              <div key={grp.id} className="border border-border rounded-xl overflow-hidden">
+              <div key={grp.id} className="overflow-hidden border border-border rounded-xl">
                 <div className={cn(
                   "flex items-center justify-between px-3 py-2.5 cursor-pointer transition-colors select-none bg-white",
                   expanded ? "border-b border-border" : hasAny ? "hover:bg-brand-50/40" : "hover:bg-muted/20",
@@ -716,9 +722,10 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
   // Geography master data (loaded once)
   const geoNodes = useMemo(() => loadGeoNodes().filter(n => n.status === "active"), []);
 
-  const [form, setFormState] = useState<Partial<Employee>>(employee || {
+  const [form, setFormState] = useState<EmployeeFormState>(employee || {
     firstName: "", lastName: "", fullName: "",
     email: "", mobile: "", countryCode: "+91", alternativeMobile: "",
+    password: "",
     bloodGroup: "Unknown", gender: undefined, dob: "",
     currentAddress: "", permanentAddress: "",
     emergencyContactName: "", emergencyContactMobile: "",
@@ -733,11 +740,13 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
     approvalLevel2Id: null, approvalLevel2Name: "", approvalLevel2Role: "",
     approvalLevel3Id: null, approvalLevel3Name: "", approvalLevel3Role: "",
   });
-
   const [perms, setPerms] = useState<UserPermissions>(initPerms);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [sameAddress, setSameAddress] = useState(false);
   const [geoMappings, setGeoMappings] = useState<GeoMappingRow[]>(initialGeoMappings);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [activeTab, setActiveTab] = useState("personal");
 
   // ── Dynamic approval chain ──────────────────────────────────────────────────
   const [approvalLevels, setApprovalLevels] = useState<ApprovalLevel[]>(() => {
@@ -1059,6 +1068,12 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
     if (!form.emergencyContactName?.trim()) e.emergencyContactName = "Required";
     const emErr = validateMobile(form.emergencyContactMobile || "");
     if (emErr) e.emergencyContactMobile = emErr;
+    if (mode === "add") {
+      if (!form.password?.trim()) e.password = "Password is required";
+      else if ((form.password || "").length < 8) e.password = "Password must be at least 8 characters";
+      if (!form.confirmPassword?.trim()) e.confirmPassword = "Please confirm password";
+      else if (form.password !== form.confirmPassword) e.confirmPassword = "Passwords do not match";
+    }
     if (form.roleType === "Field User") {
       geoMappings.forEach((mapping, index) => {
         geoFields.forEach((field) => {
@@ -1093,6 +1108,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       fullName: form.fullName || `${form.firstName || ""} ${form.lastName || ""}`.trim(),
       email: form.email || "",
       mobile: form.mobile || "",
+      password: form.password || "",
       countryCode: form.countryCode || "+91",
       alternativeMobile: form.alternativeMobile || "",
       bloodGroup: (form.bloodGroup as any) || "Unknown",
@@ -1156,7 +1172,6 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       onBack={onCancel}
       onCancel={onCancel}
       cancelLabel="Discard"
-      noCard={true}
       actions={
         <div className="flex items-center gap-2">
           <span className={cn(
@@ -1171,27 +1186,30 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
         </div>
       }
     >
-      <div className="flex flex-col" style={{ minHeight: "calc(100vh - 104px)" }}>
-        {/* ── Tabs ───────────────────────────────────────────────────────────────── */}
-        <div className="flex-1 px-5 py-4">
-        <Tabs defaultValue="personal" className="w-full">
-          <TabsList className="h-8 p-0.5 bg-muted/30 mb-4 inline-flex gap-0.5">
-            <TabsTrigger value="personal" className="text-xs h-7 px-4">Personal Details</TabsTrigger>
-            <TabsTrigger value="employment" className="text-xs h-7 px-4">Employment Details</TabsTrigger>
-            <TabsTrigger value="permissions" className="text-xs h-7 px-4 flex items-center gap-1">
-              <Shield className="w-3 h-3" /> Permissions
-            </TabsTrigger>
-          </TabsList>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="w-full mb-4">
+          <TabsTrigger value="personal" className="text-xs">
+            Personal Details
+          </TabsTrigger>
+          <TabsTrigger value="employment" className="text-xs">
+            Employment Details
+          </TabsTrigger>
+          <TabsTrigger value="permissions" className="text-xs">
+            <Shield className="w-3.5 h-3.5 mr-1.5" />
+            Permissions
+          </TabsTrigger>
+        </TabsList>
 
+        <TabsContent value="personal" className="mt-0 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
           {/* ══════════════════════════════════════════════════════════════════════
               TAB 1 — PERSONAL DETAILS
               ══════════════════════════════════════════════════════════════════════ */}
-          <TabsContent value="personal" className="space-y-5 mt-0">
-
+          {activeTab === "personal" && (
+            <div className="space-y-5">
             {/* Basic Info */}
             <div>
               <SectionHead label="Basic Information" />
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-7 gap-3">
 
                 {/* Full Name */}
                 <Field label="First Name" required error={errors.firstName}>
@@ -1245,22 +1263,79 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
               </div>
             </div>
 
+            <div className="pt-4 border-t border-border/60">
+              <SectionHead label="Account Credentials" sub="Set the login password for this employee user." />
+              <div className="grid w-full max-w-3xl grid-cols-1 gap-3 md:grid-cols-2">
+                <Field label="Password" required={mode === "add"} error={errors.password}>
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      value={(form as any).password || ""}
+                      onChange={(e) => set("password", e.target.value)}
+                      placeholder="Min. 8 characters"
+                      className={cn("h-7 text-xs pr-8", errors.password && "border-red-400")}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute -translate-y-1/2 right-2 top-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </Field>
+
+                <Field label="Confirm Password" required={mode === "add"} error={errors.confirmPassword}>
+                  <div className="relative">
+                    <Input
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={(form as any).confirmPassword || ""}
+                      onChange={(e) => set("confirmPassword", e.target.value)}
+                      placeholder="Re-enter password"
+                      className={cn("h-7 text-xs pr-8", errors.confirmPassword && "border-red-400")}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((v) => !v)}
+                      className="absolute -translate-y-1/2 right-2 top-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </Field>
+                <div className="flex items-start gap-2 px-3 py-2 mt-1 border border-blue-200 rounded-lg bg-blue-50 md:col-span-2">
+                  <Lock className="mt-0.5 h-3.5 w-3.5 text-blue-600" />
+                  <p className="text-[10px] leading-tight text-blue-700">
+                    {mode === "add"
+                      ? "Set the initial login password for this employee."
+                      : "Password can be updated later if needed."}
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Emergency Contact */}
-            <div className="border-t border-border/60 pt-4">
+            <div className="pt-4 border-t border-border/60">
               <SectionHead label="Emergency Contact" />
-              <div className="grid grid-cols-3 gap-3">
-                <Field label="Contact Name" required error={errors.emergencyContactName}>
-                  <Input value={form.emergencyContactName || ""} onChange={e => set("emergencyContactName", e.target.value)}
-                    placeholder="Full name" className={inp("emergencyContactName")} />
-                </Field>
-                <AC label="Relationship" value={form.emergencyContactRelation || "Spouse"}
-                  onChange={v => set("emergencyContactRelation", v)}
-                  options={RELATIONS.map(r => ({ label: r, value: r }))} />
-                <Field label="Contact Number" required error={errors.emergencyContactMobile}>
-                  <Input value={form.emergencyContactMobile || ""} onChange={e => set("emergencyContactMobile", e.target.value)}
-                    placeholder="10-digit mobile" maxLength={10} className={inp("emergencyContactMobile")} />
-                </Field>
-                <div className="col-span-3">
+              <div className="grid grid-cols-12 gap-3">
+                <div className="col-span-2 ">
+                  <Field label="Contact Name" required error={errors.emergencyContactName}>
+                    <Input value={form.emergencyContactName || ""} onChange={e => set("emergencyContactName", e.target.value)}
+                      placeholder="Full name" className={inp("emergencyContactName")} />
+                  </Field>
+                </div>
+                <div className="col-span-2">
+                  <AC label="Relationship" value={form.emergencyContactRelation || "Spouse"}
+                    onChange={v => set("emergencyContactRelation", v)}
+                    options={RELATIONS.map(r => ({ label: r, value: r }))} />
+                </div>
+                <div className="col-span-2">
+                  <Field label="Contact Number" required error={errors.emergencyContactMobile}>
+                    <Input value={form.emergencyContactMobile || ""} onChange={e => set("emergencyContactMobile", e.target.value)}
+                      placeholder="10-digit mobile" maxLength={10} className={inp("emergencyContactMobile")} />
+                  </Field>
+                </div>
+                <div className="col-span-6 col-start-1">
                   <Field label="Emergency Contact Address">
                     <Textarea value={form.emergencyContactAddress || ""} onChange={e => set("emergencyContactAddress", e.target.value)}
                       placeholder="Emergency contact's home address" rows={2} className="text-xs resize-none" />
@@ -1270,10 +1345,10 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
             </div>
 
             {/* Address Details */}
-            <div className="border-t border-border/60 pt-4">
+            <div className="pt-4 border-t border-border/60">
               <SectionHead label="Address Details" />
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
+              <div className="grid grid-cols-12 gap-3">
+                <div className="col-span-12 space-y-1 md:col-span-4">
                   <Label className="text-xs font-medium">Current Address</Label>
                   <Textarea value={form.currentAddress || ""} onChange={e => {
                     set("currentAddress", e.target.value);
@@ -1281,7 +1356,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                   }}
                     placeholder="Current / residential address" rows={3} className="text-xs resize-none" />
                 </div>
-                <div className="space-y-1">
+                <div className="col-span-12 space-y-1 md:col-span-4">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs font-medium">Permanent Address</Label>
                     <label className="flex items-center gap-1.5 cursor-pointer">
@@ -1302,25 +1377,28 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
 
             {/* Audit Info (edit mode) */}
             {mode === "edit" && employee && (
-              <div className="border-t border-border/60 pt-4">
+              <div className="pt-4 border-t border-border/60">
                 <div className="bg-muted/30 rounded-lg px-3 py-2.5">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Record Info</p>
                   <div className="grid grid-cols-4 gap-x-4 gap-y-1 text-[11px]">
-                    <div><span className="text-muted-foreground block">User ID</span><span className="font-mono font-semibold text-brand-700">{employee.employeeId}</span></div>
-                    <div><span className="text-muted-foreground block">Created By</span><span className="font-medium">{employee.createdBy}</span></div>
-                    <div><span className="text-muted-foreground block">Created Date</span><span className="font-medium">{employee.createdDate}</span></div>
-                    <div><span className="text-muted-foreground block">Last Updated</span><span className="font-medium">{employee.updatedDate}</span></div>
+                    <div><span className="block text-muted-foreground">User ID</span><span className="font-mono font-semibold text-brand-700">{employee.employeeId}</span></div>
+                    <div><span className="block text-muted-foreground">Created By</span><span className="font-medium">{employee.createdBy}</span></div>
+                    <div><span className="block text-muted-foreground">Created Date</span><span className="font-medium">{employee.createdDate}</span></div>
+                    <div><span className="block text-muted-foreground">Last Updated</span><span className="font-medium">{employee.updatedDate}</span></div>
                   </div>
                 </div>
               </div>
             )}
-          </TabsContent>
+            </div>
+          )}
+        </TabsContent>
 
+        <TabsContent value="employment" className="mt-0 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
           {/* ══════════════════════════════════════════════════════════════════════
               TAB 2 — EMPLOYMENT DETAILS
               ══════════════════════════════════════════════════════════════════════ */}
-          <TabsContent value="employment" className="space-y-5 mt-0">
-
+          {activeTab === "employment" && (
+            <div className="space-y-5">
             {/* Employee ID + Basic Employment */}
             <div>
               <SectionHead label="Employment Information" />
@@ -1330,7 +1408,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Employee ID</Label>
                   <div className="h-8 px-2.5 border border-border rounded-lg bg-muted/30 flex items-center">
-                    <span className="text-xs font-mono font-semibold text-brand-700">
+                    <span className="font-mono text-xs font-semibold text-brand-700">
                       {mode === "add" ? newEmpId : employee?.employeeId}
                     </span>
                     <span className="ml-auto text-[10px] text-muted-foreground">Auto</span>
@@ -1356,7 +1434,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
             </div>
 
             {/* Role Type */}
-            <div className="border-t border-border/60 pt-4">
+            <div className="pt-4 border-t border-border/60">
               <SectionHead label="Role & Access Level" />
               <div className="space-y-3">
 
@@ -1428,7 +1506,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
 
             {/* Geography Mapping */}
             {form.roleType === "Field User" && form.role && (
-              <div className="border-t border-border/60 pt-4">
+              <div className="pt-4 border-t border-border/60">
                 <div className="flex items-center justify-between mb-2.5">
                   <SectionHead label={`Geography Mapping — ${form.role}`} />
                   <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded font-medium">
@@ -1447,8 +1525,8 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                       {geoMappings.map((mapping, index) => {
                         const optionsMap = getGeoOptionsMap(mapping);
                         return (
-                          <div key={index} className="rounded-lg border border-border bg-muted/10 p-3">
-                            <div className="mb-3 flex items-center justify-between gap-3">
+                          <div key={index} className="p-3 border rounded-lg border-border bg-muted/10">
+                            <div className="flex items-center justify-between gap-3 mb-3">
                               <div>
                                 <p className="text-xs font-semibold text-foreground">Mapping {index + 1}</p>
                                 <p className="text-[11px] text-muted-foreground">
@@ -1460,7 +1538,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  className="h-7 px-2 text-xs text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                                  className="px-2 text-xs text-red-600 border-red-200 h-7 hover:bg-red-50 hover:text-red-700"
                                   onClick={() => removeGeoMapping(index)}
                                 >
                                   <Trash2 className="w-3.5 h-3.5 mr-1" /> Remove
@@ -1491,7 +1569,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
 
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                          <Info className="w-3 h-3 flex-shrink-0" />
+                          <Info className="flex-shrink-0 w-3 h-3" />
                           Selections are loaded from Geography Master. Choosing a higher level filters the options below it automatically.
                         </p>
                         <Button
@@ -1513,9 +1591,9 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
 
             {/* Admin User — no geography required */}
             {form.roleType && form.roleType !== "Field User" && (
-              <div className="border-t border-border/60 pt-4">
+              <div className="pt-4 border-t border-border/60">
                 <div className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/20 px-3 py-2.5">
-                  <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <MapPin className="flex-shrink-0 w-4 h-4 text-muted-foreground" />
                   <p className="text-xs text-muted-foreground">
                     <strong className="text-foreground">Admin User</strong> — No geography mapping required.
                     Admin users have organisation-wide visibility within their module scope.
@@ -1526,7 +1604,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
 
             {/* ── Approval Chain Configuration ──────────────────────────────── */}
             {form.role && (
-              <div className="border-t border-border/60 pt-4">
+              <div className="pt-4 border-t border-border/60">
                 <div className="flex items-center justify-between mb-2.5">
                   <SectionHead
                     label="Approval Chain Configuration"
@@ -1535,7 +1613,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                 </div>
 
                 {/* ── Level rows ── */}
-                <div className="border border-border rounded-xl overflow-hidden mb-2">
+                <div className="mb-2 overflow-hidden border border-border rounded-xl">
                   {/* Header */}
                   <div className="grid grid-cols-[28px_52px_1fr_52px] bg-muted/40 border-b border-border px-3 py-2 gap-2">
                     <div />
@@ -1665,19 +1743,19 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                 )}
               </div>
             )}
+            </div>
+          )}
+        </TabsContent>
 
-          </TabsContent>
-
+        <TabsContent value="permissions" className="mt-0 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
           {/* ══════════════════════════════════════════════════════════════════════
               TAB 3 — PERMISSIONS
               ══════════════════════════════════════════════════════════════════════ */}
-          <TabsContent value="permissions" className="mt-0">
+          {activeTab === "permissions" && (
             <PermissionsTab perms={perms} onChange={setPerms} role={form.role} />
-          </TabsContent>
-
-        </Tabs>
-        </div>
-      </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </FormContainer>
   );
 }
