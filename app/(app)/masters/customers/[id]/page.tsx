@@ -519,13 +519,13 @@ export default function CustomerDetailPage() {
 													value={customer.gstin}
 													mono
 												/>
-												<DetailField
+												{/* <DetailField
 													label='GST Code'
 													value={
 														gst ? `${gst.gstId} (${gst.gstPercentage}%)` : "—"
 													}
 													mono
-												/>
+												/> */}
 											</>
 										)}
 										<DetailField
@@ -772,12 +772,7 @@ export default function CustomerDetailPage() {
 													<th className='px-4 py-3'>Product Name</th>
 													<th className='px-4 py-3'>SKU / Code</th>
 													<th className='px-4 py-3 text-right'>MRP</th>
-													<th className='px-4 py-3 text-right'>Mapped Price</th>
-													<th className='px-4 py-3'>Discount Type</th>
-													<th className='px-4 py-3 text-right'>
-														Discount Value
-													</th>
-													<th className='px-4 py-3 text-center'>Status</th>
+													<th className='px-4 py-3 text-right'>Price</th>
 												</tr>
 											</thead>
 											<tbody>
@@ -801,28 +796,6 @@ export default function CustomerDetailPage() {
 															{item.price !== undefined
 																? `₹${item.price.toLocaleString("en-IN")}`
 																: "—"}
-														</td>
-														<td className='px-4 py-3'>
-															{item.discountType || "—"}
-														</td>
-														<td className='px-4 py-3 font-mono text-right'>
-															{item.discountValue !== undefined
-																? item.discountType === "Percentage"
-																	? `${item.discountValue}%`
-																	: `₹${item.discountValue.toLocaleString("en-IN")}`
-																: "—"}
-														</td>
-														<td className='px-4 py-3 text-center'>
-															<span
-																className={cn(
-																	"inline-flex items-center text-[10px] px-2 py-0.5 rounded-full font-semibold border",
-																	item.status === "Active"
-																		? "bg-emerald-50 text-emerald-700 border-emerald-200"
-																		: "bg-slate-50 text-slate-600 border-slate-200",
-																)}
-															>
-																{item.status || "—"}
-															</span>
 														</td>
 													</tr>
 												))}

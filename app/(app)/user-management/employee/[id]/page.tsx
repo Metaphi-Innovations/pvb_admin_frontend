@@ -91,8 +91,8 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
       toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
     )}>
       {toast.type === "success"
-        ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-        : <XCircle className="w-4 h-4 flex-shrink-0" />}
+        ? <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
+        : <XCircle className="flex-shrink-0 w-4 h-4" />}
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
         <X className="w-3.5 h-3.5" />
@@ -175,7 +175,7 @@ function PasswordResetModal({
             Reset Password
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 pt-1">
+        <div className="pt-1 space-y-4">
           <div className="space-y-1.5">
             <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">New Password *</label>
             <div className="relative">
@@ -184,7 +184,7 @@ function PasswordResetModal({
                 value={state.newPassword}
                 onChange={(e) => onChange("newPassword", e.target.value)}
                 placeholder="Enter new password (min 8 chars)"
-                className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-semibold focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-500"
+                className="w-full px-3 text-sm font-semibold border rounded-lg h-9 border-border bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-500"
               />
             </div>
             {state.errors.newPassword && (
@@ -198,7 +198,7 @@ function PasswordResetModal({
               value={state.confirmPassword}
               onChange={(e) => onChange("confirmPassword", e.target.value)}
               placeholder="Re-enter password"
-              className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-semibold focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-500"
+              className="w-full px-3 text-sm font-semibold border rounded-lg h-9 border-border bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-500"
             />
             {state.errors.confirmPassword && (
               <p className="text-[10px] text-red-500 font-semibold">{state.errors.confirmPassword}</p>
@@ -223,12 +223,12 @@ function PasswordResetModal({
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Show</span>
             </label>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer pt-1">
+          <label className="flex items-center gap-2 pt-1 cursor-pointer">
             <input
               type="checkbox"
               checked={state.sendEmail}
               onChange={(e) => onChange("sendEmail", e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+              className="w-4 h-4 border-gray-300 rounded text-brand-600 focus:ring-brand-500"
             />
             <span className="text-xs font-semibold text-foreground">Send password to employee email</span>
           </label>
@@ -237,7 +237,7 @@ function PasswordResetModal({
           <Button variant="outline" size="sm" className="h-8 text-xs font-semibold" onClick={onClose}>Cancel</Button>
           <Button
             size="sm"
-            className="h-8 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white"
+            className="h-8 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700"
             onClick={onReset}>
             Reset Password
           </Button>
@@ -288,8 +288,8 @@ function ReadOnlyPermissionsView({ permissions }: { permissions?: UserPermission
             if (!hasAny) return null;
 
             return (
-              <div key={mod.id} className="overflow-hidden border border-border rounded-xl bg-white shadow-sm p-4">
-                <h4 className="text-xs font-bold text-foreground mb-3 flex items-center gap-2">
+              <div key={mod.id} className="p-4 overflow-hidden bg-white border shadow-sm border-border rounded-xl">
+                <h4 className="flex items-center gap-2 mb-3 text-xs font-bold text-foreground">
                   <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
                   {mod.label}
                 </h4>
@@ -317,7 +317,7 @@ function ReadOnlyPermissionsView({ permissions }: { permissions?: UserPermission
             );
           })}
           {!PERMISSION_REGISTRY.some((mod) => mod.submodules.some((sub) => ALL_WEB_ACTIONS.some((act) => sub.actions.includes(act) && (getSub(mod.id, sub.id) as any)[act]))) && (
-            <div className="text-xs font-medium text-center text-muted-foreground p-8 bg-white border rounded-xl">
+            <div className="p-8 text-xs font-medium text-center bg-white border text-muted-foreground rounded-xl">
               No Web Portal permissions granted.
             </div>
           )}
@@ -335,8 +335,8 @@ function ReadOnlyPermissionsView({ permissions }: { permissions?: UserPermission
             if (!hasAny) return null;
 
             return (
-              <div key={grp.id} className="overflow-hidden border border-border rounded-xl bg-white shadow-sm p-4">
-                <h4 className="text-xs font-bold text-foreground mb-3 flex items-center gap-2">
+              <div key={grp.id} className="p-4 overflow-hidden bg-white border shadow-sm border-border rounded-xl">
+                <h4 className="flex items-center gap-2 mb-3 text-xs font-bold text-foreground">
                   <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
                   {grp.label}
                 </h4>
@@ -364,7 +364,7 @@ function ReadOnlyPermissionsView({ permissions }: { permissions?: UserPermission
             );
           })}
           {!MOBILE_PERMISSION_REGISTRY.some((grp) => grp.features.some((feat) => ALL_MOBILE_ACTIONS.some((act) => feat.actions.includes(act) && (getMob(grp.id, feat.id) as any)[act]))) && (
-            <div className="text-xs font-medium text-center text-muted-foreground p-8 bg-white border rounded-xl">
+            <div className="p-8 text-xs font-medium text-center bg-white border text-muted-foreground rounded-xl">
               No Mobile App permissions granted.
             </div>
           )}
@@ -494,7 +494,7 @@ export default function EmployeeDetailPage() {
     return (
       <AppLayout>
         <div className="flex items-center justify-center h-96">
-          <p className="text-muted-foreground text-sm font-semibold">Loading user...</p>
+          <p className="text-sm font-semibold text-muted-foreground">Loading user...</p>
         </div>
       </AppLayout>
     );
@@ -620,7 +620,7 @@ export default function EmployeeDetailPage() {
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                 Role Type
               </p>
-              <p className="mt-1 text-xs font-bold text-foreground truncate">
+              <p className="mt-1 text-xs font-bold truncate text-foreground">
                 {employee.roleType || "—"}
               </p>
             </div>
@@ -629,7 +629,7 @@ export default function EmployeeDetailPage() {
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                 Department
               </p>
-              <p className="mt-1 text-xs font-bold text-foreground truncate">
+              <p className="mt-1 text-xs font-bold truncate text-foreground">
                 {employee.department || "—"}
               </p>
             </div>
@@ -638,7 +638,7 @@ export default function EmployeeDetailPage() {
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                 Joined Date
               </p>
-              <p className="mt-1 text-xs font-bold text-foreground truncate">
+              <p className="mt-1 text-xs font-bold truncate text-foreground">
                 {employee.joiningDate || "—"}
               </p>
             </div>
@@ -647,7 +647,7 @@ export default function EmployeeDetailPage() {
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                 Manager
               </p>
-              <p className="mt-1 text-xs font-bold text-foreground truncate">
+              <p className="mt-1 text-xs font-bold truncate text-foreground">
                 {employee.reportingManager || "None"}
               </p>
             </div>
@@ -707,7 +707,7 @@ export default function EmployeeDetailPage() {
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1">
                     <DetailField label="Mobile Number" value={employee.mobile ? `${employee.countryCode || "+91"} ${employee.mobile}` : "—"} mono />
-                    <DetailField label="Alternative Mobile" value={employee.alternativeMobile} mono />
+                    {/* <DetailField label="Alternative Mobile" value={employee.alternativeMobile} mono /> */}
                     <DetailField label="Email Address" value={employee.email} />
                     <DetailField label="Current Address" value={employee.currentAddress || employee.address} />
                     <DetailField label="Permanent Address" value={employee.permanentAddress} />
@@ -761,7 +761,7 @@ export default function EmployeeDetailPage() {
                     Geography Mappings
                   </h3>
                   {employee.geoZone || employee.geoRegion || employee.geoArea || employee.territory || employee.geoLocality || (employee.geoMappings && employee.geoMappings.length > 0) ? (
-                    <div className="overflow-x-auto border border-border rounded-lg bg-white">
+                    <div className="overflow-x-auto bg-white border rounded-lg border-border">
                       <table className="w-full text-xs text-left border-collapse">
                         <thead>
                           <tr className="font-semibold border-b border-border bg-slate-50 text-muted-foreground">
@@ -775,7 +775,7 @@ export default function EmployeeDetailPage() {
                         <tbody>
                           {employee.geoMappings && employee.geoMappings.length > 0 ? (
                             employee.geoMappings.map((geo, idx) => (
-                              <tr key={idx} className="border-b border-border/60 last:border-0 hover:bg-slate-50/50 font-medium">
+                              <tr key={idx} className="font-medium border-b border-border/60 last:border-0 hover:bg-slate-50/50">
                                 <td className="px-4 py-2">{geo.geoZone || "—"}</td>
                                 <td className="px-4 py-2">{geo.geoRegion || "—"}</td>
                                 <td className="px-4 py-2">{geo.geoArea || "—"}</td>
@@ -784,7 +784,7 @@ export default function EmployeeDetailPage() {
                               </tr>
                             ))
                           ) : (
-                            <tr className="border-b border-border/60 last:border-0 font-medium">
+                            <tr className="font-medium border-b border-border/60 last:border-0">
                               <td className="px-4 py-2">{employee.geoZone || "—"}</td>
                               <td className="px-4 py-2">{employee.geoRegion || "—"}</td>
                               <td className="px-4 py-2">{employee.geoArea || "—"}</td>
@@ -796,7 +796,7 @@ export default function EmployeeDetailPage() {
                       </table>
                     </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground italic pl-1">No geography mapping assigned to this user.</p>
+                    <p className="pl-1 text-xs italic text-muted-foreground">No geography mapping assigned to this user.</p>
                   )}
                 </div>
 
@@ -819,7 +819,7 @@ export default function EmployeeDetailPage() {
                     <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
                       Approval Chain Details
                     </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                       {employee.approvalLevel1Id && (
                         <div className="p-3.5 border border-border rounded-xl bg-slate-50/50 space-y-1">
                           <span className="text-[10px] font-bold text-brand-600 uppercase tracking-wider">Level 1 Approver</span>

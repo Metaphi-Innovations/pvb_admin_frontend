@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { AppLayout } from "@/components/layout/AppLayout";
 import {
 	Edit2,
 	Send,
@@ -43,15 +44,22 @@ import { canUploadPOInvoice } from "../po-invoice-utils";
 export default function PODetailPage() {
 	const params = useParams();
 	const router = useRouter();
-	const searchParams = useSearchParams();
 	const id = Number(params.id);
-	const [po, setPo] = useState(getPOById(id));
-	const [uploadOpen, setUploadOpen] = useState(
-		searchParams.get("upload") === "1",
-	);
+	const [po, setPo] = useState<any>(undefined);
+	const [loading, setLoading] = useState(true);
+	const [uploadOpen, setUploadOpen] = useState(false);
 	const [uploadReplace, setUploadReplace] = useState(false);
 	const [approvalOpen, setApprovalOpen] = useState(false);
 	const [shortCloseOpen, setShortCloseOpen] = useState(false);
+
+	useEffect(() => {
+		if (typeof window !== "undefined") {
+			const uploadParam = new URLSearchParams(window.location.search).get("upload");
+			if (uploadParam === "1") {
+				setUploadOpen(true);
+			}
+		}
+	}, []);
 	const [approvalAction, setApprovalAction] = useState<"approve" | "reject">(
 		"approve",
 	);
@@ -66,6 +74,7 @@ export default function PODetailPage() {
 
 	useEffect(() => {
 		setPo(getPOById(id));
+		setLoading(false);
 	}, [id, invoiceTick, followUpTick]);
 
 	useEffect(() => {
@@ -96,20 +105,32 @@ export default function PODetailPage() {
 		}
 	}, [id, followUpTick, invoiceTick]);
 
+	if (loading) {
+		return (
+			<AppLayout>
+				<div className='flex items-center justify-center h-96'>
+					<p className='text-sm font-semibold text-muted-foreground'>Loading...</p>
+				</div>
+			</AppLayout>
+		);
+	}
+
 	if (!po) {
 		return (
-			<div className='p-8 text-sm text-[#6B80A0]'>
-				Purchase order not found.{" "}
-				<Link href='/procurement/purchase-orders' className='text-brand-600'>
-					Back
-				</Link>
-			</div>
+			<AppLayout>
+				<div className='p-8 text-sm text-[#6B80A0]'>
+					Purchase order not found.{" "}
+					<Link href='/procurement/purchase-orders' className='text-brand-600'>
+						Back
+					</Link>
+				</div>
+			</AppLayout>
 		);
 	}
 
 	const canUploadInvoice = canUploadPOInvoice(po);
 	const submittedDate =
-		po.activity.find((a) => a.action.toLowerCase().includes("submit"))?.date ??
+		po.activity.find((a: any) => a.action.toLowerCase().includes("submit"))?.date ??
 		po.updatedDate;
 
 	const update = (updated: typeof po, redirectToast?: string) => {
