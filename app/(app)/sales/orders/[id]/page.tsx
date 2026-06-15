@@ -3,11 +3,9 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import {
-  ArrowLeft,
-  Edit2,
+  Edit,
   FileText,
   Package,
   Split,
@@ -16,10 +14,18 @@ import {
   XCircle,
   Check,
   X,
-  Building2,
-  Info,
+  IndianRupee,
+  ListOrdered,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  RecordDetailPage,
+  RecordSectionCard,
+  RecordKvRow,
+  type RecordDetailSidebarProps,
+  type RecordDetailTab,
+} from "@/components/record-detail";
 import CancelOrderDialog from "../components/CancelOrderDialog";
 import PackingListDialog from "../components/PackingListDialog";
 import ApproveOrderDialog from "../components/ApproveOrderDialog";
@@ -45,64 +51,19 @@ import {
   getProductById,
 } from "../orders-data";
 
-const STATUS_CFG: Record<string, { bg: string; text: string; dot: string; label: string }> = {
-  draft:              { bg: "bg-slate-100 border-slate-200",    text: "text-slate-600",   dot: "bg-slate-400",   label: "Draft" },
-  pending_approval:   { bg: "bg-amber-50 border-amber-200",     text: "text-amber-700",   dot: "bg-amber-400",   label: "Pending Approval" },
-  approved:           { bg: "bg-emerald-50 border-emerald-200",   text: "text-emerald-700", dot: "bg-emerald-500", label: "Approved" },
-  rejected:           { bg: "bg-red-50 border-red-200",       text: "text-red-700",     dot: "bg-red-400",     label: "Rejected" },
-  confirmed:          { bg: "bg-blue-50 border-blue-200",      text: "text-blue-700",    dot: "bg-blue-500",    label: "Confirmed" },
-  dispatched:         { bg: "bg-amber-50 border-amber-200",     text: "text-amber-700",   dot: "bg-amber-400",   label: "Dispatched" },
-  delivered:          { bg: "bg-emerald-50 border-emerald-200",   text: "text-emerald-700", dot: "bg-emerald-500", label: "Delivered" },
-  cancelled:          { bg: "bg-red-50 border-red-200",       text: "text-red-700",     dot: "bg-red-400",     label: "Cancelled" },
-};
-
-function StatusBadge({ status }: { status: string }) {
-  const cfg = STATUS_CFG[status] || {
-    bg: "bg-slate-100 border-slate-200",
-    text: "text-slate-600",
-    dot: "bg-slate-400",
-    label: status,
-  };
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold border",
-        cfg.bg,
-        cfg.text
-      )}
-    >
-      <span className={cn("h-1.5 w-1.5 rounded-full", cfg.dot)} />
-      {cfg.label}
-    </span>
-  );
+function orderStatusVariant(status: OrderStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
+  if (["approved", "confirmed", "delivered", "dispatched"].includes(status)) return "active";
+  if (status === "draft") return "draft";
+  if (["rejected", "cancelled"].includes(status)) return "blocked";
+  if (status === "pending_approval") return "neutral";
+  return "inactive";
 }
 
-function DetailField({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value?: React.ReactNode;
-  mono?: boolean;
-}) {
-  const displayVal =
-    value !== undefined && value !== null && value !== "" ? value : "—";
-  return (
-    <div className="py-2 space-y-1 border-b border-border/50 last:border-0">
-      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-        {label}
-      </span>
-      <div
-        className={cn(
-          "text-xs font-semibold text-foreground break-all",
-          mono && "font-mono"
-        )}
-      >
-        {displayVal}
-      </div>
-    </div>
-  );
+function approvalTone(status: ReturnType<typeof resolveApprovalStatus>): "pending" | "approved" | "rejected" | "neutral" {
+  if (status === "pending_approval") return "pending";
+  if (status === "approved") return "approved";
+  if (status === "rejected") return "rejected";
+  return "neutral";
 }
 
 export default function ViewSalesOrderPage() {
@@ -113,6 +74,7 @@ export default function ViewSalesOrderPage() {
   const approvalMode = searchParams.get("from") === "approval";
 
   const [order, setOrder] = useState<SalesOrder | null>(null);
+  const [activeTab, setActiveTab] = useState("overview");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [packingOpen, setPackingOpen] = useState(false);
@@ -137,14 +99,10 @@ export default function ViewSalesOrderPage() {
 
   if (!order) {
     return (
-      <AppLayout>
-        <div className="p-8 text-sm font-semibold text-muted-foreground">
-          Sales order not found.{" "}
-          <Link href="/sales/orders" className="text-brand-600 hover:underline">
-            Back to listing
-          </Link>
-        </div>
-      </AppLayout>
+      <div className="p-8 text-sm">
+        Sales order not found.{" "}
+        <Link href="/sales/orders" className="text-brand-600">Back to orders</Link>
+      </div>
     );
   }
 
@@ -164,10 +122,6 @@ export default function ViewSalesOrderPage() {
 
   const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
 
-  const handleBack = () => {
-    router.push(approvalMode ? "/sales/orders?tab=approval" : "/sales/orders");
-  };
-
   const handleApprove = () => {
     const result = approveSalesOrder(order.id);
     if ("error" in result) {
@@ -181,382 +135,292 @@ export default function ViewSalesOrderPage() {
     router.push("/sales/orders?tab=approval&toast=rejected");
   };
 
-  const headerActions = (
-    <div className="flex flex-wrap gap-2">
-      {!approvalMode && editable && (
-        <Link href={`/sales/orders/${order.id}/edit`}>
-          <Button variant="outline" size="sm" className="h-9 text-xs font-semibold gap-1.5 border-border hover:bg-muted">
-            <Edit2 className="w-3.5 h-3.5" /> Edit
-          </Button>
-        </Link>
-      )}
-      {!approvalMode && piAllowed && (
-        <Button variant="outline" size="sm" className="h-9 text-xs font-semibold gap-1.5 border-border hover:bg-muted" onClick={() => downloadProformaInvoice(order)}>
-          <FileText className="w-3.5 h-3.5" /> Download PI
-        </Button>
-      )}
-      {!approvalMode && packingAllowed && (
-        <Button variant="outline" size="sm" className="h-9 text-xs font-semibold gap-1.5 border-border hover:bg-muted" onClick={() => setPackingOpen(true)}>
-          <Package className="w-3.5 h-3.5" /> Generate Packing List
-        </Button>
-      )}
-      {!approvalMode && splittable && (
-        <Link href={`/sales/orders/${order.id}/split`}>
-          <Button variant="outline" size="sm" className="h-9 text-xs font-semibold gap-1.5 border-border hover:bg-muted">
-            <Split className="w-3.5 h-3.5" /> Split Order
-          </Button>
-        </Link>
-      )}
-      {!approvalMode && cancellable && (
-        <Button variant="outline" size="sm" className="h-9 text-xs font-semibold gap-1.5 text-red-600 hover:bg-red-50 border-red-200" onClick={() => setCancelOpen(true)}>
-          <Trash2 className="w-3.5 h-3.5" /> Cancel Order
-        </Button>
-      )}
-    </div>
-  );
+  const quickActions: RecordDetailSidebarProps["quickActions"] = [];
+  if (!approvalMode && editable) {
+    quickActions.push({
+      label: "Edit Order",
+      icon: Edit,
+      onClick: () => router.push(`/sales/orders/${order.id}/edit`),
+    });
+  }
+  if (!approvalMode && piAllowed) {
+    quickActions.push({
+      label: "Download PI",
+      icon: FileText,
+      onClick: () => downloadProformaInvoice(order),
+    });
+  }
+  if (!approvalMode && packingAllowed) {
+    quickActions.push({
+      label: "Generate Packing List",
+      icon: Package,
+      onClick: () => setPackingOpen(true),
+    });
+  }
+  if (!approvalMode && splittable) {
+    quickActions.push({
+      label: "Split Order",
+      icon: Split,
+      onClick: () => router.push(`/sales/orders/${order.id}/split`),
+    });
+  }
+  if (!approvalMode && cancellable) {
+    quickActions.push({
+      label: "Cancel Order",
+      icon: Trash2,
+      onClick: () => setCancelOpen(true),
+    });
+  }
 
-  const tabs = [
-    { id: "overview", label: "Overview", icon: Info },
-    { id: "products", label: `Products (${order.lineItems.length})`, icon: Building2 },
+  const approvalItems: RecordDetailSidebarProps["approval"] = [
+    {
+      label: "Approval Status",
+      value: formatApprovalStatus(approvalStatus),
+      tone: approvalTone(approvalStatus),
+    },
+    {
+      label: "Order Status",
+      value: formatOrderStatus(order.status),
+      tone: orderStatusVariant(order.status) === "active" ? "approved" : orderStatusVariant(order.status) === "blocked" ? "rejected" : "neutral",
+    },
+  ];
+  if (order.approvedBy) {
+    approvalItems.push({ label: "Approved By", value: order.approvedBy, tone: "neutral" });
+  }
+  if (order.approvedDate) {
+    approvalItems.push({ label: "Approved Date", value: order.approvedDate, tone: "neutral" });
+  }
+  if (order.rejectionReason) {
+    approvalItems.push({ label: "Rejection Reason", value: order.rejectionReason, tone: "rejected" });
+  }
+
+  const sidebar: RecordDetailSidebarProps = {
+    quickActions,
+    summary: [
+      { label: "Customer", value: `${order.customerCode} — ${order.customerName}` },
+      { label: "Order Date", value: order.orderDate },
+      { label: "Delivery Date", value: order.deliveryDate || "—" },
+      { label: "Salesman", value: order.salesManName || "—" },
+      { label: "Territory", value: order.territory || "—" },
+      { label: "Grand Total", value: formatRupee(order.totalAmount), highlight: true },
+    ],
+    approval: approvalItems,
+  };
+
+  const tabs: RecordDetailTab[] = [
+    { value: "overview", label: "Overview" },
+    { value: "line-items", label: "Line Items", count: order.lineItems.length },
   ];
 
-  return (
-    <AppLayout>
-      <div className="w-full space-y-6">
-        {/* ── HEADER SECTION ── */}
-        <div className="flex flex-col gap-4 pb-5 border-b sm:flex-row sm:items-center sm:justify-between border-border/80">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="icon"
-              className="w-8 h-8 rounded-lg hover:bg-muted border-border"
-              onClick={handleBack}>
-              <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-            </Button>
-            <h1 className="text-base font-bold text-foreground">Sales Order Details</h1>
-            <span className="font-mono text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-md">
-              {order.soNumber}
-            </span>
-            <StatusBadge status={order.status} />
-          </div>
-          {headerActions}
-        </div>
+  const headerActions = showApprovalActions ? (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 text-xs gap-1.5 text-red-600 hover:bg-red-50 border-red-200"
+        onClick={() => setRejectOpen(true)}
+      >
+        <X className="w-3.5 h-3.5" /> Reject Order
+      </Button>
+      <Button
+        size="sm"
+        className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+        onClick={() => setApproveOpen(true)}
+      >
+        <Check className="w-3.5 h-3.5" /> Approve Order
+      </Button>
+    </>
+  ) : undefined;
 
-        {/* Approval Actions Alert */}
-        {showApprovalActions && (
-          <div className="p-4 bg-white border shadow-sm rounded-xl border-border">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-xs font-semibold text-foreground">Approval Required</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Review order details below and approve or reject this sales order.
-                </p>
-              </div>
-              <div className="flex items-center flex-shrink-0 gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs gap-1.5 text-red-600 hover:bg-red-50 border-red-200"
-                  onClick={() => setRejectOpen(true)}
-                >
-                  <X className="w-3.5 h-3.5" /> Reject Order
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-                  onClick={() => setApproveOpen(true)}
-                >
-                  <Check className="w-3.5 h-3.5" /> Approve Order
-                </Button>
-              </div>
+  const approvalBanner = showApprovalActions ? (
+    <div className="p-4 bg-white border shadow-sm rounded-xl border-border">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold text-foreground">Approval Required</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Review order details below and approve or reject this sales order.
+          </p>
+        </div>
+      </div>
+    </div>
+  ) : undefined;
+
+  return (
+    <>
+      <RecordDetailPage
+        listHref={approvalMode ? "/sales/orders?tab=approval" : "/sales/orders"}
+        listLabel={approvalMode ? "Order Approvals" : "Sales Orders"}
+        recordName={order.customerName}
+        recordCode={order.soNumber}
+        statusLabel={formatOrderStatus(order.status)}
+        statusVariant={orderStatusVariant(order.status)}
+        metaItems={[{ label: order.territory || "—" }]}
+        kpis={[
+          {
+            icon: IndianRupee,
+            iconBg: "bg-emerald-100",
+            iconColor: "text-emerald-700",
+            value: formatRupee(order.totalAmount),
+            label: "Total Amount",
+          },
+          {
+            icon: ListOrdered,
+            iconBg: "bg-blue-100",
+            iconColor: "text-blue-700",
+            value: String(order.lineItems.length),
+            label: "Line Items",
+          },
+          {
+            icon: Activity,
+            iconBg: "bg-amber-100",
+            iconColor: "text-amber-700",
+            value: formatOrderStatus(order.status),
+            label: "Status",
+          },
+        ]}
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        headerActions={headerActions}
+        sidebar={sidebar}
+        banner={approvalBanner}
+      >
+        {activeTab === "overview" && (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <RecordSectionCard title="Order Details" accent="blue">
+              <RecordKvRow label="Order Number" value={order.soNumber} mono />
+              <RecordKvRow label="Order Date" value={order.orderDate} />
+              <RecordKvRow label="Delivery Date" value={order.deliveryDate} />
+              <RecordKvRow label="Customer" value={`${order.customerCode} — ${order.customerName}`} />
+              <RecordKvRow label="Salesman ID" value={order.salesManId ?? "—"} />
+              <RecordKvRow label="Salesman" value={order.salesManName} />
+              <RecordKvRow label="Territory" value={order.territory} />
+              <RecordKvRow label="Order Status" value={formatOrderStatus(order.status)} />
+              <RecordKvRow label="Approval Status" value={formatApprovalStatus(approvalStatus)} />
+              <RecordKvRow label="Total Amount" value={formatRupee(order.totalAmount)} amount isLast />
+            </RecordSectionCard>
+
+            <div className="space-y-4">
+              {(order.referenceOrderNumber || order.parentOrderNumber || order.splitFromOrderNumber) && (
+                <RecordSectionCard title="Split Reference" accent="purple">
+                  {order.referenceOrderNumber && (
+                    <RecordKvRow label="Reference Order" value={order.referenceOrderNumber} mono />
+                  )}
+                  {order.parentOrderNumber && (
+                    <RecordKvRow label="Parent Order" value={order.parentOrderNumber} mono />
+                  )}
+                  {order.splitFromOrderNumber && (
+                    <RecordKvRow label="Split From" value={order.splitFromOrderNumber} mono isLast />
+                  )}
+                </RecordSectionCard>
+              )}
+
+              {order.status === "cancelled" && (
+                <RecordSectionCard title="Cancellation" accent="orange">
+                  <RecordKvRow label="Reason" value={order.cancellationReason} />
+                  <RecordKvRow label="Cancelled By" value={order.cancelledBy} />
+                  <RecordKvRow label="Cancelled Date" value={order.cancelledDate} isLast />
+                </RecordSectionCard>
+              )}
+
+              {(order.approvalStatus === "approved" || order.status === "approved") && (
+                <RecordSectionCard title="Approval" accent="green">
+                  <RecordKvRow label="Approved By" value={order.approvedBy} />
+                  <RecordKvRow label="Approved Date" value={order.approvedDate} isLast />
+                </RecordSectionCard>
+              )}
+
+              {(order.approvalStatus === "rejected" || order.status === "rejected") && (
+                <RecordSectionCard title="Rejection" accent="orange">
+                  <RecordKvRow label="Reason" value={order.rejectionReason} />
+                  <RecordKvRow label="Rejected By" value={order.rejectedBy} />
+                  <RecordKvRow label="Rejected Date" value={order.rejectedDate} isLast />
+                </RecordSectionCard>
+              )}
+
+              {(order.packingListNumber || packingList) && (
+                <RecordSectionCard title="Packing List" accent="blue">
+                  <RecordKvRow label="PL Number" value={order.packingListNumber} mono />
+                  <RecordKvRow
+                    label="Packing Status"
+                    value={order.packingStatus ? (PACKING_LIST_STATUS_LABELS[order.packingStatus] ?? order.packingStatus) : "—"}
+                  />
+                  <RecordKvRow
+                    label="Warehouse"
+                    value={order.warehouseName ?? packingList?.warehouseName}
+                    isLast
+                  />
+                </RecordSectionCard>
+              )}
+
+              <RecordSectionCard title="Audit" accent="slate">
+                <RecordKvRow label="Created By" value={order.createdBy} />
+                <RecordKvRow label="Created Date" value={order.createdDate} />
+                <RecordKvRow label="Updated By" value={order.updatedBy} />
+                <RecordKvRow label="Updated Date" value={order.updatedDate} isLast />
+              </RecordSectionCard>
             </div>
           </div>
         )}
 
-        {/* ── TOP SUMMARY CARD ── */}
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-          {/* Profile Summary Card */}
-          <div className="flex flex-col justify-between p-5 bg-white border shadow-sm lg:col-span-2 rounded-xl border-border">
-            <div className="flex items-start gap-4">
-              <div className="flex items-center justify-center flex-shrink-0 w-12 h-12 text-lg font-bold border rounded-full bg-brand-50 border-brand-100 text-brand-600">
-                SO
-              </div>
-              <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-base font-bold text-foreground">
-                    {order.customerName}
-                  </h2>
-                  <StatusBadge status={order.status} />
-                </div>
-                <div className="flex flex-wrap items-center text-xs gap-x-4 gap-y-1 text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <span className="font-semibold text-foreground">SO No:</span>
-                    <span className="font-mono">{order.soNumber}</span>
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1">
-                    <span className="font-semibold text-foreground">Order Date:</span>
-                    {order.orderDate}
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1">
-                    <span className="font-semibold text-foreground">Delivery Date:</span>
-                    {order.deliveryDate || "—"}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center pt-1 text-xs gap-x-4 gap-y-1 text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <span className="font-semibold text-foreground">Grand Total:</span>
-                    <span className="font-mono font-bold text-emerald-650">{formatRupee(order.totalAmount)}</span>
-                  </span>
-                  {order.warehouseName && (
-                    <>
-                      <span>•</span>
-                      <span className="flex items-center gap-1">
-                        <span className="font-semibold text-foreground">Warehouse:</span>
-                        {order.warehouseName}
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
+        {activeTab === "line-items" && (
+          <div className="overflow-hidden bg-white border shadow-sm rounded-xl border-border">
+            <div className="px-4 py-2.5 border-b border-border bg-muted/30">
+              <p className="text-xs font-semibold text-foreground">Product Lines</p>
             </div>
-          </div>
-
-          {/* 4 Compact KPI blocks */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col justify-between p-4 bg-white border shadow-sm rounded-xl border-border">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                Order Date
-              </p>
-              <p className="mt-1 text-xs font-bold truncate text-foreground">
-                {order.orderDate || "—"}
-              </p>
-            </div>
-
-            <div className="flex flex-col justify-between p-4 bg-white border shadow-sm rounded-xl border-border">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                Delivery Date
-              </p>
-              <p className="mt-1 text-xs font-bold truncate text-foreground">
-                {order.deliveryDate || "—"}
-              </p>
-            </div>
-
-            <div className="flex flex-col justify-between p-4 bg-white border shadow-sm rounded-xl border-border">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                Total Products
-              </p>
-              <p className="mt-1 text-xs font-bold truncate text-foreground">
-                {order.lineItems.length}
-              </p>
-            </div>
-
-            <div className="flex flex-col justify-between p-4 bg-white border shadow-sm rounded-xl border-border">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                Grand Total
-              </p>
-              <p className="mt-1 font-mono text-xs font-bold truncate text-emerald-650">
-                {formatRupee(order.totalAmount)}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* ── UNDERLINE TAB NAVIGATION ── */}
-        <div className="border-b border-border">
-          <div className="flex gap-6">
-            {tabs.map((t) => {
-              const active = activeSubTab === t.id;
-              const Icon = t.icon;
-              return (
-                <button
-                  key={t.id}
-                  className={cn(
-                    "pb-3 text-xs font-semibold border-b-2 transition-colors focus:outline-none flex items-center gap-1.5",
-                    active
-                      ? "border-brand-600 text-brand-600 font-bold"
-                      : "border-transparent text-muted-foreground hover:text-foreground",
-                  )}
-                  onClick={() => setActiveSubTab(t.id)}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* ── TAB CONTENT ── */}
-        <div className="w-full">
-          {/* TAB 1: OVERVIEW */}
-          {activeSubTab === "overview" && (
-            <div className="space-y-5">
-              {/* Card 1: Sales Order Information */}
-              <div className="p-6 space-y-4 bg-white border shadow-sm rounded-xl border-border">
-                <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
-                  Sales Order Information
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1">
-                  <DetailField label="Sales Order No." value={order.soNumber} mono />
-                  <DetailField label="Order Date" value={order.orderDate} />
-                  <DetailField label="Delivery Date" value={order.deliveryDate} />
-                  <DetailField label="Source Warehouse" value={order.warehouseName} />
-                  <DetailField label="Order Status" value={formatOrderStatus(order.status)} />
-                  <DetailField label="Approval Status" value={formatApprovalStatus(approvalStatus)} />
-                  {order.referenceOrderNumber && <DetailField label="Reference Order" value={order.referenceOrderNumber} mono />}
-                  {order.parentOrderNumber && <DetailField label="Parent Order" value={order.parentOrderNumber} mono />}
-                  {order.splitFromOrderNumber && <DetailField label="Split From" value={order.splitFromOrderNumber} mono />}
-
-                  {order.status === "cancelled" && (
-                    <>
-                      <DetailField label="Cancellation Reason" value={order.cancellationReason} />
-                      <DetailField label="Cancelled By" value={order.cancelledBy} />
-                      <DetailField label="Cancelled Date" value={order.cancelledDate} />
-                    </>
-                  )}
-
-                  {(order.approvalStatus === "approved" || order.status === "approved") && (
-                    <>
-                      <DetailField label="Approved By" value={order.approvedBy} />
-                      <DetailField label="Approved Date" value={order.approvedDate} />
-                    </>
-                  )}
-
-                  {(order.approvalStatus === "rejected" || order.status === "rejected") && (
-                    <>
-                      <DetailField label="Rejection Reason" value={order.rejectionReason} />
-                      <DetailField label="Rejected By" value={order.rejectedBy} />
-                      <DetailField label="Rejected Date" value={order.rejectedDate} />
-                    </>
-                  )}
-
-                  {(order.packingListNumber || packingList) && (
-                    <>
-                      <DetailField label="PL Number" value={order.packingListNumber} mono />
-                      <DetailField
-                        label="Packing Status"
-                        value={order.packingStatus ? (PACKING_LIST_STATUS_LABELS[order.packingStatus] ?? order.packingStatus) : "—"}
-                      />
-                      <DetailField label="Packing Warehouse" value={order.warehouseName ?? packingList?.warehouseName} />
-                    </>
-                  )}
-
-                  <DetailField label="Created By" value={order.createdBy} />
-                  <DetailField label="Created Date" value={order.createdDate} />
-                  <DetailField label="Updated By" value={order.updatedBy} />
-                  <DetailField label="Updated Date" value={order.updatedDate} />
-                  <DetailField label="" value=" "></DetailField>
-                </div>
-              </div>
-
-              {/* Card 2: Customer Details */}
-              <div className="p-6 space-y-4 bg-white border shadow-sm rounded-xl border-border">
-                <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
-                  Customer Details
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1">
-                  <DetailField label="Customer Name" value={order.customerName} />
-                  <DetailField label="Customer Code" value={order.customerCode} mono />
-                  <DetailField label="Territory" value={order.territory} />
-                  <DetailField label="Salesman ID" value={order.salesManId} mono />
-                  <DetailField label="Salesman Name" value={order.salesManName} />
-                  <DetailField label="" value=" "></DetailField>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: PRODUCTS */}
-          {activeSubTab === "products" && (
-            <div className="space-y-5">
-              <div className="p-6 space-y-4 bg-white border shadow-sm rounded-xl border-border">
-                <h3 className="pb-1 text-xs font-bold tracking-wider uppercase border-b text-foreground">
-                  Product Details
-                </h3>
-                <div className="overflow-x-auto bg-white border rounded-lg border-border">
-                  <table className="w-full text-xs text-left border-collapse min-w-[900px]">
-                    <thead>
-                      <tr className="font-semibold border-b border-border bg-slate-50 text-muted-foreground">
-                        <th className="w-12 px-4 py-2 text-center">Sr.</th>
-                        <th className="px-4 py-2">Product</th>
-                        <th className="px-4 py-2 w-28">SKU/Code</th>
-                        <th className="w-24 px-4 py-2 text-right">Stock</th>
-                        <th className="w-24 px-4 py-2 text-right">Qty</th>
-                        <th className="px-4 py-2 text-right w-28">Unit Price</th>
-                        <th className="w-20 px-4 py-2 text-right">Discount</th>
-                        <th className="w-32 px-4 py-2 text-right">GST % / Amt</th>
-                        <th className="w-32 px-4 py-2 text-right">Line Total</th>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[800px]">
+                <thead>
+                  <tr className="border-b bg-muted/40 border-border">
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold">Product</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Stock</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Qty</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold">Unit Price</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold w-20">Discount (%)</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">GST % / Amt</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold">Line Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {order.lineItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-8 text-xs text-center text-muted-foreground">No product lines</td>
+                    </tr>
+                  ) : order.lineItems.map(line => {
+                    const product = line.productId ? getProductById(line.productId) : undefined;
+                    return (
+                      <tr key={line.id} className="border-b border-border/60">
+                        <td className="px-4 py-2">
+                          <p className="text-xs font-semibold text-foreground">{line.productName || "—"}</p>
+                          <p className="text-[11px] font-mono text-brand-700">{line.productCode}</p>
+                        </td>
+                        <td className="px-4 py-2 text-xs text-right tabular-nums">{line.productId ? line.availableStock : "—"}</td>
+                        <td className="px-4 py-2 text-xs text-right tabular-nums">{line.quantity}</td>
+                        <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(line.unitPrice)}</td>
+                        <td className="px-4 py-2 text-xs text-right tabular-nums">{line.discount}%</td>
+                        <td className="px-4 py-2 text-xs text-right tabular-nums">
+                          <div className="flex flex-col items-end">
+                            <span className="text-[10px] text-muted-foreground font-semibold">{product?.gstRate || "0%"}</span>
+                            <span>{formatRupee(line.gstAmount)}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 text-xs font-semibold text-right tabular-nums">{formatRupee(line.lineTotal)}</td>
                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
-                      {order.lineItems.length === 0 ? (
-                        <tr>
-                          <td colSpan={9} className="px-4 py-8 text-xs font-semibold text-center text-muted-foreground">No products added.</td>
-                        </tr>
-                      ) : (
-                        order.lineItems.map((line, idx) => {
-                          const product = line.productId ? getProductById(line.productId) : undefined;
-                          return (
-                            <tr key={line.id} className="font-medium hover:bg-slate-50/50">
-                              <td className="px-4 py-2 text-center text-muted-foreground">{idx + 1}</td>
-                              <td className="px-4 py-2">
-                                <p className="font-semibold text-foreground">{line.productName || "—"}</p>
-                              </td>
-                              <td className="px-4 py-2 font-mono font-semibold text-brand-700">{line.productCode}</td>
-                              <td className="px-4 py-2 font-mono text-right text-muted-foreground">{line.productId ? line.availableStock : "—"}</td>
-                              <td className="px-4 py-2 font-mono text-right">{line.quantity}</td>
-                              <td className="px-4 py-2 font-mono text-right">{formatRupee(line.unitPrice)}</td>
-                              <td className="px-4 py-2 font-mono text-right">{line.discount}%</td>
-                              <td className="px-4 py-2 font-mono text-right">
-                                <div className="flex flex-col items-end">
-                                  <span className="text-[10px] text-muted-foreground font-semibold">{product?.gstRate || "0%"}</span>
-                                  <span>{formatRupee(line.gstAmount)}</span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-2 font-mono font-bold text-right text-brand-650">{formatRupee(line.lineTotal)}</td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Amount Summary Cards */}
-                <div className="flex flex-col pt-4 md:flex-row md:justify-end">
-                  <div className="w-full p-4 space-y-2 border md:w-80 border-border rounded-xl bg-slate-50/40">
-                    <h4 className="text-xs font-bold text-foreground border-b pb-1.5 uppercase tracking-wider">Amount Summary</h4>
-                    <div className="flex justify-between text-xs font-semibold text-muted-foreground">
-                      <span>Subtotal (Before Discount)</span>
-                      <span className="font-mono text-foreground">{formatRupee(totals.subtotalBeforeDiscount)}</span>
-                    </div>
-                    {totals.totalItemDiscounts > 0 && (
-                      <div className="flex justify-between text-xs font-semibold text-red-650">
-                        <span>Total Discounts</span>
-                        <span className="font-mono">-{formatRupee(totals.totalItemDiscounts)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-xs font-semibold text-muted-foreground">
-                      <span>Net Total</span>
-                      <span className="font-mono text-foreground">{formatRupee(totals.netTotal)}</span>
-                    </div>
-                    <div className="flex justify-between text-xs font-semibold text-muted-foreground">
-                      <span>Total GST</span>
-                      <span className="font-mono text-foreground">{formatRupee(totals.totalGst)}</span>
-                    </div>
-                    <div className="flex justify-between pt-2 mt-1 text-sm font-bold border-t text-foreground">
-                      <span>Grand Total</span>
-                      <span className="font-mono text-brand-700">{formatRupee(totals.grandTotal)}</span>
-                    </div>
-                  </div>
-                </div>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-end px-4 py-3 border-t border-border bg-muted/20">
+              <div className="w-full max-w-xs space-y-1 text-xs">
+                <div className="flex justify-between"><span className="text-muted-foreground">Net Total</span><span>{formatRupee(totals.netTotal)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Total GST</span><span>{formatRupee(totals.totalGst)}</span></div>
+                <div className="flex justify-between font-bold text-brand-700"><span>Grand Total</span><span>{formatRupee(totals.grandTotal)}</span></div>
               </div>
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
+      </RecordDetailPage>
 
       <CancelOrderDialog
         order={order}
@@ -603,6 +467,6 @@ export default function ViewSalesOrderPage() {
           {toast.msg}
         </div>
       )}
-    </AppLayout>
+    </>
   );
 }

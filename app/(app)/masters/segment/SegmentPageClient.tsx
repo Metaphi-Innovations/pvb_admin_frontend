@@ -14,15 +14,6 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetBody,
-  SheetFooter,
-} from "@/components/ui/sheet";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -32,7 +23,8 @@ import {
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { MiniKPICard } from "@/components/ui/KPICard";
-import { MasterFormGrid, MasterViewRow } from "@/components/masters/MasterModule";
+import { MasterFormGrid } from "@/components/masters/MasterModule";
+import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
 import { NameCodeDescriptionFields } from "@/components/masters/simpleFields";
 import {
   DEFAULT_SEGMENT_FORM,
@@ -426,109 +418,49 @@ export default function SegmentMasterPage() {
         />
       </div>
 
-      <Sheet open={sheetMode !== null} onOpenChange={(o) => !o && closeSheet()}>
-        <SheetContent>
-          <SheetHeader>
-            <div className="flex items-start gap-3 pr-8">
-              <div className="flex items-center justify-center border w-9 h-9 rounded-xl bg-brand-50 border-brand-100">
-                <PieChart className="w-4 h-4 text-brand-600" />
-              </div>
-              <div>
-                <SheetTitle className="text-base">{sheetTitle}</SheetTitle>
-                <SheetDescription className="text-xs">
-                  {sheetMode === "view" ? "Read-only details" : "Compact master form"}
-                </SheetDescription>
-              </div>
-            </div>
-          </SheetHeader>
-
-          <SheetBody>
-            {sheetMode === "view" && active ? (
-              <div className="space-y-4">
-                <div className="px-3 border rounded-lg border-border/60 bg-muted/10">
-                  <MasterViewRow label="Segment Name" value={active.segmentName} />
-                  <MasterViewRow label="Segment Code" value={<span className="font-mono">{active.segmentCode}</span>} />
-                  <MasterViewRow label="Description" value={active.description || "—"} />
-                  <MasterViewRow label="Status" value={active.status === "active" ? "Active" : "Inactive"} />
-                </div>
-                <div className="grid grid-cols-2 gap-3 pt-2 text-xs border-t">
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
-                    <p className="font-medium">{active.createdBy}</p>
-                    <p className="text-muted-foreground">{active.createdAt}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase">Updated By</p>
-                    <p className="font-medium">{active.updatedBy}</p>
-                    <p className="text-muted-foreground">{active.updatedAt}</p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
-                <MasterFormGrid>
-                  <NameCodeDescriptionFields
-                    form={{ name: form.segmentName, code: form.segmentCode, description: form.description }}
-                    setForm={(u) =>
-                      setForm((prev) => {
-                        const n = typeof u === "function" ? u({ name: prev.segmentName, code: prev.segmentCode, description: prev.description }) : u;
-                        return { ...prev, segmentName: n.name, segmentCode: n.code, description: n.description };
-                      })
-                    }
-                    errors={{}}
-                    labels={{ name: "Segment Name", code: "Segment Code" }}
-                    codeDisabled
-                    codeFirst
-                  />
-                </MasterFormGrid>
-                {/* <div className="flex items-center justify-between p-3 border rounded-lg border-border bg-muted/20">
-                  <div>
-                    <p className="text-xs font-medium">Status</p>
-                    <p className="text-[11px] text-muted-foreground">{form.status === "active" ? "Active" : "Inactive"}</p>
-                  </div>
-                  <Switch
-                    checked={form.status === "active"}
-                    onCheckedChange={(checked) =>
-                      setForm((prev) => ({ ...prev, status: checked ? "active" : "inactive" }))
-                    }
-                  />
-                </div> */}
-              </div>
-            )}
-          </SheetBody>
-
-          <SheetFooter>
-            {sheetMode === "view" ? (
-              <>
-                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
-                  Back
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
-                  onClick={() => active && openEdit(active)}
-                >
-                  Edit
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
-                  onClick={persist}
-                >
-                  Save
-                </Button>
-              </>
-            )}
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+      <MasterListingSheets
+        sheetMode={sheetMode}
+        active={active}
+        onClose={closeSheet}
+        onEdit={() => active && openEdit(active)}
+        onSave={persist}
+        sheetTitle={sheetTitle}
+        icon={PieChart}
+        viewDrawer={
+          active
+            ? buildSimpleMasterViewDrawer<SegmentRecord>({
+                drawerTitle: "Segment",
+                getRecordCode: (r) => r.segmentCode,
+                basicInfo: (r) => [
+                  { label: "Segment Name", value: r.segmentName },
+                  { label: "Segment Code", value: r.segmentCode, mono: true },
+                ],
+                description: (r) => r.description,
+                showDescription: true,
+              })(active)
+            : { title: "Segment", basicInfo: [] }
+        }
+        formContent={
+          <div className="space-y-4">
+            {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
+            <MasterFormGrid>
+              <NameCodeDescriptionFields
+                form={{ name: form.segmentName, code: form.segmentCode, description: form.description }}
+                setForm={(u) =>
+                  setForm((prev) => {
+                    const n = typeof u === "function" ? u({ name: prev.segmentName, code: prev.segmentCode, description: prev.description }) : u;
+                    return { ...prev, segmentName: n.name, segmentCode: n.code, description: n.description };
+                  })
+                }
+                errors={{}}
+                labels={{ name: "Segment Name", code: "Segment Code" }}
+                codeDisabled
+                codeFirst
+              />
+            </MasterFormGrid>
+          </div>
+        }
+      />
 
       <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <DialogContent className="max-w-sm">

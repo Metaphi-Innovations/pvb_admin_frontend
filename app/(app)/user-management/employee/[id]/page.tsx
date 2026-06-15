@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { RecordDetailPage } from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -12,14 +12,14 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  AlertTriangle, ArrowLeft, Edit2, Key, Trash2, MoreVertical,
-  CheckCircle2, XCircle, X, User, Info, Building2, ShieldAlert,
-  MapPin, UserCheck, Check, HelpCircle, Monitor, Smartphone, ChevronDown
+  AlertTriangle, Edit2, Key, Trash2,
+  CheckCircle2, XCircle, X, User, Mail, Phone,
 } from "lucide-react";
 import {
   type Employee,
@@ -492,11 +492,17 @@ export default function EmployeeDetailPage() {
 
   if (!employee) {
     return (
-      <AppLayout>
+      <RecordDetailPage
+        listHref="/user-management/employee"
+        listLabel="Employees"
+        recordName="Employee Details"
+        statusLabel="Loading"
+        statusVariant="neutral"
+      >
         <div className="flex items-center justify-center h-96">
           <p className="text-sm font-semibold text-muted-foreground">Loading user...</p>
         </div>
-      </AppLayout>
+      </RecordDetailPage>
     );
   }
 
@@ -506,111 +512,67 @@ export default function EmployeeDetailPage() {
     { id: "permissions", label: "Permissions & Access", icon: UserCheck },
   ];
 
+  const statusVariant =
+    employee.status === "active" ? "active" :
+    employee.status === "draft" ? "draft" :
+    employee.status === "archived" ? "blocked" : "inactive";
+
   return (
-    <AppLayout>
-      <div className="w-full space-y-6">
-        {/* ── HEADER SECTION ── */}
-        <div className="flex flex-col gap-4 pb-5 border-b sm:flex-row sm:items-center sm:justify-between border-border/80">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="icon"
-              className="w-8 h-8 rounded-lg hover:bg-muted border-border"
-              onClick={() => router.push("/user-management/employee")}>
-              <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-            </Button>
-            <h1 className="text-base font-bold text-foreground">User Details</h1>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 text-xs font-semibold gap-1.5 border-border hover:bg-muted"
-              onClick={handleStatusToggle}>
-              {employee.status === "active" ? "Deactivate" : "Activate"}
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-9 px-2.5">
-                  <MoreVertical className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
-                  Actions
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <button
-                  onClick={handlePasswordReset}
-                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted rounded-sm transition-colors text-left font-medium">
-                  <Key className="w-3.5 h-3.5 text-muted-foreground" /> Reset Password
-                </button>
-                <DropdownMenuSeparator />
-                <button
-                  onClick={handleDelete}
-                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-red-650 hover:bg-red-50 rounded-sm transition-colors text-left font-semibold">
-                  <Trash2 className="w-3.5 h-3.5" /> Delete User
-                </button>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Link href={`/user-management/employee/${employee.id}/edit`}>
-              <Button
-                size="sm"
-                className="h-9 gap-1.5 bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700 rounded-lg shadow-sm">
-                <Edit2 className="w-3.5 h-3.5" /> Edit User
-              </Button>
-            </Link>
-          </div>
-        </div>
-
-        {/* ── TOP SUMMARY CARD & KPI BLOCKS ── */}
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-          {/* Profile Summary Card */}
-          <div className="flex flex-col justify-between p-5 bg-white border shadow-sm lg:col-span-2 rounded-xl border-border">
-            <div className="flex items-start gap-4">
-              <div className="flex items-center justify-center flex-shrink-0 w-12 h-12 text-lg font-bold border rounded-full bg-brand-50 border-brand-100 text-brand-600">
-                {employee.fullName.charAt(0).toUpperCase()}
-              </div>
-              <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-base font-bold text-foreground">
-                    {employee.fullName}
-                  </h2>
-                  <span className="font-mono text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-md">
-                    {employee.employeeId}
-                  </span>
-                  <StatusBadge status={employee.status} />
-                </div>
-                <div className="flex flex-wrap items-center text-xs gap-x-4 gap-y-1 text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <span className="font-semibold text-foreground">Role:</span>
-                    {employee.role || "—"}
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1">
-                    <span className="font-semibold text-foreground">Email:</span>
-                    {employee.email || "—"}
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1">
-                    <span className="font-semibold text-foreground">Mobile:</span>
-                    {employee.mobile ? `${employee.countryCode || "+91"} ${employee.mobile}` : "—"}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center pt-1 text-xs gap-x-4 gap-y-1 text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <span className="font-semibold text-foreground">Department:</span>
-                    {employee.department || "—"}
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1">
-                    <span className="font-semibold text-foreground">Type:</span>
-                    {employee.employeeType || "—"}
-                  </span>
-                </div>
-              </div>
+    <>
+      <RecordDetailPage
+        listHref="/user-management/employee"
+        listLabel="Employees"
+        recordName={employee.fullName}
+        recordCode={employee.employeeId}
+        statusLabel={employee.status.charAt(0).toUpperCase() + employee.status.slice(1)}
+        statusVariant={statusVariant}
+        metaItems={[
+          { icon: Mail, label: employee.email },
+          { icon: Phone, label: employee.mobile },
+        ]}
+        active={employee.status === "active"}
+        onActiveChange={() => handleStatusToggle()}
+        onEdit={() => router.push(`/user-management/employee/${employee.id}/edit`)}
+        moreActions={[
+          {
+            label: "Reset Password",
+            onClick: handlePasswordReset,
+          },
+          {
+            label: "Archive User",
+            onClick: handleDelete,
+            destructive: true,
+          },
+        ]}
+        sidebar={{
+          summary: [
+            { label: "Department", value: employee.department, highlight: true },
+            { label: "Role", value: employee.role },
+            { label: "Joining Date", value: employee.joiningDate },
+            { label: "Reporting Manager", value: employee.reportingManager || "None" },
+            { label: "Created", value: employee.createdDate },
+            { label: "Updated", value: employee.updatedDate },
+          ],
+          quickActions: [
+            {
+              label: "Reset Password",
+              icon: Key,
+              onClick: handlePasswordReset,
+              variant: "outline",
+            },
+          ],
+        }}
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {/* Personal Details */}
+          <div className="border border-border rounded-xl bg-white p-3.5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2.5">Personal Details</p>
+            <div className="space-y-0">
+              <InfoRow label="Full Name" value={employee.fullName} />
+              <InfoRow label="Email" value={employee.email} />
+              <InfoRow label="Mobile" value={employee.mobile} />
+              {employee.alternativeMobile && <InfoRow label="Alt Mobile" value={employee.alternativeMobile} />}
+              <InfoRow label="Blood Group" value={employee.bloodGroup} />
             </div>
           </div>
 
@@ -860,7 +822,7 @@ export default function EmployeeDetailPage() {
             </div>
           )}
         </div>
-      </div>
+      </RecordDetailPage>
 
       {/* Dialogs */}
       <ConfirmDialog
@@ -891,6 +853,6 @@ export default function EmployeeDetailPage() {
 
       {/* Toast */}
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-    </AppLayout>
+    </>
   );
 }

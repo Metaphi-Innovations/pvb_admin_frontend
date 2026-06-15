@@ -6,6 +6,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { cn } from "@/lib/utils";
 import {
   Edit2,
+  Eye,
   FileText,
   CheckCircle2,
   XCircle,
@@ -21,6 +22,7 @@ import { MiniKPICard } from "@/components/ui/KPICard";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
+import { MasterRecordDrawer, masterAuditFromRecord } from "@/components/masters/MasterRecordDrawer";
 
 function AuditCell({
   name,
@@ -65,6 +67,7 @@ export default function DocumentTypesPage() {
   const [pageSize, setPageSize] = useState(10);
   
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const [viewTarget, setViewTarget] = useState<DocumentTypeMaster | null>(null);
 
   useEffect(() => {
     setRecords(loadDocumentTypes());
@@ -161,6 +164,12 @@ export default function DocumentTypesPage() {
   ];
 
   const actions: ActionItemConfig<DocumentTypeMaster>[] = [
+    {
+      label: "View",
+      action: "view",
+      icon: Eye,
+      onClick: (row) => setViewTarget(row),
+    },
     {
       label: "Edit",
       action: "edit",
@@ -288,6 +297,31 @@ export default function DocumentTypesPage() {
           currentSort={sort}
         />
       </div>
+
+      {viewTarget && (
+        <MasterRecordDrawer
+          open={!!viewTarget}
+          onOpenChange={(o) => !o && setViewTarget(null)}
+          onClose={() => setViewTarget(null)}
+          onEdit={() => {
+            router.push(`/masters/document-types/${viewTarget.id}/edit`);
+            setViewTarget(null);
+          }}
+          title="Document Type"
+          icon={FileText}
+          recordCode={viewTarget.documentTypeCode}
+          status={viewTarget.status}
+          basicInfo={[{ label: "Title", value: viewTarget.title }]}
+          description={viewTarget.description}
+          showDescription
+          auditInfo={masterAuditFromRecord({
+            createdBy: viewTarget.createdBy,
+            createdDate: viewTarget.createdDate,
+            updatedBy: viewTarget.updatedBy,
+            updatedDate: viewTarget.updatedDate,
+          })}
+        />
+      )}
 
       {/* Toast */}
       {toast && (
