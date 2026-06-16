@@ -15,7 +15,6 @@ import {
   MasterModule,
   MasterFormGrid,
   MasterField,
-  MasterViewRow,
   compactInput,
 } from "@/components/masters/MasterModule";
 import {
@@ -105,15 +104,17 @@ export default function SubCategoryMasterPage() {
             </MasterFormGrid>
           );
         },
-        renderViewDetails: (r) => (
-          <div className="rounded-lg border border-border/60 bg-muted/10 px-3">
-            <MasterViewRow label="Category" value={r.categoryName} />
-            <MasterViewRow label="Sub Category Name" value={r.subCategoryName} />
-            <MasterViewRow label="Sub Category Code" value={<span className="font-mono">{r.subCategoryCode}</span>} />
-            <MasterViewRow label="Description" value={r.description || "—"} />
-            <MasterViewRow label="Status" value={r.status === "active" ? "Active" : "Inactive"} />
-          </div>
-        ),
+        viewConfig: {
+          drawerTitle: "Sub Category",
+          getRecordCode: (r) => r.subCategoryCode,
+          basicInfo: (r) => [
+            { label: "Category", value: r.categoryName },
+            { label: "Sub Category Name", value: r.subCategoryName },
+            { label: "Sub Category Code", value: r.subCategoryCode, mono: true },
+          ],
+          description: (r) => r.description,
+          showDescription: true,
+        },
       }}
     />
   );

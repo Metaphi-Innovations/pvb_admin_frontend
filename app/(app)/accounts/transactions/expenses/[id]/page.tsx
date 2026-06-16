@@ -1,5 +1,7 @@
-import { redirect } from "next/navigation";
+import ExpenseViewPageClient from "../../../expenses/ExpenseViewPageClient";
 
-export default function LegacyRedirect() {
-  redirect("/accounts/vouchers?tab=journal");
+type PageProps = { params: { id: string } };
+
+export default function ExpenseViewPage({ params }: PageProps) {
+  return <ExpenseViewPageClient paymentId={Number(params.id)} />;
 }

@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
-import { FormContainer } from "@/components/layout/FormContainer";
+import { RecordDetailPage } from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Activity, Building, Package, BarChart2, Pencil } from "lucide-react";
+import { Activity, Building, Package, BarChart2 } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import { getReorderById, getReordersByProduct } from "../../services";
 import { ReorderLevel } from "../../types";
@@ -44,9 +44,15 @@ export default function ViewReorderLevelPage() {
 
   if (!record || !statusConfig) {
     return (
-      <FormContainer title="Reorder Level" onBack={() => router.push("/warehouse/reorder-level")}>
+      <RecordDetailPage
+        listHref="/warehouse/reorder-level"
+        listLabel="Reorder Levels"
+        recordName="Reorder Level"
+        statusLabel="Loading"
+        statusVariant="neutral"
+      >
         <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading record...</div>
-      </FormContainer>
+      </RecordDetailPage>
     );
   }
 
@@ -55,20 +61,32 @@ export default function ViewReorderLevelPage() {
     ? Math.min(100, Math.round((record.currentStock / (record.reorderLevelQty * 2)) * 100))
     : 100;
 
+  const statusVariant =
+    record.status === "In Stock" ? "active" :
+    record.status === "Low Stock" ? "blocked" : "neutral";
+
   return (
-    <FormContainer
-      title={record.product}
-      description={`Reorder level configurations for ${record.warehouse}`}
-      onBack={() => router.push("/warehouse/reorder-level")}
-      actions={
-        <div className="flex items-center gap-2">
-          <StatusBadge status={record.status} />
-          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => router.push(`/warehouse/reorder-level/edit/${record.id}`)}>
-            <Pencil className="w-3 h-3" /> Edit
-          </Button>
-        </div>
-      }
-      noCard={true}
+    <RecordDetailPage
+      listHref="/warehouse/reorder-level"
+      listLabel="Reorder Levels"
+      recordName={record.product}
+      recordCode={record.sku}
+      statusLabel={record.status}
+      statusVariant={statusVariant}
+      metaItems={[
+        { icon: Building, label: record.warehouse },
+        { icon: Package, label: record.category },
+      ]}
+      onEdit={() => router.push(`/warehouse/reorder-level/edit/${record.id}`)}
+      sidebar={{
+        summary: [
+          { label: "Current Stock", value: record.currentStock, highlight: true },
+          { label: "Reserved Stock", value: record.reservedStock },
+          { label: "Available Stock", value: availableStock },
+          { label: "Reorder Level Qty", value: record.reorderLevelQty },
+          { label: "Last Updated", value: record.lastUpdated },
+        ],
+      }}
     >
       <div className="space-y-6">
 
@@ -177,16 +195,7 @@ export default function ViewReorderLevelPage() {
           </div>
         )}
 
-        {/* Actions */}
-        <div className="flex items-center justify-end gap-3 border-t pt-4">
-          <Button variant="outline" size="sm" className="h-8 text-xs font-semibold" onClick={() => router.push("/warehouse/reorder-level")}>
-            Back to List
-          </Button>
-          <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5" onClick={() => router.push(`/warehouse/reorder-level/edit/${record.id}`)}>
-            <Pencil className="w-3.5 h-3.5" /> Edit Level
-          </Button>
-        </div>
       </div>
-    </FormContainer>
+    </RecordDetailPage>
   );
 }

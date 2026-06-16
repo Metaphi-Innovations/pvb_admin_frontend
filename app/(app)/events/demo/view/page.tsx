@@ -2,10 +2,9 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppLayout } from "@/components/layout/AppLayout";
-import { Button } from "@/components/ui/button";
+import { RecordDetailPage } from "@/components/record-detail";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, ChevronLeft, ChevronRight, Star } from "lucide-react";
+import { ChevronLeft, ChevronRight, Star, User } from "lucide-react";
 import { type DemoRecord, SEED, VIEW_DEMO_STORAGE_KEY } from "../demo-data";
 
 function formatList(values: string[]) {
@@ -121,59 +120,80 @@ export default function DemoViewPage() {
     router.push("/events/demo");
   };
 
-  return (
-    <AppLayout>
-      <div className="space-y-4">
-        <section className="rounded-xl border border-border bg-white shadow-sm">
-          <div className="flex items-start justify-between gap-4 px-5 py-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 flex-shrink-0 rounded-lg hover:bg-muted"
-                onClick={handleCloseView}
-                aria-label="Back to demo listing"
-              >
-                <ArrowLeft className="h-4 w-4 text-muted-foreground" />
-              </Button>
-              <h1 className="truncate text-base font-semibold text-foreground">
-                {viewRecord?.demoCode} - Demo Details
-              </h1>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                aria-label="Previous demo"
-                disabled={currentRecordIndex <= 0}
-                onClick={() => handleStepViewRecord(-1)}
-                className={cn(
-                  "inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted",
-                  currentRecordIndex <= 0 ? "cursor-not-allowed opacity-40" : "hover:text-foreground",
-                )}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                aria-label="Next demo"
-                disabled={currentRecordIndex < 0 || currentRecordIndex >= records.length - 1}
-                onClick={() => handleStepViewRecord(1)}
-                className={cn(
-                  "inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted",
-                  currentRecordIndex < 0 || currentRecordIndex >= records.length - 1
-                    ? "cursor-not-allowed opacity-40"
-                  : "hover:text-foreground",
-                )}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        </section>
+  if (!viewRecord) {
+    return (
+      <RecordDetailPage
+        listHref="/events/demo"
+        listLabel="Demos"
+        recordName="Demo Details"
+        statusLabel="Loading"
+        statusVariant="neutral"
+      >
+        <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading demo...</div>
+      </RecordDetailPage>
+    );
+  }
 
-        {viewRecord && (
-          <>
+  return (
+    <RecordDetailPage
+      listHref="/events/demo"
+      listLabel="Demos"
+      recordName={viewRecord.demoTopic}
+      recordCode={viewRecord.demoCode}
+      statusLabel="Completed"
+      statusVariant="active"
+      metaItems={[
+        { icon: User, label: viewRecord.demonstratorName },
+        { label: viewRecord.demoMethod },
+      ]}
+      headerActions={
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            aria-label="Previous demo"
+            disabled={currentRecordIndex <= 0}
+            onClick={() => handleStepViewRecord(-1)}
+            className={cn(
+              "inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted",
+              currentRecordIndex <= 0 ? "cursor-not-allowed opacity-40" : "hover:text-foreground",
+            )}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            aria-label="Next demo"
+            disabled={currentRecordIndex < 0 || currentRecordIndex >= records.length - 1}
+            onClick={() => handleStepViewRecord(1)}
+            className={cn(
+              "inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted",
+              currentRecordIndex < 0 || currentRecordIndex >= records.length - 1
+                ? "cursor-not-allowed opacity-40"
+                : "hover:text-foreground",
+            )}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      }
+      sidebar={{
+        summary: [
+          { label: "Farmers Attended", value: viewRecord.totalFarmersAttended, highlight: true },
+          { label: "Farmers Invited", value: viewRecord.totalFarmersInvited },
+          { label: "Distributors Attended", value: viewRecord.totalDistributorsAttended },
+          { label: "Leads Generated", value: viewRecord.leadsGenerated },
+          { label: "Event Rating", value: `${viewRecord.eventSuccessRating}/5` },
+        ],
+        quickActions: [
+          {
+            label: "Back to List",
+            onClick: handleCloseView,
+            variant: "outline",
+          },
+        ],
+      }}
+    >
+      <>
             <SectionCard title="Demo Information">
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <InfoField label="Demo Topic" value={viewRecord.demoTopic} />
@@ -263,8 +283,6 @@ export default function DemoViewPage() {
               </div>
             </SectionCard>
           </>
-        )}
-      </div>
-    </AppLayout>
+    </RecordDetailPage>
   );
 }

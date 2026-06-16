@@ -1,29 +1,44 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
+import { AppLayout } from "@/components/layout/AppLayout";
+import {
+  RecordDetailPage,
+  RecordKvRow,
+  RecordMiniTable,
+  RecordSectionCard,
+  RecordStatusPill,
+  StatusBadge,
+} from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
-	ArrowLeft,
-	Edit2,
-	Ban,
-	CheckCircle2,
-	ShieldAlert,
-	Eye,
-	Building2,
-	FileText,
-	ShoppingBag,
-	CreditCard,
-	Info,
+  AlertCircle,
+  Ban,
+  Calendar,
+  CheckCircle,
+  CheckCircle2,
+  CreditCard,
+  Eye,
+  FileText,
+  Info,
+  IndianRupee,
+  Landmark,
+  MapPin,
+  Mail,
+  Phone,
+  Plus,
+  Pencil,
+  ShieldAlert,
+  ShoppingCart,
+  Clock,
+  TrendingUp,
+  Wallet,
 } from "lucide-react";
-import {
-	Dialog,
-	DialogContent,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/ui/dialog";
 import {
 	type Customer,
 	type CustomerStatus,
@@ -37,101 +52,96 @@ import {
 	getActiveGSTMasters,
 	getActiveTDSMasters,
 } from "../customer-data";
-import { CustomerStatusControl } from "../components/CustomerStatusControl";
 import { readCustomerPermissions } from "../customer-permissions";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { loadOrders } from "@/app/(app)/sales/orders/orders-data";
+import { formatMoney } from "@/lib/accounts/money-format";
 
-const STATUS_CFG: Record<
-	CustomerStatus,
-	{ bg: string; text: string; dot: string; label: string }
+const STATUS_VARIANT: Record<
+  CustomerStatus,
+  "active" | "inactive" | "draft" | "blocked"
 > = {
-	active: {
-		bg: "bg-emerald-50 border-emerald-200",
-		text: "text-emerald-700",
-		dot: "bg-emerald-500",
-		label: "Active",
-	},
-	inactive: {
-		bg: "bg-slate-100 border-slate-200",
-		text: "text-slate-600",
-		dot: "bg-slate-400",
-		label: "Inactive",
-	},
-	draft: {
-		bg: "bg-blue-50 border-blue-200",
-		text: "text-blue-700",
-		dot: "bg-blue-500",
-		label: "Draft",
-	},
-	blocked: {
-		bg: "bg-red-50 border-red-200",
-		text: "text-red-700",
-		dot: "bg-red-400",
-		label: "Blocked",
-	},
+  active: "active",
+  inactive: "inactive",
+  draft: "draft",
+  blocked: "blocked",
 };
 
-function StatusBadge({ status }: { status: CustomerStatus }) {
-	const cfg = STATUS_CFG[status] || {
-		bg: "bg-slate-100 border-slate-200",
-		text: "text-slate-600",
-		dot: "bg-slate-400",
-		label: status,
-	};
-	return (
-		<span
-			className={cn(
-				"inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold border",
-				cfg.bg,
-				cfg.text,
-			)}
-		>
-			<span className={cn("h-1.5 w-1.5 rounded-full", cfg.dot)} />
-			{cfg.label}
-		</span>
-	);
+const STATUS_LABEL: Record<CustomerStatus, string> = {
+  active: "Active",
+  inactive: "Inactive",
+  draft: "Draft",
+  blocked: "Blocked",
+};
+
+function TypeBadge({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700">
+      {label}
+    </span>
+  );
 }
 
-function DetailField({
-	label,
-	value,
-	mono,
+const COMPLIANCE_TONES = {
+  green: { bg: "#ECFDF5", icon: "#10B981", Icon: CheckCircle2, badgeBg: "#ECFDF5", badgeTx: "#166534", badgeBd: "#86EFAC" },
+  amber: { bg: "#FFFBEB", icon: "#D97706", Icon: AlertCircle, badgeBg: "#FFFBEB", badgeTx: "#92400E", badgeBd: "#FDE68A" },
+  blue: { bg: "#EFF6FF", icon: "#3B82F6", Icon: Info, badgeBg: "#EFF6FF", badgeTx: "#1D4ED8", badgeBd: "#93C5FD" },
+} as const;
+
+function ComplianceRow({
+  tone,
+  label,
+  value,
+  badge,
+  isLast,
 }: {
-	label: string;
-	value?: React.ReactNode;
-	mono?: boolean;
+  tone: keyof typeof COMPLIANCE_TONES;
+  label: string;
+  value: string;
+  badge: string;
+  isLast?: boolean;
 }) {
-	const displayVal =
-		value !== undefined && value !== null && value !== "" ? value : "—";
-	return (
-		<div className='py-2 space-y-1 border-b border-border/50 last:border-0'>
-			<span className='text-[10px] font-semibold text-muted-foreground uppercase tracking-wider'>
-				{label}
-			</span>
-			<p
-				className={cn(
-					"text-xs font-semibold text-foreground",
-					mono && "font-mono",
-				)}
-			>
-				{displayVal}
-			</p>
-		</div>
-	);
+  const t = COMPLIANCE_TONES[tone];
+  const Icon = t.Icon;
+  return (
+    <div
+      className="flex items-center gap-3 py-2"
+      style={{ borderBottom: isLast ? "none" : "1px solid #F0F3FA" }}
+    >
+      <div
+        className="flex flex-shrink-0 items-center justify-center rounded-full"
+        style={{ width: "28px", height: "28px", background: t.bg }}
+      >
+        <Icon className="w-3.5 h-3.5" style={{ color: t.icon }} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[12.5px] font-medium text-[#3D5473] leading-tight">{label}</p>
+        <p className="text-[11px] text-[#6B80A0] truncate">{value}</p>
+      </div>
+      <span
+        className="inline-flex items-center rounded-md border text-[11px] font-bold flex-shrink-0"
+        style={{ background: t.badgeBg, color: t.badgeTx, borderColor: t.badgeBd, padding: "2px 9px" }}
+      >
+        {badge}
+      </span>
+    </div>
+  );
 }
 
 export default function CustomerDetailPage() {
-	const router = useRouter();
-	const { id } = useParams<{ id: string }>();
-	const [customer, setCustomer] = useState<Customer | null>(null);
-	const [records, setRecords] = useState<Customer[]>([]);
-	const [perms, setPerms] = useState(readCustomerPermissions);
-	const [activeSubTab, setActiveSubTab] = useState("overview");
-	const [previewDoc, setPreviewDoc] = useState<{
-		title: string;
-		fileUrl: string;
-		fileName: string;
-	} | null>(null);
+  const router = useRouter();
+  const { id } = useParams<{ id: string }>();
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [records, setRecords] = useState<Customer[]>([]);
+  const [perms, setPerms] = useState(readCustomerPermissions);
+  const [activeTab, setActiveTab] = useState("overview");
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [blockReason, setBlockReason] = useState("");
+  const [blockError, setBlockError] = useState("");
+  const [previewDoc, setPreviewDoc] = useState<{
+    title: string;
+    fileUrl: string;
+    fileName: string;
+  } | null>(null);
 
 	useEffect(() => {
 		setPerms(readCustomerPermissions());
@@ -140,871 +150,673 @@ export default function CustomerDetailPage() {
 		setCustomer(list.find((c) => c.id === Number(id)) ?? null);
 	}, [id]);
 
-	const updateStatus = (
-		customerId: number,
-		status: CustomerStatus,
-		blockReason = "",
-	) => {
-		const today = todayStr();
-		const updated = records.map((r) => {
-			if (r.id !== customerId) return r;
-			return {
-				...r,
-				status,
-				blockReason: status === "blocked" ? blockReason : "",
-				updatedBy: "Admin",
-				updatedDate: today,
-				lastStatusChange: today,
-				statusHistory: [
-					...r.statusHistory,
-					{
-						date: today,
-						from: r.status,
-						to: status,
-						by: "Admin",
-						reason: blockReason || `Status -> ${status}`,
-					},
-				],
-			};
-		});
-		setRecords(updated);
-		saveCustomers(updated);
-		setCustomer(updated.find((c) => c.id === customerId) ?? null);
-	};
+  const orders = useMemo(() => {
+    if (!customer) return [];
+    return loadOrders().filter((o) => o.customerId === customer.id);
+  }, [customer]);
 
-	if (!perms.canView) {
-		return (
-			<div className='flex flex-col items-center gap-3 py-16 text-center'>
-				<div className='flex items-center justify-center w-12 h-12 border rounded-xl border-amber-200 bg-amber-50'>
-					<ShieldAlert className='w-6 h-6 text-amber-600' />
-				</div>
-				<h1 className='text-lg font-bold text-foreground'>Access Restricted</h1>
-				<p className='max-w-md text-sm text-muted-foreground'>
-					You do not have permission to view this customer.
-				</p>
-				<Link
-					href='/masters/customers'
-					className='mt-2 text-xs text-brand-600 hover:underline'
-				>
-					Back to listing
-				</Link>
-			</div>
-		);
-	}
+  const orderStats = useMemo(() => {
+    const totalValue = orders.reduce((s, o) => s + o.totalAmount, 0);
+    const pending = orders
+      .filter((o) => o.status === "pending_approval" || o.status === "draft")
+      .reduce((s, o) => s + o.totalAmount, 0);
+    const last = [...orders].sort((a, b) => b.orderDate.localeCompare(a.orderDate))[0];
+    return {
+      count: orders.length,
+      totalValue,
+      pending,
+      lastDate: last?.orderDate ?? "—",
+    };
+  }, [orders]);
 
-	if (!customer) {
-		return (
-			<div className='py-16 text-center'>
-				<p className='text-sm text-muted-foreground'>Customer not found.</p>
-				<Link
-					href='/masters/customers'
-					className='inline-block mt-2 text-xs text-brand-600 hover:underline'
-				>
-					Back to listing
-				</Link>
-			</div>
-		);
-	}
+  const updateStatus = (customerId: number, status: CustomerStatus, reason = "") => {
+    const today = todayStr();
+    const updated = records.map((r) => {
+      if (r.id !== customerId) return r;
+      return {
+        ...r,
+        status,
+        blockReason: status === "blocked" ? reason : "",
+        updatedBy: "Admin",
+        updatedDate: today,
+        lastStatusChange: today,
+        statusHistory: [
+          ...r.statusHistory,
+          {
+            date: today,
+            from: r.status,
+            to: status,
+            by: "Admin",
+            reason: reason || `Status → ${status}`,
+          },
+        ],
+      };
+    });
+    setRecords(updated);
+    saveCustomers(updated);
+    setCustomer(updated.find((c) => c.id === customerId) ?? null);
+  };
 
-	const gst = getActiveGSTMasters().find((g) => g.id === customer.gstMasterId);
-	const tds = getActiveTDSMasters().find((t) => t.id === customer.tdsMasterId);
-	const payLabel =
-		PAYMENT_TERMS_OPTIONS.find((p) => p.value === customer.paymentTerms)
-			?.label ?? customer.paymentTerms;
+  if (!perms.canView) {
+    return (
+      <AppLayout>
+        <div className="flex flex-col items-center gap-3 py-16 text-center">
+          <ShieldAlert className="h-10 w-10 text-amber-600" />
+          <h1 className="text-lg font-bold">Access restricted</h1>
+          <Link href="/masters/customers" className="text-xs text-[#1554B4] hover:underline">
+            Back to listing
+          </Link>
+        </div>
+      </AppLayout>
+    );
+  }
 
-	const mappedProducts = customer.products || customer.customerProducts || [];
-	const branchCount = customer.branches?.length ?? 0;
-	const productCount = mappedProducts.length;
-	const docCount = (() => {
-		const reqCount =
-			customer.documents?.requiredDocuments?.filter((d) => d.fileName).length ??
-			0;
-		const addCount =
-			customer.documents?.additionalDocuments?.filter(
-				(d) => d.fileName || d.title,
-			).length ?? 0;
-		return reqCount + addCount;
-	})();
+  if (!customer) {
+    return (
+      <AppLayout>
+        <div className="py-16 text-center">
+          <p className="text-sm text-[#6B80A0]">Customer not found.</p>
+          <Link href="/masters/customers" className="mt-2 inline-block text-xs text-[#1554B4]">
+            Back to listing
+          </Link>
+        </div>
+      </AppLayout>
+    );
+  }
 
-	const tabs = [
-		{ id: "overview", label: "Overview", icon: Info },
-		{ id: "branches", label: `Branches (${branchCount})`, icon: Building2 },
-		{ id: "bank", label: "Bank Details", icon: CreditCard },
-		{
-			id: "products",
-			label: `Products Mapped (${productCount})`,
-			icon: ShoppingBag,
-		},
-		{ id: "documents", label: `Documents (${docCount})`, icon: FileText },
-	];
+  const gst = getActiveGSTMasters().find((g) => g.id === customer.gstMasterId);
+  const tds = getActiveTDSMasters().find((t) => t.id === customer.tdsMasterId);
+  const payLabel =
+    PAYMENT_TERMS_OPTIONS.find((p) => p.value === customer.paymentTerms)?.label ??
+    customer.paymentTerms;
+  const typeLabel =
+    CUSTOMER_TYPE_LABELS[customer.customerType.toLowerCase()] ?? customer.customerType;
+  const canToggle =
+    perms.canEdit && customer.status !== "blocked" && customer.status !== "draft";
 
-	return (
-		<AppLayout>
-			<div className='w-full space-y-6'>
-				{/* ── HEADER SECTION ── */}
-				<div className='flex flex-col gap-4 pb-5 border-b sm:flex-row sm:items-center sm:justify-between border-border/80'>
-					<div className='flex items-center gap-3'>
-						<Button
-							variant='outline'
-							size='icon'
-							className='w-8 h-8 rounded-lg hover:bg-muted border-border'
-							onClick={() => router.push("/masters/customers")}
-						>
-							<ArrowLeft className='w-4 h-4 text-muted-foreground' />
-						</Button>
-						<h1 className='text-base font-bold text-foreground'>
-							Customer Details
-						</h1>
-					</div>
+  const tabs = [
+    { value: "overview", label: "Overview" },
+    { value: "tax", label: "Tax & Compliance" },
+    { value: "bank", label: "Bank Details" },
+    { value: "commercial", label: "Commercial" },
+    { value: "orders", label: "Orders", count: orders.length },
+    { value: "activity", label: "Activity" },
+  ];
 
-					<div className='flex items-center gap-2'>
-						<CustomerStatusControl
-							customer={customer}
-							onStatusChange={updateStatus}
-							canEdit={perms.canEdit}
-						/>
-						{perms.canEdit && (
-							<Link href={`/masters/customers/${customer.id}/edit`}>
-								<Button
-									size='sm'
-									className='h-9 gap-1.5 bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700 rounded-lg shadow-sm'
-								>
-									<Edit2 className='w-3.5 h-3.5' /> Edit Customer
-								</Button>
-							</Link>
-						)}
-					</div>
-				</div>
+  const pendingZero = orderStats.pending <= 0;
+  const kpis = [
+    {
+      icon: ShoppingCart,
+      iconBg: "#EEF3FB",
+      iconColor: "#0C3F8A",
+      value: String(orderStats.count),
+      label: "Total Orders",
+    },
+    {
+      icon: TrendingUp,
+      iconBg: "#E6F7EF",
+      iconColor: "#1E9E61",
+      value: formatMoney(orderStats.totalValue),
+      label: "Total Value",
+    },
+    {
+      icon: CreditCard,
+      iconBg: "#FFFBEB",
+      iconColor: "#D97706",
+      value: formatCreditLimit(customer.creditLimit),
+      label: "Credit Limit",
+    },
+    {
+      icon: Calendar,
+      iconBg: "#F5F3FF",
+      iconColor: "#7C3AED",
+      value: orderStats.lastDate,
+      label: "Last Order",
+    },
+    {
+      icon: pendingZero ? CheckCircle : AlertCircle,
+      iconBg: pendingZero ? "#ECFDF5" : "#FEF2F2",
+      iconColor: pendingZero ? "#10B981" : "#DC2626",
+      value: formatMoney(orderStats.pending),
+      label: "Pending Amount",
+    },
+  ];
 
-				{/* ── TOP SUMMARY CARD & KPI BLOCKS ── */}
-				<div className='grid grid-cols-1 gap-5 lg:grid-cols-3'>
-					{/* Profile Summary Card */}
-					<div className='flex flex-col justify-between p-5 bg-white border shadow-sm lg:col-span-2 rounded-xl border-border'>
-						<div className='flex items-start gap-4'>
-							<div className='flex items-center justify-center flex-shrink-0 w-12 h-12 text-lg font-bold border rounded-full bg-brand-50 border-brand-100 text-brand-600'>
-								{customer.customerName.charAt(0).toUpperCase()}
-							</div>
-							<div className='space-y-1'>
-								<div className='flex flex-wrap items-center gap-2'>
-									<h2 className='text-base font-bold text-foreground'>
-										{customer.customerName}
-									</h2>
-									<span className='font-mono text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-md'>
-										{customer.customerCode}
-									</span>
-									<StatusBadge status={customer.status} />
-								</div>
-								<div className='flex flex-wrap items-center text-xs gap-x-4 gap-y-1 text-muted-foreground'>
-									<span className='flex items-center gap-1'>
-										<span className='font-semibold text-foreground'>Type:</span>
-										{CUSTOMER_TYPE_LABELS[
-											customer.customerType.toLowerCase()
-										] ?? customer.customerType}
-									</span>
-									<span>•</span>
-									<span className='flex items-center gap-1'>
-										<span className='font-semibold text-foreground'>
-											Mobile:
-										</span>
-										{formatMobile(customer.countryCode, customer.mobile)}
-									</span>
-									<span>•</span>
-									<span className='flex items-center gap-1'>
-										<span className='font-semibold text-foreground'>
-											Email:
-										</span>
-										{customer.email || "—"}
-									</span>
-								</div>
-								<div className='flex flex-wrap items-center pt-1 text-xs gap-x-4 gap-y-1 text-muted-foreground'>
-									{customer.gstApplicable && (
-										<span className='flex items-center gap-1'>
-											<span className='font-semibold text-foreground'>
-												GSTIN:
-											</span>
-											<span className='font-mono'>{customer.gstin || "—"}</span>
-										</span>
-									)}
-									{customer.gstApplicable && <span>•</span>}
-									<span className='flex items-center gap-1'>
-										<span className='font-semibold text-foreground'>
-											Territory:
-										</span>
-										{customer.territoryName || customer.stateName || "—"}
-									</span>
-								</div>
-							</div>
-						</div>
-					</div>
+  // Credit utilization (used ≈ pending/outstanding amount)
+  const creditLimit = customer.creditLimit;
+  const creditUsed = orderStats.pending;
+  const creditAvailable = Math.max(creditLimit - creditUsed, 0);
+  const creditPct = creditLimit > 0 ? Math.min(Math.round((creditUsed / creditLimit) * 100), 100) : 0;
+  const shortINR = (n: number) => {
+    if (n >= 1e7) return `₹${(n / 1e7).toFixed(1)}Cr`;
+    if (n >= 1e5) return `₹${(n / 1e5).toFixed(1)}L`;
+    if (n >= 1e3) return `₹${(n / 1e3).toFixed(1)}K`;
+    return `₹${n}`;
+  };
 
-					{/* 4 Compact KPI blocks */}
-					<div className='grid grid-cols-2 gap-3'>
-						<div className='flex flex-col justify-between p-4 bg-white border shadow-sm rounded-xl border-border'>
-							<p className='text-[10px] font-bold uppercase tracking-wider text-muted-foreground'>
-								Credit Limit
-							</p>
-							<p className='mt-1 font-mono text-lg font-bold text-foreground'>
-								{formatCreditLimit(customer.creditLimit)}
-							</p>
-						</div>
+  const orderColumns = [
+    {
+      key: "so",
+      header: "Order #",
+      render: (r: (typeof orders)[number]) => (
+        <span className="font-mono font-bold text-[#1554B4]">{r.soNumber}</span>
+      ),
+    },
+    {
+      key: "date",
+      header: "Date",
+      render: (r: (typeof orders)[number]) => (
+        <span className="text-[13px] text-[#3D5473]">{r.orderDate}</span>
+      ),
+    },
+    {
+      key: "items",
+      header: "Items",
+      align: "center" as const,
+      render: (r: (typeof orders)[number]) => (
+        <span className="text-[13px] font-semibold">{r.items ?? "—"}</span>
+      ),
+    },
+    {
+      key: "amt",
+      header: "Amount",
+      align: "right" as const,
+      render: (r: (typeof orders)[number]) => (
+        <span className="text-[13px] font-bold tabular-nums">{formatMoney(r.totalAmount)}</span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (r: (typeof orders)[number]) => <StatusBadge status={r.status} />,
+    },
+  ];
 
-						<div className='flex flex-col justify-between p-4 bg-white border shadow-sm rounded-xl border-border'>
-							<p className='text-[10px] font-bold uppercase tracking-wider text-muted-foreground'>
-								Branch Count
-							</p>
-							<p className='mt-1 font-mono text-lg font-bold text-foreground'>
-								{branchCount}
-							</p>
-						</div>
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case "overview":
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <RecordSectionCard title="Basic Details" icon={FileText} accent="blue">
+              <RecordKvRow label="Customer Name" value={customer.customerName} highlight />
+              <RecordKvRow
+                label="Customer Code"
+                value={customer.customerCode}
+                mono
+                copy
+              />
+              <RecordKvRow
+                label="Mobile"
+                value={formatMobile(customer.countryCode, customer.mobile)}
+                mono
+                link
+                href={`tel:${customer.mobile}`}
+              />
+              <RecordKvRow
+                label="Email"
+                value={customer.email || "—"}
+                link={!!customer.email}
+                href={customer.email ? `mailto:${customer.email}` : undefined}
+              />
+              <RecordKvRow label="Customer Type" value={typeLabel} />
+              <RecordKvRow
+                label="Status"
+                value={
+                  <RecordStatusPill
+                    label={STATUS_LABEL[customer.status]}
+                    variant={STATUS_VARIANT[customer.status]}
+                  />
+                }
+                isLast
+              />
+            </RecordSectionCard>
 
-						<div className='flex flex-col justify-between p-4 bg-white border shadow-sm rounded-xl border-border'>
-							<p className='text-[10px] font-bold uppercase tracking-wider text-muted-foreground'>
-								Products Mapped
-							</p>
-							<p className='mt-1 font-mono text-lg font-bold text-foreground'>
-								{productCount}
-							</p>
-						</div>
+            <RecordSectionCard title="Territory & Location" icon={MapPin} accent="purple">
+              <RecordKvRow label="Territory" value={customer.territoryName} highlight />
+              <RecordKvRow label="State" value={customer.stateName} />
+              <RecordKvRow label="District" value={customer.districtName} />
+              <RecordKvRow label="Pin Code" value={customer.pincode} mono />
+              <RecordKvRow label="Address" value={customer.address} isLast />
+            </RecordSectionCard>
 
-						<div className='flex flex-col justify-between p-4 bg-white border shadow-sm rounded-xl border-border'>
-							<p className='text-[10px] font-bold uppercase tracking-wider text-muted-foreground'>
-								Documents
-							</p>
-							<p className='mt-1 font-mono text-lg font-bold text-foreground'>
-								{docCount}
-							</p>
-						</div>
-					</div>
-				</div>
+            <div className="lg:col-span-2">
+              <RecordSectionCard title="Recent Orders" icon={ShoppingCart} accent="green">
+                <RecordMiniTable
+                  columns={orderColumns}
+                  rows={[...orders]
+                    .sort((a, b) => b.orderDate.localeCompare(a.orderDate))
+                    .slice(0, 5)}
+                  onRowClick={(r) => router.push(`/sales/orders/${r.id}`)}
+                  viewAllHref={`/sales/orders?customer=${customer.id}`}
+                  viewAllLabel={`View all ${orders.length} orders`}
+                />
+              </RecordSectionCard>
+            </div>
+          </div>
+        );
 
-				{/* ── UNDERLINE TAB NAVIGATION ── */}
-				<div className='border-b border-border'>
-					<div className='flex gap-6'>
-						{tabs.map((t) => {
-							const active = activeSubTab === t.id;
-							const Icon = t.icon;
-							return (
-								<button
-									key={t.id}
-									className={cn(
-										"pb-3 text-xs font-semibold border-b-2 transition-colors focus:outline-none flex items-center gap-1.5",
-										active
-											? "border-brand-600 text-brand-600 font-bold"
-											: "border-transparent text-muted-foreground hover:text-foreground",
-									)}
-									onClick={() => setActiveSubTab(t.id)}
-								>
-									<Icon className='w-3.5 h-3.5' />
-									{t.label}
-								</button>
-							);
-						})}
-					</div>
-				</div>
+      case "tax":
+        return (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <RecordSectionCard title="Tax & Registration" icon={FileText} accent="blue">
+              <RecordKvRow label="GST Applicable" value={customer.gstApplicable ? "Yes" : "No"} />
+              {customer.gstApplicable && (
+                <>
+                  <RecordKvRow label="GSTIN" value={customer.gstin} mono copy />
+                  <RecordKvRow
+                    label="GST Code"
+                    value={gst ? `${gst.gstId} (${gst.gstPercentage}%)` : "—"}
+                    mono
+                  />
+                </>
+              )}
+              <RecordKvRow label="TDS Applicable" value={customer.tdsApplicable ? "Yes" : "No"} />
+              {customer.tdsApplicable && (
+                <RecordKvRow
+                  label="TDS Section"
+                  value={tds ? `${tds.tdsCode} — ${tds.tdsRate}%` : "—"}
+                  mono
+                />
+              )}
+              <RecordKvRow label="TAN #" value={customer.tan} mono />
+              <RecordKvRow label="CIB Regn #" value={customer.cibRegn} />
+              <RecordKvRow label="FCO Regn #" value={customer.fcoRegn} />
+              <RecordKvRow label="FSSAI #" value={customer.fssai} isLast />
+            </RecordSectionCard>
 
-				{/* ── TAB CONTENT ── */}
-				<div className='w-full'>
-					{/* TAB 1: OVERVIEW */}
-					{activeSubTab === "overview" && (
-						<div className='space-y-5'>
-							{/* Status Warnings */}
-							{customer.status === "blocked" && customer.blockReason && (
-								<div className='flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50/50 px-4 py-3 shadow-sm'>
-									<Ban className='mt-0.5 h-4 w-4 flex-shrink-0 text-red-500' />
-									<div>
-										<p className='text-xs font-bold text-red-700'>
-											Blocked - Account Restricted
-										</p>
-										<p className='mt-0.5 text-xs text-red-600'>
-											{customer.blockReason}
-										</p>
-									</div>
-								</div>
-							)}
+            <RecordSectionCard title="Compliance Status" icon={CheckCircle} accent="green">
+              <ComplianceRow
+                tone="green"
+                label="GSTIN Registered"
+                value={customer.gstin || "—"}
+                badge="Verified"
+              />
+              <ComplianceRow
+                tone="green"
+                label="TDS Active"
+                value={customer.tdsApplicable ? "Enabled" : "Not enabled"}
+                badge="Active"
+              />
+              <ComplianceRow
+                tone="blue"
+                label="TAN #"
+                value={customer.tan || "—"}
+                badge="On File"
+              />
+              <ComplianceRow
+                tone="green"
+                label="FSSAI Licensed"
+                value={customer.fssai || "—"}
+                badge="Valid"
+              />
+              <ComplianceRow
+                tone="amber"
+                label="CIB Registration"
+                value={customer.cibRegn || "—"}
+                badge="Review"
+                isLast
+              />
+            </RecordSectionCard>
+          </div>
+        );
 
-							{customer.status === "inactive" && (
-								<div className='flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/40 px-4 py-3 shadow-sm'>
-									<CheckCircle2 className='mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600' />
-									<p className='text-xs text-amber-700'>
-										Inactive customer - hidden from transaction dropdowns.
-									</p>
-								</div>
-							)}
+      case "bank":
+        return (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <RecordSectionCard title="Bank Details" icon={Wallet} accent="green">
+              {(!customer.accountHolderName || customer.accountHolderName === "-") && (
+                <div
+                  className="flex items-center gap-2 mb-3"
+                  style={{
+                    background: "#FFFBEB",
+                    borderLeft: "3px solid #D97706",
+                    padding: "8px 12px",
+                    borderRadius: "0 6px 6px 0",
+                  }}
+                >
+                  <AlertCircle className="w-3.5 h-3.5 text-[#D97706] flex-shrink-0" />
+                  <span className="text-[12px] text-[#92400E]">Account holder name not added</span>
+                </div>
+              )}
+              <RecordKvRow label="Account Holder" value={customer.accountHolderName} highlight />
+              <RecordKvRow label="Bank Name" value={customer.bankName} />
+              <RecordKvRow label="Branch" value={customer.branch || customer.bankBranchAddress} />
+              <RecordKvRow label="Account #" value={customer.bankAccountNo} mono copy />
+              <RecordKvRow label="IFSC" value={customer.ifscCode} mono copy />
+              <RecordKvRow label="SWIFT" value={customer.swiftCode} mono isLast />
+            </RecordSectionCard>
 
-							<div className='p-6 space-y-6 bg-white border shadow-sm rounded-xl border-border'>
-								{/* Section 1: Basic Details */}
-								<div className='space-y-3'>
-									<h3 className='pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground'>
-										Basic Details
-									</h3>
-									<div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1'>
-										<DetailField
-											label='Customer Name'
-											value={customer.customerName}
-										/>
-										<DetailField
-											label='Customer Type'
-											value={
-												CUSTOMER_TYPE_LABELS[
-													customer.customerType.toLowerCase()
-												] ?? customer.customerType
-											}
-										/>
-										<DetailField
-											label='Mobile'
-											value={formatMobile(
-												customer.countryCode,
-												customer.mobile,
-											)}
-											mono
-										/>
-										<DetailField label='Email' value={customer.email} />
-										<DetailField
-											label='Salesman'
-											value={customer.salesManName}
-										/>
-										<DetailField label='Payment Terms' value={payLabel} />
-										<DetailField
-											label='Interest Rate'
-											value={
-												customer.interestRate
-													? `${customer.interestRate}%`
-													: "—"
-											}
-										/>
-									</div>
-								</div>
+            <RecordSectionCard title="Additional Accounts" icon={Landmark} accent="blue">
+              <div className="flex flex-col items-center text-center py-6 px-4">
+                <div
+                  className="flex items-center justify-center mb-3"
+                  style={{
+                    width: "48px",
+                    height: "48px",
+                    borderRadius: "12px",
+                    background: "#F0F2F8",
+                    border: "1.5px dashed #C4CEDF",
+                  }}
+                >
+                  <Landmark className="w-5 h-5 text-[#9AAAC5]" />
+                </div>
+                <p className="text-[13px] font-semibold text-[#3D5473]">No additional accounts</p>
+                <p className="text-[12px] text-[#6B80A0] mt-0.5">
+                  Add accounts for different payment types
+                </p>
+                <button
+                  type="button"
+                  className="mt-4 inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#6B80A0] transition-colors hover:text-[#1554B4] hover:bg-[#EEF3FB]"
+                  style={{
+                    border: "1.5px dashed #C4CEDF",
+                    borderRadius: "8px",
+                    padding: "7px 14px",
+                  }}
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Bank Account
+                </button>
+              </div>
+            </RecordSectionCard>
+          </div>
+        );
 
-								{/* Section 2: Address & Geography */}
-								<div className='pt-2 space-y-3'>
-									<h3 className='pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground'>
-										Address & Geography
-									</h3>
-									<div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1'>
-										<DetailField
-											label='Billing Address'
-											value={customer.address}
-										/>
-										<DetailField label='State' value={customer.stateName} />
-										<DetailField
-											label='District'
-											value={customer.districtName}
-										/>
-										<DetailField
-											label='Territory'
-											value={customer.territoryName}
-										/>
-										<DetailField
-											label='Pin Code'
-											value={customer.pincode}
-											mono
-										/>
-									</div>
-								</div>
+      case "commercial":
+        return (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <RecordSectionCard title="Commercial Details" icon={IndianRupee} accent="orange">
+              <RecordKvRow label="Credit Limit" value={formatCreditLimit(customer.creditLimit)} amount highlight />
+              <RecordKvRow
+                label="Interest Rate"
+                value={customer.interestRate ? `${customer.interestRate}%` : "—"}
+              />
+              <RecordKvRow label="Payment Terms" value={payLabel} />
+              <RecordKvRow label="Sales Man" value={customer.salesManName} isLast />
+            </RecordSectionCard>
 
-								{/* Section 3: Tax & Registration */}
-								<div className='pt-2 space-y-3'>
-									<h3 className='pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground'>
-										Tax & Registration
-									</h3>
-									<div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1'>
-										<DetailField
-											label='GST Applicable'
-											value={customer.gstApplicable ? "Yes" : "No"}
-										/>
-										{customer.gstApplicable && (
-											<>
-												<DetailField
-													label='GSTIN'
-													value={customer.gstin}
-													mono
-												/>
-												{/* <DetailField
-													label='GST Code'
-													value={
-														gst ? `${gst.gstId} (${gst.gstPercentage}%)` : "—"
-													}
-													mono
-												/> */}
-											</>
-										)}
-										<DetailField
-											label='TDS Applicable'
-											value={customer.tdsApplicable ? "Yes" : "No"}
-										/>
-										{customer.tdsApplicable && (
-											<DetailField
-												label='TDS Section'
-												value={tds ? `${tds.tdsCode} - ${tds.tdsRate}%` : "—"}
-												mono
-											/>
-										)}
-										<DetailField label='TAN #' value={customer.tan} mono />
-										<DetailField label='CIB Regn #' value={customer.cibRegn} />
-										<DetailField label='FCO Regn #' value={customer.fcoRegn} />
-										<DetailField label='FSSAI #' value={customer.fssai} />
-									</div>
-								</div>
+            <RecordSectionCard title="Credit Usage" icon={CreditCard} accent="green">
+              <div className="pt-2">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[28px] font-extrabold text-[#0A1628] leading-none">
+                    {shortINR(creditUsed)}
+                  </span>
+                  <span className="text-[13px] text-[#6B80A0]">
+                    used of {shortINR(creditLimit)} limit
+                  </span>
+                </div>
 
-								{/* Section 4: Commercial Details */}
-								<div className='pt-2 space-y-3'>
-									<h3 className='pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground'>
-										Commercial Details
-									</h3>
-									<div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1'>
-										<DetailField
-											label='Credit Limit'
-											value={formatCreditLimit(customer.creditLimit)}
-										/>
-										<DetailField label='Payment Terms' value={payLabel} />
-									</div>
-								</div>
+                <div className="relative" style={{ margin: "14px 0" }}>
+                  <div style={{ height: "10px", background: "#E4EAF4", borderRadius: "5px" }}>
+                    <div
+                      style={{
+                        width: `${creditPct}%`,
+                        height: "10px",
+                        background: "#1E9E61",
+                        borderRadius: "5px",
+                        transition: "width .4s ease",
+                      }}
+                    />
+                  </div>
+                  <span
+                    className="absolute -top-4 text-[11px] text-[#1E9E61] font-medium"
+                    style={{ left: `calc(${creditPct}% - 16px)` }}
+                  >
+                    {creditPct}%
+                  </span>
+                </div>
 
-								{/* Section 5: System Info */}
-								<div className='pt-2 space-y-3'>
-									<h3 className='pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground'>
-										System Info
-									</h3>
-									<div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1'>
-										<DetailField
-											label='Created By'
-											value={customer.createdBy}
-										/>
-										<DetailField
-											label='Created Date'
-											value={customer.createdDate}
-										/>
-										<DetailField
-											label='Updated By'
-											value={customer.updatedBy}
-										/>
-										<DetailField
-											label='Updated Date'
-											value={customer.updatedDate}
-										/>
-										<DetailField
-											label='Status Changes'
-											value={customer.statusHistory.length}
-										/>
-									</div>
-								</div>
-							</div>
-						</div>
-					)}
+                <div className="grid grid-cols-3 mt-3">
+                  <div className="pr-3">
+                    <p className="text-[11px] text-[#6B80A0]">Credit Limit</p>
+                    <p className="text-[13px] font-bold text-[#0A1628]">{shortINR(creditLimit)}</p>
+                  </div>
+                  <div className="px-3 border-l border-[#F0F3FA]">
+                    <p className="text-[11px] text-[#6B80A0]">Used</p>
+                    <p
+                      className="text-[13px] font-bold"
+                      style={{ color: creditPct > 80 ? "#DC2626" : "#0A1628" }}
+                    >
+                      {shortINR(creditUsed)}
+                    </p>
+                  </div>
+                  <div className="px-3 border-l border-[#F0F3FA]">
+                    <p className="text-[11px] text-[#6B80A0]">Available</p>
+                    <p className="text-[13px] font-bold text-[#1E9E61]">{shortINR(creditAvailable)}</p>
+                  </div>
+                </div>
 
-					{/* TAB: BANK DETAILS */}
-					{activeSubTab === "bank" && (
-						<div className='p-6 space-y-6 bg-white border shadow-sm rounded-xl border-border'>
-							<div className='space-y-3'>
-								<h3 className='pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground'>
-									Bank Details
-								</h3>
-								<div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1'>
-									<DetailField
-										label='Account Holder Name'
-										value={customer.accountHolderName}
-									/>
-									<DetailField label='Bank Name' value={customer.bankName} />
-									<DetailField
-										label='Branch Name'
-										value={customer.branch || customer.bankBranchAddress}
-									/>
-									<DetailField
-										label='Bank A/c #'
-										value={customer.bankAccountNo}
-										mono
-									/>
-									<DetailField
-										label='IFSC Code'
-										value={customer.ifscCode}
-										mono
-									/>
-									<DetailField
-										label='SWIFT Code'
-										value={customer.swiftCode}
-									/>
-								</div>
-							</div>
-						</div>
-					)}
+                <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-[#F0F3FA]">
+                  <span
+                    className="inline-flex items-center rounded-md text-[11px] font-semibold"
+                    style={{ background: "#EEF3FB", color: "#0C3F8A", padding: "3px 9px" }}
+                  >
+                    {payLabel}
+                  </span>
+                  {customer.interestRate ? (
+                    <span
+                      className="inline-flex items-center rounded-md text-[11px] font-semibold"
+                      style={{ background: "#FFFBEB", color: "#92400E", padding: "3px 9px" }}
+                    >
+                      {customer.interestRate}% p.a.
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </RecordSectionCard>
+          </div>
+        );
 
-					{/* TAB 2: BRANCH DETAILS */}
-					{activeSubTab === "branches" && (
-						<div>
-							{customer.branches && customer.branches.length > 0 ? (
-								<div className='grid grid-cols-1 gap-5 md:grid-cols-2'>
-									{customer.branches.map((branch, idx) => (
-										<div
-											key={idx}
-											className='p-5 space-y-4 bg-white border shadow-sm rounded-xl border-border'
-										>
-											<div className='flex items-center justify-between pb-2 border-b'>
-												<h3 className='text-sm font-bold text-foreground'>
-													{branch.branchName}
-												</h3>
-												{branch.isMain && (
-													<span className='inline-flex items-center text-[10px] px-2 py-0.5 rounded-full font-bold bg-brand-50 text-brand-750 border border-brand-200'>
-														Primary / Main Branch
-													</span>
-												)}
-											</div>
+      case "orders":
+        return (
+          <RecordSectionCard title="Order History" icon={ShoppingCart} accent="blue">
+            <RecordMiniTable
+              columns={orderColumns}
+              rows={[...orders].sort((a, b) => b.orderDate.localeCompare(a.orderDate))}
+              onRowClick={(r) => router.push(`/sales/orders/${r.id}`)}
+            />
+          </RecordSectionCard>
+        );
 
-											<div className='grid grid-cols-1 gap-4 text-xs sm:grid-cols-2'>
-												<div className='space-y-1.5 bg-slate-50/50 p-3.5 rounded-lg border border-slate-100'>
-													<span className='text-[10px] font-bold text-muted-foreground uppercase tracking-wider'>
-														Billing Address
-													</span>
-													<p className='font-semibold text-foreground'>
-														{branch.billingAddress?.address || "—"}
-													</p>
-													<p className='mt-1 text-xs text-muted-foreground'>
-														{[
-															branch.billingAddress?.city,
-															branch.billingAddress?.state,
-														]
-															.filter(Boolean)
-															.join(", ")}
-														{branch.billingAddress?.pincode
-															? ` - ${branch.billingAddress.pincode}`
-															: ""}
-													</p>
-												</div>
+      case "activity":
+        return (
+          <RecordSectionCard title="Status History" icon={Clock} accent="slate">
+            {customer.statusHistory.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-3">No activity recorded.</p>
+            ) : (
+              [...customer.statusHistory]
+                .reverse()
+                .map((h, i, arr) => (
+                  <RecordKvRow
+                    key={`${h.date}-${i}`}
+                    label={h.date}
+                    value={`${h.from} → ${h.to} (${h.by})${h.reason ? ` — ${h.reason}` : ""}`}
+                    isLast={i === arr.length - 1}
+                  />
+                ))
+            )}
+          </RecordSectionCard>
+        );
 
-												<div className='space-y-1.5 bg-slate-50/50 p-3.5 rounded-lg border border-slate-100'>
-													<span className='text-[10px] font-bold text-muted-foreground uppercase tracking-wider'>
-														Shipping Address
-													</span>
-													<p className='font-semibold text-foreground'>
-														{branch.shippingAddress?.address || "—"}
-													</p>
-													<p className='mt-1 text-xs text-muted-foreground'>
-														{[
-															branch.shippingAddress?.city,
-															branch.shippingAddress?.state,
-														]
-															.filter(Boolean)
-															.join(", ")}
-														{branch.shippingAddress?.pincode
-															? ` - ${branch.shippingAddress.pincode}`
-															: ""}
-													</p>
-												</div>
-											</div>
+      default:
+        return null;
+    }
+  };
 
-											{branch.documents && branch.documents.length > 0 && (
-												<div className='pt-2 space-y-2'>
-													<h4 className='text-xs font-bold text-foreground flex items-center gap-1.5'>
-														<FileText className='w-3.5 h-3.5 text-muted-foreground' />
-														Branch Documents
-													</h4>
-													<div className='overflow-x-auto border rounded-lg border-border'>
-														<table className='w-full text-xs text-left border-collapse'>
-															<thead>
-																<tr className='font-semibold border-b border-border bg-slate-50 text-muted-foreground'>
-																	<th className='px-3 py-2'>Document Name</th>
-																	<th className='px-3 py-2'>File Name</th>
-																	<th className='px-3 py-2 text-right'>
-																		Action
-																	</th>
-																</tr>
-															</thead>
-															<tbody>
-																{branch.documents.map((doc, dIdx) => (
-																	<tr
-																		key={dIdx}
-																		className='border-b border-border/60 last:border-0 hover:bg-muted/5'
-																	>
-																		<td className='px-3 py-2 font-semibold text-foreground'>
-																			{doc.documentName}
-																		</td>
-																		<td className='px-3 py-2 font-mono text-muted-foreground'>
-																			{doc.fileName || "—"}
-																		</td>
-																		<td className='px-3 py-2 text-right'>
-																			{doc.fileName && doc.fileUrl ? (
-																				<Button
-																					type='button'
-																					variant='link'
-																					className='h-auto p-0 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline'
-																					onClick={() =>
-																						setPreviewDoc({
-																							title: doc.documentName,
-																							fileUrl: doc.fileUrl!,
-																							fileName: doc.fileName!,
-																						})
-																					}
-																				>
-																					View
-																				</Button>
-																			) : (
-																				<span className='text-muted-foreground'>
-																					—
-																				</span>
-																			)}
-																		</td>
-																	</tr>
-																))}
-															</tbody>
-														</table>
-													</div>
-												</div>
-											)}
-										</div>
-									))}
-								</div>
-							) : (
-								<div className='p-8 text-xs text-center bg-white border shadow-sm rounded-xl border-border text-muted-foreground'>
-									No branches configured for this customer.
-								</div>
-							)}
-						</div>
-					)}
+  return (
+    <>
+      <RecordDetailPage
+      alert={
+        customer.status === "blocked" && customer.blockReason ? (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+            <Ban className="mt-0.5 h-4 w-4 text-red-500 flex-shrink-0" />
+            <p className="text-xs text-red-700">{customer.blockReason}</p>
+          </div>
+        ) : undefined
+      }
+      listHref="/masters/customers"
+      listLabel="Customers"
+      recordName={customer.customerName}
+      recordCode={customer.customerCode}
+        typeBadge={<TypeBadge label={typeLabel} />}
+        statusLabel={STATUS_LABEL[customer.status]}
+        statusVariant={STATUS_VARIANT[customer.status]}
+        metaItems={[
+          {
+            label: formatMobile(customer.countryCode, customer.mobile),
+            icon: Phone,
+            href: `tel:${customer.mobile}`,
+          },
+          ...(customer.email
+            ? [{ label: customer.email, icon: Mail, href: `mailto:${customer.email}` }]
+            : []),
+          {
+            label: [customer.territoryName, customer.stateName].filter(Boolean).join(" · ") || "—",
+            icon: MapPin,
+          },
+        ]}
+        kpis={kpis}
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        active={customer.status === "active"}
+        onActiveChange={
+          canToggle
+            ? (on) => updateStatus(customer.id, on ? "active" : "inactive")
+            : undefined
+        }
+        toggleDisabled={!canToggle}
+        onEdit={perms.canEdit ? () => router.push(`/masters/customers/${customer.id}/edit`) : undefined}
+        secondaryAction={{
+          label: "New Order",
+          onClick: () => router.push(`/sales/orders/new?customerId=${customer.id}`),
+        }}
+        moreActions={
+          perms.canEdit
+            ? [
+                ...(customer.status !== "blocked"
+                  ? [
+                      {
+                        label: "Block Customer",
+                        onClick: () => {
+                          setBlockReason(customer.blockReason || "");
+                          setBlockError("");
+                          setBlockOpen(true);
+                        },
+                        destructive: true,
+                      },
+                    ]
+                  : [
+                      {
+                        label: "Unblock Customer",
+                        onClick: () => updateStatus(customer.id, "active"),
+                      },
+                    ]),
+                ...(customer.status === "draft"
+                  ? [
+                      {
+                        label: "Mark Active",
+                        onClick: () => updateStatus(customer.id, "active"),
+                      },
+                    ]
+                  : []),
+              ]
+            : undefined
+        }
+        sidebar={{
+          quickActions: [
+            {
+              label: "New Order",
+              icon: ShoppingCart,
+              onClick: () => router.push(`/sales/orders/new?customerId=${customer.id}`),
+              variant: "primary",
+            },
+            ...(perms.canEdit
+              ? [
+                  {
+                    label: "Edit Customer",
+                    icon: Pencil,
+                    onClick: () => router.push(`/masters/customers/${customer.id}/edit`),
+                    variant: "outline" as const,
+                  },
+                ]
+              : []),
+            {
+              label: "View Orders",
+              icon: Eye,
+              onClick: () => router.push(`/sales/orders?customer=${customer.id}`),
+              variant: "outline" as const,
+            },
+          ],
+          summary: [
+            { label: "Credit Limit", value: formatCreditLimit(customer.creditLimit), highlight: true },
+            { label: "Payment Terms", value: payLabel },
+            { label: "Sales Man", value: customer.salesManName || "—" },
+            { label: "Territory", value: customer.territoryName || "—" },
+            { label: "Created", value: customer.createdDate },
+            { label: "Updated", value: customer.updatedDate },
+          ],
+          activity: [...customer.statusHistory]
+            .slice(-5)
+            .reverse()
+            .map((h, i) => ({
+              id: `${h.date}-${i}`,
+              title: `${h.from} → ${h.to}`,
+              subtitle: h.reason || `By ${h.by}`,
+              date: h.date,
+            })),
+        }}
+      >
+        {renderTabContent()}
+      </RecordDetailPage>
 
-					{/* TAB 3: PRODUCT MAPPING */}
-					{activeSubTab === "products" && (
-						<div>
-							{productCount > 0 ? (
-								<div className='overflow-hidden bg-white border shadow-sm rounded-xl border-border'>
-									<div className='overflow-x-auto'>
-										<table className='w-full text-xs text-left border-collapse'>
-											<thead>
-												<tr className='font-semibold border-b border-border bg-slate-50 text-muted-foreground'>
-													<th className='px-4 py-3'>Product Name</th>
-													<th className='px-4 py-3'>SKU / Code</th>
-													<th className='px-4 py-3 text-right'>MRP</th>
-													<th className='px-4 py-3 text-right'>Price</th>
-												</tr>
-											</thead>
-											<tbody>
-												{mappedProducts.map((item, idx) => (
-													<tr
-														key={idx}
-														className='border-b border-border/60 last:border-0 hover:bg-slate-50/50'
-													>
-														<td className='px-4 py-3 font-semibold text-foreground'>
-															{item.productName}
-														</td>
-														<td className='px-4 py-3 font-mono text-xs font-semibold text-brand-700'>
-															{item.sku || "—"}
-														</td>
-														<td className='px-4 py-3 font-mono text-right tabular-nums text-muted-foreground'>
-															{item.mrp !== undefined
-																? `₹${item.mrp.toLocaleString("en-IN")}`
-																: "—"}
-														</td>
-														<td className='px-4 py-3 font-mono font-bold text-right tabular-nums text-emerald-600'>
-															{item.price !== undefined
-																? `₹${item.price.toLocaleString("en-IN")}`
-																: "—"}
-														</td>
-													</tr>
-												))}
-											</tbody>
-										</table>
-									</div>
-								</div>
-							) : (
-								<div className='p-8 text-xs text-center bg-white border shadow-sm rounded-xl border-border text-muted-foreground'>
-									No products mapped to this customer.
-								</div>
-							)}
-						</div>
-					)}
+      <Dialog open={blockOpen} onOpenChange={setBlockOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Block customer</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Label className="text-xs">Reason</Label>
+            <Textarea
+              value={blockReason}
+              onChange={(e) => setBlockReason(e.target.value)}
+              className="text-xs min-h-[80px]"
+            />
+            {blockError && <p className="text-xs text-red-600">{blockError}</p>}
+            <Button
+              size="sm"
+              className="w-full bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => {
+                if (!blockReason.trim()) {
+                  setBlockError("Block reason is required");
+                  return;
+                }
+                updateStatus(customer.id, "blocked", blockReason.trim());
+                setBlockOpen(false);
+              }}
+            >
+              Confirm Block
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-					{/* TAB 4: DOCUMENTS */}
-					{activeSubTab === "documents" && (
-						<div>
-							{(() => {
-								const reqDocs = customer.documents?.requiredDocuments || [];
-								const addDocs = customer.documents?.additionalDocuments || [];
-
-								if (reqDocs.length === 0 && addDocs.length === 0) {
-									return (
-										<div className='p-8 text-xs text-center bg-white border shadow-sm rounded-xl border-border text-muted-foreground'>
-											No documents uploaded for this customer.
-										</div>
-									);
-								}
-
-								return (
-									<div className='grid grid-cols-1 gap-5 md:grid-cols-2'>
-										{/* Required Documents Card */}
-										{reqDocs.length > 0 && (
-											<div className='p-5 space-y-4 bg-white border shadow-sm rounded-xl border-border'>
-												<h3 className='flex items-center justify-between pb-2 text-sm font-bold border-b text-foreground'>
-													Required Documents
-													<span className='text-xs font-normal text-muted-foreground'>
-														{reqDocs.filter((d) => d.fileName).length} of{" "}
-														{reqDocs.length} uploaded
-													</span>
-												</h3>
-												<div className='space-y-3'>
-													{reqDocs.map((doc, idx) => (
-														<div
-															key={idx}
-															className='flex items-center justify-between p-3 transition-colors border rounded-lg border-border/80 bg-slate-50/50 hover:bg-slate-50'
-														>
-															<div className='space-y-1'>
-																<p className='text-xs font-bold text-foreground flex items-center gap-1.5'>
-																	{doc.documentName}
-																	{doc.required && (
-																		<span className='text-[9px] px-1.5 py-0.2 bg-rose-50 text-rose-700 border border-rose-100 rounded font-bold uppercase'>
-																			Required
-																		</span>
-																	)}
-																</p>
-																{doc.fileName ? (
-																	<button
-																		type='button'
-																		className='font-mono text-xs font-semibold text-left text-brand-600 hover:text-brand-700 hover:underline'
-																		onClick={() =>
-																			setPreviewDoc({
-																				title: doc.documentName,
-																				fileUrl: doc.fileUrl!,
-																				fileName: doc.fileName!,
-																			})
-																		}
-																	>
-																		{doc.fileName}
-																	</button>
-																) : (
-																	<p className='text-xs text-muted-foreground'>
-																		Not uploaded
-																	</p>
-																)}
-															</div>
-															<div>
-																<span
-																	className={cn(
-																		"inline-flex items-center text-[10px] px-2 py-0.5 rounded-full font-semibold border",
-																		doc.fileName
-																			? "bg-emerald-50 text-emerald-700 border-emerald-200"
-																			: "bg-red-50 text-red-700 border-red-200",
-																	)}
-																>
-																	{doc.fileName ? "Uploaded" : "Pending"}
-																</span>
-															</div>
-														</div>
-													))}
-												</div>
-											</div>
-										)}
-
-										{/* Additional Documents Card */}
-										{addDocs.length > 0 && (
-											<div className='p-5 space-y-4 bg-white border shadow-sm rounded-xl border-border'>
-												<h3 className='flex items-center justify-between pb-2 text-sm font-bold border-b text-foreground'>
-													Additional Documents
-													<span className='text-xs font-normal text-muted-foreground'>
-														{addDocs.length} uploaded
-													</span>
-												</h3>
-												<div className='space-y-3'>
-													{addDocs.map((doc, idx) => (
-														<div
-															key={idx}
-															className='flex items-center justify-between p-3 transition-colors border rounded-lg border-border/80 bg-slate-50/50 hover:bg-slate-50'
-														>
-															<div className='space-y-1'>
-																<p className='text-xs font-bold text-foreground'>
-																	{doc.title}
-																</p>
-																{doc.fileName ? (
-																	<button
-																		type='button'
-																		className='font-mono text-xs font-semibold text-left text-brand-600 hover:text-brand-700 hover:underline'
-																		onClick={() =>
-																			setPreviewDoc({
-																				title: doc.title,
-																				fileUrl: doc.fileUrl!,
-																				fileName: doc.fileName!,
-																			})
-																		}
-																	>
-																		{doc.fileName}
-																	</button>
-																) : (
-																	<p className='text-xs text-muted-foreground'>
-																		—
-																	</p>
-																)}
-															</div>
-															<div>
-																<span className='inline-flex items-center text-[10px] px-2 py-0.5 rounded-full font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200'>
-																	Uploaded
-																</span>
-															</div>
-														</div>
-													))}
-												</div>
-											</div>
-										)}
-									</div>
-								);
-							})()}
-						</div>
-					)}
-				</div>
-			</div>
-
-			{/* Image / PDF Preview Modal */}
-			<Dialog
-				open={!!previewDoc}
-				onOpenChange={(open) => !open && setPreviewDoc(null)}
-			>
-				<DialogContent className='max-w-2xl bg-white'>
-					<DialogHeader>
-						<DialogTitle className='text-sm font-semibold'>
-							{previewDoc?.title}
-						</DialogTitle>
-					</DialogHeader>
-					<div className='flex flex-col items-center justify-center p-4 border border-dashed rounded-lg border-border bg-muted/10 min-h-[300px]'>
-						{previewDoc &&
-							(/\.(jpe?g|png|webp|gif)$/i.test(previewDoc.fileName) ? (
-								<img
-									src={previewDoc.fileUrl}
-									alt={previewDoc.title}
-									className='max-h-[50vh] max-w-full object-contain rounded-md animate-in zoom-in-95 duration-200'
-								/>
-							) : (
-								<div className='space-y-4 text-center'>
-									<div className='inline-flex p-3 border rounded-full bg-brand-50 border-brand-100 text-brand-600'>
-										<svg
-											className='w-8 h-8'
-											fill='none'
-											viewBox='0 0 24 24'
-											stroke='currentColor'
-										>
-											<path
-												strokeLinecap='round'
-												strokeLinejoin='round'
-												strokeWidth={2}
-												d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'
-											/>
-										</svg>
-									</div>
-									<div>
-										<p className='text-xs font-semibold text-foreground'>
-											{previewDoc.fileName}
-										</p>
-										<p className='text-[11px] text-muted-foreground mt-1'>
-											This file type cannot be previewed directly.
-										</p>
-									</div>
-									<a
-										href={previewDoc.fileUrl}
-										target='_blank'
-										rel='noreferrer'
-										className='inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 text-xs font-medium text-white hover:bg-brand-700 transition-colors'
-									>
-										Open in new tab
-									</a>
-								</div>
-							))}
-					</div>
-				</DialogContent>
-			</Dialog>
-		</AppLayout>
-	);
+      <Dialog open={!!previewDoc} onOpenChange={(o) => !o && setPreviewDoc(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-sm">{previewDoc?.title}</DialogTitle>
+          </DialogHeader>
+          {previewDoc && (
+            <div className="flex justify-center p-4">
+              {/\.(jpe?g|png|webp|gif)$/i.test(previewDoc.fileName) ? (
+                <img src={previewDoc.fileUrl} alt={previewDoc.title} className="max-h-[50vh] object-contain" />
+              ) : (
+                <a href={previewDoc.fileUrl} target="_blank" rel="noreferrer" className="text-[#1554B4] text-sm">
+                  Open {previewDoc.fileName}
+                </a>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
