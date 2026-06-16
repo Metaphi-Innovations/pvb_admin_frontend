@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import {
   Sheet, SheetContent, SheetHeader, SheetBody, SheetFooter,
   SheetTitle, SheetDescription,
@@ -108,27 +107,6 @@ export default function DepartmentSheet({ open, onClose, onSave, dept }: Departm
             {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
           </div>
 
-          {/* Status toggle */}
-          <div className="flex items-center justify-between p-3.5 rounded-xl border border-border bg-muted/20">
-            <div>
-              <p className="text-xs font-medium text-foreground">Status</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                {form.status === "active" ? "Department is active and visible" : "Department is inactive and hidden from selection"}
-              </p>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <span className={cn(
-                "text-xs font-medium",
-                form.status === "active" ? "text-emerald-600" : "text-muted-foreground",
-              )}>
-                {form.status === "active" ? "Active" : "Inactive"}
-              </span>
-              <Switch
-                checked={form.status === "active"}
-                onCheckedChange={v => set("status", v ? "active" : "inactive")}
-              />
-            </div>
-          </div>
 
           {/* Remarks */}
           <div className="space-y-1.5">

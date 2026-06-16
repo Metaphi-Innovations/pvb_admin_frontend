@@ -13,6 +13,7 @@ import {
 	FileText,
 	Link2,
 	ExternalLink,
+	Plus,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -286,11 +287,12 @@ function FieldError({ msg }: { msg?: string }) {
 	);
 }
 
-function SectionHead({ label, sub }: { label: string; sub?: string }) {
+function SectionHead({ label, sub, required }: { label: string; sub?: string; required?: boolean }) {
 	return (
 		<div className='mb-2.5 mt-0.5'>
-			<p className='text-[10px] font-bold uppercase tracking-widest text-muted-foreground'>
+			<p className='text-xs font-bold uppercase tracking-wider text-foreground flex items-center'>
 				{label}
+				{required && <span className='text-red-500 ml-1'>*</span>}
 			</p>
 			{sub && <p className='text-[11px] text-muted-foreground mt-0.5'>{sub}</p>}
 		</div>
@@ -581,7 +583,6 @@ export function ProductForm({
 				<div className='pt-4 border-t border-border/60'>
 					<SectionHead label='Pricing & Compliance' />
 					<div className='grid grid-cols-12 gap-5'>
-						{/* Row 1 (5 fields: 2 + 3 + 2 + 3 + 2 = 12 columns) */}
 						{/* SKU */}
 						<div className='col-span-12 space-y-1 md:col-span-2'>
 							<Label className='text-xs font-medium'>
@@ -597,7 +598,7 @@ export function ProductForm({
 							<FieldError msg={errors.sku} />
 						</div>
 
-						{/* HSN Code (Searchable dropdown) */}
+						{/* HSN Code */}
 						<div className='col-span-12 md:col-span-2'>
 							<AC
 								label='HSN Code'
@@ -611,7 +612,7 @@ export function ProductForm({
 							/>
 						</div>
 
-						{/* GST Rate (Autofilled & Disabled when HSN selected) */}
+						{/* GST Rate */}
 						<div className='col-span-12 md:col-span-2'>
 							<AC
 								label='GST Rate'
@@ -638,17 +639,60 @@ export function ProductForm({
 						{/* MRP */}
 						<div className='col-span-12 space-y-1 md:col-span-1'>
 							<Label className='text-xs font-medium'>MRP</Label>
-							<Input
-								value={form.mrp}
-								onChange={(e) => decimalInput("mrp", e.target.value)}
-								className={inputCls("mrp")}
-								inputMode='decimal'
-								disabled={readOnly}
-							/>
+							<div className='relative'>
+								<span className='absolute text-xs font-medium -translate-y-1/2 select-none left-2 top-1/2 text-muted-foreground'>
+									₹
+								</span>
+								<Input
+									value={form.mrp}
+									onChange={(e) => decimalInput("mrp", e.target.value)}
+									className={cn("pl-5", inputCls("mrp"))}
+									inputMode='decimal'
+									disabled={readOnly}
+									placeholder='e.g. 500'
+								/>
+							</div>
 						</div>
 
-						{/* Row 2 (3 fields: 4 + 4 + 4 = 12 columns) */}
+						{/* Cost Price */}
+						{/* <div className='col-span-12 space-y-1 md:col-span-1'>
+							<Label className='text-xs font-medium'>Cost Price</Label>
+							<div className='relative'>
+								<span className='absolute text-xs font-medium -translate-y-1/2 select-none left-2 top-1/2 text-muted-foreground'>
+									₹
+								</span>
+								<Input
+									value={form.costPrice}
+									onChange={(e) => decimalInput("costPrice", e.target.value)}
+									className={cn("pl-5", inputCls("costPrice"))}
+									inputMode='decimal'
+									disabled={readOnly}
+									placeholder='0'
+								/>
+							</div>
+						</div> */}
+
+						{/* Distributor Price */}
+						{/* <div className='col-span-12 space-y-1 md:col-span-1'>
+							<Label className='text-xs font-medium'>Dist. Price</Label>
+							<div className='relative'>
+								<span className='absolute text-xs font-medium -translate-y-1/2 select-none left-2 top-1/2 text-muted-foreground'>
+									₹
+								</span>
+								<Input
+									value={form.distributorPrice}
+									onChange={(e) => decimalInput("distributorPrice", e.target.value)}
+									className={cn("pl-5", inputCls("distributorPrice"))}
+									inputMode='decimal'
+									disabled={readOnly}
+									placeholder='0'
+								/>
+							</div>
+						</div> */}
+
+						{/* Divider / Line Break */}
 						<div className='col-span-12' />
+
 						{/* Base Unit */}
 						<div className='col-span-12 space-y-1 md:col-span-1'>
 							<Label className='text-xs font-medium'>
@@ -659,8 +703,8 @@ export function ProductForm({
 								onValueChange={(value) => set("baseUnit", value)}
 								disabled={readOnly}
 							>
-								<SelectTrigger className={cn(inputCls("baseUnit"), "pl-1 pr-0")}>
-									<SelectValue placeholder='Select base unit...' />
+								<SelectTrigger className={cn(inputCls("baseUnit"), "pl-1.5 pr-0 text-[11px]")}>
+									<SelectValue placeholder='Select...' />
 								</SelectTrigger>
 								<SelectContent className='bg-white border shadow-lg border-border'>
 									{uomOptions.map((opt) => (
@@ -680,15 +724,15 @@ export function ProductForm({
 						{/* Packaging Unit */}
 						<div className='col-span-12 space-y-1 md:col-span-1'>
 							<Label className='text-xs font-medium'>
-								Packaging Unit <span className='text-red-500'>*</span>
+								Pack Unit <span className='text-red-500'>*</span>
 							</Label>
 							<Select
 								value={form.packagingUnit}
 								onValueChange={(value) => set("packagingUnit", value)}
 								disabled={readOnly}
 							>
-								<SelectTrigger className={cn(inputCls("packagingUnit"), "pl-1 pr-0")}>
-									<SelectValue placeholder='Select pack...' />
+								<SelectTrigger className={cn(inputCls("packagingUnit"), "pl-1.5 pr-0 text-[11px]")}>
+									<SelectValue placeholder='Select...' />
 								</SelectTrigger>
 								<SelectContent className='bg-white border shadow-lg border-border'>
 									{uomOptions.map((opt) => (
@@ -708,14 +752,14 @@ export function ProductForm({
 						{/* Conversion Quantity */}
 						<div className='col-span-12 space-y-1 md:col-span-1'>
 							<Label className='text-xs font-medium'>
-								Conversion Qty <span className='text-red-500'>*</span>
+								Conv. Qty <span className='text-red-500'>*</span>
 							</Label>
 							<Input
 								value={form.conversionQuantity}
 								onChange={(e) =>
 									decimalInput("conversionQuantity", e.target.value)
 								}
-								placeholder='e.g. 25'
+								placeholder='25'
 								className={inputCls("conversionQuantity")}
 								inputMode='decimal'
 								disabled={readOnly}
@@ -725,99 +769,80 @@ export function ProductForm({
 					</div>
 				</div>
 
-				<div className='space-y-4'>
-					<div className='space-y-1'>
-						<p className='text-xs font-semibold text-foreground'>
-							Media Upload
-						</p>
-						<p className='text-[11px] text-muted-foreground'>
-							Manage all product assets in one place.
-						</p>
-					</div>
-
+				<div className='space-y-3 pt-3 border-t border-border/60'>
+					<SectionHead
+						label='Product Media & Links'
+						sub='Upload product images, brochures, or add external web links.'
+					/>
+					
+					{/* Compact Upload Toolbar below header section */}
 					{!readOnly && (
-						<div className='grid grid-cols-1 gap-3 md:grid-cols-[160px_minmax(0,1fr)]'>
-							<div className='space-y-1'>
-								<Label className='text-xs font-medium'>Type</Label>
-								<AC
-									label=''
-									value={assetType}
-									onChange={(value) => setAssetType(value as "media" | "link")}
-									options={[
-										{ value: "media", label: "Media" },
-										{ value: "link", label: "Link" },
-									]}
-									placeholder='Select type...'
-									disabled={readOnly}
-									searchable={false}
-								/>
-							</div>
+						<div className='flex items-center gap-2'>
+							<input
+								ref={mediaInputRef}
+								type='file'
+								accept='image/png,image/jpeg,image/jpg,image/webp,video/mp4,video/quicktime,video/x-msvideo,.pdf,.doc,.docx,.xls,.xlsx'
+								multiple
+								className='hidden'
+								onChange={(e) => {
+									const files = Array.from(e.target.files ?? []);
+									const items = files.map((file) => createMediaItem(file));
+									if (items.length) emitAdd(items);
+									e.currentTarget.value = "";
+								}}
+							/>
+							
+							{/* Upload Media Button */}
+							<Button
+								type='button'
+								variant='outline'
+								size='sm'
+								className='h-7 px-2.5 text-[11px] border-brand-300 hover:bg-brand-50 hover:text-brand-700 transition-colors'
+								onClick={openMediaPicker}
+							>
+								<Upload className='w-3 h-3 mr-1.5 text-brand-600' /> Upload File
+							</Button>
 
-							{assetType === "media" ? (
-								<div className='flex flex-col gap-2 px-1 py-0 border rounded-xl border-border bg-muted/10 md:flex-row md:items-center md:justify-between'>
-									<input
-										ref={mediaInputRef}
-										type='file'
-										accept='image/png,image/jpeg,image/jpg,image/webp,video/mp4,video/quicktime,video/x-msvideo,.pdf,.doc,.docx,.xls,.xlsx'
-										multiple
-										className='hidden'
-										disabled={readOnly}
-										onChange={(e) => {
-											const files = Array.from(e.target.files ?? []);
-											const items = files.map((file) => createMediaItem(file));
-											if (items.length) emitAdd(items);
-											e.currentTarget.value = "";
-										}}
-									/>
+							{/* Add Link Popover */}
+							<Popover>
+								<PopoverTrigger asChild>
 									<Button
 										type='button'
-										className='h-8 px-4 text-xs text-white bg-brand-600 hover:bg-brand-700 md:shrink-0'
-										onClick={openMediaPicker}
-										disabled={readOnly}
+										variant='outline'
+										size='sm'
+										className='h-7 px-2.5 text-[11px] border-border hover:bg-muted/30 transition-colors'
 									>
-										Choose Files
+										<Plus className='w-3 h-3 mr-1.5 text-muted-foreground' /> Add Link
 									</Button>
-									<div className='min-w-0 space-y-1'>
-										<p className='text-xs font-medium text-foreground'>
-											Upload Files
-										</p>
-										<p className='text-[11px] text-muted-foreground'>
-											Supported: PNG, JPG, JPEG, WEBP, PDF, DOC, DOCX, XLS,
-											XLSX, MP4, MOV, AVI
-										</p>
-										<p className='text-[11px] text-muted-foreground'>
-											Max size: 50MB per file
-										</p>
-									</div>
-								</div>
-							) : (
-								<div className='flex flex-col gap-2 px-3 py-3 border rounded-xl border-border bg-muted/10 md:flex-row md:items-end'>
-									<div className='grid flex-1 grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'>
-										<div className='space-y-1'>
-											<Label className='text-xs font-medium'>Link Title</Label>
+								</PopoverTrigger>
+								<PopoverContent className='w-72 p-3 bg-white border border-border shadow-lg rounded-xl space-y-2.5' align='start'>
+									<p className='text-xs font-bold uppercase tracking-wider text-muted-foreground'>
+										Add External Link
+									</p>
+									<div className='space-y-2'>
+										<div className='space-y-0.5'>
+											<Label className='text-[10px] font-medium text-muted-foreground'>Link Title</Label>
 											<Input
 												value={linkTitle}
 												onChange={(e) => setLinkTitle(e.target.value)}
-												placeholder='e.g. Product brochure'
-												className='h-8 text-xs'
-												disabled={readOnly}
+												placeholder='e.g. Technical Datasheet'
+												className='h-7 text-xs'
 											/>
 										</div>
-										<div className='space-y-1'>
-											<Label className='text-xs font-medium'>URL</Label>
+										<div className='space-y-0.5'>
+											<Label className='text-[10px] font-medium text-muted-foreground'>URL</Label>
 											<Input
 												value={linkUrl}
 												onChange={(e) => setLinkUrl(e.target.value)}
-												placeholder='https://...'
-												className='h-8 text-xs'
-												disabled={readOnly}
+												placeholder='https://example.com/...'
+												className='h-7 text-xs'
 											/>
 										</div>
 									</div>
 									<Button
 										type='button'
-										className='h-8 px-4 text-xs text-white bg-brand-600 hover:bg-brand-700 md:shrink-0'
-										disabled={readOnly || !linkTitle.trim() || !linkUrl.trim()}
+										className='w-full h-7 text-xs text-white bg-brand-600 hover:bg-brand-700'
+										disabled={!linkTitle.trim() || !linkUrl.trim()}
 										onClick={() => {
 											emitAdd([
 												createLinkMediaItem(linkTitle.trim(), linkUrl.trim()),
@@ -826,31 +851,21 @@ export function ProductForm({
 											setLinkUrl("");
 										}}
 									>
-										<Link2 className='mr-1.5 h-3.5 w-3.5' /> Add Link
+										<Link2 className='mr-1.5 h-3 w-3' /> Save Link
 									</Button>
-								</div>
-							)}
+								</PopoverContent>
+							</Popover>
 						</div>
 					)}
 
-					<div className='space-y-3'>
-						<div className='flex items-center justify-between gap-3'>
-							<div>
-								<p className='text-xs font-semibold text-foreground'>
-									Uploaded Assets ({allAssets.length})
-								</p>
-								<p className='text-[11px] text-muted-foreground'>
-									Open or remove individual media and links from the same list.
-								</p>
-							</div>
-						</div>
-
+					{/* High Density Asset List */}
+					<div className='border border-border/60 rounded-xl overflow-hidden bg-white shadow-xs'>
 						{allAssets.length === 0 ? (
-							<p className='px-1 py-4 text-sm text-muted-foreground'>
-								No assets added yet.
+							<p className='px-4 py-6 text-xs text-center text-muted-foreground select-none'>
+								No media files or links attached.
 							</p>
 						) : (
-							<div className='space-y-3'>
+							<div className='divide-y divide-border/40'>
 								{allAssets.map((item) => {
 									const url = getAssetUrl(item);
 									const typeLabel = getAssetTypeLabel(item);
@@ -860,65 +875,73 @@ export function ProductForm({
 									return (
 										<div
 											key={item.id}
-											className='p-3 bg-white border shadow-sm rounded-xl border-border'
+											className='flex items-center justify-between gap-3 px-3.5 py-2 hover:bg-muted/15 transition-colors group'
 										>
-											<div className='flex items-start justify-between gap-3'>
-												<div className='flex items-start min-w-0 gap-3'>
-													<div className='flex items-center justify-center flex-shrink-0 overflow-hidden border rounded-lg h-9 w-9 border-border bg-muted/20 text-brand-600'>
-														{isImage && url ? (
-															<img
-																src={url}
-																alt={item.name}
-																className='object-cover w-full h-full'
-															/>
-														) : (
-															getAssetIcon(item)
-														)}
-													</div>
-													<div className='min-w-0'>
-														<p className='text-xs font-medium truncate text-foreground'>
-															{item.title || item.name}
-														</p>
-														<p className='text-[11px] text-muted-foreground truncate'>
-															{item.size ||
-																item.fileType ||
-																item.mediaKind ||
-																"Asset"}
-														</p>
-													</div>
+											<div className='flex items-center min-w-0 gap-3'>
+												{/* Small Icon / Image Thumbnail */}
+												<div className='flex items-center justify-center flex-shrink-0 overflow-hidden border rounded-lg h-7 w-7 border-border/50 bg-muted/20 text-brand-600'>
+													{isImage && url ? (
+														<img
+															src={url}
+															alt={item.name}
+															className='object-cover w-full h-full'
+														/>
+													) : (
+														getAssetIcon(item)
+													)}
 												</div>
+												<div className='min-w-0'>
+													<p 
+														onClick={() => openAsset(item)}
+														className='text-xs font-semibold truncate text-foreground hover:text-brand-700 cursor-pointer transition-colors leading-tight'
+													>
+														{item.title || item.name}
+													</p>
+													<p className='text-[10px] text-muted-foreground leading-none mt-0.5'>
+														{item.size || item.fileType || item.mediaKind || "Asset"}
+													</p>
+												</div>
+											</div>
+											
+											<div className='flex items-center gap-2.5'>
+												{/* Compact Status Indicator */}
 												<span
 													className={cn(
-														"inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+														"inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold leading-none",
 														item.uploaded
 															? "bg-emerald-50 text-emerald-700"
 															: "bg-amber-50 text-amber-700",
 													)}
 												>
-													<CheckCircle2 className='w-3 h-3' />
 													{typeLabel}
 												</span>
-											</div>
-											<div className='flex items-center justify-end gap-2 mt-3'>
-												<Button
-													type='button'
-													variant='outline'
-													className='h-8 px-3 text-[11px]'
-													onClick={() => openAsset(item)}
-													disabled={!url}
-												>
-													Open
-												</Button>
-												{!readOnly && (
+												
+												{/* Action Buttons */}
+												<div className='flex items-center gap-1'>
 													<Button
 														type='button'
-														variant='outline'
-														className='h-8 px-3 text-[11px] text-red-600 hover:text-red-700'
-														onClick={() => removeMedia(item.id)}
+														variant='ghost'
+														size='icon'
+														className='w-6 h-6 rounded hover:bg-muted text-muted-foreground hover:text-foreground'
+														onClick={() => openAsset(item)}
+														disabled={!url}
+														title='Open'
 													>
-														Delete
+														<ExternalLink className='w-3 h-3' />
 													</Button>
-												)}
+													{!readOnly && (
+														<Button
+															type='button'
+															variant='ghost'
+															size='icon'
+															className='w-6 h-6 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600'
+															onClick={() => removeMedia(item.id)}
+															title='Delete'
+														>
+															<X className='w-3 h-3' />
+														</Button>
+													)}
+												</div>
 											</div>
 										</div>
 									);

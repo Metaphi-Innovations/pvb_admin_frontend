@@ -318,12 +318,24 @@ function TreeRow({
           <LevelBadge level={node.level} />
         </td>
 
-        {/* Pincode */}
+        {/* Status */}
         <td className="px-3 py-2.5 flex-[0.8]">
-          {node.level === "Pincode" && node.pincode
-            ? <span className="font-mono text-xs text-muted-foreground">{node.pincode}</span>
-            : <span className="text-muted-foreground/30 text-xs">—</span>
-          }
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleStatus(node);
+            }}
+            className={cn(
+              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-colors border cursor-pointer",
+              node.status === "active"
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
+            )}
+          >
+            <span className={cn("w-1.5 h-1.5 rounded-full", node.status === "active" ? "bg-emerald-500" : "bg-red-500")} />
+            {node.status === "active" ? "Active" : "Inactive"}
+          </button>
         </td>
 
         {/* Actions */}
@@ -670,14 +682,28 @@ export default function GeographyListPage() {
       render: (val, row) => <LevelBadge level={row.level} />
     },
     {
-      key: "pincode",
-      header: "Pincode",
+      key: "status",
+      header: "Status",
       width: "120px",
       render: (val, row) => {
-        return row.level === "Pincode" && row.pincode ? (
-          <span className="font-mono text-xs text-muted-foreground">{row.pincode}</span>
-        ) : (
-          <span className="text-muted-foreground/30 text-xs">—</span>
+        const isActive = row.status === "active";
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleToggleStatus(row);
+            }}
+            className={cn(
+              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-colors border cursor-pointer",
+              isActive
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
+            )}
+          >
+            <span className={cn("w-1.5 h-1.5 rounded-full", isActive ? "bg-emerald-500" : "bg-red-500")} />
+            {isActive ? "Active" : "Inactive"}
+          </button>
         );
       }
     },

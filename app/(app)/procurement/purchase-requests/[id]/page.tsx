@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 import { CheckCircle2, Edit2, ShoppingCart, XCircle } from "lucide-react";
 import {
   RecordDetailPage,
@@ -107,7 +108,7 @@ export default function PRViewPage() {
 
 	if (!pr) {
 		return (
-			<AppLayout>
+			<>
 				<div className='p-8 text-sm font-semibold text-muted-foreground'>
 					Purchase Request not found.{" "}
 					<Link
@@ -117,7 +118,7 @@ export default function PRViewPage() {
 						Back to listing
 					</Link>
 				</div>
-			</AppLayout>
+			</>
 		);
 	}
 
@@ -229,6 +230,6 @@ export default function PRViewPage() {
 				}}
 			/>
 			{toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-		</AppLayout>
+		</>
 	);
 }

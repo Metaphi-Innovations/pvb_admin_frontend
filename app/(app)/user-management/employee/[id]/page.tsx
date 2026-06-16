@@ -20,6 +20,7 @@ import {
 import {
   AlertTriangle, Edit2, Key, Trash2,
   CheckCircle2, XCircle, X, User, Mail, Phone,
+  Monitor, Smartphone, Info, Building2, UserCheck,
 } from "lucide-react";
 import {
   type Employee,
@@ -568,11 +569,11 @@ export default function EmployeeDetailPage() {
           <div className="border border-border rounded-xl bg-white p-3.5">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2.5">Personal Details</p>
             <div className="space-y-0">
-              <InfoRow label="Full Name" value={employee.fullName} />
-              <InfoRow label="Email" value={employee.email} />
-              <InfoRow label="Mobile" value={employee.mobile} />
-              {employee.alternativeMobile && <InfoRow label="Alt Mobile" value={employee.alternativeMobile} />}
-              <InfoRow label="Blood Group" value={employee.bloodGroup} />
+              <DetailField label="Full Name" value={employee.fullName} />
+              <DetailField label="Email" value={employee.email} />
+              <DetailField label="Mobile" value={employee.mobile} />
+              {employee.alternativeMobile && <DetailField label="Alt Mobile" value={employee.alternativeMobile} />}
+              <DetailField label="Blood Group" value={employee.bloodGroup} />
             </div>
           </div>
 
@@ -659,6 +660,7 @@ export default function EmployeeDetailPage() {
                     <DetailField label="Gender" value={employee.gender} />
                     <DetailField label="DOB" value={employee.dob} />
                     <DetailField label="Blood Group" value={employee.bloodGroup} />
+                    <DetailField label="" value=" "></DetailField>
                   </div>
                 </div>
 
@@ -673,6 +675,7 @@ export default function EmployeeDetailPage() {
                     <DetailField label="Email Address" value={employee.email} />
                     <DetailField label="Current Address" value={employee.currentAddress || employee.address} />
                     <DetailField label="Permanent Address" value={employee.permanentAddress} />
+                    <DetailField label="" value=" "></DetailField>
                   </div>
                 </div>
 
@@ -690,6 +693,7 @@ export default function EmployeeDetailPage() {
                     <DetailField label="Updated By" value={employee.updatedBy} />
                     <DetailField label="Last Status Change" value={employee.lastStatusChange} />
                     {employee.remarks && <DetailField label="Remarks" value={employee.remarks} />}
+                    <DetailField label="" value=" "></DetailField>
                   </div>
                 </div>
               </div>
@@ -714,6 +718,7 @@ export default function EmployeeDetailPage() {
                     {employee.salesType && <DetailField label="Sales Type" value={employee.salesType} />}
                     <DetailField label="Joining Date" value={employee.joiningDate} />
                     <DetailField label="Reporting Manager" value={employee.reportingManager || "None"} />
+                    <DetailField label="" value=" "></DetailField>
                   </div>
                 </div>
 
@@ -772,6 +777,7 @@ export default function EmployeeDetailPage() {
                     <DetailField label="Mobile Number" value={employee.emergencyContactMobile} mono />
                     <DetailField label="Relation" value={employee.emergencyContactRelation} />
                     {employee.emergencyContactAddress && <DetailField label="Address" value={employee.emergencyContactAddress} />}
+                    <DetailField label="" value=" "></DetailField>
                   </div>
                 </div>
 

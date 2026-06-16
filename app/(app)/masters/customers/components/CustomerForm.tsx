@@ -869,7 +869,11 @@ export function CustomerForm({
 				<TabsContent value='basic' className='mt-0 space-y-5'>
 					<div className='space-y-6'>
 						<div>
-							<SectionHead label='Basic Information' />
+							<div className='mb-2.5 mt-0.5'>
+								<p className='text-xs font-bold uppercase tracking-wider text-foreground flex items-center'>
+									Basic Information <span className='text-red-500 ml-1'>*</span>
+								</p>
+							</div>
 							<div className='space-y-4 w-full'>
 								<div className='flex flex-col md:flex-row items-start justify-between gap-4 w-full'>
 									{/* Customer Name */}
@@ -1184,7 +1188,11 @@ export function CustomerForm({
 				{/* ── TAB 3: BANK & COMMERCIAL ── */}
 				<TabsContent value='commercial' className='mt-0 space-y-5'>
 					<div>
-						<SectionHead label='Bank & Commercial' />
+						<div className='mb-2.5 mt-0.5'>
+							<p className='text-xs font-bold uppercase tracking-wider text-foreground flex items-center'>
+								Bank & Commercial <span className='text-red-500 ml-1'>*</span>
+							</p>
+						</div>
 						<div className='grid grid-cols-6 gap-4'>
 							{/* Credit Limit */}
 							<div className='col-span-1 space-y-1'>
@@ -1347,10 +1355,13 @@ export function CustomerForm({
 					</div>
 				</TabsContent>
 
-				{/* ── TAB 4: PRODUCT MAPPING ── */}
 				<TabsContent value='product' className='mt-0 space-y-5'>
 					<div>
-
+						<div className='mb-2.5 mt-0.5'>
+							<p className='text-xs font-bold uppercase tracking-wider text-foreground'>
+								Product Mappings
+							</p>
+						</div>
 
 						{!readOnly && (
 							<div className='mb-4 rounded-lg border border-border bg-muted/20 p-3'>
@@ -1760,8 +1771,8 @@ export function CustomerForm({
 													{/* Billing Address block */}
 													<div className='space-y-4'>
 														<div className='flex justify-between items-center border-b border-border/40 pb-1.5'>
-															<span className='text-[10px] font-bold uppercase tracking-wider text-muted-foreground'>
-																Billing Address
+															<span className='text-xs font-bold uppercase tracking-wider text-foreground flex items-center'>
+																Billing Address <span className='text-red-500 ml-1'>*</span>
 															</span>
 														</div>
 
@@ -1997,28 +2008,11 @@ export function CustomerForm({
 
 												{/* Branch Documents Section */}
 												<div className='pt-3 space-y-3 border-t border-border/40'>
-													<div
-														onClick={() => {
-															setExpandedChecklists((prev) => ({
-																...prev,
-																[bIdx]: !prev[bIdx],
-															}));
-														}}
-														className='flex items-center justify-between p-2 transition-colors border rounded-lg cursor-pointer select-none hover:bg-muted/10 bg-muted/5 border-border/40'
-													>
-														<p className='text-[10px] font-bold uppercase tracking-wider text-muted-foreground'>
-															Document Upload Checklist
-														</p>
-														<ChevronDown
-															className={cn(
-																"w-3.5 h-3.5 text-muted-foreground transition-transform duration-200",
-																expandedChecklists[bIdx] && "rotate-180",
-															)}
-														/>
-													</div>
+													<p className='text-xs font-bold uppercase tracking-wider text-foreground flex items-center leading-none'>
+														Document Upload Checklist <span className='text-red-500 ml-1'>*</span>
+													</p>
 
-													{expandedChecklists[bIdx] && (
-														<div className='space-y-4 duration-200 animate-in fade-in-50'>
+													<div className='space-y-4 duration-200 animate-in fade-in-50'>
 															{!form.customerType ? (
 																<p className='text-xs italic text-muted-foreground'>
 																	Please select a Customer Type in Basic Details
@@ -2255,7 +2249,6 @@ export function CustomerForm({
 																</>
 															)}
 														</div>
-													)}
 												</div>
 											</div>
 										)}

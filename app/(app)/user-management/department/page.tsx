@@ -170,7 +170,7 @@ interface KpiCardProps {
 
 function KpiCard({ label, value, icon: Icon, bgClass = "bg-brand-600" }: KpiCardProps) {
   return (
-    <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
+    <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
       <div className={cn(
         "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
         bgClass,
@@ -178,7 +178,7 @@ function KpiCard({ label, value, icon: Icon, bgClass = "bg-brand-600" }: KpiCard
         <Icon className="w-4 h-4 text-white" />
       </div>
       <div>
-        <p className="text-base font-bold text-foreground leading-none">{value}</p>
+        <p className="text-base font-bold leading-none text-foreground">{value}</p>
         <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{label}</p>
       </div>
     </div>
@@ -408,12 +408,12 @@ export default function DepartmentPage() {
             <DropdownMenuItem onClick={() => openEdit(row)} className="cursor-pointer">
               <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => handleQuickToggle(row)} className="cursor-pointer">
+            {/* <DropdownMenuSeparator /> */}
+            {/* <DropdownMenuItem onClick={() => handleQuickToggle(row)} className="cursor-pointer">
               {row.status === "active" ? "Deactivate" : "Activate"}
-            </DropdownMenuItem>
+            </DropdownMenuItem> */}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => handleDelete(row)} className="cursor-pointer text-red-600 focus:bg-red-50 focus:text-red-600">
+            <DropdownMenuItem onClick={() => handleDelete(row)} className="text-red-600 cursor-pointer focus:bg-red-50 focus:text-red-600">
               <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
             </DropdownMenuItem>
           </DropdownMenuContent>

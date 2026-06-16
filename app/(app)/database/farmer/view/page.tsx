@@ -33,6 +33,11 @@ function formatArea(value: number) {
   return `${formatted} Acres`;
 }
 
+function getOwnedLeasedSummary(farmer: Farmer) {
+  const { ownedTotal, leasedTotal } = getOwnedLeasedTotals(farmer);
+  return `Owned: ${formatArea(ownedTotal)} / Leased: ${formatArea(leasedTotal)}`;
+}
+
 function getCurrentCropSummary(farmer: Farmer) {
   return Array.from(
     new Set(

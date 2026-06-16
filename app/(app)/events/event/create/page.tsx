@@ -72,7 +72,7 @@ interface EventFormState {
 }
 
 type EventFormErrors = Partial<
-  Record<"title" | "selectedDates" | "time" | "attendees" | GeoLevel, string>
+  Record<"title" | "selectedDates" | "time" | "attendees" | GeoLevel | "City", string>
 >;
 
 interface ToastState {
@@ -111,7 +111,7 @@ const FARMER_OPTIONS: MultiSelectOption[] = FARMER_NAMES.map((label, index) => (
 
 const CUSTOMER_DISTRIBUTOR_ID_OFFSET = 100000;
 
-const LOCATION_LEVELS: GeoLevel[] = [
+const LOCATION_LEVELS: (GeoLevel | "City")[] = [
   "Zone",
   "State",
   "Region",
@@ -121,7 +121,7 @@ const LOCATION_LEVELS: GeoLevel[] = [
   "City",
 ];
 
-const LOCATION_PARENT: Record<GeoLevel, GeoLevel | null> = {
+const LOCATION_PARENT: Record<GeoLevel | "City", GeoLevel | "City" | null> = {
   Zone: null,
   State: "Zone",
   Region: "State",
@@ -129,6 +129,7 @@ const LOCATION_PARENT: Record<GeoLevel, GeoLevel | null> = {
   Territory: "Area",
   Locality: "Territory",
   City: "Locality",
+  Pincode: "Locality",
 };
 
 function handleScrollableWheel(event: React.WheelEvent<HTMLElement>) {
@@ -964,7 +965,7 @@ export default function CreateEventPage() {
   );
 
   const selectedLocationNodes = useMemo(() => {
-    const result: Partial<Record<GeoLevel, GeoNode>> = {};
+    const result: Partial<Record<GeoLevel | "City", GeoNode>> = {};
 
     LOCATION_LEVELS.forEach((level) => {
       const nodeId = form.location[level];
@@ -981,12 +982,12 @@ export default function CreateEventPage() {
     return `EVT-${String(nextId).padStart(3, "0")}`;
   }, [events]);
 
-  const getOptionsForLevel = (level: GeoLevel) => {
+  const getOptionsForLevel = (level: GeoLevel | "City") => {
     const parentLevel = LOCATION_PARENT[level];
 
     return geoNodes
       .filter((node) => {
-        if (node.level !== level) return false;
+        if ((node.level as string) !== level) return false;
         if (!parentLevel) return true;
 
         const selectedParentId = form.location[parentLevel];
@@ -1050,7 +1051,7 @@ export default function CreateEventPage() {
     setErrors((current) => ({ ...current, attendees: undefined }));
   };
 
-  const handleLocationChange = (level: GeoLevel, value?: number) => {
+  const handleLocationChange = (level: GeoLevel | "City", value?: number) => {
     setForm((current) => {
       const nextLocation: LocationSelection = { ...current.location };
       const levelIndex = LOCATION_LEVELS.indexOf(level);

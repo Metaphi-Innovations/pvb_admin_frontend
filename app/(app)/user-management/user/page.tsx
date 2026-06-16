@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -23,11 +23,22 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   Plus, Download, MoreVertical, Eye, Edit2, Trash2, Users,
-  CheckCircle2, XCircle, X, AlertTriangle,
+  CheckCircle2, XCircle, X, AlertTriangle, AlertCircle,
   Calendar, Clock, MapPin,
 } from "lucide-react";
 import GeographyAssignmentSection from "./components/GeographyAssignmentSection";
 import ReportingAssignmentSection from "./components/ReportingAssignmentSection";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+import { loadNewPermissionTemplates, type PermissionTemplate } from "../roles/roles-data";
+
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface User {
@@ -331,6 +342,81 @@ function BasicDetailsTab() {
 // ── Tab Component: Permissions ────────────────────────────────────────────────
 function PermissionsTab() {
   const [permissions, setPermissions] = useState<Record<string, Record<string, boolean>>>({});
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [pendingTemplateId, setPendingTemplateId] = useState("");
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  // Load active templates
+  const templates = loadNewPermissionTemplates().filter(t => t.status === "Active");
+  const templateOptions = templates.map(t => ({
+    value: t.id,
+    label: t.templateName,
+  }));
+
+  const hasCheckedPermissions = () => {
+    return Object.values(permissions).some(actions =>
+      Object.values(actions).some(checked => checked)
+    );
+  };
+
+  const applyTemplatePermissions = (tpl: PermissionTemplate) => {
+    const newPerms: Record<string, Record<string, boolean>> = {};
+    
+    // Initialize all to false
+    PERMISSION_MODULES.forEach(m => {
+      newPerms[m] = {};
+      PERMISSION_ACTIONS.forEach(a => {
+        newPerms[m][a] = false;
+      });
+    });
+
+    const list = tpl.accessType === "web" ? tpl.webPermissions : tpl.mobilePermissions;
+    list.forEach(p => {
+      const parts = p.moduleKey.split(".");
+      const modPart = parts[0];
+      let mappedMod = modPart.charAt(0).toUpperCase() + modPart.slice(1);
+      const matchedMod = PERMISSION_MODULES.find(
+        m => m.toLowerCase() === modPart.toLowerCase() || m.toLowerCase() === mappedMod.toLowerCase()
+      );
+      
+      const actPart = p.actionKey;
+      const matchedAct = PERMISSION_ACTIONS.find(a => a.toLowerCase() === actPart.toLowerCase());
+
+      if (matchedMod && matchedAct) {
+        newPerms[matchedMod][matchedAct] = true;
+      }
+    });
+
+    setPermissions(newPerms);
+  };
+
+  const handleTemplateSelect = (val: string) => {
+    const tpl = templates.find(t => t.id === val);
+    if (!tpl) return;
+
+    if (hasCheckedPermissions()) {
+      setPendingTemplateId(val);
+      setShowConfirmModal(true);
+    } else {
+      setSelectedTemplateId(val);
+      applyTemplatePermissions(tpl);
+    }
+  };
+
+  const confirmTemplateChange = () => {
+    const tpl = templates.find(t => t.id === pendingTemplateId);
+    if (tpl) {
+      setSelectedTemplateId(pendingTemplateId);
+      applyTemplatePermissions(tpl);
+    }
+    setPendingTemplateId("");
+    setShowConfirmModal(false);
+  };
+
+  const cancelTemplateChange = () => {
+    setPendingTemplateId("");
+    setShowConfirmModal(false);
+  };
 
   const togglePermission = (module: string, action: string) => {
     setPermissions(prev => ({
@@ -342,12 +428,35 @@ function PermissionsTab() {
     }));
   };
 
+  const resetPermissions = () => {
+    const empty: Record<string, Record<string, boolean>> = {};
+    PERMISSION_MODULES.forEach(m => {
+      empty[m] = {};
+      PERMISSION_ACTIONS.forEach(a => {
+        empty[m][a] = false;
+      });
+    });
+    setPermissions(empty);
+    setSelectedTemplateId("");
+  };
+
   return (
     <div className="space-y-4">
-      <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-        <p className="text-xs text-blue-700">
-          Select permissions for each module. Users can only access features they have permission for.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 flex-1">
+          <p className="text-xs text-blue-700">
+            Select permissions for each module. Users can only access features they have permission for.
+          </p>
+        </div>
+        <div className="w-64 space-y-1.5 flex-shrink-0">
+          <Label className="text-xs font-medium">Permission Template</Label>
+          <AutocompleteSelect
+            placeholder="Select permission template"
+            options={templateOptions}
+            value={selectedTemplateId}
+            onChange={handleTemplateSelect}
+          />
+        </div>
       </div>
 
       <Accordion type="single" collapsible className="space-y-2">
@@ -385,13 +494,47 @@ function PermissionsTab() {
 
       {/* Action Buttons */}
       <div className="flex items-center gap-2 pt-4 border-t border-border">
-        <Button variant="outline" size="sm" className="h-8 text-xs">
+        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={resetPermissions}>
           Reset Permissions
         </Button>
         <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white">
           Save Permissions
         </Button>
       </div>
+
+      {/* Overwrite Warning Dialog */}
+      <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-50 border border-red-200">
+                <AlertCircle className="w-4 h-4 text-red-500" />
+              </div>
+              Overwrite Permissions?
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-xs">
+              Changing the permission template will replace current permissions. Do you want to continue?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={cancelTemplateChange}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white"
+              onClick={confirmTemplateChange}
+            >
+              Yes, Overwrite
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

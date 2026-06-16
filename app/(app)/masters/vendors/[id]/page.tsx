@@ -192,7 +192,7 @@ export default function ViewVendorPage() {
     switch (activeTab) {
       case "overview":
         return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <RecordSectionCard title="Basic Details" icon={Building2} accent="blue">
               <RecordKvRow label="Vendor Name" value={vendor.vendorName} highlight />
               <RecordKvRow label="Vendor Code" value={vendor.vendorCode} mono copy />

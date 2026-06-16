@@ -154,11 +154,12 @@ export function poToFormValues(po: PurchaseOrder): POFormValues {
 	};
 }
 
-function SectionHead({ label, sub }: { label: string; sub?: string }) {
+function SectionHead({ label, sub, required }: { label: string; sub?: string; required?: boolean }) {
 	return (
 		<div className="mb-2.5 mt-0.5">
-			<p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+			<p className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center">
 				{label}
+				{required && <span className="text-red-500 ml-1">*</span>}
 			</p>
 			{sub && <p className="mt-0.5 text-[11px] text-muted-foreground">{sub}</p>}
 		</div>

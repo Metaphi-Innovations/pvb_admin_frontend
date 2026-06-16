@@ -236,15 +236,7 @@ export default function WarehouseListPage() {
       width: "90px",
       render: (val, row) => <span className="font-mono text-xs text-foreground">{row.pincode || "—"}</span>,
     },
-    {
-      key: "capacity",
-      header: "Capacity",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "100px",
-      render: (val, row) => row.capacity ? row.capacity.toLocaleString("en-IN") : "—",
-    },
+
     {
       key: "manager",
       header: "Manager",
@@ -461,13 +453,13 @@ export default function WarehouseListPage() {
     const headers = [
       "Warehouse Code", "Warehouse Name", "Warehouse Type", "GST Number",
       "Contact Person", "Mobile Number", "Email Address", "Address",
-      "State", "District", "City", "Pincode", "Capacity",
+      "State", "District", "City", "Pincode",
       "Manager", "Operated By", "Status",
     ];
     const rows = filtered.map(r => [
       r.warehouseCode, r.warehouseName, r.warehouseType, r.gstNumber,
       r.contactPerson, r.mobileNumber, r.emailAddress, `"${r.address}"`,
-      r.state, r.district, r.city, r.pincode, String(r.capacity),
+      r.state, r.district, r.city, r.pincode,
       r.manager, r.operatedBy, formatStatus(r.status),
     ]);
     const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
@@ -496,7 +488,7 @@ export default function WarehouseListPage() {
         <div>
           <h1 className="text-xl font-bold text-foreground">Warehouse Master</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Manage warehouse locations, capacity, and operations
+            Manage warehouse locations and operations
           </p>
         </div>
 

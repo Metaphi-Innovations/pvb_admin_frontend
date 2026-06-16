@@ -1,5 +1,7 @@
 // ── Employee Master — types, seed data, validation, and storage helpers ──────
 
+import { loadRoles, loadPermissionTemplates } from "../roles/roles-data";
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type RoleType = "Field User" | "Admin User";
@@ -405,82 +407,62 @@ export function migratePermissions(raw: any): UserPermissions {
 
 /** Auto-suggest sensible defaults based on selected role. Admin can override after. */
 export function roleDefaultPermissions(role: string): UserPermissions {
-  const full = fullPermissions();
-  const empty = defaultPermissions();
+  const p = defaultPermissions();
+  try {
+    const roles = loadRoles();
+    const templates = loadPermissionTemplates();
+    
+    // Find the role in roles-data.ts by matching roleName or role string
+    const matchedRole = roles.find(r => r.roleName.toLowerCase() === role.toLowerCase());
+    if (!matchedRole) {
+      // Fallback to SPM/NSM check
+      if (["NSM", "SPM"].includes(role)) {
+        return fullPermissions();
+      }
+      return p;
+    }
+    
+    const template = templates[matchedRole.id] || templates[String(matchedRole.id)];
+    if (!template) return p;
 
-  // National / top-level admin → full access
-  if (["NSM", "SPM"].includes(role)) return full;
-
-  // Domain-specific admin roles
-  if (role === "Procurement Head") {
-    const p = defaultPermissions();
-    p.web["procurement"] = full.web["procurement"];
-    p.web["masters"]     = full.web["masters"];
-    p.web["reports"]     = full.web["reports"];
-    return p;
+    if (template.accessType === "web" && Array.isArray(template.webPermissions)) {
+      template.webPermissions.forEach((perm: any) => {
+        let mKey = perm.moduleKey || perm.module || perm.moduleId || perm.moduleName;
+        const aKey = perm.actionKey || perm.action || perm.permission;
+        if (mKey && aKey) {
+          if (mKey === "sales.customers") {
+            mKey = "masters.customerMaster";
+          }
+          const parts = mKey.split(".");
+          if (parts.length >= 2) {
+            const modId = parts[0];
+            const subId = parts[1];
+            if (p.web[modId] && p.web[modId][subId]) {
+              (p.web[modId][subId] as any)[aKey] = true;
+            }
+          }
+        }
+      });
+    } else if (template.accessType === "mobile" && Array.isArray(template.mobilePermissions)) {
+      template.mobilePermissions.forEach((perm: any) => {
+        const mKey = perm.moduleKey || perm.module || perm.moduleId || perm.moduleName;
+        const aKey = perm.actionKey || perm.action || perm.permission;
+        if (mKey && aKey) {
+          const parts = mKey.split(".");
+          if (parts.length >= 2) {
+            const grpId = parts[0];
+            const featId = parts[1];
+            if (p.mobile[grpId] && p.mobile[grpId][featId]) {
+              (p.mobile[grpId][featId] as any)[aKey] = true;
+            }
+          }
+        }
+      });
+    }
+  } catch (err) {
+    console.error("Error loading dynamic role defaults:", err);
   }
-  if (role === "Accounts Manager" || role === "Finance Manager") {
-    const p = defaultPermissions();
-    p.web["accounts"] = full.web["accounts"];
-    p.web["reports"]  = full.web["reports"];
-    return p;
-  }
-  if (role === "HR Admin") {
-    const p = defaultPermissions();
-    p.web["hr"]      = full.web["hr"];
-    p.web["reports"] = full.web["reports"];
-    return p;
-  }
-  if (role === "Operations Manager" || role === "Back Office Manager") {
-    const p = defaultPermissions();
-    p.web["procurement"] = full.web["procurement"];
-    p.web["sales"]       = full.web["sales"];
-    p.web["reports"]     = full.web["reports"];
-    return p;
-  }
-
-  // Field users — primarily mobile
-  if (["DO", "Intern"].includes(role)) {
-    const p = defaultPermissions();
-    p.mobile["fieldOps"]   = full.mobile["fieldOps"];
-    p.mobile["salesOps"]   = full.mobile["salesOps"];
-    p.mobile["farmerOps"]  = full.mobile["farmerOps"];
-    p.mobile["dataOps"]    = full.mobile["dataOps"];
-    return p;
-  }
-  if (["FMO", "TM"].includes(role)) {
-    const p = defaultPermissions();
-    p.mobile["fieldOps"]    = full.mobile["fieldOps"];
-    p.mobile["salesOps"]    = full.mobile["salesOps"];
-    p.mobile["farmerOps"]   = full.mobile["farmerOps"];
-    p.mobile["masterAccess"]= full.mobile["masterAccess"];
-    p.mobile["dataOps"]     = full.mobile["dataOps"];
-    return p;
-  }
-  if (["ASM", "KAM", "RSM"].includes(role)) {
-    const p = defaultPermissions();
-    p.mobile["fieldOps"]    = full.mobile["fieldOps"];
-    p.mobile["salesOps"]    = full.mobile["salesOps"];
-    p.mobile["masterAccess"]= full.mobile["masterAccess"];
-    p.mobile["hrOps"]       = full.mobile["hrOps"];
-    p.mobile["dataOps"]     = full.mobile["dataOps"];
-    p.web["sales"]   = full.web["sales"];
-    p.web["reports"] = full.web["reports"];
-    return p;
-  }
-  if (role === "ZSM") {
-    const p = defaultPermissions();
-    p.mobile["fieldOps"]    = full.mobile["fieldOps"];
-    p.mobile["salesOps"]    = full.mobile["salesOps"];
-    p.mobile["masterAccess"]= full.mobile["masterAccess"];
-    p.mobile["hrOps"]       = full.mobile["hrOps"];
-    p.web["sales"]          = full.web["sales"];
-    p.web["hr"]             = full.web["hr"];
-    p.web["reports"]        = full.web["reports"];
-    return p;
-  }
-
-  return empty;
+  return p;
 }
 
 // Legacy compat
@@ -755,7 +737,7 @@ export const SEED_EMPLOYEES: Employee[] = [
 // ── localStorage Helpers ──────────────────────────────────────────────────────
 
 const EMPLOYEE_KEY = "ds_employees";
-const EMPLOYEE_VERSION = 3;
+const EMPLOYEE_VERSION = 5;
 
 interface StoredEmployeeData {
   version: number;
@@ -766,18 +748,31 @@ export function loadEmployees(): Employee[] {
   if (typeof window === "undefined") return [...SEED_EMPLOYEES];
   try {
     const raw = localStorage.getItem(EMPLOYEE_KEY);
+    const getSeeded = () => SEED_EMPLOYEES.map(emp => {
+      // Map seed employees permissions to their role template defaults
+      const perms = emp.role === "HR Admin" ? fullPermissions() : roleDefaultPermissions(emp.role);
+      return {
+        ...emp,
+        permissions: perms,
+      };
+    });
     if (!raw) {
-      localStorage.setItem(EMPLOYEE_KEY, JSON.stringify({ version: EMPLOYEE_VERSION, employees: SEED_EMPLOYEES }));
-      return [...SEED_EMPLOYEES];
+      const seeded = getSeeded();
+      localStorage.setItem(EMPLOYEE_KEY, JSON.stringify({ version: EMPLOYEE_VERSION, employees: seeded }));
+      return seeded;
     }
     const parsed = JSON.parse(raw) as StoredEmployeeData;
     if (parsed.version !== EMPLOYEE_VERSION) {
-      localStorage.setItem(EMPLOYEE_KEY, JSON.stringify({ version: EMPLOYEE_VERSION, employees: SEED_EMPLOYEES }));
-      return [...SEED_EMPLOYEES];
+      const seeded = getSeeded();
+      localStorage.setItem(EMPLOYEE_KEY, JSON.stringify({ version: EMPLOYEE_VERSION, employees: seeded }));
+      return seeded;
     }
-    return parsed.employees || [...SEED_EMPLOYEES];
+    return parsed.employees || getSeeded();
   } catch {
-    return [...SEED_EMPLOYEES];
+    return SEED_EMPLOYEES.map(emp => ({
+      ...emp,
+      permissions: roleDefaultPermissions(emp.role),
+    }));
   }
 }
 

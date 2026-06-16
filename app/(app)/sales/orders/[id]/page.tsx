@@ -233,8 +233,8 @@ export default function ViewSalesOrderPage() {
   ) : undefined;
 
   const approvalBanner = showApprovalActions ? (
-    <div className="bg-white rounded-xl border border-border shadow-sm p-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="p-4 bg-white border shadow-sm rounded-xl border-border">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-semibold text-foreground">Approval Required</p>
           <p className="text-[11px] text-muted-foreground mt-0.5">
@@ -286,7 +286,7 @@ export default function ViewSalesOrderPage() {
         banner={approvalBanner}
       >
         {activeTab === "overview" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <RecordSectionCard title="Order Details" accent="blue">
               <RecordKvRow label="Order Number" value={order.soNumber} mono />
               <RecordKvRow label="Order Date" value={order.orderDate} />
@@ -364,14 +364,14 @@ export default function ViewSalesOrderPage() {
         )}
 
         {activeTab === "line-items" && (
-          <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+          <div className="overflow-hidden bg-white border shadow-sm rounded-xl border-border">
             <div className="px-4 py-2.5 border-b border-border bg-muted/30">
               <p className="text-xs font-semibold text-foreground">Product Lines</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[800px]">
                 <thead>
-                  <tr className="bg-muted/40 border-b border-border">
+                  <tr className="border-b bg-muted/40 border-border">
                     <th className="px-4 py-2.5 text-left text-xs font-semibold">Product</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Stock</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Qty</th>
@@ -384,7 +384,7 @@ export default function ViewSalesOrderPage() {
                 <tbody>
                   {order.lineItems.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-xs text-muted-foreground">No product lines</td>
+                      <td colSpan={7} className="px-4 py-8 text-xs text-center text-muted-foreground">No product lines</td>
                     </tr>
                   ) : order.lineItems.map(line => {
                     const product = line.productId ? getProductById(line.productId) : undefined;
@@ -404,14 +404,14 @@ export default function ViewSalesOrderPage() {
                             <span>{formatRupee(line.gstAmount)}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-2 text-xs text-right font-semibold tabular-nums">{formatRupee(line.lineTotal)}</td>
+                        <td className="px-4 py-2 text-xs font-semibold text-right tabular-nums">{formatRupee(line.lineTotal)}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
-            <div className="px-4 py-3 border-t border-border bg-muted/20 flex justify-end">
+            <div className="flex justify-end px-4 py-3 border-t border-border bg-muted/20">
               <div className="w-full max-w-xs space-y-1 text-xs">
                 <div className="flex justify-between"><span className="text-muted-foreground">Net Total</span><span>{formatRupee(totals.netTotal)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Total GST</span><span>{formatRupee(totals.totalGst)}</span></div>
