@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,48 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   ArrowLeft, Save, Check, ChevronsUpDown, AlertCircle,
   User, Building2, MapPin, Lock, Calendar, Clock, X, Search,
-  Eye, EyeOff,
+  Eye, EyeOff, Monitor, Smartphone, ChevronDown, Shield,
 } from "lucide-react";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  PERMISSION_REGISTRY,
+  MOBILE_PERMISSION_REGISTRY,
+  type WebAction,
+  type MobileAction,
+  type PermModule,
+  type MobileGroupDef,
+  type PermSubmodule,
+  type MobileFeatureDef,
+} from "../../employee/employee-data";
+import {
+  type PermissionTemplate,
+  loadNewPermissionTemplates,
+} from "../../roles/roles-data";
+import { loadUsers, saveUsers } from "../user-data";
+
+const ALL_WEB_ACTIONS: WebAction[] = ["view", "create", "edit", "delete", "approve", "export", "import"];
+const ALL_MOBILE_ACTIONS: MobileAction[] = ["view", "create", "edit", "delete", "approve"];
+
+const WEB_ACTION_LABELS: Record<WebAction, string> = {
+  view: "View",
+  create: "Create",
+  edit: "Edit",
+  delete: "Delete",
+  approve: "Approve",
+  export: "Export",
+  import: "Import",
+};
+
+const MOBILE_ACTION_LABELS: Record<MobileAction, string> = {
+  view: "View",
+  create: "Create",
+  edit: "Edit",
+  delete: "Delete",
+  approve: "Approve",
+};
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
 const DEPARTMENTS = [
@@ -266,6 +306,7 @@ function SectionCard({
   iconBg = "bg-brand-50 border-brand-100",
   title,
   subtitle,
+  headerRight,
   children,
 }: {
   icon: React.ElementType;
@@ -273,18 +314,22 @@ function SectionCard({
   iconBg?: string;
   title: string;
   subtitle: string;
+  headerRight?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b border-border flex items-center gap-2.5">
-        <div className={cn("w-7 h-7 rounded-lg border flex items-center justify-center flex-shrink-0", iconBg)}>
-          <Icon className={cn("w-3.5 h-3.5", iconColor)} />
+      <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2.5">
+          <div className={cn("w-7 h-7 rounded-lg border flex items-center justify-center flex-shrink-0", iconBg)}>
+            <Icon className={cn("w-3.5 h-3.5", iconColor)} />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-foreground">{title}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{subtitle}</p>
+          </div>
         </div>
-        <div>
-          <p className="text-xs font-semibold text-foreground">{title}</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">{subtitle}</p>
-        </div>
+        {headerRight && <div>{headerRight}</div>}
       </div>
       <div className="p-5">{children}</div>
     </div>
@@ -292,8 +337,11 @@ function SectionCard({
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-export default function AddUserPage() {
+// ── Main Page ─────────────────────────────────────────────────────────────────
+function AddUserForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const idParam = searchParams.get("id");
 
   const [form, setForm] = useState({
     employeeId: generateEmployeeId(),
@@ -313,7 +361,229 @@ export default function AddUserPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
+  // Permissions state
+  const [activeWebPerms, setActiveWebPerms] = useState<Set<string>>(new Set());
+  const [activeMobilePerms, setActiveMobilePerms] = useState<Set<string>>(new Set());
+  const [accessType, setAccessType] = useState<"web" | "mobile" | null>("web");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [pendingTemplateId, setPendingTemplateId] = useState("");
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  const [pendingAccessType, setPendingAccessType] = useState<"web" | "mobile" | null>(null);
+  const [showPlatformWarningModal, setShowPlatformWarningModal] = useState(false);
+
+  const [openMods, setOpenMods] = useState<Set<string>>(new Set());
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+
+  // Load active templates
+  const templates = loadNewPermissionTemplates().filter(t => t.status === "Active");
+  const templateOptions = templates.map(t => ({
+    value: t.id,
+    label: t.templateName,
+  }));
+
   const set = (key: string, val: unknown) => setForm(prev => ({ ...prev, [key]: val }));
+
+  useEffect(() => {
+    if (PERMISSION_REGISTRY.length > 0) {
+      setOpenMods(new Set([PERMISSION_REGISTRY[0].id]));
+    }
+    if (MOBILE_PERMISSION_REGISTRY.length > 0) {
+      setOpenGroups(new Set([MOBILE_PERMISSION_REGISTRY[0].id]));
+    }
+
+    if (idParam) {
+      const uId = Number(idParam);
+      const user = loadUsers().find(u => u.id === uId);
+      if (user) {
+        const dept = DEPARTMENTS.find(d => d.name === user.department);
+        const role = ROLES.find(r => r.name === user.role);
+        const manager = REPORTING_MANAGERS.find(m => m.name === user.reportingManager);
+        
+        setForm({
+          employeeId: user.employeeId,
+          fullName: user.fullName,
+          email: user.email,
+          mobile: user.mobile,
+          departmentId: dept ? dept.id : null,
+          roleId: role ? role.id : null,
+          reportingManagerId: manager ? manager.id : null,
+          stateAccess: user.stateAccess,
+          territoryAccess: user.territoryAccess,
+          password: "dummy_password",
+          confirmPassword: "dummy_password",
+        });
+      }
+    }
+  }, [idParam]);
+
+  const hasCheckedPermissions = () => {
+    return activeWebPerms.size > 0 || activeMobilePerms.size > 0;
+  };
+
+  const applyTemplate = (tpl: PermissionTemplate) => {
+    setSelectedTemplateId(tpl.id);
+    setAccessType(tpl.accessType);
+    
+    if (tpl.accessType === "web") {
+      const webSet = new Set<string>();
+      tpl.webPermissions.forEach(p => {
+        webSet.add(`${p.moduleKey}.${p.actionKey}`);
+      });
+      setActiveWebPerms(webSet);
+      setActiveMobilePerms(new Set());
+    } else {
+      const mobileSet = new Set<string>();
+      tpl.mobilePermissions.forEach(p => {
+        mobileSet.add(`${p.moduleKey}.${p.actionKey}`);
+      });
+      setActiveMobilePerms(mobileSet);
+      setActiveWebPerms(new Set());
+    }
+  };
+
+  const handleTemplateSelect = (val: string) => {
+    const tpl = templates.find(t => t.id === val);
+    if (!tpl) return;
+
+    if (hasCheckedPermissions()) {
+      setPendingTemplateId(val);
+      setShowConfirmModal(true);
+    } else {
+      applyTemplate(tpl);
+    }
+  };
+
+  const confirmTemplateChange = () => {
+    const tpl = templates.find(t => t.id === pendingTemplateId);
+    if (tpl) {
+      applyTemplate(tpl);
+    }
+    setPendingTemplateId("");
+    setShowConfirmModal(false);
+  };
+
+  const cancelTemplateChange = () => {
+    setPendingTemplateId("");
+    setShowConfirmModal(false);
+  };
+
+  const handleAccessTypeChange = (target: "web" | "mobile") => {
+    if (accessType === target) return;
+
+    if (hasCheckedPermissions()) {
+      setPendingAccessType(target);
+      setShowPlatformWarningModal(true);
+    } else {
+      setAccessType(target);
+    }
+  };
+
+  const confirmPlatformChange = () => {
+    if (!pendingAccessType) return;
+    if (accessType === "web") {
+      setActiveWebPerms(new Set());
+    } else {
+      setActiveMobilePerms(new Set());
+    }
+    setAccessType(pendingAccessType);
+    setPendingAccessType(null);
+    setShowPlatformWarningModal(false);
+  };
+
+  const toggleMod = (id: string) => {
+    setOpenMods(s => {
+      const next = new Set(s);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleGroup = (id: string) => {
+    setOpenGroups(s => {
+      const next = new Set(s);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleWebPerm = (modId: string, subId: string, action: string) => {
+    const key = `${modId}.${subId}.${action}`;
+    setActiveWebPerms(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  const toggleMobilePerm = (grpId: string, featId: string, action: string) => {
+    const key = `${grpId}.${featId}.${action}`;
+    setActiveMobilePerms(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  const grantMod = (mod: PermModule) => {
+    setActiveWebPerms(prev => {
+      const next = new Set(prev);
+      mod.submodules.forEach((sub: PermSubmodule) => {
+        sub.actions.forEach((action: WebAction) => {
+          next.add(`${mod.id}.${sub.id}.${action}`);
+        });
+      });
+      return next;
+    });
+  };
+
+  const revokeMod = (mod: PermModule) => {
+    setActiveWebPerms(prev => {
+      const next = new Set(prev);
+      mod.submodules.forEach((sub: PermSubmodule) => {
+        sub.actions.forEach((action: WebAction) => {
+          next.delete(`${mod.id}.${sub.id}.${action}`);
+        });
+      });
+      return next;
+    });
+  };
+
+  const grantGroup = (grp: MobileGroupDef) => {
+    setActiveMobilePerms(prev => {
+      const next = new Set(prev);
+      grp.features.forEach((feat: MobileFeatureDef) => {
+        feat.actions.forEach((action: MobileAction) => {
+          next.add(`${grp.id}.${feat.id}.${action}`);
+        });
+      });
+      return next;
+    });
+  };
+
+  const revokeGroup = (grp: MobileGroupDef) => {
+    setActiveMobilePerms(prev => {
+      const next = new Set(prev);
+      grp.features.forEach((feat: MobileFeatureDef) => {
+        feat.actions.forEach((action: MobileAction) => {
+          next.delete(`${grp.id}.${feat.id}.${action}`);
+        });
+      });
+      return next;
+    });
+  };
+
+  const modHasAny = (mod: PermModule) => {
+    return mod.submodules.some((sub: PermSubmodule) =>
+      sub.actions.some((action: WebAction) => activeWebPerms.has(`${mod.id}.${sub.id}.${action}`))
+    );
+  };
+
+  const groupHasAny = (grp: MobileGroupDef) => {
+    return grp.features.some((feat: MobileFeatureDef) =>
+      feat.actions.some((action: MobileAction) => activeMobilePerms.has(`${grp.id}.${feat.id}.${action}`))
+    );
+  };
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
@@ -324,17 +594,67 @@ export default function AddUserPage() {
     else if (!/^\d{10}$/.test(form.mobile)) e.mobile = "Enter a valid 10-digit mobile";
     if (!form.departmentId)       e.departmentId = "Department is required";
     if (!form.roleId)             e.roleId       = "Role is required";
-    if (!form.password)           e.password     = "Password is required";
-    else if (form.password.length < 8) e.password = "Password must be at least 8 characters";
-    if (!form.confirmPassword)    e.confirmPassword = "Please confirm the password";
-    else if (form.password !== form.confirmPassword) e.confirmPassword = "Passwords do not match";
+    if (!idParam) {
+      if (!form.password)           e.password     = "Password is required";
+      else if (form.password.length < 8) e.password = "Password must be at least 8 characters";
+      if (!form.confirmPassword)    e.confirmPassword = "Please confirm the password";
+      else if (form.password !== form.confirmPassword) e.confirmPassword = "Passwords do not match";
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
   const handleSave = (asDraft = false) => {
     if (!validate()) return;
-    console.log("Creating user:", { ...form, status: asDraft ? "inactive" : "active" });
+    const users = loadUsers();
+    
+    const dept = DEPARTMENTS.find(d => d.id === form.departmentId)?.name || "";
+    const role = ROLES.find(r => r.id === form.roleId)?.name || "";
+    const manager = REPORTING_MANAGERS.find(m => m.id === form.reportingManagerId)?.name || "";
+    
+    const nowStr = new Date().toISOString().slice(0, 10);
+    
+    if (idParam) {
+      const uId = Number(idParam);
+      const index = users.findIndex(u => u.id === uId);
+      if (index !== -1) {
+        users[index] = {
+          ...users[index],
+          fullName: form.fullName,
+          email: form.email,
+          mobile: form.mobile,
+          department: dept,
+          role: role,
+          reportingManager: manager,
+          stateAccess: form.stateAccess,
+          territoryAccess: form.territoryAccess,
+          status: asDraft ? "inactive" : "active",
+          updatedDate: nowStr,
+        };
+        saveUsers(users);
+      }
+    } else {
+      const newId = users.length > 0 ? Math.max(...users.map(u => u.id)) + 1 : 1;
+      const newUser = {
+        id: newId,
+        employeeId: form.employeeId,
+        fullName: form.fullName,
+        email: form.email,
+        mobile: form.mobile,
+        department: dept,
+        role: role,
+        reportingManager: manager,
+        stateAccess: form.stateAccess,
+        territoryAccess: form.territoryAccess,
+        status: asDraft ? "inactive" : "active",
+        createdBy: "System",
+        createdDate: nowStr,
+        updatedBy: "System",
+        updatedDate: nowStr,
+      };
+      users.push(newUser);
+      saveUsers(users);
+    }
     router.push("/user-management/user");
   };
 
@@ -548,6 +868,318 @@ export default function AddUserPage() {
                 )}
               </SectionCard>
 
+              {/* ── Section: Permissions ── */}
+              <SectionCard
+                icon={Shield}
+                iconBg="bg-amber-50 border-amber-100"
+                iconColor="text-amber-600"
+                title="Permissions"
+                subtitle="Select permissions or load from a template"
+                headerRight={
+                  <div className="flex items-center gap-3">
+                    <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                      Permission Template
+                    </Label>
+                    <div className="w-56">
+                      <AutocompleteSelect
+                        placeholder="Select permission template"
+                        options={templateOptions}
+                        value={selectedTemplateId}
+                        onChange={handleTemplateSelect}
+                      />
+                    </div>
+                  </div>
+                }
+              >
+                <div className="space-y-4">
+                  {/* Platform Tab Selection */}
+                  <div className="flex gap-1.5 pb-2 border-b border-border">
+                    {(
+                      [
+                        ["web", "Web Portal"],
+                        ["mobile", "Mobile App"],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => handleAccessTypeChange(key)}
+                        className={cn(
+                          "flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-medium transition-colors border",
+                          accessType === key
+                            ? "bg-brand-600 text-white border-brand-600"
+                            : "border-border text-muted-foreground hover:bg-muted/40"
+                        )}
+                      >
+                        {key === "web" ? (
+                          <Monitor className="w-3.5 h-3.5" />
+                        ) : (
+                          <Smartphone className="w-3.5 h-3.5" />
+                        )}
+                        {label} Permissions
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Permission Accordion */}
+                  <div className="space-y-3">
+                    {accessType === "web" && (
+                      <div className="space-y-2">
+                        {PERMISSION_REGISTRY.map((mod: PermModule) => {
+                          const expanded = openMods.has(mod.id);
+                          const hasAny = modHasAny(mod);
+                          return (
+                            <div
+                              key={mod.id}
+                              className="overflow-hidden bg-white border shadow-sm border-border rounded-xl"
+                            >
+                              <div
+                                className={cn(
+                                  "flex items-center justify-between px-4 py-3.5 cursor-pointer transition-colors select-none",
+                                  expanded
+                                    ? "border-b border-border bg-muted/5"
+                                    : hasAny
+                                    ? "hover:bg-brand-50/40"
+                                    : "hover:bg-muted/20"
+                                )}
+                                onClick={() => toggleMod(mod.id)}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <ChevronDown
+                                    className={cn(
+                                      "w-3.5 h-3.5 text-muted-foreground transition-transform duration-150",
+                                      !expanded && "-rotate-90"
+                                    )}
+                                  />
+                                  <span className="text-xs font-semibold text-foreground">
+                                    {mod.label}
+                                  </span>
+                                  <span className="text-[10px] text-muted-foreground">
+                                    ({mod.submodules.length} submodule
+                                    {mod.submodules.length > 1 ? "s" : ""})
+                                  </span>
+                                  {hasAny && !expanded && (
+                                    <span className="text-[9px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-semibold">
+                                      configured
+                                    </span>
+                                  )}
+                                </div>
+                                <div
+                                  className="flex items-center gap-1"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => grantMod(mod)}
+                                    className="text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-660 hover:bg-brand-100 transition-colors"
+                                  >
+                                    Grant All
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => revokeMod(mod)}
+                                    className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-105 transition-colors"
+                                  >
+                                    Revoke All
+                                  </button>
+                                </div>
+                              </div>
+                              {expanded && (
+                                <div className="space-y-2.5 p-4 bg-slate-50/30">
+                                  {mod.submodules.map((sub: PermSubmodule) => {
+                                    const actions = ALL_WEB_ACTIONS.filter((action) =>
+                                      sub.actions.includes(action)
+                                    );
+                                    const rowActive = actions.some((action) =>
+                                      activeWebPerms.has(`${mod.id}.${sub.id}.${action}`)
+                                    );
+                                    return (
+                                      <div
+                                        key={sub.id}
+                                        className={cn(
+                                          "rounded-xl border border-border bg-white px-4 py-3 transition-colors",
+                                          rowActive && "bg-brand-50/10 border-brand-100"
+                                        )}
+                                      >
+                                        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+                                          <div className="min-w-0 lg:w-56 lg:flex-shrink-0">
+                                            <p className="text-[11px] font-semibold text-foreground">
+                                              {sub.label}
+                                            </p>
+                                            <p className="text-[9px] text-muted-foreground mt-0.5">
+                                              Available permissions
+                                            </p>
+                                          </div>
+                                          <div className="flex flex-wrap items-center gap-1.5 lg:pl-4">
+                                            {actions.map((action) => {
+                                              const checked = activeWebPerms.has(
+                                                `${mod.id}.${sub.id}.${action}`
+                                              );
+                                              return (
+                                                <label
+                                                  key={action}
+                                                  className={cn(
+                                                    "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-medium cursor-pointer transition-colors select-none",
+                                                    checked
+                                                      ? "border-brand-300 bg-brand-50 text-brand-700 font-semibold"
+                                                      : "border-border text-muted-foreground hover:bg-muted/40"
+                                                  )}
+                                                >
+                                                  <input
+                                                    type="checkbox"
+                                                    checked={checked}
+                                                    onChange={() =>
+                                                      toggleWebPerm(mod.id, sub.id, action)
+                                                    }
+                                                    className="w-3.5 h-3.5 rounded accent-brand-650 cursor-pointer"
+                                                  />
+                                                  <span>{WEB_ACTION_LABELS[action]}</span>
+                                                </label>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {accessType === "mobile" && (
+                      <div className="space-y-2">
+                        {MOBILE_PERMISSION_REGISTRY.map((grp: MobileGroupDef) => {
+                          const expanded = openGroups.has(grp.id);
+                          const hasAny = groupHasAny(grp);
+                          return (
+                            <div
+                              key={grp.id}
+                              className="overflow-hidden bg-white border shadow-sm border-border rounded-xl"
+                            >
+                              <div
+                                className={cn(
+                                  "flex items-center justify-between px-4 py-3.5 cursor-pointer transition-colors select-none",
+                                  expanded
+                                    ? "border-b border-border bg-muted/5"
+                                    : hasAny
+                                    ? "hover:bg-brand-50/40"
+                                    : "hover:bg-muted/20"
+                                )}
+                                onClick={() => toggleGroup(grp.id)}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <ChevronDown
+                                    className={cn(
+                                      "w-3.5 h-3.5 text-muted-foreground transition-transform duration-150",
+                                      !expanded && "-rotate-90"
+                                    )}
+                                  />
+                                  <span className="text-xs font-semibold text-foreground">
+                                    {grp.label}
+                                  </span>
+                                  <span className="text-[10px] text-muted-foreground">
+                                    ({grp.features.length} feature
+                                    {grp.features.length > 1 ? "s" : ""})
+                                  </span>
+                                  {hasAny && !expanded && (
+                                    <span className="text-[9px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-semibold">
+                                      configured
+                                    </span>
+                                  )}
+                                </div>
+                                <div
+                                  className="flex items-center gap-1"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => grantGroup(grp)}
+                                    className="text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-660 hover:bg-brand-100 transition-colors"
+                                  >
+                                    Grant All
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => revokeGroup(grp)}
+                                    className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-105 transition-colors"
+                                  >
+                                    Revoke All
+                                  </button>
+                                </div>
+                              </div>
+                              {expanded && (
+                                <div className="space-y-2.5 p-4 bg-slate-50/30">
+                                  {grp.features.map((feat: MobileFeatureDef) => {
+                                    const actions = ALL_MOBILE_ACTIONS.filter((action) =>
+                                      feat.actions.includes(action)
+                                    );
+                                    const rowActive = actions.some((action) =>
+                                      activeMobilePerms.has(`${grp.id}.${feat.id}.${action}`)
+                                    );
+                                    return (
+                                      <div
+                                        key={feat.id}
+                                        className={cn(
+                                          "rounded-xl border border-border bg-white px-4 py-3 transition-colors",
+                                          rowActive && "bg-brand-50/10 border-brand-100"
+                                        )}
+                                      >
+                                        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+                                          <div className="min-w-0 lg:w-56 lg:flex-shrink-0">
+                                            <p className="text-[11px] font-semibold text-foreground">
+                                              {feat.label}
+                                            </p>
+                                            <p className="text-[9px] text-muted-foreground mt-0.5">
+                                              Available permissions
+                                            </p>
+                                          </div>
+                                          <div className="flex flex-wrap items-center gap-1.5 lg:pl-4">
+                                            {actions.map((action) => {
+                                              const checked = activeMobilePerms.has(
+                                                `${grp.id}.${feat.id}.${action}`
+                                              );
+                                              return (
+                                                <label
+                                                  key={action}
+                                                  className={cn(
+                                                    "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-medium cursor-pointer transition-colors select-none",
+                                                    checked
+                                                      ? "border-brand-300 bg-brand-50 text-brand-700 font-semibold"
+                                                      : "border-border text-muted-foreground hover:bg-muted/40"
+                                                  )}
+                                                >
+                                                  <input
+                                                    type="checkbox"
+                                                    checked={checked}
+                                                    onChange={() =>
+                                                      toggleMobilePerm(grp.id, feat.id, action)
+                                                    }
+                                                    className="w-3.5 h-3.5 rounded accent-brand-650 cursor-pointer"
+                                                  />
+                                                  <span>{MOBILE_ACTION_LABELS[action]}</span>
+                                                </label>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </SectionCard>
+
               {/* ── Section 4: Account Security ── */}
               <SectionCard
                 icon={Lock}
@@ -736,6 +1368,86 @@ export default function AddUserPage() {
 
         </div>
       </div>
+
+      {/* Warning Dialog for Permission Template Overwrite */}
+      <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-50 border border-red-200">
+                <AlertCircle className="w-4 h-4 text-red-500" />
+              </div>
+              Overwrite Permissions?
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-xs">
+              Changing the permission template will replace current permissions. Do you want to continue?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={cancelTemplateChange}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white"
+              onClick={confirmTemplateChange}
+            >
+              Yes, Overwrite
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Warning Dialog for Access Type (Platform Type) Switch */}
+      <Dialog open={showPlatformWarningModal} onOpenChange={setShowPlatformWarningModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <div className="flex items-center justify-center w-8 h-8 border border-red-200 rounded-lg bg-red-50">
+                <AlertCircle className="w-4 h-4 text-red-500" />
+              </div>
+              Switch Platform Type?
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-xs">
+              Changing the platform type will clear all currently selected permissions for{" "}
+              {accessType === "web" ? "Web Portal" : "Mobile App"}. Do you want to proceed?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => {
+                setPendingAccessType(null);
+                setShowPlatformWarningModal(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 text-xs text-white bg-red-600 hover:bg-red-700"
+              onClick={confirmPlatformChange}
+            >
+              Proceed &amp; Clear
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </FormContainer>
+  );
+}
+
+export default function AddUserPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-xs text-muted-foreground">Loading form...</div>}>
+      <AddUserForm />
+    </Suspense>
   );
 }

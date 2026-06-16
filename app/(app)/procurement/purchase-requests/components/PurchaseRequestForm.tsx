@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useRef, useState } from "react";
 import { Download, Eye, Package, Plus, Trash2, Upload } from "lucide-react";
@@ -56,10 +56,13 @@ export const DEFAULT_PR_FORM: PRFormValues = {
   attachments: [],
 };
 
-function SectionHead({ label, sub }: { label: string; sub?: string }) {
+function SectionHead({ label, sub, required }: { label: string; sub?: string; required?: boolean }) {
   return (
     <div className="mb-2.5 mt-0.5">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
+      <p className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center">
+        {label}
+        {required && <span className="text-red-500 ml-1">*</span>}
+      </p>
       {sub && <p className="mt-0.5 text-[11px] text-muted-foreground">{sub}</p>}
     </div>
   );

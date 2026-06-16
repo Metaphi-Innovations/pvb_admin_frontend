@@ -34,13 +34,13 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 
-const STATUS_LABEL: Record<ProductStatus, string> = {
+const STATUS_LABEL: Record<ProductStatus | "draft", string> = {
 	active: "Active",
 	inactive: "Inactive",
 	draft: "Draft",
 };
 
-const STATUS_VARIANT: Record<ProductStatus, "active" | "inactive" | "draft"> = {
+const STATUS_VARIANT: Record<ProductStatus | "draft", "active" | "inactive" | "draft"> = {
 	active: "active",
 	inactive: "inactive",
 	draft: "draft",
@@ -406,11 +406,11 @@ export default function ProductDetailPage() {
 			onTabChange={setActiveTab}
 			active={product.status === "active"}
 			onActiveChange={
-				product.status !== "draft"
+				(product.status as string) !== "draft"
 					? (on) => updateStatus(on ? "active" : "inactive")
 					: undefined
 			}
-			toggleDisabled={product.status === "draft"}
+			toggleDisabled={(product.status as string) === "draft"}
 			onEdit={() => router.push(`/masters/products/${product.id}/edit`)}
 			sidebar={{
 				quickActions: [

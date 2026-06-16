@@ -683,7 +683,7 @@ export function VendorForm({
 				{tab === "basic" && (
 					<div className='w-full space-y-4'>
 						<section>
-							<SectionDivider title='Vendor Information' />
+							<SectionDivider title='Vendor Information' required />
 							<div className='grid grid-cols-12 gap-3'>
 								{/* Vendor Code */}
 								<Field
@@ -799,7 +799,7 @@ export function VendorForm({
 						</section>
 
 						<section>
-							<SectionDivider title='Billing Address' />
+							<SectionDivider title='Billing Address' required />
 							<div className='grid grid-cols-12 gap-3'>
 								<Field label='Address' className='col-span-12 md:col-span-5'>
 									<Textarea
@@ -840,6 +840,7 @@ export function VendorForm({
 										value={form.billingAddress.state}
 										onChange={(e) => setAddr("state", e.target.value)}
 										className={fieldClass}
+										placeholder='e.g. Maharashtra'
 									/>
 								</Field>
 								<Field label='City' className='col-span-12 md:col-span-2'>
@@ -848,6 +849,7 @@ export function VendorForm({
 										value={form.billingAddress.city}
 										onChange={(e) => setAddr("city", e.target.value)}
 										className={fieldClass}
+										placeholder='e.g. Mumbai'
 									/>
 								</Field>
 								<Field label='Pincode' className='col-span-12 md:col-span-2'>
@@ -856,6 +858,7 @@ export function VendorForm({
 										value={form.billingAddress.pincode}
 										onChange={(e) => setAddr("pincode", e.target.value)}
 										className={fieldClass}
+										placeholder='e.g. 400001'
 									/>
 								</Field>
 							</div>
@@ -954,6 +957,7 @@ export function VendorForm({
 										}
 										className={cn(fieldClass, "font-mono uppercase")}
 										maxLength={10}
+										placeholder='e.g. ABCDE1234F'
 									/>
 								</Field>
 								<Field label='Tags' className='col-span-12 md:col-span-2'>
@@ -977,6 +981,7 @@ export function VendorForm({
 											value={form.creditPeriodValue}
 											onChange={(e) => set("creditPeriodValue", e.target.value)}
 											className={cn(fieldClass, "w-20")}
+											placeholder='e.g. 30'
 										/>
 										<Select
 											disabled={readOnly}
@@ -1034,6 +1039,7 @@ export function VendorForm({
 												updateContact(c.uid, { name: e.target.value })
 											}
 											className={fieldClass}
+											placeholder='e.g. Rajesh Kumar'
 										/>
 									</Field>
 									<Field
@@ -1047,6 +1053,7 @@ export function VendorForm({
 												updateContact(c.uid, { designation: e.target.value })
 											}
 											className={fieldClass}
+											placeholder='e.g. Account Manager'
 										/>
 									</Field>
 									<Field
@@ -1072,6 +1079,7 @@ export function VendorForm({
 												updateContact(c.uid, { email: e.target.value })
 											}
 											className={fieldClass}
+											placeholder='e.g. rajesh@company.com'
 										/>
 									</Field>
 									{!readOnly && form.contacts.length > 1 && (
@@ -1106,7 +1114,7 @@ export function VendorForm({
 
 				{tab === "banking" && (
 					<div className=''>
-						<SectionDivider title='Bank Account' />
+						<SectionDivider title='Bank Account' required />
 						<div className='grid grid-cols-5 gap-3'>
 							<Field label='Account Holder Name'>
 								<Input
@@ -1114,6 +1122,7 @@ export function VendorForm({
 									value={form.accountHolderName}
 									onChange={(e) => set("accountHolderName", e.target.value)}
 									className={fieldClass}
+									placeholder='e.g. Rajesh Kumar'
 								/>
 							</Field>
 							<Field label='Bank Name'>
@@ -1122,6 +1131,7 @@ export function VendorForm({
 									value={form.bankName}
 									onChange={(e) => set("bankName", e.target.value)}
 									className={fieldClass}
+									placeholder='e.g. HDFC Bank'
 								/>
 							</Field>
 							<Field label='Branch Name'>
@@ -1130,6 +1140,7 @@ export function VendorForm({
 									value={form.branch}
 									onChange={(e) => set("branch", e.target.value)}
 									className={fieldClass}
+									placeholder='e.g. Dadar West'
 								/>
 							</Field>
 							<Field label='Account Number'>
@@ -1138,6 +1149,7 @@ export function VendorForm({
 									value={form.accountNumber}
 									onChange={(e) => set("accountNumber", e.target.value)}
 									className={cn(fieldClass, "font-mono")}
+									placeholder='e.g. 50100234567890'
 								/>
 							</Field>
 							<Field label='Confirm Account Number'>
@@ -1146,6 +1158,7 @@ export function VendorForm({
 									value={form.confirmAccountNumber}
 									onChange={(e) => set("confirmAccountNumber", e.target.value)}
 									className={cn(fieldClass, "font-mono")}
+									placeholder='Re-enter account number'
 								/>
 							</Field>
 						</div>
@@ -1158,6 +1171,7 @@ export function VendorForm({
 										set("ifscCode", e.target.value.toUpperCase())
 									}
 									className={cn(fieldClass, "font-mono uppercase")}
+									placeholder='e.g. HDFC0000012'
 								/>
 							</Field>
 							<Field label='SWIFT Code' className='col-span-1'>
@@ -1400,7 +1414,7 @@ export function VendorForm({
 				{tab === "documents" && (
 					<div className='w-full space-y-4'>
 						<section>
-							<SectionDivider title='Documents' />
+							<SectionDivider title='Documents' required />
 							{!readOnly && (
 								<div className='p-3 mb-3 border rounded-lg border-border bg-muted/20'>
 									<div className='grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto]'>

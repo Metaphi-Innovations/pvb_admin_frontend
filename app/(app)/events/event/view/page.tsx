@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { RecordDetailPage } from "@/components/record-detail";
 import { cn } from "@/lib/utils";
 import { Calendar, ChevronLeft, ChevronRight, MapPin, Users } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   type GeoLevel,
   type GeoNode,
@@ -38,7 +39,7 @@ import {
 } from "../event-data";
 
 const CUSTOMER_DISTRIBUTOR_ID_OFFSET = 100000;
-const LOCATION_LEVELS: GeoLevel[] = ["Zone", "State", "Region", "Area", "Territory", "Locality", "City"];
+const LOCATION_LEVELS: (GeoLevel | "City")[] = ["Zone", "State", "Region", "Area", "Territory", "Locality", "City"];
 type AttendanceTab = "users" | "farmers" | "distributors";
 
 function formatTitleCase(value: string) {
@@ -72,12 +73,13 @@ function resolveLocationDisplay(event: Event, geoNodes: GeoNode[]) {
     Territory: withSuffix(fallbackDistrict, "Territory"),
     Locality: fallbackLocality,
     Pincode: event.district || event.state || "Event Pincode",
+    City: event.venue || event.district || event.state || "Event City",
   };
 
-  const getNodeName = (level: GeoLevel) => {
-    const nodeId = event.location?.[level];
-    if (!nodeId) return fallback[level];
-    return geoNodes.find((node) => node.id === nodeId)?.name ?? fallback[level];
+  const getNodeName = (level: GeoLevel | "City" | "Pincode") => {
+    const nodeId = event.location?.[level as GeoLevel];
+    if (!nodeId) return fallback[level as keyof typeof fallback];
+    return geoNodes.find((node) => node.id === nodeId)?.name ?? fallback[level as keyof typeof fallback];
   };
 
   return {
@@ -88,6 +90,7 @@ function resolveLocationDisplay(event: Event, geoNodes: GeoNode[]) {
     Territory: getNodeName("Territory"),
     Locality: getNodeName("Locality"),
     Pincode: getNodeName("Pincode"),
+    City: getNodeName("City"),
   };
 }
 

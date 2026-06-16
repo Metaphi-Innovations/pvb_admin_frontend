@@ -8,11 +8,13 @@ import {
   RecordKvRow,
   RecordSectionCard,
   RecordStatusPill,
+  RecordMiniTable,
 } from "@/components/record-detail";
-import { Clock, Mail, MapPin, Pencil, Phone, User, Warehouse } from "lucide-react";
+import { Clock, Mail, MapPin, Pencil, Phone, User, Warehouse, FileText } from "lucide-react";
 import {
 	type WarehouseMaster,
 	type WarehouseStatus,
+	type WarehouseDocument,
 	loadWarehouses,
 	formatStatus,
 } from "../warehouse-data";
@@ -66,16 +68,16 @@ export default function WarehouseDetailPage() {
   }
 
   const contacts = warehouse.contacts?.length
-    ? warehouse.contacts
-    : [
-        {
-          id: "CON-1",
-          contactPerson: warehouse.contactPerson,
-          mobileNumber: warehouse.mobileNumber,
-          emailAddress: warehouse.emailAddress,
-          isPrimary: true,
-        },
-      ];
+     ? warehouse.contacts
+     : [
+         {
+           id: "CON-1",
+           contactPerson: warehouse.contactPerson,
+           mobileNumber: warehouse.mobileNumber,
+           emailAddress: warehouse.emailAddress,
+           isPrimary: true,
+         },
+       ];
 
   const tabs = [{ value: "overview", label: "Overview" }];
 
@@ -101,13 +103,6 @@ export default function WarehouseDetailPage() {
       value: warehouse.manager || "—",
       label: "Manager",
     },
-    {
-      icon: Warehouse,
-      iconBg: "#F5F3FF",
-      iconColor: "#7C3AED",
-      value: warehouse.capacity ? warehouse.capacity.toLocaleString() : "—",
-      label: "Capacity (Sq. Ft.)",
-    },
   ];
 
   const renderTabContent = () => {
@@ -119,13 +114,9 @@ export default function WarehouseDetailPage() {
           <RecordKvRow label="Warehouse Name" value={warehouse.warehouseName} highlight />
           <RecordKvRow label="Warehouse Code" value={warehouse.warehouseCode} mono copy />
           <RecordKvRow label="Warehouse Type" value={warehouse.warehouseType} />
-          <RecordKvRow
-            label="Capacity (Sq. Ft.)"
-            value={warehouse.capacity?.toLocaleString()}
-          />
           <RecordKvRow label="Operated By" value={warehouse.operatedBy} />
           {warehouse.operatedBy === "C&F Agent" && (
-            <RecordKvRow label="Customer Type" value={warehouse.customerType} />
+            <RecordKvRow label="C&F Agent" value={warehouse.customerType} />
           )}
           <RecordKvRow
             label="Status"
@@ -159,10 +150,14 @@ export default function WarehouseDetailPage() {
                 value={c.emailAddress || "—"}
                 link={!!c.emailAddress}
                 href={c.emailAddress ? `mailto:${c.emailAddress}` : undefined}
+                isLast={idx === contacts.length - 1 && !warehouse.gstApplicable}
               />
             </React.Fragment>
           ))}
-          <RecordKvRow label="GST Number" value={warehouse.gstNumber} mono copy isLast />
+          <RecordKvRow label="GST Applicable" value={warehouse.gstApplicable ? "Yes" : "No"} />
+          {warehouse.gstApplicable && (
+            <RecordKvRow label="GST Number" value={warehouse.gstNumber} mono copy isLast />
+          )}
         </RecordSectionCard>
 
         <RecordSectionCard title="Address Details" icon={MapPin} accent="purple">
@@ -176,6 +171,59 @@ export default function WarehouseDetailPage() {
         <RecordSectionCard title="Warehouse Manager" icon={User} accent="orange">
           <RecordKvRow label="Manager Name" value={warehouse.manager} isLast />
         </RecordSectionCard>
+
+        <div className="lg:col-span-2">
+          <RecordSectionCard title="Warehouse Documents" icon={FileText} accent="blue">
+            {(!warehouse.documents || warehouse.documents.length === 0) ? (
+              <div className="py-6 text-center text-xs text-muted-foreground">
+                No documents uploaded.
+              </div>
+            ) : (
+              <RecordMiniTable
+                columns={[
+                  {
+                    key: "documentName",
+                    header: "Document Name",
+                    render: (r: WarehouseDocument) => <span className="font-medium">{r.documentName}</span>,
+                  },
+                  {
+                    key: "fileName",
+                    header: "File Name",
+                    render: (r: WarehouseDocument) =>
+                      r.fileName ? (
+                        <button
+                          type="button"
+                          className="text-brand-600 hover:underline text-left font-mono text-[11px]"
+                          onClick={() => {
+                            const url = r.fileUrl;
+                            if (!url) return;
+                            const trimmedUrl = url.trim();
+                            if (!trimmedUrl) return;
+                            const isAbsolute =
+                              /^https?:\/\//i.test(trimmedUrl) ||
+                              /^blob:/i.test(trimmedUrl) ||
+                              /^data:/i.test(trimmedUrl);
+                            const safeUrl = isAbsolute ? trimmedUrl : `https://${trimmedUrl}`;
+                            window.open(safeUrl, "_blank", "noopener,noreferrer");
+                          }}
+                        >
+                          {r.fileName}
+                        </button>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      ),
+                  },
+                  {
+                    key: "uploadedAt",
+                    header: "Uploaded At",
+                    render: (r: WarehouseDocument) => <span className="text-muted-foreground">{r.uploadedAt || "—"}</span>,
+                  },
+                ]}
+                rows={warehouse.documents}
+              />
+            )}
+          </RecordSectionCard>
+        </div>
 
         <div className="lg:col-span-2">
           <RecordSectionCard title="Audit Details" icon={Clock} accent="slate">

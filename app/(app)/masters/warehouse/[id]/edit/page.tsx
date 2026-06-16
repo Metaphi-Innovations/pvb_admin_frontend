@@ -55,18 +55,19 @@ export default function EditWarehousePage() {
     setForm({
       warehouseName: found.warehouseName,
       warehouseType: found.warehouseType,
+      gstApplicable: found.gstApplicable ?? (found.gstNumber ? true : false),
       gstNumber: found.gstNumber,
       address: found.address,
       state: found.state,
       district: found.district,
       city: found.city,
       pincode: found.pincode,
-      capacity: String(found.capacity || ""),
       manager: found.manager,
       status: found.status,
       operatedBy: found.operatedBy,
       customerType: found.customerType || "",
       contacts: contacts,
+      documents: found.documents || [],
     });
   }, [id, router]);
 
@@ -100,6 +101,7 @@ export default function EditWarehousePage() {
             ...r,
             warehouseName: form.warehouseName,
             warehouseType: form.warehouseType,
+            gstApplicable: form.gstApplicable,
             gstNumber: form.gstNumber,
             contactPerson: primaryContact ? primaryContact.contactPerson : "",
             mobileNumber: primaryContact ? primaryContact.mobileNumber : "",
@@ -109,12 +111,12 @@ export default function EditWarehousePage() {
             district: form.district,
             city: form.city,
             pincode: form.pincode,
-            capacity: Number(form.capacity) || 0,
             manager: form.manager,
             status: form.status,
             operatedBy: form.operatedBy,
             customerType: form.operatedBy === "C&F Agent" ? form.customerType : undefined,
             contacts: form.contacts,
+            documents: form.documents || [],
             updatedBy: "Admin",
             updatedDate: todayStr(),
           }

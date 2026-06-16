@@ -93,11 +93,14 @@ export const fieldClass =
 export const labelClass = "text-xs font-medium text-foreground";
 export const selectClass = cn(fieldClass, "w-full px-3");
 
-export function SectionDivider({ title, subtitle }: { title: string; subtitle?: string }) {
+export function SectionDivider({ title, subtitle, required }: { title: string; subtitle?: string; required?: boolean }) {
   return (
-    <div className="flex items-baseline justify-between gap-2 pb-2 mb-3 border-b border-border/40">
-      <p className="text-xs font-semibold text-foreground">{title}</p>
-      {subtitle && <p className="text-[11px] text-muted-foreground">{subtitle}</p>}
+    <div className="mb-2.5 mt-0.5">
+      <p className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center">
+        {title}
+        {required && <span className="text-red-500 ml-1">*</span>}
+      </p>
+      {subtitle && <p className="text-[11px] text-muted-foreground mt-0.5">{subtitle}</p>}
     </div>
   );
 }

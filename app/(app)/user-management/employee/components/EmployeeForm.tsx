@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,14 @@ import {
   validateEmail, validateEmailUnique, validateMobile, validateMobileUnique,
   validateCircularReporting, todayStr, loadEmployees, nextEmployeeId,
 } from "../employee-data";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  loadRoles, loadPermissionTemplates, type Role, loadNewPermissionTemplates, type PermissionTemplate
+} from "../../roles/roles-data";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -92,10 +100,13 @@ function Field({ label, required, error, helper, children }: {
   );
 }
 
-function SectionHead({ label, sub }: { label: string; sub?: string }) {
+function SectionHead({ label, sub, required }: { label: string; sub?: string; required?: boolean }) {
   return (
     <div className="mb-2.5 mt-0.5">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
+      <p className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center">
+        {label}
+        {required && <span className="text-red-500 ml-1">*</span>}
+      </p>
       {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
     </div>
   );
@@ -392,19 +403,215 @@ function HierarchyInfoCard({ roleType, salesType, role, geoFields, accent }: Hie
 
 // ── Permissions Tab (metadata-driven accordion) ────────────────────────────────
 
+// ── Mapping and Conversion Helpers ──────────────────────────────────────────
+const getRoleTemplateId = (empRoleName: string, allRolesMaster: Role[]): number | null => {
+  const normalized = empRoleName.toLowerCase().trim();
+  let matchName = normalized;
+  if (normalized === "nsm") matchName = "sales manager";
+  else if (normalized === "procurement head") matchName = "procurement lead";
+  else if (normalized === "accounts manager") matchName = "accountant";
+
+  const match = allRolesMaster.find(r => r.roleName.toLowerCase().trim() === matchName);
+  return match ? match.id : null;
+};
+
+const convertToSets = (perms: UserPermissions) => {
+  const webSet = new Set<string>();
+  const mobileSet = new Set<string>();
+  if (perms) {
+    if (perms.web) {
+      Object.entries(perms.web).forEach(([modId, submodules]) => {
+        if (submodules) {
+          Object.entries(submodules).forEach(([subId, actions]) => {
+            if (actions) {
+              Object.entries(actions).forEach(([action, value]) => {
+                if (value) {
+                  webSet.add(`${modId}.${subId}.${action}`);
+                }
+              });
+            }
+          });
+        }
+      });
+    }
+    if (perms.mobile) {
+      Object.entries(perms.mobile).forEach(([grpId, features]) => {
+        if (features) {
+          Object.entries(features).forEach(([featId, actions]) => {
+            if (actions) {
+              Object.entries(actions).forEach(([action, value]) => {
+                if (value) {
+                  mobileSet.add(`${grpId}.${featId}.${action}`);
+                }
+              });
+            }
+          });
+        }
+      });
+    }
+  }
+  return { webSet, mobileSet };
+};
+
+const convertFromSets = (webSet: Set<string>, mobileSet: Set<string>): UserPermissions => {
+  const perms = defaultPermissions();
+  webSet.forEach(key => {
+    const parts = key.split(".");
+    if (parts.length >= 3) {
+      const modId = parts[0];
+      const subId = parts[1];
+      const action = parts[2] as WebAction;
+      if (!perms.web[modId]) perms.web[modId] = {};
+      if (!perms.web[modId][subId]) perms.web[modId][subId] = defaultSubPerm();
+      perms.web[modId][subId][action] = true;
+    }
+  });
+  mobileSet.forEach(key => {
+    const parts = key.split(".");
+    if (parts.length >= 3) {
+      const grpId = parts[0];
+      const featId = parts[1];
+      const action = parts[2] as MobileAction;
+      if (!perms.mobile[grpId]) perms.mobile[grpId] = {};
+      if (!perms.mobile[grpId][featId]) perms.mobile[grpId][featId] = defaultMobilePerm();
+      perms.mobile[grpId][featId][action] = true;
+    }
+  });
+  return perms;
+};
+
 const ALL_WEB_ACTIONS: WebAction[]    = ["view","create","edit","delete","approve","export","import"];
 const ALL_MOBILE_ACTIONS: MobileAction[] = ["view","create","edit","delete","approve"];
 const WEB_ACTION_LABELS: Record<WebAction, string>    = { view:"View", create:"Create", edit:"Edit", delete:"Delete", approve:"Approve", export:"Export", import:"Import" };
 const MOBILE_ACTION_LABELS: Record<MobileAction, string> = { view:"View", create:"Create", edit:"Edit", delete:"Delete", approve:"Approve" };
 
-function PermissionsTab({ perms, onChange, role }: {
-  perms: UserPermissions;
-  onChange: (p: UserPermissions) => void;
+
+function PermissionsTab({
+  activeWebPerms,
+  setActiveWebPerms,
+  activeMobilePerms,
+  setActiveMobilePerms,
+  role,
+  roleType,
+}: {
+  activeWebPerms: Set<string>;
+  setActiveWebPerms: React.Dispatch<React.SetStateAction<Set<string>>>;
+  activeMobilePerms: Set<string>;
+  setActiveMobilePerms: React.Dispatch<React.SetStateAction<Set<string>>>;
   role?: string;
+  roleType?: string;
 }) {
-  const [section, setSection] = useState<"web" | "mobile">("web");
+  const [section, setSection] = useState<"web" | "mobile" | string>("web");
   const [openMods, setOpenMods] = useState<Set<string>>(new Set([PERMISSION_REGISTRY[0].id]));
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set([MOBILE_PERMISSION_REGISTRY[0].id]));
+
+  const [pendingSection, setPendingSection] = useState<"web" | "mobile" | null>(null);
+  const [showPlatformWarning, setShowPlatformWarning] = useState(false);
+
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [pendingTemplateId, setPendingTemplateId] = useState("");
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  // Load active templates
+  const templates = loadNewPermissionTemplates().filter(t => t.status === "Active");
+  const templateOptions = templates.map(t => ({
+    value: t.id,
+    label: t.templateName,
+  }));
+
+  const hasCheckedPermissions = () => {
+    return activeWebPerms.size > 0 || activeMobilePerms.size > 0;
+  };
+
+  const applyTemplate = (tpl: PermissionTemplate) => {
+    setSelectedTemplateId(tpl.id);
+    setSection(tpl.accessType);
+    
+    if (tpl.accessType === "web") {
+      const webSet = new Set<string>();
+      tpl.webPermissions.forEach(p => {
+        webSet.add(`${p.moduleKey}.${p.actionKey}`);
+      });
+      setActiveWebPerms(webSet);
+      setActiveMobilePerms(new Set());
+    } else {
+      const mobileSet = new Set<string>();
+      tpl.mobilePermissions.forEach(p => {
+        mobileSet.add(`${p.moduleKey}.${p.actionKey}`);
+      });
+      setActiveMobilePerms(mobileSet);
+      setActiveWebPerms(new Set());
+    }
+  };
+
+  const handleTemplateSelect = (val: string) => {
+    const tpl = templates.find(t => t.id === val);
+    if (!tpl) return;
+
+    if (hasCheckedPermissions()) {
+      setPendingTemplateId(val);
+      setShowConfirmModal(true);
+    } else {
+      applyTemplate(tpl);
+    }
+  };
+
+  const confirmTemplateChange = () => {
+    const tpl = templates.find(t => t.id === pendingTemplateId);
+    if (tpl) {
+      applyTemplate(tpl);
+    }
+    setPendingTemplateId("");
+    setShowConfirmModal(false);
+  };
+
+  const cancelTemplateChange = () => {
+    setPendingTemplateId("");
+    setShowConfirmModal(false);
+  };
+
+  const templateAccessType = useMemo(() => {
+    if (!role) return "web";
+    const allRolesMaster = loadRoles();
+    const templatesList = loadPermissionTemplates();
+    const templateId = getRoleTemplateId(role, allRolesMaster);
+    if (templateId && templatesList[templateId]) {
+      return templatesList[templateId].accessType;
+    }
+    return "web";
+  }, [role]);
+
+  const visibleTabs = useMemo(() => {
+    const allTabs = [ ["web", "Web Portal"], ["mobile", "Mobile App"] ] as const;
+    if (roleType === "Field User") {
+      const access = templateAccessType === "none" ? "web" : templateAccessType;
+      return allTabs.filter(([key]) => key === access);
+    }
+    return allTabs;
+  }, [roleType, templateAccessType]);
+
+  useEffect(() => {
+    if (visibleTabs.length === 1 && section !== visibleTabs[0][0]) {
+      setSection(visibleTabs[0][0]);
+    }
+  }, [visibleTabs, section]);
+
+  // Set default section based on template accessType on load/role change
+  useEffect(() => {
+    if (role) {
+      const allRolesMaster = loadRoles();
+      const templates = loadPermissionTemplates();
+      const templateId = getRoleTemplateId(role, allRolesMaster);
+      if (templateId && templates[templateId]) {
+        const template = templates[templateId];
+        if (template.accessType === "mobile") {
+          setSection("mobile");
+        } else if (template.accessType === "web") {
+          setSection("web");
+        }
+      }
+    }
+  }, [role]);
 
   const toggleMod = (id: string) => setOpenMods((s) => {
     const next = new Set(s);
@@ -417,137 +624,228 @@ function PermissionsTab({ perms, onChange, role }: {
     return next;
   });
 
-  const getSub = (modId: string, subId: string): SubmodulePermission =>
-    perms.web?.[modId]?.[subId] || defaultSubPerm();
-  const getMob = (grpId: string, featId: string): MobileFeaturePermission =>
-    perms.mobile?.[grpId]?.[featId] || defaultMobilePerm();
+  const toggleWebPerm = (modId: string, subId: string, action: string) => {
+    const key = `${modId}.${subId}.${action}`;
+    setActiveWebPerms((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
-  const setSubAction = (modId: string, subId: string, action: WebAction, val: boolean) =>
-    onChange({ ...perms, web: { ...perms.web, [modId]: { ...(perms.web?.[modId] || {}), [subId]: { ...getSub(modId, subId), [action]: val } } } });
-
-  const setMobAction = (grpId: string, featId: string, action: MobileAction, val: boolean) =>
-    onChange({ ...perms, mobile: { ...perms.mobile, [grpId]: { ...(perms.mobile?.[grpId] || {}), [featId]: { ...getMob(grpId, featId), [action]: val } } } });
+  const toggleMobilePerm = (grpId: string, featId: string, action: string) => {
+    const key = `${grpId}.${featId}.${action}`;
+    setActiveMobilePerms((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   const grantMod = (mod: PermModule) => {
-    const updated = { ...(perms.web || {}) };
-    updated[mod.id] = {};
-    mod.submodules.forEach((sub) => {
-      updated[mod.id][sub.id] = {
-        view: sub.actions.includes("view"),
-        create: sub.actions.includes("create"),
-        edit: sub.actions.includes("edit"),
-        delete: sub.actions.includes("delete"),
-        approve: sub.actions.includes("approve"),
-        export: sub.actions.includes("export"),
-        import: sub.actions.includes("import"),
-      };
-    });
-    onChange({ ...perms, web: updated });
-  };
-  const revokeMod = (mod: PermModule) => {
-    const updated = { ...(perms.web || {}) };
-    updated[mod.id] = {};
-    mod.submodules.forEach((sub) => {
-      updated[mod.id][sub.id] = defaultSubPerm();
-    });
-    onChange({ ...perms, web: updated });
-  };
-  const grantGroup = (grp: MobileGroupDef) => {
-    const updated = { ...(perms.mobile || {}) };
-    updated[grp.id] = {};
-    grp.features.forEach((feat) => {
-      updated[grp.id][feat.id] = {
-        view: feat.actions.includes("view"),
-        create: feat.actions.includes("create"),
-        edit: feat.actions.includes("edit"),
-        delete: feat.actions.includes("delete"),
-        approve: feat.actions.includes("approve"),
-      };
-    });
-    onChange({ ...perms, mobile: updated });
-  };
-  const revokeGroup = (grp: MobileGroupDef) => {
-    const updated = { ...(perms.mobile || {}) };
-    updated[grp.id] = {};
-    grp.features.forEach((feat) => {
-      updated[grp.id][feat.id] = defaultMobilePerm();
-    });
-    onChange({ ...perms, mobile: updated });
-  };
-  const grantAll = () => {
-    const next: UserPermissions = { web: {}, mobile: {} };
-    PERMISSION_REGISTRY.forEach((mod) => {
-      next.web[mod.id] = {};
+    setActiveWebPerms((prev) => {
+      const next = new Set(prev);
       mod.submodules.forEach((sub) => {
-        next.web[mod.id][sub.id] = {
-          view: sub.actions.includes("view"),
-          create: sub.actions.includes("create"),
-          edit: sub.actions.includes("edit"),
-          delete: sub.actions.includes("delete"),
-          approve: sub.actions.includes("approve"),
-          export: sub.actions.includes("export"),
-          import: sub.actions.includes("import"),
-        };
+        sub.actions.forEach((action) => {
+          next.add(`${mod.id}.${sub.id}.${action}`);
+        });
       });
+      return next;
     });
-    MOBILE_PERMISSION_REGISTRY.forEach((grp) => {
-      next.mobile[grp.id] = {};
-      grp.features.forEach((feat) => {
-        next.mobile[grp.id][feat.id] = {
-          view: feat.actions.includes("view"),
-          create: feat.actions.includes("create"),
-          edit: feat.actions.includes("edit"),
-          delete: feat.actions.includes("delete"),
-          approve: feat.actions.includes("approve"),
-        };
-      });
-    });
-    onChange(next);
   };
-  const revokeAll = () => onChange(defaultPermissions());
+
+  const revokeMod = (mod: PermModule) => {
+    setActiveWebPerms((prev) => {
+      const next = new Set(prev);
+      mod.submodules.forEach((sub) => {
+        sub.actions.forEach((action) => {
+          next.delete(`${mod.id}.${sub.id}.${action}`);
+        });
+      });
+      return next;
+    });
+  };
+
+  const grantGroup = (grp: MobileGroupDef) => {
+    setActiveMobilePerms((prev) => {
+      const next = new Set(prev);
+      grp.features.forEach((feat) => {
+        feat.actions.forEach((action) => {
+          next.add(`${grp.id}.${feat.id}.${action}`);
+        });
+      });
+      return next;
+    });
+  };
+
+  const revokeGroup = (grp: MobileGroupDef) => {
+    setActiveMobilePerms((prev) => {
+      const next = new Set(prev);
+      grp.features.forEach((feat) => {
+        feat.actions.forEach((action) => {
+          next.delete(`${grp.id}.${feat.id}.${action}`);
+        });
+      });
+      return next;
+    });
+  };
+
+  const grantAll = () => {
+    const webSet = new Set<string>();
+    PERMISSION_REGISTRY.forEach((mod) => {
+      mod.submodules.forEach((sub) => {
+        sub.actions.forEach((action) => {
+          webSet.add(`${mod.id}.${sub.id}.${action}`);
+        });
+      });
+    });
+
+    const mobileSet = new Set<string>();
+    MOBILE_PERMISSION_REGISTRY.forEach((grp) => {
+      grp.features.forEach((feat) => {
+        feat.actions.forEach((action) => {
+          mobileSet.add(`${grp.id}.${feat.id}.${action}`);
+        });
+      });
+    });
+
+    setActiveWebPerms(webSet);
+    setActiveMobilePerms(mobileSet);
+  };
+
+  const revokeAll = () => {
+    setActiveWebPerms(new Set());
+    setActiveMobilePerms(new Set());
+  };
 
   const modHasAny = (mod: PermModule) =>
-    mod.submodules.some((sub) => ALL_WEB_ACTIONS.some((action) => sub.actions.includes(action) && Boolean((getSub(mod.id, sub.id) as any)[action])));
+    mod.submodules.some((sub) =>
+      ALL_WEB_ACTIONS.some(
+        (action) =>
+          sub.actions.includes(action) &&
+          activeWebPerms.has(`${mod.id}.${sub.id}.${action}`)
+      )
+    );
+
   const groupHasAny = (grp: MobileGroupDef) =>
-    grp.features.some((feat) => ALL_MOBILE_ACTIONS.some((action) => feat.actions.includes(action) && Boolean((getMob(grp.id, feat.id) as any)[action])));
+    grp.features.some((feat) =>
+      ALL_MOBILE_ACTIONS.some(
+        (action) =>
+          feat.actions.includes(action) &&
+          activeMobilePerms.has(`${grp.id}.${feat.id}.${action}`)
+      )
+    );
+
+  const handleSectionChange = (targetSection: "web" | "mobile") => {
+    if (section === targetSection) return;
+    const hasPerms = section === "web" ? activeWebPerms.size > 0 : activeMobilePerms.size > 0;
+    if (hasPerms) {
+      setPendingSection(targetSection);
+      setShowPlatformWarning(true);
+    } else {
+      setSection(targetSection);
+    }
+  };
+
+  const confirmSectionChange = () => {
+    if (!pendingSection) return;
+    if (section === "web") {
+      setActiveWebPerms(new Set());
+    } else {
+      setActiveMobilePerms(new Set());
+    }
+    setSection(pendingSection);
+    setPendingSection(null);
+    setShowPlatformWarning(false);
+  };
+
+  const cancelSectionChange = () => {
+    setPendingSection(null);
+    setShowPlatformWarning(false);
+  };
+
+  const handleLoadRoleDefaults = () => {
+    if (!role) return;
+    const allRolesMaster = loadRoles();
+    const templates = loadPermissionTemplates();
+    const templateId = getRoleTemplateId(role, allRolesMaster);
+    if (templateId && templates[templateId]) {
+      const template = templates[templateId];
+      const webSet = new Set<string>();
+      if (Array.isArray(template.webPermissions)) {
+        template.webPermissions.forEach((p: any) => {
+          const mKey = p.moduleKey || p.module || p.moduleId || p.moduleName;
+          const aKey = p.actionKey || p.action || p.permission;
+          if (mKey && aKey) webSet.add(`${mKey}.${aKey}`);
+        });
+      }
+      const mobileSet = new Set<string>();
+      if (Array.isArray(template.mobilePermissions)) {
+        template.mobilePermissions.forEach((p: any) => {
+          const mKey = p.moduleKey || p.module || p.moduleId || p.moduleName;
+          const aKey = p.actionKey || p.action || p.permission;
+          if (mKey && aKey) mobileSet.add(`${mKey}.${aKey}`);
+        });
+      }
+      setActiveWebPerms(webSet);
+      setActiveMobilePerms(mobileSet);
+      if (template.accessType === "mobile") {
+        setSection("mobile");
+      } else if (template.accessType === "web") {
+        setSection("web");
+      }
+    } else {
+      const defaults = roleDefaultPermissions(role);
+      const converted = convertToSets(defaults);
+      setActiveWebPerms(converted.webSet);
+      setActiveMobilePerms(converted.mobileSet);
+    }
+  };
 
   return (
     <div className="space-y-3">
       {role && (
-        <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 px-3 py-2.5">
-          <div>
-            <p className="text-xs font-semibold text-foreground">
-              Role: <span className="text-brand-700">{role}</span>
-            </p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Load suggested permissions for this role. You can adjust individually after loading.
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <Button type="button" variant="outline" size="sm" className="text-xs h-7" onClick={() => onChange(roleDefaultPermissions(role))}>
-              Load Role Defaults
-            </Button>
-            <button type="button" onClick={grantAll} className="text-[10px] font-semibold px-2 py-1 rounded bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors">
-              Grant All
-            </button>
-            <button type="button" onClick={revokeAll} className="text-[10px] font-semibold px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
-              Revoke All
-            </button>
-          </div>
+        <div className="inline-flex items-center rounded-xl border border-border bg-muted/20 px-3.5 py-1.5">
+          <p className="text-xs font-semibold text-foreground">
+            Role: <span className="text-brand-700">{role}</span>
+          </p>
         </div>
       )}
 
-      <div className="flex gap-1.5 pb-3 border-b border-border">
-        {([ ["web", "Web Portal"], ["mobile", "Mobile App"] ] as const).map(([key, label]) => (
-          <button key={key} type="button" onClick={() => setSection(key)}
-            className={cn(
-              "flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-medium transition-colors border",
-              section === key ? "bg-brand-600 text-white border-brand-600" : "border-border text-muted-foreground hover:bg-muted/40",
-            )}>
-            {key === "web" ? <Monitor className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
-            {label} Permissions
-          </button>
-        ))}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-3 border-b border-border">
+        <div className="flex gap-1.5">
+          {visibleTabs.map(([key, label]) => (
+            <button key={key} type="button" onClick={() => handleSectionChange(key as "web" | "mobile")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-medium transition-colors border",
+                section === key ? "bg-brand-600 text-white border-brand-600" : "border-border text-muted-foreground hover:bg-muted/40",
+              )}>
+              {key === "web" ? <Monitor className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
+              {label} Permissions
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <Label className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
+            Permission Template
+          </Label>
+          <div className="w-56">
+            <AutocompleteSelect
+              placeholder="Select permission template"
+              options={templateOptions}
+              value={selectedTemplateId}
+              onChange={handleTemplateSelect}
+            />
+          </div>
+        </div>
       </div>
 
       {section === "web" && (
@@ -568,33 +866,32 @@ function PermissionsTab({ perms, onChange, role }: {
                     {hasAny && !expanded && <span className="text-[9px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-semibold">configured</span>}
                   </div>
                   <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                    <button type="button" onClick={() => grantMod(mod)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors">
+                    <button type="button" onClick={() => grantMod(mod)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-660 hover:bg-brand-100 transition-colors">
                       Grant All
                     </button>
-                    <button type="button" onClick={() => revokeMod(mod)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
+                    <button type="button" onClick={() => revokeMod(mod)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-105 transition-colors">
                       Revoke All
                     </button>
                   </div>
                 </div>
                 {expanded && (
-                  <div className="space-y-2.5 p-3">
-                    {mod.submodules.map((sub, si) => {
-                      const sp = getSub(mod.id, sub.id);
+                  <div className="space-y-2.5 p-3 bg-slate-50/30">
+                    {mod.submodules.map((sub) => {
                       const actions = ALL_WEB_ACTIONS.filter((action) => sub.actions.includes(action));
-                      const rowActive = actions.some((action) => Boolean((sp as any)[action]));
+                      const rowActive = actions.some((action) => activeWebPerms.has(`${mod.id}.${sub.id}.${action}`));
                       return (
-                        <div key={sub.id} className={cn("rounded-xl border border-border/60 bg-muted/10 px-3 py-2.5 transition-colors", rowActive && "bg-brand-50/30") }>
+                        <div key={sub.id} className={cn("rounded-xl border border-border bg-white px-4 py-3 transition-colors", rowActive && "bg-brand-50/10 border-brand-100")}>
                           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
                             <div className="min-w-0 lg:w-56 lg:flex-shrink-0">
                               <p className="text-[11px] font-semibold text-foreground">{sub.label}</p>
-                              <p className="text-[10px] text-muted-foreground">Only available permissions are shown</p>
+                              <p className="text-[9px] text-muted-foreground mt-0.5">Available permissions</p>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2 lg:pl-4">
+                            <div className="flex flex-wrap items-center gap-1.5 lg:pl-4">
                               {actions.map((action) => {
-                                const checked = Boolean((sp as any)[action]);
+                                const checked = activeWebPerms.has(`${mod.id}.${sub.id}.${action}`);
                                 return (
-                                  <label key={action} className={cn("inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-medium cursor-pointer transition-colors", checked ? "border-brand-300 bg-brand-50 text-brand-700" : "border-border text-muted-foreground hover:bg-muted/40") }>
-                                    <input type="checkbox" checked={checked} onChange={(e) => setSubAction(mod.id, sub.id, action, e.target.checked)} className="w-3.5 h-3.5 rounded accent-brand-600 cursor-pointer" />
+                                  <label key={action} className={cn("inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-medium cursor-pointer transition-colors select-none", checked ? "border-brand-300 bg-brand-50 text-brand-700 font-semibold" : "border-border text-muted-foreground hover:bg-muted/40")}>
+                                    <input type="checkbox" checked={checked} onChange={() => toggleWebPerm(mod.id, sub.id, action)} className="w-3.5 h-3.5 rounded accent-brand-650 cursor-pointer" />
                                     <span>{WEB_ACTION_LABELS[action]}</span>
                                   </label>
                                 );
@@ -634,33 +931,32 @@ function PermissionsTab({ perms, onChange, role }: {
                     {hasAny && !expanded && <span className="text-[9px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-semibold">configured</span>}
                   </div>
                   <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                    <button type="button" onClick={() => grantGroup(grp)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors">
+                    <button type="button" onClick={() => grantGroup(grp)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-660 hover:bg-brand-100 transition-colors">
                       Grant All
                     </button>
-                    <button type="button" onClick={() => revokeGroup(grp)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
+                    <button type="button" onClick={() => revokeGroup(grp)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-105 transition-colors">
                       Revoke All
                     </button>
                   </div>
                 </div>
                 {expanded && (
-                  <div className="space-y-2.5 p-3">
-                    {grp.features.map((feat, fi) => {
-                      const fp = getMob(grp.id, feat.id);
+                  <div className="space-y-2.5 p-3 bg-slate-50/30">
+                    {grp.features.map((feat) => {
                       const actions = ALL_MOBILE_ACTIONS.filter((action) => feat.actions.includes(action));
-                      const rowActive = actions.some((action) => Boolean((fp as any)[action]));
+                      const rowActive = actions.some((action) => activeMobilePerms.has(`${grp.id}.${feat.id}.${action}`));
                       return (
-                        <div key={feat.id} className={cn("rounded-xl border border-border/60 bg-muted/10 px-3 py-2.5 transition-colors", rowActive && "bg-brand-50/30") }>
+                        <div key={feat.id} className={cn("rounded-xl border border-border bg-white px-4 py-3 transition-colors", rowActive && "bg-brand-50/10 border-brand-100")}>
                           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
                             <div className="min-w-0 lg:w-56 lg:flex-shrink-0">
                               <p className="text-[11px] font-semibold text-foreground">{feat.label}</p>
-                              <p className="text-[10px] text-muted-foreground">Only available permissions are shown</p>
+                              <p className="text-[9px] text-muted-foreground mt-0.5">Available permissions</p>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2 lg:pl-4">
+                            <div className="flex flex-wrap items-center gap-1.5 lg:pl-4">
                               {actions.map((action) => {
-                                const checked = Boolean((fp as any)[action]);
+                                const checked = activeMobilePerms.has(`${grp.id}.${feat.id}.${action}`);
                                 return (
-                                  <label key={action} className={cn("inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-medium cursor-pointer transition-colors", checked ? "border-brand-300 bg-brand-50 text-brand-700" : "border-border text-muted-foreground hover:bg-muted/40") }>
-                                    <input type="checkbox" checked={checked} onChange={(e) => setMobAction(grp.id, feat.id, action, e.target.checked)} className="w-3.5 h-3.5 rounded accent-brand-600 cursor-pointer" />
+                                  <label key={action} className={cn("inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-medium cursor-pointer transition-colors select-none", checked ? "border-brand-300 bg-brand-50 text-brand-700 font-semibold" : "border-border text-muted-foreground hover:bg-muted/40")}>
+                                    <input type="checkbox" checked={checked} onChange={() => toggleMobilePerm(grp.id, feat.id, action)} className="w-3.5 h-3.5 rounded accent-brand-650 cursor-pointer" />
                                     <span>{MOBILE_ACTION_LABELS[action]}</span>
                                   </label>
                                 );
@@ -677,10 +973,73 @@ function PermissionsTab({ perms, onChange, role }: {
           })}
         </div>
       )}
+
+      {/* Warning Modal for switching platform tabs */}
+      <Dialog open={showPlatformWarning} onOpenChange={(v) => !v && cancelSectionChange()}>
+        <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-5 pt-5 pb-3 border-b border-border/80">
+            <DialogTitle className="text-sm font-semibold flex items-center gap-2 text-red-650">
+              <AlertCircle className="w-4 h-4 text-red-650" />
+              Confirm Platform Switch
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Changing the access type will reset existing selections.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="px-5 py-4 text-xs text-foreground leading-normal">
+            {section === "web"
+              ? "Switching to Mobile permissions will clear all Web Portal permissions for this employee. Do you want to continue?"
+              : "Switching to Web Portal permissions will clear all Mobile permissions for this employee. Do you want to continue?"}
+          </div>
+
+          <DialogFooter className="px-5 py-3 border-t border-border/80 bg-muted/20 flex items-center justify-end gap-2">
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={cancelSectionChange}>
+              Cancel
+            </Button>
+            <Button size="sm" className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700" onClick={confirmSectionChange}>
+              Yes, Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Warning Dialog for Permission Template Overwrite */}
+      <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-50 border border-red-200">
+                <AlertCircle className="w-4 h-4 text-red-500" />
+              </div>
+              Overwrite Permissions?
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-xs">
+              Changing the permission template will replace current permissions. Do you want to continue?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={cancelTemplateChange}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white"
+              onClick={confirmTemplateChange}
+            >
+              Yes, Overwrite
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-
 
 // -- Geo helpers --------------------------------------------------------------
 
@@ -740,7 +1099,11 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
     approvalLevel2Id: null, approvalLevel2Name: "", approvalLevel2Role: "",
     approvalLevel3Id: null, approvalLevel3Name: "", approvalLevel3Role: "",
   });
-  const [perms, setPerms] = useState<UserPermissions>(initPerms);
+  const converted = useMemo(() => convertToSets(initPerms), [initPerms]);
+  const [activeWebPerms, setActiveWebPerms] = useState<Set<string>>(converted.webSet);
+  const [activeMobilePerms, setActiveMobilePerms] = useState<Set<string>>(converted.mobileSet);
+  const [pendingRoleId, setPendingRoleId] = useState<number | null>(null);
+  const [showRoleChangeWarning, setShowRoleChangeWarning] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [sameAddress, setSameAddress] = useState(false);
   const [geoMappings, setGeoMappings] = useState<GeoMappingRow[]>(initialGeoMappings);
@@ -781,7 +1144,8 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
         upd.approvalLevel1Id = null; upd.approvalLevel1Name = ""; upd.approvalLevel1Role = "";
         upd.approvalLevel2Id = null; upd.approvalLevel2Name = ""; upd.approvalLevel2Role = "";
         upd.approvalLevel3Id = null; upd.approvalLevel3Name = ""; upd.approvalLevel3Role = "";
-        setPerms(initPerms);
+        setActiveWebPerms(new Set());
+        setActiveMobilePerms(new Set());
         setGeoMappings([emptyGeoMapping()]);
         setErrors(prev => Object.fromEntries(Object.entries(prev).filter(([errorKey]) => !errorKey.startsWith("geoMapping_"))));
       }
@@ -811,6 +1175,81 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
     });
     setErrors(prev => ({ ...prev, [key]: "" }));
   };
+
+  const applyRoleAndTemplate = (targetRoleId: number) => {
+    const allRoles = [...RETAIL_SALES_ROLES, ...INSTITUTIONAL_SALES_ROLES, ...ADMIN_ROLES];
+    const r = allRoles.find(x => x.id === targetRoleId);
+    if (!r) return;
+
+    // Fetch newly selected role's template
+    const allRolesMaster = loadRoles();
+    const templates = loadPermissionTemplates();
+    const templateId = getRoleTemplateId(r.name, allRolesMaster);
+    
+    let webSet = new Set<string>();
+    let mobileSet = new Set<string>();
+    
+    if (templateId && templates[templateId]) {
+      const template = templates[templateId];
+      if (Array.isArray(template.webPermissions)) {
+        template.webPermissions.forEach((p: any) => {
+          const mKey = p.moduleKey || p.module || p.moduleId || p.moduleName;
+          const aKey = p.actionKey || p.action || p.permission;
+          if (mKey && aKey) webSet.add(`${mKey}.${aKey}`);
+        });
+      }
+      if (Array.isArray(template.mobilePermissions)) {
+        template.mobilePermissions.forEach((p: any) => {
+          const mKey = p.moduleKey || p.module || p.moduleId || p.moduleName;
+          const aKey = p.actionKey || p.action || p.permission;
+          if (mKey && aKey) mobileSet.add(`${mKey}.${aKey}`);
+        });
+      }
+    }
+
+    setFormState(prev => ({
+      ...prev,
+      roleId: targetRoleId,
+      role: r.name || "",
+      geoZone: "", geoRegion: "", geoArea: "", territory: "", geoLocality: "",
+      approvalLevel1Id: null, approvalLevel1Name: "", approvalLevel1Role: "",
+      approvalLevel2Id: null, approvalLevel2Name: "", approvalLevel2Role: "",
+      approvalLevel3Id: null, approvalLevel3Name: "", approvalLevel3Role: "",
+    }));
+    setGeoMappings([emptyGeoMapping()]);
+    setErrors(prev => ({
+      ...Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith("geoMapping_"))),
+      roleId: "",
+    }));
+
+    // Update active permissions
+    setActiveWebPerms(webSet);
+    setActiveMobilePerms(mobileSet);
+  };
+
+  const handleRoleChange = (newRoleIdVal: number) => {
+    const hasExistingPerms = activeWebPerms.size > 0 || activeMobilePerms.size > 0;
+    if (hasExistingPerms) {
+      setPendingRoleId(newRoleIdVal);
+      setShowRoleChangeWarning(true);
+    } else {
+      applyRoleAndTemplate(newRoleIdVal);
+    }
+  };
+
+  const confirmRoleChange = () => {
+    if (pendingRoleId !== null) {
+      applyRoleAndTemplate(pendingRoleId);
+      setPendingRoleId(null);
+    }
+    setShowRoleChangeWarning(false);
+  };
+
+  const cancelRoleChange = () => {
+    setPendingRoleId(null);
+    setShowRoleChangeWarning(false);
+  };
+
 
   const syncPrimaryGeoToForm = (mappings: GeoMappingRow[]) => {
     const primary = mappings[0] || emptyGeoMapping();
@@ -1084,6 +1523,12 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
         });
       });
     }
+    const hasWeb = activeWebPerms.size > 0;
+    const hasMobile = activeMobilePerms.size > 0;
+    if (hasWeb && hasMobile) {
+      e.permissions = "Only one access type is allowed (Web Portal OR Mobile).";
+      alert("Only one access type is allowed (Web Portal OR Mobile).");
+    }
     const cErr = validateCircularReporting(form.id || 0, form.reportingManagerId || null, allEmployees);
     if (cErr) e.reportingManagerId = cErr;
     setErrors(e);
@@ -1137,7 +1582,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       territory: geoMappings[0]?.territory || "",
       geoLocality: geoMappings[0]?.geoLocality || "",
       geoMappings: form.roleType === "Field User" ? geoMappings.map((mapping) => ({ ...mapping })) : [],
-      permissions: perms,
+      permissions: convertFromSets(activeWebPerms, activeMobilePerms),
       // Approval chain — dynamic levels, save up to 3 for backward compat
       approvalLevel1Id: approvalLevels[0]?.empId || null,
       approvalLevel1Name: approvalLevels[0]?.name || "",
@@ -1472,22 +1917,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                 {form.roleType && (form.roleType !== "Field User" || form.salesType) && (
                   <div className="grid grid-cols-2 gap-3">
                     <AC label="Role" required value={form.roleId || ""}
-                      onChange={v => {
-                        const allRoles = [...RETAIL_SALES_ROLES, ...INSTITUTIONAL_SALES_ROLES, ...ADMIN_ROLES];
-                        const r = allRoles.find(x => x.id === v);
-                        setFormState(prev => ({
-                          ...prev, roleId: v as number, role: r?.name || "",
-                          geoZone: "", geoRegion: "", geoArea: "", territory: "", geoLocality: "",
-                          approvalLevel1Id: null, approvalLevel1Name: "", approvalLevel1Role: "",
-                          approvalLevel2Id: null, approvalLevel2Name: "", approvalLevel2Role: "",
-                          approvalLevel3Id: null, approvalLevel3Name: "", approvalLevel3Role: "",
-                        }));
-                        setGeoMappings([emptyGeoMapping()]);
-                        setErrors(prev => ({
-                          ...Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith("geoMapping_"))),
-                          roleId: "",
-                        }));
-                      }}
+                      onChange={v => handleRoleChange(v as number)}
                       options={roleOptions}
                       placeholder="Select role"
                       error={errors.roleId} />
@@ -1752,10 +2182,45 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
               TAB 3 — PERMISSIONS
               ══════════════════════════════════════════════════════════════════════ */}
           {activeTab === "permissions" && (
-            <PermissionsTab perms={perms} onChange={setPerms} role={form.role} />
+            <PermissionsTab
+              activeWebPerms={activeWebPerms}
+              setActiveWebPerms={setActiveWebPerms}
+              activeMobilePerms={activeMobilePerms}
+              setActiveMobilePerms={setActiveMobilePerms}
+              role={form.role}
+              roleType={form.roleType}
+            />
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Warning Modal for Role Change */}
+      <Dialog open={showRoleChangeWarning} onOpenChange={(v) => !v && cancelRoleChange()}>
+        <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-5 pt-5 pb-3 border-b border-border/80">
+            <DialogTitle className="text-sm font-semibold flex items-center gap-2 text-red-650">
+              <AlertCircle className="w-4 h-4 text-red-650" />
+              Confirm Role Change
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Changing the role will replace current employee permissions.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="px-5 py-4 text-xs text-foreground leading-normal">
+            Changing the role will replace current employee permissions with the selected role template. Do you want to continue?
+          </div>
+
+          <DialogFooter className="px-5 py-3 border-t border-border/80 bg-muted/20 flex items-center justify-end gap-2">
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={cancelRoleChange}>
+              Cancel
+            </Button>
+            <Button size="sm" className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700" onClick={confirmRoleChange}>
+              Yes, Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </FormContainer>
   );
 }

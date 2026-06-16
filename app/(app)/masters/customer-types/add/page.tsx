@@ -26,8 +26,10 @@ export default function AddCustomerTypePage() {
   const [form, setForm] = useState<CustomerTypeFormValues>(DEFAULT_CUSTOMER_TYPE_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const list = loadCustomerTypes();
     setForm((prev) => ({ ...prev, customerTypeCode: generateCustomerTypeCode(list) }));
   }, []);
@@ -67,6 +69,14 @@ export default function AddCustomerTypePage() {
     setToast({ msg: "Customer Type added successfully.", type: "success" });
     setTimeout(() => router.push("/masters/customer-types"), 900);
   };
+
+  if (!mounted) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <FormContainer

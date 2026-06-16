@@ -2,7 +2,7 @@
 
 export interface CustomerTypeDocument {
   id: string;
-  documentTypeId: string;
+  documentTypeId?: string;
   documentName: string;
 }
 

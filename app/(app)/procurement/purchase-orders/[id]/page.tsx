@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Edit2, Send, CheckCircle2, FileText, Upload, Scissors } from "lucide-react";
 import {
@@ -77,7 +77,6 @@ export default function PODetailPage() {
 
 	useEffect(() => {
 		setPo(getPOById(id));
-		setLoading(false);
 	}, [id, invoiceTick, followUpTick]);
 
   useEffect(() => {
@@ -89,14 +88,14 @@ export default function PODetailPage() {
 
 	if (!po) {
 		return (
-			<AppLayout>
+			<>
 				<div className='p-8 text-sm text-[#6B80A0]'>
 					Purchase order not found.{" "}
 					<Link href='/procurement/purchase-orders' className='text-brand-600'>
 						Back
 					</Link>
 				</div>
-			</AppLayout>
+			</>
 		);
 	}
 

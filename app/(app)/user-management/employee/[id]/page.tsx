@@ -20,6 +20,7 @@ import {
 import {
   AlertTriangle, Edit2, Key, Trash2,
   CheckCircle2, XCircle, X, User, Mail, Phone,
+  Monitor, Smartphone, Info, Building2, UserCheck,
 } from "lucide-react";
 import {
   type Employee,
@@ -568,11 +569,11 @@ export default function EmployeeDetailPage() {
           <div className="border border-border rounded-xl bg-white p-3.5">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2.5">Personal Details</p>
             <div className="space-y-0">
-              <InfoRow label="Full Name" value={employee.fullName} />
-              <InfoRow label="Email" value={employee.email} />
-              <InfoRow label="Mobile" value={employee.mobile} />
-              {employee.alternativeMobile && <InfoRow label="Alt Mobile" value={employee.alternativeMobile} />}
-              <InfoRow label="Blood Group" value={employee.bloodGroup} />
+              <DetailField label="Full Name" value={employee.fullName} />
+              <DetailField label="Email" value={employee.email} />
+              <DetailField label="Mobile" value={employee.mobile} />
+              {employee.alternativeMobile && <DetailField label="Alt Mobile" value={employee.alternativeMobile} />}
+              <DetailField label="Blood Group" value={employee.bloodGroup} />
             </div>
           </div>
 
