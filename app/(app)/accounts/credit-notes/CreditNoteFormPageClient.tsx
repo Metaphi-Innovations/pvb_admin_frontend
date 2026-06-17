@@ -38,6 +38,10 @@ import {
 } from "./credit-notes-data";
 import { customerToInvoiceFields } from "../invoices/invoices-data";
 import { CREDIT_NOTES_BREADCRUMB, CREDIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
+import {
+  formatCustomerDropdownLabel,
+  formatCustomerDropdownSublabel,
+} from "@/lib/masters/entity-display";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -92,8 +96,8 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
     () =>
       customers.map((c) => ({
         value: String(c.id),
-        label: `${c.customerCode} — ${c.customerName}`,
-        sub: [c.mobile, c.email].filter(Boolean).join(" · "),
+        label: formatCustomerDropdownLabel(c),
+        sub: formatCustomerDropdownSublabel(c),
       })),
     [customers],
   );

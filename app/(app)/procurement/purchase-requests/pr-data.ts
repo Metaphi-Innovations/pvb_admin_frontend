@@ -1,6 +1,9 @@
 import { PROCUREMENT_APPROVAL, CURRENT_USER } from "@/lib/procurement/config";
 import { nextId, todayStr } from "@/lib/procurement/utils";
 import type { ActivityEntry } from "@/lib/procurement/types";
+import type { PackagingUom, PRPriority } from "@/lib/procurement/procurement-line-utils";
+import { calcTotalQtyBase } from "@/lib/procurement/procurement-line-utils";
+import { enrichProductForProcurement } from "@/lib/procurement/procurement-line-utils";
 
 /** Visible in listing tabs */
 export type PRListStatus = "draft" | "pending_approval" | "approved" | "rejected";
@@ -26,8 +29,18 @@ export interface PRLineItem {
   productCode: string;
   productName: string;
   description: string;
-  uom: string;
+  sku: string;
+  baseUnit: string;
+  packagingUnit: string;
+  conversionQty: number;
+  requestUom: PackagingUom;
   requestedQty: number;
+  totalQtyBase: number;
+  segment: string;
+  category: string;
+  mrp: number;
+  /** @deprecated use requestUom */
+  uom: string;
   remarks: string;
 }
 
@@ -36,7 +49,13 @@ export interface PurchaseRequest {
   prNumber: string;
   prDate: string;
   requestedBy: string;
+  department: string;
+  priority: PRPriority;
+  state: string;
+  warehouseId: number | null;
+  warehouseName: string;
   requiredByDate: string;
+  purpose: string;
   remarks: string;
   status: PRStatus;
   lines: PRLineItem[];
@@ -51,15 +70,63 @@ export interface PurchaseRequest {
   activity: ActivityEntry[];
 }
 
-const STORAGE_KEY = "ds_procurement_purchase_requests_v2";
+const STORAGE_KEY = "ds_procurement_purchase_requests_v3";
 
-const SEED: PurchaseRequest[] = [
+function migrateLine(line: Partial<PRLineItem>): PRLineItem {
+  const enriched = line.productId ? enrichProductForProcurement(line.productId) : null;
+  const requestUom = (line.requestUom ?? (line.uom as PackagingUom) ?? "Unit") as PackagingUom;
+  const requestedQty = line.requestedQty ?? 1;
+  const conversionQty = line.conversionQty ?? enriched?.conversionQty ?? 1;
+  const totalQtyBase =
+    line.totalQtyBase ??
+    calcTotalQtyBase(requestUom, requestedQty, conversionQty);
+  return {
+    uid: line.uid ?? `l-${Date.now()}`,
+    productId: line.productId ?? 0,
+    productCode: line.productCode ?? enriched?.productCode ?? "",
+    productName: line.productName ?? enriched?.productName ?? "",
+    description: line.description ?? enriched?.description ?? "",
+    sku: line.sku ?? enriched?.sku ?? "",
+    baseUnit: line.baseUnit ?? enriched?.baseUnit ?? "Unit",
+    packagingUnit: line.packagingUnit ?? enriched?.packagingUnit ?? "Box",
+    conversionQty,
+    requestUom,
+    requestedQty,
+    totalQtyBase,
+    segment: line.segment ?? enriched?.segment ?? "",
+    category: line.category ?? enriched?.category ?? "",
+    mrp: line.mrp ?? enriched?.mrp ?? 0,
+    uom: line.uom ?? requestUom,
+    remarks: line.remarks ?? "",
+  };
+}
+
+function migratePR(pr: PurchaseRequest): PurchaseRequest {
+  return {
+    ...pr,
+    department: pr.department ?? "procurement",
+    priority: pr.priority ?? "medium",
+    state: pr.state ?? "",
+    warehouseId: pr.warehouseId ?? null,
+    warehouseName: pr.warehouseName ?? "",
+    purpose: pr.purpose ?? pr.remarks ?? "",
+    lines: (pr.lines ?? []).map((l) => migrateLine(l)),
+  };
+}
+
+const RAW_SEED = [
   {
     id: 1,
     prNumber: "PR-2025-0001",
     prDate: "2025-02-01",
     requestedBy: "Rajesh Kumar",
+    department: "procurement",
+    priority: "high",
+    state: "Maharashtra",
+    warehouseId: 1,
+    warehouseName: "Central Warehouse — Pune",
     requiredByDate: "2025-02-15",
+    purpose: "Q1 fertilizer stock replenishment. Prefer Agro Chem as vendor.",
     remarks: "Q1 fertilizer stock replenishment. Prefer Agro Chem as vendor.",
     status: "approved",
     lines: [
@@ -205,17 +272,26 @@ const SEED: PurchaseRequest[] = [
   },
 ];
 
+const SEED = (RAW_SEED as unknown as PurchaseRequest[]).map(migratePR);
+
 export function loadPurchaseRequests(): PurchaseRequest[] {
-  if (typeof window === "undefined") return SEED;
+  if (typeof window === "undefined") return SEED.map(migratePR);
   try {
+    const v2 = localStorage.getItem("ds_procurement_purchase_requests_v2");
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED));
-      return SEED;
+    if (!raw && v2) {
+      const migrated = (JSON.parse(v2) as PurchaseRequest[]).map(migratePR);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+      return migrated;
     }
-    return JSON.parse(raw) as PurchaseRequest[];
+    if (!raw) {
+      const seeded = SEED.map(migratePR);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
+      return seeded;
+    }
+    return (JSON.parse(raw) as PurchaseRequest[]).map(migratePR);
   } catch {
-    return SEED;
+    return SEED.map(migratePR);
   }
 }
 
@@ -237,7 +313,12 @@ export function generatePRNumber(list: PurchaseRequest[]): string {
 export function recalcPR(pr: PurchaseRequest): PurchaseRequest {
   return {
     ...pr,
-    lines: pr.lines.filter((l) => l.productId > 0 || l.productName),
+    lines: pr.lines
+      .filter((l) => l.productId > 0 || l.productName)
+      .map((l) => {
+        const totalQtyBase = calcTotalQtyBase(l.requestUom, l.requestedQty, l.conversionQty);
+        return { ...l, totalQtyBase, uom: l.requestUom };
+      }),
   };
 }
 

@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { ProcInput } from "../../design/proc-design";
 import type { PurchaseOrder } from "../po-data";
 import {
@@ -136,15 +137,13 @@ export function ShortClosePOModal({
 
           <div className="space-y-1">
             <Label className="text-xs">Reason *</Label>
-            <select
-              className="w-full h-[38px] px-2.5 text-[13px] rounded-[9px] border-[1.5px] border-[#DDE3EF] bg-white"
+            <AutocompleteSelect
+              options={SHORT_CLOSE_REASONS.map((r) => ({ value: r.value, label: r.label }))}
               value={reason}
-              onChange={(e) => setReason(e.target.value as ShortCloseReason)}
-            >
-              {SHORT_CLOSE_REASONS.map((r) => (
-                <option key={r.value} value={r.value}>{r.label}</option>
-              ))}
-            </select>
+              onChange={(v) => setReason(v as ShortCloseReason)}
+              placeholder="Select reason…"
+              className="h-[38px] text-[13px]"
+            />
           </div>
 
           <div className="space-y-1">

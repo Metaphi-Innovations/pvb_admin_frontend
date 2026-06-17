@@ -17,12 +17,16 @@ import type { ChartOfAccount } from "../../data";
 import {
   DEFAULT_LEDGER_FORM,
   canAddLedgerUnder,
+  canAddSubLedgerUnder,
   defaultBalanceTypeForParent,
   formToLedger,
+  formToSubLedger,
   generateLedgerCode,
+  generateSubLedgerCode,
   ledgerToForm,
   saveChartOfAccounts,
   validateLedgerForm,
+  validateSubLedgerForm,
   type LedgerFormValues,
 } from "./chart-of-accounts-data";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
@@ -32,6 +36,7 @@ import { LedgerSheet } from "./components/LedgerSheet";
 import { ChevronsDownUp, ChevronsUpDown, Plus } from "lucide-react";
 
 type SheetMode = "add" | "edit" | "view" | null;
+type SheetKind = "ledger" | "sub_ledger";
 
 export default function ChartOfAccountsPageClient() {
   const {
@@ -44,6 +49,7 @@ export default function ChartOfAccountsPageClient() {
   } = useCoaNavigation();
 
   const [sheetMode, setSheetMode] = useState<SheetMode>(null);
+  const [sheetKind, setSheetKind] = useState<SheetKind>("ledger");
   const [active, setActive] = useState<ChartOfAccount | null>(null);
   const [form, setForm] = useState<LedgerFormValues>(DEFAULT_LEDGER_FORM);
   const [formError, setFormError] = useState<string | null>(null);
@@ -62,6 +68,7 @@ export default function ChartOfAccountsPageClient() {
     const parentId =
       parentGroupId ??
       (selectedNode && canAddLedgerUnder(selectedNode, records) ? selectedNode.id : null);
+    setSheetKind("ledger");
     setForm({
       ...DEFAULT_LEDGER_FORM,
       parentGroupId: parentId,
@@ -73,7 +80,21 @@ export default function ChartOfAccountsPageClient() {
     setSheetMode("add");
   };
 
+  const openAddSubLedger = (parentLedgerId: number) => {
+    setSheetKind("sub_ledger");
+    setForm({
+      ...DEFAULT_LEDGER_FORM,
+      parentGroupId: parentLedgerId,
+      balanceType: defaultBalanceTypeForParent(records, parentLedgerId),
+    });
+    setPreviewCode(generateSubLedgerCode(records));
+    setActive(null);
+    setFormError(null);
+    setSheetMode("add");
+  };
+
   const openEditLedger = (row: ChartOfAccount) => {
+    setSheetKind(row.nodeLevel === "sub_ledger" ? "sub_ledger" : "ledger");
     setActive(row);
     setForm(ledgerToForm(row));
     setPreviewCode(row.accountCode);
@@ -88,7 +109,10 @@ export default function ChartOfAccountsPageClient() {
   };
 
   const handleSave = () => {
-    const err = validateLedgerForm(form, records, active?.id);
+    const err =
+      sheetKind === "sub_ledger"
+        ? validateSubLedgerForm(form, records, active?.id)
+        : validateLedgerForm(form, records, active?.id);
     if (err) {
       setFormError(err);
       return;
@@ -96,14 +120,21 @@ export default function ChartOfAccountsPageClient() {
     const list = [...records];
     let saved: ChartOfAccount | null = null;
     if (sheetMode === "add") {
-      const code = generateLedgerCode(list);
-      const row = formToLedger(form, nextId(list), code, list);
+      const code =
+        sheetKind === "sub_ledger" ? generateSubLedgerCode(list) : generateLedgerCode(list);
+      const row =
+        sheetKind === "sub_ledger"
+          ? formToSubLedger(form, nextId(list), code, list)
+          : formToLedger(form, nextId(list), code, list);
       list.push(row);
       saved = row;
     } else if (sheetMode === "edit" && active) {
       const idx = list.findIndex((r) => r.id === active.id);
       if (idx >= 0) {
-        list[idx] = formToLedger(form, active.id, active.accountCode, list, active);
+        list[idx] =
+          sheetKind === "sub_ledger"
+            ? formToSubLedger(form, active.id, active.accountCode, list, active)
+            : formToLedger(form, active.id, active.accountCode, list, active);
         saved = list[idx];
       }
     }
@@ -162,6 +193,7 @@ export default function ChartOfAccountsPageClient() {
             canDelete={canDelete}
             onSelect={selectNode}
             onAddLedger={openAddLedger}
+            onAddSubLedger={openAddSubLedger}
             onEditLedger={openEditLedger}
             onDeleteLedger={setDeleteTarget}
           />
@@ -171,6 +203,7 @@ export default function ChartOfAccountsPageClient() {
       <LedgerSheet
         open={!!sheetMode}
         mode={sheetMode}
+        kind={sheetKind}
         form={form}
         formError={formError}
         previewCode={previewCode}

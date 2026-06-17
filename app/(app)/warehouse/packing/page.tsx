@@ -67,54 +67,38 @@ export default function PackingManagementPage() {
           <MiniKPICard label="Total Packed Qty" value={stats.totalQtyPacked} icon={Boxes} accent={false} />
         </div>
       }
-    >
-      {/* Tabs and Inline Warehouse Selector */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
-          <TabsList className="bg-muted/50 p-0.5 border border-border/60 rounded-xl inline-flex">
-            <TabsTrigger
-              value="ready-for-packing"
-              className="text-xs font-semibold px-4 py-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-brand-700"
-            >
-              <Clock className="w-3.5 h-3.5 mr-1.5" />
-              Ready For Packing
-            </TabsTrigger>
-            <TabsTrigger
-              value="packing-done"
-              className="text-xs font-semibold px-4 py-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-brand-700"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
-              Packing Done
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Warehouse Dropdown inline with tabs */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-muted-foreground">Warehouse:</span>
-            <AutocompleteSelect
-              options={[
-                { value: "All", label: "All Warehouses" },
-                ...WAREHOUSE_OPTIONS
-              ]}
-              value={selectedWarehouse}
-              onChange={setSelectedWarehouse}
-              placeholder="All Warehouses"
-              searchPlaceholder="Search warehouse..."
-              className="h-9 w-[200px] text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none"
-            />
-          </div>
+      tabs={[
+        { value: "ready-for-packing", label: "Ready For Packing", icon: Clock },
+        { value: "packing-done", label: "Packing Done", icon: CheckCircle2 }
+      ]}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      actions={
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-muted-foreground">Warehouse:</span>
+          <AutocompleteSelect
+            options={[
+              { value: "All", label: "All Warehouses" },
+              ...WAREHOUSE_OPTIONS
+            ]}
+            value={selectedWarehouse}
+            onChange={setSelectedWarehouse}
+            placeholder="All Warehouses"
+            searchPlaceholder="Search warehouse..."
+            className="h-9 w-[200px] text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none"
+          />
         </div>
+      }
+    >
+      {/* TAB 1: Ready For Packing */}
+      <TabsContent value="ready-for-packing" className="mt-0 outline-none">
+        <ReadyPackingListing ordersForWarehouse={ordersForWarehouse} />
+      </TabsContent>
 
-        {/* TAB 1: Ready For Packing */}
-        <TabsContent value="ready-for-packing" className="mt-0 outline-none">
-          <ReadyPackingListing ordersForWarehouse={ordersForWarehouse} />
-        </TabsContent>
-
-        {/* TAB 2: Packing Done */}
-        <TabsContent value="packing-done" className="mt-0 outline-none">
-          <DonePackingListing packingsForWarehouse={packingsForWarehouse} />
-        </TabsContent>
-      </Tabs>
+      {/* TAB 2: Packing Done */}
+      <TabsContent value="packing-done" className="mt-0 outline-none">
+        <DonePackingListing packingsForWarehouse={packingsForWarehouse} />
+      </TabsContent>
     </ListingContainer>
   );
 }

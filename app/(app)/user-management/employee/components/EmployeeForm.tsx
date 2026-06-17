@@ -1,18 +1,18 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertCircle, ChevronsUpDown, Check, ArrowLeft, Save, MapPin,
   Shield, Info, ChevronDown, ChevronUp, Plus, Trash2, GripVertical,
   Monitor, Smartphone,
+  Eye, EyeOff, Lock, User, Briefcase, FileText,
 } from "lucide-react";
 import { loadGeoNodes, type GeoNode, type GeoLevel } from "@/app/(app)/masters/geography/geo-data";
 import {
@@ -27,7 +27,26 @@ import {
   migratePermissions, roleDefaultPermissions,
   validateEmail, validateEmailUnique, validateMobile, validateMobileUnique,
   validateCircularReporting, todayStr, loadEmployees, nextEmployeeId,
+  applyEmployeeStatusChange,
 } from "../employee-data";
+import { type EmployeeDocument } from "../employee-documents";
+import { EmployeeDocumentsSection } from "./EmployeeDocumentsSection";
+import { EmployeeListingStatusCell } from "./EmployeeListingStatusCell";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  loadRoles, loadPermissionTemplates, type Role, loadNewPermissionTemplates, type PermissionTemplate
+} from "../../roles/roles-data";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+import { DualAddressSection, AddressBlock } from "@/components/address";
+import {
+  EMPTY_STRUCTURED_ADDRESS,
+  formatStructuredAddress,
+  structuredAddressesEqual,
+  type StructuredAddress,
+} from "@/lib/address";
+
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -35,8 +54,71 @@ interface EmployeeFormProps {
   mode: "add" | "edit";
   employee?: Employee;
   onSave: (emp: Employee) => void;
+  onStatusSave?: (emp: Employee) => void;
   onCancel: () => void;
   departments: Array<{ id: number; name: string }>;
+}
+
+type EmployeeFormState = Partial<Employee> & {
+  password?: string;
+  confirmPassword?: string;
+};
+
+function employeeToCurrentAddress(emp?: Employee): StructuredAddress {
+  if (!emp) return { ...EMPTY_STRUCTURED_ADDRESS };
+  return {
+    line1: emp.currentAddressLine1 || "",
+    line2: emp.currentAddressLine2 || "",
+    stateId: emp.currentStateId ?? null,
+    cityId: emp.currentCityId ?? null,
+    pincodeId: emp.currentPincodeId ?? null,
+  };
+}
+
+function employeeToPermanentAddress(emp?: Employee): StructuredAddress {
+  if (!emp) return { ...EMPTY_STRUCTURED_ADDRESS };
+  return {
+    line1: emp.permanentAddressLine1 || "",
+    line2: emp.permanentAddressLine2 || "",
+    stateId: emp.permanentStateId ?? null,
+    cityId: emp.permanentCityId ?? null,
+    pincodeId: emp.permanentPincodeId ?? null,
+  };
+}
+
+function employeeToEmergencyAddress(emp?: Employee): StructuredAddress {
+  if (!emp) return { ...EMPTY_STRUCTURED_ADDRESS };
+  return {
+    line1: emp.emergencyAddressLine1 || "",
+    line2: emp.emergencyAddressLine2 || "",
+    stateId: emp.emergencyStateId ?? null,
+    cityId: emp.emergencyCityId ?? null,
+    pincodeId: emp.emergencyPincodeId ?? null,
+  };
+}
+
+function validateStructuredAddress(
+  addr: StructuredAddress,
+  prefix: string,
+  errors: Record<string, string>,
+) {
+  if (!addr.line1.trim()) errors[`${prefix}_line1`] = "Required";
+  if (!addr.stateId) errors[`${prefix}_stateId`] = "Required";
+  if (!addr.cityId) errors[`${prefix}_cityId`] = "Required";
+  if (!addr.pincodeId) errors[`${prefix}_pincodeId`] = "Required";
+}
+
+function mapAddressErrors(
+  prefix: string,
+  errors: Record<string, string>,
+): Partial<Record<keyof StructuredAddress, string>> {
+  return {
+    line1: errors[`${prefix}_line1`],
+    line2: errors[`${prefix}_line2`],
+    stateId: errors[`${prefix}_stateId`],
+    cityId: errors[`${prefix}_cityId`],
+    pincodeId: errors[`${prefix}_pincodeId`],
+  };
 }
 
 // ── Country Code Picker ───────────────────────────────────────────────────────
@@ -53,7 +135,7 @@ function CountryCodePicker({ value, onChange, hasError }: { value: string; onCha
           <ChevronDown className="w-3 h-3 text-muted-foreground" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-52 p-1">
+      <PopoverContent align="start" className="p-1 w-52">
         {COUNTRY_CODES.map(cc => (
           <button key={cc.code} type="button" onClick={() => { onChange(cc.code); setOpen(false); }}
             className={cn(
@@ -80,17 +162,115 @@ function Field({ label, required, error, helper, children }: {
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </Label>
       {children}
-      {error && <p className="text-[11px] text-red-500 flex items-center gap-1"><AlertCircle className="w-3 h-3 flex-shrink-0" />{error}</p>}
-      {helper && !error && <p className="text-[11px] text-muted-foreground">{helper}</p>}
+      {error && <p className="text-[10px] leading-tight text-red-500 flex items-center gap-1"><AlertCircle className="flex-shrink-0 w-2.5 h-2.5" />{error}</p>}
+      {helper && !error && <p className="text-[10px] leading-tight text-muted-foreground">{helper}</p>}
     </div>
   );
 }
 
-function SectionHead({ label, sub }: { label: string; sub?: string }) {
+function SectionHead({ label, sub, required }: { label: string; sub?: string; required?: boolean }) {
   return (
     <div className="mb-2.5 mt-0.5">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
+      <p className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center">
+        {label}
+        {required && <span className="text-red-500 ml-1">*</span>}
+      </p>
       {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+type FormTabId = "personal" | "employment" | "documents" | "permissions";
+
+const FORM_SECTIONS: Record<
+  FormTabId,
+  {
+    label: string;
+    icon: React.ElementType;
+    description: string;
+    bullets: string[];
+  }
+> = {
+  personal: {
+    label: "Personal Details",
+    icon: User,
+    description: "Complete employee personal information including:",
+    bullets: [
+      "Basic Information",
+      "Address Information",
+      "Account Credentials",
+      "Emergency Contact",
+    ],
+  },
+  employment: {
+    label: "Employment Details",
+    icon: Briefcase,
+    description: "Configure employment, role, and organizational mapping including:",
+    bullets: [
+      "Employment Information",
+      "Role & Access Level",
+      "Geography Mapping",
+      "Approval Chain",
+    ],
+  },
+  documents: {
+    label: "Documents",
+    icon: FileText,
+    description: "Upload and manage employee documents including:",
+    bullets: [
+      "Identity Documents",
+      "Employment Documents",
+      "Education & Banking Documents",
+      "Profile Completion Tracking",
+    ],
+  },
+  permissions: {
+    label: "Permissions",
+    icon: Shield,
+    description: "Manage system access and permission templates including:",
+    bullets: [
+      "Web Portal Access",
+      "Mobile App Access",
+      "Permission Templates",
+    ],
+  },
+};
+
+const TAB_TRIGGER_CLASS = cn(
+  "px-4 pb-3 pt-2 text-sm font-medium gap-2",
+  "data-[state=active]:text-base data-[state=active]:font-semibold data-[state=active]:text-brand-600",
+  "data-[state=active]:after:h-[3px] data-[state=active]:after:bg-brand-600",
+);
+
+function FormSectionHeader({ tab }: { tab: FormTabId }) {
+  const section = FORM_SECTIONS[tab];
+  const Icon = section.icon;
+  return (
+    <div className="mb-6 pt-1">
+      <div className="flex items-start gap-3.5">
+        <div className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center flex-shrink-0">
+          <Icon className="w-5 h-5 text-brand-600" />
+        </div>
+        <div className="min-w-0">
+          <h2 className="text-xl sm:text-2xl font-semibold text-foreground leading-tight tracking-tight">
+            {section.label}
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+            {section.description}
+          </p>
+          <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1">
+            {section.bullets.map((item) => (
+              <li
+                key={item}
+                className="text-xs text-muted-foreground flex items-center gap-1.5"
+              >
+                <span className="w-1 h-1 rounded-full bg-brand-400 flex-shrink-0" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }
@@ -102,28 +282,37 @@ interface ApprovalLevel { uid: string; empId: number | null; name: string; role:
 interface GeoMappingRow {
   geoZone: string;
   geoRegion: string;
+  geoState: string;
   geoArea: string;
   territory: string;
-  geoLocality: string;
+  geoDistrict: string;
+  geoCity: string;
+  geoTown: string;
 }
 
 function emptyGeoMapping(): GeoMappingRow {
   return {
     geoZone: "",
     geoRegion: "",
+    geoState: "",
     geoArea: "",
     territory: "",
-    geoLocality: "",
+    geoDistrict: "",
+    geoCity: "",
+    geoTown: "",
   };
 }
 
-function toGeoMappingRow(mapping?: Partial<GeoMappingRow> | null): GeoMappingRow {
+function toGeoMappingRow(mapping?: Partial<GeoMappingRow> & { geoLocality?: string } | null): GeoMappingRow {
   return {
     geoZone: mapping?.geoZone || "",
     geoRegion: mapping?.geoRegion || "",
+    geoState: mapping?.geoState || "",
     geoArea: mapping?.geoArea || "",
     territory: mapping?.territory || "",
-    geoLocality: mapping?.geoLocality || "",
+    geoDistrict: mapping?.geoDistrict || "",
+    geoCity: mapping?.geoCity || "",
+    geoTown: mapping?.geoTown || mapping?.geoLocality || "",
   };
 }
 
@@ -167,11 +356,11 @@ function AC({ label, value, onChange, options, placeholder, required, error, dis
         <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
           <div className="p-1.5 border-b border-border">
             <Input placeholder="Search…" value={q} onChange={e => setQ(e.target.value)}
-              className="h-7 text-xs focus-visible:ring-0" autoFocus />
+              className="text-xs h-7 focus-visible:ring-0" autoFocus />
           </div>
-          <div className="max-h-48 overflow-y-auto py-1">
+          <div className="py-1 overflow-y-auto max-h-48">
             {filtered.length === 0
-              ? <p className="px-3 py-4 text-center text-xs text-muted-foreground">No options</p>
+              ? <p className="px-3 py-4 text-xs text-center text-muted-foreground">No options</p>
               : filtered.map(opt => (
                 <button key={opt.value} onClick={() => { onChange(opt.value); setOpen(false); setQ(""); }}
                   className={cn(
@@ -182,7 +371,7 @@ function AC({ label, value, onChange, options, placeholder, required, error, dis
                     <span className="block truncate">{opt.label}</span>
                     {opt.sub && <span className="text-[10px] text-muted-foreground">{opt.sub}</span>}
                   </div>
-                  {selected?.value === opt.value && <Check className="w-3 h-3 text-brand-600 flex-shrink-0" />}
+                  {selected?.value === opt.value && <Check className="flex-shrink-0 w-3 h-3 text-brand-600" />}
                 </button>
               ))}
           </div>
@@ -302,7 +491,7 @@ function HierarchyInfoCard({ roleType, salesType, role, geoFields, accent }: Hie
   if (roleType === "Admin User") {
     return (
       <div className={cn("rounded-lg border px-3 py-2.5 text-xs", accent.bg, accent.border, accent.text)}>
-        <p className="font-semibold mb-1">Admin User</p>
+        <p className="mb-1 font-semibold">Admin User</p>
         <p className="leading-relaxed">
           Organisation-wide access within their department.{" "}
           <strong>No geography mapping required.</strong> Only a reporting manager can be assigned.
@@ -359,7 +548,7 @@ function HierarchyInfoCard({ roleType, salesType, role, geoFields, accent }: Hie
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">Selected Role</p>
               <p className={cn("font-semibold text-[11px]", accent.text)}>
                 {roleObj?.fullName || role}{" "}
-                <span className="opacity-60 font-normal">({role})</span>
+                <span className="font-normal opacity-60">({role})</span>
               </p>
             </div>
             <div>
@@ -386,19 +575,215 @@ function HierarchyInfoCard({ roleType, salesType, role, geoFields, accent }: Hie
 
 // ── Permissions Tab (metadata-driven accordion) ────────────────────────────────
 
+// ── Mapping and Conversion Helpers ──────────────────────────────────────────
+const getRoleTemplateId = (empRoleName: string, allRolesMaster: Role[]): number | null => {
+  const normalized = empRoleName.toLowerCase().trim();
+  let matchName = normalized;
+  if (normalized === "nsm") matchName = "sales manager";
+  else if (normalized === "procurement head") matchName = "procurement lead";
+  else if (normalized === "accounts manager") matchName = "accountant";
+
+  const match = allRolesMaster.find(r => r.roleName.toLowerCase().trim() === matchName);
+  return match ? match.id : null;
+};
+
+const convertToSets = (perms: UserPermissions) => {
+  const webSet = new Set<string>();
+  const mobileSet = new Set<string>();
+  if (perms) {
+    if (perms.web) {
+      Object.entries(perms.web).forEach(([modId, submodules]) => {
+        if (submodules) {
+          Object.entries(submodules).forEach(([subId, actions]) => {
+            if (actions) {
+              Object.entries(actions).forEach(([action, value]) => {
+                if (value) {
+                  webSet.add(`${modId}.${subId}.${action}`);
+                }
+              });
+            }
+          });
+        }
+      });
+    }
+    if (perms.mobile) {
+      Object.entries(perms.mobile).forEach(([grpId, features]) => {
+        if (features) {
+          Object.entries(features).forEach(([featId, actions]) => {
+            if (actions) {
+              Object.entries(actions).forEach(([action, value]) => {
+                if (value) {
+                  mobileSet.add(`${grpId}.${featId}.${action}`);
+                }
+              });
+            }
+          });
+        }
+      });
+    }
+  }
+  return { webSet, mobileSet };
+};
+
+const convertFromSets = (webSet: Set<string>, mobileSet: Set<string>): UserPermissions => {
+  const perms = defaultPermissions();
+  webSet.forEach(key => {
+    const parts = key.split(".");
+    if (parts.length >= 3) {
+      const modId = parts[0];
+      const subId = parts[1];
+      const action = parts[2] as WebAction;
+      if (!perms.web[modId]) perms.web[modId] = {};
+      if (!perms.web[modId][subId]) perms.web[modId][subId] = defaultSubPerm();
+      perms.web[modId][subId][action] = true;
+    }
+  });
+  mobileSet.forEach(key => {
+    const parts = key.split(".");
+    if (parts.length >= 3) {
+      const grpId = parts[0];
+      const featId = parts[1];
+      const action = parts[2] as MobileAction;
+      if (!perms.mobile[grpId]) perms.mobile[grpId] = {};
+      if (!perms.mobile[grpId][featId]) perms.mobile[grpId][featId] = defaultMobilePerm();
+      perms.mobile[grpId][featId][action] = true;
+    }
+  });
+  return perms;
+};
+
 const ALL_WEB_ACTIONS: WebAction[]    = ["view","create","edit","delete","approve","export","import"];
 const ALL_MOBILE_ACTIONS: MobileAction[] = ["view","create","edit","delete","approve"];
 const WEB_ACTION_LABELS: Record<WebAction, string>    = { view:"View", create:"Create", edit:"Edit", delete:"Delete", approve:"Approve", export:"Export", import:"Import" };
 const MOBILE_ACTION_LABELS: Record<MobileAction, string> = { view:"View", create:"Create", edit:"Edit", delete:"Delete", approve:"Approve" };
 
-function PermissionsTab({ perms, onChange, role }: {
-  perms: UserPermissions;
-  onChange: (p: UserPermissions) => void;
+
+function PermissionsTab({
+  activeWebPerms,
+  setActiveWebPerms,
+  activeMobilePerms,
+  setActiveMobilePerms,
+  role,
+  roleType,
+}: {
+  activeWebPerms: Set<string>;
+  setActiveWebPerms: React.Dispatch<React.SetStateAction<Set<string>>>;
+  activeMobilePerms: Set<string>;
+  setActiveMobilePerms: React.Dispatch<React.SetStateAction<Set<string>>>;
   role?: string;
+  roleType?: string;
 }) {
-  const [section, setSection] = useState<"web" | "mobile">("web");
+  const [section, setSection] = useState<"web" | "mobile" | string>("web");
   const [openMods, setOpenMods] = useState<Set<string>>(new Set([PERMISSION_REGISTRY[0].id]));
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set([MOBILE_PERMISSION_REGISTRY[0].id]));
+
+  const [pendingSection, setPendingSection] = useState<"web" | "mobile" | null>(null);
+  const [showPlatformWarning, setShowPlatformWarning] = useState(false);
+
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [pendingTemplateId, setPendingTemplateId] = useState("");
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  // Load active templates
+  const templates = loadNewPermissionTemplates().filter(t => t.status === "Active");
+  const templateOptions = templates.map(t => ({
+    value: t.id,
+    label: t.templateName,
+  }));
+
+  const hasCheckedPermissions = () => {
+    return activeWebPerms.size > 0 || activeMobilePerms.size > 0;
+  };
+
+  const applyTemplate = (tpl: PermissionTemplate) => {
+    setSelectedTemplateId(tpl.id);
+    setSection(tpl.accessType);
+    
+    if (tpl.accessType === "web") {
+      const webSet = new Set<string>();
+      tpl.webPermissions.forEach(p => {
+        webSet.add(`${p.moduleKey}.${p.actionKey}`);
+      });
+      setActiveWebPerms(webSet);
+      setActiveMobilePerms(new Set());
+    } else {
+      const mobileSet = new Set<string>();
+      tpl.mobilePermissions.forEach(p => {
+        mobileSet.add(`${p.moduleKey}.${p.actionKey}`);
+      });
+      setActiveMobilePerms(mobileSet);
+      setActiveWebPerms(new Set());
+    }
+  };
+
+  const handleTemplateSelect = (val: string) => {
+    const tpl = templates.find(t => t.id === val);
+    if (!tpl) return;
+
+    if (hasCheckedPermissions()) {
+      setPendingTemplateId(val);
+      setShowConfirmModal(true);
+    } else {
+      applyTemplate(tpl);
+    }
+  };
+
+  const confirmTemplateChange = () => {
+    const tpl = templates.find(t => t.id === pendingTemplateId);
+    if (tpl) {
+      applyTemplate(tpl);
+    }
+    setPendingTemplateId("");
+    setShowConfirmModal(false);
+  };
+
+  const cancelTemplateChange = () => {
+    setPendingTemplateId("");
+    setShowConfirmModal(false);
+  };
+
+  const templateAccessType = useMemo(() => {
+    if (!role) return "web";
+    const allRolesMaster = loadRoles();
+    const templatesList = loadPermissionTemplates();
+    const templateId = getRoleTemplateId(role, allRolesMaster);
+    if (templateId && templatesList[templateId]) {
+      return templatesList[templateId].accessType;
+    }
+    return "web";
+  }, [role]);
+
+  const visibleTabs = useMemo(() => {
+    const allTabs = [ ["web", "Web Portal"], ["mobile", "Mobile App"] ] as const;
+    if (roleType === "Field User") {
+      const access = templateAccessType === "none" ? "web" : templateAccessType;
+      return allTabs.filter(([key]) => key === access);
+    }
+    return allTabs;
+  }, [roleType, templateAccessType]);
+
+  useEffect(() => {
+    if (visibleTabs.length === 1 && section !== visibleTabs[0][0]) {
+      setSection(visibleTabs[0][0]);
+    }
+  }, [visibleTabs, section]);
+
+  // Set default section based on template accessType on load/role change
+  useEffect(() => {
+    if (role) {
+      const allRolesMaster = loadRoles();
+      const templates = loadPermissionTemplates();
+      const templateId = getRoleTemplateId(role, allRolesMaster);
+      if (templateId && templates[templateId]) {
+        const template = templates[templateId];
+        if (template.accessType === "mobile") {
+          setSection("mobile");
+        } else if (template.accessType === "web") {
+          setSection("web");
+        }
+      }
+    }
+  }, [role]);
 
   const toggleMod = (id: string) => setOpenMods((s) => {
     const next = new Set(s);
@@ -411,137 +796,228 @@ function PermissionsTab({ perms, onChange, role }: {
     return next;
   });
 
-  const getSub = (modId: string, subId: string): SubmodulePermission =>
-    perms.web?.[modId]?.[subId] || defaultSubPerm();
-  const getMob = (grpId: string, featId: string): MobileFeaturePermission =>
-    perms.mobile?.[grpId]?.[featId] || defaultMobilePerm();
+  const toggleWebPerm = (modId: string, subId: string, action: string) => {
+    const key = `${modId}.${subId}.${action}`;
+    setActiveWebPerms((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
-  const setSubAction = (modId: string, subId: string, action: WebAction, val: boolean) =>
-    onChange({ ...perms, web: { ...perms.web, [modId]: { ...(perms.web?.[modId] || {}), [subId]: { ...getSub(modId, subId), [action]: val } } } });
-
-  const setMobAction = (grpId: string, featId: string, action: MobileAction, val: boolean) =>
-    onChange({ ...perms, mobile: { ...perms.mobile, [grpId]: { ...(perms.mobile?.[grpId] || {}), [featId]: { ...getMob(grpId, featId), [action]: val } } } });
+  const toggleMobilePerm = (grpId: string, featId: string, action: string) => {
+    const key = `${grpId}.${featId}.${action}`;
+    setActiveMobilePerms((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   const grantMod = (mod: PermModule) => {
-    const updated = { ...(perms.web || {}) };
-    updated[mod.id] = {};
-    mod.submodules.forEach((sub) => {
-      updated[mod.id][sub.id] = {
-        view: sub.actions.includes("view"),
-        create: sub.actions.includes("create"),
-        edit: sub.actions.includes("edit"),
-        delete: sub.actions.includes("delete"),
-        approve: sub.actions.includes("approve"),
-        export: sub.actions.includes("export"),
-        import: sub.actions.includes("import"),
-      };
-    });
-    onChange({ ...perms, web: updated });
-  };
-  const revokeMod = (mod: PermModule) => {
-    const updated = { ...(perms.web || {}) };
-    updated[mod.id] = {};
-    mod.submodules.forEach((sub) => {
-      updated[mod.id][sub.id] = defaultSubPerm();
-    });
-    onChange({ ...perms, web: updated });
-  };
-  const grantGroup = (grp: MobileGroupDef) => {
-    const updated = { ...(perms.mobile || {}) };
-    updated[grp.id] = {};
-    grp.features.forEach((feat) => {
-      updated[grp.id][feat.id] = {
-        view: feat.actions.includes("view"),
-        create: feat.actions.includes("create"),
-        edit: feat.actions.includes("edit"),
-        delete: feat.actions.includes("delete"),
-        approve: feat.actions.includes("approve"),
-      };
-    });
-    onChange({ ...perms, mobile: updated });
-  };
-  const revokeGroup = (grp: MobileGroupDef) => {
-    const updated = { ...(perms.mobile || {}) };
-    updated[grp.id] = {};
-    grp.features.forEach((feat) => {
-      updated[grp.id][feat.id] = defaultMobilePerm();
-    });
-    onChange({ ...perms, mobile: updated });
-  };
-  const grantAll = () => {
-    const next: UserPermissions = { web: {}, mobile: {} };
-    PERMISSION_REGISTRY.forEach((mod) => {
-      next.web[mod.id] = {};
+    setActiveWebPerms((prev) => {
+      const next = new Set(prev);
       mod.submodules.forEach((sub) => {
-        next.web[mod.id][sub.id] = {
-          view: sub.actions.includes("view"),
-          create: sub.actions.includes("create"),
-          edit: sub.actions.includes("edit"),
-          delete: sub.actions.includes("delete"),
-          approve: sub.actions.includes("approve"),
-          export: sub.actions.includes("export"),
-          import: sub.actions.includes("import"),
-        };
+        sub.actions.forEach((action) => {
+          next.add(`${mod.id}.${sub.id}.${action}`);
+        });
       });
+      return next;
     });
-    MOBILE_PERMISSION_REGISTRY.forEach((grp) => {
-      next.mobile[grp.id] = {};
-      grp.features.forEach((feat) => {
-        next.mobile[grp.id][feat.id] = {
-          view: feat.actions.includes("view"),
-          create: feat.actions.includes("create"),
-          edit: feat.actions.includes("edit"),
-          delete: feat.actions.includes("delete"),
-          approve: feat.actions.includes("approve"),
-        };
-      });
-    });
-    onChange(next);
   };
-  const revokeAll = () => onChange(defaultPermissions());
+
+  const revokeMod = (mod: PermModule) => {
+    setActiveWebPerms((prev) => {
+      const next = new Set(prev);
+      mod.submodules.forEach((sub) => {
+        sub.actions.forEach((action) => {
+          next.delete(`${mod.id}.${sub.id}.${action}`);
+        });
+      });
+      return next;
+    });
+  };
+
+  const grantGroup = (grp: MobileGroupDef) => {
+    setActiveMobilePerms((prev) => {
+      const next = new Set(prev);
+      grp.features.forEach((feat) => {
+        feat.actions.forEach((action) => {
+          next.add(`${grp.id}.${feat.id}.${action}`);
+        });
+      });
+      return next;
+    });
+  };
+
+  const revokeGroup = (grp: MobileGroupDef) => {
+    setActiveMobilePerms((prev) => {
+      const next = new Set(prev);
+      grp.features.forEach((feat) => {
+        feat.actions.forEach((action) => {
+          next.delete(`${grp.id}.${feat.id}.${action}`);
+        });
+      });
+      return next;
+    });
+  };
+
+  const grantAll = () => {
+    const webSet = new Set<string>();
+    PERMISSION_REGISTRY.forEach((mod) => {
+      mod.submodules.forEach((sub) => {
+        sub.actions.forEach((action) => {
+          webSet.add(`${mod.id}.${sub.id}.${action}`);
+        });
+      });
+    });
+
+    const mobileSet = new Set<string>();
+    MOBILE_PERMISSION_REGISTRY.forEach((grp) => {
+      grp.features.forEach((feat) => {
+        feat.actions.forEach((action) => {
+          mobileSet.add(`${grp.id}.${feat.id}.${action}`);
+        });
+      });
+    });
+
+    setActiveWebPerms(webSet);
+    setActiveMobilePerms(mobileSet);
+  };
+
+  const revokeAll = () => {
+    setActiveWebPerms(new Set());
+    setActiveMobilePerms(new Set());
+  };
 
   const modHasAny = (mod: PermModule) =>
-    mod.submodules.some((sub) => ALL_WEB_ACTIONS.some((action) => sub.actions.includes(action) && Boolean((getSub(mod.id, sub.id) as any)[action])));
+    mod.submodules.some((sub) =>
+      ALL_WEB_ACTIONS.some(
+        (action) =>
+          sub.actions.includes(action) &&
+          activeWebPerms.has(`${mod.id}.${sub.id}.${action}`)
+      )
+    );
+
   const groupHasAny = (grp: MobileGroupDef) =>
-    grp.features.some((feat) => ALL_MOBILE_ACTIONS.some((action) => feat.actions.includes(action) && Boolean((getMob(grp.id, feat.id) as any)[action])));
+    grp.features.some((feat) =>
+      ALL_MOBILE_ACTIONS.some(
+        (action) =>
+          feat.actions.includes(action) &&
+          activeMobilePerms.has(`${grp.id}.${feat.id}.${action}`)
+      )
+    );
+
+  const handleSectionChange = (targetSection: "web" | "mobile") => {
+    if (section === targetSection) return;
+    const hasPerms = section === "web" ? activeWebPerms.size > 0 : activeMobilePerms.size > 0;
+    if (hasPerms) {
+      setPendingSection(targetSection);
+      setShowPlatformWarning(true);
+    } else {
+      setSection(targetSection);
+    }
+  };
+
+  const confirmSectionChange = () => {
+    if (!pendingSection) return;
+    if (section === "web") {
+      setActiveWebPerms(new Set());
+    } else {
+      setActiveMobilePerms(new Set());
+    }
+    setSection(pendingSection);
+    setPendingSection(null);
+    setShowPlatformWarning(false);
+  };
+
+  const cancelSectionChange = () => {
+    setPendingSection(null);
+    setShowPlatformWarning(false);
+  };
+
+  const handleLoadRoleDefaults = () => {
+    if (!role) return;
+    const allRolesMaster = loadRoles();
+    const templates = loadPermissionTemplates();
+    const templateId = getRoleTemplateId(role, allRolesMaster);
+    if (templateId && templates[templateId]) {
+      const template = templates[templateId];
+      const webSet = new Set<string>();
+      if (Array.isArray(template.webPermissions)) {
+        template.webPermissions.forEach((p: any) => {
+          const mKey = p.moduleKey || p.module || p.moduleId || p.moduleName;
+          const aKey = p.actionKey || p.action || p.permission;
+          if (mKey && aKey) webSet.add(`${mKey}.${aKey}`);
+        });
+      }
+      const mobileSet = new Set<string>();
+      if (Array.isArray(template.mobilePermissions)) {
+        template.mobilePermissions.forEach((p: any) => {
+          const mKey = p.moduleKey || p.module || p.moduleId || p.moduleName;
+          const aKey = p.actionKey || p.action || p.permission;
+          if (mKey && aKey) mobileSet.add(`${mKey}.${aKey}`);
+        });
+      }
+      setActiveWebPerms(webSet);
+      setActiveMobilePerms(mobileSet);
+      if (template.accessType === "mobile") {
+        setSection("mobile");
+      } else if (template.accessType === "web") {
+        setSection("web");
+      }
+    } else {
+      const defaults = roleDefaultPermissions(role);
+      const converted = convertToSets(defaults);
+      setActiveWebPerms(converted.webSet);
+      setActiveMobilePerms(converted.mobileSet);
+    }
+  };
 
   return (
     <div className="space-y-3">
       {role && (
-        <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 px-3 py-2.5">
-          <div>
-            <p className="text-xs font-semibold text-foreground">
-              Role: <span className="text-brand-700">{role}</span>
-            </p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Load suggested permissions for this role. You can adjust individually after loading.
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => onChange(roleDefaultPermissions(role))}>
-              Load Role Defaults
-            </Button>
-            <button type="button" onClick={grantAll} className="text-[10px] font-semibold px-2 py-1 rounded bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors">
-              Grant All
-            </button>
-            <button type="button" onClick={revokeAll} className="text-[10px] font-semibold px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
-              Revoke All
-            </button>
-          </div>
+        <div className="inline-flex items-center rounded-xl border border-border bg-muted/20 px-3.5 py-1.5">
+          <p className="text-xs font-semibold text-foreground">
+            Role: <span className="text-brand-700">{role}</span>
+          </p>
         </div>
       )}
 
-      <div className="flex gap-1.5 pb-3 border-b border-border">
-        {([ ["web", "Web Portal"], ["mobile", "Mobile App"] ] as const).map(([key, label]) => (
-          <button key={key} type="button" onClick={() => setSection(key)}
-            className={cn(
-              "flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-medium transition-colors border",
-              section === key ? "bg-brand-600 text-white border-brand-600" : "border-border text-muted-foreground hover:bg-muted/40",
-            )}>
-            {key === "web" ? <Monitor className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
-            {label} Permissions
-          </button>
-        ))}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-3 border-b border-border">
+        <div className="flex gap-1.5">
+          {visibleTabs.map(([key, label]) => (
+            <button key={key} type="button" onClick={() => handleSectionChange(key as "web" | "mobile")}
+              className={cn(
+                "flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-medium transition-colors border",
+                section === key ? "bg-brand-600 text-white border-brand-600" : "border-border text-muted-foreground hover:bg-muted/40",
+              )}>
+              {key === "web" ? <Monitor className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
+              {label} Permissions
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <Label className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
+            Permission Template
+          </Label>
+          <div className="w-56">
+            <AutocompleteSelect
+              placeholder="Select permission template"
+              options={templateOptions}
+              value={selectedTemplateId}
+              onChange={handleTemplateSelect}
+            />
+          </div>
+        </div>
       </div>
 
       {section === "web" && (
@@ -550,7 +1026,7 @@ function PermissionsTab({ perms, onChange, role }: {
             const expanded = openMods.has(mod.id);
             const hasAny = modHasAny(mod);
             return (
-              <div key={mod.id} className="border border-border rounded-xl overflow-hidden">
+              <div key={mod.id} className="overflow-hidden border border-border rounded-xl">
                 <div className={cn(
                   "flex items-center justify-between px-3 py-2.5 cursor-pointer transition-colors select-none bg-white",
                   expanded ? "border-b border-border" : hasAny ? "hover:bg-brand-50/40" : "hover:bg-muted/20",
@@ -562,33 +1038,32 @@ function PermissionsTab({ perms, onChange, role }: {
                     {hasAny && !expanded && <span className="text-[9px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-semibold">configured</span>}
                   </div>
                   <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                    <button type="button" onClick={() => grantMod(mod)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors">
+                    <button type="button" onClick={() => grantMod(mod)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-660 hover:bg-brand-100 transition-colors">
                       Grant All
                     </button>
-                    <button type="button" onClick={() => revokeMod(mod)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
+                    <button type="button" onClick={() => revokeMod(mod)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-105 transition-colors">
                       Revoke All
                     </button>
                   </div>
                 </div>
                 {expanded && (
-                  <div className="space-y-2.5 p-3">
-                    {mod.submodules.map((sub, si) => {
-                      const sp = getSub(mod.id, sub.id);
+                  <div className="space-y-2.5 p-3 bg-slate-50/30">
+                    {mod.submodules.map((sub) => {
                       const actions = ALL_WEB_ACTIONS.filter((action) => sub.actions.includes(action));
-                      const rowActive = actions.some((action) => Boolean((sp as any)[action]));
+                      const rowActive = actions.some((action) => activeWebPerms.has(`${mod.id}.${sub.id}.${action}`));
                       return (
-                        <div key={sub.id} className={cn("rounded-xl border border-border/60 bg-muted/10 px-3 py-2.5 transition-colors", rowActive && "bg-brand-50/30") }>
+                        <div key={sub.id} className={cn("rounded-xl border border-border bg-white px-4 py-3 transition-colors", rowActive && "bg-brand-50/10 border-brand-100")}>
                           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
                             <div className="min-w-0 lg:w-56 lg:flex-shrink-0">
                               <p className="text-[11px] font-semibold text-foreground">{sub.label}</p>
-                              <p className="text-[10px] text-muted-foreground">Only available permissions are shown</p>
+                              <p className="text-[9px] text-muted-foreground mt-0.5">Available permissions</p>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2 lg:pl-4">
+                            <div className="flex flex-wrap items-center gap-1.5 lg:pl-4">
                               {actions.map((action) => {
-                                const checked = Boolean((sp as any)[action]);
+                                const checked = activeWebPerms.has(`${mod.id}.${sub.id}.${action}`);
                                 return (
-                                  <label key={action} className={cn("inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-medium cursor-pointer transition-colors", checked ? "border-brand-300 bg-brand-50 text-brand-700" : "border-border text-muted-foreground hover:bg-muted/40") }>
-                                    <input type="checkbox" checked={checked} onChange={(e) => setSubAction(mod.id, sub.id, action, e.target.checked)} className="w-3.5 h-3.5 rounded accent-brand-600 cursor-pointer" />
+                                  <label key={action} className={cn("inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-medium cursor-pointer transition-colors select-none", checked ? "border-brand-300 bg-brand-50 text-brand-700 font-semibold" : "border-border text-muted-foreground hover:bg-muted/40")}>
+                                    <input type="checkbox" checked={checked} onChange={() => toggleWebPerm(mod.id, sub.id, action)} className="w-3.5 h-3.5 rounded accent-brand-650 cursor-pointer" />
                                     <span>{WEB_ACTION_LABELS[action]}</span>
                                   </label>
                                 );
@@ -609,14 +1084,14 @@ function PermissionsTab({ perms, onChange, role }: {
       {section === "mobile" && (
         <div className="space-y-1.5">
           <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground px-0.5 pb-1">
-            <Info className="w-3 h-3 flex-shrink-0" />
+            <Info className="flex-shrink-0 w-3 h-3" />
             Mobile permissions primarily apply to field roles: DO, Intern, FMO, TM, ASM, KAM, RSM, ZSM.
           </p>
           {MOBILE_PERMISSION_REGISTRY.map((grp) => {
             const expanded = openGroups.has(grp.id);
             const hasAny = groupHasAny(grp);
             return (
-              <div key={grp.id} className="border border-border rounded-xl overflow-hidden">
+              <div key={grp.id} className="overflow-hidden border border-border rounded-xl">
                 <div className={cn(
                   "flex items-center justify-between px-3 py-2.5 cursor-pointer transition-colors select-none bg-white",
                   expanded ? "border-b border-border" : hasAny ? "hover:bg-brand-50/40" : "hover:bg-muted/20",
@@ -628,33 +1103,32 @@ function PermissionsTab({ perms, onChange, role }: {
                     {hasAny && !expanded && <span className="text-[9px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-semibold">configured</span>}
                   </div>
                   <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                    <button type="button" onClick={() => grantGroup(grp)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors">
+                    <button type="button" onClick={() => grantGroup(grp)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-660 hover:bg-brand-100 transition-colors">
                       Grant All
                     </button>
-                    <button type="button" onClick={() => revokeGroup(grp)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
+                    <button type="button" onClick={() => revokeGroup(grp)} className="text-[10px] font-semibold px-2 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-105 transition-colors">
                       Revoke All
                     </button>
                   </div>
                 </div>
                 {expanded && (
-                  <div className="space-y-2.5 p-3">
-                    {grp.features.map((feat, fi) => {
-                      const fp = getMob(grp.id, feat.id);
+                  <div className="space-y-2.5 p-3 bg-slate-50/30">
+                    {grp.features.map((feat) => {
                       const actions = ALL_MOBILE_ACTIONS.filter((action) => feat.actions.includes(action));
-                      const rowActive = actions.some((action) => Boolean((fp as any)[action]));
+                      const rowActive = actions.some((action) => activeMobilePerms.has(`${grp.id}.${feat.id}.${action}`));
                       return (
-                        <div key={feat.id} className={cn("rounded-xl border border-border/60 bg-muted/10 px-3 py-2.5 transition-colors", rowActive && "bg-brand-50/30") }>
+                        <div key={feat.id} className={cn("rounded-xl border border-border bg-white px-4 py-3 transition-colors", rowActive && "bg-brand-50/10 border-brand-100")}>
                           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
                             <div className="min-w-0 lg:w-56 lg:flex-shrink-0">
                               <p className="text-[11px] font-semibold text-foreground">{feat.label}</p>
-                              <p className="text-[10px] text-muted-foreground">Only available permissions are shown</p>
+                              <p className="text-[9px] text-muted-foreground mt-0.5">Available permissions</p>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2 lg:pl-4">
+                            <div className="flex flex-wrap items-center gap-1.5 lg:pl-4">
                               {actions.map((action) => {
-                                const checked = Boolean((fp as any)[action]);
+                                const checked = activeMobilePerms.has(`${grp.id}.${feat.id}.${action}`);
                                 return (
-                                  <label key={action} className={cn("inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-medium cursor-pointer transition-colors", checked ? "border-brand-300 bg-brand-50 text-brand-700" : "border-border text-muted-foreground hover:bg-muted/40") }>
-                                    <input type="checkbox" checked={checked} onChange={(e) => setMobAction(grp.id, feat.id, action, e.target.checked)} className="w-3.5 h-3.5 rounded accent-brand-600 cursor-pointer" />
+                                  <label key={action} className={cn("inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-medium cursor-pointer transition-colors select-none", checked ? "border-brand-300 bg-brand-50 text-brand-700 font-semibold" : "border-border text-muted-foreground hover:bg-muted/40")}>
+                                    <input type="checkbox" checked={checked} onChange={() => toggleMobilePerm(grp.id, feat.id, action)} className="w-3.5 h-3.5 rounded accent-brand-650 cursor-pointer" />
                                     <span>{MOBILE_ACTION_LABELS[action]}</span>
                                   </label>
                                 );
@@ -671,10 +1145,73 @@ function PermissionsTab({ perms, onChange, role }: {
           })}
         </div>
       )}
+
+      {/* Warning Modal for switching platform tabs */}
+      <Dialog open={showPlatformWarning} onOpenChange={(v) => !v && cancelSectionChange()}>
+        <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-5 pt-5 pb-3 border-b border-border/80">
+            <DialogTitle className="text-sm font-semibold flex items-center gap-2 text-red-650">
+              <AlertCircle className="w-4 h-4 text-red-650" />
+              Confirm Platform Switch
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Changing the access type will reset existing selections.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="px-5 py-4 text-xs text-foreground leading-normal">
+            {section === "web"
+              ? "Switching to Mobile permissions will clear all Web Portal permissions for this employee. Do you want to continue?"
+              : "Switching to Web Portal permissions will clear all Mobile permissions for this employee. Do you want to continue?"}
+          </div>
+
+          <DialogFooter className="px-5 py-3 border-t border-border/80 bg-muted/20 flex items-center justify-end gap-2">
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={cancelSectionChange}>
+              Cancel
+            </Button>
+            <Button size="sm" className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700" onClick={confirmSectionChange}>
+              Yes, Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Warning Dialog for Permission Template Overwrite */}
+      <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-50 border border-red-200">
+                <AlertCircle className="w-4 h-4 text-red-500" />
+              </div>
+              Overwrite Permissions?
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-xs">
+              Changing the permission template will replace current permissions. Do you want to continue?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={cancelTemplateChange}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white"
+              onClick={confirmTemplateChange}
+            >
+              Yes, Overwrite
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-
 
 // -- Geo helpers --------------------------------------------------------------
 
@@ -690,20 +1227,24 @@ function isDescendantOf(node: GeoNode, ancestorLevel: GeoLevel, ancestorName: st
 
 // ── Main Form ─────────────────────────────────────────────────────────────────
 
-export default function EmployeeForm({ mode, employee, onSave, onCancel, departments }: EmployeeFormProps) {
+export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onCancel, departments }: EmployeeFormProps) {
   const allEmployees = loadEmployees();
   const newEmpId = mode === "add" ? nextEmployeeId(allEmployees) : (employee?.employeeId || "");
   const initialGeoMappings = (() => {
     if (employee?.geoMappings?.length) {
       return employee.geoMappings.map((mapping) => toGeoMappingRow(mapping));
     }
-    if (employee?.geoZone || employee?.geoRegion || employee?.geoArea || employee?.territory || employee?.geoLocality) {
+    if (employee?.geoZone || employee?.geoRegion || employee?.geoState || employee?.geoArea || employee?.territory || employee?.geoTown || employee?.geoLocality) {
       return [
         toGeoMappingRow({
           geoZone: employee.geoZone,
           geoRegion: employee.geoRegion,
+          geoState: employee.geoState,
           geoArea: employee.geoArea,
           territory: employee.territory,
+          geoDistrict: employee.geoDistrict,
+          geoCity: employee.geoCity,
+          geoTown: employee.geoTown,
           geoLocality: employee.geoLocality,
         }),
       ];
@@ -716,28 +1257,53 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
   // Geography master data (loaded once)
   const geoNodes = useMemo(() => loadGeoNodes().filter(n => n.status === "active"), []);
 
-  const [form, setFormState] = useState<Partial<Employee>>(employee || {
+  const [form, setFormState] = useState<EmployeeFormState>(employee || {
     firstName: "", lastName: "", fullName: "",
     email: "", mobile: "", countryCode: "+91", alternativeMobile: "",
+    password: "",
     bloodGroup: "Unknown", gender: undefined, dob: "",
-    currentAddress: "", permanentAddress: "",
     emergencyContactName: "", emergencyContactMobile: "",
-    emergencyContactRelation: "Spouse", emergencyContactAddress: "",
+    emergencyContactRelation: "Spouse",
     departmentId: null, employeeType: undefined,
     roleType: undefined, salesType: undefined,
     roleId: null, role: "",
     reportingManagerId: null,
     status: "draft", joiningDate: todayStr(),
-    geoZone: "", geoRegion: "", geoArea: "", territory: "", geoLocality: "",
+    geoZone: "", geoRegion: "", geoState: "", geoArea: "", territory: "", geoDistrict: "", geoCity: "", geoTown: "",
     approvalLevel1Id: null, approvalLevel1Name: "", approvalLevel1Role: "",
     approvalLevel2Id: null, approvalLevel2Name: "", approvalLevel2Role: "",
     approvalLevel3Id: null, approvalLevel3Name: "", approvalLevel3Role: "",
   });
-
-  const [perms, setPerms] = useState<UserPermissions>(initPerms);
+  const converted = useMemo(() => convertToSets(initPerms), [initPerms]);
+  const [activeWebPerms, setActiveWebPerms] = useState<Set<string>>(converted.webSet);
+  const [activeMobilePerms, setActiveMobilePerms] = useState<Set<string>>(converted.mobileSet);
+  const [pendingRoleId, setPendingRoleId] = useState<number | null>(null);
+  const [showRoleChangeWarning, setShowRoleChangeWarning] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [sameAddress, setSameAddress] = useState(false);
+  const [currentAddr, setCurrentAddr] = useState<StructuredAddress>(() =>
+    employeeToCurrentAddress(employee),
+  );
+  const [permanentAddr, setPermanentAddr] = useState<StructuredAddress>(() =>
+    employeeToPermanentAddress(employee),
+  );
+  const [emergencyAddr, setEmergencyAddr] = useState<StructuredAddress>(() =>
+    employeeToEmergencyAddress(employee),
+  );
+  const [sameAddress, setSameAddress] = useState(() => {
+    if (employee?.sameAsCurrentAddress) return true;
+    if (!employee) return false;
+    return structuredAddressesEqual(
+      employeeToCurrentAddress(employee),
+      employeeToPermanentAddress(employee),
+    );
+  });
   const [geoMappings, setGeoMappings] = useState<GeoMappingRow[]>(initialGeoMappings);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [activeTab, setActiveTab] = useState("personal");
+  const [documents, setDocuments] = useState<EmployeeDocument[]>(() => employee?.documents || []);
+  const [statusConfirm, setStatusConfirm] = useState<"active" | "inactive" | null>(null);
+  const [statusToast, setStatusToast] = useState<string | null>(null);
 
   // ── Dynamic approval chain ──────────────────────────────────────────────────
   const [approvalLevels, setApprovalLevels] = useState<ApprovalLevel[]>(() => {
@@ -767,34 +1333,46 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       if (key === "roleType") {
         upd.salesType = undefined;
         upd.roleId = null; upd.role = "";
-        upd.geoZone = ""; upd.geoRegion = ""; upd.geoArea = "";
-        upd.territory = ""; upd.geoLocality = "";
+        upd.geoZone = ""; upd.geoRegion = ""; upd.geoState = ""; upd.geoArea = "";
+        upd.territory = ""; upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
         upd.approvalLevel1Id = null; upd.approvalLevel1Name = ""; upd.approvalLevel1Role = "";
         upd.approvalLevel2Id = null; upd.approvalLevel2Name = ""; upd.approvalLevel2Role = "";
         upd.approvalLevel3Id = null; upd.approvalLevel3Name = ""; upd.approvalLevel3Role = "";
-        setPerms(initPerms);
+        setActiveWebPerms(new Set());
+        setActiveMobilePerms(new Set());
         setGeoMappings([emptyGeoMapping()]);
         setErrors(prev => Object.fromEntries(Object.entries(prev).filter(([errorKey]) => !errorKey.startsWith("geoMapping_"))));
       }
       if (key === "salesType") {
         upd.roleId = null; upd.role = "";
-        upd.geoZone = ""; upd.geoRegion = ""; upd.geoArea = "";
-        upd.territory = ""; upd.geoLocality = "";
+        upd.geoZone = ""; upd.geoRegion = ""; upd.geoState = ""; upd.geoArea = "";
+        upd.territory = ""; upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
         setGeoMappings([emptyGeoMapping()]);
         setErrors(prev => Object.fromEntries(Object.entries(prev).filter(([errorKey]) => !errorKey.startsWith("geoMapping_"))));
       }
       // Cascade geo resets
       if (key === "geoZone") {
-        upd.geoRegion = ""; upd.geoArea = ""; upd.territory = ""; upd.geoLocality = "";
+        upd.geoRegion = ""; upd.geoState = ""; upd.geoArea = ""; upd.territory = "";
+        upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
       }
       if (key === "geoRegion") {
-        upd.geoArea = ""; upd.territory = ""; upd.geoLocality = "";
+        upd.geoState = ""; upd.geoArea = ""; upd.territory = "";
+        upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
+      }
+      if (key === "geoState") {
+        upd.geoArea = ""; upd.territory = ""; upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
       }
       if (key === "geoArea") {
-        upd.territory = ""; upd.geoLocality = "";
+        upd.territory = ""; upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
       }
       if (key === "territory") {
-        upd.geoLocality = "";
+        upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
+      }
+      if (key === "geoDistrict") {
+        upd.geoCity = ""; upd.geoTown = "";
+      }
+      if (key === "geoCity") {
+        upd.geoTown = "";
       }
       if (key === "firstName" || key === "lastName")
         upd.fullName = `${key === "firstName" ? value : prev.firstName || ""} ${key === "lastName" ? value : prev.lastName || ""}`.trim();
@@ -803,15 +1381,93 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
     setErrors(prev => ({ ...prev, [key]: "" }));
   };
 
+  const applyRoleAndTemplate = (targetRoleId: number) => {
+    const allRoles = [...RETAIL_SALES_ROLES, ...INSTITUTIONAL_SALES_ROLES, ...ADMIN_ROLES];
+    const r = allRoles.find(x => x.id === targetRoleId);
+    if (!r) return;
+
+    // Fetch newly selected role's template
+    const allRolesMaster = loadRoles();
+    const templates = loadPermissionTemplates();
+    const templateId = getRoleTemplateId(r.name, allRolesMaster);
+    
+    let webSet = new Set<string>();
+    let mobileSet = new Set<string>();
+    
+    if (templateId && templates[templateId]) {
+      const template = templates[templateId];
+      if (Array.isArray(template.webPermissions)) {
+        template.webPermissions.forEach((p: any) => {
+          const mKey = p.moduleKey || p.module || p.moduleId || p.moduleName;
+          const aKey = p.actionKey || p.action || p.permission;
+          if (mKey && aKey) webSet.add(`${mKey}.${aKey}`);
+        });
+      }
+      if (Array.isArray(template.mobilePermissions)) {
+        template.mobilePermissions.forEach((p: any) => {
+          const mKey = p.moduleKey || p.module || p.moduleId || p.moduleName;
+          const aKey = p.actionKey || p.action || p.permission;
+          if (mKey && aKey) mobileSet.add(`${mKey}.${aKey}`);
+        });
+      }
+    }
+
+    setFormState(prev => ({
+      ...prev,
+      roleId: targetRoleId,
+      role: r.name || "",
+      geoZone: "", geoRegion: "", geoState: "", geoArea: "", territory: "", geoDistrict: "", geoCity: "", geoTown: "",
+      approvalLevel1Id: null, approvalLevel1Name: "", approvalLevel1Role: "",
+      approvalLevel2Id: null, approvalLevel2Name: "", approvalLevel2Role: "",
+      approvalLevel3Id: null, approvalLevel3Name: "", approvalLevel3Role: "",
+    }));
+    setGeoMappings([emptyGeoMapping()]);
+    setErrors(prev => ({
+      ...Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith("geoMapping_"))),
+      roleId: "",
+    }));
+
+    // Update active permissions
+    setActiveWebPerms(webSet);
+    setActiveMobilePerms(mobileSet);
+  };
+
+  const handleRoleChange = (newRoleIdVal: number) => {
+    const hasExistingPerms = activeWebPerms.size > 0 || activeMobilePerms.size > 0;
+    if (hasExistingPerms) {
+      setPendingRoleId(newRoleIdVal);
+      setShowRoleChangeWarning(true);
+    } else {
+      applyRoleAndTemplate(newRoleIdVal);
+    }
+  };
+
+  const confirmRoleChange = () => {
+    if (pendingRoleId !== null) {
+      applyRoleAndTemplate(pendingRoleId);
+      setPendingRoleId(null);
+    }
+    setShowRoleChangeWarning(false);
+  };
+
+  const cancelRoleChange = () => {
+    setPendingRoleId(null);
+    setShowRoleChangeWarning(false);
+  };
+
+
   const syncPrimaryGeoToForm = (mappings: GeoMappingRow[]) => {
     const primary = mappings[0] || emptyGeoMapping();
     setFormState(prev => ({
       ...prev,
       geoZone: primary.geoZone,
       geoRegion: primary.geoRegion,
+      geoState: primary.geoState,
       geoArea: primary.geoArea,
       territory: primary.territory,
-      geoLocality: primary.geoLocality,
+      geoDistrict: primary.geoDistrict,
+      geoCity: primary.geoCity,
+      geoTown: primary.geoTown,
     }));
   };
 
@@ -874,9 +1530,14 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       .filter(n => !mapping.geoZone || isDescendantOf(n, "Zone", mapping.geoZone, geoNodes))
       .map(n => ({ label: n.name, value: n.name }));
 
+    const stateOptions = geoNodes
+      .filter(n => n.level === "State")
+      .filter(n => !mapping.geoRegion || isDescendantOf(n, "Region", mapping.geoRegion, geoNodes))
+      .map(n => ({ label: n.name, value: n.name }));
+
     const areaOptions = geoNodes
       .filter(n => n.level === "Area")
-      .filter(n => !mapping.geoRegion || isDescendantOf(n, "Region", mapping.geoRegion, geoNodes))
+      .filter(n => !mapping.geoState || isDescendantOf(n, "State", mapping.geoState, geoNodes))
       .map(n => ({ label: n.name, value: n.name }));
 
     const territoryOptions = geoNodes
@@ -884,17 +1545,30 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       .filter(n => !mapping.geoArea || isDescendantOf(n, "Area", mapping.geoArea, geoNodes))
       .map(n => ({ label: n.name, value: n.name }));
 
-    const localityOptions = geoNodes
-      .filter(n => n.level === "Locality")
+    const districtOptions = geoNodes
+      .filter(n => n.level === "District")
       .filter(n => !mapping.territory || isDescendantOf(n, "Territory", mapping.territory, geoNodes))
+      .map(n => ({ label: n.name, value: n.name }));
+
+    const cityOptions = geoNodes
+      .filter(n => n.level === "City")
+      .filter(n => !mapping.geoDistrict || isDescendantOf(n, "District", mapping.geoDistrict, geoNodes))
+      .map(n => ({ label: n.name, value: n.name }));
+
+    const townOptions = geoNodes
+      .filter(n => n.level === "Town")
+      .filter(n => !mapping.geoCity || isDescendantOf(n, "City", mapping.geoCity, geoNodes))
       .map(n => ({ label: n.name, value: n.name }));
 
     return {
       Zone: zoneOptions,
       Region: regionOptions,
+      State: stateOptions,
       Area: areaOptions,
       Territory: territoryOptions,
-      Locality: localityOptions,
+      District: districtOptions,
+      City: cityOptions,
+      Town: townOptions,
     };
   };
 
@@ -975,9 +1649,15 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
   };
 
   // ── Geo value map ────────────────────────────────────────────────────────────
-  const geoKey: Record<string, keyof Employee> = {
-    Zone: "geoZone", Region: "geoRegion", Area: "geoArea",
-    Territory: "territory", Locality: "geoLocality",
+  const geoKey: Record<string, keyof GeoMappingRow> = {
+    Zone: "geoZone",
+    Region: "geoRegion",
+    State: "geoState",
+    Area: "geoArea",
+    Territory: "territory",
+    District: "geoDistrict",
+    City: "geoCity",
+    Town: "geoTown",
   };
 
   const getGeoMappingErrorKey = (index: number, field: string) => `geoMapping_${index}_${field}`;
@@ -995,21 +1675,45 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
 
       if (key === "geoZone") {
         mapping.geoRegion = "";
+        mapping.geoState = "";
         mapping.geoArea = "";
         mapping.territory = "";
-        mapping.geoLocality = "";
+        mapping.geoDistrict = "";
+        mapping.geoCity = "";
+        mapping.geoTown = "";
       }
       if (key === "geoRegion") {
+        mapping.geoState = "";
         mapping.geoArea = "";
         mapping.territory = "";
-        mapping.geoLocality = "";
+        mapping.geoDistrict = "";
+        mapping.geoCity = "";
+        mapping.geoTown = "";
+      }
+      if (key === "geoState") {
+        mapping.geoArea = "";
+        mapping.territory = "";
+        mapping.geoDistrict = "";
+        mapping.geoCity = "";
+        mapping.geoTown = "";
       }
       if (key === "geoArea") {
         mapping.territory = "";
-        mapping.geoLocality = "";
+        mapping.geoDistrict = "";
+        mapping.geoCity = "";
+        mapping.geoTown = "";
       }
       if (key === "territory") {
-        mapping.geoLocality = "";
+        mapping.geoDistrict = "";
+        mapping.geoCity = "";
+        mapping.geoTown = "";
+      }
+      if (key === "geoDistrict") {
+        mapping.geoCity = "";
+        mapping.geoTown = "";
+      }
+      if (key === "geoCity") {
+        mapping.geoTown = "";
       }
 
       next[index] = mapping;
@@ -1059,6 +1763,14 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
     if (!form.emergencyContactName?.trim()) e.emergencyContactName = "Required";
     const emErr = validateMobile(form.emergencyContactMobile || "");
     if (emErr) e.emergencyContactMobile = emErr;
+    validateStructuredAddress(currentAddr, "current", e);
+    if (!sameAddress) validateStructuredAddress(permanentAddr, "permanent", e);
+    if (mode === "add") {
+      if (!form.password?.trim()) e.password = "Password is required";
+      else if ((form.password || "").length < 8) e.password = "Password must be at least 8 characters";
+      if (!form.confirmPassword?.trim()) e.confirmPassword = "Please confirm password";
+      else if (form.password !== form.confirmPassword) e.confirmPassword = "Passwords do not match";
+    }
     if (form.roleType === "Field User") {
       geoMappings.forEach((mapping, index) => {
         geoFields.forEach((field) => {
@@ -1069,10 +1781,28 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
         });
       });
     }
+    const hasWeb = activeWebPerms.size > 0;
+    const hasMobile = activeMobilePerms.size > 0;
+    if (hasWeb && hasMobile) {
+      e.permissions = "Only one access type is allowed (Web Portal OR Mobile).";
+      alert("Only one access type is allowed (Web Portal OR Mobile).");
+    }
     const cErr = validateCircularReporting(form.id || 0, form.reportingManagerId || null, allEmployees);
     if (cErr) e.reportingManagerId = cErr;
     setErrors(e);
     return Object.keys(e).length === 0;
+  };
+
+  const confirmStatusChange = () => {
+    if (!statusConfirm || mode !== "edit" || !employee) return;
+    const updated = applyEmployeeStatusChange(
+      { ...employee, ...form, documents, activityLog: employee.activityLog } as Employee,
+      statusConfirm,
+    );
+    setFormState(updated);
+    (onStatusSave ?? onSave)(updated);
+    setStatusConfirm(null);
+    setStatusToast(`User ${statusConfirm === "active" ? "activated" : "deactivated"} successfully`);
   };
 
   const handleSave = () => {
@@ -1085,6 +1815,8 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
     const rm = allEmployees.find(e => e.id === form.reportingManagerId);
     const now = todayStr();
 
+    const resolvedPermanent = sameAddress ? currentAddr : permanentAddr;
+
     const saved: Employee = {
       id: form.id || (Math.max(0, ...allEmployees.map(e => e.id)) + 1),
       employeeId: form.employeeId || newEmpId,
@@ -1093,17 +1825,34 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       fullName: form.fullName || `${form.firstName || ""} ${form.lastName || ""}`.trim(),
       email: form.email || "",
       mobile: form.mobile || "",
+      password: form.password || "",
       countryCode: form.countryCode || "+91",
       alternativeMobile: form.alternativeMobile || "",
       bloodGroup: (form.bloodGroup as any) || "Unknown",
       gender: form.gender,
       dob: form.dob || "",
-      currentAddress: form.currentAddress || "",
-      permanentAddress: form.permanentAddress || "",
+      currentAddressLine1: currentAddr.line1,
+      currentAddressLine2: currentAddr.line2,
+      currentStateId: currentAddr.stateId,
+      currentCityId: currentAddr.cityId,
+      currentPincodeId: currentAddr.pincodeId,
+      permanentAddressLine1: resolvedPermanent.line1,
+      permanentAddressLine2: resolvedPermanent.line2,
+      permanentStateId: resolvedPermanent.stateId,
+      permanentCityId: resolvedPermanent.cityId,
+      permanentPincodeId: resolvedPermanent.pincodeId,
+      emergencyAddressLine1: emergencyAddr.line1,
+      emergencyAddressLine2: emergencyAddr.line2,
+      emergencyStateId: emergencyAddr.stateId,
+      emergencyCityId: emergencyAddr.cityId,
+      emergencyPincodeId: emergencyAddr.pincodeId,
+      sameAsCurrentAddress: sameAddress,
+      currentAddress: formatStructuredAddress(currentAddr, geoNodes),
+      permanentAddress: formatStructuredAddress(resolvedPermanent, geoNodes),
       emergencyContactName: form.emergencyContactName || "",
       emergencyContactMobile: form.emergencyContactMobile || "",
       emergencyContactRelation: (form.emergencyContactRelation as any) || "Spouse",
-      emergencyContactAddress: form.emergencyContactAddress || "",
+      emergencyContactAddress: formatStructuredAddress(emergencyAddr, geoNodes),
       departmentId: form.departmentId || null,
       department: dept?.name || "",
       employeeType: (form.employeeType as any) || undefined,
@@ -1117,11 +1866,14 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       joiningDate: form.joiningDate || now,
       geoZone: geoMappings[0]?.geoZone || "",
       geoRegion: geoMappings[0]?.geoRegion || "",
+      geoState: geoMappings[0]?.geoState || "",
       geoArea: geoMappings[0]?.geoArea || "",
       territory: geoMappings[0]?.territory || "",
-      geoLocality: geoMappings[0]?.geoLocality || "",
+      geoDistrict: geoMappings[0]?.geoDistrict || "",
+      geoCity: geoMappings[0]?.geoCity || "",
+      geoTown: geoMappings[0]?.geoTown || "",
       geoMappings: form.roleType === "Field User" ? geoMappings.map((mapping) => ({ ...mapping })) : [],
-      permissions: perms,
+      permissions: convertFromSets(activeWebPerms, activeMobilePerms),
       // Approval chain — dynamic levels, save up to 3 for backward compat
       approvalLevel1Id: approvalLevels[0]?.empId || null,
       approvalLevel1Name: approvalLevels[0]?.name || "",
@@ -1133,6 +1885,8 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       approvalLevel3Name: approvalLevels[2]?.name || "",
       approvalLevel3Role: approvalLevels[2]?.role || "",
       profilePhotoPath: form.profilePhotoPath || "",
+      documents,
+      activityLog: employee?.activityLog || form.activityLog || [],
       createdBy: form.createdBy || "Admin",
       createdDate: form.createdDate || now,
       updatedBy: "Admin",
@@ -1144,7 +1898,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
 
   // ── Role type accent colors ──────────────────────────────────────────────────
   const roleTypeAccent = form.roleType === "Field User"
-    ? { bg: "bg-blue-50", border: "border-blue-200", text: "text-blue-700" }
+    ? { bg: "bg-brand-50", border: "border-brand-200", text: "text-brand-700" }
     : { bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-700" };
 
   const inp = (key: string) => cn("h-8 text-xs", errors[key] && "border-red-400");
@@ -1156,7 +1910,6 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       onBack={onCancel}
       onCancel={onCancel}
       cancelLabel="Discard"
-      noCard={true}
       actions={
         <div className="flex items-center gap-2">
           <span className={cn(
@@ -1171,27 +1924,38 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
         </div>
       }
     >
-      <div className="flex flex-col" style={{ minHeight: "calc(100vh - 104px)" }}>
-        {/* ── Tabs ───────────────────────────────────────────────────────────────── */}
-        <div className="flex-1 px-5 py-4">
-        <Tabs defaultValue="personal" className="w-full">
-          <TabsList className="h-8 p-0.5 bg-muted/30 mb-4 inline-flex gap-0.5">
-            <TabsTrigger value="personal" className="text-xs h-7 px-4">Personal Details</TabsTrigger>
-            <TabsTrigger value="employment" className="text-xs h-7 px-4">Employment Details</TabsTrigger>
-            <TabsTrigger value="permissions" className="text-xs h-7 px-4 flex items-center gap-1">
-              <Shield className="w-3 h-3" /> Permissions
-            </TabsTrigger>
-          </TabsList>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <FormSectionHeader tab={activeTab as FormTabId} />
 
+        <TabsList className="w-full mb-0">
+          <TabsTrigger value="personal" className={TAB_TRIGGER_CLASS}>
+            <User className="w-4 h-4 shrink-0" />
+            Personal Details
+          </TabsTrigger>
+          <TabsTrigger value="employment" className={TAB_TRIGGER_CLASS}>
+            <Briefcase className="w-4 h-4 shrink-0" />
+            Employment Details
+          </TabsTrigger>
+          <TabsTrigger value="documents" className={TAB_TRIGGER_CLASS}>
+            <FileText className="w-4 h-4 shrink-0" />
+            Documents
+          </TabsTrigger>
+          <TabsTrigger value="permissions" className={TAB_TRIGGER_CLASS}>
+            <Shield className="w-4 h-4 shrink-0" />
+            Permissions
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="personal" className="mt-6 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
           {/* ══════════════════════════════════════════════════════════════════════
               TAB 1 — PERSONAL DETAILS
               ══════════════════════════════════════════════════════════════════════ */}
-          <TabsContent value="personal" className="space-y-5 mt-0">
-
+          {activeTab === "personal" && (
+            <div className="space-y-5">
             {/* Basic Info */}
             <div>
               <SectionHead label="Basic Information" />
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-7 gap-3">
 
                 {/* Full Name */}
                 <Field label="First Name" required error={errors.firstName}>
@@ -1245,82 +2009,130 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
               </div>
             </div>
 
-            {/* Emergency Contact */}
-            <div className="border-t border-border/60 pt-4">
-              <SectionHead label="Emergency Contact" />
-              <div className="grid grid-cols-3 gap-3">
-                <Field label="Contact Name" required error={errors.emergencyContactName}>
-                  <Input value={form.emergencyContactName || ""} onChange={e => set("emergencyContactName", e.target.value)}
-                    placeholder="Full name" className={inp("emergencyContactName")} />
+            {/* Address Details — before credentials */}
+            <div className="pt-4 border-t border-border/60">
+              <SectionHead label="Address Details" />
+              <DualAddressSection
+                current={currentAddr}
+                permanent={permanentAddr}
+                onCurrentChange={setCurrentAddr}
+                onPermanentChange={setPermanentAddr}
+                sameAsCurrent={sameAddress}
+                onSameAsCurrentChange={setSameAddress}
+                geoNodes={geoNodes}
+                currentErrors={mapAddressErrors("current", errors)}
+                permanentErrors={mapAddressErrors("permanent", errors)}
+              />
+            </div>
+
+            <div className="pt-4 border-t border-border/60">
+              <SectionHead label="Account Credentials" sub="Set the login password for this employee user." />
+              <div className="grid w-full max-w-3xl grid-cols-1 gap-3 md:grid-cols-2">
+                <Field label="Password" required={mode === "add"} error={errors.password}>
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      value={(form as any).password || ""}
+                      onChange={(e) => set("password", e.target.value)}
+                      placeholder="Min. 8 characters"
+                      className={cn("h-7 text-xs pr-8", errors.password && "border-red-400")}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute -translate-y-1/2 right-2 top-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
                 </Field>
-                <AC label="Relationship" value={form.emergencyContactRelation || "Spouse"}
-                  onChange={v => set("emergencyContactRelation", v)}
-                  options={RELATIONS.map(r => ({ label: r, value: r }))} />
-                <Field label="Contact Number" required error={errors.emergencyContactMobile}>
-                  <Input value={form.emergencyContactMobile || ""} onChange={e => set("emergencyContactMobile", e.target.value)}
-                    placeholder="10-digit mobile" maxLength={10} className={inp("emergencyContactMobile")} />
+
+                <Field label="Confirm Password" required={mode === "add"} error={errors.confirmPassword}>
+                  <div className="relative">
+                    <Input
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={(form as any).confirmPassword || ""}
+                      onChange={(e) => set("confirmPassword", e.target.value)}
+                      placeholder="Re-enter password"
+                      className={cn("h-7 text-xs pr-8", errors.confirmPassword && "border-red-400")}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((v) => !v)}
+                      className="absolute -translate-y-1/2 right-2 top-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
                 </Field>
-                <div className="col-span-3">
-                  <Field label="Emergency Contact Address">
-                    <Textarea value={form.emergencyContactAddress || ""} onChange={e => set("emergencyContactAddress", e.target.value)}
-                      placeholder="Emergency contact's home address" rows={2} className="text-xs resize-none" />
-                  </Field>
+                <div className="flex items-start gap-2 px-3 py-2 mt-1 border border-brand-200 rounded-lg bg-brand-50 md:col-span-2">
+                  <Lock className="mt-0.5 h-3.5 w-3.5 text-brand-600" />
+                  <p className="text-[10px] leading-tight text-brand-700">
+                    {mode === "add"
+                      ? "Set the initial login password for this employee."
+                      : "Password can be updated later if needed."}
+                  </p>
                 </div>
               </div>
             </div>
 
-            {/* Address Details */}
-            <div className="border-t border-border/60 pt-4">
-              <SectionHead label="Address Details" />
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs font-medium">Current Address</Label>
-                  <Textarea value={form.currentAddress || ""} onChange={e => {
-                    set("currentAddress", e.target.value);
-                    if (sameAddress) set("permanentAddress", e.target.value);
-                  }}
-                    placeholder="Current / residential address" rows={3} className="text-xs resize-none" />
+            {/* Emergency Contact */}
+            <div className="pt-4 border-t border-border/60">
+              <SectionHead label="Emergency Contact" />
+              <div className="grid grid-cols-12 gap-3">
+                <div className="col-span-2 ">
+                  <Field label="Contact Name" required error={errors.emergencyContactName}>
+                    <Input value={form.emergencyContactName || ""} onChange={e => set("emergencyContactName", e.target.value)}
+                      placeholder="Full name" className={inp("emergencyContactName")} />
+                  </Field>
                 </div>
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-medium">Permanent Address</Label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" checked={sameAddress} onChange={e => {
-                        setSameAddress(e.target.checked);
-                        if (e.target.checked) set("permanentAddress", form.currentAddress || "");
-                      }} className="w-3.5 h-3.5 accent-brand-600 rounded" />
-                      <span className="text-[11px] text-muted-foreground">Same as current address</span>
-                    </label>
-                  </div>
-                  <Textarea value={form.permanentAddress || ""} onChange={e => set("permanentAddress", e.target.value)}
-                    disabled={sameAddress}
-                    placeholder={sameAddress ? "Same as current address" : "Permanent / home town address"}
-                    rows={3} className={cn("text-xs resize-none", sameAddress && "opacity-50")} />
+                <div className="col-span-2">
+                  <AC label="Relationship" value={form.emergencyContactRelation || "Spouse"}
+                    onChange={v => set("emergencyContactRelation", v)}
+                    options={RELATIONS.map(r => ({ label: r, value: r }))} />
+                </div>
+                <div className="col-span-2">
+                  <Field label="Contact Number" required error={errors.emergencyContactMobile}>
+                    <Input value={form.emergencyContactMobile || ""} onChange={e => set("emergencyContactMobile", e.target.value)}
+                      placeholder="10-digit mobile" maxLength={10} className={inp("emergencyContactMobile")} />
+                  </Field>
+                </div>
+                <div className="col-span-12 pt-2">
+                  <SectionHead label="Emergency Contact Address" />
+                  <AddressBlock
+                    value={emergencyAddr}
+                    onChange={setEmergencyAddr}
+                    geoNodes={geoNodes}
+                    errors={mapAddressErrors("emergency", errors)}
+                  />
                 </div>
               </div>
             </div>
 
             {/* Audit Info (edit mode) */}
             {mode === "edit" && employee && (
-              <div className="border-t border-border/60 pt-4">
+              <div className="pt-4 border-t border-border/60">
                 <div className="bg-muted/30 rounded-lg px-3 py-2.5">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Record Info</p>
                   <div className="grid grid-cols-4 gap-x-4 gap-y-1 text-[11px]">
-                    <div><span className="text-muted-foreground block">User ID</span><span className="font-mono font-semibold text-brand-700">{employee.employeeId}</span></div>
-                    <div><span className="text-muted-foreground block">Created By</span><span className="font-medium">{employee.createdBy}</span></div>
-                    <div><span className="text-muted-foreground block">Created Date</span><span className="font-medium">{employee.createdDate}</span></div>
-                    <div><span className="text-muted-foreground block">Last Updated</span><span className="font-medium">{employee.updatedDate}</span></div>
+                    <div><span className="block text-muted-foreground">User ID</span><span className="font-mono font-semibold text-brand-700">{employee.employeeId}</span></div>
+                    <div><span className="block text-muted-foreground">Created By</span><span className="font-medium">{employee.createdBy}</span></div>
+                    <div><span className="block text-muted-foreground">Created Date</span><span className="font-medium">{employee.createdDate}</span></div>
+                    <div><span className="block text-muted-foreground">Last Updated</span><span className="font-medium">{employee.updatedDate}</span></div>
                   </div>
                 </div>
               </div>
             )}
-          </TabsContent>
+            </div>
+          )}
+        </TabsContent>
 
+        <TabsContent value="employment" className="mt-6 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
           {/* ══════════════════════════════════════════════════════════════════════
               TAB 2 — EMPLOYMENT DETAILS
               ══════════════════════════════════════════════════════════════════════ */}
-          <TabsContent value="employment" className="space-y-5 mt-0">
-
+          {activeTab === "employment" && (
+            <div className="space-y-5">
             {/* Employee ID + Basic Employment */}
             <div>
               <SectionHead label="Employment Information" />
@@ -1330,7 +2142,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Employee ID</Label>
                   <div className="h-8 px-2.5 border border-border rounded-lg bg-muted/30 flex items-center">
-                    <span className="text-xs font-mono font-semibold text-brand-700">
+                    <span className="font-mono text-xs font-semibold text-brand-700">
                       {mode === "add" ? newEmpId : employee?.employeeId}
                     </span>
                     <span className="ml-auto text-[10px] text-muted-foreground">Auto</span>
@@ -1352,11 +2164,25 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                   <Input type="date" value={form.joiningDate || todayStr()}
                     onChange={e => set("joiningDate", e.target.value)} className="h-8 text-xs" />
                 </div>
+
+                {mode === "edit" && (
+                  <div className="space-y-1 col-span-2">
+                    <Label className="text-xs font-medium">Status</Label>
+                    <div className="h-8 flex items-center">
+                      <EmployeeListingStatusCell
+                        status={(form.status as Employee["status"]) || "draft"}
+                        employee={{ ...form, documents }}
+                        onToggleRequest={(next) => setStatusConfirm(next)}
+                        onActivateBlocked={(gaps) => setStatusToast(gaps[0] || "Complete required profile data")}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Role Type */}
-            <div className="border-t border-border/60 pt-4">
+            <div className="pt-4 border-t border-border/60">
               <SectionHead label="Role & Access Level" />
               <div className="space-y-3">
 
@@ -1394,22 +2220,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                 {form.roleType && (form.roleType !== "Field User" || form.salesType) && (
                   <div className="grid grid-cols-2 gap-3">
                     <AC label="Role" required value={form.roleId || ""}
-                      onChange={v => {
-                        const allRoles = [...RETAIL_SALES_ROLES, ...INSTITUTIONAL_SALES_ROLES, ...ADMIN_ROLES];
-                        const r = allRoles.find(x => x.id === v);
-                        setFormState(prev => ({
-                          ...prev, roleId: v as number, role: r?.name || "",
-                          geoZone: "", geoRegion: "", geoArea: "", territory: "", geoLocality: "",
-                          approvalLevel1Id: null, approvalLevel1Name: "", approvalLevel1Role: "",
-                          approvalLevel2Id: null, approvalLevel2Name: "", approvalLevel2Role: "",
-                          approvalLevel3Id: null, approvalLevel3Name: "", approvalLevel3Role: "",
-                        }));
-                        setGeoMappings([emptyGeoMapping()]);
-                        setErrors(prev => ({
-                          ...Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith("geoMapping_"))),
-                          roleId: "",
-                        }));
-                      }}
+                      onChange={v => handleRoleChange(v as number)}
                       options={roleOptions}
                       placeholder="Select role"
                       error={errors.roleId} />
@@ -1428,16 +2239,16 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
 
             {/* Geography Mapping */}
             {form.roleType === "Field User" && form.role && (
-              <div className="border-t border-border/60 pt-4">
+              <div className="pt-4 border-t border-border/60">
                 <div className="flex items-center justify-between mb-2.5">
                   <SectionHead label={`Geography Mapping — ${form.role}`} />
-                  <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded font-medium">
+                  <span className="text-[10px] text-brand-600 bg-brand-50 border border-brand-200 px-2 py-0.5 rounded font-medium">
                     {geoFields.length > 0 ? geoFields.join(" → ") : "National Level — No mapping required"}
                   </span>
                 </div>
 
                 {geoFields.length === 0 ? (
-                  <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 text-xs text-blue-700">
+                  <div className="flex items-center gap-2 bg-brand-50 border border-brand-200 rounded-lg px-3 py-2.5 text-xs text-brand-700">
                     <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
                     {form.role ? `${form.role} operates at national level` : "This role operates at national level"} — no specific geography mapping required.
                   </div>
@@ -1447,8 +2258,8 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                       {geoMappings.map((mapping, index) => {
                         const optionsMap = getGeoOptionsMap(mapping);
                         return (
-                          <div key={index} className="rounded-lg border border-border bg-muted/10 p-3">
-                            <div className="mb-3 flex items-center justify-between gap-3">
+                          <div key={index} className="p-3 border rounded-lg border-border bg-muted/10">
+                            <div className="flex items-center justify-between gap-3 mb-3">
                               <div>
                                 <p className="text-xs font-semibold text-foreground">Mapping {index + 1}</p>
                                 <p className="text-[11px] text-muted-foreground">
@@ -1460,7 +2271,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  className="h-7 px-2 text-xs text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                                  className="px-2 text-xs text-red-600 border-red-200 h-7 hover:bg-red-50 hover:text-red-700"
                                   onClick={() => removeGeoMapping(index)}
                                 >
                                   <Trash2 className="w-3.5 h-3.5 mr-1" /> Remove
@@ -1491,7 +2302,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
 
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                          <Info className="w-3 h-3 flex-shrink-0" />
+                          <Info className="flex-shrink-0 w-3 h-3" />
                           Selections are loaded from Geography Master. Choosing a higher level filters the options below it automatically.
                         </p>
                         <Button
@@ -1513,9 +2324,9 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
 
             {/* Admin User — no geography required */}
             {form.roleType && form.roleType !== "Field User" && (
-              <div className="border-t border-border/60 pt-4">
+              <div className="pt-4 border-t border-border/60">
                 <div className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/20 px-3 py-2.5">
-                  <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <MapPin className="flex-shrink-0 w-4 h-4 text-muted-foreground" />
                   <p className="text-xs text-muted-foreground">
                     <strong className="text-foreground">Admin User</strong> — No geography mapping required.
                     Admin users have organisation-wide visibility within their module scope.
@@ -1526,7 +2337,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
 
             {/* ── Approval Chain Configuration ──────────────────────────────── */}
             {form.role && (
-              <div className="border-t border-border/60 pt-4">
+              <div className="pt-4 border-t border-border/60">
                 <div className="flex items-center justify-between mb-2.5">
                   <SectionHead
                     label="Approval Chain Configuration"
@@ -1535,7 +2346,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                 </div>
 
                 {/* ── Level rows ── */}
-                <div className="border border-border rounded-xl overflow-hidden mb-2">
+                <div className="mb-2 overflow-hidden border border-border rounded-xl">
                   {/* Header */}
                   <div className="grid grid-cols-[28px_52px_1fr_52px] bg-muted/40 border-b border-border px-3 py-2 gap-2">
                     <div />
@@ -1665,19 +2476,99 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                 )}
               </div>
             )}
+            </div>
+          )}
+        </TabsContent>
 
-          </TabsContent>
+        <TabsContent value="documents" className="mt-6 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
+          {activeTab === "documents" && (
+            <EmployeeDocumentsSection
+              documents={documents}
+              onChange={setDocuments}
+              employee={{ ...form, documents }}
+            />
+          )}
+        </TabsContent>
 
+        <TabsContent value="permissions" className="mt-6 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
           {/* ══════════════════════════════════════════════════════════════════════
-              TAB 3 — PERMISSIONS
+              TAB 4 — PERMISSIONS
               ══════════════════════════════════════════════════════════════════════ */}
-          <TabsContent value="permissions" className="mt-0">
-            <PermissionsTab perms={perms} onChange={setPerms} role={form.role} />
-          </TabsContent>
+          {activeTab === "permissions" && (
+            <PermissionsTab
+              activeWebPerms={activeWebPerms}
+              setActiveWebPerms={setActiveWebPerms}
+              activeMobilePerms={activeMobilePerms}
+              setActiveMobilePerms={setActiveMobilePerms}
+              role={form.role}
+              roleType={form.roleType}
+            />
+          )}
+        </TabsContent>
+      </Tabs>
 
-        </Tabs>
+      <Dialog open={!!statusConfirm} onOpenChange={(open) => !open && setStatusConfirm(null)}>
+        <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-5 pt-5 pb-3 border-b border-border/80">
+            <DialogTitle className="text-sm font-semibold flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-brand-600" />
+              {statusConfirm === "active" ? "Activate User" : "Deactivate User"}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {statusConfirm === "active"
+                ? "Are you sure you want to activate this user?"
+                : "Are you sure you want to deactivate this user?"}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="px-5 py-3 border-t border-border/80 bg-muted/20 flex items-center justify-end gap-2">
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setStatusConfirm(null)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+              onClick={confirmStatusChange}
+            >
+              {statusConfirm === "active" ? "Activate" : "Deactivate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {statusToast && (
+        <div className="fixed bottom-5 right-5 z-[100] flex items-center gap-2 px-4 py-3 rounded-xl shadow-xl text-white text-sm bg-red-600">
+          {statusToast}
+          <button type="button" onClick={() => setStatusToast(null)} className="ml-1 opacity-70">×</button>
         </div>
-      </div>
+      )}
+
+      {/* Warning Modal for Role Change */}
+      <Dialog open={showRoleChangeWarning} onOpenChange={(v) => !v && cancelRoleChange()}>
+        <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-5 pt-5 pb-3 border-b border-border/80">
+            <DialogTitle className="text-sm font-semibold flex items-center gap-2 text-red-650">
+              <AlertCircle className="w-4 h-4 text-red-650" />
+              Confirm Role Change
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Changing the role will replace current employee permissions.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="px-5 py-4 text-xs text-foreground leading-normal">
+            Changing the role will replace current employee permissions with the selected role template. Do you want to continue?
+          </div>
+
+          <DialogFooter className="px-5 py-3 border-t border-border/80 bg-muted/20 flex items-center justify-end gap-2">
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={cancelRoleChange}>
+              Cancel
+            </Button>
+            <Button size="sm" className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700" onClick={confirmRoleChange}>
+              Yes, Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </FormContainer>
   );
 }

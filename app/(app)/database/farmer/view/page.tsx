@@ -2,22 +2,22 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { RecordDetailPage } from "@/components/record-detail";
 import { cn } from "@/lib/utils";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   ImageIcon,
   Leaf,
   MapPin,
+  Phone,
   Store,
   User,
-  X,
 } from "lucide-react";
 import { type Farmer, SEED, VIEW_FARMER_STORAGE_KEY } from "../farmer-data";
 
-function getOwnedLeasedSummary(farmer: Farmer) {
+function getOwnedLeasedTotals(farmer: Farmer) {
   const ownedTotal = farmer.cropEntries
     .filter((entry) => entry.ownershipType === "Owned")
     .reduce((sum, entry) => sum + Number.parseFloat(entry.landSize), 0);
@@ -25,10 +25,66 @@ function getOwnedLeasedSummary(farmer: Farmer) {
     .filter((entry) => entry.ownershipType === "Leased")
     .reduce((sum, entry) => sum + Number.parseFloat(entry.landSize), 0);
 
-  const parts: string[] = [];
-  if (ownedTotal > 0) parts.push(`${ownedTotal} Owned`);
-  if (leasedTotal > 0) parts.push(`${leasedTotal} Leased`);
-  return parts.join(" + ") || farmer.ownershipType;
+  return { ownedTotal, leasedTotal };
+}
+
+function formatArea(value: number) {
+  const formatted = Number.isInteger(value) ? String(value) : value.toFixed(1);
+  return `${formatted} Acres`;
+}
+
+function getOwnedLeasedSummary(farmer: Farmer) {
+  const { ownedTotal, leasedTotal } = getOwnedLeasedTotals(farmer);
+  return `Owned: ${formatArea(ownedTotal)} / Leased: ${formatArea(leasedTotal)}`;
+}
+
+function getCurrentCropSummary(farmer: Farmer) {
+  return Array.from(
+    new Set(
+      farmer.cropEntries
+        .map((entry) => entry.produceCropName.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function getCropRotationSummary(farmer: Farmer) {
+  return Array.from(
+    new Set(
+      farmer.cropEntries
+        .flatMap((entry) =>
+          entry.cropRotation
+            .split(/->|→/)
+            .map((part) => part.trim())
+            .filter(Boolean),
+        )
+        .filter(
+          (part) =>
+            !["fallow", "parcel based"].includes(part.toLowerCase()),
+        ),
+    ),
+  );
+}
+
+function splitChipItems(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function getChemicalBiologicalSplit(value: string) {
+  const chemicalMatch = value.match(/Chemical\s*([0-9]+%?)/i);
+  const biologicalMatch = value.match(/Biological\s*([0-9]+%?)/i);
+
+  return {
+    chemical: chemicalMatch?.[1] ?? "-",
+    biological: biologicalMatch?.[1] ?? "-",
+  };
 }
 
 function SectionBlock({
@@ -73,15 +129,51 @@ function ReadOnlyField({
 }) {
   return (
     <div className={cn("space-y-1.5", className)}>
-      <p className="text-xs font-medium text-foreground">{label}</p>
+      <p className="text-xs font-semibold tracking-tight text-foreground">{label}</p>
       <div
         className={cn(
-          "min-h-9 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-foreground",
+          "min-h-9 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-foreground",
           multiline ? "flex items-start leading-5" : "flex items-center",
           mono && "font-mono text-xs font-semibold text-brand-700",
         )}
       >
         {value}
+      </div>
+    </div>
+  );
+}
+
+function ChipField({
+  label,
+  items,
+  className,
+}: {
+  label: string;
+  items: string[];
+  className?: string;
+}) {
+  return (
+    <div className={cn("space-y-1.5", className)}>
+      <p className="text-xs font-semibold tracking-tight text-foreground">
+        {label}
+      </p>
+      <div className="min-h-9 rounded-lg border border-border bg-muted/30 px-3 py-2">
+        {items.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {items.map((item) => (
+              <span
+                key={item}
+                className="inline-flex items-center rounded-full border border-brand-200 bg-brand-50 px-2 py-1 text-[11px] font-medium text-brand-700"
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="flex min-h-5 items-center text-xs text-muted-foreground">
+            -
+          </div>
+        )}
       </div>
     </div>
   );
@@ -97,7 +189,7 @@ function FarmerPhoto({ farmer }: { farmer: Farmer }) {
 
   return (
     <div className="space-y-1.5">
-      <p className="text-xs font-medium text-foreground">Farmer Photo</p>
+      <p className="text-xs font-semibold tracking-tight text-foreground">Farmer Photo</p>
       <div className="flex h-[156px] flex-col items-center justify-center gap-2 rounded-xl border border-border bg-brand-50/70">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-600 text-lg font-bold text-white shadow-sm">
           {initials}
@@ -111,17 +203,27 @@ function FarmerPhoto({ farmer }: { farmer: Farmer }) {
   );
 }
 
+const FARMER_TABS = [
+  { id: "farmer-details", label: "Farmer Details" },
+  { id: "crop-land", label: "Crop and Land Details" },
+  { id: "product", label: "Product Details" },
+] as const;
+
 export default function FarmerViewPage() {
   const router = useRouter();
   const [farmers] = useState<Farmer[]>(SEED);
   const [viewFarmer, setViewFarmer] = useState<Farmer | null>(null);
-  const [activeTab, setActiveTab] = useState<"farmer-details" | "crop-land" | "product">("farmer-details");
+  const [activeTab, setActiveTab] = useState<
+    "farmer-details" | "crop-land" | "product"
+  >("farmer-details");
 
   useEffect(() => {
     let selectedFarmer: Farmer | undefined;
     if (typeof window !== "undefined") {
       const selectedId = window.sessionStorage.getItem(VIEW_FARMER_STORAGE_KEY);
-      selectedFarmer = farmers.find((farmer) => String(farmer.id) === selectedId);
+      selectedFarmer = farmers.find(
+        (farmer) => String(farmer.id) === selectedId,
+      );
     }
 
     setViewFarmer(selectedFarmer ?? farmers[0] ?? null);
@@ -134,10 +236,47 @@ export default function FarmerViewPage() {
   }, [viewFarmer?.id]);
 
   const currentViewFarmerIndex = useMemo(
-    () => (viewFarmer ? farmers.findIndex((farmer) => farmer.id === viewFarmer.id) : -1),
+    () =>
+      viewFarmer
+        ? farmers.findIndex((farmer) => farmer.id === viewFarmer.id)
+        : -1,
     [farmers, viewFarmer],
   );
   const canNavigateRecords = activeTab === "farmer-details";
+  const ownershipTotals = useMemo(
+    () =>
+      viewFarmer
+        ? getOwnedLeasedTotals(viewFarmer)
+        : { ownedTotal: 0, leasedTotal: 0 },
+    [viewFarmer],
+  );
+  const currentCropSummary = useMemo(
+    () => (viewFarmer ? getCurrentCropSummary(viewFarmer) : []),
+    [viewFarmer],
+  );
+  const cropRotationSummary = useMemo(
+    () => (viewFarmer ? getCropRotationSummary(viewFarmer) : []),
+    [viewFarmer],
+  );
+  const chemicalBiologicalSplit = useMemo(
+    () =>
+      viewFarmer
+        ? getChemicalBiologicalSplit(viewFarmer.chemicalBiologicalPercentage)
+        : { chemical: "-", biological: "-" },
+    [viewFarmer],
+  );
+  const brandProductUsesChips = useMemo(
+    () => (viewFarmer ? splitChipItems(viewFarmer.brandProductUses) : []),
+    [viewFarmer],
+  );
+  const brandsRecallChips = useMemo(
+    () => (viewFarmer ? splitChipItems(viewFarmer.brandsRecall) : []),
+    [viewFarmer],
+  );
+  const majorDiseasesChips = useMemo(
+    () => (viewFarmer ? splitChipItems(viewFarmer.majorDiseases) : []),
+    [viewFarmer],
+  );
 
   const handleStepViewFarmer = (direction: -1 | 1) => {
     if (currentViewFarmerIndex < 0) return;
@@ -146,7 +285,10 @@ export default function FarmerViewPage() {
     if (!nextFarmer) return;
 
     if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(VIEW_FARMER_STORAGE_KEY, String(nextFarmer.id));
+      window.sessionStorage.setItem(
+        VIEW_FARMER_STORAGE_KEY,
+        String(nextFarmer.id),
+      );
     }
     setViewFarmer(nextFarmer);
     router.push("/database/farmer/view");
@@ -156,72 +298,81 @@ export default function FarmerViewPage() {
     router.push("/database/farmer");
   };
 
+  if (!viewFarmer) {
+    return (
+      <RecordDetailPage
+        listHref="/database/farmer"
+        listLabel="Farmers"
+        recordName="Farmer Details"
+        statusLabel="Loading"
+        statusVariant="neutral"
+      >
+        <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading farmer...</div>
+      </RecordDetailPage>
+    );
+  }
+
   return (
-    <AppLayout>
-      {viewFarmer && (
-        <Tabs
-          value={activeTab}
-          onValueChange={(value) => setActiveTab(value as "farmer-details" | "crop-land" | "product")}
-          className="space-y-4"
-        >
-          <section className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
-            <div className="relative border-b border-border px-5 py-3">
-              <div className={cn("space-y-0.5", canNavigateRecords ? "pr-32" : "pr-10")}>
-                <h1 className="text-sm font-semibold text-foreground">Farmer Details</h1>
-              </div>
-              <div className="absolute right-4 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1.5">
-                {canNavigateRecords && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => handleStepViewFarmer(-1)}
-                      disabled={currentViewFarmerIndex <= 0}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-                      aria-label="Previous farmer"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleStepViewFarmer(1)}
-                      disabled={currentViewFarmerIndex < 0 || currentViewFarmerIndex >= farmers.length - 1}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-                      aria-label="Next farmer"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </>
-                )}
-                <button
-                  type="button"
-                  onClick={handleCloseView}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                >
-                  <X className="h-4 w-4" />
-                  <span className="sr-only">Close</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="px-4 py-2.5">
-              <TabsList className="h-9 rounded-lg bg-muted/70 p-1">
-                <TabsTrigger value="farmer-details" className="h-7 gap-1.5 px-3 text-xs">
-                  <User className="h-3.5 w-3.5" />
-                  Farmer Details
-                </TabsTrigger>
-                <TabsTrigger value="crop-land" className="h-7 gap-1.5 px-3 text-xs">
-                  <Leaf className="h-3.5 w-3.5" />
-                  Crop and Land Details
-                </TabsTrigger>
-                <TabsTrigger value="product" className="h-7 gap-1.5 px-3 text-xs">
-                  <Store className="h-3.5 w-3.5" />
-                  Product Details
-                </TabsTrigger>
-              </TabsList>
-            </div>
-          </section>
-
-          <TabsContent value="farmer-details" className="m-0 space-y-4">
+    <RecordDetailPage
+      listHref="/database/farmer"
+      listLabel="Farmers"
+      recordName={viewFarmer.name}
+      statusLabel="Active"
+      statusVariant="active"
+      metaItems={[
+        { icon: MapPin, label: viewFarmer.village },
+        { icon: Phone, label: viewFarmer.phoneNumber },
+      ]}
+      tabs={[
+        { value: "farmer-details", label: "Farmer Details" },
+        { value: "crop-land", label: "Crop and Land Details" },
+        { value: "product", label: "Product Details" },
+      ]}
+      activeTab={activeTab}
+      onTabChange={(value) => setActiveTab(value as "farmer-details" | "crop-land" | "product")}
+      headerActions={
+        canNavigateRecords ? (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => handleStepViewFarmer(-1)}
+              disabled={currentViewFarmerIndex <= 0}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Previous farmer"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleStepViewFarmer(1)}
+              disabled={currentViewFarmerIndex < 0 || currentViewFarmerIndex >= farmers.length - 1}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Next farmer"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        ) : undefined
+      }
+      sidebar={{
+        summary: [
+          { label: "Farmland Size", value: viewFarmer.farmlandSize, highlight: true },
+          { label: "Current Crop", value: viewFarmer.currentCrop },
+          { label: "Owned / Leased", value: getOwnedLeasedSummary(viewFarmer) },
+          { label: "District", value: viewFarmer.district },
+          { label: "State", value: viewFarmer.state },
+        ],
+        quickActions: [
+          {
+            label: "Back to List",
+            onClick: handleCloseView,
+            variant: "outline",
+          },
+        ],
+      }}
+    >
+      {activeTab === "farmer-details" && (
+        <div className="space-y-4">
             <SectionBlock icon={User} title="Farmer Basic Details" subtitle="Identity, family, contact, and demographics">
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
                 <div className="lg:row-span-2">
@@ -246,9 +397,11 @@ export default function FarmerViewPage() {
                 <ReadOnlyField label="Lat-long" value={viewFarmer.latLong} mono />
               </div>
             </SectionBlock>
-          </TabsContent>
+        </div>
+      )}
 
-          <TabsContent value="crop-land" className="m-0 space-y-4">
+      {activeTab === "crop-land" && (
+        <div className="space-y-4">
             <SectionBlock icon={Leaf} title="Crop & Land Details" subtitle="Landholding and cultivation information">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <ReadOnlyField label="Total Size of Farmland" value={viewFarmer.farmlandSize} />
@@ -294,9 +447,11 @@ export default function FarmerViewPage() {
                 </div>
               </div>
             </SectionBlock>
-          </TabsContent>
+        </div>
+      )}
 
-          <TabsContent value="product" className="m-0 space-y-4">
+      {activeTab === "product" && (
+        <div className="space-y-4">
             <SectionBlock icon={Store} title="Product Details" subtitle="Usage patterns, brand recall, and field issues">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <ReadOnlyField
@@ -329,9 +484,8 @@ export default function FarmerViewPage() {
                 />
               </div>
             </SectionBlock>
-          </TabsContent>
-        </Tabs>
+        </div>
       )}
-    </AppLayout>
+    </RecordDetailPage>
   );
 }
