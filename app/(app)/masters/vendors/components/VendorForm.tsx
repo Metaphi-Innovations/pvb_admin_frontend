@@ -465,7 +465,7 @@ export function VendorForm({
 			return loadProducts()
 				.filter((p) => p.status === "active")
 				.map((p) => ({
-					productId: p.productId,
+					productId: p.sku,
 					numericId: p.id,
 					productName: p.productName,
 					sku: p.sku,
@@ -481,7 +481,7 @@ export function VendorForm({
 	const getProductMetadataString = (prodId: string) => {
 		const prod = activeProducts.find((item) => item.productId === prodId);
 		if (!prod) return "";
-		const master = loadProducts().find((p) => p.productId === prodId);
+		const master = loadProducts().find((p) => p.sku === prodId || String(p.id) === prodId);
 		if (!master) return "";
 		const parts: string[] = [];
 		if (master.category) parts.push(`Category: ${master.category}`);

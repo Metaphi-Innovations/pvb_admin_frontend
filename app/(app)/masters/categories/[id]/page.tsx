@@ -98,7 +98,6 @@ export default function CategoryDetailPage() {
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <RecordSectionCard title="Basic Details" icon={Tag} accent="blue">
-          <RecordKvRow label="Category Code" value={category.categoryCode} mono copy />
           <RecordKvRow label="Category Name" value={category.categoryName} highlight />
           <RecordKvRow label="Description" value={category.description} />
           <RecordKvRow
@@ -129,7 +128,7 @@ export default function CategoryDetailPage() {
         listHref="/masters/categories"
         listLabel="Categories"
         recordName={category.categoryName}
-        recordCode={category.categoryCode}
+        recordCode={String(category.id)}
         statusLabel={category.status === "active" ? "Active" : "Inactive"}
         statusVariant={category.status}
         tabs={tabs}
@@ -148,7 +147,7 @@ export default function CategoryDetailPage() {
             },
           ],
           summary: [
-            { label: "Code", value: category.categoryCode, highlight: true },
+            { label: "ID", value: String(category.id), highlight: true },
             { label: "Description", value: category.description || "—" },
             { label: "Created", value: category.createdDate },
             { label: "Updated", value: category.updatedDate },

@@ -87,7 +87,7 @@ export function enrichProductForProcurement(productId: number): EnrichedProductL
 export function productLineFromMaster(p: Product): EnrichedProductLine {
   return {
     productId: p.id,
-    productCode: p.productId,
+    productCode: p.sku,
     productName: p.productName,
     sku: p.sku ?? "",
     baseUnit: p.baseUnit || "Unit",

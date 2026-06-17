@@ -238,7 +238,7 @@ export function getProductsForInvoice(customerId?: number): InvoiceProductOption
 			const resolved = resolveSalesUnitPrice(p.id, customerId);
 			return {
 				id: p.id,
-				code: p.productId,
+				code: p.sku,
 				name: p.productName,
 				unit: p.baseUnit || "PCS",
 				taxPct: parseTaxPct(p.gstRate),

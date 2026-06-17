@@ -64,7 +64,7 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 export default function GSTPage() {
   const [records, setRecords] = useState<GSTMaster[]>([]);
   const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "gstId", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "gstPercentage", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -73,7 +73,6 @@ export default function GSTPage() {
   const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
   const [active, setActive] = useState<GSTMaster | null>(null);
   const [form, setForm] = useState({
-    gstId: "",
     gstPercentage: 0,
     remarks: "",
     status: "active" as "active" | "inactive",
@@ -112,17 +111,6 @@ export default function GSTPage() {
   };
 
   const columns: ColumnConfig<GSTMaster>[] = [
-    {
-      key: "gstId",
-      header: "GST ID",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "100px",
-      render: (val, row) => (
-        <span className="font-mono text-xs text-brand-700">{row.gstId}</span>
-      ),
-    },
     {
       key: "gstPercentage",
       header: "GST Percentage",
@@ -208,7 +196,6 @@ export default function GSTPage() {
       const q = String(filters.search).toLowerCase();
       result = result.filter(
         (r) =>
-          r.gstId.toLowerCase().includes(q) ||
           String(r.gstPercentage).includes(q) ||
           (r.remarks || "").toLowerCase().includes(q)
       );
@@ -246,10 +233,7 @@ export default function GSTPage() {
   }, [filters, sort, pageSize]);
 
   const openAdd = () => {
-    const nextIdVal = nextGSTId(records);
-    const code = generateGSTCode(nextIdVal);
     setForm({
-      gstId: code,
       gstPercentage: 0,
       remarks: "",
       status: "active",
@@ -261,7 +245,6 @@ export default function GSTPage() {
 
   const openEdit = (row: GSTMaster) => {
     setForm({
-      gstId: row.gstId,
       gstPercentage: row.gstPercentage,
       remarks: row.remarks || "",
       status: row.status,
@@ -310,7 +293,8 @@ export default function GSTPage() {
       const id = nextGSTId(list);
       const newRecord: GSTMaster = {
         id,
-        gstId: form.gstId,
+        gstId: generateGSTCode(id),
+        gstCode: generateGSTCode(id),
         gstPercentage: form.gstPercentage,
         remarks: form.remarks,
         status: form.status,
@@ -354,12 +338,11 @@ export default function GSTPage() {
 
   const handleExport = () => {
     try {
-      const headers = ["ID", "GST ID", "GST Percentage", "Remarks", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
+      const headers = ["ID", "GST Percentage", "Remarks", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
       const csvRows = [headers.join(",")];
       for (const r of records) {
         const row = [
           r.id,
-          `"${r.gstId.replace(/"/g, '""')}"`,
           r.gstPercentage,
           `"${(r.remarks || "").replace(/"/g, '""')}"`,
           r.status,
@@ -433,7 +416,7 @@ export default function GSTPage() {
           addLabel="Add GST"
           onExport={handleExport}
           emptyMessage="GST configs"
-          searchPlaceholder="Search GST ID, percentage or remarks..."
+          searchPlaceholder="Search percentage or remarks..."
           currentFilters={filters}
           currentSort={sort}
         />
@@ -451,9 +434,8 @@ export default function GSTPage() {
           active
             ? buildSimpleMasterViewDrawer<GSTMaster>({
                 drawerTitle: "GST",
-                getRecordCode: (r) => r.gstId,
+                getRecordCode: (r) => `${r.gstPercentage}%`,
                 basicInfo: (r) => [
-                  { label: "GST ID", value: r.gstId, mono: true },
                   { label: "GST Percentage", value: `${r.gstPercentage}%` },
                 ],
                 description: (r) => r.remarks,
@@ -466,14 +448,6 @@ export default function GSTPage() {
             {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1">
-                <Label className="text-xs font-medium">GST ID (Auto)</Label>
-                <Input
-                  value={form.gstId}
-                  disabled
-                  className="h-8 text-xs cursor-not-allowed bg-muted/30 text-muted-foreground"
-                />
-              </div>
-              <div className="space-y-1">
                 <Label className="text-xs font-medium">
                   GST Percentage <span className="text-red-500">*</span>
                 </Label>
@@ -481,10 +455,14 @@ export default function GSTPage() {
                   type="number"
                   value={form.gstPercentage}
                   onChange={(e) => setFormField("gstPercentage", parseFloat(e.target.value) || 0)}
+                  onWheel={(e) => e.currentTarget.blur()}
                   placeholder="e.g., 18.0"
                   step="0.01"
                   min="0"
-                  className={cn("h-8 text-xs", errors.gstPercentage && "border-red-400 focus-visible:ring-red-300")}
+                  className={cn(
+                    "h-8 text-xs [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
+                    errors.gstPercentage && "border-red-400 focus-visible:ring-red-300",
+                  )}
                 />
                 {errors.gstPercentage && <p className="text-[11px] text-red-500">{errors.gstPercentage}</p>}
               </div>

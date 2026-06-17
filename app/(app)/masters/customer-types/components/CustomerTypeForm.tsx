@@ -22,6 +22,10 @@ import {
 	normalizeInitialCode,
 	INITIAL_CODE_PATTERN,
 } from "@/lib/masters/code-generation";
+import {
+	loadCustomerTypes,
+	resolveCustomerTypeCode,
+} from "../customer-type-data";
 
 function DocumentNameField({
 	value,
@@ -187,14 +191,14 @@ export function validateCustomerTypeForm(
 	if (!form.customerType.trim()) {
 		errors.customerType = "Customer type is required";
 	}
-	if (!form.customerTypeCode.trim()) {
-		errors.customerTypeCode = "Customer type code is required";
-	}
 	const code = normalizeInitialCode(form.initialCode);
 	if (!code) {
 		errors.initialCode = "Initial code is required";
 	} else if (!INITIAL_CODE_PATTERN.test(code)) {
 		errors.initialCode = "Use uppercase letters only (2–5 characters)";
+	}
+	if (code && !form.customerTypeCode.trim()) {
+		errors.customerTypeCode = "Customer type code could not be generated";
 	}
 	if (!form.documentTypes || form.documentTypes.length === 0) {
 		errors.documentTypes = "At least one document type is required";
@@ -221,15 +225,41 @@ export function CustomerTypeForm({
 	onClearError,
 	readOnly,
 	triggerToast,
+	recordId,
+	originalInitialCode,
 }: {
 	form: CustomerTypeFormValues;
-	onChange: (form: CustomerTypeFormValues) => void;
+	onChange: React.Dispatch<React.SetStateAction<CustomerTypeFormValues>>;
 	errors: Record<string, string>;
 	onClearError: (key: string) => void;
 	readOnly?: boolean;
 	triggerToast?: (message: string, type: "success" | "error") => void;
+	/** Set in edit mode to preserve code when initial code is unchanged. */
+	recordId?: number;
+	originalInitialCode?: string;
 }) {
 	const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
+
+	useEffect(() => {
+		const normalized = normalizeInitialCode(form.initialCode);
+		if (!normalized) {
+			onChange((prev) =>
+				prev.customerTypeCode ? { ...prev, customerTypeCode: "" } : prev,
+			);
+			return;
+		}
+
+		const records = loadCustomerTypes();
+		const nextCode = resolveCustomerTypeCode(form.initialCode, records, {
+			recordId,
+			existingCode: form.customerTypeCode,
+			originalInitialCode,
+		});
+
+		if (nextCode !== form.customerTypeCode) {
+			onChange((prev) => ({ ...prev, customerTypeCode: nextCode }));
+		}
+	}, [form.initialCode, form.customerTypeCode, recordId, originalInitialCode]);
 
 	const docTypesList = useMemo(() => {
 		return loadDocumentTypes().filter((d) => d.status === "Active");
@@ -246,7 +276,7 @@ export function CustomerTypeForm({
 		key: K,
 		value: CustomerTypeFormValues[K],
 	) => {
-		onChange({ ...form, [key]: value });
+		onChange((prev) => ({ ...prev, [key]: value }));
 		onClearError(key);
 	};
 
@@ -344,25 +374,25 @@ export function CustomerTypeForm({
 				<div>
 					<SectionHead label='Customer Type Details' required />
 					<div className='grid grid-cols-1 gap-3 md:grid-cols-4'>
-						{/* Customer Type Code */}
+						{/* Initial Code */}
 						<div className='space-y-1'>
 							<Label className='text-xs font-medium'>
-								Customer Type Code <span className='text-red-500'>*</span>
+								Initial Code <span className='text-red-500'>*</span>
 							</Label>
 							<Input
-								value={form.customerTypeCode}
+								value={form.initialCode}
 								onChange={(e) =>
-									set("customerTypeCode", e.target.value.toUpperCase())
+									set("initialCode", normalizeInitialCode(e.target.value))
 								}
-								placeholder='Auto-generated code'
-								className={cn(inputCls("customerTypeCode"), "font-mono")}
+								placeholder='e.g. GRC'
+								className={cn(inputCls("initialCode"), "font-mono uppercase")}
 								disabled={readOnly}
-								readOnly
+								maxLength={5}
 							/>
-							{errors.customerTypeCode && (
+							{errors.initialCode && (
 								<p className='flex items-center gap-1 mt-1 text-[11px] text-red-500'>
 									<AlertCircle className='w-3.5 h-3.5 flex-shrink-0' />
-									{errors.customerTypeCode}
+									{errors.initialCode}
 								</p>
 							)}
 						</div>
@@ -375,7 +405,7 @@ export function CustomerTypeForm({
 							<Input
 								value={form.customerType}
 								onChange={(e) => set("customerType", e.target.value)}
-								placeholder='e.g. Farmer'
+								placeholder='e.g. Grocery'
 								className={inputCls("customerType")}
 								disabled={readOnly}
 							/>
@@ -387,25 +417,25 @@ export function CustomerTypeForm({
 							)}
 						</div>
 
-						{/* Initial Code */}
+						{/* Customer Type Code (auto-generated) */}
 						<div className='space-y-1'>
 							<Label className='text-xs font-medium'>
-								Initial Code <span className='text-red-500'>*</span>
+								Customer Type Code
 							</Label>
 							<Input
-								value={form.initialCode}
-								onChange={(e) =>
-									set("initialCode", normalizeInitialCode(e.target.value))
-								}
-								placeholder='e.g. DIS'
-								className={cn(inputCls("initialCode"), "font-mono uppercase")}
-								disabled={readOnly}
-								maxLength={5}
+								value={form.customerTypeCode}
+								placeholder='Auto-generated from initial code'
+								className={cn(
+									inputCls("customerTypeCode"),
+									"font-mono bg-muted/30 cursor-not-allowed",
+								)}
+								disabled
+								readOnly
 							/>
-							{errors.initialCode && (
+							{errors.customerTypeCode && (
 								<p className='flex items-center gap-1 mt-1 text-[11px] text-red-500'>
 									<AlertCircle className='w-3.5 h-3.5 flex-shrink-0' />
-									{errors.initialCode}
+									{errors.customerTypeCode}
 								</p>
 							)}
 						</div>
