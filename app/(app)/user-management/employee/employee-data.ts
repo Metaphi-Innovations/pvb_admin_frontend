@@ -1,6 +1,21 @@
 // ── Employee Master — types, seed data, validation, and storage helpers ──────
 
 import { loadRoles, loadPermissionTemplates } from "../roles/roles-data";
+import type { EmployeeDocument, EmployeeActivityEntry } from "./employee-documents";
+
+export type { EmployeeDocument, EmployeeActivityEntry } from "./employee-documents";
+export {
+  applyEmployeeStatusChange,
+  canActivateEmployee,
+  computeProfileCompletion,
+  ALL_EMPLOYEE_DOCUMENT_TYPES,
+  EMPLOYEE_DOCUMENT_TYPE_GROUPS,
+  EMPLOYEE_DOCUMENT_MAX_BYTES,
+  EMPLOYEE_DOCUMENT_ACCEPT,
+  PROFILE_DOCUMENT_TYPES,
+  DOCUMENT_STATUS_STYLES,
+  newDocumentId,
+} from "./employee-documents";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -59,7 +74,24 @@ export interface Employee {
   reportingManager: string;
   status: "active" | "inactive" | "draft" | "archived";
   joiningDate: string;
-  // Address
+  // Address (structured — preferred)
+  currentAddressLine1?: string;
+  currentAddressLine2?: string;
+  currentStateId?: number | null;
+  currentCityId?: number | null;
+  currentPincodeId?: number | null;
+  permanentAddressLine1?: string;
+  permanentAddressLine2?: string;
+  permanentStateId?: number | null;
+  permanentCityId?: number | null;
+  permanentPincodeId?: number | null;
+  emergencyAddressLine1?: string;
+  emergencyAddressLine2?: string;
+  emergencyStateId?: number | null;
+  emergencyCityId?: number | null;
+  emergencyPincodeId?: number | null;
+  sameAsCurrentAddress?: boolean;
+  // Address (legacy flat strings — kept for display / exports)
   currentAddress?: string;
   permanentAddress?: string;
   emergencyContactName: string;
@@ -69,14 +101,24 @@ export interface Employee {
   // Geography (Field Users)
   geoZone?: string;
   geoRegion?: string;
+  geoState?: string;
   geoArea?: string;
   territory?: string;
+  geoDistrict?: string;
+  geoCity?: string;
+  geoTown?: string;
+  /** @deprecated use geoTown */
   geoLocality?: string;
   geoMappings?: Array<{
     geoZone?: string;
     geoRegion?: string;
+    geoState?: string;
     geoArea?: string;
     territory?: string;
+    geoDistrict?: string;
+    geoCity?: string;
+    geoTown?: string;
+    /** @deprecated use geoTown */
     geoLocality?: string;
   }>;
   // Permissions
@@ -98,11 +140,12 @@ export interface Employee {
   pincode?: string;
   address?: string;
   state?: string;
-  geoState?: string;
   relativeName?: string;
   correspondenceAddress?: string;
   remarks?: string;
   profilePhotoPath?: string;
+  documents?: EmployeeDocument[];
+  activityLog?: EmployeeActivityEntry[];
   // Audit
   createdBy: string;
   createdDate: string;
@@ -175,12 +218,12 @@ export const ROLE_GEO_FIELDS: Record<string, string[]> = {
   "SPM":    [],                                                       // National — no geo mapping (Institutional top level)
   "ZSM":    ["Zone"],                                                 // Zonal
   "RSM":    ["Zone", "Region"],                                       // Regional
-  "ASM":    ["Zone", "Region", "Area"],                               // Area
-  "KAM":    ["Zone", "Region", "Area"],                               // Area (same level as ASM)
-  "TM":     ["Zone", "Region", "Area", "Territory"],                  // Territory
-  "FMO":    ["Zone", "Region", "Area", "Territory"],                  // Territory
-  "DO":     ["Zone", "Region", "Area", "Territory", "Locality"],      // Locality
-  "Intern": ["Zone", "Region", "Area", "Territory", "Locality"],      // Locality
+  "ASM":    ["Zone", "Region", "State", "Area"],
+  "KAM":    ["Zone", "Region", "State", "Area"],
+  "TM":     ["Zone", "Region", "State", "Area", "Territory"],
+  "FMO":    ["Zone", "Region", "State", "Area", "Territory"],
+  "DO":     ["Zone", "Region", "State", "Area", "Territory", "District", "City", "Town"],
+  "Intern": ["Zone", "Region", "State", "Area", "Territory", "District", "City", "Town"],
 };
 
 // ── Web Portal Permission Registry ─────────────────────────────────────────────
@@ -576,7 +619,7 @@ export const SEED_EMPLOYEES: Employee[] = [
         geoRegion: "Mumbai",
         geoArea: "Central Mumbai",
         territory: "Mumbai Region",
-        geoLocality: "Dadar",
+        geoTown: "Kothrud Town",
       }
     ],
     approvalLevel1Id: 4,
@@ -595,6 +638,43 @@ export const SEED_EMPLOYEES: Employee[] = [
     updatedBy: "Admin",
     updatedDate: "2024-01-10",
     lastStatusChange: "2024-01-10",
+    documents: [
+      {
+        id: "doc-seed-1",
+        documentType: "Aadhaar Card",
+        documentNumber: "XXXX-XXXX-1234",
+        status: "verified",
+        fileName: "rajesh-aadhaar.pdf",
+        fileUrl: "data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvTWVkaWFCb3hbMCAwIDMgM10+PgplbmRvYmoKeHJlZgowIDQKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAp0cmFpbGVyCjw8L1NpemUgNC9Sb290IDEgMCBSL0luZm8gNCAwIFI+PgpzdGFydHhyZWYKMTg5CiUlRU9G",
+        mimeType: "application/pdf",
+        uploadedBy: "Admin",
+        uploadedOn: "2024-01-10",
+        verifiedBy: "Priya Patel",
+        verifiedDate: "2024-01-11",
+      },
+      {
+        id: "doc-seed-2",
+        documentType: "PAN Card",
+        documentNumber: "ABCDE1234F",
+        status: "uploaded",
+        fileName: "rajesh-pan.jpg",
+        fileUrl: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDABALDA4MChAODQ4SERATGCgaGBYWGDEjJR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2P/2wBDAQwNDR8REiUeHyAeJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pL/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCwAA//2Q==",
+        mimeType: "image/jpeg",
+        uploadedBy: "Admin",
+        uploadedOn: "2024-01-10",
+      },
+      {
+        id: "doc-seed-3",
+        documentType: "Photograph",
+        status: "uploaded",
+        fileName: "rajesh-photo.png",
+        fileUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        mimeType: "image/png",
+        uploadedBy: "Admin",
+        uploadedOn: "2024-01-10",
+      },
+    ],
+    activityLog: [],
   },
   {
     id: 2, employeeId: "EMP-0002", firstName: "Anjali", lastName: "Sharma",
@@ -620,7 +700,7 @@ export const SEED_EMPLOYEES: Employee[] = [
     departmentId: 5, department: "Field Force", roleType: "Field User",
     salesType: "Retail Sales", roleId: 101, role: "DO",
     geoZone: "West", geoRegion: "Mumbai", geoArea: "Central Mumbai",
-    territory: "Matunga Territory", geoLocality: "Matunga East",
+    territory: "West Territory", geoTown: "Kothrud Town",
     emergencyContactName: "Neha Singh", emergencyContactMobile: "9876543217",
     emergencyContactRelation: "Spouse",
     currentAddress: "789 Residential Complex, Mumbai 400019",
@@ -695,7 +775,7 @@ export const SEED_EMPLOYEES: Employee[] = [
     departmentId: 5, department: "Field Force", roleType: "Field User",
     salesType: "Retail Sales", roleId: 101, role: "DO",
     geoZone: "South", geoRegion: "Bangalore", geoArea: "East Bangalore",
-    territory: "Indiranagar Territory", geoLocality: "Indiranagar",
+    territory: "South Territory", geoTown: "Whitefield Town",
     emergencyContactName: "Suresh Desai", emergencyContactMobile: "8765432116",
     emergencyContactRelation: "Parent",
     currentAddress: "567 Garden View, Bangalore 560038",
@@ -737,7 +817,7 @@ export const SEED_EMPLOYEES: Employee[] = [
 // ── localStorage Helpers ──────────────────────────────────────────────────────
 
 const EMPLOYEE_KEY = "ds_employees";
-const EMPLOYEE_VERSION = 5;
+const EMPLOYEE_VERSION = 6;
 
 interface StoredEmployeeData {
   version: number;
@@ -763,6 +843,18 @@ export function loadEmployees(): Employee[] {
     }
     const parsed = JSON.parse(raw) as StoredEmployeeData;
     if (parsed.version !== EMPLOYEE_VERSION) {
+      if (parsed.version === 5 && Array.isArray(parsed.employees)) {
+        const migrated = parsed.employees.map((e: Employee) => ({
+          ...e,
+          documents: e.documents ?? [],
+          activityLog: e.activityLog ?? [],
+        }));
+        localStorage.setItem(
+          EMPLOYEE_KEY,
+          JSON.stringify({ version: EMPLOYEE_VERSION, employees: migrated }),
+        );
+        return migrated;
+      }
       const seeded = getSeeded();
       localStorage.setItem(EMPLOYEE_KEY, JSON.stringify({ version: EMPLOYEE_VERSION, employees: seeded }));
       return seeded;

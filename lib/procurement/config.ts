@@ -1,5 +1,8 @@
 /** Procurement module configuration (client-side; replace with API later). */
 
+/** Default landing route when user opens Procurement from the main nav. */
+export const PROCUREMENT_DEFAULT_ROUTE = "/procurement/purchase-requests";
+
 export const CURRENT_USER = "Admin";
 
 export const PROCUREMENT_APPROVER = "Admin";
@@ -15,6 +18,15 @@ export const BRANCH_OPTIONS = [
   { value: "branch-nagpur", label: "Branch — Nagpur" },
   { value: "warehouse-aurangabad", label: "Warehouse — Aurangabad" },
 ];
+
+export const PR_PRIORITY_OPTIONS = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "urgent", label: "Urgent" },
+] as const;
+
+export type PRPriority = (typeof PR_PRIORITY_OPTIONS)[number]["value"];
 
 export const DEPARTMENT_OPTIONS = [
   { value: "procurement", label: "Procurement" },

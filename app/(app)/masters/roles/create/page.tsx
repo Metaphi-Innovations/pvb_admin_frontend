@@ -49,7 +49,9 @@ const GEO_BADGE_CFG: Record<GeoLevel, { bg: string; text: string }> = {
   Region:    { bg: "bg-purple-100", text: "text-purple-700" },
   Area:      { bg: "bg-amber-100",  text: "text-amber-700"  },
   Territory: { bg: "bg-orange-100", text: "text-orange-700" },
-  Locality:  { bg: "bg-rose-100",   text: "text-rose-700"   },
+  District:  { bg: "bg-rose-100",   text: "text-rose-700"   },
+  City:      { bg: "bg-indigo-100", text: "text-indigo-700" },
+  Town:      { bg: "bg-violet-100", text: "text-violet-700" },
   None:      { bg: "bg-slate-100",  text: "text-slate-600"  },
 };
 function GeoLevelBadge({ level }: { level: GeoLevel }) {

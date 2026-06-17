@@ -1,5 +1,12 @@
 "use client";
 
+import {
+  generateTypedMasterCode,
+  isMasterCodeEmpty,
+  normalizeInitialCode,
+  validateInitialCode,
+} from "@/lib/masters/code-generation";
+
 export interface CustomerTypeDocument {
   id: string;
   documentTypeId?: string;
@@ -9,6 +16,8 @@ export interface CustomerTypeDocument {
 export interface CustomerTypeRecord {
   id: number;
   customerTypeCode: string;
+  /** Prefix for customer codes, e.g. DIS, RET */
+  initialCode: string;
   customerType: string;
   description: string;
   documentTypes: CustomerTypeDocument[];
@@ -23,6 +32,7 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
   {
     id: 1,
     customerTypeCode: "CTY-001",
+    initialCode: "FAR",
     customerType: "Farmer",
     description: "Standard farm customer",
     status: "active",
@@ -38,6 +48,7 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
   {
     id: 2,
     customerTypeCode: "CTY-002",
+    initialCode: "DIS",
     customerType: "Distributor",
     description: "Wholesale distributor partner",
     status: "active",
@@ -56,6 +67,7 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
   {
     id: 3,
     customerTypeCode: "CTY-003",
+    initialCode: "DLR",
     customerType: "Dealer",
     description: "Registered dealer merchant",
     status: "active",
@@ -72,6 +84,7 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
   {
     id: 4,
     customerTypeCode: "CTY-004",
+    initialCode: "RET",
     customerType: "Retailer",
     description: "Direct retail store outlet",
     status: "inactive",
@@ -86,6 +99,7 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
   {
     id: 5,
     customerTypeCode: "CTY-005",
+    initialCode: "CF",
     customerType: "C&F",
     description: "Carrying and Forwarding agent",
     status: "active",
@@ -102,6 +116,7 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
   {
     id: 6,
     customerTypeCode: "CTY-006",
+    initialCode: "CBBO",
     customerType: "CBBO",
     description: "Cluster Based Business Organization",
     status: "inactive",
@@ -116,6 +131,7 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
   {
     id: 7,
     customerTypeCode: "CTY-007",
+    initialCode: "FPO",
     customerType: "FPO",
     description: "Farmer Producer Organization",
     status: "active",
@@ -186,6 +202,31 @@ export function loadCustomerTypes(): CustomerTypeRecord[] {
       localStorage.removeItem(STORAGE_KEY);
       return CUSTOMER_TYPE_SEED;
     }
+    if (firstRecord && !("initialCode" in firstRecord)) {
+      const defaultCodes: Record<string, string> = {
+        farmer: "FAR",
+        distributor: "DIS",
+        dealer: "DLR",
+        retailer: "RET",
+        "c&f": "CF",
+        cf: "CF",
+        cbbo: "CBBO",
+        fpo: "FPO",
+      };
+      const migrated = parsed.map((item, idx) => {
+        const seed = CUSTOMER_TYPE_SEED[idx];
+        const key = normalizeCustomerTypeKey(item.customerType);
+        return {
+          ...item,
+          initialCode:
+            seed?.initialCode ??
+            defaultCodes[key] ??
+            normalizeInitialCode(item.customerType.slice(0, 5)),
+        };
+      });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+      return migrated;
+    }
     return parsed;
   } catch {
     return CUSTOMER_TYPE_SEED;
@@ -208,4 +249,31 @@ export function generateCustomerTypeCode(list: CustomerTypeRecord[]): string {
     return Math.max(acc, num);
   }, 0);
   return `CTY-${String(max + 1).padStart(3, "0")}`;
+}
+
+/** Normalize customer type slug/name for matching (e.g. "c&f" → "cf"). */
+export function normalizeCustomerTypeKey(value: string): string {
+  return value.toLowerCase().replace(/&/g, "").replace(/\s+/g, "");
+}
+
+export function getInitialCodeForCustomerType(typeKey: string): string | null {
+  const norm = normalizeCustomerTypeKey(typeKey);
+  const match = loadCustomerTypes().find(
+    (t) => normalizeCustomerTypeKey(t.customerType) === norm,
+  );
+  return match?.initialCode ?? null;
+}
+
+export function validateCustomerTypeInitialCode(
+  value: string,
+  records: CustomerTypeRecord[],
+  excludeId?: number,
+): string | null {
+  const existing = records
+    .filter((r) => r.id !== excludeId)
+    .map((r) => r.initialCode);
+  const exclude = excludeId
+    ? records.find((r) => r.id === excludeId)?.initialCode
+    : undefined;
+  return validateInitialCode(value, existing, exclude);
 }

@@ -34,6 +34,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ActiveInactiveToggle } from "@/components/ui/ActiveInactiveToggle";
+import { ListingAuditCell } from "@/components/listing/ListingAuditCell";
 import {
   loadMasterRecords,
   saveMasterRecords,
@@ -99,16 +100,13 @@ export interface MasterModuleConfig<T extends BaseMasterRecord, F> {
 function AuditCell({
   name,
   date,
+  variant,
 }: {
   name?: string;
   date?: string;
+  variant: "created" | "updated";
 }) {
-  return (
-    <div className="space-y-0.5">
-      <p className="text-[11px] font-semibold leading-4 text-brand-700">{name || "—"}</p>
-      <p className="text-[10px] font-mono leading-3 text-muted-foreground">{date || "—"}</p>
-    </div>
-  );
+  return <ListingAuditCell name={name} date={date} variant={variant} />;
 }
 
 export function MasterModule<T extends BaseMasterRecord, F>({
@@ -280,7 +278,9 @@ export function MasterModule<T extends BaseMasterRecord, F>({
         sortable: true,
         render:
           auditColumnVariant === "product"
-            ? (_: unknown, row: T) => <AuditCell name={row.createdBy} date={row.createdAt} />
+            ? (_: unknown, row: T) => (
+                <AuditCell name={row.createdBy} date={row.createdAt} variant="created" />
+              )
             : (v: unknown) => <span className="text-muted-foreground text-xs">{String(v)}</span>,
       },
       {
@@ -289,7 +289,9 @@ export function MasterModule<T extends BaseMasterRecord, F>({
         sortable: true,
         render:
           auditColumnVariant === "product"
-            ? (_: unknown, row: T) => <AuditCell name={row.updatedBy} date={row.updatedAt} />
+            ? (_: unknown, row: T) => (
+                <AuditCell name={row.updatedBy} date={row.updatedAt} variant="updated" />
+              )
             : (v: unknown) => <span className="text-muted-foreground text-xs">{String(v)}</span>,
       },
     ],

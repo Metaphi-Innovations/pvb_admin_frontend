@@ -12,30 +12,31 @@ import {
 	ChevronsUpDown,
 	Check,
 	ChevronDown,
+	Loader2,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CompactToggle } from "./CompactToggle";
 import { loadProducts } from "../../products/product-data";
 import {
 	Field,
-	FieldGrid,
 	SectionDivider,
 	VendorTabBar,
 	fieldClass,
-	selectClass,
 } from "./VendorFormLayout";
 import {
 	type VendorFormValues,
 	type VendorContact,
 	type VendorDocument,
 	type VendorProductMapping,
-	COUNTRY_CODES,
 	COUNTRIES,
-	TDS_PERCENT_OPTIONS,
-	fetchGstDetails,
 	emptyContact,
 	todayStr,
+	isGoodsVendorType,
 } from "../vendor-data";
+import { loadActiveVendorTypeOptions } from "../../vendor-type/vendor-type-data";
+import { PAYMENT_TERMS_OPTIONS, getActiveGeoStates } from "../../customers/customer-data";
+import { getActiveTDSMasters, toTdsSelectOptions } from "../../tds/tds-data";
+import { SearchableSelect } from "../../customers/components/SearchableSelect";
+import { loadGeoNodes, resolvePincodeLocation } from "../../geography/geo-data";
 import { loadDocumentTypes } from "../../document-types/document-type-data";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { cn } from "@/lib/utils";
@@ -47,16 +48,30 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
+import { getStandardMrp } from "@/lib/pricing/resolve-pricing";
+import {
+	buildGstCategory,
+	deriveGstRegistrationType,
+	fetchGstRegistrationDetailsAsync,
+	gstApplicableFromCategory,
+	gstDetailsToAddressSnapshot,
+	type GstAddressSnapshot,
+} from "@/lib/masters/gst-compliance";
+import { GstRegistrationFields } from "@/components/masters/GstRegistrationFields";
+import { RegisteredNumberRow } from "@/components/masters/RegisteredNumberRow";
+import { YesNoRadio } from "@/components/masters/YesNoRadio";
+import { validateGSTIN, validatePAN, validateTAN, validateMSMENumber } from "@/lib/masters/gst-compliance";
 
-const TABS = [
+const ALL_TABS = [
 	{ id: "basic", label: "Basic Details" },
 	{ id: "contact", label: "Contact Information" },
-	{ id: "banking", label: "Banking Information" },
-	{ id: "product", label: "Product" },
+	{ id: "banking", label: "Bank Details" },
+	{ id: "product", label: "Product Mapping" },
 	{ id: "documents", label: "Documents & Remarks" },
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"];
+type TabId = (typeof ALL_TABS)[number]["id"];
 
 const PHONE_COUNTRY_CODES = [
 	{ code: "+91", label: "🇮🇳 +91 (India)" },
@@ -177,9 +192,12 @@ function Toast({
 
 interface ProductCatalogItem {
 	productId: string;
+	numericId: number;
 	productName: string;
 	sku: string;
-	mrp: number;
+	category?: string;
+	hsnCode?: string;
+	gstRate?: string;
 }
 
 function ProductSelect({
@@ -201,7 +219,9 @@ function ProductSelect({
 		value: p.productId,
 		label: `${p.sku} — ${p.productName}`,
 		trailing: (
-			<span className='text-[10px] text-muted-foreground'>MRP: ₹{p.mrp}</span>
+			<span className='text-[10px] text-muted-foreground'>
+				MRP: {formatIndianRupeeDisplay(getStandardMrp(p.numericId))}
+			</span>
 		),
 	}));
 
@@ -374,12 +394,10 @@ export function VendorForm({
 	form,
 	onChange,
 	readOnly,
-	vendorCode,
 }: {
 	form: VendorFormValues;
 	onChange: (f: VendorFormValues) => void;
 	readOnly?: boolean;
-	vendorCode?: string;
 }) {
 	const [tab, setTab] = useState<TabId>("basic");
 	const [fetchingGst, setFetchingGst] = useState(false);
@@ -390,6 +408,42 @@ export function VendorForm({
 		type: "success" | "error";
 	} | null>(null);
 	const [bulkProductIds, setBulkProductIds] = useState<string[]>([]);
+	const [gstAddressSnapshot, setGstAddressSnapshot] =
+		useState<GstAddressSnapshot | null>(null);
+
+	const [geoNodes] = useState(() =>
+		typeof window !== "undefined" ? loadGeoNodes() : [],
+	);
+
+	const gstRegistered = form.gstRegistered;
+
+	const vendorTypeOptions = useMemo(() => loadActiveVendorTypeOptions(), []);
+	const tdsMasters = useMemo(() => getActiveTDSMasters(), []);
+	const stateOptions = useMemo(
+		() =>
+			getActiveGeoStates(geoNodes).map((s) => ({
+				value: s.name.replace(/\s+State$/i, ""),
+				label: s.name.replace(/\s+State$/i, ""),
+			})),
+		[geoNodes],
+	);
+
+	const visibleTabs = useMemo(() => {
+		const tabs = ALL_TABS.filter((t) => {
+			if (t.id === "product") return isGoodsVendorType(form.vendorType);
+			if (t.id === "banking") return Boolean(form.vendorType);
+			return true;
+		});
+		return tabs;
+	}, [form.vendorType]);
+
+	useEffect(() => {
+		if (!visibleTabs.some((t) => t.id === tab)) {
+			setTab("basic");
+		}
+	}, [visibleTabs, tab]);
+
+	const isGoods = isGoodsVendorType(form.vendorType);
 
 	const showToast = (msg: string, type: "success" | "error" = "error") => {
 		setToast({ msg, type });
@@ -406,9 +460,19 @@ export function VendorForm({
 		v: VendorFormValues[K],
 	) => onChange({ ...form, [k]: v });
 
-	const activeProducts = useMemo(() => {
+	const activeProducts = useMemo((): ProductCatalogItem[] => {
 		try {
-			return loadProducts().filter((p) => p.status === "active");
+			return loadProducts()
+				.filter((p) => p.status === "active")
+				.map((p) => ({
+					productId: p.productId,
+					numericId: p.id,
+					productName: p.productName,
+					sku: p.sku,
+					category: p.category,
+					hsnCode: p.hsnCode,
+					gstRate: p.gstRate,
+				}));
 		} catch {
 			return [];
 		}
@@ -417,13 +481,15 @@ export function VendorForm({
 	const getProductMetadataString = (prodId: string) => {
 		const prod = activeProducts.find((item) => item.productId === prodId);
 		if (!prod) return "";
+		const master = loadProducts().find((p) => p.productId === prodId);
+		if (!master) return "";
 		const parts: string[] = [];
-		if (prod.category) parts.push(`Category: ${prod.category}`);
-		if (prod.subCategory) parts.push(`Sub Category: ${prod.subCategory}`);
-		if (prod.baseUnit) parts.push(`Base Unit: ${prod.baseUnit}`);
-		if (prod.packagingUnit) parts.push(`Packaging Unit: ${prod.packagingUnit}`);
-		if (prod.hsnCode) parts.push(`HSN: ${prod.hsnCode}`);
-		if (prod.gstRate) parts.push(`GST: ${prod.gstRate}`);
+		if (master.category) parts.push(`Category: ${master.category}`);
+		if (master.subCategory) parts.push(`Sub Category: ${master.subCategory}`);
+		if (master.baseUnit) parts.push(`Base Unit: ${master.baseUnit}`);
+		if (master.packagingUnit) parts.push(`Packaging Unit: ${master.packagingUnit}`);
+		if (master.hsnCode) parts.push(`HSN: ${master.hsnCode}`);
+		if (master.gstRate) parts.push(`GST: ${master.gstRate}`);
 		return parts.join(" | ");
 	};
 
@@ -440,7 +506,6 @@ export function VendorForm({
 			id: newId,
 			productId: "",
 			productName: "",
-			mrp: 0,
 			price: undefined,
 			status: "Active",
 		};
@@ -469,7 +534,6 @@ export function VendorForm({
 				productId: prod.productId,
 				productName: prod.productName,
 				sku: prod.sku,
-				mrp: prod.mrp,
 				price: undefined,
 				status: "Active",
 			});
@@ -506,21 +570,59 @@ export function VendorForm({
 	const setAddr = (k: keyof VendorFormValues["billingAddress"], v: string) =>
 		set("billingAddress", { ...form.billingAddress, [k]: v });
 
-	const handleFetchGst = () => {
-		if (readOnly) return;
-		setFetchingGst(true);
-		const details = fetchGstDetails(form.gstNumber);
-		setTimeout(() => {
-			if (details) {
-				onChange({
-					...form,
-					legalCompanyName: details.legalCompanyName,
-					companyName: form.companyName || details.legalCompanyName,
-					billingAddress: { ...form.billingAddress, ...details.billingAddress },
-				});
+	const handlePincodeChange = (pincode: string) => {
+		const digits = pincode.replace(/\D/g, "").slice(0, 6);
+		const next = { ...form.billingAddress, pincode: digits };
+		const country = form.billingAddress.country || "India";
+		if (digits.length === 6 && country === "India") {
+			const loc = resolvePincodeLocation(digits, geoNodes);
+			if (loc) {
+				if (loc.city) next.city = loc.city;
+				if (loc.state) next.state = loc.state;
 			}
+		}
+		set("billingAddress", next);
+	};
+
+	const handleFetchGst = async () => {
+		if (readOnly) return;
+		if (!form.gstNumber.trim()) {
+			showToast("Enter GSTIN before fetching details.");
+			return;
+		}
+		if (!validateGSTIN(form.gstNumber)) {
+			showToast("Enter a valid 15-character GSTIN.");
+			return;
+		}
+		setFetchingGst(true);
+		try {
+			const details = await fetchGstRegistrationDetailsAsync(form.gstNumber);
+			if (!details) {
+				showToast("Could not fetch GST details. Check GSTIN format.");
+				return;
+			}
+			const snap = gstDetailsToAddressSnapshot(details);
+			setGstAddressSnapshot(snap);
+			const displayName = details.tradeName || details.legalBusinessName;
+			onChange({
+				...form,
+				vendorName: form.vendorName.trim() || displayName,
+				companyName: form.companyName.trim() || displayName,
+				legalCompanyName: details.legalBusinessName,
+				panNumber: form.panNumber.trim() || form.gstNumber.trim().slice(2, 12),
+				billingAddress: {
+					...form.billingAddress,
+					line1: snap.address,
+					city: snap.city,
+					state: snap.state,
+					pincode: snap.pincode,
+					country: form.billingAddress.country || "India",
+				},
+			});
+			showToast("GST details fetched and applied.", "success");
+		} finally {
 			setFetchingGst(false);
-		}, 400);
+		}
 	};
 
 	const updateContact = (uid: string, patch: Partial<VendorContact>) => {
@@ -674,7 +776,7 @@ export function VendorForm({
 	return (
 		<div className='shadow-sm'>
 			<VendorTabBar
-				tabs={TABS}
+				tabs={visibleTabs}
 				active={tab}
 				onChange={(id) => setTab(id as TabId)}
 			/>
@@ -683,25 +785,12 @@ export function VendorForm({
 				{tab === "basic" && (
 					<div className='w-full space-y-4'>
 						<section>
-							<SectionDivider title='Vendor Information' required />
+							<SectionDivider title='Basic Information' required />
 							<div className='grid grid-cols-12 gap-3'>
-								{/* Vendor Code */}
-								<Field
-									label='Vendor Code'
-									className='col-span-12 md:col-span-1'
-								>
-									<Input
-										disabled
-										value={vendorCode || form.vendorCode || ""}
-										className={cn(fieldClass, "bg-muted/20")}
-									/>
-								</Field>
-
-								{/* Vendor Name */}
 								<Field
 									label='Vendor Name'
 									required
-									className='col-span-12 md:col-span-2'
+									className='col-span-12 md:col-span-3'
 								>
 									<Input
 										disabled={readOnly}
@@ -712,24 +801,52 @@ export function VendorForm({
 									/>
 								</Field>
 
-								{/* Company Name */}
 								<Field
-									label='Company Name'
+									label='Vendor Type'
+									required
+									className='col-span-12 md:col-span-3'
+								>
+									<AutocompleteSelect
+										disabled={readOnly}
+										value={form.vendorType}
+										onChange={(value) => set("vendorType", String(value))}
+										options={vendorTypeOptions}
+										placeholder='Select vendor type...'
+									/>
+								</Field>
+
+								<Field
+									label='Payment Terms'
+									required
+									className='col-span-12 md:col-span-2'
+								>
+									<AutocompleteSelect
+										disabled={readOnly}
+										value={form.paymentTerms}
+										onChange={(value) => set("paymentTerms", String(value))}
+										options={PAYMENT_TERMS_OPTIONS.map((o) => ({
+											value: o.value,
+											label: o.label,
+										}))}
+										placeholder='Select payment terms...'
+									/>
+								</Field>
+
+								<Field
+									label='Contact Person'
 									className='col-span-12 md:col-span-2'
 								>
 									<Input
 										disabled={readOnly}
-										value={form.companyName}
-										onChange={(e) => set("companyName", e.target.value)}
+										value={form.contactPerson}
+										onChange={(e) => set("contactPerson", e.target.value)}
 										className={fieldClass}
-										placeholder='Registered company name'
+										placeholder='Primary contact name'
 									/>
 								</Field>
 
-								{/* Mobile Number */}
 								<Field
 									label='Mobile Number'
-									required
 									className='col-span-12 md:col-span-2'
 								>
 									<MobileRow
@@ -741,8 +858,7 @@ export function VendorForm({
 									/>
 								</Field>
 
-								{/* Email ID */}
-								<Field label='Email ID' className='col-span-12 md:col-span-2'>
+								<Field label='Email Address' className='col-span-12 md:col-span-2'>
 									<Input
 										type='email'
 										disabled={readOnly}
@@ -752,256 +868,189 @@ export function VendorForm({
 										placeholder='vendor@company.com'
 									/>
 								</Field>
-
-								{/* GST Group */}
-								<div className="flex items-end col-span-12 gap-3 md:col-span-6">
-									<Field label='GST Applicable' className='w-24 shrink-0'>
-										<div className='flex items-center h-9'>
-											<CompactToggle
-												checked={form.gstApplicable}
-												onCheckedChange={(c) => set("gstApplicable", c)}
-												disabled={readOnly}
-												activeLabel='Yes'
-												inactiveLabel='No'
-											/>
-										</div>
-									</Field>
-
-									{form.gstApplicable && (
-										<Field label='GSTIN' className='w-[200px] shrink-0'>
-											<Input
-												disabled={readOnly}
-												value={form.gstNumber}
-												onChange={(e) =>
-													set("gstNumber", e.target.value.toUpperCase())
-												}
-												className={cn(fieldClass, "font-mono uppercase")}
-												maxLength={15}
-												placeholder='15-character GSTIN'
-											/>
-										</Field>
-									)}
-								</div>
-
-								{form.gstApplicable && form.legalCompanyName && (
-									<Field
-										label='Legal Company Name'
-										className='col-span-12 md:col-span-4'
-									>
-										<Input
-											readOnly
-											value={form.legalCompanyName}
-											className={cn(fieldClass, "bg-muted/20")}
-										/>
-									</Field>
-								)}
 							</div>
 						</section>
 
 						<section>
-							<SectionDivider title='Billing Address' required />
-							<div className='grid grid-cols-12 gap-3'>
-								<Field label='Address' className='col-span-12 md:col-span-5'>
-									<Textarea
-										disabled={readOnly}
-										value={form.billingAddress.line1}
-										onChange={(e) => {
-											setAddr("line1", e.target.value);
-											setAddr("line2", "");
-										}}
-										placeholder='Street address, building, area...'
-										rows={2}
-										className='text-xs resize-none rounded-lg min-h-[100px]'
-									/>
-								</Field>
+							<SectionDivider title='Tax & Registration' />
+							<div className='space-y-3'>
+								<GstRegistrationFields
+									namePrefix="vendor"
+									values={{
+										gstRegistered: form.gstRegistered,
+										gstRegistrationType: form.gstRegistrationType,
+										gstin: form.gstNumber,
+									}}
+									onChange={(gst) => {
+										const gstCategory = buildGstCategory(
+											gst.gstRegistered,
+											gst.gstRegistrationType,
+										);
+										onChange({
+											...form,
+											gstRegistered: gst.gstRegistered,
+											gstRegistrationType: gst.gstRegistrationType,
+											gstNumber: gst.gstin,
+											gstCategory,
+											gstApplicable: gstApplicableFromCategory(gstCategory),
+										});
+									}}
+									readOnly={readOnly}
+									fetchingGst={fetchingGst}
+									onFetchGst={handleFetchGst}
+									inputClassName={fieldClass}
+								/>
+								<div className='grid grid-cols-12 gap-3'>
+									<Field label='PAN Number' required className='col-span-12 md:col-span-4'>
+										<Input
+											disabled={readOnly}
+											value={form.panNumber}
+											onChange={(e) =>
+												set("panNumber", e.target.value.toUpperCase())
+											}
+											className={cn(fieldClass, "font-mono uppercase")}
+											maxLength={10}
+											placeholder='e.g. ABCDE1234F'
+										/>
+									</Field>
+									<Field label='TAN Number' className='col-span-12 md:col-span-4'>
+										<Input
+											disabled={readOnly}
+											value={form.tanNumber}
+											onChange={(e) =>
+												set("tanNumber", e.target.value.toUpperCase())
+											}
+											className={cn(fieldClass, "font-mono uppercase")}
+											maxLength={10}
+											placeholder='AAAA99999A'
+										/>
+									</Field>
+								</div>
+								<RegisteredNumberRow
+									label="MSME Registered?"
+									registered={form.msmeRegistered}
+									onRegisteredChange={(yes) =>
+										onChange({
+											...form,
+											msmeRegistered: yes,
+											msmeNumber: yes ? form.msmeNumber : "",
+										})
+									}
+									numberLabel="MSME Number"
+									numberValue={form.msmeNumber}
+									onNumberChange={(value) => set("msmeNumber", value)}
+									numberPlaceholder="UDYAM-XX-00-0000000"
+									namePrefix="vendor-msme"
+									readOnly={readOnly}
+									inputClassName={fieldClass}
+								/>
+
+								<div className='grid grid-cols-12 gap-3 border-t border-border/40 pt-3'>
+									<div className='space-y-1 md:col-span-3'>
+										<label className='text-xs font-medium'>TDS Applicable?</label>
+										<YesNoRadio
+											name='vendor-tds'
+											value={form.tdsApplicable}
+											onChange={(yes) =>
+												onChange({
+													...form,
+													tdsApplicable: yes,
+													tdsMasterId: yes ? form.tdsMasterId : "",
+												})
+											}
+											disabled={readOnly}
+										/>
+									</div>
+									{form.tdsApplicable && (
+										<div className='space-y-1 md:col-span-5'>
+											<label className='text-xs font-medium'>
+												TDS Section <span className='text-red-500'>*</span>
+											</label>
+											<SearchableSelect
+												value={form.tdsMasterId}
+												onChange={(value) => set("tdsMasterId", value)}
+												options={toTdsSelectOptions(tdsMasters)}
+												placeholder='Select from TDS Master...'
+												disabled={readOnly}
+											/>
+										</div>
+									)}
+								</div>
 							</div>
-							<div className='grid grid-cols-12 gap-3 mt-2'>
-								<Field label='Country' className='col-span-12 md:col-span-2'>
-									<Select
-										disabled={readOnly}
-										value={form.billingAddress.country}
-										onValueChange={(val) => setAddr("country", val)}
-									>
-										<SelectTrigger className='text-xs h-9'>
-											<SelectValue placeholder='Select country...' />
-										</SelectTrigger>
-										<SelectContent>
-											{COUNTRIES.map((c) => (
-												<SelectItem key={c} value={c}>
-													{c}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								</Field>
-								<Field label='State' className='col-span-12 md:col-span-2'>
+						</section>
+
+						<section>
+							<SectionDivider title='Registered Address' required />
+							<div className='grid grid-cols-12 gap-3'>
+								<Field label='Address Line 1' required className='col-span-12 md:col-span-6'>
 									<Input
 										disabled={readOnly}
-										value={form.billingAddress.state}
-										onChange={(e) => setAddr("state", e.target.value)}
+										value={form.billingAddress.line1}
+										onChange={(e) => setAddr("line1", e.target.value)}
 										className={fieldClass}
-										placeholder='e.g. Maharashtra'
+										placeholder='Building, street, area'
 									/>
 								</Field>
-								<Field label='City' className='col-span-12 md:col-span-2'>
+								<Field label='Address Line 2' className='col-span-12 md:col-span-6'>
+									<Input
+										disabled={readOnly}
+										value={form.billingAddress.line2}
+										onChange={(e) => setAddr("line2", e.target.value)}
+										className={fieldClass}
+										placeholder='Landmark, floor (optional)'
+									/>
+								</Field>
+								<Field label='Pincode' required className='col-span-12 md:col-span-2'>
+									<Input
+										disabled={readOnly}
+										value={form.billingAddress.pincode}
+										onChange={(e) => handlePincodeChange(e.target.value)}
+										className={cn(fieldClass, "font-mono")}
+										inputMode='numeric'
+										maxLength={6}
+										placeholder='6-digit'
+									/>
+								</Field>
+								<Field label='Country' className='col-span-12 md:col-span-2'>
+									<AutocompleteSelect
+										disabled={readOnly}
+										value={form.billingAddress.country || "India"}
+										onChange={(value) =>
+											setAddr("country", String(value))
+										}
+										options={COUNTRIES.map((c) => ({ value: c, label: c }))}
+										placeholder='Country'
+										className='h-8 text-xs'
+									/>
+								</Field>
+								<Field label='State' className='col-span-12 md:col-span-4'>
+									{(form.billingAddress.country || "India") === "India" ? (
+										<AutocompleteSelect
+											disabled={readOnly}
+											value={form.billingAddress.state}
+											onChange={(value) => setAddr("state", String(value))}
+											options={stateOptions}
+											placeholder='Select state...'
+											searchPlaceholder='Search state...'
+											className='h-8 text-xs'
+										/>
+									) : (
+										<Input
+											disabled={readOnly}
+											value={form.billingAddress.state}
+											onChange={(e) => setAddr("state", e.target.value)}
+											className={fieldClass}
+										/>
+									)}
+								</Field>
+								<Field label='City' className='col-span-12 md:col-span-4'>
 									<Input
 										disabled={readOnly}
 										value={form.billingAddress.city}
 										onChange={(e) => setAddr("city", e.target.value)}
 										className={fieldClass}
-										placeholder='e.g. Mumbai'
+										placeholder='City / district'
 									/>
-								</Field>
-								<Field label='Pincode' className='col-span-12 md:col-span-2'>
-									<Input
-										disabled={readOnly}
-										value={form.billingAddress.pincode}
-										onChange={(e) => setAddr("pincode", e.target.value)}
-										className={fieldClass}
-										placeholder='e.g. 400001'
-									/>
-								</Field>
-							</div>
-						</section>
-
-						<section>
-							<SectionDivider title='TDS' />
-							<div className='flex flex-wrap items-end gap-3'>
-								<Field
-									label='TDS Applicable'
-									className='w-fit shrink-0'
-								>
-									<div className='flex items-center gap-2 h-9'>
-										<CompactToggle
-											checked={form.tdsApplicable}
-											onCheckedChange={(c) => set("tdsApplicable", c)}
-											disabled={readOnly}
-											activeLabel='Yes'
-											inactiveLabel='No'
-										/>
-										<span className='text-[11px] text-muted-foreground'>
-											{form.tdsApplicable ? "Applicable" : "Not applicable"}
-										</span>
-									</div>
-								</Field>
-								{form.tdsApplicable && (
-									<>
-										<Field
-											label='TDS Percentage'
-											className='w-36 shrink-0'
-										>
-											<Select
-												disabled={readOnly}
-												value={form.tdsPercentage}
-												onValueChange={(val) => set("tdsPercentage", val)}
-											>
-												<SelectTrigger className='text-xs h-9'>
-													<SelectValue placeholder='Select TDS %...' />
-												</SelectTrigger>
-												<SelectContent>
-													{TDS_PERCENT_OPTIONS.map((o) => (
-														<SelectItem key={o.value} value={o.value}>
-															{o.label}
-														</SelectItem>
-													))}
-												</SelectContent>
-											</Select>
-										</Field>
-										{form.tdsPercentage === "custom" && (
-											<Field
-												label='Custom %'
-												className='w-24 shrink-0'
-											>
-												<Input
-													type='number'
-													disabled={readOnly}
-													value={form.tdsCustomPercent}
-													onChange={(e) =>
-														set("tdsCustomPercent", e.target.value)
-													}
-													className={fieldClass}
-													placeholder='e.g. 7.5'
-												/>
-											</Field>
-										)}
-									</>
-								)}
-							</div>
-						</section>
-
-						<section>
-							<SectionDivider title='TCS' />
-							<div className='flex items-center gap-2'>
-								<CompactToggle
-									checked={form.tcsApplicable}
-									onCheckedChange={(c) => set("tcsApplicable", c)}
-									disabled={readOnly}
-									activeLabel='Yes'
-									inactiveLabel='No'
-								/>
-								<span className='text-[11px] text-muted-foreground'>
-									{form.tcsApplicable ? "Applicable" : "Not applicable"}
-								</span>
-							</div>
-						</section>
-
-						<section>
-							<SectionDivider title='Additional Information' />
-							<div className='grid grid-cols-12 gap-3'>
-								<Field label='PAN Number' className='col-span-12 md:col-span-2'>
-									<Input
-										disabled={readOnly}
-										value={form.panNumber}
-										onChange={(e) =>
-											set("panNumber", e.target.value.toUpperCase())
-										}
-										className={cn(fieldClass, "font-mono uppercase")}
-										maxLength={10}
-										placeholder='e.g. ABCDE1234F'
-									/>
-								</Field>
-								<Field label='Tags' className='col-span-12 md:col-span-2'>
-									<Input
-										disabled={readOnly}
-										value={form.tags}
-										onChange={(e) => set("tags", e.target.value)}
-										className={fieldClass}
-										placeholder='Comma-separated'
-									/>
-								</Field>
-								<Field
-									label='Vendor Credit Period'
-									className='col-span-12 md:col-span-2'
-								>
-									<div className='flex gap-2'>
-										<Input
-											type='number'
-											min={0}
-											disabled={readOnly}
-											value={form.creditPeriodValue}
-											onChange={(e) => set("creditPeriodValue", e.target.value)}
-											className={cn(fieldClass, "w-20")}
-											placeholder='e.g. 30'
-										/>
-										<Select
-											disabled={readOnly}
-											value={form.creditPeriodUnit}
-											onValueChange={(val) =>
-												set(
-													"creditPeriodUnit",
-													val as VendorFormValues["creditPeriodUnit"],
-												)
-											}
-										>
-											<SelectTrigger className='flex-1 text-xs h-9'>
-												<SelectValue placeholder='Select unit...' />
-											</SelectTrigger>
-											<SelectContent>
-												<SelectItem value='days'>Days</SelectItem>
-												<SelectItem value='months'>Months</SelectItem>
-											</SelectContent>
-										</Select>
-									</div>
 								</Field>
 							</div>
 						</section>
@@ -1162,8 +1211,8 @@ export function VendorForm({
 								/>
 							</Field>
 						</div>
-						<div className='grid grid-cols-5 gap-3 mt-3'>
-							<Field label='IFSC Code' className='col-span-1'>
+						<div className='grid grid-cols-1 gap-3 md:grid-cols-5'>
+							<Field label='IFSC Code'>
 								<Input
 									disabled={readOnly}
 									value={form.ifscCode}
@@ -1174,32 +1223,22 @@ export function VendorForm({
 									placeholder='e.g. HDFC0000012'
 								/>
 							</Field>
-							<Field label='SWIFT Code' className='col-span-1'>
-								<Input
-									disabled={readOnly}
-									value={form.swiftCode}
-									onChange={(e) => set("swiftCode", e.target.value)}
-									className={fieldClass}
-									placeholder='Optional'
-								/>
-							</Field>
 						</div>
 					</div>
 				)}
 
 				{tab === "product" && (
-					<div className='w-full space-y-4'>
-						<div className='flex items-center justify-between pb-2 border-b border-border/60'>
+					<div className='w-full space-y-3'>
+						<div className='flex items-center justify-between pb-1 border-b border-border/60'>
 							<SectionDivider
 								title='Product Mappings'
-								subtitle='Select products and enter vendor-specific purchase prices.'
+								subtitle='Vendor-specific purchase prices'
 							/>
-							{/* Button removed to keep only the autocomplete Add Selected panel */}
 						</div>
 
 						{!readOnly && (
-							<div className='p-3 border rounded-lg border-border bg-muted/20'>
-								<div className='grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto]'>
+							<div className='p-2.5 border rounded-lg border-border bg-muted/20'>
+								<div className='grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end'>
 									<div className='space-y-1'>
 										<label className='text-xs font-medium text-foreground'>
 											Products
@@ -1207,10 +1246,10 @@ export function VendorForm({
 										<AutocompleteSelect
 											options={activeProducts.map((p) => ({
 												value: p.productId,
-												label: `${p.sku} â€” ${p.productName}`,
+												label: `${p.sku} — ${p.productName}`,
 												trailing: (
 													<span className='text-[10px] text-muted-foreground'>
-														MRP: â‚¹{p.mrp}
+														MRP: {formatIndianRupeeDisplay(getStandardMrp(p.numericId))}
 													</span>
 												),
 											}))}
@@ -1252,29 +1291,25 @@ export function VendorForm({
 						)}
 
 						{!form.vendorProducts || form.vendorProducts.length === 0 ? (
-							<div className='py-8 text-center border border-dashed rounded-lg border-border'>
+							<div className='py-4 text-center border border-dashed rounded-lg border-border'>
 								<p className='text-xs text-muted-foreground'>
-									No products mapped yet. Click Add Product to map
-									vendor-specific prices.
+									No products mapped — select and add products above
 								</p>
 							</div>
 						) : (
-							<div className='overflow-hidden bg-white border rounded-lg shadow-sm border-border'>
+							<div className='overflow-hidden bg-white border rounded-lg border-border'>
 								<div className='overflow-x-auto'>
-									<table className='w-full text-xs min-w-[640px]'>
+									<table className='w-full text-xs min-w-[900px]'>
 										<thead>
-											<tr className='text-left border-b bg-muted/25 border-border/50 text-muted-foreground'>
-												<th className='px-3 py-2 font-medium'>Product</th>
-												<th
-													className='px-3 py-2 font-medium w-36'
-													title='Fetched from Product Master'
-												>
-													MRP
-												</th>
-												<th className='px-3 py-2 font-medium w-36'>
-													Cost Price
-												</th>
-												{!readOnly && <th className='w-12 px-3 py-2' />}
+											<tr className='text-left border-b bg-muted/40 border-border text-muted-foreground'>
+												<th className='px-2 py-2 font-semibold'>Product</th>
+												<th className='px-2 py-2 font-semibold'>SKU</th>
+												<th className='px-2 py-2 font-semibold'>Category</th>
+												<th className='px-2 py-2 font-semibold'>HSN</th>
+												<th className='px-2 py-2 font-semibold'>GST</th>
+												<th className='px-2 py-2 font-semibold w-28'>MRP</th>
+												<th className='px-2 py-2 font-semibold w-28'>Cost Price</th>
+												{!readOnly && <th className='w-10 px-2 py-2' />}
 											</tr>
 										</thead>
 										<tbody>
@@ -1284,6 +1319,9 @@ export function VendorForm({
 													p.price === null ||
 													isNaN(p.price) ||
 													p.price <= 0;
+												const prodMeta = activeProducts.find(
+													(item) => item.productId === p.productId,
+												);
 
 												return (
 													<tr
@@ -1291,70 +1329,68 @@ export function VendorForm({
 														className='border-b border-border/40 last:border-0 hover:bg-muted/10'
 													>
 														{/* Product Select */}
-														<td className='px-3 py-2 min-w-[240px]'>
+														<td className='px-2 py-1.5 min-w-[180px]'>
 															{readOnly ? (
-																<div className='flex flex-col gap-1'>
-																	<span className='font-medium text-foreground'>
-																		{p.productName
-																			? `${p.sku || "—"} — ${p.productName}`
-																			: "—"}
-																	</span>
-																	{p.productId && (
-																		<div className='text-[10px] text-muted-foreground select-none'>
-																			{getProductMetadataString(p.productId)}
-																		</div>
-																	)}
-																</div>
+																<span className='font-medium text-foreground'>
+																	{p.productName || "—"}
+																</span>
 															) : (
-																<div className='space-y-1'>
-																	<ProductSelect
-																		products={activeProducts}
-																		value={p.productId}
-																		onSelect={(prod) => {
-																			// Avoid duplicate product mapping
-																			const isDuplicate =
-																				form.vendorProducts.some(
-																					(item) =>
-																						item.productId === prod.productId &&
-																						item.id !== p.id,
-																				);
-																			if (isDuplicate) {
-																				showToast(
-																					`${prod.productName} is already mapped.`,
-																				);
-																				return;
-																			}
-																			updateProductRow(p.id, {
-																				productId: prod.productId,
-																				productName: prod.productName,
-																				sku: prod.sku,
-																				mrp: prod.mrp,
-																			});
-																		}}
-																	/>
-																	<div className='text-[10px] text-muted-foreground select-none'>
-																		{p.productId
-																			? getProductMetadataString(p.productId)
-																			: "Product details like category, unit, pack size, HSN, and GST will appear after selection."}
-																	</div>
-																</div>
+																<ProductSelect
+																	products={activeProducts}
+																	value={p.productId}
+																	onSelect={(prod) => {
+																		const isDuplicate =
+																			form.vendorProducts.some(
+																				(item) =>
+																					item.productId === prod.productId &&
+																					item.id !== p.id,
+																			);
+																		if (isDuplicate) {
+																			showToast(
+																				`${prod.productName} is already mapped.`,
+																			);
+																			return;
+																		}
+																		updateProductRow(p.id, {
+																			productId: prod.productId,
+																			productName: prod.productName,
+																			sku: prod.sku,
+																		});
+																	}}
+																/>
 															)}
 														</td>
+														<td className='px-2 py-1.5 font-mono text-muted-foreground'>
+															{prodMeta?.sku || p.sku || "—"}
+														</td>
+														<td className='px-2 py-1.5 text-muted-foreground'>
+															{prodMeta?.category || "—"}
+														</td>
+														<td className='px-2 py-1.5 font-mono text-muted-foreground'>
+															{prodMeta?.hsnCode || "—"}
+														</td>
+														<td className='px-2 py-1.5 text-muted-foreground'>
+															{prodMeta?.gstRate ? `${prodMeta.gstRate}%` : "—"}
+														</td>
 
-														{/* MRP */}
-														<td className='px-3 py-2 w-36'>
+														{/* MRP (Pricing Master) */}
+														<td className='px-2 py-1.5 w-28'>
 															<span
 																className='font-mono text-muted-foreground'
-																title='Fetched from Product Master'
+																title='From Pricing Master'
 															>
-																{p.mrp !== undefined && p.mrp !== null
-																	? `₹${p.mrp.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-																	: "—"}
+																{(() => {
+																	if (!prodMeta) return "—";
+																	const mrp = getStandardMrp(prodMeta.numericId);
+																	return mrp > 0
+																		? formatIndianRupeeDisplay(mrp)
+																		: "—";
+																})()}
 															</span>
 														</td>
 
-														{/* Price */}
-														<td className='px-3 py-2 w-36'>
+														{/* Vendor Price (overrides CP) */}
+														<td className='px-2 py-1.5 w-28'>
 															{readOnly ? (
 																<span className='font-mono font-semibold text-foreground'>
 																	{p.price !== undefined && p.price !== null

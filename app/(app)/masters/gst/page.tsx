@@ -39,6 +39,7 @@ import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/m
 import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
+import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
 interface ToastState {
   msg: string;
@@ -56,34 +57,6 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
       <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100"><X className="h-3.5 w-3.5" /></button>
-    </div>
-  );
-}
-
-function StatusToggle({ record, onToggle }: { record: GSTMaster; onToggle: (item: GSTMaster) => void }) {
-  const active = record.status === "active";
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle(record);
-      }}
-      className={cn(
-        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-        active ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
-      )}
-    >
-      {active ? "Active" : "Inactive"}
-    </button>
-  );
-}
-
-function AuditCell({ name, date }: { name: string; date?: string }) {
-  return (
-    <div className="space-y-0.5">
-      <p className="text-[11px] font-semibold leading-4 text-brand-700">{name}</p>
-      {date ? <p className="text-[10px] font-mono leading-3 text-muted-foreground">{date}</p> : null}
     </div>
   );
 }
@@ -182,7 +155,7 @@ export default function GSTPage() {
       ],
       width: "110px",
       render: (val, row) => (
-        <StatusToggle record={row} onToggle={toggleStatus} />
+        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
       ),
     },
     {
@@ -192,7 +165,7 @@ export default function GSTPage() {
       filterable: true,
       filterType: "text",
       width: "120px",
-      render: (val, row) => <AuditCell name={row.createdBy} date={row.createdDate} />,
+      render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />,
     },
     {
       key: "updatedBy",
@@ -201,7 +174,7 @@ export default function GSTPage() {
       filterable: true,
       filterType: "text",
       width: "120px",
-      render: (val, row) => <AuditCell name={row.updatedBy} date={row.updatedDate} />,
+      render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />,
     },
   ];
 

@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
-import { ACCOUNTS_HOME_HREF } from "@/lib/accounts/accounts-nav";
+import CostCentersPageClient from "./CostCentersPageClient";
 
-export default function CostCentersRedirect() {
-  redirect(ACCOUNTS_HOME_HREF);
+export default function Page() {
+  return <CostCentersPageClient />;
 }

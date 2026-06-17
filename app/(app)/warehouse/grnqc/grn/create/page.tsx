@@ -69,6 +69,7 @@ export default function GenerateGrnPage() {
             productCode: it.productCode,
             orderedQty: it.orderedQty,
             receivedQty: it.orderedQty,
+            unit: "Unit",
             poNumber: po.poNumber,
           });
         });

@@ -10,11 +10,11 @@ import {
   type VendorFormValues,
   loadVendors,
   saveVendors,
-  generateVendorCode,
   formToVendor,
   nextId,
   todayStr,
   validateVendorForm,
+  generateVendorCodeForType,
 } from "../vendor-data";
 import { CURRENT_USER } from "@/lib/procurement/config";
 
@@ -40,11 +40,12 @@ export default function NewVendorPage() {
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
   useEffect(() => {
-    const list = loadVendors();
-    const code = generateVendorCode(list);
-    setVendorCode(code);
-    setForm((f) => ({ ...f, vendorCode: code }));
-  }, []);
+    if (!form.vendorType) {
+      setVendorCode("");
+      return;
+    }
+    setVendorCode(generateVendorCodeForType(form.vendorType, loadVendors()));
+  }, [form.vendorType]);
 
   const save = () => {
     const err = validateVendorForm(form);
@@ -52,20 +53,21 @@ export default function NewVendorPage() {
       setToast({ msg: err, type: "error" });
       return;
     }
+    if (!vendorCode) {
+      setToast({ msg: "Select a vendor type to generate vendor code.", type: "error" });
+      return;
+    }
     const list = loadVendors();
     const today = todayStr();
-    const record = formToVendor(
-      { ...form, vendorCode },
-      {
-        id: nextId(list),
-        vendorCode,
-        status: "active",
-        createdBy: CURRENT_USER,
-        createdDate: today,
-        updatedBy: CURRENT_USER,
-        updatedDate: today,
-      },
-    );
+    const record = formToVendor(form, {
+      id: nextId(list),
+      vendorCode,
+      status: "active",
+      createdBy: CURRENT_USER,
+      createdDate: today,
+      updatedBy: CURRENT_USER,
+      updatedDate: today,
+    });
     saveVendors([...list, record]);
     setToast({ msg: "Vendor created.", type: "success" });
     setTimeout(() => router.push("/masters/vendors"), 700);
@@ -74,10 +76,15 @@ export default function NewVendorPage() {
   return (
     <FormContainer
       title="Create Vendor"
-      description={`Masters → Vendor Master → ${vendorCode || "New"}`}
+      description="Masters → Vendor Master → New"
       onBack={() => router.push("/masters/vendors")}
       actions={
         <div className="flex items-center gap-2">
+          {vendorCode && (
+            <span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
+              {vendorCode}
+            </span>
+          )}
           <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.push("/masters/vendors")}>
             Cancel
           </Button>
@@ -87,7 +94,7 @@ export default function NewVendorPage() {
         </div>
       }
     >
-      <VendorForm form={form} onChange={setForm} vendorCode={vendorCode} />
+      <VendorForm form={form} onChange={setForm} />
       {toast && <Toast msg={toast.msg} type={toast.type} onDismiss={() => setToast(null)} />}
     </FormContainer>
   );

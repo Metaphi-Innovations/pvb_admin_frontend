@@ -17,7 +17,7 @@ import {
 import {
   Plus, Eye, Edit2, Trash2,
   Building2, CheckCircle2, XCircle, X, AlertTriangle,
-  Clock, MoreHorizontal,
+  MoreHorizontal,
 } from "lucide-react";
 import DepartmentSheet, { type Department } from "./components/DepartmentSheet";
 import DepartmentDetailSheet from "./components/DepartmentDetailSheet";
@@ -26,17 +26,15 @@ import DepartmentDetailSheet from "./components/DepartmentDetailSheet";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
+import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
 // ── Seed data ─────────────────────────────────────────────────────────────────
 const SEED: Department[] = [
-  { id: 1, code: "DEPT-001", name: "Sales",        status: "active",   remarks: "",                    createdBy: "Admin", createdDate: "2024-01-10", updatedBy: "Admin", updatedDate: "2024-01-10", lastStatusChange: "2024-01-10" },
-  { id: 2, code: "DEPT-002", name: "HR",           status: "active",   remarks: "",                    createdBy: "Admin", createdDate: "2024-01-12", updatedBy: "Admin", updatedDate: "2024-01-12", lastStatusChange: "2024-01-12" },
-  { id: 3, code: "DEPT-003", name: "Accounts",     status: "active",   remarks: "",                    createdBy: "Admin", createdDate: "2024-01-15", updatedBy: "Admin", updatedDate: "2024-01-15", lastStatusChange: "2024-01-15" },
-  { id: 4, code: "DEPT-004", name: "Procurement",  status: "inactive", remarks: "Under restructuring", createdBy: "Admin", createdDate: "2024-01-18", updatedBy: "Admin", updatedDate: "2024-01-20", lastStatusChange: "2024-01-20" },
-  { id: 5, code: "DEPT-005", name: "Field Force",  status: "active",   remarks: "",                    createdBy: "Admin", createdDate: "2024-01-22", updatedBy: "Admin", updatedDate: "2024-01-22", lastStatusChange: "2024-01-22" },
-  { id: 6, code: "DEPT-006", name: "Retail Sales", status: "active",   remarks: "",                    createdBy: "Admin", createdDate: "2024-02-01", updatedBy: "Admin", updatedDate: "2024-02-01", lastStatusChange: "2024-02-01" },
-  { id: 7, code: "DEPT-007", name: "Territory",    status: "active",   remarks: "",                    createdBy: "Admin", createdDate: "2024-02-05", updatedBy: "Admin", updatedDate: "2024-02-05", lastStatusChange: "2024-02-05" },
-  { id: 8, code: "DEPT-008", name: "Collections",  status: "inactive", remarks: "Merged with Accounts", createdBy: "Admin", createdDate: "2024-02-10", updatedBy: "Admin", updatedDate: "2024-02-15", lastStatusChange: "2024-02-15" },
+  { id: 1, code: "DEPT-001", name: "Accounts",    status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-01-15", updatedBy: "Admin", updatedDate: "2024-01-15", lastStatusChange: "2024-01-15" },
+  { id: 2, code: "DEPT-002", name: "HR",          status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-01-12", updatedBy: "Admin", updatedDate: "2024-01-12", lastStatusChange: "2024-01-12" },
+  { id: 3, code: "DEPT-003", name: "Procurement", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-01-18", updatedBy: "Admin", updatedDate: "2024-01-18", lastStatusChange: "2024-01-18" },
+  { id: 4, code: "DEPT-004", name: "Warehouse",     status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-02-01", updatedBy: "Admin", updatedDate: "2024-02-01", lastStatusChange: "2024-02-01" },
+  { id: 5, code: "DEPT-005", name: "Admin",         status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-02-05", updatedBy: "Admin", updatedDate: "2024-02-05", lastStatusChange: "2024-02-05" },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -114,49 +112,6 @@ function ConfirmDialog({ open, onClose, onConfirm, title, description, confirmLa
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-// ── Status Configuration ──────────────────────────────────────────────────────
-const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
-  active:   { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
-  inactive: { bg: "bg-slate-100",  text: "text-slate-600",   dot: "bg-slate-400"   },
-  draft:    { bg: "bg-blue-50",    text: "text-blue-700",    dot: "bg-blue-500"    },
-  archived: { bg: "bg-red-50",     text: "text-red-700",     dot: "bg-red-400"     },
-};
-
-function StatusToggle({ record, onToggle }: { record: Department; onToggle: (item: Department) => void }) {
-  const active = record.status === "active";
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onToggle(record);
-      }}
-      className={cn(
-        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-        active
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
-      )}
-    >
-      {active ? "Active" : "Inactive"}
-    </button>
-  );
-}
-
-function AuditCell({ name, date }: { name?: string; date?: string }) {
-  return (
-    <div className="space-y-0.5">
-      <p className="text-[11px] font-semibold leading-4 text-brand-700">
-        {name || "—"}
-      </p>
-      <p className="text-[10px] font-mono leading-3 text-muted-foreground">
-        {date || "—"}
-      </p>
-    </div>
   );
 }
 
@@ -373,17 +328,26 @@ export default function DepartmentPage() {
         { label: "Active", value: "active" },
         { label: "Inactive", value: "inactive" },
       ],
-      render: (val, row) => <StatusToggle record={row} onToggle={toggleStatus} />,
+      render: (val, row) => (
+        <ListingStatusToggle
+          active={isActiveStatus(row.status)}
+          onChange={() => toggleStatus(row)}
+        />
+      ),
     },
     {
       key: "createdDate",
-      header: "Created By",
-      render: (val, row) => <AuditCell name={row.createdBy} date={row.createdDate} />,
+      header: "Created",
+      render: (val, row) => (
+        <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />
+      ),
     },
     {
       key: "updatedDate",
       header: "Updated",
-      render: (val, row) => <AuditCell name={row.updatedBy} date={row.updatedDate} />,
+      render: (val, row) => (
+        <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />
+      ),
     },
     {
       key: "actions",

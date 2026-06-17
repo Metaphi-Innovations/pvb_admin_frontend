@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,13 +27,18 @@ import {
 	recalculateLineItem,
 	computeGstAmount,
 	getProductById,
+	calculateDiscountPercentFromValue,
+	calculateLineDiscountValue,
 } from "../orders-data";
+import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
 
 interface ProductLinesEditorProps {
 	lines: SalesOrderLineItem[];
 	products: ProductCatalogItem[];
 	onChange: (lines: SalesOrderLineItem[]) => void;
 	error?: string;
+	/** When true (SEZ + active LUT), line GST is zeroed. */
+	zeroGst?: boolean;
 }
 
 function ProductSelect({
@@ -186,9 +191,33 @@ export default function ProductLinesEditor({
 	products,
 	onChange,
 	error,
+	zeroGst = false,
 }: ProductLinesEditorProps) {
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [localError, setLocalError] = useState<string | null>(null);
+
+	useEffect(() => {
+		const nextLines = lines.map((line) => {
+			if (!line.productId) return line;
+			const product = getProductById(line.productId);
+			if (!product) return line;
+			const gstAmount = computeGstAmount(
+				line.quantity,
+				line.unitPrice,
+				line.discount,
+				product.gstRate,
+				zeroGst,
+			);
+			return recalculateLineItem({ ...line, gstAmount });
+		});
+		const changed = nextLines.some(
+			(l, i) =>
+				l.gstAmount !== lines[i]?.gstAmount ||
+				l.lineTotal !== lines[i]?.lineTotal,
+		);
+		if (changed) onChange(nextLines);
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- recalc when LUT zero-tax toggles
+	}, [zeroGst]);
 
 	const updateLine = (id: string, patch: Partial<SalesOrderLineItem>) => {
 		setLocalError(null);
@@ -196,13 +225,29 @@ export default function ProductLinesEditor({
 			lines.map((line) => {
 				if (line.id !== id) return line;
 				let next = { ...line, ...patch };
+
+				if (patch.discountValue !== undefined && patch.discount === undefined) {
+					next.discount = calculateDiscountPercentFromValue(
+						next.quantity,
+						next.unitPrice,
+						next.discountValue,
+					);
+				}
+
 				if (patch.productId !== undefined && patch.productId !== null) {
 					const product = getProductById(patch.productId);
-					if (product) next = applyProductToLine(next, product);
+					if (product) {
+						next = applyProductToLine(next, product);
+						if (zeroGst) {
+							next.gstAmount = 0;
+							next = recalculateLineItem(next);
+						}
+					}
 				} else if (
 					patch.quantity !== undefined ||
 					patch.unitPrice !== undefined ||
-					patch.discount !== undefined
+					patch.discount !== undefined ||
+					patch.discountValue !== undefined
 				) {
 					const product = next.productId
 						? getProductById(next.productId)
@@ -213,8 +258,14 @@ export default function ProductLinesEditor({
 							next.unitPrice,
 							next.discount,
 							product.gstRate,
+							zeroGst,
 						);
 					}
+					next.discountValue = calculateLineDiscountValue(
+						next.quantity,
+						next.unitPrice,
+						next.discount,
+					);
 					next = recalculateLineItem(next);
 				} else if (patch.gstAmount !== undefined) {
 					next = recalculateLineItem(next);
@@ -306,7 +357,7 @@ export default function ProductLinesEditor({
 			) : (
 				<div className='border border-border rounded-xl bg-white shadow-sm overflow-hidden'>
 					<div className='overflow-x-auto'>
-						<table className='w-full min-w-[960px]'>
+						<table className='w-full min-w-[1100px]'>
 							<thead>
 								<tr className='bg-muted/40 border-b border-border'>
 									{[
@@ -315,6 +366,7 @@ export default function ProductLinesEditor({
 										{ h: "Qty", className: "w-16" },
 										{ h: "Unit Price", className: "min-w-[120px] w-32" },
 										{ h: "Discount (%)", className: "w-24" },
+										{ h: "Discount Value (₹)", className: "min-w-[120px] w-28" },
 										{ h: "GST % / Amt", className: "min-w-[140px] w-24" },
 										{ h: "Item Total", className: "min-w-[100px]" },
 										{ h: "", className: "w-16" },
@@ -457,6 +509,24 @@ export default function ProductLinesEditor({
 													</div>
 												) : (
 													<span className='text-xs'>{line.discount}%</span>
+												)}
+											</td>
+											<td className='px-2 py-1.5 min-w-[120px] w-28'>
+												{isEditing ? (
+													<IndianRupeeInput
+														value={line.discountValue}
+														onChange={(n) =>
+															updateLine(line.id, { discountValue: n })
+														}
+														className="h-7 text-xs"
+													/>
+												) : (
+													<span className='text-xs tabular-nums'>
+														₹{line.discountValue.toLocaleString("en-IN", {
+															minimumFractionDigits: 2,
+															maximumFractionDigits: 2,
+														})}
+													</span>
 												)}
 											</td>
 											<td className='px-2 py-1.5 min-w-[140px] w-24'>

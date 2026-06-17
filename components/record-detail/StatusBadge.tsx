@@ -10,20 +10,20 @@ interface BadgeStyle {
 }
 
 const STATUS_STYLES: Record<string, BadgeStyle> = {
-  draft: { bg: "#F1F5F9", tx: "#475569", bd: "#CBD5E1", dot: "#94A3B8" },
-  "pending approval": { bg: "#FFFBEB", tx: "#92400E", bd: "#FDE68A", dot: "#D97706" },
-  confirmed: { bg: "#EFF6FF", tx: "#1D4ED8", bd: "#93C5FD", dot: "#3B82F6" },
-  approved: { bg: "#E6F7EF", tx: "#065F46", bd: "#C2EDD9", dot: "#1E9E61" },
-  dispatched: { bg: "#F5F3FF", tx: "#5B21B6", bd: "#C4B5FD", dot: "#7C3AED" },
-  delivered: { bg: "#ECFDF5", tx: "#166534", bd: "#86EFAC", dot: "#10B981" },
-  cancelled: { bg: "#FEF2F2", tx: "#991B1B", bd: "#FCA5A5", dot: "#EF4444" },
-  rejected: { bg: "#FEF2F2", tx: "#991B1B", bd: "#FCA5A5", dot: "#EF4444" },
-  active: { bg: "#ECFDF5", tx: "#166534", bd: "#86EFAC", dot: "#10B981" },
-  inactive: { bg: "#F1F5F9", tx: "#475569", bd: "#CBD5E1", dot: "#94A3B8" },
-  blocked: { bg: "#FEF2F2", tx: "#991B1B", bd: "#FCA5A5", dot: "#EF4444" },
+  draft: { bg: "#FFFBEB", tx: "#B45309", bd: "#F59E0B", dot: "#F59E0B" },
+  "pending approval": { bg: "#FFFBEB", tx: "#B45309", bd: "#F59E0B", dot: "#F59E0B" },
+  confirmed: { bg: "#ECFDF5", tx: "#16A34A", bd: "#86EFAC", dot: "#16A34A" },
+  approved: { bg: "#ECFDF5", tx: "#16A34A", bd: "#86EFAC", dot: "#16A34A" },
+  dispatched: { bg: "#FFF7ED", tx: "#E57A1F", bd: "#E57A1F", dot: "#E57A1F" },
+  delivered: { bg: "#ECFDF5", tx: "#16A34A", bd: "#86EFAC", dot: "#16A34A" },
+  cancelled: { bg: "#FEF2F2", tx: "#DC2626", bd: "#FCA5A5", dot: "#DC2626" },
+  rejected: { bg: "#FEF2F2", tx: "#DC2626", bd: "#FCA5A5", dot: "#DC2626" },
+  active: { bg: "#ECFDF5", tx: "#16A34A", bd: "#86EFAC", dot: "#16A34A" },
+  inactive: { bg: "#F3F4F6", tx: "#64748B", bd: "#E5E7EB", dot: "#9CA3AF" },
+  blocked: { bg: "#FEF2F2", tx: "#DC2626", bd: "#FCA5A5", dot: "#DC2626" },
 };
 
-const FALLBACK: BadgeStyle = { bg: "#F1F5F9", tx: "#475569", bd: "#CBD5E1", dot: "#94A3B8" };
+const FALLBACK: BadgeStyle = { bg: "#F3F4F6", tx: "#64748B", bd: "#E5E7EB", dot: "#9CA3AF" };
 
 function normalize(status: string): string {
   return status.trim().toLowerCase().replace(/[_-]+/g, " ");

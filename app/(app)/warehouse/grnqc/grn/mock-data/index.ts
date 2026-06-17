@@ -53,8 +53,8 @@ const SEED_GRNS: GrnRecord[] = [
     totalQty: 800,
     status: "qc_completed",
     items: [
-      { productId: "1", productName: "Urea 50kg", productCode: "FER-UR-001", orderedQty: 500, receivedQty: 500 },
-      { productId: "2", productName: "NPK 10:26:26", productCode: "FER-NPK-002", orderedQty: 300, receivedQty: 300 },
+      { productId: "1", productName: "Urea 50kg", productCode: "FER-UR-001", orderedQty: 500, receivedQty: 500, unit: "BAG" },
+      { productId: "2", productName: "NPK 10:26:26", productCode: "FER-NPK-002", orderedQty: 300, receivedQty: 300, unit: "BAG" },
     ],
     batches: [
       { productId: "1", productName: "Urea 50kg", batchNumber: "B-UR-99A", mfgDate: "2023-11-01", expDate: "2025-11-01", quantity: 500 },
@@ -72,7 +72,7 @@ const SEED_GRNS: GrnRecord[] = [
     totalQty: 200,
     status: "qc_completed",
     items: [
-      { productId: "3", productName: "Hybrid Maize Seed", productCode: "SED-MZ-003", orderedQty: 200, receivedQty: 200 },
+      { productId: "3", productName: "Hybrid Maize Seed", productCode: "SED-MZ-003", orderedQty: 200, receivedQty: 200, unit: "KG" },
     ],
     batches: [
       { productId: "3", productName: "Hybrid Maize Seed", batchNumber: "B-MZ-01X", mfgDate: "2023-10-10", expDate: "2024-10-10", quantity: 200 },
@@ -89,8 +89,8 @@ const SEED_GRNS: GrnRecord[] = [
     totalQty: 520,
     status: "qc_pending",
     items: [
-      { productId: "4", productName: "DAP 50kg", productCode: "FER-DAP-004", orderedQty: 400, receivedQty: 380 },
-      { productId: "5", productName: "Zinc Sulphate 21%", productCode: "CHEM-ZN-005", orderedQty: 150, receivedQty: 140 },
+      { productId: "4", productName: "DAP 50kg", productCode: "FER-DAP-004", orderedQty: 400, receivedQty: 380, unit: "BAG" },
+      { productId: "5", productName: "Zinc Sulphate 21%", productCode: "CHEM-ZN-005", orderedQty: 150, receivedQty: 140, unit: "KG" },
     ],
     batches: [
       { productId: "4", productName: "DAP 50kg", batchNumber: "B-DAP-33C", mfgDate: "2023-12-01", expDate: "2025-12-01", quantity: 380 },
@@ -109,7 +109,7 @@ const SEED_GRNS: GrnRecord[] = [
     totalQty: 60,
     status: "qc_completed",
     items: [
-      { productId: "4", productName: "Chlorpyrifos 20 EC", productCode: "PRD-004", orderedQty: 100, receivedQty: 60 },
+      { productId: "4", productName: "Chlorpyrifos 20 EC", productCode: "PRD-004", orderedQty: 100, receivedQty: 60, unit: "LTR", batchNumber: "B-CP-24A", mfgDate: "2023-10-01", expDate: "2025-10-01", inventoryTracked: true },
     ],
     batches: [
       { productId: "4", productName: "Chlorpyrifos 20 EC", batchNumber: "B-CP-24A", mfgDate: "2023-10-01", expDate: "2025-10-01", quantity: 60 },

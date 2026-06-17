@@ -6,14 +6,13 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertCircle, ChevronsUpDown, Check, ArrowLeft, Save, MapPin,
   Shield, Info, ChevronDown, ChevronUp, Plus, Trash2, GripVertical,
   Monitor, Smartphone,
-  Eye, EyeOff, Lock,
+  Eye, EyeOff, Lock, User, Briefcase, FileText,
 } from "lucide-react";
 import { loadGeoNodes, type GeoNode, type GeoLevel } from "@/app/(app)/masters/geography/geo-data";
 import {
@@ -28,7 +27,11 @@ import {
   migratePermissions, roleDefaultPermissions,
   validateEmail, validateEmailUnique, validateMobile, validateMobileUnique,
   validateCircularReporting, todayStr, loadEmployees, nextEmployeeId,
+  applyEmployeeStatusChange,
 } from "../employee-data";
+import { type EmployeeDocument } from "../employee-documents";
+import { EmployeeDocumentsSection } from "./EmployeeDocumentsSection";
+import { EmployeeListingStatusCell } from "./EmployeeListingStatusCell";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -36,6 +39,13 @@ import {
   loadRoles, loadPermissionTemplates, type Role, loadNewPermissionTemplates, type PermissionTemplate
 } from "../../roles/roles-data";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+import { DualAddressSection, AddressBlock } from "@/components/address";
+import {
+  EMPTY_STRUCTURED_ADDRESS,
+  formatStructuredAddress,
+  structuredAddressesEqual,
+  type StructuredAddress,
+} from "@/lib/address";
 
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -44,6 +54,7 @@ interface EmployeeFormProps {
   mode: "add" | "edit";
   employee?: Employee;
   onSave: (emp: Employee) => void;
+  onStatusSave?: (emp: Employee) => void;
   onCancel: () => void;
   departments: Array<{ id: number; name: string }>;
 }
@@ -52,6 +63,63 @@ type EmployeeFormState = Partial<Employee> & {
   password?: string;
   confirmPassword?: string;
 };
+
+function employeeToCurrentAddress(emp?: Employee): StructuredAddress {
+  if (!emp) return { ...EMPTY_STRUCTURED_ADDRESS };
+  return {
+    line1: emp.currentAddressLine1 || "",
+    line2: emp.currentAddressLine2 || "",
+    stateId: emp.currentStateId ?? null,
+    cityId: emp.currentCityId ?? null,
+    pincodeId: emp.currentPincodeId ?? null,
+  };
+}
+
+function employeeToPermanentAddress(emp?: Employee): StructuredAddress {
+  if (!emp) return { ...EMPTY_STRUCTURED_ADDRESS };
+  return {
+    line1: emp.permanentAddressLine1 || "",
+    line2: emp.permanentAddressLine2 || "",
+    stateId: emp.permanentStateId ?? null,
+    cityId: emp.permanentCityId ?? null,
+    pincodeId: emp.permanentPincodeId ?? null,
+  };
+}
+
+function employeeToEmergencyAddress(emp?: Employee): StructuredAddress {
+  if (!emp) return { ...EMPTY_STRUCTURED_ADDRESS };
+  return {
+    line1: emp.emergencyAddressLine1 || "",
+    line2: emp.emergencyAddressLine2 || "",
+    stateId: emp.emergencyStateId ?? null,
+    cityId: emp.emergencyCityId ?? null,
+    pincodeId: emp.emergencyPincodeId ?? null,
+  };
+}
+
+function validateStructuredAddress(
+  addr: StructuredAddress,
+  prefix: string,
+  errors: Record<string, string>,
+) {
+  if (!addr.line1.trim()) errors[`${prefix}_line1`] = "Required";
+  if (!addr.stateId) errors[`${prefix}_stateId`] = "Required";
+  if (!addr.cityId) errors[`${prefix}_cityId`] = "Required";
+  if (!addr.pincodeId) errors[`${prefix}_pincodeId`] = "Required";
+}
+
+function mapAddressErrors(
+  prefix: string,
+  errors: Record<string, string>,
+): Partial<Record<keyof StructuredAddress, string>> {
+  return {
+    line1: errors[`${prefix}_line1`],
+    line2: errors[`${prefix}_line2`],
+    stateId: errors[`${prefix}_stateId`],
+    cityId: errors[`${prefix}_cityId`],
+    pincodeId: errors[`${prefix}_pincodeId`],
+  };
+}
 
 // ── Country Code Picker ───────────────────────────────────────────────────────
 function CountryCodePicker({ value, onChange, hasError }: { value: string; onChange: (v: string) => void; hasError?: boolean }) {
@@ -112,6 +180,101 @@ function SectionHead({ label, sub, required }: { label: string; sub?: string; re
   );
 }
 
+type FormTabId = "personal" | "employment" | "documents" | "permissions";
+
+const FORM_SECTIONS: Record<
+  FormTabId,
+  {
+    label: string;
+    icon: React.ElementType;
+    description: string;
+    bullets: string[];
+  }
+> = {
+  personal: {
+    label: "Personal Details",
+    icon: User,
+    description: "Complete employee personal information including:",
+    bullets: [
+      "Basic Information",
+      "Address Information",
+      "Account Credentials",
+      "Emergency Contact",
+    ],
+  },
+  employment: {
+    label: "Employment Details",
+    icon: Briefcase,
+    description: "Configure employment, role, and organizational mapping including:",
+    bullets: [
+      "Employment Information",
+      "Role & Access Level",
+      "Geography Mapping",
+      "Approval Chain",
+    ],
+  },
+  documents: {
+    label: "Documents",
+    icon: FileText,
+    description: "Upload and manage employee documents including:",
+    bullets: [
+      "Identity Documents",
+      "Employment Documents",
+      "Education & Banking Documents",
+      "Profile Completion Tracking",
+    ],
+  },
+  permissions: {
+    label: "Permissions",
+    icon: Shield,
+    description: "Manage system access and permission templates including:",
+    bullets: [
+      "Web Portal Access",
+      "Mobile App Access",
+      "Permission Templates",
+    ],
+  },
+};
+
+const TAB_TRIGGER_CLASS = cn(
+  "px-4 pb-3 pt-2 text-sm font-medium gap-2",
+  "data-[state=active]:text-base data-[state=active]:font-semibold data-[state=active]:text-brand-600",
+  "data-[state=active]:after:h-[3px] data-[state=active]:after:bg-brand-600",
+);
+
+function FormSectionHeader({ tab }: { tab: FormTabId }) {
+  const section = FORM_SECTIONS[tab];
+  const Icon = section.icon;
+  return (
+    <div className="mb-6 pt-1">
+      <div className="flex items-start gap-3.5">
+        <div className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center flex-shrink-0">
+          <Icon className="w-5 h-5 text-brand-600" />
+        </div>
+        <div className="min-w-0">
+          <h2 className="text-xl sm:text-2xl font-semibold text-foreground leading-tight tracking-tight">
+            {section.label}
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+            {section.description}
+          </p>
+          <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1">
+            {section.bullets.map((item) => (
+              <li
+                key={item}
+                className="text-xs text-muted-foreground flex items-center gap-1.5"
+              >
+                <span className="w-1 h-1 rounded-full bg-brand-400 flex-shrink-0" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Autocomplete (searchable dropdown) ───────────────────────────────────────
 
 interface ACOption { label: string; value: string | number; sub?: string }
@@ -119,28 +282,37 @@ interface ApprovalLevel { uid: string; empId: number | null; name: string; role:
 interface GeoMappingRow {
   geoZone: string;
   geoRegion: string;
+  geoState: string;
   geoArea: string;
   territory: string;
-  geoLocality: string;
+  geoDistrict: string;
+  geoCity: string;
+  geoTown: string;
 }
 
 function emptyGeoMapping(): GeoMappingRow {
   return {
     geoZone: "",
     geoRegion: "",
+    geoState: "",
     geoArea: "",
     territory: "",
-    geoLocality: "",
+    geoDistrict: "",
+    geoCity: "",
+    geoTown: "",
   };
 }
 
-function toGeoMappingRow(mapping?: Partial<GeoMappingRow> | null): GeoMappingRow {
+function toGeoMappingRow(mapping?: Partial<GeoMappingRow> & { geoLocality?: string } | null): GeoMappingRow {
   return {
     geoZone: mapping?.geoZone || "",
     geoRegion: mapping?.geoRegion || "",
+    geoState: mapping?.geoState || "",
     geoArea: mapping?.geoArea || "",
     territory: mapping?.territory || "",
-    geoLocality: mapping?.geoLocality || "",
+    geoDistrict: mapping?.geoDistrict || "",
+    geoCity: mapping?.geoCity || "",
+    geoTown: mapping?.geoTown || mapping?.geoLocality || "",
   };
 }
 
@@ -1055,20 +1227,24 @@ function isDescendantOf(node: GeoNode, ancestorLevel: GeoLevel, ancestorName: st
 
 // ── Main Form ─────────────────────────────────────────────────────────────────
 
-export default function EmployeeForm({ mode, employee, onSave, onCancel, departments }: EmployeeFormProps) {
+export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onCancel, departments }: EmployeeFormProps) {
   const allEmployees = loadEmployees();
   const newEmpId = mode === "add" ? nextEmployeeId(allEmployees) : (employee?.employeeId || "");
   const initialGeoMappings = (() => {
     if (employee?.geoMappings?.length) {
       return employee.geoMappings.map((mapping) => toGeoMappingRow(mapping));
     }
-    if (employee?.geoZone || employee?.geoRegion || employee?.geoArea || employee?.territory || employee?.geoLocality) {
+    if (employee?.geoZone || employee?.geoRegion || employee?.geoState || employee?.geoArea || employee?.territory || employee?.geoTown || employee?.geoLocality) {
       return [
         toGeoMappingRow({
           geoZone: employee.geoZone,
           geoRegion: employee.geoRegion,
+          geoState: employee.geoState,
           geoArea: employee.geoArea,
           territory: employee.territory,
+          geoDistrict: employee.geoDistrict,
+          geoCity: employee.geoCity,
+          geoTown: employee.geoTown,
           geoLocality: employee.geoLocality,
         }),
       ];
@@ -1086,15 +1262,14 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
     email: "", mobile: "", countryCode: "+91", alternativeMobile: "",
     password: "",
     bloodGroup: "Unknown", gender: undefined, dob: "",
-    currentAddress: "", permanentAddress: "",
     emergencyContactName: "", emergencyContactMobile: "",
-    emergencyContactRelation: "Spouse", emergencyContactAddress: "",
+    emergencyContactRelation: "Spouse",
     departmentId: null, employeeType: undefined,
     roleType: undefined, salesType: undefined,
     roleId: null, role: "",
     reportingManagerId: null,
     status: "draft", joiningDate: todayStr(),
-    geoZone: "", geoRegion: "", geoArea: "", territory: "", geoLocality: "",
+    geoZone: "", geoRegion: "", geoState: "", geoArea: "", territory: "", geoDistrict: "", geoCity: "", geoTown: "",
     approvalLevel1Id: null, approvalLevel1Name: "", approvalLevel1Role: "",
     approvalLevel2Id: null, approvalLevel2Name: "", approvalLevel2Role: "",
     approvalLevel3Id: null, approvalLevel3Name: "", approvalLevel3Role: "",
@@ -1105,11 +1280,30 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
   const [pendingRoleId, setPendingRoleId] = useState<number | null>(null);
   const [showRoleChangeWarning, setShowRoleChangeWarning] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [sameAddress, setSameAddress] = useState(false);
+  const [currentAddr, setCurrentAddr] = useState<StructuredAddress>(() =>
+    employeeToCurrentAddress(employee),
+  );
+  const [permanentAddr, setPermanentAddr] = useState<StructuredAddress>(() =>
+    employeeToPermanentAddress(employee),
+  );
+  const [emergencyAddr, setEmergencyAddr] = useState<StructuredAddress>(() =>
+    employeeToEmergencyAddress(employee),
+  );
+  const [sameAddress, setSameAddress] = useState(() => {
+    if (employee?.sameAsCurrentAddress) return true;
+    if (!employee) return false;
+    return structuredAddressesEqual(
+      employeeToCurrentAddress(employee),
+      employeeToPermanentAddress(employee),
+    );
+  });
   const [geoMappings, setGeoMappings] = useState<GeoMappingRow[]>(initialGeoMappings);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [activeTab, setActiveTab] = useState("personal");
+  const [documents, setDocuments] = useState<EmployeeDocument[]>(() => employee?.documents || []);
+  const [statusConfirm, setStatusConfirm] = useState<"active" | "inactive" | null>(null);
+  const [statusToast, setStatusToast] = useState<string | null>(null);
 
   // ── Dynamic approval chain ──────────────────────────────────────────────────
   const [approvalLevels, setApprovalLevels] = useState<ApprovalLevel[]>(() => {
@@ -1139,8 +1333,8 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       if (key === "roleType") {
         upd.salesType = undefined;
         upd.roleId = null; upd.role = "";
-        upd.geoZone = ""; upd.geoRegion = ""; upd.geoArea = "";
-        upd.territory = ""; upd.geoLocality = "";
+        upd.geoZone = ""; upd.geoRegion = ""; upd.geoState = ""; upd.geoArea = "";
+        upd.territory = ""; upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
         upd.approvalLevel1Id = null; upd.approvalLevel1Name = ""; upd.approvalLevel1Role = "";
         upd.approvalLevel2Id = null; upd.approvalLevel2Name = ""; upd.approvalLevel2Role = "";
         upd.approvalLevel3Id = null; upd.approvalLevel3Name = ""; upd.approvalLevel3Role = "";
@@ -1151,23 +1345,34 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       }
       if (key === "salesType") {
         upd.roleId = null; upd.role = "";
-        upd.geoZone = ""; upd.geoRegion = ""; upd.geoArea = "";
-        upd.territory = ""; upd.geoLocality = "";
+        upd.geoZone = ""; upd.geoRegion = ""; upd.geoState = ""; upd.geoArea = "";
+        upd.territory = ""; upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
         setGeoMappings([emptyGeoMapping()]);
         setErrors(prev => Object.fromEntries(Object.entries(prev).filter(([errorKey]) => !errorKey.startsWith("geoMapping_"))));
       }
       // Cascade geo resets
       if (key === "geoZone") {
-        upd.geoRegion = ""; upd.geoArea = ""; upd.territory = ""; upd.geoLocality = "";
+        upd.geoRegion = ""; upd.geoState = ""; upd.geoArea = ""; upd.territory = "";
+        upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
       }
       if (key === "geoRegion") {
-        upd.geoArea = ""; upd.territory = ""; upd.geoLocality = "";
+        upd.geoState = ""; upd.geoArea = ""; upd.territory = "";
+        upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
+      }
+      if (key === "geoState") {
+        upd.geoArea = ""; upd.territory = ""; upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
       }
       if (key === "geoArea") {
-        upd.territory = ""; upd.geoLocality = "";
+        upd.territory = ""; upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
       }
       if (key === "territory") {
-        upd.geoLocality = "";
+        upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
+      }
+      if (key === "geoDistrict") {
+        upd.geoCity = ""; upd.geoTown = "";
+      }
+      if (key === "geoCity") {
+        upd.geoTown = "";
       }
       if (key === "firstName" || key === "lastName")
         upd.fullName = `${key === "firstName" ? value : prev.firstName || ""} ${key === "lastName" ? value : prev.lastName || ""}`.trim();
@@ -1211,7 +1416,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       ...prev,
       roleId: targetRoleId,
       role: r.name || "",
-      geoZone: "", geoRegion: "", geoArea: "", territory: "", geoLocality: "",
+      geoZone: "", geoRegion: "", geoState: "", geoArea: "", territory: "", geoDistrict: "", geoCity: "", geoTown: "",
       approvalLevel1Id: null, approvalLevel1Name: "", approvalLevel1Role: "",
       approvalLevel2Id: null, approvalLevel2Name: "", approvalLevel2Role: "",
       approvalLevel3Id: null, approvalLevel3Name: "", approvalLevel3Role: "",
@@ -1257,9 +1462,12 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       ...prev,
       geoZone: primary.geoZone,
       geoRegion: primary.geoRegion,
+      geoState: primary.geoState,
       geoArea: primary.geoArea,
       territory: primary.territory,
-      geoLocality: primary.geoLocality,
+      geoDistrict: primary.geoDistrict,
+      geoCity: primary.geoCity,
+      geoTown: primary.geoTown,
     }));
   };
 
@@ -1322,9 +1530,14 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       .filter(n => !mapping.geoZone || isDescendantOf(n, "Zone", mapping.geoZone, geoNodes))
       .map(n => ({ label: n.name, value: n.name }));
 
+    const stateOptions = geoNodes
+      .filter(n => n.level === "State")
+      .filter(n => !mapping.geoRegion || isDescendantOf(n, "Region", mapping.geoRegion, geoNodes))
+      .map(n => ({ label: n.name, value: n.name }));
+
     const areaOptions = geoNodes
       .filter(n => n.level === "Area")
-      .filter(n => !mapping.geoRegion || isDescendantOf(n, "Region", mapping.geoRegion, geoNodes))
+      .filter(n => !mapping.geoState || isDescendantOf(n, "State", mapping.geoState, geoNodes))
       .map(n => ({ label: n.name, value: n.name }));
 
     const territoryOptions = geoNodes
@@ -1332,17 +1545,30 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       .filter(n => !mapping.geoArea || isDescendantOf(n, "Area", mapping.geoArea, geoNodes))
       .map(n => ({ label: n.name, value: n.name }));
 
-    const localityOptions = geoNodes
-      .filter(n => n.level === "Locality")
+    const districtOptions = geoNodes
+      .filter(n => n.level === "District")
       .filter(n => !mapping.territory || isDescendantOf(n, "Territory", mapping.territory, geoNodes))
+      .map(n => ({ label: n.name, value: n.name }));
+
+    const cityOptions = geoNodes
+      .filter(n => n.level === "City")
+      .filter(n => !mapping.geoDistrict || isDescendantOf(n, "District", mapping.geoDistrict, geoNodes))
+      .map(n => ({ label: n.name, value: n.name }));
+
+    const townOptions = geoNodes
+      .filter(n => n.level === "Town")
+      .filter(n => !mapping.geoCity || isDescendantOf(n, "City", mapping.geoCity, geoNodes))
       .map(n => ({ label: n.name, value: n.name }));
 
     return {
       Zone: zoneOptions,
       Region: regionOptions,
+      State: stateOptions,
       Area: areaOptions,
       Territory: territoryOptions,
-      Locality: localityOptions,
+      District: districtOptions,
+      City: cityOptions,
+      Town: townOptions,
     };
   };
 
@@ -1423,9 +1649,15 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
   };
 
   // ── Geo value map ────────────────────────────────────────────────────────────
-  const geoKey: Record<string, keyof Employee> = {
-    Zone: "geoZone", Region: "geoRegion", Area: "geoArea",
-    Territory: "territory", Locality: "geoLocality",
+  const geoKey: Record<string, keyof GeoMappingRow> = {
+    Zone: "geoZone",
+    Region: "geoRegion",
+    State: "geoState",
+    Area: "geoArea",
+    Territory: "territory",
+    District: "geoDistrict",
+    City: "geoCity",
+    Town: "geoTown",
   };
 
   const getGeoMappingErrorKey = (index: number, field: string) => `geoMapping_${index}_${field}`;
@@ -1443,21 +1675,45 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
 
       if (key === "geoZone") {
         mapping.geoRegion = "";
+        mapping.geoState = "";
         mapping.geoArea = "";
         mapping.territory = "";
-        mapping.geoLocality = "";
+        mapping.geoDistrict = "";
+        mapping.geoCity = "";
+        mapping.geoTown = "";
       }
       if (key === "geoRegion") {
+        mapping.geoState = "";
         mapping.geoArea = "";
         mapping.territory = "";
-        mapping.geoLocality = "";
+        mapping.geoDistrict = "";
+        mapping.geoCity = "";
+        mapping.geoTown = "";
+      }
+      if (key === "geoState") {
+        mapping.geoArea = "";
+        mapping.territory = "";
+        mapping.geoDistrict = "";
+        mapping.geoCity = "";
+        mapping.geoTown = "";
       }
       if (key === "geoArea") {
         mapping.territory = "";
-        mapping.geoLocality = "";
+        mapping.geoDistrict = "";
+        mapping.geoCity = "";
+        mapping.geoTown = "";
       }
       if (key === "territory") {
-        mapping.geoLocality = "";
+        mapping.geoDistrict = "";
+        mapping.geoCity = "";
+        mapping.geoTown = "";
+      }
+      if (key === "geoDistrict") {
+        mapping.geoCity = "";
+        mapping.geoTown = "";
+      }
+      if (key === "geoCity") {
+        mapping.geoTown = "";
       }
 
       next[index] = mapping;
@@ -1507,6 +1763,8 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
     if (!form.emergencyContactName?.trim()) e.emergencyContactName = "Required";
     const emErr = validateMobile(form.emergencyContactMobile || "");
     if (emErr) e.emergencyContactMobile = emErr;
+    validateStructuredAddress(currentAddr, "current", e);
+    if (!sameAddress) validateStructuredAddress(permanentAddr, "permanent", e);
     if (mode === "add") {
       if (!form.password?.trim()) e.password = "Password is required";
       else if ((form.password || "").length < 8) e.password = "Password must be at least 8 characters";
@@ -1535,6 +1793,18 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
     return Object.keys(e).length === 0;
   };
 
+  const confirmStatusChange = () => {
+    if (!statusConfirm || mode !== "edit" || !employee) return;
+    const updated = applyEmployeeStatusChange(
+      { ...employee, ...form, documents, activityLog: employee.activityLog } as Employee,
+      statusConfirm,
+    );
+    setFormState(updated);
+    (onStatusSave ?? onSave)(updated);
+    setStatusConfirm(null);
+    setStatusToast(`User ${statusConfirm === "active" ? "activated" : "deactivated"} successfully`);
+  };
+
   const handleSave = () => {
     if (!validate()) return;
 
@@ -1544,6 +1814,8 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
     const dept = departments.find(d => d.id === form.departmentId);
     const rm = allEmployees.find(e => e.id === form.reportingManagerId);
     const now = todayStr();
+
+    const resolvedPermanent = sameAddress ? currentAddr : permanentAddr;
 
     const saved: Employee = {
       id: form.id || (Math.max(0, ...allEmployees.map(e => e.id)) + 1),
@@ -1559,12 +1831,28 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       bloodGroup: (form.bloodGroup as any) || "Unknown",
       gender: form.gender,
       dob: form.dob || "",
-      currentAddress: form.currentAddress || "",
-      permanentAddress: form.permanentAddress || "",
+      currentAddressLine1: currentAddr.line1,
+      currentAddressLine2: currentAddr.line2,
+      currentStateId: currentAddr.stateId,
+      currentCityId: currentAddr.cityId,
+      currentPincodeId: currentAddr.pincodeId,
+      permanentAddressLine1: resolvedPermanent.line1,
+      permanentAddressLine2: resolvedPermanent.line2,
+      permanentStateId: resolvedPermanent.stateId,
+      permanentCityId: resolvedPermanent.cityId,
+      permanentPincodeId: resolvedPermanent.pincodeId,
+      emergencyAddressLine1: emergencyAddr.line1,
+      emergencyAddressLine2: emergencyAddr.line2,
+      emergencyStateId: emergencyAddr.stateId,
+      emergencyCityId: emergencyAddr.cityId,
+      emergencyPincodeId: emergencyAddr.pincodeId,
+      sameAsCurrentAddress: sameAddress,
+      currentAddress: formatStructuredAddress(currentAddr, geoNodes),
+      permanentAddress: formatStructuredAddress(resolvedPermanent, geoNodes),
       emergencyContactName: form.emergencyContactName || "",
       emergencyContactMobile: form.emergencyContactMobile || "",
       emergencyContactRelation: (form.emergencyContactRelation as any) || "Spouse",
-      emergencyContactAddress: form.emergencyContactAddress || "",
+      emergencyContactAddress: formatStructuredAddress(emergencyAddr, geoNodes),
       departmentId: form.departmentId || null,
       department: dept?.name || "",
       employeeType: (form.employeeType as any) || undefined,
@@ -1578,9 +1866,12 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       joiningDate: form.joiningDate || now,
       geoZone: geoMappings[0]?.geoZone || "",
       geoRegion: geoMappings[0]?.geoRegion || "",
+      geoState: geoMappings[0]?.geoState || "",
       geoArea: geoMappings[0]?.geoArea || "",
       territory: geoMappings[0]?.territory || "",
-      geoLocality: geoMappings[0]?.geoLocality || "",
+      geoDistrict: geoMappings[0]?.geoDistrict || "",
+      geoCity: geoMappings[0]?.geoCity || "",
+      geoTown: geoMappings[0]?.geoTown || "",
       geoMappings: form.roleType === "Field User" ? geoMappings.map((mapping) => ({ ...mapping })) : [],
       permissions: convertFromSets(activeWebPerms, activeMobilePerms),
       // Approval chain — dynamic levels, save up to 3 for backward compat
@@ -1594,6 +1885,8 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       approvalLevel3Name: approvalLevels[2]?.name || "",
       approvalLevel3Role: approvalLevels[2]?.role || "",
       profilePhotoPath: form.profilePhotoPath || "",
+      documents,
+      activityLog: employee?.activityLog || form.activityLog || [],
       createdBy: form.createdBy || "Admin",
       createdDate: form.createdDate || now,
       updatedBy: "Admin",
@@ -1605,7 +1898,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
 
   // ── Role type accent colors ──────────────────────────────────────────────────
   const roleTypeAccent = form.roleType === "Field User"
-    ? { bg: "bg-blue-50", border: "border-blue-200", text: "text-blue-700" }
+    ? { bg: "bg-brand-50", border: "border-brand-200", text: "text-brand-700" }
     : { bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-700" };
 
   const inp = (key: string) => cn("h-8 text-xs", errors[key] && "border-red-400");
@@ -1632,20 +1925,28 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
       }
     >
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="w-full mb-4">
-          <TabsTrigger value="personal" className="text-xs">
+        <FormSectionHeader tab={activeTab as FormTabId} />
+
+        <TabsList className="w-full mb-0">
+          <TabsTrigger value="personal" className={TAB_TRIGGER_CLASS}>
+            <User className="w-4 h-4 shrink-0" />
             Personal Details
           </TabsTrigger>
-          <TabsTrigger value="employment" className="text-xs">
+          <TabsTrigger value="employment" className={TAB_TRIGGER_CLASS}>
+            <Briefcase className="w-4 h-4 shrink-0" />
             Employment Details
           </TabsTrigger>
-          <TabsTrigger value="permissions" className="text-xs">
-            <Shield className="w-3.5 h-3.5 mr-1.5" />
+          <TabsTrigger value="documents" className={TAB_TRIGGER_CLASS}>
+            <FileText className="w-4 h-4 shrink-0" />
+            Documents
+          </TabsTrigger>
+          <TabsTrigger value="permissions" className={TAB_TRIGGER_CLASS}>
+            <Shield className="w-4 h-4 shrink-0" />
             Permissions
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="personal" className="mt-0 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
+        <TabsContent value="personal" className="mt-6 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
           {/* ══════════════════════════════════════════════════════════════════════
               TAB 1 — PERSONAL DETAILS
               ══════════════════════════════════════════════════════════════════════ */}
@@ -1708,6 +2009,22 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
               </div>
             </div>
 
+            {/* Address Details — before credentials */}
+            <div className="pt-4 border-t border-border/60">
+              <SectionHead label="Address Details" />
+              <DualAddressSection
+                current={currentAddr}
+                permanent={permanentAddr}
+                onCurrentChange={setCurrentAddr}
+                onPermanentChange={setPermanentAddr}
+                sameAsCurrent={sameAddress}
+                onSameAsCurrentChange={setSameAddress}
+                geoNodes={geoNodes}
+                currentErrors={mapAddressErrors("current", errors)}
+                permanentErrors={mapAddressErrors("permanent", errors)}
+              />
+            </div>
+
             <div className="pt-4 border-t border-border/60">
               <SectionHead label="Account Credentials" sub="Set the login password for this employee user." />
               <div className="grid w-full max-w-3xl grid-cols-1 gap-3 md:grid-cols-2">
@@ -1748,9 +2065,9 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                     </button>
                   </div>
                 </Field>
-                <div className="flex items-start gap-2 px-3 py-2 mt-1 border border-blue-200 rounded-lg bg-blue-50 md:col-span-2">
-                  <Lock className="mt-0.5 h-3.5 w-3.5 text-blue-600" />
-                  <p className="text-[10px] leading-tight text-blue-700">
+                <div className="flex items-start gap-2 px-3 py-2 mt-1 border border-brand-200 rounded-lg bg-brand-50 md:col-span-2">
+                  <Lock className="mt-0.5 h-3.5 w-3.5 text-brand-600" />
+                  <p className="text-[10px] leading-tight text-brand-700">
                     {mode === "add"
                       ? "Set the initial login password for this employee."
                       : "Password can be updated later if needed."}
@@ -1780,42 +2097,14 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                       placeholder="10-digit mobile" maxLength={10} className={inp("emergencyContactMobile")} />
                   </Field>
                 </div>
-                <div className="col-span-6 col-start-1">
-                  <Field label="Emergency Contact Address">
-                    <Textarea value={form.emergencyContactAddress || ""} onChange={e => set("emergencyContactAddress", e.target.value)}
-                      placeholder="Emergency contact's home address" rows={2} className="text-xs resize-none" />
-                  </Field>
-                </div>
-              </div>
-            </div>
-
-            {/* Address Details */}
-            <div className="pt-4 border-t border-border/60">
-              <SectionHead label="Address Details" />
-              <div className="grid grid-cols-12 gap-3">
-                <div className="col-span-12 space-y-1 md:col-span-4">
-                  <Label className="text-xs font-medium">Current Address</Label>
-                  <Textarea value={form.currentAddress || ""} onChange={e => {
-                    set("currentAddress", e.target.value);
-                    if (sameAddress) set("permanentAddress", e.target.value);
-                  }}
-                    placeholder="Current / residential address" rows={3} className="text-xs resize-none" />
-                </div>
-                <div className="col-span-12 space-y-1 md:col-span-4">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-medium">Permanent Address</Label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" checked={sameAddress} onChange={e => {
-                        setSameAddress(e.target.checked);
-                        if (e.target.checked) set("permanentAddress", form.currentAddress || "");
-                      }} className="w-3.5 h-3.5 accent-brand-600 rounded" />
-                      <span className="text-[11px] text-muted-foreground">Same as current address</span>
-                    </label>
-                  </div>
-                  <Textarea value={form.permanentAddress || ""} onChange={e => set("permanentAddress", e.target.value)}
-                    disabled={sameAddress}
-                    placeholder={sameAddress ? "Same as current address" : "Permanent / home town address"}
-                    rows={3} className={cn("text-xs resize-none", sameAddress && "opacity-50")} />
+                <div className="col-span-12 pt-2">
+                  <SectionHead label="Emergency Contact Address" />
+                  <AddressBlock
+                    value={emergencyAddr}
+                    onChange={setEmergencyAddr}
+                    geoNodes={geoNodes}
+                    errors={mapAddressErrors("emergency", errors)}
+                  />
                 </div>
               </div>
             </div>
@@ -1838,7 +2127,7 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
           )}
         </TabsContent>
 
-        <TabsContent value="employment" className="mt-0 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
+        <TabsContent value="employment" className="mt-6 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
           {/* ══════════════════════════════════════════════════════════════════════
               TAB 2 — EMPLOYMENT DETAILS
               ══════════════════════════════════════════════════════════════════════ */}
@@ -1875,6 +2164,20 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
                   <Input type="date" value={form.joiningDate || todayStr()}
                     onChange={e => set("joiningDate", e.target.value)} className="h-8 text-xs" />
                 </div>
+
+                {mode === "edit" && (
+                  <div className="space-y-1 col-span-2">
+                    <Label className="text-xs font-medium">Status</Label>
+                    <div className="h-8 flex items-center">
+                      <EmployeeListingStatusCell
+                        status={(form.status as Employee["status"]) || "draft"}
+                        employee={{ ...form, documents }}
+                        onToggleRequest={(next) => setStatusConfirm(next)}
+                        onActivateBlocked={(gaps) => setStatusToast(gaps[0] || "Complete required profile data")}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1939,13 +2242,13 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
               <div className="pt-4 border-t border-border/60">
                 <div className="flex items-center justify-between mb-2.5">
                   <SectionHead label={`Geography Mapping — ${form.role}`} />
-                  <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded font-medium">
+                  <span className="text-[10px] text-brand-600 bg-brand-50 border border-brand-200 px-2 py-0.5 rounded font-medium">
                     {geoFields.length > 0 ? geoFields.join(" → ") : "National Level — No mapping required"}
                   </span>
                 </div>
 
                 {geoFields.length === 0 ? (
-                  <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 text-xs text-blue-700">
+                  <div className="flex items-center gap-2 bg-brand-50 border border-brand-200 rounded-lg px-3 py-2.5 text-xs text-brand-700">
                     <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
                     {form.role ? `${form.role} operates at national level` : "This role operates at national level"} — no specific geography mapping required.
                   </div>
@@ -2177,9 +2480,19 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
           )}
         </TabsContent>
 
-        <TabsContent value="permissions" className="mt-0 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
+        <TabsContent value="documents" className="mt-6 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
+          {activeTab === "documents" && (
+            <EmployeeDocumentsSection
+              documents={documents}
+              onChange={setDocuments}
+              employee={{ ...form, documents }}
+            />
+          )}
+        </TabsContent>
+
+        <TabsContent value="permissions" className="mt-6 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
           {/* ══════════════════════════════════════════════════════════════════════
-              TAB 3 — PERMISSIONS
+              TAB 4 — PERMISSIONS
               ══════════════════════════════════════════════════════════════════════ */}
           {activeTab === "permissions" && (
             <PermissionsTab
@@ -2193,6 +2506,41 @@ export default function EmployeeForm({ mode, employee, onSave, onCancel, departm
           )}
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!statusConfirm} onOpenChange={(open) => !open && setStatusConfirm(null)}>
+        <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-5 pt-5 pb-3 border-b border-border/80">
+            <DialogTitle className="text-sm font-semibold flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-brand-600" />
+              {statusConfirm === "active" ? "Activate User" : "Deactivate User"}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {statusConfirm === "active"
+                ? "Are you sure you want to activate this user?"
+                : "Are you sure you want to deactivate this user?"}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="px-5 py-3 border-t border-border/80 bg-muted/20 flex items-center justify-end gap-2">
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setStatusConfirm(null)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+              onClick={confirmStatusChange}
+            >
+              {statusConfirm === "active" ? "Activate" : "Deactivate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {statusToast && (
+        <div className="fixed bottom-5 right-5 z-[100] flex items-center gap-2 px-4 py-3 rounded-xl shadow-xl text-white text-sm bg-red-600">
+          {statusToast}
+          <button type="button" onClick={() => setStatusToast(null)} className="ml-1 opacity-70">×</button>
+        </div>
+      )}
 
       {/* Warning Modal for Role Change */}
       <Dialog open={showRoleChangeWarning} onOpenChange={(v) => !v && cancelRoleChange()}>

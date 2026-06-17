@@ -52,9 +52,15 @@ import {
 	getActiveGSTMasters,
 	getActiveTDSMasters,
 } from "../customer-data";
+import { formatTdsSummary } from "../../tds/tds-data";
 import { readCustomerPermissions } from "../customer-permissions";
 import { loadOrders } from "@/app/(app)/sales/orders/orders-data";
 import { formatMoney } from "@/lib/accounts/money-format";
+import {
+	deriveGstRegistered,
+	getGstCategoryLabel,
+} from "@/lib/masters/gst-compliance";
+import { ComplianceRegistrationViewRows } from "@/components/masters/ComplianceRegistrationViewRows";
 
 const STATUS_VARIANT: Record<
   CustomerStatus,
@@ -398,10 +404,33 @@ export default function CustomerDetailPage() {
       case "tax":
         return (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <RecordSectionCard title="Tax & Registration" icon={FileText} accent="blue">
-              <RecordKvRow label="GST Applicable" value={customer.gstApplicable ? "Yes" : "No"} />
-              {customer.gstApplicable && (
+            <RecordSectionCard title="Tax & Registration" icon={FileText} accent="orange">
+              <RecordKvRow label="MSME Registered" value={customer.msmeRegistered ? "Yes" : "No"} />
+              {customer.msmeRegistered && (
+                <RecordKvRow label="MSME Number" value={customer.msmeNumber || "—"} mono copy />
+              )}
+              <RecordKvRow
+                label="GST Registered"
+                value={
+                  deriveGstRegistered(
+                    customer.gstApplicable,
+                    customer.gstin,
+                    customer.gstCategory,
+                  )
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              {deriveGstRegistered(
+                customer.gstApplicable,
+                customer.gstin,
+                customer.gstCategory,
+              ) && (
                 <>
+                  <RecordKvRow
+                    label="GST Registration Type"
+                    value={getGstCategoryLabel(customer.gstCategory ?? "regular")}
+                  />
                   <RecordKvRow label="GSTIN" value={customer.gstin} mono copy />
                   <RecordKvRow
                     label="GST Code"
@@ -410,18 +439,20 @@ export default function CustomerDetailPage() {
                   />
                 </>
               )}
+              <RecordKvRow label="PAN Number" value={customer.pan || "—"} mono copy />
+              <RecordKvRow label="TAN Number" value={customer.tan || "—"} mono />
               <RecordKvRow label="TDS Applicable" value={customer.tdsApplicable ? "Yes" : "No"} />
               {customer.tdsApplicable && (
                 <RecordKvRow
                   label="TDS Section"
-                  value={tds ? `${tds.tdsCode} — ${tds.tdsRate}%` : "—"}
+                  value={tds ? `${formatTdsSummary(tds)} — ${tds.sectionName}` : "—"}
                   mono
                 />
               )}
-              <RecordKvRow label="TAN #" value={customer.tan} mono />
-              <RecordKvRow label="CIB Regn #" value={customer.cibRegn} />
-              <RecordKvRow label="FCO Regn #" value={customer.fcoRegn} />
-              <RecordKvRow label="FSSAI #" value={customer.fssai} isLast />
+              <ComplianceRegistrationViewRows
+                values={customer}
+                lastRowProps={{ isLast: true }}
+              />
             </RecordSectionCard>
 
             <RecordSectionCard title="Compliance Status" icon={CheckCircle} accent="green">
@@ -445,17 +476,62 @@ export default function CustomerDetailPage() {
               />
               <ComplianceRow
                 tone="green"
-                label="FSSAI Licensed"
-                value={customer.fssai || "—"}
-                badge="Valid"
+                label="FSSAI Registered"
+                value={
+                  (customer.fssaiRegistered ?? !!customer.fssai?.trim()) ? "Yes" : "No"
+                }
+                badge={
+                  (customer.fssaiRegistered ?? !!customer.fssai?.trim()) ? "Valid" : "N/A"
+                }
               />
+              {(customer.fssaiRegistered ?? !!customer.fssai?.trim()) && (
+                <ComplianceRow
+                  tone="green"
+                  label="FSSAI Number"
+                  value={customer.fssai || "—"}
+                  badge="On File"
+                />
+              )}
               <ComplianceRow
                 tone="amber"
-                label="CIB Registration"
-                value={customer.cibRegn || "—"}
-                badge="Review"
-                isLast
+                label="CIB Registered"
+                value={
+                  (customer.cibRegistered ?? !!customer.cibRegn?.trim()) ? "Yes" : "No"
+                }
+                badge={
+                  (customer.cibRegistered ?? !!customer.cibRegn?.trim()) ? "Review" : "N/A"
+                }
               />
+              {(customer.cibRegistered ?? !!customer.cibRegn?.trim()) && (
+                <ComplianceRow
+                  tone="amber"
+                  label="CIB Registration Number"
+                  value={customer.cibRegn || "—"}
+                  badge="On File"
+                />
+              )}
+              <ComplianceRow
+                tone="blue"
+                label="FCO Registered"
+                value={
+                  (customer.fcoRegistered ?? !!customer.fcoRegn?.trim()) ? "Yes" : "No"
+                }
+                badge={
+                  (customer.fcoRegistered ?? !!customer.fcoRegn?.trim()) ? "On File" : "N/A"
+                }
+                isLast={
+                  !(customer.fcoRegistered ?? !!customer.fcoRegn?.trim())
+                }
+              />
+              {(customer.fcoRegistered ?? !!customer.fcoRegn?.trim()) && (
+                <ComplianceRow
+                  tone="blue"
+                  label="FCO Registration Number"
+                  value={customer.fcoRegn || "—"}
+                  badge="On File"
+                  isLast
+                />
+              )}
             </RecordSectionCard>
           </div>
         );

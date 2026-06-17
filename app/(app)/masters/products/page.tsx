@@ -25,11 +25,14 @@ import {
   UserX,
   XCircle,
 } from "lucide-react";
-import { type Product, type ProductStatus, formatMoney, loadProducts, saveProducts } from "./product-data";
+import { type Product, type ProductStatus, loadProducts, saveProducts } from "./product-data";
+import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
+import { getStandardMrp } from "@/lib/pricing/resolve-pricing";
 
 import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
+import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
 function KpiCard({
   label,
@@ -54,34 +57,6 @@ function KpiCard({
         <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{label}</p>
       </div>
     </div>
-  );
-}
-
-function StatusToggle({
-  record,
-  onToggle,
-}: {
-  record: Product;
-  onToggle: (id: number, status: ProductStatus) => void;
-}) {
-  const active = record.status === "active";
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onToggle(record.id, active ? "inactive" : "active");
-      }}
-      className={cn(
-        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-        active
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
-      )}
-    >
-      {active ? "Active" : "Inactive"}
-    </button>
   );
 }
 
@@ -153,13 +128,30 @@ export default function ProductsPage() {
       width: "130px",
     },
     {
-      key: "formulation",
-      header: "Formulation",
+      key: "scientificName",
+      header: "Scientific Name",
+      width: "160px",
+      render: (val, row) => row.scientificName || "—",
+    },
+    {
+      key: "form",
+      header: "Form",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: Array.from(new Set(records.map((item) => item.formulation))).sort().map(v => ({ label: v, value: v })),
-      width: "220px",
+      filterOptions: Array.from(new Set(records.map((item) => item.form ?? item.formulation ?? ""))).filter(Boolean).sort().map(v => ({ label: v, value: v })),
+      width: "140px",
+      render: (val, row) => row.form ?? row.formulation ?? "—",
+    },
+    {
+      key: "cfu",
+      header: "CFU",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: Array.from(new Set(records.map((item) => item.cfu ?? ""))).filter(Boolean).sort().map(v => ({ label: v, value: v })),
+      width: "140px",
+      render: (val, row) => row.cfu || "—",
     },
     {
       key: "baseUnit",
@@ -201,16 +193,18 @@ export default function ProductsPage() {
       render: (val, row) => <span className="font-mono">{row.sku}</span>,
     },
     {
-      key: "cropApplicable",
-      header: "Crop Applicable",
-      width: "140px",
-      render: (val, row) => row.cropApplicable || "—",
-    },
-    {
-      key: "mrp",
+      key: "standardMrp",
       header: "MRP",
       width: "120px",
-      render: (val, row) => <span className="font-semibold">{formatMoney(row.mrp)}</span>,
+      align: "right",
+      render: (_val, row) => {
+        const mrp = getStandardMrp(row.id);
+        return (
+          <span className="font-semibold text-xs tabular-nums">
+            {mrp > 0 ? formatIndianRupeeDisplay(mrp) : "—"}
+          </span>
+        );
+      },
     },
     {
       key: "status",
@@ -224,7 +218,10 @@ export default function ProductsPage() {
       ],
       width: "110px",
       render: (val, row) => (
-        <StatusToggle record={row} onToggle={updateStatus} />
+        <ListingStatusToggle
+          active={isActiveStatus(row.status)}
+          onChange={() => updateStatus(row.id, isActiveStatus(row.status) ? "inactive" : "active")}
+        />
       ),
     },
     {
@@ -235,10 +232,7 @@ export default function ProductsPage() {
       filterType: "text",
       width: "120px",
       render: (val, row) => (
-        <div>
-          <p className="text-[11px] font-semibold leading-4 text-brand-700">{row.createdBy}</p>
-          <p className="text-[10px] font-mono leading-3 text-muted-foreground">{row.createdDate}</p>
-        </div>
+        <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />
       ),
     },
     {
@@ -249,10 +243,7 @@ export default function ProductsPage() {
       filterType: "text",
       width: "120px",
       render: (val, row) => (
-        <div>
-          <p className="text-[11px] font-semibold leading-4 text-brand-700">{row.updatedBy}</p>
-          <p className="text-[10px] font-mono leading-3 text-muted-foreground">{row.updatedDate}</p>
-        </div>
+        <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />
       ),
     },
   ];
@@ -321,14 +312,15 @@ export default function ProductsPage() {
       "Product Name",
       "Category",
       "Segment",
-      "Formulation",
+      "Scientific Name",
+      "Form",
+      "CFU",
       "Base Unit",
       "Packaging Unit",
       "Conversion Quantity",
       "HSN Code",
       "GST Rate",
       "SKU",
-      "Crop Applicable",
       "MRP",
       "Status",
     ];
@@ -338,15 +330,16 @@ export default function ProductsPage() {
       item.productName,
       item.category,
       item.segment,
-      item.formulation,
+      item.scientificName || "",
+      item.form ?? item.formulation ?? "",
+      item.cfu || "",
       item.baseUnit || "",
       item.packagingUnit || "",
       item.conversionQuantity !== undefined ? item.conversionQuantity : "",
       item.hsnCode,
       item.gstRate,
       item.sku,
-      item.cropApplicable || "",
-      item.mrp,
+      getStandardMrp(item.id) || "",
       item.status,
     ]);
 

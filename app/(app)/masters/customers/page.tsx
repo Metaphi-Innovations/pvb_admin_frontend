@@ -50,19 +50,7 @@ import {
 	SortState,
 	ActionItemConfig,
 } from "@/components/listing/types";
-
-function AuditCell({ name, date }: { name?: string; date?: string }) {
-	return (
-		<div className='space-y-0.5'>
-			<p className='text-[11px] font-semibold leading-4 text-brand-700'>
-				{name || "—"}
-			</p>
-			<p className='text-[10px] font-mono leading-3 text-muted-foreground'>
-				{date || "—"}
-			</p>
-		</div>
-	);
-}
+import { ListingAuditCell } from "@/components/listing";
 
 function KpiCard({
 	label,
@@ -404,7 +392,7 @@ export default function CustomersPage() {
 			filterType: "text",
 			width: "120px",
 			render: (val, row) => (
-				<AuditCell name={row.createdBy} date={row.createdDate} />
+				<ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />
 			),
 		},
 		{
@@ -415,7 +403,7 @@ export default function CustomersPage() {
 			filterType: "text",
 			width: "120px",
 			render: (val, row) => (
-				<AuditCell name={row.updatedBy} date={row.updatedDate} />
+				<ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />
 			),
 		},
 	];

@@ -51,8 +51,9 @@ export default function CustomerTypeDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <RecordSectionCard title="Customer Type Info" icon={User} accent="blue">
           <RecordKvRow label="Customer Type ID" value={String(customerType.id)} mono />
-          <RecordKvRow label="Customer Type Code" value={customerType.customerTypeCode} mono copy />
-          <RecordKvRow label="Customer Type" value={customerType.customerType} highlight />
+          <RecordKvRow label="Initial Code" value={customerType.initialCode} mono copy highlight />
+          <RecordKvRow label="Internal Type Code" value={customerType.customerTypeCode} mono copy />
+          <RecordKvRow label="Customer Type" value={customerType.customerType} />
           <RecordKvRow label="Description" value={customerType.description} isLast />
         </RecordSectionCard>
 
