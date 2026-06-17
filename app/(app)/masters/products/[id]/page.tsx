@@ -14,6 +14,9 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
 	Clock,
+	Download,
+	Eye,
+	ExternalLink,
 	FileText,
 	IndianRupee,
 	Package,
@@ -21,10 +24,13 @@ import {
 	Tag,
 } from "lucide-react";
 import {
-	getAssetDisplayType,
+	getImagePreviewUrl,
+	getProductImages,
+	getProductUrls,
 	loadProducts,
 	saveProducts,
 	type Product,
+	type ProductImage,
 	type ProductStatus,
 } from "../product-data";
 import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
@@ -49,126 +55,146 @@ const STATUS_VARIANT: Record<ProductStatus | "draft", "active" | "inactive" | "d
 };
 
 function MediaSection({ product }: { product: Product }) {
-	const [selectedItem, setSelectedItem] = useState<{
-		src: string;
-		name: string;
-	} | null>(null);
-	const items = product.assets ?? product.mediaItems ?? [];
-	const openExternal = (url?: string) => {
-		if (!url) return;
-		const trimmedUrl = url.trim();
-		const isAbsoluteUrl =
-			/^https?:\/\//i.test(trimmedUrl) ||
-			/^blob:/i.test(trimmedUrl) ||
-			/^data:/i.test(trimmedUrl);
-		const safeUrl = isAbsoluteUrl ? trimmedUrl : `https://${trimmedUrl}`;
-		window.open(safeUrl, "_blank", "noopener,noreferrer");
+	const [previewImage, setPreviewImage] = useState<ProductImage | null>(null);
+	const images = getProductImages(product);
+	const urls = getProductUrls(product);
+
+	const openExternal = (url: string) => {
+		window.open(url, "_blank", "noopener,noreferrer");
 	};
-	const getUrl = (item: (typeof items)[number]) =>
-		item.url ?? item.fileUrl ?? item.previewUrl ?? item.src ?? "";
-	const getLabel = (item: (typeof items)[number]) => getAssetDisplayType(item);
+
+	const downloadImage = (image: ProductImage) => {
+		const url = getImagePreviewUrl(image);
+		const anchor = document.createElement("a");
+		anchor.href = url;
+		anchor.download = image.name;
+		anchor.target = "_blank";
+		anchor.rel = "noopener noreferrer";
+		document.body.appendChild(anchor);
+		anchor.click();
+		document.body.removeChild(anchor);
+	};
 
 	return (
 		<div className='space-y-4'>
-			<div className='space-y-1'>
-				<p className='text-xs font-semibold text-foreground'>
-					Uploaded Assets ({items.length})
-				</p>
-				<p className='text-[11px] text-muted-foreground'>
-					Read-only media, documents, spreadsheets, and links.
-				</p>
-			</div>
-			{items.length === 0 ? (
-				<p className='px-1 py-4 text-sm text-muted-foreground'>
-					No assets uploaded.
-				</p>
-			) : (
-				<div className='space-y-3'>
-					{items.map((item) => {
-						const url = getUrl(item);
-						const isImage =
-							item.type === "media" &&
-							(item.mediaKind === "image" || item.kind === "image");
-						return (
-							<div
-								key={item.id}
-								className='rounded-xl border border-border bg-white p-3 shadow-sm'
-							>
-								<div className='flex items-start justify-between gap-3'>
-									<div className='flex items-start gap-3 min-w-0'>
-										<div className='flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/20 text-brand-600'>
-											{isImage && url ? (
-												<img
-													src={url}
-													alt={item.name}
-													className='h-full w-full object-cover'
-												/>
-											) : (
-												<FileText className='h-4 w-4' />
-											)}
-										</div>
-										<div className='min-w-0'>
-											<p className='text-xs font-medium text-foreground truncate'>
-												{item.title || item.name}
-											</p>
-											<p className='text-[11px] text-muted-foreground truncate'>
-												{item.size ||
-													item.fileType ||
-													item.mediaKind ||
-													item.type}
-											</p>
+			<div className='space-y-2'>
+				<p className='text-xs font-semibold text-foreground'>Product Images</p>
+				{images.length === 0 ? (
+					<p className='text-xs text-muted-foreground py-3 text-center border border-dashed border-border/60 rounded-lg'>
+						No product images uploaded
+					</p>
+				) : (
+					<div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5'>
+						{images.map((image) => {
+							const preview = getImagePreviewUrl(image);
+							return (
+								<div
+									key={image.id}
+									className='flex flex-col overflow-hidden border rounded-lg border-border/60 bg-white'
+								>
+									<button
+										type='button'
+										className='relative h-[88px] w-full bg-muted/20'
+										onClick={() => setPreviewImage(image)}
+										title='Click to preview'
+									>
+										<img src={preview} alt={image.name} className='object-cover w-full h-full' />
+									</button>
+									<div className='px-2 py-1.5 space-y-1 border-t border-border/40'>
+										<p className='text-[10px] font-medium truncate'>{image.name}</p>
+										<p className='text-[9px] text-muted-foreground'>{image.size || "—"}</p>
+										<div className='flex items-center gap-1'>
+											<Button
+												type='button'
+												variant='outline'
+												size='sm'
+												className='h-6 flex-1 px-1 text-[9px] gap-1'
+												onClick={() => setPreviewImage(image)}
+											>
+												<Eye className='w-3 h-3 shrink-0' />
+												Preview
+											</Button>
+											<Button
+												type='button'
+												variant='outline'
+												size='sm'
+												className='h-6 w-7 px-0'
+												onClick={() => downloadImage(image)}
+												title='Download'
+											>
+												<Download className='w-3 h-3' />
+											</Button>
 										</div>
 									</div>
-									<span
-										className={cn(
-											"inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
-											item.uploaded
-												? "bg-emerald-50 text-emerald-700"
-												: "bg-amber-50 text-amber-700",
-										)}
-									>
-										{getLabel(item)}
-									</span>
 								</div>
-								<div className='mt-3 flex items-center justify-end gap-2'>
-									<Button
-										type='button'
-										variant='outline'
-										className='h-8 px-3 text-[11px]'
-										onClick={() =>
-											item.type === "media" &&
-											(item.mediaKind === "image" || item.kind === "image") &&
-											url
-												? setSelectedItem({ src: url, name: item.name })
-												: openExternal(url)
-										}
-										disabled={!url}
-									>
-										Open
-									</Button>
-								</div>
-							</div>
-						);
-					})}
-				</div>
-			)}
+							);
+						})}
+					</div>
+				)}
+			</div>
+
+			<div className='pt-2 space-y-2 border-t border-border/40'>
+				<p className='text-xs font-semibold text-foreground'>Document URLs</p>
+				{urls.length === 0 ? (
+					<p className='text-xs text-muted-foreground py-3 text-center border border-dashed border-border/60 rounded-lg'>
+						No document URLs added
+					</p>
+				) : (
+					<div className='overflow-hidden border rounded-lg border-border/60'>
+						<table className='w-full text-xs'>
+							<thead>
+								<tr className='border-b bg-muted/30 border-border/50'>
+									<th className='w-12 px-2 py-1.5 text-left text-[10px] font-semibold text-muted-foreground'>Sr No</th>
+									<th className='px-2 py-1.5 text-left text-[10px] font-semibold text-muted-foreground'>URL</th>
+									<th className='w-24 px-2 py-1.5 text-center text-[10px] font-semibold text-muted-foreground'>Open Link</th>
+								</tr>
+							</thead>
+							<tbody>
+								{urls.map((item, index) => (
+									<tr key={item.id} className='border-b border-border/40 last:border-0'>
+										<td className='px-2 py-2 text-muted-foreground tabular-nums'>{index + 1}</td>
+										<td className='px-2 py-2 truncate max-w-md' title={item.url}>{item.url}</td>
+										<td className='px-2 py-2 text-center'>
+											<Button
+												type='button'
+												variant='ghost'
+												size='icon'
+												className='w-7 h-7 text-brand-600'
+												onClick={() => openExternal(item.url)}
+											>
+												<ExternalLink className='w-3.5 h-3.5' />
+											</Button>
+										</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
+				)}
+			</div>
 
 			<Dialog
-				open={!!selectedItem}
-				onOpenChange={(open) => !open && setSelectedItem(null)}
+				open={!!previewImage}
+				onOpenChange={(open) => {
+					if (!open) setPreviewImage(null);
+				}}
 			>
-				<DialogContent className='max-w-3xl p-4 bg-white border border-border rounded-xl shadow-lg'>
+				<DialogContent className='z-[500] max-w-3xl p-4 bg-white border border-border rounded-xl shadow-lg'>
 					<DialogHeader className='pb-2 border-b border-border/50'>
-						<DialogTitle className='text-sm font-semibold text-foreground truncate'>
-							{selectedItem?.name}
+						<DialogTitle className='text-sm font-semibold truncate'>
+							{previewImage?.name ?? "Image preview"}
 						</DialogTitle>
 					</DialogHeader>
-					<div className='flex items-center justify-center overflow-hidden bg-muted/5 rounded-lg py-4'>
-						<img
-							src={selectedItem?.src}
-							alt={selectedItem?.name}
-							className='max-h-[70vh] max-w-full object-contain rounded-md'
-						/>
+					<div className='flex items-center justify-center min-h-[200px] py-4 bg-muted/5 rounded-lg'>
+						{previewImage && getImagePreviewUrl(previewImage) ? (
+							<img
+								src={getImagePreviewUrl(previewImage)}
+								alt={previewImage.name}
+								className='max-h-[70vh] max-w-full object-contain'
+							/>
+						) : (
+							<p className='text-sm text-muted-foreground'>Preview unavailable</p>
+						)}
 					</div>
 				</DialogContent>
 			</Dialog>
@@ -189,10 +215,10 @@ export default function ProductDetailPage() {
 		setProduct(list.find((item) => item.id === Number(id)) ?? null);
 	}, [id]);
 
-	const mediaCount = useMemo(
-		() => (product?.assets ?? product?.mediaItems ?? []).length,
-		[product],
-	);
+	const mediaCount = useMemo(() => {
+		if (!product) return 0;
+		return getProductImages(product).length + getProductUrls(product).length;
+	}, [product]);
 
 	const updateStatus = (status: ProductStatus) => {
 		if (!product) return;
@@ -229,9 +255,7 @@ export default function ProductDetailPage() {
 
 	const tabs = [
 		{ value: "overview", label: "Overview" },
-		...(mediaCount > 0
-			? [{ value: "media", label: "Media & Documents", count: mediaCount }]
-			: []),
+		{ value: "media", label: "Media & Documents", count: mediaCount || undefined },
 	];
 
 	const standardPricing = getStandardPricing(product.id);
@@ -279,12 +303,6 @@ export default function ProductDetailPage() {
 							icon={Package}
 							accent='blue'
 						>
-							<RecordKvRow
-								label='Product ID'
-								value={product.productId}
-								mono
-								copy
-							/>
 							<RecordKvRow
 								label='Product Name'
 								value={product.productName}
@@ -441,7 +459,7 @@ export default function ProductDetailPage() {
 			listHref='/masters/products'
 			listLabel='Products'
 			recordName={product.productName}
-			recordCode={product.productId}
+			recordCode={product.sku}
 			statusLabel={STATUS_LABEL[product.status]}
 			statusVariant={STATUS_VARIANT[product.status]}
 			metaItems={[

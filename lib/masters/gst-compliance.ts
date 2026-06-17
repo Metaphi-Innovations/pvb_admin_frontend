@@ -104,9 +104,15 @@ export function validateTAN(v: string): boolean {
 }
 
 export function validateMSMENumber(v: string): boolean {
-	const trimmed = v.trim();
-	if (!trimmed) return false;
-	return /^[A-Za-z0-9]+$/.test(trimmed);
+	return /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/.test(v.trim().toUpperCase());
+}
+
+export const MSME_NUMBER_ERROR =
+	"Please enter a valid UDYAM Registration Number. Example: UDYAM-MH-27-0123456";
+
+/** Uppercase; allow only UDYAM-format characters. */
+export function normalizeUdyamInput(v: string): string {
+	return v.toUpperCase().replace(/[^A-Z0-9-]/g, "");
 }
 
 export interface GstRegistrationDetails {
@@ -175,6 +181,9 @@ export async function fetchGstRegistrationDetailsAsync(
 
 export interface GstAddressSnapshot {
 	address: string;
+	addressLine2?: string;
+	country?: string;
+	district?: string;
 	city: string;
 	state: string;
 	pincode: string;
@@ -185,6 +194,8 @@ export function gstDetailsToAddressSnapshot(
 ): GstAddressSnapshot {
 	return {
 		address: details.registeredAddress,
+		country: "India",
+		district: details.district,
 		city: details.district,
 		state: details.state,
 		pincode: details.pincode,

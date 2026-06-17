@@ -74,7 +74,7 @@ function matchesVendorProduct(
   product: Product,
 ): boolean {
   return (
-    mapping.productId === product.productId ||
+    mapping.productId === product.sku ||
     mapping.productId === String(product.id) ||
     (!!mapping.sku && mapping.sku === product.sku)
   );
@@ -85,7 +85,7 @@ function matchesCustomerProduct(
   product: Product,
 ): boolean {
   return (
-    mapping.productId === product.productId ||
+    mapping.productId === product.sku ||
     mapping.productId === String(product.id) ||
     (!!mapping.sku && mapping.sku === product.sku)
   );

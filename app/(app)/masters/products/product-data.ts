@@ -40,9 +40,140 @@ export interface ProductAsset {
 
 export type ProductMediaItem = ProductAsset;
 
+export interface ProductImage {
+  id: string;
+  name: string;
+  url: string;
+  previewUrl?: string;
+  size?: string;
+  sizeBytes?: number;
+  mimeType?: string;
+  uploaded?: boolean;
+  createdAt?: string;
+}
+
+export interface ProductUrl {
+  id: string;
+  url: string;
+  createdAt?: string;
+}
+
+const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
+
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function isValidProductUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value.trim());
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function isAllowedProductImageFile(file: File): boolean {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const mime = file.type.toLowerCase();
+  return (
+    mime.startsWith("image/") &&
+    (IMAGE_EXTENSIONS.has(ext) ||
+      ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(mime))
+  );
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+export async function createProductImageFromFile(file: File): Promise<ProductImage> {
+  const dataUrl = await readFileAsDataUrl(file);
+  return {
+    id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: file.name,
+    url: dataUrl,
+    previewUrl: dataUrl,
+    size: formatFileSize(file.size),
+    sizeBytes: file.size,
+    mimeType: file.type,
+    uploaded: true,
+    createdAt: todayStr(),
+  };
+}
+
+export function createProductUrl(url: string): ProductUrl {
+  const trimmed = url.trim();
+  return {
+    id: `url-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    url: trimmed,
+    createdAt: todayStr(),
+  };
+}
+
+function legacyAssetToImage(item: ProductAsset): ProductImage | null {
+  const isImage =
+    item.type === "media" &&
+    (item.mediaKind === "image" || item.kind === "image");
+  if (!isImage) return null;
+  const url = item.url ?? item.previewUrl ?? item.src ?? "";
+  if (!url) return null;
+  return {
+    id: item.id,
+    name: item.name,
+    url,
+    previewUrl: item.previewUrl ?? item.src ?? url,
+    size: item.size ?? item.sizeLabel,
+    mimeType: item.fileType,
+    uploaded: item.uploaded ?? true,
+    createdAt: item.createdAt,
+  };
+}
+
+function legacyAssetToUrl(item: ProductAsset): ProductUrl | null {
+  if (item.type !== "link" && item.assetRole !== "link" && item.kind !== "link") {
+    return null;
+  }
+  const url = item.url?.trim();
+  if (!url) return null;
+  return {
+    id: item.id,
+    url,
+    createdAt: item.createdAt,
+  };
+}
+
+export function getProductImages(product: Pick<Product, "productImages" | "assets" | "mediaItems">): ProductImage[] {
+  if (product.productImages?.length) return product.productImages;
+  const legacy = product.assets ?? product.mediaItems ?? [];
+  return legacy
+    .map(legacyAssetToImage)
+    .filter((item): item is ProductImage => item !== null);
+}
+
+export function getProductUrls(product: Pick<Product, "productUrls" | "assets" | "mediaItems">): ProductUrl[] {
+  if (product.productUrls?.length) return product.productUrls;
+  const legacy = product.assets ?? product.mediaItems ?? [];
+  return legacy
+    .map(legacyAssetToUrl)
+    .filter((item): item is ProductUrl => item !== null);
+}
+
+export function getImagePreviewUrl(image: ProductImage): string {
+  return image.previewUrl ?? image.url;
+}
+
 export interface Product {
   id: number;
-  productId: string;
+  /** @deprecated Legacy product code — not shown in UI. Use `sku` instead. */
+  productId?: string;
   productName: string;
   scientificName?: string;
   category: string;
@@ -64,7 +195,11 @@ export interface Product {
   createdDate: string;
   updatedBy: string;
   updatedDate: string;
+  productImages?: ProductImage[];
+  productUrls?: ProductUrl[];
+  /** @deprecated Merged media store — use productImages + productUrls */
   assets?: ProductAsset[];
+  /** @deprecated Use productImages + productUrls */
   mediaItems?: ProductAsset[];
   baseUnit?: string;
   packagingUnit?: string;
@@ -273,45 +408,30 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "KG",
     packagingUnit: "Bag",
     conversionQuantity: 25,
-    assets: [
+    productImages: [
       {
         id: "prd-1-media-1",
-        type: "media",
-        mediaKind: "image",
-        assetRole: "image",
         name: "dharitri-hybrid-corn-gold.jpg",
         url: "https://images.unsplash.com/photo-1464226184884-fa280b77c399?auto=format&fit=crop&w=1200&q=80",
+        previewUrl: "https://images.unsplash.com/photo-1464226184884-fa280b77c399?auto=format&fit=crop&w=1200&q=80",
+        size: "245 KB",
         uploaded: true,
         createdAt: "2026-06-03",
       },
       {
         id: "prd-1-media-2",
-        type: "media",
-        mediaKind: "image",
         name: "dharitri-pack-shot.jpg",
         url: "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=1200&q=80",
+        previewUrl: "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=1200&q=80",
+        size: "198 KB",
         uploaded: true,
         createdAt: "2026-06-03",
       },
-      {
-        id: "prd-1-doc-1",
-        type: "media",
-        mediaKind: "pdf",
-        assetRole: "brochure",
-        name: "product-brochure.pdf",
-        url: "https://example.com/documents/product-brochure.pdf",
-        size: "1.2 MB",
-        uploaded: true,
-        createdAt: "2026-06-03",
-      },
+    ],
+    productUrls: [
       {
         id: "prd-1-link-1",
-        type: "link",
-        assetRole: "link",
-        name: "Official Product Page",
-        title: "Official Product Page",
         url: "https://example.com/products/dharitri-hybrid-corn-gold",
-        uploaded: true,
         createdAt: "2026-06-03",
       },
     ],
@@ -336,17 +456,18 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "KG",
     packagingUnit: "Box",
     conversionQuantity: 10,
-    assets: [
+    productImages: [
       {
         id: "prd-2-media-1",
-        type: "media",
-        mediaKind: "image",
         name: "nutrigrow-wsf-191919.jpg",
         url: "https://images.unsplash.com/photo-1465433360938-e1e1f5a7f7d6?auto=format&fit=crop&w=1200&q=80",
+        previewUrl: "https://images.unsplash.com/photo-1465433360938-e1e1f5a7f7d6?auto=format&fit=crop&w=1200&q=80",
+        size: "210 KB",
         uploaded: true,
         createdAt: "2026-06-03",
       },
     ],
+    productUrls: [],
   },
   {
     id: 3,
@@ -368,7 +489,8 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "Liter",
     packagingUnit: "Drum",
     conversionQuantity: 200,
-    assets: [],
+    productImages: [],
+    productUrls: [],
   },
   {
     id: 4,
@@ -391,7 +513,8 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "Gram",
     packagingUnit: "Packet",
     conversionQuantity: 50,
-    assets: [],
+    productImages: [],
+    productUrls: [],
   },
 ];
 
@@ -401,11 +524,23 @@ function migrateProduct(raw: Record<string, unknown>): Product {
     formulation?: string;
     cropApplicable?: string;
   };
-  const assets = Array.isArray(p.assets)
+  const legacyAssets = Array.isArray(p.assets)
     ? (p.assets as ProductAsset[])
     : Array.isArray(p.mediaItems)
       ? (p.mediaItems as ProductAsset[])
       : [];
+  const productImages =
+    Array.isArray(p.productImages) && p.productImages.length > 0
+      ? p.productImages
+      : legacyAssets
+          .map(legacyAssetToImage)
+          .filter((item): item is ProductImage => item !== null);
+  const productUrls =
+    Array.isArray(p.productUrls) && p.productUrls.length > 0
+      ? p.productUrls
+      : legacyAssets
+          .map(legacyAssetToUrl)
+          .filter((item): item is ProductUrl => item !== null);
   return {
     id: p.id ?? 0,
     productId: p.productId ?? "",
@@ -426,8 +561,10 @@ function migrateProduct(raw: Record<string, unknown>): Product {
     createdDate: p.createdDate ?? todayStr(),
     updatedBy: p.updatedBy ?? "Admin",
     updatedDate: p.updatedDate ?? todayStr(),
-    assets,
-    mediaItems: assets,
+    productImages,
+    productUrls,
+    assets: legacyAssets,
+    mediaItems: legacyAssets,
     baseUnit: p.baseUnit ?? "",
     packagingUnit: p.packagingUnit ?? "",
     conversionQuantity: p.conversionQuantity !== undefined ? Number(p.conversionQuantity) : undefined,
@@ -454,12 +591,9 @@ export function nextProductId(list: Product[]): number {
   return Math.max(0, ...list.map((item) => item.id)) + 1;
 }
 
-export function generateProductCode(list: Product[]): string {
-  const maxNum = list.reduce((max, item) => {
-    const match = item.productId.match(/PRD-(\d+)/);
-    return match ? Math.max(max, parseInt(match[1], 10)) : max;
-  }, 0);
-  return `PRD-${String(maxNum + 1).padStart(4, "0")}`;
+/** @deprecated Product code is no longer generated. Use SKU as the product identifier. */
+export function generateProductCode(_list: Product[]): string {
+  return "";
 }
 
 export function formatMoney(value: number): string {

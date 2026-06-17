@@ -1,4 +1,4 @@
-﻿// ── Geography Master — shared types, seed data, storage helpers ───────────────
+// ── Geography Master — shared types, seed data, storage helpers ───────────────
 
 export type GeoLevel =
   | "Zone"
@@ -386,7 +386,7 @@ export function deleteGeoNode(
 export function resolvePincodeLocation(
   pincode: string,
   nodes?: GeoNode[],
-): { city: string; state: string } | null {
+): { city: string; state: string; district: string } | null {
   const list = nodes ?? loadGeoNodes();
   const code = pincode.trim();
   if (!/^\d{6}$/.test(code)) return null;
@@ -398,6 +398,7 @@ export function resolvePincodeLocation(
 
   let city = "";
   let state = "";
+  let district = "";
   let current: GeoNode | undefined = pinNode;
 
   while (current?.parentId != null) {
@@ -406,12 +407,15 @@ export function resolvePincodeLocation(
     if (parent.level === "City" || parent.level === "Town") {
       city = parent.name.replace(/\s+(City|Town)$/i, "");
     }
+    if (parent.level === "District") {
+      district = parent.name.replace(/\s+District$/i, "");
+    }
     if (parent.level === "State") {
       state = parent.name.replace(/\s+State$/i, "");
     }
     current = parent;
   }
 
-  if (!city && !state) return null;
-  return { city, state };
+  if (!city && !state && !district) return null;
+  return { city, state, district };
 }

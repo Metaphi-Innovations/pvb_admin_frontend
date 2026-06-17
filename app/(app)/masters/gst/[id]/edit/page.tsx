@@ -184,10 +184,12 @@ export default function EditGSTPage() {
           </button>
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-semibold leading-none">Edit GST</h2>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Masters → GST → {record.gstId}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Masters → GST → {record.gstPercentage}%
+            </p>
           </div>
-          <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
-            {record.gstId}
+          <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
+            {record.gstPercentage}%
           </span>
           <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => router.back()}>
             Discard
@@ -205,17 +207,6 @@ export default function EditGSTPage() {
         <div className="flex-1 overflow-y-auto px-5 py-4">
           <SectionHead label="GST Details" />
           <div className="grid grid-cols-4 gap-3">
-            {/* GST ID (Read Only) */}
-            <div className="col-span-2 space-y-1">
-              <Label className="text-xs font-medium">GST ID</Label>
-              <Input
-                value={record.gstId}
-                disabled
-                className="h-8 text-xs bg-muted/30 text-muted-foreground cursor-not-allowed"
-              />
-            </div>
-
-            {/* GST Percentage */}
             <div className="col-span-2 space-y-1">
               <Label className="text-xs font-medium">
                 GST Percentage <span className="text-red-500">*</span>
@@ -224,10 +215,14 @@ export default function EditGSTPage() {
                 type="number"
                 value={form.gstPercentage}
                 onChange={e => set("gstPercentage", parseFloat(e.target.value) || 0)}
+                onWheel={(e) => e.currentTarget.blur()}
                 placeholder="e.g., 18.0"
                 step="0.01"
                 min="0"
-                className={cn("h-8 text-xs", errors.gstPercentage && "border-red-400 focus-visible:ring-red-300")}
+                className={cn(
+                  "h-8 text-xs [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
+                  errors.gstPercentage && "border-red-400 focus-visible:ring-red-300",
+                )}
               />
               <FieldError msg={errors.gstPercentage} />
             </div>

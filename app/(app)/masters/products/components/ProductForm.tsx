@@ -3,19 +3,17 @@
 import React, { useMemo, useRef, useState } from "react";
 import {
 	AlertCircle,
+	Eye,
 	Download,
 	Image as ImageIcon,
 	Upload,
 	X,
-	FileText,
-	Link2,
 	ExternalLink,
 	Plus,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
 	Dialog,
 	DialogContent,
@@ -28,11 +26,14 @@ import { loadUOMMasters } from "../../uom/uom-data";
 import { loadHSNMasters } from "../../hsn/hsn-data";
 import {
 	type Product,
-	type ProductAsset,
+	type ProductImage,
+	type ProductUrl,
 	type ProductStatus,
-	createMediaItem,
-	createLinkMediaItem,
-	getAssetDisplayType,
+	createProductImageFromFile,
+	createProductUrl,
+	getImagePreviewUrl,
+	isAllowedProductImageFile,
+	isValidProductUrl,
 	loadActiveCategoryOptions,
 	loadActiveCfuOptions,
 	loadActiveFormOptions,
@@ -174,26 +175,24 @@ export function ProductForm({
 	onChange,
 	errors,
 	onClearError,
-	assets,
-	mediaItems,
-	onAssetAdd,
-	onMediaAdd,
-	onAssetRemove,
-	onMediaRemove,
+	productImages = [],
+	productUrls = [],
+	onImageAdd,
+	onImageRemove,
+	onUrlAdd,
+	onUrlRemove,
 	readOnly,
 }: {
 	form: ProductFormValues;
 	onChange: (form: ProductFormValues) => void;
 	errors: Record<string, string>;
 	onClearError: (key: string) => void;
-	assets?: ProductAsset[];
-	mediaItems?: ProductAsset[];
-	onAssetAdd?: (items: ProductAsset[]) => void;
-	onMediaAdd?: (items: ProductAsset[]) => void;
-	onAssetRemove?: (id: string) => void;
-	onMediaRemove?: (id: string) => void;
-	onAssetUpload?: () => void;
-	onMediaUpload?: () => void;
+	productImages?: ProductImage[];
+	productUrls?: ProductUrl[];
+	onImageAdd?: (items: ProductImage[]) => void;
+	onImageRemove?: (id: string) => void;
+	onUrlAdd?: (item: ProductUrl) => void;
+	onUrlRemove?: (id: string) => void;
 	readOnly?: boolean;
 }) {
 	const set = <K extends keyof ProductFormValues>(
@@ -267,27 +266,13 @@ export function ProductForm({
 				.replace(/(\..*)\./g, "$1") as ProductFormValues[keyof ProductFormValues],
 		);
 
-	const mediaInputRef = useRef<HTMLInputElement | null>(null);
-	const openMediaPicker = () => mediaInputRef.current?.click();
-	const [linkTitle, setLinkTitle] = useState("");
+	const imageInputRef = useRef<HTMLInputElement | null>(null);
+	const openImagePicker = () => imageInputRef.current?.click();
 	const [linkUrl, setLinkUrl] = useState("");
-	const [previewImage, setPreviewImage] = useState<{
-		src: string;
-		name: string;
-	} | null>(null);
-	const allAssets = assets ?? mediaItems ?? [];
-	const emitAdd = onAssetAdd ?? onMediaAdd ?? (() => {});
-	const emitRemove = onAssetRemove ?? onMediaRemove ?? (() => {});
-
-	const getAssetUrl = (item: ProductAsset) =>
-		item.url ?? item.fileUrl ?? item.previewUrl ?? item.src ?? "";
-
-	const getAssetIcon = (item: ProductAsset) => {
-		if (item.type === "link") return <Link2 className='w-4 h-4' />;
-		if (item.mediaKind === "pdf" || item.kind === "document")
-			return <FileText className='w-4 h-4' />;
-		return <ImageIcon className='w-4 h-4' />;
-	};
+	const [linkUrlError, setLinkUrlError] = useState("");
+	const [urlDialogOpen, setUrlDialogOpen] = useState(false);
+	const [previewImage, setPreviewImage] = useState<ProductImage | null>(null);
+	const [uploadingImages, setUploadingImages] = useState(false);
 
 	const openExternal = (url?: string) => {
 		if (!url) return;
@@ -300,12 +285,12 @@ export function ProductForm({
 		window.open(safeUrl, "_blank", "noopener,noreferrer");
 	};
 
-	const downloadAsset = (item: ProductAsset) => {
-		const url = getAssetUrl(item);
+	const downloadImage = (image: ProductImage) => {
+		const url = getImagePreviewUrl(image);
 		if (!url) return;
 		const anchor = document.createElement("a");
 		anchor.href = url;
-		anchor.download = item.name || "download";
+		anchor.download = image.name || "product-image";
 		anchor.target = "_blank";
 		anchor.rel = "noopener noreferrer";
 		document.body.appendChild(anchor);
@@ -313,17 +298,32 @@ export function ProductForm({
 		document.body.removeChild(anchor);
 	};
 
-	const openAsset = (item: ProductAsset) => {
-		const url = getAssetUrl(item);
-		if (!url) return;
-		if (
-			item.type === "media" &&
-			(item.mediaKind === "image" || item.kind === "image")
-		) {
-			setPreviewImage({ src: url, name: item.name });
+	const handleImageFiles = async (files: File[]) => {
+		const valid = files.filter(isAllowedProductImageFile);
+		if (!valid.length || !onImageAdd) return;
+		setUploadingImages(true);
+		try {
+			const items = await Promise.all(valid.map(createProductImageFromFile));
+			onImageAdd(items);
+		} finally {
+			setUploadingImages(false);
+		}
+	};
+
+	const handleAddUrl = () => {
+		const trimmed = linkUrl.trim();
+		if (!trimmed) {
+			setLinkUrlError("URL is required");
 			return;
 		}
-		openExternal(url);
+		if (!isValidProductUrl(trimmed)) {
+			setLinkUrlError("Enter a valid URL (https://…)");
+			return;
+		}
+		onUrlAdd?.(createProductUrl(trimmed));
+		setLinkUrl("");
+		setLinkUrlError("");
+		setUrlDialogOpen(false);
 	};
 
 	return (
@@ -503,210 +503,233 @@ export function ProductForm({
 				</div>
 
 				{/* Media & Documents */}
-				<div className='pt-3 border-t border-border/60 space-y-2.5'>
+				<div className='pt-3 border-t border-border/60 space-y-3'>
 					<SectionHead
 						label='Media & Documents'
-						sub='Product images, brochures, label artwork, and external links.'
+						sub='Product images and external document links.'
 					/>
 
-					{!readOnly && (
-						<div className='flex items-center gap-2'>
-							<input
-								ref={mediaInputRef}
-								type='file'
-								accept='image/png,image/jpeg,image/jpg,image/webp,.pdf'
-								multiple
-								className='hidden'
-								onChange={(e) => {
-									const files = Array.from(e.target.files ?? []);
-									const items = files.map((file) => createMediaItem(file));
-									if (items.length) emitAdd(items);
-									e.currentTarget.value = "";
-								}}
-							/>
-
-							<Button
-								type='button'
-								variant='outline'
-								size='sm'
-								className='h-7 px-2.5 text-[11px] border-brand-300 hover:bg-brand-50 hover:text-brand-700'
-								onClick={openMediaPicker}
-							>
-								<Upload className='w-3 h-3 mr-1.5 text-brand-600' /> Upload Media
-							</Button>
-
-							<Popover>
-								<PopoverTrigger asChild>
+					<div className='space-y-2'>
+						<div className='flex items-center justify-between gap-2'>
+							<p className='text-[11px] font-semibold text-foreground'>Product Images</p>
+							{!readOnly && (
+								<div className='flex items-center gap-2'>
+									<input
+										ref={imageInputRef}
+										type='file'
+										accept='image/jpeg,image/jpg,image/png,image/webp,.jpg,.jpeg,.png,.webp'
+										multiple
+										className='hidden'
+										onChange={(e) => {
+											void handleImageFiles(Array.from(e.target.files ?? []));
+											e.currentTarget.value = "";
+										}}
+									/>
 									<Button
 										type='button'
 										variant='outline'
 										size='sm'
-										className='h-7 px-2.5 text-[11px] border-border hover:bg-muted/30'
+										className='h-7 px-2.5 text-[11px] border-brand-300 hover:bg-brand-50 hover:text-brand-700'
+										onClick={openImagePicker}
+										disabled={uploadingImages}
 									>
-										<Plus className='w-3 h-3 mr-1.5 text-muted-foreground' /> Add URL
+										<Upload className='w-3 h-3 mr-1.5 text-brand-600' />
+										{uploadingImages ? "Uploading…" : "Upload Images"}
 									</Button>
-								</PopoverTrigger>
-								<PopoverContent
-									className='w-72 p-3 bg-white border border-border shadow-lg rounded-xl space-y-2.5'
-									align='start'
-								>
-									<p className='text-xs font-bold uppercase tracking-wider text-muted-foreground'>
-										Add External URL
-									</p>
-									<div className='space-y-2'>
-										<div className='space-y-0.5'>
-											<Label className='text-[10px] font-medium text-muted-foreground'>
-												Link Title
-											</Label>
-											<Input
-												value={linkTitle}
-												onChange={(e) => setLinkTitle(e.target.value)}
-												placeholder='e.g. Product website'
-												className='h-7 text-xs'
-											/>
-										</div>
-										<div className='space-y-0.5'>
-											<Label className='text-[10px] font-medium text-muted-foreground'>
-												URL
-											</Label>
-											<Input
-												value={linkUrl}
-												onChange={(e) => setLinkUrl(e.target.value)}
-												placeholder='https://…'
-												className='h-7 text-xs'
-											/>
-										</div>
-									</div>
-									<Button
-										type='button'
-										className='w-full h-7 text-xs text-white bg-brand-600 hover:bg-brand-700'
-										disabled={!linkTitle.trim() || !linkUrl.trim()}
-										onClick={() => {
-											emitAdd([
-												createLinkMediaItem(linkTitle.trim(), linkUrl.trim()),
-											]);
-											setLinkTitle("");
-											setLinkUrl("");
-										}}
-									>
-										<Link2 className='mr-1.5 h-3 w-3' /> Save Link
-									</Button>
-								</PopoverContent>
-							</Popover>
+								</div>
+							)}
 						</div>
-					)}
 
-					<div className='border border-border/60 rounded-xl overflow-hidden bg-white'>
-						{allAssets.length === 0 ? (
-							<p className='px-4 py-5 text-xs text-center text-muted-foreground'>
-								No media or documents attached.
+						{productImages.length === 0 && readOnly ? (
+							<p className='text-xs text-muted-foreground py-3 text-center border border-dashed border-border/60 rounded-lg bg-muted/10'>
+								No product images uploaded
 							</p>
 						) : (
-							<div className='divide-y divide-border/40'>
-								{allAssets.map((item) => {
-									const url = getAssetUrl(item);
-									const typeLabel = getAssetDisplayType(item);
-									const isImage =
-										item.type === "media" &&
-										(item.mediaKind === "image" || item.kind === "image");
+							<div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5'>
+								{productImages.map((image) => {
+									const preview = getImagePreviewUrl(image);
 									return (
 										<div
-											key={item.id}
-											className='grid grid-cols-[1fr_auto] md:grid-cols-[minmax(0,1fr)_100px_120px_auto] items-center gap-2 px-3 py-2 hover:bg-muted/15 transition-colors'
+											key={image.id}
+											className='flex flex-col overflow-hidden border rounded-lg border-border/60 bg-white shadow-sm'
 										>
-											<div className='flex items-center min-w-0 gap-2.5'>
-												<div className='flex items-center justify-center flex-shrink-0 overflow-hidden border rounded-md h-8 w-8 border-border/50 bg-muted/20 text-brand-600'>
-													{isImage && url ? (
-														<img
-															src={url}
-															alt={item.name}
-															className='object-cover w-full h-full cursor-pointer'
-															onClick={() => openAsset(item)}
-														/>
-													) : (
-														getAssetIcon(item)
-													)}
-												</div>
-												<div className='min-w-0'>
-													<p className='text-xs font-medium truncate text-foreground'>
-														{item.title || item.name}
-													</p>
-													<p className='text-[10px] text-muted-foreground truncate'>
-														{item.size || item.sizeLabel || "—"}
-													</p>
-												</div>
-											</div>
-
-											<span className='hidden md:block text-[10px] text-muted-foreground'>
-												{typeLabel}
-											</span>
-
-											<div className='hidden md:flex items-center'>
-												{isImage && url ? (
-													<button
-														type='button'
-														onClick={() => openAsset(item)}
-														className='text-[10px] text-brand-600 hover:underline'
-													>
-														Preview
-													</button>
-												) : url ? (
-													<button
-														type='button'
-														onClick={() => openExternal(url)}
-														className='text-[10px] text-brand-600 hover:underline'
-													>
-														Open
-													</button>
+											<button
+												type='button'
+												className='relative h-[88px] w-full bg-muted/20 group/thumb'
+												onClick={() => setPreviewImage(image)}
+												title='Click to preview'
+											>
+												{preview ? (
+													<img
+														src={preview}
+														alt={image.name}
+														className='object-cover w-full h-full'
+													/>
 												) : (
-													<span className='text-[10px] text-muted-foreground'>—</span>
+													<div className='flex items-center justify-center w-full h-full text-muted-foreground'>
+														<ImageIcon className='w-5 h-5' />
+													</div>
 												)}
-											</div>
-
-											<div className='flex items-center gap-1 justify-end'>
-												<span className='md:hidden text-[9px] text-muted-foreground mr-1'>
-													{typeLabel}
+												<span className='absolute bottom-1 right-1 rounded px-1.5 py-0.5 text-[9px] font-medium bg-black/55 text-white opacity-0 group-hover/thumb:opacity-100 transition-opacity'>
+													Click to preview
 												</span>
-												{url && (
-													<>
-														<Button
-															type='button'
-															variant='ghost'
-															size='icon'
-															className='w-7 h-7 text-muted-foreground hover:text-foreground'
-															onClick={() => downloadAsset(item)}
-															title='Download'
-														>
-															<Download className='w-3.5 h-3.5' />
-														</Button>
-														<Button
-															type='button'
-															variant='ghost'
-															size='icon'
-															className='w-7 h-7 md:hidden text-muted-foreground hover:text-foreground'
-															onClick={() => openAsset(item)}
-															title='Preview'
-														>
-															<ExternalLink className='w-3.5 h-3.5' />
-														</Button>
-													</>
-												)}
-												{!readOnly && (
+											</button>
+											<div className='px-2 py-1.5 space-y-1 border-t border-border/40'>
+												<p
+													className='text-[10px] font-medium truncate text-foreground'
+													title={image.name}
+												>
+													{image.name}
+												</p>
+												<p className='text-[9px] text-muted-foreground'>
+													{image.size || "—"}
+												</p>
+												<div className='flex items-center gap-1 pt-0.5'>
 													<Button
 														type='button'
-														variant='ghost'
-														size='icon'
-														className='w-7 h-7 hover:bg-red-50 text-muted-foreground hover:text-red-600'
-														onClick={() => emitRemove(item.id)}
-														title='Delete'
+														variant='outline'
+														size='sm'
+														className='h-6 flex-1 px-1 text-[9px] gap-1'
+														onClick={() => setPreviewImage(image)}
 													>
-														<X className='w-3.5 h-3.5' />
+														<Eye className='w-3 h-3 shrink-0' />
+														Preview
 													</Button>
-												)}
+													<Button
+														type='button'
+														variant='outline'
+														size='sm'
+														className='h-6 w-7 px-0 shrink-0'
+														onClick={() => downloadImage(image)}
+														title='Download'
+													>
+														<Download className='w-3 h-3' />
+													</Button>
+													{!readOnly && (
+														<Button
+															type='button'
+															variant='outline'
+															size='sm'
+															className='h-6 w-7 px-0 shrink-0 text-red-600 hover:text-red-700 hover:bg-red-50'
+															onClick={() => onImageRemove?.(image.id)}
+															title='Delete'
+														>
+															<X className='w-3 h-3' />
+														</Button>
+													)}
+												</div>
 											</div>
 										</div>
 									);
 								})}
+
+								{!readOnly && (
+									<button
+										type='button'
+										onClick={openImagePicker}
+										disabled={uploadingImages}
+										className='flex flex-col items-center justify-center h-[118px] border border-dashed rounded-lg border-border/70 bg-muted/10 text-muted-foreground hover:border-brand-300 hover:bg-brand-50/40 hover:text-brand-700 transition-colors'
+									>
+										<Plus className='w-4 h-4 mb-1' />
+										<span className='text-[10px] font-medium'>Upload</span>
+									</button>
+								)}
+							</div>
+						)}
+
+						{productImages.length === 0 && !readOnly && (
+							<p className='text-[10px] text-muted-foreground'>
+								No product images uploaded. JPG, JPEG, PNG, WEBP supported.
+							</p>
+						)}
+					</div>
+
+					<div className='pt-2 space-y-2 border-t border-border/40'>
+						<div className='flex items-center justify-between gap-2'>
+							<p className='text-[11px] font-semibold text-foreground'>Document URLs</p>
+							{!readOnly && (
+								<Button
+									type='button'
+									variant='outline'
+									size='sm'
+									className='h-7 px-2.5 text-[11px] border-border hover:bg-muted/30'
+									onClick={() => {
+										setLinkUrl("");
+										setLinkUrlError("");
+										setUrlDialogOpen(true);
+									}}
+								>
+									<Plus className='w-3 h-3 mr-1.5 text-muted-foreground' /> Add URL
+								</Button>
+							)}
+						</div>
+
+						{productUrls.length === 0 ? (
+							<p className='text-xs text-muted-foreground py-3 text-center border border-dashed border-border/60 rounded-lg bg-muted/10'>
+								No document URLs added
+							</p>
+						) : (
+							<div className='overflow-hidden border rounded-lg border-border/60'>
+								<table className='w-full text-xs'>
+									<thead>
+										<tr className='border-b bg-muted/30 border-border/50'>
+											<th className='w-12 px-2 py-1.5 text-left text-[10px] font-semibold text-muted-foreground'>
+												Sr No
+											</th>
+											<th className='px-2 py-1.5 text-left text-[10px] font-semibold text-muted-foreground'>
+												URL
+											</th>
+											<th className='w-24 px-2 py-1.5 text-center text-[10px] font-semibold text-muted-foreground'>
+												Open Link
+											</th>
+											{!readOnly && (
+												<th className='w-16 px-2 py-1.5 text-center text-[10px] font-semibold text-muted-foreground'>
+													Delete
+												</th>
+											)}
+										</tr>
+									</thead>
+									<tbody>
+										{productUrls.map((item, index) => (
+											<tr key={item.id} className='border-b border-border/40 last:border-0'>
+												<td className='px-2 py-2 text-[11px] text-muted-foreground tabular-nums'>
+													{index + 1}
+												</td>
+												<td className='px-2 py-2'>
+													<p className='text-[11px] text-foreground truncate max-w-[280px] md:max-w-md' title={item.url}>
+														{item.url}
+													</p>
+												</td>
+												<td className='px-2 py-2 text-center'>
+													<Button
+														type='button'
+														variant='ghost'
+														size='icon'
+														className='w-7 h-7 text-brand-600 hover:text-brand-700 hover:bg-brand-50'
+														onClick={() => openExternal(item.url)}
+														title='Open link'
+													>
+														<ExternalLink className='w-3.5 h-3.5' />
+													</Button>
+												</td>
+												{!readOnly && (
+													<td className='px-2 py-2 text-center'>
+														<Button
+															type='button'
+															variant='ghost'
+															size='icon'
+															className='w-7 h-7 hover:bg-red-50 text-muted-foreground hover:text-red-600'
+															onClick={() => onUrlRemove?.(item.id)}
+															title='Delete'
+														>
+															<X className='w-3.5 h-3.5' />
+														</Button>
+													</td>
+												)}
+											</tr>
+										))}
+									</tbody>
+								</table>
 							</div>
 						)}
 					</div>
@@ -715,20 +738,70 @@ export function ProductForm({
 
 			<Dialog
 				open={!!previewImage}
-				onOpenChange={(open) => !open && setPreviewImage(null)}
+				onOpenChange={(open) => {
+					if (!open) setPreviewImage(null);
+				}}
 			>
-				<DialogContent className='max-w-3xl p-4 bg-white border shadow-lg border-border rounded-xl'>
+				<DialogContent className='z-[500] max-w-3xl p-4 bg-white border shadow-lg border-border rounded-xl'>
 					<DialogHeader className='pb-2 border-b border-border/50'>
 						<DialogTitle className='text-sm font-semibold truncate text-foreground'>
-							{previewImage?.name}
+							{previewImage?.name ?? "Image preview"}
 						</DialogTitle>
 					</DialogHeader>
-					<div className='flex items-center justify-center py-4 rounded-lg bg-muted/5'>
-						<img
-							src={previewImage?.src}
-							alt={previewImage?.name}
-							className='max-h-[70vh] max-w-full object-contain'
-						/>
+					<div className='flex items-center justify-center min-h-[200px] py-4 rounded-lg bg-muted/5'>
+						{previewImage && getImagePreviewUrl(previewImage) ? (
+							<img
+								src={getImagePreviewUrl(previewImage)}
+								alt={previewImage.name}
+								className='max-h-[70vh] max-w-full object-contain'
+							/>
+						) : (
+							<p className='text-sm text-muted-foreground'>Preview unavailable</p>
+						)}
+					</div>
+				</DialogContent>
+			</Dialog>
+
+			<Dialog open={urlDialogOpen} onOpenChange={setUrlDialogOpen}>
+				<DialogContent className='max-w-md p-4 bg-white border border-border rounded-xl shadow-lg'>
+					<DialogHeader className='pb-2'>
+						<DialogTitle className='text-sm font-semibold'>Add URL</DialogTitle>
+					</DialogHeader>
+					<div className='space-y-2'>
+						<div className='space-y-1'>
+							<Label className='text-xs font-medium'>
+								URL <span className='text-red-500'>*</span>
+							</Label>
+							<Input
+								value={linkUrl}
+								onChange={(e) => {
+									setLinkUrl(e.target.value);
+									if (linkUrlError) setLinkUrlError("");
+								}}
+								placeholder='Enter URL'
+								className={cn("h-8 text-xs", linkUrlError && "border-red-400")}
+							/>
+							{linkUrlError && <FieldError msg={linkUrlError} />}
+						</div>
+						<div className='flex justify-end gap-2 pt-1'>
+							<Button
+								type='button'
+								variant='outline'
+								size='sm'
+								className='h-8 text-xs'
+								onClick={() => setUrlDialogOpen(false)}
+							>
+								Cancel
+							</Button>
+							<Button
+								type='button'
+								size='sm'
+								className='h-8 text-xs text-white bg-brand-600 hover:bg-brand-700'
+								onClick={handleAddUrl}
+							>
+								Add URL
+							</Button>
+						</div>
 					</div>
 				</DialogContent>
 			</Dialog>
@@ -767,14 +840,13 @@ export function formValuesToProduct(
 	form: ProductFormValues,
 	base: Partial<Product> & {
 		id: number;
-		productId: string;
-		assets?: ProductAsset[];
-		mediaItems?: ProductAsset[];
+		productImages?: ProductImage[];
+		productUrls?: ProductUrl[];
 	},
 ): Product {
 	return {
 		id: base.id,
-		productId: base.productId,
+		productId: base.productId ?? "",
 		productName: form.productName.trim(),
 		scientificName: form.scientificName.trim() || undefined,
 		category: form.category,
@@ -792,8 +864,8 @@ export function formValuesToProduct(
 		createdDate: base.createdDate ?? todayStr(),
 		updatedBy: "Admin",
 		updatedDate: todayStr(),
-		assets: base.assets ?? base.mediaItems ?? [],
-		mediaItems: base.assets ?? base.mediaItems ?? [],
+		productImages: base.productImages ?? [],
+		productUrls: base.productUrls ?? [],
 		baseUnit: form.baseUnit,
 		packagingUnit: form.packagingUnit,
 		conversionQuantity: form.conversionQuantity

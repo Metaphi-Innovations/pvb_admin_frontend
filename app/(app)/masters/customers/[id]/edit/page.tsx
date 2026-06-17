@@ -163,13 +163,10 @@ export default function EditCustomerPage() {
           <span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
             {customerCode}
           </span>
-          <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
+          <Button variant="ghost" size="sm" onClick={() => router.back()}>
             Discard
           </Button>
-          <Button
-            className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
-            onClick={handleSave}
-          >
+          <Button variant="default" size="sm" onClick={handleSave}>
             <Save className="w-4 h-4" /> Update Customer
           </Button>
         </div>

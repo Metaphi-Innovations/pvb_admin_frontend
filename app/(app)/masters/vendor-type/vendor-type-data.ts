@@ -1,3 +1,5 @@
+"use client";
+
 import {
   MASTER_CURRENT_USER,
   masterToday,
@@ -7,7 +9,6 @@ import {
 import { loadMasterRecords, saveMasterRecords } from "@/lib/masters/common";
 import {
   generateTypedMasterCode,
-  isMasterCodeEmpty,
   normalizeInitialCode,
   validateInitialCode,
 } from "@/lib/masters/code-generation";
@@ -18,20 +19,23 @@ export const VENDOR_TYPE_GOODS = "Creditor for Goods";
 export const VENDOR_TYPE_EXPENSES = "Creditor for Expenses";
 
 export interface VendorTypeRecord extends BaseMasterRecord {
+  vendorTypeCode: string;
   vendorTypeName: string;
   /** Prefix for vendor codes, e.g. CG, CE */
   initialCode: string;
   description: string;
 }
 
-export interface VendorTypeForm {
+export interface VendorTypeFormValues {
+  vendorTypeCode: string;
   vendorTypeName: string;
   initialCode: string;
   description: string;
   status: MasterStatus;
 }
 
-export const DEFAULT_VENDOR_TYPE_FORM: VendorTypeForm = {
+export const DEFAULT_VENDOR_TYPE_FORM: VendorTypeFormValues = {
+  vendorTypeCode: "",
   vendorTypeName: "",
   initialCode: "",
   description: "",
@@ -41,6 +45,7 @@ export const DEFAULT_VENDOR_TYPE_FORM: VendorTypeForm = {
 export const VENDOR_TYPE_SEED: VendorTypeRecord[] = [
   {
     id: 1,
+    vendorTypeCode: "CG-001",
     vendorTypeName: VENDOR_TYPE_GOODS,
     initialCode: "CG",
     description: "Suppliers of physical goods and inventory items",
@@ -52,6 +57,7 @@ export const VENDOR_TYPE_SEED: VendorTypeRecord[] = [
   },
   {
     id: 2,
+    vendorTypeCode: "CE-001",
     vendorTypeName: VENDOR_TYPE_EXPENSES,
     initialCode: "CE",
     description: "Service providers and expense-based vendors",
@@ -68,8 +74,9 @@ const LEGACY_INITIAL_CODES: Record<string, string> = {
   [VENDOR_TYPE_EXPENSES.toLowerCase()]: "CE",
 };
 
-export function vendorTypeToForm(r: VendorTypeRecord): VendorTypeForm {
+export function vendorTypeToFormValues(r: VendorTypeRecord): VendorTypeFormValues {
   return {
+    vendorTypeCode: r.vendorTypeCode,
     vendorTypeName: r.vendorTypeName,
     initialCode: r.initialCode,
     description: r.description,
@@ -77,23 +84,63 @@ export function vendorTypeToForm(r: VendorTypeRecord): VendorTypeForm {
   };
 }
 
-export function formToVendorType(
-  form: VendorTypeForm,
-  id: number,
-  existing?: VendorTypeRecord,
-): VendorTypeRecord {
-  const now = masterToday();
-  return {
-    id,
-    vendorTypeName: form.vendorTypeName.trim(),
-    initialCode: normalizeInitialCode(form.initialCode),
-    description: form.description.trim(),
-    status: form.status,
-    createdBy: existing?.createdBy ?? MASTER_CURRENT_USER,
-    updatedBy: MASTER_CURRENT_USER,
-    createdAt: existing?.createdAt ?? now,
-    updatedAt: now,
-  };
+export function nextVendorTypeId(list: VendorTypeRecord[]): number {
+  return list.length ? Math.max(...list.map((r) => r.id)) + 1 : 1;
+}
+
+export function generateVendorTypeCode(
+  initialCode: string,
+  records: VendorTypeRecord[],
+  excludeId?: number,
+): string {
+  const prefix = normalizeInitialCode(initialCode);
+  if (!prefix) return "";
+  const codes = records.map((r) => r.vendorTypeCode);
+  const exclude = excludeId
+    ? records.find((r) => r.id === excludeId)?.vendorTypeCode
+    : undefined;
+  return generateTypedMasterCode(prefix, codes, exclude);
+}
+
+export function resolveVendorTypeCode(
+  initialCode: string,
+  records: VendorTypeRecord[],
+  options: {
+    recordId?: number;
+    existingCode?: string;
+    originalInitialCode?: string;
+  } = {},
+): string {
+  const normalized = normalizeInitialCode(initialCode);
+  if (!normalized) return "";
+
+  const original = normalizeInitialCode(options.originalInitialCode ?? "");
+  if (
+    options.recordId &&
+    options.existingCode &&
+    original &&
+    original === normalized
+  ) {
+    return options.existingCode;
+  }
+
+  return generateVendorTypeCode(initialCode, records, options.recordId);
+}
+
+export function validateVendorTypeCodeUnique(
+  code: string,
+  records: VendorTypeRecord[],
+  excludeId?: number,
+): string | null {
+  const normalized = code.trim().toUpperCase();
+  if (!normalized) return "Vendor type code is required.";
+  const duplicate = records.find(
+    (r) =>
+      r.id !== excludeId &&
+      r.vendorTypeCode.trim().toUpperCase() === normalized,
+  );
+  if (duplicate) return "Vendor type code already exists.";
+  return null;
 }
 
 export function findVendorTypeDuplicate(
@@ -107,26 +154,6 @@ export function findVendorTypeDuplicate(
       r.id !== excludeId &&
       r.vendorTypeName.trim().toLowerCase() === normalized,
   );
-}
-
-export function validateVendorTypeForm(
-  form: VendorTypeForm,
-  records: VendorTypeRecord[],
-  excludeId?: number,
-): Record<string, string> {
-  const errors: Record<string, string> = {};
-  if (!form.vendorTypeName.trim()) {
-    errors.vendorTypeName = "Vendor type name is required.";
-  } else if (findVendorTypeDuplicate(form.vendorTypeName, records, excludeId)) {
-    errors.vendorTypeName = "Vendor type name must be unique.";
-  }
-  const initialErr = validateVendorTypeInitialCode(
-    form.initialCode,
-    records,
-    excludeId,
-  );
-  if (initialErr) errors.initialCode = initialErr;
-  return errors;
 }
 
 export function validateVendorTypeInitialCode(
@@ -143,7 +170,26 @@ export function validateVendorTypeInitialCode(
   return validateInitialCode(value, existing, exclude);
 }
 
-function migrateVendorTypes(records: VendorTypeRecord[]): VendorTypeRecord[] {
+export function validateVendorTypeForm(
+  form: VendorTypeFormValues,
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!form.vendorTypeName.trim()) {
+    errors.vendorTypeName = "Vendor type name is required";
+  }
+  const code = normalizeInitialCode(form.initialCode);
+  if (!code) {
+    errors.initialCode = "Initial code is required";
+  } else if (!/^[A-Z]{2,5}$/.test(code)) {
+    errors.initialCode = "Use uppercase letters only (2–5 characters)";
+  }
+  if (code && !form.vendorTypeCode.trim()) {
+    errors.vendorTypeCode = "Vendor type code could not be generated";
+  }
+  return errors;
+}
+
+function migrateInitialCodes(records: VendorTypeRecord[]): VendorTypeRecord[] {
   return records.map((r, idx) => {
     if (r.initialCode) return r;
     const seed = VENDOR_TYPE_SEED[idx];
@@ -157,18 +203,40 @@ function migrateVendorTypes(records: VendorTypeRecord[]): VendorTypeRecord[] {
   });
 }
 
+function migrateVendorTypeCodes(records: VendorTypeRecord[]): VendorTypeRecord[] {
+  const prefixCounts = new Map<string, number>();
+  return records.map((item) => {
+    if (item.vendorTypeCode?.trim()) return item;
+    const prefix = normalizeInitialCode(item.initialCode);
+    if (!prefix) return item;
+    const next = (prefixCounts.get(prefix) ?? 0) + 1;
+    prefixCounts.set(prefix, next);
+    return {
+      ...item,
+      vendorTypeCode: `${prefix}-${String(next).padStart(3, "0")}`,
+    };
+  });
+}
+
 export function loadVendorTypes(): VendorTypeRecord[] {
   const loaded = loadMasterRecords<VendorTypeRecord>(
     VENDOR_TYPE_STORAGE_KEY,
     VENDOR_TYPE_SEED,
   );
-  const needsMigration = loaded.some((r) => !r.initialCode);
-  if (needsMigration) {
-    const migrated = migrateVendorTypes(loaded);
-    saveMasterRecords(VENDOR_TYPE_STORAGE_KEY, migrated);
-    return migrated;
+  let migrated = loaded;
+  let changed = false;
+  if (migrated.some((r) => !r.initialCode)) {
+    migrated = migrateInitialCodes(migrated);
+    changed = true;
   }
-  return loaded;
+  if (migrated.some((r) => !r.vendorTypeCode?.trim())) {
+    migrated = migrateVendorTypeCodes(migrated);
+    changed = true;
+  }
+  if (changed) {
+    saveMasterRecords(VENDOR_TYPE_STORAGE_KEY, migrated);
+  }
+  return migrated;
 }
 
 export function saveVendorTypes(records: VendorTypeRecord[]): void {
@@ -199,3 +267,9 @@ export function isGoodsVendorType(type: string): boolean {
 export function isExpenseVendorType(type: string): boolean {
   return type === VENDOR_TYPE_EXPENSES;
 }
+
+/** @deprecated Use vendorTypeToFormValues */
+export const vendorTypeToForm = vendorTypeToFormValues;
+
+/** @deprecated Use validateVendorTypeForm with separate save logic */
+export type VendorTypeForm = VendorTypeFormValues;
