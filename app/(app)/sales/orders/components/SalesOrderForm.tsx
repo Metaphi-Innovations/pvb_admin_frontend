@@ -11,16 +11,24 @@ import {
 } from "@/components/ui/popover";
 import { Check, ChevronsUpDown, AlertCircle, Search, Info } from "lucide-react";
 import type { Customer } from "@/app/(app)/masters/customers/customer-data";
+import {
+	customerMatchesTransactionSearch,
+	formatCustomerDropdownLabel,
+	formatCustomerDropdownSublabel,
+} from "@/lib/masters/entity-display";
 import type { Employee } from "@/app/(app)/user-management/employee/employee-data";
 import {
 	loadWarehouses,
 	type WarehouseMaster,
 } from "@/app/(app)/masters/warehouse/warehouse-data";
 import ProductLinesEditor from "./ProductLinesEditor";
+import AdditionalExpensesEditor from "./AdditionalExpensesEditor";
 import CustomerInfoDialog from "./CustomerInfoDialog";
 import {
 	type SalesOrder,
 	type SalesOrderLineItem,
+	type SalesOrderAdditionalExpense,
+	type SalesOrderFormValues,
 	type ProductCatalogItem,
 	type OrderStatus,
 	ORDER_APPROVAL_THRESHOLD,
@@ -33,17 +41,13 @@ import {
 	getProductById,
 	computeGstAmount,
 } from "../orders-data";
+import { isSezGstCategory } from "@/lib/masters/gst-compliance";
+import {
+	LUT_SUPPLY_DECLARATION,
+	resolveSezLutSupply,
+} from "@/lib/settings/gst-tax-config";
 
-export interface SalesOrderFormValues {
-	orderDate: string;
-	customerId: number | null;
-	salesManId: number | null;
-	deliveryDate: string;
-	status: OrderStatus;
-	lineItems: SalesOrderLineItem[];
-	warehouseId?: number | null;
-	warehouseName?: string;
-}
+export type { SalesOrderFormValues };
 
 function SearchableDropdown<T extends { id: number }>({
 	label,
@@ -54,6 +58,8 @@ function SearchableDropdown<T extends { id: number }>({
 	placeholder,
 	error,
 	getLabel,
+	getSublabel,
+	matchOption,
 	renderOption,
 }: {
 	label: string;
@@ -64,13 +70,17 @@ function SearchableDropdown<T extends { id: number }>({
 	placeholder: string;
 	error?: string;
 	getLabel: (opt: T) => string;
+	getSublabel?: (opt: T) => string;
+	matchOption?: (opt: T, query: string) => boolean;
 	renderOption?: (opt: T) => React.ReactNode;
 }) {
 	const [open, setOpen] = useState(false);
 	const [search, setSearch] = useState("");
 	const selected = options.find((o) => o.id === value);
 	const filtered = options.filter((o) =>
-		getLabel(o).toLowerCase().includes(search.toLowerCase()),
+		matchOption
+			? matchOption(o, search)
+			: getLabel(o).toLowerCase().includes(search.toLowerCase()),
 	);
 
 	return (
@@ -131,7 +141,14 @@ function SearchableDropdown<T extends { id: number }>({
 								{renderOption ? (
 									renderOption(opt)
 								) : (
-									<span className='flex-1'>{getLabel(opt)}</span>
+									<span className='flex-1 min-w-0'>
+										<span className='block truncate'>{getLabel(opt)}</span>
+										{getSublabel?.(opt) && (
+											<span className='block text-[10px] text-muted-foreground truncate mt-0.5'>
+												{getSublabel(opt)}
+											</span>
+										)}
+									</span>
 								)}
 								{value === opt.id && (
 									<Check className='w-3.5 h-3.5 text-brand-600 flex-shrink-0 ml-auto' />
@@ -386,17 +403,31 @@ export default function SalesOrderForm({
 		val: SalesOrderFormValues[K],
 	) => onChange({ ...form, [key]: val });
 
-	const totalsSummary = useMemo(
-		() => calculateOrderTotalsSummary(form.lineItems),
-		[form.lineItems],
-	);
-
-	const needsApproval = orderRequiresApproval(totalsSummary.grandTotal);
-
 	const selectedCustomer = useMemo(
 		() => customers.find((c) => c.id === form.customerId) ?? null,
 		[customers, form.customerId],
 	);
+
+	const sezLutResolution = useMemo(() => {
+		if (!selectedCustomer) return { appliesLut: false };
+		const category =
+			selectedCustomer.gstCategory ||
+			(selectedCustomer.gstApplicable ? "regular" : "unregistered");
+		return resolveSezLutSupply({
+			customerGstCategory: category,
+			transactionDate: form.orderDate,
+		});
+	}, [selectedCustomer, form.orderDate]);
+
+	const totalsSummary = useMemo(
+		() =>
+			calculateOrderTotalsSummary(form.lineItems, form.additionalExpenses ?? [], {
+				sezLutApplies: sezLutResolution.appliesLut,
+			}),
+		[form.lineItems, form.additionalExpenses, sezLutResolution.appliesLut],
+	);
+
+	const needsApproval = orderRequiresApproval(totalsSummary.grandTotal);
 
 	const formatRupee = (n: number) =>
 		`₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -461,7 +492,9 @@ export default function SalesOrderForm({
 							options={customers}
 							placeholder='Select customer…'
 							error={errors.customerId}
-							getLabel={(c) => `${c.customerCode} — ${c.customerName}`}
+							getLabel={formatCustomerDropdownLabel}
+							getSublabel={formatCustomerDropdownSublabel}
+							matchOption={(c, q) => customerMatchesTransactionSearch(c, q)}
 						/>
 					</div>
 
@@ -545,6 +578,35 @@ export default function SalesOrderForm({
 					</p>
 				)}
 
+				{selectedCustomer &&
+					isSezGstCategory(
+						selectedCustomer.gstCategory ||
+							(selectedCustomer.gstApplicable ? "regular" : "unregistered"),
+					) && (
+						<div className='rounded-lg border border-border/60 bg-muted/20 p-3 space-y-1'>
+							<p className='text-xs font-medium text-foreground'>
+								SEZ Customer
+								{sezLutResolution.appliesLut
+									? " — Supply under LUT (IGST not charged)"
+									: " — IGST will be charged"}
+							</p>
+							{sezLutResolution.appliesLut ? (
+								<>
+									<p className='text-[11px] font-mono text-muted-foreground'>
+										LUT: {sezLutResolution.lutNumber}
+									</p>
+									<p className='text-[11px] font-medium text-brand-800'>
+										{sezLutResolution.declaration ?? LUT_SUPPLY_DECLARATION}
+									</p>
+								</>
+							) : (
+								<p className='text-[11px] text-muted-foreground'>
+									No active LUT for company GSTIN and financial year.
+								</p>
+							)}
+						</div>
+					)}
+
 				<SectionDivider title='Products' />
 				{mode === "split" && originalOrder && (
 					<div className='flex items-center justify-end'>
@@ -560,6 +622,12 @@ export default function SalesOrderForm({
 					products={products}
 					onChange={(lines) => set("lineItems", lines)}
 					error={errors.lineItems}
+					zeroGst={sezLutResolution.appliesLut}
+				/>
+
+				<AdditionalExpensesEditor
+					expenses={form.additionalExpenses ?? []}
+					onChange={(additionalExpenses) => set("additionalExpenses", additionalExpenses)}
 				/>
 
 				<SectionDivider title='Total Summary' />
@@ -568,20 +636,28 @@ export default function SalesOrderForm({
 						<div className='divide-y divide-border/60'>
 							{[
 								{
-									label: "Subtotal (Before Discount):",
-									value: formatRupee(totalsSummary.subtotalBeforeDiscount),
+									label: "Product Subtotal:",
+									value: formatRupee(totalsSummary.productSubtotal),
 								},
 								{
-									label: "Total Item Discounts:",
-									value: formatRupee(totalsSummary.totalItemDiscounts),
+									label: "Product Discount Total:",
+									value: formatRupee(totalsSummary.productDiscountTotal),
 								},
 								{
-									label: "Net Total:",
-									value: formatRupee(totalsSummary.netTotal),
+									label: "Additional Expenses Total:",
+									value: formatRupee(totalsSummary.additionalExpensesTotal),
 								},
 								{
-									label: "Total GST Value:",
-									value: formatRupee(totalsSummary.totalGst),
+									label: "Expense Discount Total:",
+									value: formatRupee(totalsSummary.expenseDiscountTotal),
+								},
+								{
+									label: "Taxable Amount:",
+									value: formatRupee(totalsSummary.taxableAmount),
+								},
+								{
+									label: "GST Amount:",
+									value: formatRupee(totalsSummary.gstAmount),
 								},
 							].map((row) => (
 								<div
@@ -596,7 +672,7 @@ export default function SalesOrderForm({
 							))}
 							<div className='flex items-center justify-between gap-6 px-3 py-2.5 bg-brand-50/50'>
 								<span className='text-xs font-semibold text-foreground'>
-									Grand Total Amount:
+									Grand Total:
 								</span>
 								<span className='text-sm font-bold text-brand-700 tabular-nums'>
 									{formatRupee(totalsSummary.grandTotal)}

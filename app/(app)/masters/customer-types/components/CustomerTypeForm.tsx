@@ -18,6 +18,10 @@ import { cn } from "@/lib/utils";
 import { type CustomerTypeDocument } from "../customer-type-data";
 import { loadDocumentTypes } from "../../document-types/document-type-data";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+import {
+	normalizeInitialCode,
+	INITIAL_CODE_PATTERN,
+} from "@/lib/masters/code-generation";
 
 function DocumentNameField({
 	value,
@@ -162,6 +166,7 @@ function DocumentNameField({
 
 export interface CustomerTypeFormValues {
 	customerTypeCode: string;
+	initialCode: string;
 	customerType: string;
 	description: string;
 	documentTypes: CustomerTypeDocument[];
@@ -169,6 +174,7 @@ export interface CustomerTypeFormValues {
 
 export const DEFAULT_CUSTOMER_TYPE_FORM: CustomerTypeFormValues = {
 	customerTypeCode: "",
+	initialCode: "",
 	customerType: "",
 	description: "",
 	documentTypes: [],
@@ -183,6 +189,12 @@ export function validateCustomerTypeForm(
 	}
 	if (!form.customerTypeCode.trim()) {
 		errors.customerTypeCode = "Customer type code is required";
+	}
+	const code = normalizeInitialCode(form.initialCode);
+	if (!code) {
+		errors.initialCode = "Initial code is required";
+	} else if (!INITIAL_CODE_PATTERN.test(code)) {
+		errors.initialCode = "Use uppercase letters only (2–5 characters)";
 	}
 	if (!form.documentTypes || form.documentTypes.length === 0) {
 		errors.documentTypes = "At least one document type is required";
@@ -371,6 +383,29 @@ export function CustomerTypeForm({
 								<p className='flex items-center gap-1 mt-1 text-[11px] text-red-500'>
 									<AlertCircle className='w-3.5 h-3.5 flex-shrink-0' />
 									{errors.customerType}
+								</p>
+							)}
+						</div>
+
+						{/* Initial Code */}
+						<div className='space-y-1'>
+							<Label className='text-xs font-medium'>
+								Initial Code <span className='text-red-500'>*</span>
+							</Label>
+							<Input
+								value={form.initialCode}
+								onChange={(e) =>
+									set("initialCode", normalizeInitialCode(e.target.value))
+								}
+								placeholder='e.g. DIS'
+								className={cn(inputCls("initialCode"), "font-mono uppercase")}
+								disabled={readOnly}
+								maxLength={5}
+							/>
+							{errors.initialCode && (
+								<p className='flex items-center gap-1 mt-1 text-[11px] text-red-500'>
+									<AlertCircle className='w-3.5 h-3.5 flex-shrink-0' />
+									{errors.initialCode}
 								</p>
 							)}
 						</div>

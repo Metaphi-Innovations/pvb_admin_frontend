@@ -23,7 +23,7 @@ export interface Event {
   distributorAttendeeIds?: number[];
 }
 
-export type LocationSelection = Partial<Record<GeoLevel | "City", number>>;
+export type LocationSelection = Partial<Record<GeoLevel, number>>;
 
 export const EVENTS_STORAGE_KEY = "events:event:records";
 export const VIEW_EVENT_STORAGE_KEY = "events:event:view-id";

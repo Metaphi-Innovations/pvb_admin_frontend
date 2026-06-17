@@ -135,6 +135,12 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
             <DetailRow label="Mobile" value={record.customerMobile} />
             <DetailRow label="Email" value={record.customerEmail} />
             <DetailRow label="GST Number" value={record.customerGst} />
+            {record.lutNumber && (
+              <DetailRow label="LUT Number" value={record.lutNumber} />
+            )}
+            {record.lutDeclaration && (
+              <DetailRow label="LUT Declaration" value={record.lutDeclaration} />
+            )}
             <DetailRow label="Billing Address" value={record.billingAddress} />
           </div>
         </div>

@@ -45,7 +45,7 @@ export function RecordKvRow({
     link && href && typeof text === "string" ? (
       <a
         href={href}
-        className="text-[#1554B4] hover:underline"
+        className="text-[#E57A1F] hover:underline hover:text-[#D96C10]"
         onClick={(e) => e.stopPropagation()}
       >
         {text}
@@ -61,12 +61,12 @@ export function RecordKvRow({
         !isLast && "border-b border-[#F0F3FA]",
       )}
     >
-      <span className="min-w-[130px] flex-shrink-0 text-[12.5px] font-medium text-[#6B80A0]">
+      <span className="min-w-[130px] flex-shrink-0 text-[12.5px] font-medium text-[#64748B]">
         {label}
       </span>
       <span
         className={cn(
-          "flex items-center justify-end gap-1.5 text-right text-[13px] font-medium text-[#3D5473]",
+          "flex items-center justify-end gap-1.5 text-right text-[13px] font-medium text-[#0F172A]",
           highlight && "font-bold text-[#0A1628]",
           mono && "font-mono",
           muted && "text-[#9AAAC5]",
@@ -79,7 +79,7 @@ export function RecordKvRow({
           <button
             type="button"
             onClick={handleCopy}
-            className="opacity-0 group-hover:opacity-100 transition-opacity text-[#6B80A0] hover:text-[#1554B4]"
+            className="opacity-0 group-hover:opacity-100 transition-opacity text-[#64748B] hover:text-[#D96C10]"
             aria-label="Copy"
           >
             {copied ? (

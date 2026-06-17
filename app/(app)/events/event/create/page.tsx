@@ -31,6 +31,8 @@ import {
   X,
 } from "lucide-react";
 import {
+  LEVELS,
+  PARENT_LEVEL,
   type GeoLevel,
   type GeoNode,
   loadGeoNodes,
@@ -72,7 +74,7 @@ interface EventFormState {
 }
 
 type EventFormErrors = Partial<
-  Record<"title" | "selectedDates" | "time" | "attendees" | GeoLevel | "City", string>
+  Record<"title" | "selectedDates" | "time" | "attendees" | GeoLevel, string>
 >;
 
 interface ToastState {
@@ -111,26 +113,8 @@ const FARMER_OPTIONS: MultiSelectOption[] = FARMER_NAMES.map((label, index) => (
 
 const CUSTOMER_DISTRIBUTOR_ID_OFFSET = 100000;
 
-const LOCATION_LEVELS: (GeoLevel | "City")[] = [
-  "Zone",
-  "State",
-  "Region",
-  "Area",
-  "Territory",
-  "Locality",
-  "City",
-];
-
-const LOCATION_PARENT: Record<GeoLevel | "City", GeoLevel | "City" | null> = {
-  Zone: null,
-  State: "Zone",
-  Region: "State",
-  Area: "Region",
-  Territory: "Area",
-  Locality: "Territory",
-  City: "Locality",
-  Pincode: "Locality",
-};
+const LOCATION_LEVELS: GeoLevel[] = LEVELS;
+const LOCATION_PARENT = PARENT_LEVEL;
 
 function handleScrollableWheel(event: React.WheelEvent<HTMLElement>) {
   const current = event.currentTarget;
@@ -965,7 +949,7 @@ export default function CreateEventPage() {
   );
 
   const selectedLocationNodes = useMemo(() => {
-    const result: Partial<Record<GeoLevel | "City", GeoNode>> = {};
+    const result: Partial<Record<GeoLevel, GeoNode>> = {};
 
     LOCATION_LEVELS.forEach((level) => {
       const nodeId = form.location[level];
@@ -982,7 +966,7 @@ export default function CreateEventPage() {
     return `EVT-${String(nextId).padStart(3, "0")}`;
   }, [events]);
 
-  const getOptionsForLevel = (level: GeoLevel | "City") => {
+  const getOptionsForLevel = (level: GeoLevel) => {
     const parentLevel = LOCATION_PARENT[level];
 
     return geoNodes
@@ -1051,7 +1035,7 @@ export default function CreateEventPage() {
     setErrors((current) => ({ ...current, attendees: undefined }));
   };
 
-  const handleLocationChange = (level: GeoLevel | "City", value?: number) => {
+  const handleLocationChange = (level: GeoLevel, value?: number) => {
     setForm((current) => {
       const nextLocation: LocationSelection = { ...current.location };
       const levelIndex = LOCATION_LEVELS.indexOf(level);
@@ -1115,17 +1099,21 @@ export default function CreateEventPage() {
     const region = selectedLocationNodes.Region;
     const area = selectedLocationNodes.Area;
     const territory = selectedLocationNodes.Territory;
-    const locality = selectedLocationNodes.Locality;
+    const district = selectedLocationNodes.District;
     const city = selectedLocationNodes.City;
+    const town = selectedLocationNodes.Town;
+    const pincode = selectedLocationNodes.Pincode;
     const currentUser = AuthService.getUserData();
     const organizerName = currentUser?.username || currentUser?.email || "Admin";
     const locationSummary = [
+      pincode?.name,
+      town?.name,
       city?.name,
-      locality?.name,
+      district?.name,
       territory?.name,
       area?.name,
-      region?.name,
       state?.name,
+      region?.name,
       zone?.name,
     ]
       .filter(Boolean)
@@ -1137,17 +1125,18 @@ export default function CreateEventPage() {
       title: form.title.trim(),
       type: "training",
       venue:
+        pincode?.name ||
+        town?.name ||
         city?.name ||
-        locality?.name ||
+        district?.name ||
         territory?.name ||
         area?.name ||
-        region?.name ||
         "Location TBD",
       district:
-        region?.name ||
-        area?.name ||
+        district?.name ||
+        city?.name ||
         territory?.name ||
-        locality?.name ||
+        area?.name ||
         "",
       state: state?.name || "",
       startDate,

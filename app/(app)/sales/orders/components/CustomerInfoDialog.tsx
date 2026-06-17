@@ -17,6 +17,7 @@ import {
   getActiveGSTMasters,
   getActiveTDSMasters,
 } from "@/app/(app)/masters/customers/customer-data";
+import { formatTdsSummary } from "@/app/(app)/masters/tds/tds-data";
 
 const STATUS_CFG: Record<CustomerStatus, { bg: string; text: string; dot: string; label: string }> = {
   active: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Active" },
@@ -127,7 +128,7 @@ export default function CustomerInfoDialog({ customer, open, onOpenChange }: Cus
             {customer.tdsApplicable && (
               <InfoRow
                 label="TDS Section"
-                value={tds ? `${tds.tdsCode} — ${tds.tdsRate}%` : undefined}
+                value={tds ? `${formatTdsSummary(tds)} — ${tds.sectionName}` : undefined}
                 mono
               />
             )}

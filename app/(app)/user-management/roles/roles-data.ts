@@ -3,20 +3,22 @@
 export type GeoLevel =
   | "Country"
   | "Zone"
-  | "State"
   | "Region"
+  | "State"
   | "Area"
   | "Territory"
-  | "Locality"
+  | "District"
+  | "City"
+  | "Town"
   | "None";
 
 export const GEO_LEVELS: GeoLevel[] = [
-  "Country", "Zone", "State", "Region", "Area", "Territory", "Locality", "None",
+  "Country", "Zone", "Region", "State", "Area", "Territory", "District", "City", "Town", "None",
 ];
 
 export const GEO_LEVEL_ORDER: Record<GeoLevel, number> = {
-  Country: 8, Zone: 7, State: 6, Region: 5,
-  Area: 4, Territory: 3, Locality: 2, None: 0,
+  Country: 10, Zone: 9, Region: 8, State: 7, Area: 6, Territory: 5,
+  District: 4, City: 3, Town: 2, None: 0,
 };
 
 export interface ApprovalStep {
@@ -47,12 +49,11 @@ export interface Role {
 
 // ── Mock departments ──────────────────────────────────────────────────────────
 export const DEPARTMENTS = [
-  { id: 1, name: "Sales" },
+  { id: 1, name: "Accounts" },
   { id: 2, name: "HR" },
-  { id: 3, name: "Accounts" },
-  { id: 4, name: "Procurement" },
-  { id: 5, name: "Field Force" },
-  { id: 6, name: "Operations" },
+  { id: 3, name: "Procurement" },
+  { id: 4, name: "Warehouse" },
+  { id: 5, name: "Admin" },
 ];
 
 // ── Mock user counts per role ─────────────────────────────────────────────────
@@ -76,16 +77,16 @@ export const MOCK_USER_COUNTS: Record<number, number> = {
 
 // ── Seed data ─────────────────────────────────────────────────────────────────
 export const SEED_ROLES: Role[] = [
-  // ── Sales ────────────────────────────────────────────────────────────────
+  // ── Sales (legacy — department removed) ─────────────────────────────────
   {
     id: 1,
     roleName: "Sales Manager",
-    departmentId: 1,
-    department: "Sales",
+    departmentId: null,
+    department: "—",
     description: "Manages regional sales targets and team performance.",
     geoLevel: "State",
     approvalChain: [],
-    status: "active",
+    status: "inactive",
     createdBy: "Admin",
     createdDate: "2026-04-15",
     updatedBy: "Admin",
@@ -94,12 +95,12 @@ export const SEED_ROLES: Role[] = [
   {
     id: 2,
     roleName: "Sales Executive",
-    departmentId: 1,
-    department: "Sales",
+    departmentId: null,
+    department: "—",
     description: "Handles sales activities and customer account management.",
     geoLevel: "Territory",
     approvalChain: [],
-    status: "active",
+    status: "inactive",
     createdBy: "Admin",
     createdDate: "2026-04-20",
     updatedBy: "Admin",
@@ -108,12 +109,12 @@ export const SEED_ROLES: Role[] = [
   {
     id: 3,
     roleName: "KAM",
-    departmentId: 1,
-    department: "Sales",
+    departmentId: null,
+    department: "—",
     description: "Key Account Manager — owns strategic customer relationships.",
     geoLevel: "None",
     approvalChain: [],
-    status: "active",
+    status: "inactive",
     createdBy: "Admin",
     createdDate: "2026-05-01",
     updatedBy: "Admin",
@@ -122,12 +123,12 @@ export const SEED_ROLES: Role[] = [
   {
     id: 4,
     roleName: "SPM",
-    departmentId: 1,
-    department: "Sales",
+    departmentId: null,
+    department: "—",
     description: "Sales Planning Manager — handles forecasting, target setting, and analytics.",
     geoLevel: "None",
     approvalChain: [],
-    status: "active",
+    status: "inactive",
     createdBy: "Admin",
     createdDate: "2026-05-01",
     updatedBy: "Admin",
@@ -152,7 +153,7 @@ export const SEED_ROLES: Role[] = [
   {
     id: 6,
     roleName: "Accountant",
-    departmentId: 3,
+    departmentId: 1,
     department: "Accounts",
     description: "Finance accountant handling ledger, reconciliation and reporting.",
     geoLevel: "None",
@@ -167,7 +168,7 @@ export const SEED_ROLES: Role[] = [
   {
     id: 7,
     roleName: "Procurement Lead",
-    departmentId: 4,
+    departmentId: 3,
     department: "Procurement",
     description: "Manages purchase orders, vendor relations and GRN.",
     geoLevel: "None",
@@ -178,16 +179,16 @@ export const SEED_ROLES: Role[] = [
     updatedBy: "Admin",
     updatedDate: "2026-05-02",
   },
-  // ── Field Force ──────────────────────────────────────────────────────────
+  // ── Field Force (legacy — department removed) ────────────────────────────
   {
     id: 8,
     roleName: "Field Agent",
-    departmentId: 5,
-    department: "Field Force",
+    departmentId: null,
+    department: "—",
     description: "On-ground field operations and last-mile distribution.",
-    geoLevel: "Locality",
+    geoLevel: "Town",
     approvalChain: [],
-    status: "active",
+    status: "inactive",
     createdBy: "Admin",
     createdDate: "2026-04-10",
     updatedBy: "Admin",
@@ -196,12 +197,12 @@ export const SEED_ROLES: Role[] = [
   {
     id: 9,
     roleName: "TM",
-    departmentId: 5,
-    department: "Field Force",
+    departmentId: null,
+    department: "—",
     description: "Territory Manager — manages a defined sales territory.",
     geoLevel: "Territory",
     approvalChain: [],
-    status: "active",
+    status: "inactive",
     createdBy: "Admin",
     createdDate: "2026-04-10",
     updatedBy: "Admin",
@@ -210,12 +211,12 @@ export const SEED_ROLES: Role[] = [
   {
     id: 10,
     roleName: "ASM",
-    departmentId: 5,
-    department: "Field Force",
+    departmentId: null,
+    department: "—",
     description: "Area Sales Manager — oversees multiple territories.",
     geoLevel: "Area",
     approvalChain: [],
-    status: "active",
+    status: "inactive",
     createdBy: "Admin",
     createdDate: "2026-04-10",
     updatedBy: "Admin",
@@ -224,12 +225,12 @@ export const SEED_ROLES: Role[] = [
   {
     id: 11,
     roleName: "RSM",
-    departmentId: 5,
-    department: "Field Force",
+    departmentId: null,
+    department: "—",
     description: "Regional Sales Manager — manages multiple areas.",
     geoLevel: "Region",
     approvalChain: [],
-    status: "active",
+    status: "inactive",
     createdBy: "Admin",
     createdDate: "2026-04-10",
     updatedBy: "Admin",
@@ -238,12 +239,12 @@ export const SEED_ROLES: Role[] = [
   {
     id: 12,
     roleName: "ZSM",
-    departmentId: 5,
-    department: "Field Force",
+    departmentId: null,
+    department: "—",
     description: "Zonal Sales Manager — manages multiple regions.",
     geoLevel: "Zone",
     approvalChain: [],
-    status: "active",
+    status: "inactive",
     createdBy: "Admin",
     createdDate: "2026-04-10",
     updatedBy: "Admin",
@@ -252,12 +253,12 @@ export const SEED_ROLES: Role[] = [
   {
     id: 13,
     roleName: "FMO",
-    departmentId: 5,
-    department: "Field Force",
+    departmentId: null,
+    department: "—",
     description: "Field Marketing Officer — on-ground marketing activities.",
     geoLevel: "Territory",
     approvalChain: [],
-    status: "active",
+    status: "inactive",
     createdBy: "Admin",
     createdDate: "2026-04-10",
     updatedBy: "Admin",
@@ -266,12 +267,12 @@ export const SEED_ROLES: Role[] = [
   {
     id: 14,
     roleName: "DO",
-    departmentId: 5,
-    department: "Field Force",
+    departmentId: null,
+    department: "—",
     description: "District Officer — district-level field operations.",
     geoLevel: "Area",
     approvalChain: [],
-    status: "active",
+    status: "inactive",
     createdBy: "Admin",
     createdDate: "2026-04-10",
     updatedBy: "Admin",
@@ -280,12 +281,12 @@ export const SEED_ROLES: Role[] = [
   {
     id: 15,
     roleName: "Intern",
-    departmentId: 5,
-    department: "Field Force",
+    departmentId: null,
+    department: "—",
     description: "Sales Force intern — limited travel and expense eligibility.",
-    geoLevel: "Locality",
+    geoLevel: "Town",
     approvalChain: [],
-    status: "active",
+    status: "inactive",
     createdBy: "Admin",
     createdDate: "2026-04-10",
     updatedBy: "Admin",
@@ -297,7 +298,7 @@ export const SEED_ROLES: Role[] = [
 const STORAGE_KEY = "ds_um_roles";
 const ID_KEY      = "ds_um_roles_next_id";
 const VERSION_KEY = "ds_um_roles_version";
-const STORAGE_VER = "v5";
+const STORAGE_VER = "v6";
 
 export function loadRoles(): Role[] {
   if (typeof window === "undefined") return SEED_ROLES;

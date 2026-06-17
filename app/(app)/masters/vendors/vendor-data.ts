@@ -1,5 +1,53 @@
+import { PAYMENT_TERMS_OPTIONS } from "../customers/customer-data";
+import {
+  VENDOR_TYPE_EXPENSES,
+  VENDOR_TYPE_GOODS,
+  getInitialCodeForVendorType,
+  isExpenseVendorType,
+  isGoodsVendorType,
+} from "../vendor-type/vendor-type-data";
+import {
+  generateTypedMasterCode,
+  isMasterCodeEmpty,
+} from "@/lib/masters/code-generation";
+import {
+  deriveGstCategory,
+  deriveGstRegistered,
+  deriveGstRegistrationType,
+  buildGstCategory,
+  fetchGstRegistrationDetails,
+  gstApplicableFromCategory,
+  isGstCategoryRegistered,
+  validateMSMENumber,
+  validateTAN,
+  GST_REGISTRATION_TYPE_DEFAULT,
+  GST_CATEGORY_UNREGISTERED,
+  type GstRegistrationDetails,
+} from "@/lib/masters/gst-compliance";
+
 export type VendorStatus = "active" | "inactive";
 export type CreditPeriodUnit = "days" | "months";
+
+export { VENDOR_TYPE_GOODS, VENDOR_TYPE_EXPENSES, isGoodsVendorType, isExpenseVendorType };
+
+export const EXPENSE_CATEGORY_OPTIONS = [
+  { value: "transport-vendor", label: "Transport Vendor" },
+  { value: "consultant", label: "Consultant" },
+  { value: "legal-advisor", label: "Legal Advisor" },
+  { value: "marketing-agency", label: "Marketing Agency" },
+  { value: "contractor", label: "Contractor" },
+  { value: "auditor", label: "Auditor" },
+];
+
+export function formatPaymentTerms(value: string): string {
+  if (!value) return "—";
+  return PAYMENT_TERMS_OPTIONS.find((p) => p.value === value)?.label ?? value;
+}
+
+export function formatExpenseCategory(value: string): string {
+  if (!value) return "—";
+  return EXPENSE_CATEGORY_OPTIONS.find((o) => o.value === value)?.label ?? value;
+}
 
 export interface VendorAddress {
   line1: string;
@@ -36,7 +84,7 @@ export interface VendorProductMapping {
   productId: string;
   productName: string;
   sku?: string;
-  mrp?: number;
+  /** Vendor-specific purchase price — overrides Pricing Master CP */
   price?: number;
   status: "Active" | "Inactive";
 }
@@ -45,19 +93,24 @@ export interface Vendor {
   id: number;
   vendorCode: string;
   vendorName: string;
+  vendorType: string;
+  contactPerson: string;
+  paymentTerms: string;
   companyName: string;
   mobileCountryCode: string;
   mobile: string;
   email: string;
   gstApplicable: boolean;
   gstNumber: string;
+  gstCategory?: string;
   legalCompanyName: string;
   billingAddress: VendorAddress;
   tdsApplicable: boolean;
-  tdsPercentage: string;
-  tdsCustomPercent: string;
-  tcsApplicable: boolean;
+  tdsMasterId: number | null;
   panNumber: string;
+  tanNumber?: string;
+  msmeRegistered?: boolean;
+  msmeNumber?: string;
   tags: string;
   creditPeriodValue: string;
   creditPeriodUnit: CreditPeriodUnit;
@@ -67,7 +120,6 @@ export interface Vendor {
   branch: string;
   accountNumber: string;
   ifscCode: string;
-  swiftCode: string;
   documents: VendorDocument[];
   remarks: string;
   status: VendorStatus;
@@ -96,14 +148,6 @@ export const COUNTRY_CODES = [
 ];
 
 export const COUNTRIES = ["India", "United States", "United Kingdom", "UAE", "Singapore"];
-
-export const TDS_PERCENT_OPTIONS = [
-  { value: "1", label: "1%" },
-  { value: "2", label: "2%" },
-  { value: "5", label: "5%" },
-  { value: "10", label: "10%" },
-  { value: "custom", label: "Custom" },
-];
 
 export const DEFAULT_DOCUMENT_NAMES = [
   "GST Certificate",
@@ -144,6 +188,23 @@ export function nextId(list: Vendor[]): number {
   return list.length ? Math.max(...list.map((v) => v.id)) + 1 : 1;
 }
 
+/** Generate per-type vendor code (e.g. CG-001). */
+export function generateVendorCodeForType(
+  vendorType: string,
+  vendors: Vendor[],
+  excludeCode?: string,
+): string {
+  const initialCode = getInitialCodeForVendorType(vendorType);
+  if (!initialCode) {
+    return `VND-${String(vendors.length + 1).padStart(3, "0")}`;
+  }
+  return generateTypedMasterCode(
+    initialCode,
+    vendors.map((v) => v.vendorCode),
+    excludeCode,
+  );
+}
+
 export function formatCreditPeriod(v: Vendor): string {
   if (!v.creditPeriodValue) return "—";
   const unit = v.creditPeriodUnit === "months" ? "Months" : "Days";
@@ -181,34 +242,40 @@ export function fetchGstDetails(gstin: string): {
   legalCompanyName: string;
   billingAddress: Partial<VendorAddress>;
 } | null {
-  const g = gstin.trim().toUpperCase();
-  if (g.length !== 15) return null;
-  const stateCode = g.slice(0, 2);
+  const details = fetchGstRegistrationDetails(gstin);
+  if (!details) return null;
   return {
-    legalCompanyName: `Legal Entity — ${g.slice(2, 12)}`,
+    legalCompanyName: details.legalBusinessName,
     billingAddress: {
-      line1: "Auto-fetched registered address",
-      city: stateCode === "29" ? "Bengaluru" : "Pune",
-      state: GST_STATE_MAP[stateCode] ?? "Maharashtra",
+      line1: details.registeredAddress,
+      line2: "",
+      city: details.district,
+      state: details.state,
       country: "India",
-      pincode: "411001",
+      pincode: details.pincode,
     },
   };
 }
 
-const STORAGE_KEY = "ds_vendor_masters_v4";
+export type { GstRegistrationDetails };
+
+const STORAGE_KEY = "ds_vendor_masters_v7";
 
 const SEED: Vendor[] = [
   {
     id: 1,
-    vendorCode: "VEN-00001",
+    vendorCode: "CG-001",
     vendorName: "Agro Chem Distributors",
+    vendorType: VENDOR_TYPE_GOODS,
+    contactPerson: "Ramesh Patil",
+    paymentTerms: "net-30",
     companyName: "Agro Chem Distributors Pvt Ltd",
     mobileCountryCode: "+91",
     mobile: "9876501234",
     email: "ramesh@agrochem.in",
     gstApplicable: true,
     gstNumber: "27AABCA1234F1Z2",
+    gstCategory: "regular",
     legalCompanyName: "Agro Chem Distributors Pvt Ltd",
     billingAddress: {
       line1: "12 MIDC Road, Bhosari",
@@ -219,10 +286,11 @@ const SEED: Vendor[] = [
       pincode: "411026",
     },
     tdsApplicable: true,
-    tdsPercentage: "2",
-    tdsCustomPercent: "",
-    tcsApplicable: false,
+    tdsMasterId: 1,
     panNumber: "AABCA1234F",
+    tanNumber: "PNEA12345A",
+    msmeRegistered: false,
+    msmeNumber: "",
     tags: "fertilizer, priority",
     creditPeriodValue: "30",
     creditPeriodUnit: "days",
@@ -241,7 +309,6 @@ const SEED: Vendor[] = [
     branch: "Bhosari",
     accountNumber: "50100234567890",
     ifscCode: "HDFC0001234",
-    swiftCode: "",
     remarks: "",
     status: "active",
     createdBy: "Admin",
@@ -254,7 +321,6 @@ const SEED: Vendor[] = [
         productId: "prod-1",
         productName: "Organic Neem Fertilizer",
         sku: "FERT-NEEM-1KG",
-        mrp: 350,
         price: 250,
         status: "Active",
       },
@@ -263,7 +329,6 @@ const SEED: Vendor[] = [
         productId: "prod-2",
         productName: "Urea Premium Blend",
         sku: "FERT-UREA-50KG",
-        mrp: 1200,
         price: 950,
         status: "Active",
       },
@@ -291,14 +356,18 @@ const SEED: Vendor[] = [
   },
   {
     id: 2,
-    vendorCode: "VEN-00002",
+    vendorCode: "CG-002",
     vendorName: "Seed Corp India",
+    vendorType: VENDOR_TYPE_GOODS,
+    contactPerson: "Priya Nair",
+    paymentTerms: "net-45",
     companyName: "Seed Corp India Pvt Ltd",
     mobileCountryCode: "+91",
     mobile: "9988776655",
     email: "priya@seedcorp.in",
     gstApplicable: true,
     gstNumber: "29AABCS5678G1Z9",
+    gstCategory: "regular",
     legalCompanyName: "Seed Corp India Pvt Ltd",
     billingAddress: {
       line1: "45 Industrial Area, Whitefield",
@@ -309,10 +378,11 @@ const SEED: Vendor[] = [
       pincode: "560066",
     },
     tdsApplicable: false,
-    tdsPercentage: "1",
-    tdsCustomPercent: "",
-    tcsApplicable: true,
+    tdsMasterId: null,
     panNumber: "AABCS5678G",
+    tanNumber: "",
+    msmeRegistered: true,
+    msmeNumber: "UDYAM-KA-12-0012345",
     tags: "seeds",
     creditPeriodValue: "2",
     creditPeriodUnit: "months",
@@ -331,7 +401,6 @@ const SEED: Vendor[] = [
     branch: "Whitefield",
     accountNumber: "601234567890",
     ifscCode: "ICIC0001234",
-    swiftCode: "",
     documents: [],
     remarks: "",
     status: "active",
@@ -340,51 +409,120 @@ const SEED: Vendor[] = [
     updatedBy: "Admin",
     updatedDate: "2024-02-10",
   },
+  {
+    id: 3,
+    vendorCode: "CE-001",
+    vendorName: "Swift Logistics Services",
+    vendorType: VENDOR_TYPE_EXPENSES,
+    contactPerson: "Amit Sharma",
+    paymentTerms: "net-15",
+    companyName: "Swift Logistics Services",
+    mobileCountryCode: "+91",
+    mobile: "9123456780",
+    email: "amit@swiftlogistics.in",
+    gstApplicable: false,
+    gstNumber: "",
+    gstCategory: "unregistered",
+    legalCompanyName: "",
+    billingAddress: emptyAddress(),
+    tdsApplicable: false,
+    tdsMasterId: null,
+    panNumber: "AABCS1234L",
+    tanNumber: "",
+    msmeRegistered: false,
+    msmeNumber: "",
+    tags: "transport",
+    creditPeriodValue: "15",
+    creditPeriodUnit: "days",
+    contacts: [
+      {
+        uid: "c1",
+        name: "Amit Sharma",
+        designation: "Operations Head",
+        countryCode: "+91",
+        mobile: "9123456780",
+        email: "amit@swiftlogistics.in",
+      },
+    ],
+    accountHolderName: "Swift Logistics Services",
+    bankName: "Axis Bank",
+    branch: "Andheri",
+    accountNumber: "912345678901",
+    ifscCode: "UTIB0000123",
+    documents: [],
+    remarks: "",
+    status: "active",
+    createdBy: "Admin",
+    createdDate: "2024-02-15",
+    updatedBy: "Admin",
+    updatedDate: "2024-02-15",
+  },
 ];
 
 function migrateLegacy(raw: Record<string, unknown>): Vendor {
   const billing = (raw.billingAddress as VendorAddress) ?? emptyAddress();
   const legacyContact = String(raw.contactPerson ?? "");
+  const contacts = Array.isArray(raw.contacts)
+    ? (raw.contacts as VendorContact[])
+    : legacyContact || raw.mobile
+      ? [
+          {
+            uid: "c1",
+            name: legacyContact,
+            designation: String(raw.designation ?? ""),
+            countryCode: "+91",
+            mobile: String(raw.mobile ?? ""),
+            email: String(raw.email ?? ""),
+          },
+        ]
+      : [emptyContact("c1")];
+  const primaryContact =
+    String(raw.contactPerson ?? "").trim() ||
+    contacts[0]?.name?.trim() ||
+    "";
+  const vendorType =
+    String(raw.vendorType ?? "").trim() ||
+    (Array.isArray(raw.vendorProducts) && (raw.vendorProducts as unknown[]).length > 0
+      ? VENDOR_TYPE_GOODS
+      : VENDOR_TYPE_GOODS);
   return {
     id: Number(raw.id),
     vendorCode: String(raw.vendorCode ?? ""),
     vendorName: String(raw.vendorName ?? ""),
+    vendorType,
+    contactPerson: primaryContact,
+    paymentTerms: String(raw.paymentTerms ?? "net-30"),
     companyName: String(raw.companyName ?? raw.vendorName ?? ""),
     mobileCountryCode: String(raw.mobileCountryCode ?? "+91"),
     mobile: String(raw.mobile ?? ""),
     email: String(raw.email ?? ""),
     gstApplicable: Boolean(raw.gstApplicable ?? raw.gstNumber),
     gstNumber: String(raw.gstNumber ?? ""),
+    gstCategory: deriveGstCategory(
+      Boolean(raw.gstApplicable ?? raw.gstNumber),
+      String(raw.gstNumber ?? ""),
+      raw.gstCategory as string | undefined,
+    ),
     legalCompanyName: String(raw.legalCompanyName ?? raw.companyName ?? raw.vendorName ?? ""),
     billingAddress: billing,
     tdsApplicable: Boolean(raw.tdsApplicable ?? false),
-    tdsPercentage: String(raw.tdsPercentage ?? "2"),
-    tdsCustomPercent: String(raw.tdsCustomPercent ?? ""),
-    tcsApplicable: Boolean(raw.tcsApplicable ?? false),
+    tdsMasterId:
+      raw.tdsMasterId !== undefined && raw.tdsMasterId !== null
+        ? Number(raw.tdsMasterId)
+        : null,
     panNumber: String(raw.panNumber ?? ""),
+    tanNumber: String(raw.tanNumber ?? ""),
+    msmeRegistered: Boolean(raw.msmeRegistered ?? false),
+    msmeNumber: String(raw.msmeNumber ?? ""),
     tags: String(raw.tags ?? ""),
     creditPeriodValue: String(raw.creditPeriodValue ?? raw.creditDays ?? "30"),
     creditPeriodUnit: (raw.creditPeriodUnit as CreditPeriodUnit) ?? "days",
-    contacts: Array.isArray(raw.contacts)
-      ? (raw.contacts as VendorContact[])
-      : legacyContact || raw.mobile
-        ? [
-            {
-              uid: "c1",
-              name: legacyContact,
-              designation: String(raw.designation ?? ""),
-              countryCode: "+91",
-              mobile: String(raw.mobile ?? ""),
-              email: String(raw.email ?? ""),
-            },
-          ]
-        : [emptyContact("c1")],
+    contacts,
     accountHolderName: String(raw.accountHolderName ?? ""),
     bankName: String(raw.bankName ?? ""),
     branch: String(raw.branch ?? ""),
     accountNumber: String(raw.accountNumber ?? ""),
     ifscCode: String(raw.ifscCode ?? ""),
-    swiftCode: String(raw.swiftCode ?? ""),
     documents: Array.isArray(raw.documents)
       ? (raw.documents as VendorDocument[])
       : Array.isArray(raw.attachments)
@@ -414,10 +552,29 @@ function migrateLegacy(raw: Record<string, unknown>): Vendor {
 }
 
 function normalize(v: Vendor | Record<string, unknown>): Vendor {
-  if (v && typeof v === "object" && "contacts" in v && Array.isArray((v as Vendor).contacts)) {
-    return v as Vendor;
+  const raw = v as Record<string, unknown>;
+  let vendor: Vendor;
+  if (raw.vendorType && "contactPerson" in raw) {
+    vendor = { ...(v as Vendor), vendorCode: String((v as Vendor).vendorCode ?? raw.vendorCode ?? "") };
+  } else {
+    vendor = migrateLegacy(raw);
   }
-  return migrateLegacy(v as Record<string, unknown>);
+  return vendor;
+}
+
+function migrateMissingVendorCodes(vendors: Vendor[]): { list: Vendor[]; changed: boolean } {
+  const codes = vendors.map((v) => v.vendorCode).filter((c) => !isMasterCodeEmpty(c));
+  let changed = false;
+  const list = vendors.map((v) => {
+    if (!isMasterCodeEmpty(v.vendorCode)) return v;
+    const prefix = getInitialCodeForVendorType(v.vendorType);
+    if (!prefix) return v;
+    const code = generateTypedMasterCode(prefix, codes);
+    codes.push(code);
+    changed = true;
+    return { ...v, vendorCode: code };
+  });
+  return { list, changed };
 }
 
 export function loadVendors(): Vendor[] {
@@ -425,16 +582,27 @@ export function loadVendors(): Vendor[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      const legacy = localStorage.getItem("ds_vendor_masters");
-      if (legacy) {
-        const migrated = (JSON.parse(legacy) as Record<string, unknown>[]).map(normalize);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-        return migrated;
+      const legacyKeys = ["ds_vendor_masters_v5", "ds_vendor_masters_v4", "ds_vendor_masters"];
+      for (const key of legacyKeys) {
+        const legacyRaw = localStorage.getItem(key);
+        if (legacyRaw) {
+          const { list, changed } = migrateMissingVendorCodes(
+            (JSON.parse(legacyRaw) as Record<string, unknown>[]).map(normalize),
+          );
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+          return list;
+        }
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED));
       return SEED;
     }
-    return (JSON.parse(raw) as Record<string, unknown>[]).map(normalize);
+    let list = (JSON.parse(raw) as Record<string, unknown>[]).map(normalize);
+    const { list: migrated, changed } = migrateMissingVendorCodes(list);
+    if (changed) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+      return migrated;
+    }
+    return list;
   } catch {
     return SEED;
   }
@@ -453,26 +621,28 @@ export function getActiveVendors(): Vendor[] {
   return loadVendors().filter((v) => v.status === "active");
 }
 
-export function generateVendorCode(list: Vendor[]): string {
-  return `VEN-${String(list.length + 1).padStart(5, "0")}`;
-}
-
 export interface VendorFormValues {
   vendorName: string;
-  vendorCode: string;
+  vendorType: string;
+  contactPerson: string;
+  paymentTerms: string;
   companyName: string;
   mobileCountryCode: string;
   mobile: string;
   email: string;
   gstApplicable: boolean;
+  gstRegistered: boolean;
+  gstRegistrationType: string;
   gstNumber: string;
+  gstCategory: string;
   legalCompanyName: string;
   billingAddress: VendorAddress;
   tdsApplicable: boolean;
-  tdsPercentage: string;
-  tdsCustomPercent: string;
-  tcsApplicable: boolean;
+  tdsMasterId: string;
   panNumber: string;
+  tanNumber: string;
+  msmeRegistered: boolean;
+  msmeNumber: string;
   tags: string;
   creditPeriodValue: string;
   creditPeriodUnit: CreditPeriodUnit;
@@ -483,7 +653,6 @@ export interface VendorFormValues {
   accountNumber: string;
   confirmAccountNumber: string;
   ifscCode: string;
-  swiftCode: string;
   documents: VendorDocument[];
   remarks: string;
   vendorProducts: VendorProductMapping[];
@@ -491,20 +660,26 @@ export interface VendorFormValues {
 
 export const DEFAULT_VENDOR_FORM: VendorFormValues = {
   vendorName: "",
-  vendorCode: "",
+  vendorType: "",
+  contactPerson: "",
+  paymentTerms: "net-30",
   companyName: "",
   mobileCountryCode: "+91",
   mobile: "",
   email: "",
   gstApplicable: false,
+  gstRegistered: false,
+  gstRegistrationType: GST_REGISTRATION_TYPE_DEFAULT,
   gstNumber: "",
+  gstCategory: GST_CATEGORY_UNREGISTERED,
   legalCompanyName: "",
   billingAddress: emptyAddress(),
   tdsApplicable: false,
-  tdsPercentage: "2",
-  tdsCustomPercent: "",
-  tcsApplicable: false,
+  tdsMasterId: "",
   panNumber: "",
+  tanNumber: "",
+  msmeRegistered: false,
+  msmeNumber: "",
   tags: "",
   creditPeriodValue: "30",
   creditPeriodUnit: "days",
@@ -515,29 +690,36 @@ export const DEFAULT_VENDOR_FORM: VendorFormValues = {
   accountNumber: "",
   confirmAccountNumber: "",
   ifscCode: "",
-  swiftCode: "",
   documents: [],
   remarks: "",
   vendorProducts: [],
 };
 
 export function vendorToForm(v: Vendor): VendorFormValues {
+  const gstCategory = v.gstCategory || deriveGstCategory(v.gstApplicable, v.gstNumber);
+  const gstRegistered = deriveGstRegistered(v.gstApplicable, v.gstNumber, gstCategory);
   return {
     vendorName: v.vendorName,
-    vendorCode: v.vendorCode,
+    vendorType: v.vendorType,
+    contactPerson: v.contactPerson,
+    paymentTerms: v.paymentTerms || "net-30",
     companyName: v.companyName,
     mobileCountryCode: v.mobileCountryCode,
     mobile: v.mobile,
     email: v.email,
-    gstApplicable: v.gstApplicable,
+    gstApplicable: gstApplicableFromCategory(gstCategory),
+    gstRegistered,
+    gstRegistrationType: deriveGstRegistrationType(gstCategory),
     gstNumber: v.gstNumber,
+    gstCategory,
     legalCompanyName: v.legalCompanyName,
     billingAddress: { ...v.billingAddress },
     tdsApplicable: v.tdsApplicable,
-    tdsPercentage: v.tdsPercentage,
-    tdsCustomPercent: v.tdsCustomPercent,
-    tcsApplicable: v.tcsApplicable,
+    tdsMasterId: v.tdsMasterId != null ? String(v.tdsMasterId) : "",
     panNumber: v.panNumber,
+    tanNumber: v.tanNumber ?? "",
+    msmeRegistered: v.msmeRegistered ?? false,
+    msmeNumber: v.msmeNumber ?? "",
     tags: v.tags,
     creditPeriodValue: v.creditPeriodValue,
     creditPeriodUnit: v.creditPeriodUnit,
@@ -548,7 +730,6 @@ export function vendorToForm(v: Vendor): VendorFormValues {
     accountNumber: v.accountNumber,
     confirmAccountNumber: v.accountNumber,
     ifscCode: v.ifscCode,
-    swiftCode: v.swiftCode,
     documents: v.documents.length
       ? v.documents.map((d) => ({ ...d }))
       : [],
@@ -569,22 +750,34 @@ export function formToVendor(
     updatedDate: string;
   },
 ): Vendor {
+  const gstCategory = buildGstCategory(form.gstRegistered, form.gstRegistrationType);
+  const gstApplicable = form.gstRegistered;
+  const gstRegistered = form.gstRegistered;
   return {
     ...meta,
+    vendorCode: meta.vendorCode,
     vendorName: form.vendorName.trim(),
+    vendorType: form.vendorType,
+    contactPerson: form.contactPerson.trim(),
+    paymentTerms: form.paymentTerms,
     companyName: form.companyName.trim() || form.vendorName.trim(),
     mobileCountryCode: form.mobileCountryCode,
     mobile: form.mobile.trim(),
     email: form.email.trim(),
-    gstApplicable: form.gstApplicable,
-    gstNumber: form.gstApplicable ? form.gstNumber.trim().toUpperCase() : "",
+    gstApplicable,
+    gstNumber: gstRegistered ? form.gstNumber.trim().toUpperCase() : "",
+    gstCategory,
     legalCompanyName: form.legalCompanyName.trim(),
     billingAddress: form.billingAddress,
     tdsApplicable: form.tdsApplicable,
-    tdsPercentage: form.tdsApplicable ? form.tdsPercentage : "",
-    tdsCustomPercent: form.tdsPercentage === "custom" ? form.tdsCustomPercent : "",
-    tcsApplicable: form.tcsApplicable,
+    tdsMasterId:
+      form.tdsApplicable && form.tdsMasterId
+        ? Number(form.tdsMasterId)
+        : null,
     panNumber: form.panNumber.trim().toUpperCase(),
+    tanNumber: form.tanNumber.trim().toUpperCase(),
+    msmeRegistered: form.msmeRegistered,
+    msmeNumber: form.msmeRegistered ? form.msmeNumber.trim() : "",
     tags: form.tags.trim(),
     creditPeriodValue: form.creditPeriodValue,
     creditPeriodUnit: form.creditPeriodUnit,
@@ -594,7 +787,6 @@ export function formToVendor(
     branch: form.branch.trim(),
     accountNumber: form.accountNumber.trim(),
     ifscCode: form.ifscCode.trim().toUpperCase(),
-    swiftCode: form.swiftCode.trim(),
     documents: form.documents,
     remarks: form.remarks.trim(),
     vendorProducts: form.vendorProducts || [],
@@ -603,24 +795,52 @@ export function formToVendor(
 
 export function validateVendorForm(form: VendorFormValues): string | null {
   if (!form.vendorName.trim()) return "Vendor name is required.";
-  if (!form.mobile.trim()) return "Mobile number is required.";
-  if (!validateVendorMobile(form.mobile)) {
+  if (!form.vendorType.trim()) return "Vendor type is required.";
+
+  if (form.gstRegistered) {
+    if (!form.gstNumber.trim()) return "GSTIN is required when GST registered.";
+    if (!validateVendorGSTIN(form.gstNumber)) return "Enter a valid 15-character GSTIN.";
+  }
+
+  if (form.tanNumber.trim() && !validateTAN(form.tanNumber)) {
+    return "Enter a valid TAN number.";
+  }
+
+  if (form.msmeRegistered) {
+    if (!form.msmeNumber.trim()) return "MSME number is required when MSME registered.";
+    if (!validateMSMENumber(form.msmeNumber)) {
+      return "MSME number must be alphanumeric.";
+    }
+  }
+
+  if (form.tdsApplicable && !form.tdsMasterId) {
+    return "Select TDS section from master.";
+  }
+
+  if (!form.panNumber.trim()) return "PAN number is required.";
+  if (!validateVendorPAN(form.panNumber)) {
+    return "Enter a valid PAN number.";
+  }
+  if (!form.paymentTerms) return "Payment terms are required.";
+
+  if (!form.billingAddress.line1.trim()) {
+    return "Address Line 1 is required.";
+  }
+  if (!form.billingAddress.pincode.trim()) {
+    return "Pincode is required.";
+  }
+
+  if (form.mobile.trim() && !validateVendorMobile(form.mobile)) {
     return "Enter a valid 10-digit mobile number.";
   }
   if (form.email.trim() && !validateVendorEmail(form.email)) {
     return "Enter a valid email address.";
   }
-  if (form.gstApplicable && !validateVendorGSTIN(form.gstNumber)) {
-    return "Enter a valid GSTIN.";
-  }
-  if (form.panNumber.trim() && !validateVendorPAN(form.panNumber)) {
-    return "Enter a valid PAN number.";
-  }
   if (
     form.billingAddress.pincode.trim() &&
     !validateVendorPincode(form.billingAddress.pincode)
   ) {
-    return "Enter a valid 6-digit billing pincode.";
+    return "Enter a valid 6-digit pincode.";
   }
   if (form.ifscCode.trim() && !validateVendorIFSC(form.ifscCode)) {
     return "Enter a valid IFSC code.";

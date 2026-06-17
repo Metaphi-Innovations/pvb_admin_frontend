@@ -48,6 +48,7 @@ import {
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { applyFilters } from "@/components/listing/filter-utils";
+import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
 interface ToastState {
   msg: string;
@@ -67,37 +68,6 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
         <X className="h-3.5 w-3.5" />
       </button>
-    </div>
-  );
-}
-
-function StatusToggle({ record, onToggle }: { record: FormulationRecord; onToggle: (item: FormulationRecord) => void }) {
-  const active = record.status === "active";
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onToggle(record);
-      }}
-      className={cn(
-        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-        active
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
-      )}
-    >
-      {active ? "Active" : "Inactive"}
-    </button>
-  );
-}
-
-function AuditCell({ name, date }: { name: string; date?: string }) {
-  return (
-    <div className="space-y-0.5">
-      <p className="text-[11px] font-semibold leading-4 text-brand-700">{name}</p>
-      {date ? <p className="text-[10px] font-mono leading-3 text-muted-foreground">{date}</p> : null}
     </div>
   );
 }
@@ -137,7 +107,7 @@ export default function FormulationMasterPage() {
     setRecords(updated);
     saveMasterRecords(FORMULATION_STORAGE_KEY, updated);
     setToast({
-      msg: `Formulation status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`,
+      msg: `Form status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`,
       type: "success",
     });
   };
@@ -145,7 +115,7 @@ export default function FormulationMasterPage() {
   const columns: ColumnConfig<FormulationRecord>[] = [
     {
       key: "formulationCode",
-      header: "Formulation Code",
+      header: "Form Code",
       sortable: true,
       filterable: true,
       filterType: "text",
@@ -156,7 +126,7 @@ export default function FormulationMasterPage() {
     },
     {
       key: "formulationName",
-      header: "Formulation Name",
+      header: "Form Name",
       sortable: true,
       filterable: true,
       filterType: "text",
@@ -185,7 +155,7 @@ export default function FormulationMasterPage() {
       ],
       width: "100px",
       render: (val, row) => (
-        <StatusToggle record={row} onToggle={toggleStatus} />
+        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
       ),
     },
     {
@@ -195,7 +165,7 @@ export default function FormulationMasterPage() {
       filterable: true,
       filterType: "text",
       width: "110px",
-      render: (val, row) => <AuditCell name={row.createdBy} date={row.createdAt} />,
+      render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdAt} variant="created" />,
     },
     {
       key: "updatedBy",
@@ -204,7 +174,7 @@ export default function FormulationMasterPage() {
       filterable: true,
       filterType: "text",
       width: "110px",
-      render: (val, row) => <AuditCell name={row.updatedBy} date={row.updatedAt} />,
+      render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedAt} variant="updated" />,
     },
   ];
 
@@ -311,10 +281,10 @@ export default function FormulationMasterPage() {
     if (mode === "add") {
       const id = list.length ? Math.max(...list.map((r) => r.id)) + 1 : 1;
       updatedList = [...list, formToFormulation(form, id)];
-      setToast({ msg: "Formulation added successfully", type: "success" });
+      setToast({ msg: "Form added successfully", type: "success" });
     } else if (active) {
       updatedList = list.map((r) => (r.id === active.id ? formToFormulation(form, active.id, active) : r));
-      setToast({ msg: "Formulation updated successfully", type: "success" });
+      setToast({ msg: "Form updated successfully", type: "success" });
     } else {
       return;
     }
@@ -331,12 +301,12 @@ export default function FormulationMasterPage() {
     saveMasterRecords(FORMULATION_STORAGE_KEY, list);
     setRecords(list);
     setDeleteTarget(null);
-    setToast({ msg: "Formulation deleted successfully", type: "success" });
+    setToast({ msg: "Form deleted successfully", type: "success" });
   };
 
   const handleExport = () => {
     try {
-      const headers = ["ID", "Formulation Code", "Formulation Name", "Description", "Status", "Created By", "Updated By", "Created At", "Updated At"];
+      const headers = ["ID", "Form Code", "Form Name", "Description", "Status", "Created By", "Updated By", "Created At", "Updated At"];
       const csvRows = [headers.join(",")];
       for (const r of records) {
         const row = [
@@ -361,25 +331,25 @@ export default function FormulationMasterPage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      setToast({ msg: "Formulations exported successfully", type: "success" });
+      setToast({ msg: "Forms exported successfully", type: "success" });
     } catch {
-      setToast({ msg: "Failed to export formulations", type: "error" });
+      setToast({ msg: "Failed to export forms", type: "error" });
     }
   };
 
   const sheetTitle =
     sheetMode === "add"
-      ? "Add Formulation"
+      ? "Add Form"
       : sheetMode === "edit"
-      ? "Edit Formulation"
-      : "View Formulation";
+      ? "Edit Form"
+      : "View Form";
 
   return (
     <AppLayout>
       <div className="space-y-5">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Formulation Master</h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">Product formulation types</p>
+          <h1 className="text-xl font-bold text-foreground">Form Master</h1>
+          <p className="mt-0.5 text-xs text-muted-foreground">Product form types (e.g. Liquid, Granules)</p>
         </div>
 
         {/* <div className="grid grid-cols-3 gap-3">
@@ -410,10 +380,10 @@ export default function FormulationMasterPage() {
           onFilterChange={setFilters}
           actions={actions}
           onAdd={openAdd}
-          addLabel="Add Formulation"
+          addLabel="Add Form"
           onExport={handleExport}
-          emptyMessage="formulations"
-          searchPlaceholder="Search formulation code, name, description..."
+          emptyMessage="forms"
+          searchPlaceholder="Search form code, name, description..."
           currentFilters={filters}
           currentSort={sort}
         />
@@ -430,16 +400,16 @@ export default function FormulationMasterPage() {
         viewDrawer={
           active
             ? buildSimpleMasterViewDrawer<FormulationRecord>({
-                drawerTitle: "Formulation",
+                drawerTitle: "Form",
                 getRecordCode: (r) => r.formulationCode,
                 basicInfo: (r) => [
-                  { label: "Formulation Name", value: r.formulationName },
-                  { label: "Formulation Code", value: r.formulationCode, mono: true },
+                  { label: "Form Name", value: r.formulationName },
+                  { label: "Form Code", value: r.formulationCode, mono: true },
                 ],
                 description: (r) => r.description,
                 showDescription: true,
               })(active)
-            : { title: "Formulation", basicInfo: [] }
+            : { title: "Form", basicInfo: [] }
         }
         formContent={
           <div className="space-y-4">
@@ -454,7 +424,7 @@ export default function FormulationMasterPage() {
                   })
                 }
                 errors={{}}
-                labels={{ name: "Formulation Name", code: "Formulation Code" }}
+                labels={{ name: "Form Name", code: "Form Code" }}
                 codeDisabled
                 codeFirst
               />

@@ -26,6 +26,8 @@ function handleScrollableWheel(event: React.WheelEvent<HTMLElement>) {
 export interface AutocompleteOption {
   value: string;
   label: string;
+  sublabel?: string;
+  searchText?: string;
   icon?: React.ReactNode;
   trailing?: React.ReactNode;
   disabled?: boolean;
@@ -59,9 +61,10 @@ export function AutocompleteSelect({
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
 
-  const filtered = options.filter((opt) =>
-    opt.label.toLowerCase().includes(q.toLowerCase())
-  );
+  const filtered = options.filter((opt) => {
+    const haystack = `${opt.label} ${opt.sublabel ?? ""} ${opt.searchText ?? ""}`.toLowerCase();
+    return haystack.includes(q.toLowerCase());
+  });
 
   const handleSelect = (val: string) => {
     if (multiple) {
@@ -223,8 +226,13 @@ export function AutocompleteSelect({
                       {opt.icon}
                     </span>
                   )}
-                  <span className="flex-1 text-foreground truncate">
-                    {opt.label}
+                  <span className="flex-1 text-foreground min-w-0">
+                    <span className="block truncate">{opt.label}</span>
+                    {opt.sublabel && (
+                      <span className="block text-[10px] text-muted-foreground truncate mt-0.5">
+                        {opt.sublabel}
+                      </span>
+                    )}
                   </span>
                   {opt.trailing && (
                     <span className="flex-shrink-0">{opt.trailing}</span>

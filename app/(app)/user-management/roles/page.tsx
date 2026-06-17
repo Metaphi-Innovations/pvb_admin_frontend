@@ -30,6 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
+import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type ConfirmKind = "toggle-status" | "delete";
@@ -158,49 +159,6 @@ function ConfirmDialog({ open, onClose, config }: ConfirmDialogProps) {
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-// ── Status Configuration ──────────────────────────────────────────────────────
-const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
-  active:   { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
-  inactive: { bg: "bg-slate-100",  text: "text-slate-600",   dot: "bg-slate-400"   },
-  draft:    { bg: "bg-blue-50",    text: "text-blue-700",    dot: "bg-blue-500"    },
-  archived: { bg: "bg-red-50",     text: "text-red-700",     dot: "bg-red-400"     },
-};
-
-function StatusToggle({ record, onToggle }: { record: Role; onToggle: (item: Role) => void }) {
-  const active = record.status === "active";
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onToggle(record);
-      }}
-      className={cn(
-        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-        active
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
-      )}
-    >
-      {active ? "Active" : "Inactive"}
-    </button>
-  );
-}
-
-function AuditCell({ name, date }: { name?: string; date?: string }) {
-  return (
-    <div className="space-y-0.5">
-      <p className="text-[11px] font-semibold leading-4 text-brand-700">
-        {name || "—"}
-      </p>
-      <p className="text-[10px] font-mono leading-3 text-muted-foreground">
-        {date || "—"}
-      </p>
-    </div>
   );
 }
 
@@ -443,33 +401,25 @@ export default function RolesPage() {
       header: "Status",
       sortable: true,
       render: (val, row) => (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleTemplateStatus(row);
-          }}
-          className={cn(
-            "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-            row.status === "Active"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-              : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
-          )}
-        >
-          {row.status}
-        </button>
+        <ListingStatusToggle
+          active={isActiveStatus(row.status)}
+          onChange={() => toggleTemplateStatus(row)}
+        />
       ),
     },
     {
       key: "createdAt",
       header: "Created",
-      render: (val, row) => <AuditCell name="Admin" date={row.createdAt} />,
+      render: (val, row) => (
+        <ListingAuditCell name="Admin" date={row.createdAt} variant="created" />
+      ),
     },
     {
       key: "updatedAt",
       header: "Updated",
-      render: (val, row) => <AuditCell name="Admin" date={row.updatedAt} />,
+      render: (val, row) => (
+        <ListingAuditCell name="Admin" date={row.updatedAt} variant="updated" />
+      ),
     },
     {
       key: "actions",
@@ -547,17 +497,26 @@ export default function RolesPage() {
         { label: "Active", value: "active" },
         { label: "Inactive", value: "inactive" },
       ],
-      render: (val, row) => <StatusToggle record={row} onToggle={toggleStatus} />,
+      render: (val, row) => (
+        <ListingStatusToggle
+          active={isActiveStatus(row.status)}
+          onChange={() => toggleStatus(row)}
+        />
+      ),
     },
     {
       key: "createdBy",
-      header: "Created By",
-      render: (val, row) => <AuditCell name={row.createdBy} date={row.createdDate} />,
+      header: "Created",
+      render: (val, row) => (
+        <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />
+      ),
     },
     {
       key: "updatedDate",
       header: "Updated",
-      render: (val, row) => <AuditCell name={row.updatedBy} date={row.updatedDate} />,
+      render: (val, row) => (
+        <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />
+      ),
     },
     {
       key: "actions",

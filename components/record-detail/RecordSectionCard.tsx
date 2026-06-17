@@ -5,9 +5,9 @@ import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ACCENT_COLORS = {
-  blue: "#1554B4",
+  blue: "#E57A1F",
   green: "#1E9E61",
-  orange: "#E87B35",
+  orange: "#E57A1F",
   purple: "#7C5CBF",
   slate: "#6B80A0",
 } as const;
@@ -37,8 +37,8 @@ export function RecordSectionCard({
           className="w-[3px] self-stretch rounded-full flex-shrink-0"
           style={{ backgroundColor: ACCENT_COLORS[accent] }}
         />
-        {Icon && <Icon className="w-[13px] h-[13px] text-[#6B80A0] flex-shrink-0" />}
-        <h3 className="text-[11.5px] font-bold uppercase tracking-[0.4px] text-[#3D5473]">
+        {Icon && <Icon className="w-[13px] h-[13px] text-[#64748B] flex-shrink-0" />}
+        <h3 className="text-[11.5px] font-bold uppercase tracking-[0.4px] text-[#0F172A]">
           {title}
         </h3>
       </div>

@@ -17,12 +17,12 @@ import {
 	Pencil,
 	ChevronsUpDown,
 	Search,
+	Loader2,
 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CompactToggle } from "@/app/(app)/masters/vendors/components/CompactToggle";
 import {
 	Popover,
 	PopoverContent,
@@ -38,7 +38,31 @@ import {
 import { cn } from "@/lib/utils";
 import { SearchableSelect } from "./SearchableSelect";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
+import { getStandardMrp } from "@/lib/pricing/resolve-pricing";
+import {
+	GST_REGISTRATION_TYPE_DEFAULT,
+	GST_CATEGORY_UNREGISTERED,
+	deriveGstCategory,
+	deriveGstRegistered,
+	deriveGstRegistrationType,
+	buildGstCategory,
+	fetchGstRegistrationDetailsAsync,
+	gstApplicableFromCategory,
+	gstDetailsToAddressSnapshot,
+	isGstCategoryRegistered,
+	type GstAddressSnapshot,
+} from "@/lib/masters/gst-compliance";
+import { YesNoRadio } from "@/components/masters/YesNoRadio";
+import { GstRegistrationFields } from "@/components/masters/GstRegistrationFields";
+import { RegisteredNumberRow } from "@/components/masters/RegisteredNumberRow";
+import { ComplianceRegistrationFields } from "@/components/masters/ComplianceRegistrationFields";
+import {
+	complianceRegistrationToStored,
+	validateComplianceRegistration,
+} from "@/lib/masters/compliance-registration";
 import { Button } from "@/components/ui/button";
+import { toTdsSelectOptions } from "../../tds/tds-data";
 import {
 	type Customer,
 	type CustomerStatus,
@@ -55,6 +79,9 @@ import {
 	getActiveSalesEmployees,
 	todayStr,
 	validateGSTIN,
+	validatePAN,
+	validateTAN,
+	validateMSMENumber,
 	validateMobile,
 	validateEmail,
 	validatePincode,
@@ -133,11 +160,20 @@ export interface CustomerFormValues {
 	status: CustomerStatus;
 	blockReason: string;
 	gstApplicable: boolean;
+	gstRegistered: boolean;
+	gstRegistrationType: string;
+	gstCategory: string;
 	gstin: string;
 	gstMasterId: string;
 	tdsApplicable: boolean;
 	tdsMasterId: string;
+	pan: string;
 	tan: string;
+	msmeRegistered: boolean;
+	msmeNumber: string;
+	fssaiRegistered: boolean;
+	cibRegistered: boolean;
+	fcoRegistered: boolean;
 	cibRegn: string;
 	fcoRegn: string;
 	fssai: string;
@@ -191,11 +227,20 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
 	status: "draft",
 	blockReason: "",
 	gstApplicable: false,
+	gstRegistered: false,
+	gstRegistrationType: GST_REGISTRATION_TYPE_DEFAULT,
+	gstCategory: GST_CATEGORY_UNREGISTERED,
 	gstin: "",
 	gstMasterId: "",
 	tdsApplicable: false,
 	tdsMasterId: "",
+	pan: "",
 	tan: "",
+	msmeRegistered: false,
+	msmeNumber: "",
+	fssaiRegistered: false,
+	cibRegistered: false,
+	fcoRegistered: false,
 	cibRegn: "",
 	fcoRegn: "",
 	fssai: "",
@@ -234,6 +279,13 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
 };
 
 export function customerToFormValues(c: Customer): CustomerFormValues {
+	const gstCategory =
+		c.gstCategory || deriveGstCategory(c.gstApplicable, c.gstin);
+	const gstRegistered = deriveGstRegistered(
+		c.gstApplicable,
+		c.gstin,
+		gstCategory,
+	);
 	return {
 		customerName: c.customerName,
 		countryCode: c.countryCode || "+91",
@@ -242,12 +294,21 @@ export function customerToFormValues(c: Customer): CustomerFormValues {
 		customerType: c.customerType,
 		status: c.status,
 		blockReason: c.blockReason ?? "",
-		gstApplicable: c.gstApplicable,
+		gstApplicable: gstApplicableFromCategory(gstCategory),
+		gstRegistered,
+		gstRegistrationType: deriveGstRegistrationType(gstCategory),
+		gstCategory,
 		gstin: c.gstin,
 		gstMasterId: c.gstMasterId != null ? String(c.gstMasterId) : "",
 		tdsApplicable: c.tdsApplicable,
 		tdsMasterId: c.tdsMasterId != null ? String(c.tdsMasterId) : "",
+		pan: c.pan ?? "",
 		tan: c.tan,
+		msmeRegistered: c.msmeRegistered ?? false,
+		msmeNumber: c.msmeNumber ?? "",
+		fssaiRegistered: c.fssaiRegistered ?? !!c.fssai?.trim(),
+		cibRegistered: c.cibRegistered ?? !!c.cibRegn?.trim(),
+		fcoRegistered: c.fcoRegistered ?? !!c.fcoRegn?.trim(),
 		cibRegn: c.cibRegn,
 		fcoRegn: c.fcoRegn,
 		fssai: c.fssai,
@@ -376,9 +437,12 @@ const STATUS_OPTIONS = [
 function SectionHead({ label, sub }: { label: string; sub?: string }) {
 	return (
 		<div className='mb-2.5 mt-0.5'>
-			<p className='text-[10px] font-bold uppercase tracking-widest text-muted-foreground'>
-				{label}
-			</p>
+      <div className='flex items-center gap-2'>
+        <span className='w-[3px] h-3.5 rounded-full bg-[#E57A1F] flex-shrink-0' />
+        <p className='text-[10px] font-bold uppercase tracking-widest text-[#0F172A]'>
+          {label}
+        </p>
+      </div>
 			{sub && <p className='text-[11px] text-muted-foreground mt-0.5'>{sub}</p>}
 		</div>
 	);
@@ -437,6 +501,7 @@ function CountryCodePicker({
 
 interface ProductCatalogItem {
 	productId: string;
+	numericId: number;
 	productName: string;
 	sku: string;
 	category?: string;
@@ -444,7 +509,6 @@ interface ProductCatalogItem {
 	packSize?: string;
 	hsnCode?: string;
 	gstRate?: string;
-	mrp: number;
 }
 
 function ProductSelect({
@@ -471,7 +535,9 @@ function ProductSelect({
 			.filter(Boolean)
 			.join(" | "),
 		trailing: (
-			<span className='text-[10px] text-muted-foreground'>MRP: ?{p.mrp}</span>
+			<span className='text-[10px] text-muted-foreground'>
+				MRP: {formatIndianRupeeDisplay(getStandardMrp(p.numericId))}
+			</span>
 		),
 	}));
 
@@ -526,6 +592,8 @@ interface CustomerFormProps {
 	onClearError: (key: string) => void;
 	readOnly?: boolean;
 	isAdd?: boolean;
+	/** Auto-generated code preview (add) or stored code (edit). */
+	customerCode?: string;
 }
 
 export function CustomerForm({
@@ -536,6 +604,7 @@ export function CustomerForm({
 	onClearError,
 	readOnly,
 	isAdd,
+	customerCode,
 }: CustomerFormProps) {
 	const [geoNodes] = useState(() =>
 		typeof window !== "undefined" ? loadGeoNodes() : [],
@@ -548,6 +617,71 @@ export function CustomerForm({
 		Record<number, boolean>
 	>({});
 	const [bulkProductIds, setBulkProductIds] = useState<string[]>([]);
+	const [fetchingGst, setFetchingGst] = useState(false);
+	const [gstAddressSnapshot, setGstAddressSnapshot] =
+		useState<GstAddressSnapshot | null>(null);
+
+	const gstRegistered = form.gstRegistered;
+
+	const handleFetchGst = async () => {
+		if (readOnly) return;
+		if (!form.gstin.trim()) {
+			showToast("Enter GSTIN before fetching details.", "error");
+			return;
+		}
+		if (!validateGSTIN(form.gstin)) {
+			showToast("Enter a valid 15-character GSTIN.", "error");
+			return;
+		}
+		setFetchingGst(true);
+		try {
+			const details = await fetchGstRegistrationDetailsAsync(form.gstin);
+			if (!details) {
+				showToast("Could not fetch GST details. Check GSTIN format.", "error");
+				return;
+			}
+			const snap = gstDetailsToAddressSnapshot(details);
+			setGstAddressSnapshot(snap);
+			const displayName = details.tradeName || details.legalBusinessName;
+			const updatedBranches = form.branches.map((b, idx) => {
+				const isMain =
+					b.isMain || (!form.branches.some((x) => x.isMain) && idx === 0);
+				if (!isMain) return b;
+				return {
+					...b,
+					billingAddress: { ...snap },
+					shippingAddress: { ...snap },
+				};
+			});
+			onChange({
+				...form,
+				customerName: form.customerName.trim() || displayName,
+				pan: form.pan.trim() || form.gstin.trim().slice(2, 12),
+				branches: updatedBranches,
+			});
+			showToast("GST details fetched and applied.", "success");
+		} finally {
+			setFetchingGst(false);
+		}
+	};
+
+	const copyGstAddressToBranch = (bIdx: number) => {
+		if (!gstAddressSnapshot) {
+			showToast("Fetch GST details first to copy the registered address.", "error");
+			return;
+		}
+		const updatedBranches = form.branches.map((b, idx) =>
+			idx === bIdx
+				? {
+						...b,
+						billingAddress: { ...gstAddressSnapshot },
+						shippingAddress: { ...gstAddressSnapshot },
+					}
+				: b,
+		);
+		onChange({ ...form, branches: updatedBranches });
+		showToast("GST registered address copied to branch.", "success");
+	};
 
 	const [toastState, setToastState] = useState<ToastState | null>(null);
 	const showToast = (msg: string, type: "success" | "error") => {
@@ -655,10 +789,21 @@ export function CustomerForm({
 		});
 	}, []);
 
-	const activeProducts = useMemo(
-		() => loadProducts().filter((p) => p.status === "active"),
-		[],
-	);
+	const activeProducts = useMemo((): ProductCatalogItem[] => {
+		return loadProducts()
+			.filter((p) => p.status === "active")
+			.map((p) => ({
+				productId: p.productId,
+				numericId: p.id,
+				productName: p.productName,
+				sku: p.sku,
+				category: p.category,
+				unit: p.baseUnit,
+				packSize: p.packagingUnit,
+				hsnCode: p.hsnCode,
+				gstRate: p.gstRate,
+			}));
+	}, []);
 	const productOptions = useMemo(() => {
 		return activeProducts.map((p) => ({
 			value: p.productId,
@@ -732,7 +877,6 @@ export function CustomerForm({
 			id: newId,
 			productId: "",
 			productName: "",
-			mrp: 0,
 			price: undefined,
 			status: "Active" as const,
 		};
@@ -764,7 +908,6 @@ export function CustomerForm({
 				productId: prod.productId,
 				productName: prod.productName,
 				sku: prod.sku,
-				mrp: prod.mrp,
 				price: undefined,
 				status: "Active" as const,
 			});
@@ -989,6 +1132,22 @@ export function CustomerForm({
 										<FieldError msg={errors.customerType} />
 									</div>
 
+									{/* Customer Code */}
+									<div className='w-full md:w-[14%] space-y-1'>
+										<Label className='text-xs font-medium'>Customer Code</Label>
+										<Input
+											value={
+												customerCode ||
+												(form.customerType
+													? "Generating…"
+													: "Select type first")
+											}
+											readOnly
+											disabled
+											className='h-8 text-xs font-mono font-semibold bg-brand-50 text-brand-700 border-brand-200 cursor-default'
+										/>
+									</div>
+
 									{/* Sales Man */}
 									<div className='w-full md:w-[18%] space-y-1'>
 										<Label className='text-xs font-medium'>Sales Man</Label>
@@ -1029,82 +1188,113 @@ export function CustomerForm({
 						<div className='pt-5 border-t border-border/60'>
 							<SectionHead label='Tax & Registration' />
 
-							{/* Row 2+: Registration Fields & Conditional Fields */}
-							<div className='grid grid-cols-1 gap-3 md:grid-cols-7'>
-								{/* CIB Regn # */}
-								<div className='space-y-1'>
-									<Label className='text-xs font-medium'>CIB Regn #</Label>
-									<Input
-										value={form.cibRegn}
-										onChange={(e) => set("cibRegn", e.target.value)}
-										disabled={readOnly}
-										className='h-8 text-xs'
-									/>
-								</div>
+							<div className='space-y-3'>
+								<GstRegistrationFields
+									namePrefix="customer"
+									values={{
+										gstRegistered: form.gstRegistered,
+										gstRegistrationType: form.gstRegistrationType,
+										gstin: form.gstin,
+									}}
+									onChange={(gst) => {
+										const gstCategory = buildGstCategory(
+											gst.gstRegistered,
+											gst.gstRegistrationType,
+										);
+										onChange({
+											...form,
+											...gst,
+											gstCategory,
+											gstApplicable: gstApplicableFromCategory(gstCategory),
+											gstMasterId: gst.gstRegistered
+												? form.gstMasterId
+												: "",
+										});
+										if (!gst.gstRegistered) onClearError("gstin");
+									}}
+									errors={errors}
+									readOnly={readOnly}
+									fetchingGst={fetchingGst}
+									onFetchGst={handleFetchGst}
+								/>
 
-								{/* FCO Regn # */}
-								<div className='space-y-1'>
-									<Label className='text-xs font-medium'>FCO Regn #</Label>
-									<Input
-										value={form.fcoRegn}
-										onChange={(e) => set("fcoRegn", e.target.value)}
-										disabled={readOnly}
-										className='h-8 text-xs'
-									/>
-								</div>
-
-								{/* TAN # */}
-								<div className='space-y-1'>
-									<Label className='text-xs font-medium'>TAN #</Label>
-									<Input
-										value={form.tan}
-										onChange={(e) => set("tan", e.target.value)}
-										className={inputCls("tan")}
-										disabled={readOnly}
-									/>
-								</div>
-
-								{/* FSSAI # */}
-								<div className='space-y-1'>
-									<Label className='text-xs font-medium'>FSSAI #</Label>
-									<Input
-										value={form.fssai}
-										onChange={(e) => set("fssai", e.target.value)}
-										disabled={readOnly}
-										className='h-8 text-xs'
-									/>
-								</div>
-								{/* Row 1: Toggle Fields */}
-								<div className='grid grid-cols-1 gap-3 mb-4 md:grid-cols-2'>
-									{/* GST Applicable */}
-									<div className='space-y-1'>
-										<Label className='text-xs font-medium'>
-											GST Applicable
-										</Label>
-										<CompactToggle
-											checked={form.gstApplicable}
-											onCheckedChange={(yes) =>
-												onChange({
-													...form,
-													gstApplicable: yes,
-													gstin: yes ? form.gstin : "",
-													gstMasterId: yes ? form.gstMasterId : "",
-												})
+								<div className='grid grid-cols-1 gap-3 md:grid-cols-12'>
+									<div className='space-y-1 md:col-span-4'>
+										<Label className='text-xs font-medium'>PAN Number</Label>
+										<Input
+											value={form.pan}
+											onChange={(e) =>
+												set("pan", e.target.value.toUpperCase())
 											}
+											className={cn("font-mono h-8 text-xs", inputCls("pan"))}
 											disabled={readOnly}
-											activeLabel='Yes'
-											inactiveLabel='No'
+											maxLength={10}
+											placeholder='ABCDE1234F'
 										/>
+										<FieldError msg={errors.pan} />
 									</div>
+									<div className='space-y-1 md:col-span-4'>
+										<Label className='text-xs font-medium'>TAN Number</Label>
+										<Input
+											value={form.tan}
+											onChange={(e) =>
+												set("tan", e.target.value.toUpperCase())
+											}
+											className={cn("font-mono h-8 text-xs", inputCls("tan"))}
+											disabled={readOnly}
+											maxLength={10}
+											placeholder='AAAA99999A'
+										/>
+										<FieldError msg={errors.tan} />
+									</div>
+								</div>
 
-									{/* TDS Applicable */}
-									<div className='space-y-1'>
-										<Label className='text-xs font-medium'>
-											TDS Applicable
-										</Label>
-										<CompactToggle
-											checked={form.tdsApplicable}
-											onCheckedChange={(yes) =>
+								<RegisteredNumberRow
+									label="MSME Registered?"
+									registered={form.msmeRegistered}
+									onRegisteredChange={(yes) =>
+										onChange({
+											...form,
+											msmeRegistered: yes,
+											msmeNumber: yes ? form.msmeNumber : "",
+										})
+									}
+									numberLabel="MSME Number"
+									numberValue={form.msmeNumber}
+									onNumberChange={(value) => set("msmeNumber", value)}
+									numberError={errors.msmeNumber}
+									numberPlaceholder="UDYAM-XX-00-0000000"
+									namePrefix="customer-msme"
+									readOnly={readOnly}
+								/>
+
+								<ComplianceRegistrationFields
+									namePrefix="customer"
+									values={{
+										fssaiRegistered: form.fssaiRegistered,
+										fssai: form.fssai,
+										cibRegistered: form.cibRegistered,
+										cibRegn: form.cibRegn,
+										fcoRegistered: form.fcoRegistered,
+										fcoRegn: form.fcoRegn,
+									}}
+									onChange={(compliance) =>
+										onChange({
+											...form,
+											...compliance,
+										})
+									}
+									errors={errors}
+									readOnly={readOnly}
+								/>
+
+								<div className='grid grid-cols-1 gap-3 pt-1 md:grid-cols-12 border-t border-border/40'>
+									<div className='space-y-1 md:col-span-3'>
+										<Label className='text-xs font-medium'>TDS Applicable</Label>
+										<YesNoRadio
+											name='customer-tds'
+											value={form.tdsApplicable}
+											onChange={(yes) =>
 												onChange({
 													...form,
 													tdsApplicable: yes,
@@ -1112,74 +1302,46 @@ export function CustomerForm({
 												})
 											}
 											disabled={readOnly}
-											activeLabel='Yes'
-											inactiveLabel='No'
 										/>
 									</div>
+									{form.tdsApplicable && (
+										<div className='space-y-1 md:col-span-5'>
+											<Label className='text-xs font-medium'>
+												TDS % / TDS Section
+											</Label>
+											<SearchableSelect
+												value={form.tdsMasterId}
+												onChange={(value) => set("tdsMasterId", value)}
+												options={toTdsSelectOptions(tdsMasters)}
+												placeholder='Select from TDS Master...'
+												disabled={readOnly}
+												error={!!errors.tdsMasterId}
+											/>
+											<FieldError msg={errors.tdsMasterId} />
+										</div>
+									)}
+									{gstRegistered && !isAdd && (
+										<div className='space-y-1 md:col-span-4'>
+											<Label className='text-xs font-medium'>
+												GST % / GST Code
+											</Label>
+											<SearchableSelect
+												value={form.gstMasterId}
+												onChange={(value) => set("gstMasterId", value)}
+												options={gstMasters.map((gst) => ({
+													value: String(gst.id),
+													label: `${gst.gstId} - ${gst.gstPercentage}%`,
+													sublabel: gst.remarks,
+												}))}
+												placeholder='Select from GST Master...'
+												searchPlaceholder='Search GST code...'
+												disabled={readOnly}
+												error={!!errors.gstMasterId}
+											/>
+											<FieldError msg={errors.gstMasterId} />
+										</div>
+									)}
 								</div>
-
-								{/* Conditional: GSTIN (when GST Applicable is ON) */}
-								{form.gstApplicable && (
-									<div className='space-y-1'>
-										<Label className='text-xs font-medium'>
-											GSTIN <span className='text-red-500'>*</span>
-										</Label>
-										<Input
-											value={form.gstin}
-											onChange={(e) =>
-												set("gstin", e.target.value.toUpperCase())
-											}
-											placeholder='27AABCU9603R1ZX'
-											className={cn("font-mono", inputCls("gstin"))}
-											disabled={readOnly}
-										/>
-										<FieldError msg={errors.gstin} />
-									</div>
-								)}
-								{/* Conditional: GST Master (when GST Applicable is ON and not Add mode) */}
-								{form.gstApplicable && !isAdd && (
-									<div className='space-y-1'>
-										<Label className='text-xs font-medium'>
-											GST % / GST Code
-										</Label>
-										<SearchableSelect
-											value={form.gstMasterId}
-											onChange={(value) => set("gstMasterId", value)}
-											options={gstMasters.map((gst) => ({
-												value: String(gst.id),
-												label: `${gst.gstId} - ${gst.gstPercentage}%`,
-												sublabel: gst.remarks,
-											}))}
-											placeholder='Select from GST Master...'
-											searchPlaceholder='Search GST code...'
-											disabled={readOnly || !form.gstApplicable}
-											error={!!errors.gstMasterId}
-										/>
-										<FieldError msg={errors.gstMasterId} />
-									</div>
-								)}
-
-								{/* Conditional: TDS Master (when TDS Applicable is ON) */}
-								{form.tdsApplicable && (
-									<div className='space-y-1'>
-										<Label className='text-xs font-medium'>
-											TDS % / TDS Section
-										</Label>
-										<SearchableSelect
-											value={form.tdsMasterId}
-											onChange={(value) => set("tdsMasterId", value)}
-											options={tdsMasters.map((tds) => ({
-												value: String(tds.id),
-												label: `${tds.tdsCode} - ${tds.tdsRate}%`,
-												sublabel: tds.remarks,
-											}))}
-											placeholder='Select from TDS Master...'
-											disabled={readOnly}
-											error={!!errors.tdsMasterId}
-										/>
-										<FieldError msg={errors.tdsMasterId} />
-									</div>
-								)}
 							</div>
 						</div>
 					</div>
@@ -1355,17 +1517,17 @@ export function CustomerForm({
 					</div>
 				</TabsContent>
 
-				<TabsContent value='product' className='mt-0 space-y-5'>
+				<TabsContent value='product' className='mt-0 space-y-3'>
 					<div>
-						<div className='mb-2.5 mt-0.5'>
+						<div className='mb-2'>
 							<p className='text-xs font-bold uppercase tracking-wider text-foreground'>
 								Product Mappings
 							</p>
 						</div>
 
 						{!readOnly && (
-							<div className='mb-4 rounded-lg border border-border bg-muted/20 p-3'>
-								<div className='grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto]'>
+							<div className='mb-3 rounded-lg border border-border bg-muted/20 p-2.5'>
+								<div className='grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end'>
 									<div className='space-y-1'>
 										<label className='text-xs font-medium text-foreground'>
 											Products
@@ -1410,28 +1572,33 @@ export function CustomerForm({
 						)}
 
 						{!form.customerProducts || form.customerProducts.length === 0 ? (
-							<div className='py-6 text-center border border-dashed rounded-lg border-border'>
+							<div className='py-4 text-center border border-dashed rounded-lg border-border'>
 								<p className='text-xs text-muted-foreground'>
-									No products — click Add Product
+									No products mapped — select and add products above
 								</p>
 							</div>
 						) : (
-							<div className='overflow-hidden bg-white border shadow-sm border-border rounded-xl'>
+							<div className='overflow-hidden bg-white border border-border rounded-lg'>
 								<div className='overflow-x-auto'>
-									<table className='w-full min-w-[640px]'>
+									<table className='w-full min-w-[900px] text-xs'>
 										<thead>
 											<tr className='border-b bg-muted/40 border-border'>
 												{[
-													{ h: "Product", className: "" },
-													{ h: "MRP", className: "w-36" },
-													{ h: "Price", className: "w-36" },
-													...(!readOnly ? [{ h: "", className: "w-12" }] : []),
-												].map(({ h, className }) => (
+													"Product",
+													"SKU",
+													"Category",
+													"HSN",
+													"GST",
+													"MRP",
+													"Price",
+													...(!readOnly ? [""] : []),
+												].map((h) => (
 													<th
 														key={h || "actions"}
 														className={cn(
-															"px-2 py-2 text-left text-xs font-semibold text-foreground whitespace-nowrap",
-															className,
+															"px-2 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap",
+															h === "Price" || h === "MRP" ? "w-28" : "",
+															h === "" ? "w-10" : "",
 														)}
 													>
 														{h}
@@ -1443,6 +1610,9 @@ export function CustomerForm({
 											{form.customerProducts.map((p, idx) => {
 												const hasProductError = !!errors[`product_${idx}_id`];
 												const hasPriceError = !!errors[`product_${idx}_price`];
+												const prodMeta = activeProducts.find(
+													(item) => item.productId === p.productId,
+												);
 
 												return (
 													<tr
@@ -1450,7 +1620,7 @@ export function CustomerForm({
 														className='border-b border-border/60 hover:bg-muted/10'
 													>
 														{/* Product */}
-														<td className='px-2 py-1.5 min-w-[240px]'>
+														<td className='px-2 py-1.5 min-w-[180px]'>
 															{readOnly ? (
 																<span className='text-xs font-medium text-foreground'>
 																	{p.productName
@@ -1481,7 +1651,6 @@ export function CustomerForm({
 																				productId: prod.productId,
 																				productName: prod.productName,
 																				sku: prod.sku,
-																				mrp: prod.mrp,
 																			});
 																			clearProductFieldError(idx);
 																		}}
@@ -1495,30 +1664,34 @@ export function CustomerForm({
 															)}
 														</td>
 
-														{/* MRP */}
-														<td className='px-2 py-1.5 w-36'>
-															{readOnly ? (
-																<span className='text-xs text-muted-foreground whitespace-nowrap'>
-																	{p.mrp !== undefined && p.mrp !== null
-																		? `₹${p.mrp.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-																		: "—"}
-																</span>
-															) : (
-																<Input
-																	type='text'
-																	value={
-																		p.mrp !== undefined && p.mrp !== null
-																			? `₹${p.mrp.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-																			: "—"
-																	}
-																	readOnly
-																	className='text-xs cursor-not-allowed pointer-events-none select-none h-7 bg-muted/40 text-muted-foreground border-border'
-																/>
-															)}
+														<td className='px-2 py-1.5 font-mono text-muted-foreground'>
+															{prodMeta?.sku || p.sku || "—"}
+														</td>
+														<td className='px-2 py-1.5 text-muted-foreground'>
+															{prodMeta?.category || "—"}
+														</td>
+														<td className='px-2 py-1.5 font-mono text-muted-foreground'>
+															{prodMeta?.hsnCode || "—"}
+														</td>
+														<td className='px-2 py-1.5 text-muted-foreground'>
+															{prodMeta?.gstRate ? `${prodMeta.gstRate}%` : "—"}
 														</td>
 
-														{/* Price */}
-														<td className='px-2 py-1.5 w-36'>
+														{/* MRP (Pricing Master) */}
+														<td className='px-2 py-1.5 w-28'>
+															<span className='text-muted-foreground whitespace-nowrap font-mono'>
+																{(() => {
+																	if (!prodMeta) return "—";
+																	const mrp = getStandardMrp(prodMeta.numericId);
+																	return mrp > 0
+																		? formatIndianRupeeDisplay(mrp)
+																		: "—";
+																})()}
+															</span>
+														</td>
+
+														{/* Customer Price (overrides DP/RP) */}
+														<td className='px-2 py-1.5 w-28'>
 															{readOnly ? (
 																<span className='text-xs font-semibold text-foreground whitespace-nowrap'>
 																	{p.price !== undefined && p.price !== null
@@ -1774,6 +1947,17 @@ export function CustomerForm({
 															<span className='text-xs font-bold uppercase tracking-wider text-foreground flex items-center'>
 																Billing Address <span className='text-red-500 ml-1'>*</span>
 															</span>
+															{!readOnly && gstAddressSnapshot && (
+																<Button
+																	type='button'
+																	variant='outline'
+																	size='sm'
+																	className='h-7 text-[10px] px-2 border-brand-200 text-brand-700 hover:bg-brand-50'
+																	onClick={() => copyGstAddressToBranch(bIdx)}
+																>
+																	Copy GST Registered Address
+																</Button>
+															)}
 														</div>
 
 														<div className='space-y-3'>
@@ -2346,15 +2530,26 @@ export function validateCustomerForm(
 		e.mobile = "Enter a valid 10-digit mobile number";
 	if (form.email.trim() && !validateEmail(form.email))
 		e.email = "Enter a valid email address";
-	if (form.gstApplicable) {
+	if (form.gstRegistered) {
 		if (!form.gstin.trim())
-			e.gstin = "GSTIN is required when GST is applicable";
+			e.gstin = "GSTIN is required when GST registered";
 		else if (!validateGSTIN(form.gstin)) e.gstin = "Invalid GSTIN format";
 		if (!isAdd && !form.gstMasterId)
 			e.gstMasterId = "Select GST code from master";
 	}
+	if (form.pan.trim() && !validatePAN(form.pan))
+		e.pan = "Enter a valid PAN number";
+	if (form.tan.trim() && !validateTAN(form.tan))
+		e.tan = "Enter a valid TAN number";
+	if (form.msmeRegistered) {
+		if (!form.msmeNumber.trim())
+			e.msmeNumber = "MSME number is required when MSME registered";
+		else if (!validateMSMENumber(form.msmeNumber))
+			e.msmeNumber = "MSME number must be alphanumeric";
+	}
 	if (form.tdsApplicable && !form.tdsMasterId)
 		e.tdsMasterId = "Select TDS section from master";
+	Object.assign(e, validateComplianceRegistration(form));
 
 	// Validate Main Branch
 	const mainBranch =
@@ -2481,17 +2676,31 @@ export function formValuesToCustomer(
 		countryCode: form.countryCode,
 		mobile: form.mobile.trim(),
 		email: form.email.trim(),
-		gstApplicable: form.gstApplicable,
-		gstin: form.gstApplicable ? form.gstin.trim().toUpperCase() : "",
+		gstApplicable: form.gstRegistered,
+		gstCategory: buildGstCategory(
+			form.gstRegistered,
+			form.gstRegistrationType,
+		),
+		gstin: form.gstRegistered ? form.gstin.trim().toUpperCase() : "",
 		gstMasterId:
-			form.gstApplicable && form.gstMasterId ? Number(form.gstMasterId) : null,
+			form.gstRegistered && form.gstMasterId
+				? Number(form.gstMasterId)
+				: null,
 		tdsApplicable: form.tdsApplicable,
 		tdsMasterId:
 			form.tdsApplicable && form.tdsMasterId ? Number(form.tdsMasterId) : null,
-		tan: form.tan.trim(),
-		cibRegn: form.cibRegn.trim(),
-		fcoRegn: form.fcoRegn.trim(),
-		fssai: form.fssai.trim(),
+		pan: form.pan.trim().toUpperCase(),
+		tan: form.tan.trim().toUpperCase(),
+		msmeRegistered: form.msmeRegistered,
+		msmeNumber: form.msmeRegistered ? form.msmeNumber.trim() : "",
+		...complianceRegistrationToStored({
+			fssaiRegistered: form.fssaiRegistered,
+			fssai: form.fssai,
+			cibRegistered: form.cibRegistered,
+			cibRegn: form.cibRegn,
+			fcoRegistered: form.fcoRegistered,
+			fcoRegn: form.fcoRegn,
+		}),
 
 		// For backwards compatibility and listing/view pages:
 		address: cleanMainBranch?.billingAddress?.address?.trim() || "",

@@ -54,6 +54,8 @@ import {
   X,
 } from "lucide-react";
 import {
+  LEVELS,
+  PARENT_LEVEL,
   type GeoLevel,
   type GeoNode,
   loadGeoNodes,
@@ -157,25 +159,8 @@ const FARMER_OPTIONS: MultiSelectOption[] = FARMER_NAMES.map((label, index) => (
 const CUSTOMER_DISTRIBUTOR_ID_OFFSET = 100000;
 const PER_PAGE = 10;
 
-const LOCATION_LEVELS: GeoLevel[] = [
-  "Zone",
-  "State",
-  "Region",
-  "Area",
-  "Territory",
-  "Locality",
-  "Pincode",
-];
-
-const LOCATION_PARENT: Record<GeoLevel, GeoLevel | null> = {
-  Zone: null,
-  State: "Zone",
-  Region: "State",
-  Area: "Region",
-  Territory: "Area",
-  Locality: "Territory",
-  Pincode: "Locality",
-};
+const LOCATION_LEVELS: GeoLevel[] = LEVELS;
+const LOCATION_PARENT = PARENT_LEVEL;
 
 function todayIso() {
   return toIsoDate(new Date());
@@ -1131,17 +1116,21 @@ export default function EventsPage() {
     const region = selectedLocationNodes.Region;
     const area = selectedLocationNodes.Area;
     const territory = selectedLocationNodes.Territory;
-    const locality = selectedLocationNodes.Locality;
+    const district = selectedLocationNodes.District;
+    const city = selectedLocationNodes.City;
+    const town = selectedLocationNodes.Town;
     const pincode = selectedLocationNodes.Pincode;
     const currentUser = AuthService.getUserData();
     const organizerName = currentUser?.username || currentUser?.email || "Admin";
     const locationSummary = [
       pincode?.name,
-      locality?.name,
+      town?.name,
+      city?.name,
+      district?.name,
       territory?.name,
       area?.name,
-      region?.name,
       state?.name,
+      region?.name,
       zone?.name,
     ]
       .filter(Boolean)
@@ -1152,8 +1141,8 @@ export default function EventsPage() {
       eventCode,
       title: form.title.trim(),
       type: "training",
-      venue: pincode?.name || locality?.name || territory?.name || area?.name || region?.name || "Location TBD",
-      district: region?.name || area?.name || territory?.name || locality?.name || "",
+      venue: pincode?.name || town?.name || city?.name || district?.name || territory?.name || area?.name || "Location TBD",
+      district: district?.name || city?.name || territory?.name || area?.name || "",
       state: state?.name || "",
       startDate,
       endDate,

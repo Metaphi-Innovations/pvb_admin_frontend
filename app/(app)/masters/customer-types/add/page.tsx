@@ -12,8 +12,10 @@ import {
   saveCustomerTypes,
   nextCustomerTypeId,
   generateCustomerTypeCode,
+  validateCustomerTypeInitialCode,
   type CustomerTypeRecord,
 } from "../customer-type-data";
+import { normalizeInitialCode } from "@/lib/masters/code-generation";
 import {
   CustomerTypeForm,
   DEFAULT_CUSTOMER_TYPE_FORM,
@@ -43,6 +45,9 @@ export default function AddCustomerTypePage() {
 
   const handleSave = () => {
     const validation = validateCustomerTypeForm(form);
+    const list = loadCustomerTypes();
+    const initialErr = validateCustomerTypeInitialCode(form.initialCode, list);
+    if (initialErr) validation.initialCode = initialErr;
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
       setToast({ msg: "Please fix the errors before saving.", type: "error" });
@@ -50,11 +55,11 @@ export default function AddCustomerTypePage() {
       return;
     }
 
-    const list = loadCustomerTypes();
     const today = new Date().toISOString().slice(0, 10);
     const newRecord: CustomerTypeRecord = {
       id: nextCustomerTypeId(list),
       customerTypeCode: form.customerTypeCode.trim() || generateCustomerTypeCode(list),
+      initialCode: normalizeInitialCode(form.initialCode),
       customerType: form.customerType.trim(),
       description: form.description.trim(),
       documentTypes: form.documentTypes || [],

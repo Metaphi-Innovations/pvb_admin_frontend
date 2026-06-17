@@ -21,12 +21,14 @@ import {
 	Tag,
 } from "lucide-react";
 import {
-	formatMoney,
+	getAssetDisplayType,
 	loadProducts,
 	saveProducts,
 	type Product,
 	type ProductStatus,
 } from "../product-data";
+import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
+import { getStandardPricing } from "@/lib/pricing/resolve-pricing";
 import {
 	Dialog,
 	DialogContent,
@@ -64,21 +66,7 @@ function MediaSection({ product }: { product: Product }) {
 	};
 	const getUrl = (item: (typeof items)[number]) =>
 		item.url ?? item.fileUrl ?? item.previewUrl ?? item.src ?? "";
-	const getLabel = (item: (typeof items)[number]) => {
-		if (item.type === "link") return "Link";
-		switch (item.mediaKind ?? item.fileType?.toLowerCase()) {
-			case "video":
-				return "Video";
-			case "pdf":
-				return "PDF";
-			case "document":
-				return "Document";
-			case "spreadsheet":
-				return "Spreadsheet";
-			default:
-				return "Image";
-		}
-	};
+	const getLabel = (item: (typeof items)[number]) => getAssetDisplayType(item);
 
 	return (
 		<div className='space-y-4'>
@@ -242,9 +230,11 @@ export default function ProductDetailPage() {
 	const tabs = [
 		{ value: "overview", label: "Overview" },
 		...(mediaCount > 0
-			? [{ value: "media", label: "Media", count: mediaCount }]
+			? [{ value: "media", label: "Media & Documents", count: mediaCount }]
 			: []),
 	];
+
+	const standardPricing = getStandardPricing(product.id);
 
 	const kpis = [
 		{
@@ -265,8 +255,10 @@ export default function ProductDetailPage() {
 			icon: IndianRupee,
 			iconBg: "#FFFBEB",
 			iconColor: "#D97706",
-			value: formatMoney(product.mrp),
-			label: "MRP",
+			value: standardPricing
+				? formatIndianRupeeDisplay(standardPricing.mrp)
+				: "—",
+			label: "MRP (Pricing Master)",
 		},
 		{
 			icon: FileText,
@@ -298,9 +290,17 @@ export default function ProductDetailPage() {
 								value={product.productName}
 								highlight
 							/>
+							<RecordKvRow
+								label='Scientific Name'
+								value={product.scientificName}
+							/>
 							<RecordKvRow label='Category' value={product.category} />
 							<RecordKvRow label='Segment' value={product.segment} />
-							<RecordKvRow label='Formulation' value={product.formulation} />
+							<RecordKvRow
+								label='Form'
+								value={product.form ?? product.formulation}
+							/>
+							<RecordKvRow label='CFU' value={product.cfu} />
 							<RecordKvRow label='Base Unit' value={product.baseUnit} />
 							<RecordKvRow
 								label='Packaging Unit'
@@ -318,19 +318,71 @@ export default function ProductDetailPage() {
 						</RecordSectionCard>
 
 						<RecordSectionCard
-							title='Tax & Pricing'
+							title='Tax & Compliance'
 							icon={IndianRupee}
 							accent='orange'
 						>
 							<RecordKvRow label='HSN Code' value={product.hsnCode} mono copy />
-							<RecordKvRow label='GST Rate' value={product.gstRate} />
 							<RecordKvRow
-								label='MRP'
-								value={formatMoney(product.mrp)}
-								amount
-								highlight
-								isLast
+								label='GST Rate'
+								value={
+									<div className='text-right'>
+										<span>{product.gstRate || "—"}</span>
+										<p className='text-[10px] font-normal text-muted-foreground mt-0.5'>
+											Auto-filled from HSN code
+										</p>
+									</div>
+								}
+								isLast={!standardPricing}
 							/>
+							{standardPricing && (
+								<>
+									<RecordKvRow
+										label='Cost Price (CP)'
+										value={formatIndianRupeeDisplay(standardPricing.costPrice)}
+										amount
+									/>
+									<RecordKvRow
+										label='Distributor Price (DP)'
+										value={formatIndianRupeeDisplay(standardPricing.distributorPrice)}
+										amount
+									/>
+									<RecordKvRow
+										label='Retail Price (RP)'
+										value={formatIndianRupeeDisplay(standardPricing.retailPrice)}
+										amount
+									/>
+									<RecordKvRow
+										label='MRP'
+										value={formatIndianRupeeDisplay(standardPricing.mrp)}
+										amount
+										highlight
+										isLast
+									/>
+									<p className='text-[10px] text-muted-foreground px-1 pt-1'>
+										Pricing from{" "}
+										<Link
+											href='/masters/pricing'
+											className='text-brand-600 hover:underline'
+										>
+											Pricing Master
+										</Link>
+										. Vendor and customer overrides apply at transaction level.
+									</p>
+								</>
+							)}
+							{!standardPricing && (
+								<p className='text-[10px] text-muted-foreground px-1 pt-1'>
+									No active pricing record. Add pricing in{" "}
+									<Link
+										href='/masters/pricing'
+										className='text-brand-600 hover:underline'
+									>
+										Pricing Master
+									</Link>
+									.
+								</p>
+							)}
 						</RecordSectionCard>
 
 						<RecordSectionCard
@@ -339,10 +391,6 @@ export default function ProductDetailPage() {
 							accent='green'
 						>
 							<RecordKvRow label='SKU' value={product.sku} mono copy />
-							<RecordKvRow
-								label='Crop Applicable'
-								value={product.cropApplicable}
-							/>
 							<RecordKvRow
 								label='Status'
 								value={
@@ -375,7 +423,7 @@ export default function ProductDetailPage() {
 			case "media":
 				return (
 					<RecordSectionCard
-						title='Media & Assets'
+						title='Media & Documents'
 						icon={FileText}
 						accent='purple'
 					>
@@ -428,8 +476,13 @@ export default function ProductDetailPage() {
 						highlight: true,
 					},
 					{ label: "SKU", value: product.sku || "—" },
-					{ label: "MRP", value: formatMoney(product.mrp) },
-					{ label: "GST Rate", value: product.gstRate || "—" },
+					{
+						label: "MRP",
+						value: standardPricing
+							? formatIndianRupeeDisplay(standardPricing.mrp)
+							: "—",
+					},
+					{ label: "GST Rate", value: product.gstRate ? `${product.gstRate} (from HSN)` : "—" },
 					{ label: "Created", value: product.createdDate },
 					{ label: "Updated", value: product.updatedDate },
 				],

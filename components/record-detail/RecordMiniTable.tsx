@@ -19,7 +19,7 @@ export function RecordMiniTable<T>({
   onRowClick?: (row: T) => void;
 }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-[#6B80A0] py-4 text-center">No records yet.</p>;
+    return <p className="text-sm text-[#64748B] py-4 text-center">No records yet.</p>;
   }
 
   const align = (a?: "left" | "right" | "center") =>
@@ -34,7 +34,7 @@ export function RecordMiniTable<T>({
               <th
                 key={col.key}
                 className={cn(
-                  "py-2 px-2 font-semibold uppercase text-[11px] text-[#9AAAC5] first:rounded-l-md last:rounded-r-md",
+                  "py-2 px-2 font-semibold uppercase text-[11px] text-[#64748B] first:rounded-l-md last:rounded-r-md",
                   align(col.align),
                 )}
               >
@@ -49,15 +49,15 @@ export function RecordMiniTable<T>({
               key={i}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
               className={cn(
-                "border-b border-[#F0F3FA] last:border-0 transition-colors",
-                onRowClick && "cursor-pointer hover:bg-[#F4F7FE]",
+                "border-b border-[#E5E7EB] last:border-0 transition-colors",
+                onRowClick && "cursor-pointer hover:bg-[#F8F6F1]",
               )}
             >
               {columns.map((col) => (
                 <td
                   key={col.key}
                   className={cn(
-                    "py-2.5 px-2 text-[#3D5473]",
+                    "py-2.5 px-2 text-[#0F172A]",
                     col.align === "right" && "text-right tabular-nums",
                     col.align === "center" && "text-center",
                   )}
@@ -70,10 +70,10 @@ export function RecordMiniTable<T>({
         </tbody>
       </table>
       {viewAllHref && viewAllLabel && (
-        <div className="pt-2 border-t border-[#F0F3FA] mt-1">
+        <div className="pt-2 border-t border-[#E5E7EB] mt-1">
           <Link
             href={viewAllHref}
-            className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#1554B4] hover:underline"
+            className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#E57A1F] hover:underline hover:text-[#D96C10]"
           >
             {viewAllLabel}
             <ArrowRight className="w-3.5 h-3.5" />

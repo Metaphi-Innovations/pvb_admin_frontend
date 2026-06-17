@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import SalesInvoicesPageClient from "./SalesInvoicesPageClient";
 
-export default function LegacyRedirect() {
-  redirect("/accounts/vouchers?tab=sales");
+export default function Page() {
+  return <SalesInvoicesPageClient />;
 }

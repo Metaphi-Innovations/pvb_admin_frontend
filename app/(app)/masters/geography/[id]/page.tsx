@@ -10,11 +10,12 @@ import {
   RecordSectionCard,
   RecordStatusPill,
 } from "@/components/record-detail";
-import { ChevronRight, Clock, MapPin, Pencil, Users } from "lucide-react";
+import { ChevronRight, Clock, MapPin, Pencil, Trash2, Users } from "lucide-react";
 import {
   type GeoNode, loadGeoNodes, getAncestorPath, getChildren,
 } from "../geo-data";
 import { LevelBadge } from "../components/LevelBadge";
+import { GeographyDeleteDialog } from "../components/GeographyDeleteDialog";
 
 export default function GeographyViewPage() {
   const router = useRouter();
@@ -24,6 +25,7 @@ export default function GeographyViewPage() {
 
   const [nodes, setNodes] = useState<GeoNode[]>([]);
   const [node, setNode] = useState<GeoNode | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   useEffect(() => {
     const all = loadGeoNodes();
@@ -65,13 +67,6 @@ export default function GeographyViewPage() {
       header: "Name",
       render: (r: GeoNode) => (
         <span className="font-semibold text-[#3D5473]">{r.name}</span>
-      ),
-    },
-    {
-      key: "code",
-      header: "Code",
-      render: (r: GeoNode) => (
-        <span className="font-mono text-[12px] text-brand-700">{r.code || "—"}</span>
       ),
     },
     {
@@ -125,7 +120,6 @@ export default function GeographyViewPage() {
               label="Level"
               value={<LevelBadge level={node.level} />}
             />
-            <RecordKvRow label="Code" value={node.code || "—"} mono copy />
             <RecordKvRow
               label="Status"
               value={
@@ -157,8 +151,10 @@ export default function GeographyViewPage() {
           </RecordSectionCard>
 
           <RecordSectionCard title="Audit Details" icon={Clock} accent="slate">
-            <RecordKvRow label="Created" value={node.createdDate} />
-            <RecordKvRow label="Last Updated" value={node.updatedDate} isLast />
+            <RecordKvRow label="Created By" value={node.createdBy} />
+            <RecordKvRow label="Created Date" value={node.createdDate} />
+            <RecordKvRow label="Updated By" value={node.updatedBy} />
+            <RecordKvRow label="Updated Date" value={node.updatedDate} isLast />
           </RecordSectionCard>
         </div>
 
@@ -178,7 +174,6 @@ export default function GeographyViewPage() {
       listHref="/masters/geography"
       listLabel="Geography"
       recordName={node.name}
-      recordCode={node.code}
       typeBadge={<LevelBadge level={node.level} />}
       statusLabel={node.status === "active" ? "Active" : "Inactive"}
       statusVariant={node.status === "active" ? "active" : "inactive"}
@@ -189,23 +184,37 @@ export default function GeographyViewPage() {
       sidebar={{
         quickActions: [
           {
-            label: "Edit Territory",
+            label: "Edit Geography",
             icon: Pencil,
             onClick: () => router.push(`/masters/geography/${node.id}/edit`),
             variant: "primary",
           },
+          {
+            label: "Delete",
+            icon: Trash2,
+            onClick: () => setDeleteOpen(true),
+          },
         ],
         summary: [
           { label: "Level", value: node.level, highlight: true },
-          { label: "Code", value: node.code || "—" },
           { label: "Parent", value: parent?.name || "Root" },
           { label: "Children", value: String(children.length) },
+          { label: "Created By", value: node.createdBy },
           { label: "Created", value: node.createdDate },
+          { label: "Updated By", value: node.updatedBy },
           { label: "Updated", value: node.updatedDate },
         ],
       }}
     >
       {renderTabContent()}
+
+      <GeographyDeleteDialog
+        node={node}
+        nodes={nodes}
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={() => router.push("/masters/geography")}
+      />
     </RecordDetailPage>
   );
 }

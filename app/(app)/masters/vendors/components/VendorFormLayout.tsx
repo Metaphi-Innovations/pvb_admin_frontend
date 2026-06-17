@@ -10,14 +10,12 @@ import { cn } from "@/lib/utils";
 
 export function VendorFormLayout({
   mode,
-  vendorCode,
   vendor,
   children,
   footer,
   onSave,
 }: {
   mode: "create" | "edit" | "view";
-  vendorCode: string;
   vendor?: Vendor | null;
   children: React.ReactNode;
   footer?: React.ReactNode;
@@ -51,7 +49,7 @@ export function VendorFormLayout({
                     Vendor Master
                   </Link>
                   <span className="mx-1">/</span>
-                  <span className="font-mono text-foreground/80">{vendorCode || "New"}</span>
+                  <span className="text-foreground/80">{vendor?.vendorName || "New"}</span>
                 </p>
               </div>
             </div>
