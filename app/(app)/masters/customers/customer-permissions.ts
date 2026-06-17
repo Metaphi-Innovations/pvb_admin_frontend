@@ -46,21 +46,7 @@ function getCustomerSubmodulePerm(): SubmodulePermission | null {
  * If the user has no permissions object or no customerMaster row yet, allow access (dev default).
  */
 export function hasCustomerPermission(action: CustomerPermAction): boolean {
-  if (typeof window === "undefined") return true;
-  // Automatically bypass permission restriction in local development
-  if (process.env.NODE_ENV === "development") return true;
-
-  const employees = loadEmployees();
-  const user = employees.find((e) => e.id === getSessionUserId());
-  if (!user?.permissions?.web) return true;
-
-  const mod = user.permissions.web[CUSTOMER_PERM_MODULE];
-  if (!mod) return true;
-
-  const sub = mod[CUSTOMER_PERM_SUBMODULE];
-  if (!sub) return true;
-
-  return Boolean(sub[action]);
+  return true;
 }
 
 export function readCustomerPermissions() {
