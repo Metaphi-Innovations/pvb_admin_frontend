@@ -24,15 +24,7 @@ export interface GrnItem {
   productCode: string;
   orderedQty: number;
   receivedQty: number;
-  balanceQty?: number;
-  unit?: string;
-  batchNumber?: string;
-  mfgDate?: string;
-  expDate?: string;
-  remarks?: string;
   poNumber?: string;
-  /** Inventory-tracked products require batch + dates */
-  inventoryTracked?: boolean;
 }
 
 export interface GrnBatch {
@@ -51,18 +43,13 @@ export interface GrnRecord {
   id: string;
   grnNo: string;
   poNumber: string;
-  poId?: number;
   vendorName: string;
   vendorReference?: string;
   warehouse: string;
-  warehouseId?: number;
   grnDate: string;
   totalProducts: number;
   totalQty: number;
   status: GrnStatus;
   items: GrnItem[];
   batches: GrnBatch[];
-  activity?: Array<{ date: string; time?: string; action: string; by: string; remarks?: string }>;
-  createdBy?: string;
-  updatedBy?: string;
 }

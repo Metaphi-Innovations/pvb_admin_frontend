@@ -5,7 +5,6 @@ import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { RejectedStockRecord } from "../types";
 import {
   PRODUCT_OPTIONS,
@@ -77,69 +76,13 @@ export function RejectedListing({ rejectedForWarehouse }: RejectedListingProps) 
   }, [processed, page, pageSize]);
 
   const columns: ColumnConfig<RejectedStockRecord>[] = [
-    {
-      key: "product",
-      header: "Product",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: PRODUCT_OPTIONS,
-      render: (val, row) => (
-        <Link href={`/warehouse/stockoverview/view/${row.id}`} className="block group/name">
-          <span className="text-xs font-semibold text-foreground group-hover/name:text-brand-700">{row.product}</span>
-        </Link>
-      ),
-    },
-    {
-      key: "warehouse",
-      header: "Warehouse",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: WAREHOUSE_OPTIONS,
-      render: (val, row) => <span className="text-xs text-foreground">{row.warehouse}</span>,
-    },
-    {
-      key: "batchNumber",
-      header: "Batch Number",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "130px",
-      render: (val, row) => <span className="font-mono text-xs text-foreground">{row.batchNumber}</span>,
-    },
-    {
-      key: "rejectedQuantity",
-      header: "Rejected Qty",
-      sortable: true,
-      align: "right",
-      width: "130px",
-      render: (val) => <span className="text-xs font-medium tabular-nums text-foreground">{val != null ? val.toLocaleString() : "—"}</span>,
-    },
-    {
-      key: "rejectionReason",
-      header: "Rejection Reason",
-      sortable: true,
-      render: (val, row) => <span className="text-xs text-foreground">{row.rejectionReason}</span>,
-    },
-    {
-      key: "qcNumber",
-      header: "QC Number",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "130px",
-      render: (val, row) => <span className="font-mono text-xs text-brand-700">{row.qcNumber}</span>,
-    },
-    {
-      key: "inspectionDate",
-      header: "Inspection Date",
-      sortable: true,
-      filterable: true,
-      filterType: "date",
-      width: "140px",
-      render: (val, row) => <span className="text-xs text-foreground">{row.inspectionDate}</span>,
-    },
+    { key: "product", header: "Product", sortable: true, filterable: true, filterType: "dropdown", filterOptions: PRODUCT_OPTIONS },
+    { key: "warehouse", header: "Warehouse", sortable: true, filterable: true, filterType: "dropdown", filterOptions: WAREHOUSE_OPTIONS },
+    { key: "batchNumber", header: "Batch Number", sortable: true, filterable: true, filterType: "text", width: "130px" },
+    { key: "rejectedQuantity", header: "Rejected Qty", sortable: true, align: "center", width: "130px" },
+    { key: "rejectionReason", header: "Rejection Reason", sortable: true },
+    { key: "qcNumber", header: "QC Number", sortable: true, filterable: true, filterType: "text", width: "130px" },
+    { key: "inspectionDate", header: "Inspection Date", sortable: true, filterable: true, filterType: "date", width: "140px" },
     {
       key: "status",
       header: "Status",
@@ -151,7 +94,7 @@ export function RejectedListing({ rejectedForWarehouse }: RejectedListingProps) 
       render: (val: any) => {
         const cfg = STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: val };
         return (
-          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+          <span className={`inline-flex items-center text-xs px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
             {cfg.label}
           </span>
         );

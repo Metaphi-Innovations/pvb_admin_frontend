@@ -54,12 +54,12 @@ function vendorToSupplier(v: Vendor): Supplier {
   const primary = v.contacts[0];
   return {
     id: v.id,
-    supplierName: v.vendorName,
-    supplierCode: v.vendorCode || String(v.id),
-    supplierType: v.vendorType || "other",
+    supplierName: v.companyName || v.vendorName,
+    supplierCode: v.vendorCode,
+    supplierType: "distributor",
     gstNumber: v.gstNumber,
     panNumber: v.panNumber,
-    contactPerson: v.contactPerson || primary?.name || "",
+    contactPerson: primary?.name ?? "",
     phone: "",
     mobile: v.mobile || primary?.mobile || "",
     email: v.email || primary?.email || "",

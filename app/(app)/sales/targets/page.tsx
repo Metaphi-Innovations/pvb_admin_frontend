@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Target, Plus, Download, TrendingUp, TrendingDown, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 
 interface SalesTarget {
   id: number;
@@ -58,13 +57,12 @@ export default function TargetsPage() {
             <p className="text-xs text-muted-foreground mt-0.5">Monitor team performance against targets</p>
           </div>
           <div className="flex items-center gap-2">
-            <AutocompleteSelect
-              options={["Jan 2024", "Feb 2024", "Mar 2024"].map((p) => ({ value: p, label: p }))}
-              value={period}
-              onChange={setPeriod}
-              placeholder="Select period…"
-              className="h-8 text-xs w-36"
-            />
+            <select value={period} onChange={e => setPeriod(e.target.value)}
+              className="h-8 px-2.5 text-xs border border-border rounded-lg bg-white focus:outline-none">
+              <option>Jan 2024</option>
+              <option>Feb 2024</option>
+              <option>Mar 2024</option>
+            </select>
             <button className="h-8 px-3 text-xs border border-border rounded-lg inline-flex items-center gap-1.5 font-medium text-muted-foreground hover:bg-muted transition-colors">
               <Download className="w-3.5 h-3.5" /> Export
             </button>

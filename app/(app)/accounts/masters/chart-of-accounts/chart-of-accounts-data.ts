@@ -30,7 +30,6 @@ export const NODE_LEVEL_LABELS: Record<CoaNodeLevel, string> = {
   account_group: "Account Group",
   sub_group: "Sub-Group",
   ledger: "Ledger",
-  sub_ledger: "Sub-Ledger",
 };
 
 export interface LedgerFormValues {
@@ -95,7 +94,6 @@ export function getDirectChildren(
     account_group: 1,
     sub_group: 2,
     ledger: 3,
-    sub_ledger: 4,
   };
   return records
     .filter((r) => r.parentAccountId === parentId)
@@ -111,17 +109,7 @@ export function getChildGroups(records: ChartOfAccount[], nodeId: number): Chart
 }
 
 export function getChildLedgers(records: ChartOfAccount[], nodeId: number): ChartOfAccount[] {
-  return getDirectChildren(records, nodeId).filter(
-    (c) => c.nodeLevel === "ledger" || c.nodeLevel === "sub_ledger",
-  );
-}
-
-export function getChildSubLedgers(records: ChartOfAccount[], ledgerId: number): ChartOfAccount[] {
-  return getDirectChildren(records, ledgerId).filter((c) => c.nodeLevel === "sub_ledger");
-}
-
-export function canAddSubLedgerUnder(ledger: ChartOfAccount): boolean {
-  return ledger.nodeLevel === "ledger" && !ledger.isSystem;
+  return getDirectChildren(records, nodeId).filter((c) => c.nodeLevel === "ledger");
 }
 
 /** Sub-groups always accept ledgers; account groups only when they have no sub-groups */
@@ -194,83 +182,6 @@ export function parentGroupLabel(records: ChartOfAccount[], parentId: number): s
   return getAncestorPath(records, parentId)
     .map((n) => n.accountName)
     .join(" › ");
-}
-
-export function generateSubLedgerCode(records: ChartOfAccount[]): string {
-  const nums = records
-    .filter((r) => r.nodeLevel === "sub_ledger")
-    .map((r) => {
-      const m = r.accountCode.match(/SLED-(\d+)/);
-      return m ? parseInt(m[1], 10) : 0;
-    })
-    .filter((n) => n > 0);
-  const next = nums.length ? Math.max(...nums) + 1 : 1;
-  return `SLED-${String(next).padStart(4, "0")}`;
-}
-
-export function formToSubLedger(
-  form: LedgerFormValues,
-  id: number,
-  accountCode: string,
-  records: ChartOfAccount[],
-  existing?: ChartOfAccount,
-): ChartOfAccount {
-  const parent = records.find((r) => r.id === form.parentGroupId);
-  const parentName = parent?.accountName ?? "";
-  return {
-    id,
-    accountCode: existing?.accountCode ?? accountCode,
-    accountName: form.ledgerName.trim(),
-    alias: form.alias.trim(),
-    accountType: parent?.accountType ?? existing?.accountType ?? "Asset",
-    nodeLevel: "sub_ledger",
-    parentAccountId: form.parentGroupId,
-    parentAccount: parentName,
-    description: existing?.description ?? "",
-    status: form.status,
-    usedIn: existing?.usedIn ?? [],
-    isSystem: false,
-    openingBalance: 0,
-    balanceType: parent?.balanceType ?? "Debit",
-    gstApplicable: false,
-    tdsApplicable: false,
-    costCenterApplicable: false,
-    bankAccountFlag: false,
-    createdBy: existing?.createdBy ?? ACCOUNTS_CURRENT_USER,
-    updatedBy: ACCOUNTS_CURRENT_USER,
-  };
-}
-
-export function validateSubLedgerForm(
-  form: LedgerFormValues,
-  records: ChartOfAccount[],
-  editingId?: number,
-): string | null {
-  if (!form.ledgerName.trim()) return "Sub-ledger name is required.";
-  if (!form.parentGroupId) return "Parent ledger is required.";
-  const parent = records.find((r) => r.id === form.parentGroupId);
-  if (!parent || parent.nodeLevel !== "ledger") {
-    return "Sub-ledgers must be created under a Ledger.";
-  }
-  const dup = records.find(
-    (r) =>
-      r.id !== editingId &&
-      r.nodeLevel === "sub_ledger" &&
-      r.parentAccountId === form.parentGroupId &&
-      r.accountName.toLowerCase() === form.ledgerName.trim().toLowerCase(),
-  );
-  if (dup) return "A sub-ledger with this name already exists under this ledger.";
-  return null;
-}
-
-export function canEditSubLedger(record: ChartOfAccount): boolean {
-  return record.nodeLevel === "sub_ledger" && canUserEditNode(record);
-}
-
-export function canDeleteSubLedger(record: ChartOfAccount): boolean {
-  if (!canEditSubLedger(record)) return false;
-  if (ledgerHasVoucherPostings(record.id)) return false;
-  return true;
 }
 
 export function generateLedgerCode(records: ChartOfAccount[]): string {
@@ -380,16 +291,13 @@ export function canCreateCoaNodeAtLevel(level: CoaNodeLevel): boolean {
 }
 
 export function getAllExpandableIds(records: ChartOfAccount[]): number[] {
-  return records.filter((r) => r.nodeLevel !== "sub_ledger").map((r) => r.id);
+  return records.filter((r) => r.nodeLevel !== "ledger").map((r) => r.id);
 }
 
 export function countLedgersUnder(records: ChartOfAccount[], nodeId: number): number {
   return getDirectChildren(records, nodeId).reduce(
     (sum, c) =>
-      sum +
-      (c.nodeLevel === "ledger" || c.nodeLevel === "sub_ledger"
-        ? 1
-        : countLedgersUnder(records, c.id)),
+      sum + (c.nodeLevel === "ledger" ? 1 : countLedgersUnder(records, c.id)),
     0,
   );
 }
@@ -431,7 +339,7 @@ export function getSearchVisibleIds(
     const collectDesc = (id: number) => {
       getDirectChildren(records, id).forEach((c) => {
         visible.add(c.id);
-        if (c.nodeLevel !== "ledger" && c.nodeLevel !== "sub_ledger") collectDesc(c.id);
+        if (c.nodeLevel !== "ledger") collectDesc(c.id);
       });
     };
     collectDesc(node.id);

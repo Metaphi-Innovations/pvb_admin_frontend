@@ -6,7 +6,6 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { cn } from "@/lib/utils";
 import {
   Edit2,
-  Eye,
   FileText,
   CheckCircle2,
   XCircle,
@@ -22,8 +21,25 @@ import { MiniKPICard } from "@/components/ui/KPICard";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { MasterRecordDrawer, masterAuditFromRecord } from "@/components/masters/MasterRecordDrawer";
-import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
+
+function StatusToggle({ record, onToggle }: { record: DocumentTypeMaster; onToggle: (item: DocumentTypeMaster) => void }) {
+  const active = record.status === "Active";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(record);
+      }}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+        active ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
+      )}
+    >
+      {active ? "Active" : "Inactive"}
+    </button>
+  );
+}
 
 export default function DocumentTypesPage() {
   const router = useRouter();
@@ -34,7 +50,6 @@ export default function DocumentTypesPage() {
   const [pageSize, setPageSize] = useState(10);
   
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-  const [viewTarget, setViewTarget] = useState<DocumentTypeMaster | null>(null);
 
   useEffect(() => {
     setRecords(loadDocumentTypes());
@@ -71,7 +86,7 @@ export default function DocumentTypesPage() {
       filterable: true,
       filterType: "text",
       width: "180px",
-      render: (val, row) => <span className="font-mono text-xs text-brand-700">{row.documentTypeCode}</span>,
+      render: (val, row) => <span className="font-mono font-semibold text-foreground">{row.documentTypeCode}</span>,
     },
     {
       key: "title",
@@ -81,7 +96,7 @@ export default function DocumentTypesPage() {
       filterType: "text",
       width: "280px",
       render: (val, row) => (
-        <span className="text-xs font-semibold text-foreground">
+        <span className="font-semibold text-foreground">
           {row.title}
         </span>
       ),
@@ -96,6 +111,22 @@ export default function DocumentTypesPage() {
       render: (val, row) => row.description || "—",
     },
     {
+      key: "createdBy",
+      header: "Created By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
       key: "status",
       header: "Status",
       sortable: true,
@@ -107,36 +138,12 @@ export default function DocumentTypesPage() {
       ],
       width: "160px",
       render: (val, row) => (
-        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
+        <StatusToggle record={row} onToggle={toggleStatus} />
       ),
-    },
-    {
-      key: "createdBy",
-      header: "Created",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />,
-    },
-    {
-      key: "updatedBy",
-      header: "Updated",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />,
     },
   ];
 
   const actions: ActionItemConfig<DocumentTypeMaster>[] = [
-    {
-      label: "View",
-      action: "view",
-      icon: Eye,
-      onClick: (row) => setViewTarget(row),
-    },
     {
       label: "Edit",
       action: "edit",
@@ -185,38 +192,6 @@ export default function DocumentTypesPage() {
     return filtered.slice(start, start + pageSize);
   }, [filtered, page, pageSize]);
 
-  const handleExport = () => {
-    const rows = filtered.map((row) => ({
-      "Document Type Code": row.documentTypeCode,
-      Title: row.title,
-      Description: row.description || "",
-      Status: row.status,
-      "Created By": row.createdBy || "",
-      "Updated By": row.updatedBy || "",
-    }));
-
-    const headers = Object.keys(rows[0] || {});
-    const csv = [
-      headers.join(","),
-      ...rows.map((row) =>
-        headers
-          .map((header) => {
-            const value = String(row[header as keyof typeof row] ?? "");
-            return `"${value.replace(/"/g, '""')}"`;
-          })
-          .join(","),
-      ),
-    ].join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `document-types-${todayStr()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   useEffect(() => {
     setPage(1);
   }, [filters, sort, pageSize]);
@@ -256,7 +231,6 @@ export default function DocumentTypesPage() {
           onFilterChange={setFilters}
           actions={actions}
           onAdd={() => router.push("/masters/document-types/add")}
-          onExport={handleExport}
           addLabel="Add Document Type"
           emptyMessage="document types"
           searchPlaceholder="Search document type..."
@@ -264,31 +238,6 @@ export default function DocumentTypesPage() {
           currentSort={sort}
         />
       </div>
-
-      {viewTarget && (
-        <MasterRecordDrawer
-          open={!!viewTarget}
-          onOpenChange={(o) => !o && setViewTarget(null)}
-          onClose={() => setViewTarget(null)}
-          onEdit={() => {
-            router.push(`/masters/document-types/${viewTarget.id}/edit`);
-            setViewTarget(null);
-          }}
-          title="Document Type"
-          icon={FileText}
-          recordCode={viewTarget.documentTypeCode}
-          status={viewTarget.status}
-          basicInfo={[{ label: "Title", value: viewTarget.title }]}
-          description={viewTarget.description}
-          showDescription
-          auditInfo={masterAuditFromRecord({
-            createdBy: viewTarget.createdBy,
-            createdDate: viewTarget.createdDate,
-            updatedBy: viewTarget.updatedBy,
-            updatedDate: viewTarget.updatedDate,
-          })}
-        />
-      )}
 
       {/* Toast */}
       {toast && (

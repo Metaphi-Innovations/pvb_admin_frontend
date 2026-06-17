@@ -1,16 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
+import { ACCOUNTS_HOME_HREF } from "@/lib/accounts/accounts-nav";
 
-import { Suspense } from "react";
-import ReconciliationPageClient from "@/app/(app)/accounts/bank-reconciliation/ReconciliationPageClient";
-
-function ReconciliationWrapper() {
-  return <ReconciliationPageClient embedded />;
-}
-
-export default function BankReconciliationPage() {
-  return (
-    <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Loading…</div>}>
-      <ReconciliationWrapper />
-    </Suspense>
-  );
+export default function BankingReconRedirect() {
+  redirect(ACCOUNTS_HOME_HREF);
 }

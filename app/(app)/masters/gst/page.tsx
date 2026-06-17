@@ -13,6 +13,15 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetBody,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
@@ -34,12 +43,11 @@ import {
   generateGSTCode,
 } from "./gst-data";
 import { MiniKPICard } from "@/components/ui/KPICard";
-import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
+import { MasterViewRow } from "@/components/masters/MasterModule";
 
 import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
 interface ToastState {
   msg: string;
@@ -58,6 +66,25 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100"><X className="h-3.5 w-3.5" /></button>
     </div>
+  );
+}
+
+function StatusToggle({ record, onToggle }: { record: GSTMaster; onToggle: (item: GSTMaster) => void }) {
+  const active = record.status === "active";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(record);
+      }}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+        active ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
+      )}
+    >
+      {active ? "Active" : "Inactive"}
+    </button>
   );
 }
 
@@ -120,7 +147,7 @@ export default function GSTPage() {
       filterType: "text",
       width: "100px",
       render: (val, row) => (
-        <span className="font-mono text-xs text-brand-700">{row.gstId}</span>
+        <span className="font-mono font-semibold text-brand-700">{row.gstId}</span>
       ),
     },
     {
@@ -130,9 +157,7 @@ export default function GSTPage() {
       filterable: true,
       filterType: "text",
       width: "140px",
-      render: (val, row) => (
-        <span className="text-xs font-semibold text-foreground">{row.gstPercentage}%</span>
-      ),
+      render: (val, row) => `${row.gstPercentage}%`,
     },
     {
       key: "remarks",
@@ -142,6 +167,22 @@ export default function GSTPage() {
       filterType: "text",
       width: "220px",
       render: (val, row) => row.remarks || "—",
+    },
+    {
+      key: "createdBy",
+      header: "Created By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
     },
     {
       key: "status",
@@ -155,26 +196,8 @@ export default function GSTPage() {
       ],
       width: "110px",
       render: (val, row) => (
-        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
+        <StatusToggle record={row} onToggle={toggleStatus} />
       ),
-    },
-    {
-      key: "createdBy",
-      header: "Created",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />,
-    },
-    {
-      key: "updatedBy",
-      header: "Updated",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />,
     },
   ];
 
@@ -439,69 +462,117 @@ export default function GSTPage() {
         />
       </div>
 
-      <MasterListingSheets
-        sheetMode={sheetMode}
-        active={active}
-        onClose={closeSheet}
-        onEdit={() => active && openEdit(active)}
-        onSave={persist}
-        sheetTitle={sheetTitle}
-        icon={Percent}
-        viewDrawer={
-          active
-            ? buildSimpleMasterViewDrawer<GSTMaster>({
-                drawerTitle: "GST",
-                getRecordCode: (r) => r.gstId,
-                basicInfo: (r) => [
-                  { label: "GST ID", value: r.gstId, mono: true },
-                  { label: "GST Percentage", value: `${r.gstPercentage}%` },
-                ],
-                description: (r) => r.remarks,
-                showDescription: true,
-              })(active)
-            : { title: "GST", basicInfo: [] }
-        }
-        formContent={
-          <div className="space-y-4">
-            {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label className="text-xs font-medium">GST ID (Auto)</Label>
-                <Input
-                  value={form.gstId}
-                  disabled
-                  className="h-8 text-xs cursor-not-allowed bg-muted/30 text-muted-foreground"
-                />
+      <Sheet open={sheetMode !== null} onOpenChange={(o) => !o && closeSheet()}>
+        <SheetContent>
+          <SheetHeader>
+            <div className="flex items-start gap-3 pr-8">
+              <div className="flex items-center justify-center border w-9 h-9 rounded-xl bg-brand-50 border-brand-100">
+                <Percent className="w-4 h-4 text-brand-600" />
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs font-medium">
-                  GST Percentage <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  type="number"
-                  value={form.gstPercentage}
-                  onChange={(e) => setFormField("gstPercentage", parseFloat(e.target.value) || 0)}
-                  placeholder="e.g., 18.0"
-                  step="0.01"
-                  min="0"
-                  className={cn("h-8 text-xs", errors.gstPercentage && "border-red-400 focus-visible:ring-red-300")}
-                />
-                {errors.gstPercentage && <p className="text-[11px] text-red-500">{errors.gstPercentage}</p>}
-              </div>
-              <div className="space-y-1 sm:col-span-2">
-                <Label className="text-xs font-medium">Remarks</Label>
-                <Textarea
-                  value={form.remarks}
-                  onChange={(e) => setFormField("remarks", e.target.value)}
-                  placeholder="Enter remarks"
-                  rows={3}
-                  className="text-xs resize-none rounded-lg min-h-[72px]"
-                />
+              <div>
+                <SheetTitle className="text-base">{sheetTitle}</SheetTitle>
+                <SheetDescription className="text-xs">
+                  {sheetMode === "view" ? "Read-only details" : "Compact GST form"}
+                </SheetDescription>
               </div>
             </div>
-          </div>
-        }
-      />
+          </SheetHeader>
+
+          <SheetBody>
+            {sheetMode === "view" && active ? (
+              <div className="space-y-4">
+                <div className="px-3 border rounded-lg border-border/60 bg-muted/10">
+                  <MasterViewRow label="GST ID" value={<span className="font-mono">{active.gstId}</span>} />
+                  <MasterViewRow label="GST Percentage" value={`${active.gstPercentage}%`} />
+                  <MasterViewRow label="Remarks" value={active.remarks || "—"} />
+                  <MasterViewRow label="Status" value={active.status === "active" ? "Active" : "Inactive"} />
+                </div>
+                <div className="grid grid-cols-2 gap-3 pt-2 text-xs border-t">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
+                    <p className="font-medium">{active.createdBy}</p>
+                    <p className="text-muted-foreground">{active.createdDate}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Updated By</p>
+                    <p className="font-medium">{active.updatedBy}</p>
+                    <p className="text-muted-foreground">{active.updatedDate}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">GST ID (Auto)</Label>
+                    <Input
+                      value={form.gstId}
+                      disabled
+                      className="h-8 text-xs cursor-not-allowed bg-muted/30 text-muted-foreground"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">
+                      GST Percentage <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      type="number"
+                      value={form.gstPercentage}
+                      onChange={(e) => setFormField("gstPercentage", parseFloat(e.target.value) || 0)}
+                      placeholder="e.g., 18.0"
+                      step="0.01"
+                      min="0"
+                      className={cn("h-8 text-xs", errors.gstPercentage && "border-red-400 focus-visible:ring-red-300")}
+                    />
+                    {errors.gstPercentage && <p className="text-[11px] text-red-500">{errors.gstPercentage}</p>}
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label className="text-xs font-medium">Remarks</Label>
+                    <Textarea
+                      value={form.remarks}
+                      onChange={(e) => setFormField("remarks", e.target.value)}
+                      placeholder="Enter remarks"
+                      rows={3}
+                      className="text-xs resize-none rounded-lg min-h-[72px]"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </SheetBody>
+
+          <SheetFooter>
+            {sheetMode === "view" ? (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Back
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+                  onClick={() => active && openEdit(active)}
+                >
+                  Edit
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+                  onClick={persist}
+                >
+                  Save
+                </Button>
+              </>
+            )}
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <DialogContent className="max-w-sm">

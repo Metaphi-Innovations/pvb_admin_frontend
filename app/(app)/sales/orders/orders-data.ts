@@ -3,7 +3,6 @@
 import { loadCustomers, getCustomersForTransactionDropdown } from "@/app/(app)/masters/customers/customer-data";
 import { loadEmployees, type Employee } from "@/app/(app)/user-management/employee/employee-data";
 import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
-import { resolveSezLutSupply } from "@/lib/settings/gst-tax-config";
 
 /** Orders above this amount require approval on submit (not draft). */
 export const ORDER_APPROVAL_THRESHOLD = 10_000;
@@ -67,10 +66,7 @@ export interface SalesOrderLineItem {
   availableStock: number;
   quantity: number;
   unitPrice: number;
-  /** Discount percentage */
   discount: number;
-  /** Discount amount in ₹ (synced with discount %) */
-  discountValue: number;
   gstAmount: number;
   lineTotal: number;
   /** Split form only: parent line when qty is taken from original order */
@@ -78,22 +74,6 @@ export interface SalesOrderLineItem {
   /** Split form only: max qty available from parent line */
   maxSplitQty?: number;
 }
-
-export type ExpenseDiscountType = "percent" | "fixed";
-
-export interface SalesOrderAdditionalExpense {
-  id: string;
-  expenseName: string;
-  amount: number;
-  discountType: ExpenseDiscountType;
-  discountValue: number;
-  netAmount: number;
-}
-
-export const EXPENSE_DISCOUNT_TYPE_OPTIONS: { value: ExpenseDiscountType; label: string }[] = [
-  { value: "percent", label: "Percentage (%)" },
-  { value: "fixed", label: "Fixed Amount (₹)" },
-];
 
 export interface SalesOrder {
   id: number;
@@ -108,7 +88,6 @@ export interface SalesOrder {
   deliveryDate: string;
   status: OrderStatus;
   lineItems: SalesOrderLineItem[];
-  additionalExpenses?: SalesOrderAdditionalExpense[];
   totalAmount: number;
   requiresApproval: boolean;
   approvalStatus?: ApprovalStatus;
@@ -249,7 +228,6 @@ function buildSeedLineItems(orderId: number, lineCount: number): SalesOrderLineI
       quantity,
       unitPrice: product.sellingPrice,
       discount,
-      discountValue: 0,
       gstAmount,
       lineTotal: 0,
     }));
@@ -281,7 +259,6 @@ function buildSeedOrder(id: number, status: OrderStatus): SalesOrder {
     deliveryDate,
     status,
     lineItems,
-    additionalExpenses: [],
     totalAmount,
     requiresApproval,
     items: lineItems.length,
@@ -378,18 +355,6 @@ export function parseGstRate(gstRate: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-export function calculateLineDiscountValue(quantity: number, unitPrice: number, discountPercent: number): number {
-  const gross = quantity * unitPrice;
-  return Math.round(gross * (discountPercent / 100) * 100) / 100;
-}
-
-export function calculateDiscountPercentFromValue(quantity: number, unitPrice: number, discountValue: number): number {
-  const gross = quantity * unitPrice;
-  if (gross <= 0) return 0;
-  const pct = (discountValue / gross) * 100;
-  return Math.round(Math.min(100, Math.max(0, pct)) * 100) / 100;
-}
-
 export function calculateLineSubtotal(quantity: number, unitPrice: number, discountPercent: number): number {
   const subtotalBeforeDiscount = quantity * unitPrice;
   const discountAmount = subtotalBeforeDiscount * (discountPercent / 100);
@@ -401,9 +366,8 @@ export function calculateLineTotal(quantity: number, unitPrice: number, discount
 }
 
 export function recalculateLineItem(line: SalesOrderLineItem): SalesOrderLineItem {
-  const discountValue = calculateLineDiscountValue(line.quantity, line.unitPrice, line.discount);
   const lineTotal = calculateLineTotal(line.quantity, line.unitPrice, line.discount, line.gstAmount);
-  return { ...line, discountValue, lineTotal };
+  return { ...line, lineTotal };
 }
 
 export function calculateOrderTotal(lines: SalesOrderLineItem[]): number {
@@ -411,56 +375,14 @@ export function calculateOrderTotal(lines: SalesOrderLineItem[]): number {
 }
 
 export interface OrderTotalsSummary {
-  /** Product subtotal before discounts */
   subtotalBeforeDiscount: number;
-  /** @alias subtotalBeforeDiscount */
-  productSubtotal: number;
   totalItemDiscounts: number;
-  /** @alias totalItemDiscounts */
-  productDiscountTotal: number;
   netTotal: number;
-  additionalExpensesTotal: number;
-  expenseDiscountTotal: number;
-  netAdditionalExpenses: number;
-  taxableAmount: number;
   totalGst: number;
-  /** @alias totalGst */
-  gstAmount: number;
   grandTotal: number;
 }
 
-export function calculateExpenseNet(
-  expense: Pick<SalesOrderAdditionalExpense, "amount" | "discountType" | "discountValue">,
-): number {
-  const amount = Math.max(0, expense.amount || 0);
-  if (expense.discountType === "percent") {
-    const pct = Math.min(100, Math.max(0, expense.discountValue || 0));
-    return Math.round(Math.max(0, amount - amount * (pct / 100)) * 100) / 100;
-  }
-  return Math.round(Math.max(0, amount - (expense.discountValue || 0)) * 100) / 100;
-}
-
-export function recalculateExpense(expense: SalesOrderAdditionalExpense): SalesOrderAdditionalExpense {
-  const netAmount = calculateExpenseNet(expense);
-  return { ...expense, netAmount };
-}
-
-export function createEmptyExpense(): SalesOrderAdditionalExpense {
-  return {
-    id: `exp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    expenseName: "",
-    amount: 0,
-    discountType: "percent",
-    discountValue: 0,
-    netAmount: 0,
-  };
-}
-
-export function calculateOrderTotalsSummary(
-  lines: SalesOrderLineItem[],
-  expenses: SalesOrderAdditionalExpense[] = [],
-  options?: { sezLutApplies?: boolean },
-): OrderTotalsSummary {
+export function calculateOrderTotalsSummary(lines: SalesOrderLineItem[]): OrderTotalsSummary {
   let subtotalBeforeDiscount = 0;
   let totalItemDiscounts = 0;
   let netTotal = 0;
@@ -468,55 +390,23 @@ export function calculateOrderTotalsSummary(
 
   for (const line of lines) {
     const lineSubtotalBeforeDiscount = line.quantity * line.unitPrice;
-    const lineDiscount = calculateLineDiscountValue(line.quantity, line.unitPrice, line.discount);
+    const lineDiscount = lineSubtotalBeforeDiscount * (line.discount / 100);
     subtotalBeforeDiscount += lineSubtotalBeforeDiscount;
     totalItemDiscounts += lineDiscount;
     netTotal += calculateLineSubtotal(line.quantity, line.unitPrice, line.discount);
     totalGst += line.gstAmount;
   }
 
-  let additionalExpensesTotal = 0;
-  let expenseDiscountTotal = 0;
-  let netAdditionalExpenses = 0;
-  for (const exp of expenses) {
-    const net = calculateExpenseNet(exp);
-    additionalExpensesTotal += exp.amount || 0;
-    expenseDiscountTotal += Math.max(0, (exp.amount || 0) - net);
-    netAdditionalExpenses += net;
-  }
-
-  subtotalBeforeDiscount = Math.round(subtotalBeforeDiscount * 100) / 100;
-  totalItemDiscounts = Math.round(totalItemDiscounts * 100) / 100;
-  netTotal = Math.round(netTotal * 100) / 100;
-  additionalExpensesTotal = Math.round(additionalExpensesTotal * 100) / 100;
-  expenseDiscountTotal = Math.round(expenseDiscountTotal * 100) / 100;
-  netAdditionalExpenses = Math.round(netAdditionalExpenses * 100) / 100;
-  const taxableAmount = Math.round((netTotal + netAdditionalExpenses) * 100) / 100;
-  if (options?.sezLutApplies) {
-    totalGst = 0;
-  } else {
-    totalGst = Math.round(totalGst * 100) / 100;
-  }
-  const grandTotal = Math.round((taxableAmount + totalGst) * 100) / 100;
-
   return {
     subtotalBeforeDiscount,
-    productSubtotal: subtotalBeforeDiscount,
     totalItemDiscounts,
-    productDiscountTotal: totalItemDiscounts,
     netTotal,
-    additionalExpensesTotal,
-    expenseDiscountTotal,
-    netAdditionalExpenses,
-    taxableAmount,
     totalGst,
-    gstAmount: totalGst,
-    grandTotal,
+    grandTotal: netTotal + totalGst,
   };
 }
 
-export function computeGstAmount(quantity: number, unitPrice: number, discountPercent: number, gstRate: string, zeroTax = false): number {
-  if (zeroTax) return 0;
+export function computeGstAmount(quantity: number, unitPrice: number, discountPercent: number, gstRate: string): number {
   const subtotal = calculateLineSubtotal(quantity, unitPrice, discountPercent);
   const rate = parseGstRate(gstRate);
   return Math.round(subtotal * (rate / 100) * 100) / 100;
@@ -608,7 +498,6 @@ export function createEmptyLineItem(): SalesOrderLineItem {
     quantity: 1,
     unitPrice: 0,
     discount: 0,
-    discountValue: 0,
     gstAmount: 0,
     lineTotal: 0,
   };
@@ -743,15 +632,8 @@ export function suggestFefoAllocations(productId: number, orderedQty: number): {
 // ── Order access & business rules ────────────────────────────────────────────
 
 export function hydrateOrderLineItems(order: SalesOrder): SalesOrder {
-  const additionalExpenses = (order.additionalExpenses ?? []).map(recalculateExpense);
-  if (order.lineItems.length > 0) {
-    return {
-      ...order,
-      additionalExpenses,
-      lineItems: order.lineItems.map((l) => recalculateLineItem({ ...l, discountValue: l.discountValue ?? calculateLineDiscountValue(l.quantity, l.unitPrice, l.discount) })),
-    };
-  }
-  if (order.items <= 0) return { ...order, additionalExpenses };
+  if (order.lineItems.length > 0) return order;
+  if (order.items <= 0) return order;
 
   const catalog = PRODUCT_CATALOG.filter(p => p.status === "active");
   const count = Math.min(order.items, catalog.length);
@@ -772,13 +654,12 @@ export function hydrateOrderLineItems(order: SalesOrder): SalesOrder {
       quantity,
       unitPrice: product.sellingPrice,
       discount,
-      discountValue: 0,
       gstAmount,
       lineTotal: 0,
     }));
   }
 
-  return { ...order, lineItems, additionalExpenses: order.additionalExpenses ?? [] };
+  return { ...order, lineItems };
 }
 
 export function hydrateOrders(orders: SalesOrder[]): SalesOrder[] {
@@ -786,7 +667,6 @@ export function hydrateOrders(orders: SalesOrder[]): SalesOrder[] {
     const hydrated = hydrateOrderLineItems(order);
     return {
       ...hydrated,
-      additionalExpenses: hydrated.additionalExpenses ?? [],
       approvalStatus: resolveApprovalStatus(hydrated),
     };
   });
@@ -831,19 +711,16 @@ export function canGeneratePackingList(order: SalesOrder): boolean {
   return hydrated.lineItems.some(l => l.productId && l.quantity > 0);
 }
 
-export interface SalesOrderFormValues {
+export function orderToFormValues(order: SalesOrder): {
   orderDate: string;
   customerId: number | null;
   salesManId: number | null;
   deliveryDate: string;
   status: OrderStatus;
   lineItems: SalesOrderLineItem[];
-  additionalExpenses: SalesOrderAdditionalExpense[];
   warehouseId?: number | null;
   warehouseName?: string;
-}
-
-export function orderToFormValues(order: SalesOrder): SalesOrderFormValues {
+} {
   const hydrated = hydrateOrderLineItems(order);
   return {
     orderDate: hydrated.orderDate,
@@ -852,14 +729,22 @@ export function orderToFormValues(order: SalesOrder): SalesOrderFormValues {
     deliveryDate: hydrated.deliveryDate,
     status: hydrated.status,
     lineItems: hydrated.lineItems.length > 0 ? hydrated.lineItems : [createEmptyLineItem()],
-    additionalExpenses: hydrated.additionalExpenses ?? [],
     warehouseId: hydrated.warehouseId ?? null,
     warehouseName: hydrated.warehouseName ?? "",
   };
 }
 
 export function buildOrderFromForm(
-  form: SalesOrderFormValues,
+  form: {
+    orderDate: string;
+    customerId: number | null;
+    salesManId: number | null;
+    deliveryDate: string;
+    status: OrderStatus;
+    lineItems: SalesOrderLineItem[];
+    warehouseId?: number | null;
+    warehouseName?: string;
+  },
   existing: Partial<SalesOrder> & { soNumber: string },
   asDraft: boolean,
 ): SalesOrder | null {
@@ -871,17 +756,7 @@ export function buildOrderFromForm(
   const warehouse = warehouses.find(w => w.id === form.warehouseId);
   if (!customer || !salesman) return null;
 
-  const sezLut = resolveSezLutSupply({
-    customerGstCategory:
-      customer.gstCategory ||
-      (customer.gstApplicable ? "regular" : "unregistered"),
-    transactionDate: form.orderDate,
-  });
-  const totalAmount = calculateOrderTotalsSummary(
-    form.lineItems,
-    form.additionalExpenses ?? [],
-    { sezLutApplies: sezLut.appliesLut },
-  ).grandTotal;
+  const totalAmount = calculateOrderTotalsSummary(form.lineItems).grandTotal;
   const finalStatus = resolveSubmitStatus(totalAmount, form.status, asDraft);
   const requiresApproval = orderRequiresApproval(totalAmount) && !asDraft;
   const approvalStatus = resolveApprovalStatusOnSubmit(finalStatus, requiresApproval, asDraft);
@@ -900,7 +775,6 @@ export function buildOrderFromForm(
     deliveryDate: form.deliveryDate,
     status: finalStatus,
     lineItems: form.lineItems,
-    additionalExpenses: (form.additionalExpenses ?? []).map(recalculateExpense),
     totalAmount,
     requiresApproval,
     approvalStatus,
@@ -937,7 +811,14 @@ function stripSplitLineMeta(line: SalesOrderLineItem): SalesOrderLineItem {
 
 export function splitSalesOrderFromForm(
   parentOrderId: number,
-  form: SalesOrderFormValues,
+  form: {
+    orderDate: string;
+    customerId: number | null;
+    salesManId: number | null;
+    deliveryDate: string;
+    status: OrderStatus;
+    lineItems: SalesOrderLineItem[];
+  },
   newSoNumber: string,
   asDraft: boolean,
 ): { original: SalesOrder; newOrder: SalesOrder } | { error: string } {

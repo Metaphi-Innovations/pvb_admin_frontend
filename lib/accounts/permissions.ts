@@ -1,124 +1,29 @@
-/**
- * Accounts module RBAC permission codes.
- * Wire to role_permissions in production; client checks are advisory until auth is integrated.
- */
+import { loadEmployees } from "@/app/(app)/user-management/employee/employee-data";
+import type { SubmodulePermission } from "@/app/(app)/user-management/employee/employee-data";
 
-export const ACCOUNTS_PERMISSIONS = {
-  // Chart of Accounts
-  COA_VIEW: "accounts.coa.view",
-  COA_LEDGER_CREATE: "accounts.coa.ledger.create",
-  COA_SUB_LEDGER_CREATE: "accounts.coa.sub_ledger.create",
-  COA_LEDGER_EDIT: "accounts.coa.ledger.edit",
-  COA_LEDGER_DELETE: "accounts.coa.ledger.delete",
+export const COA_PERM_MODULE = "accounts";
+export const COA_PERM_SUBMODULE = "chartOfAccounts";
 
-  // Vouchers
-  VOUCHER_VIEW: "accounts.voucher.view",
-  VOUCHER_CREATE: "accounts.voucher.create",
-  VOUCHER_EDIT: "accounts.voucher.edit",
-  VOUCHER_DELETE: "accounts.voucher.delete",
-  VOUCHER_APPROVE: "accounts.voucher.approve",
-  VOUCHER_POST: "accounts.voucher.post",
-  VOUCHER_CANCEL: "accounts.voucher.cancel",
+export type CoaPermAction = "view" | "create" | "edit" | "delete";
 
-  // Masters
-  FY_MANAGE: "accounts.fy.manage",
-  VOUCHER_TYPE_CONFIGURE: "accounts.voucher_type.configure",
-  COST_CENTER_MANAGE: "accounts.cost_center.manage",
-  BANK_ACCOUNT_MANAGE: "accounts.bank_account.manage",
-  SETTINGS_MANAGE: "accounts.settings.manage",
+const SESSION_USER_KEY = "ds_session_user_id";
 
-  // Reports
-  REPORT_VIEW: "accounts.report.view",
-  REPORT_EXPORT: "accounts.report.export",
-
-  // Banking
-  BANK_RECONCILE: "accounts.bank.reconcile",
-  FUND_TRANSFER: "accounts.fund_transfer.create",
-
-  // Receivables / Payables
-  RECEIVABLES_VIEW: "accounts.receivables.view",
-  PAYABLES_VIEW: "accounts.payables.view",
-  COLLECTION_TRACK: "accounts.collection.track",
-} as const;
-
-export type AccountsPermissionCode =
-  (typeof ACCOUNTS_PERMISSIONS)[keyof typeof ACCOUNTS_PERMISSIONS];
-
-/** Default permission sets by role archetype */
-export const ROLE_PERMISSION_PRESETS: Record<string, AccountsPermissionCode[]> = {
-  accounts_admin: Object.values(ACCOUNTS_PERMISSIONS),
-  accounts_manager: [
-    ACCOUNTS_PERMISSIONS.COA_VIEW,
-    ACCOUNTS_PERMISSIONS.COA_LEDGER_CREATE,
-    ACCOUNTS_PERMISSIONS.COA_SUB_LEDGER_CREATE,
-    ACCOUNTS_PERMISSIONS.COA_LEDGER_EDIT,
-    ACCOUNTS_PERMISSIONS.VOUCHER_VIEW,
-    ACCOUNTS_PERMISSIONS.VOUCHER_CREATE,
-    ACCOUNTS_PERMISSIONS.VOUCHER_EDIT,
-    ACCOUNTS_PERMISSIONS.VOUCHER_APPROVE,
-    ACCOUNTS_PERMISSIONS.VOUCHER_POST,
-    ACCOUNTS_PERMISSIONS.REPORT_VIEW,
-    ACCOUNTS_PERMISSIONS.REPORT_EXPORT,
-    ACCOUNTS_PERMISSIONS.RECEIVABLES_VIEW,
-    ACCOUNTS_PERMISSIONS.PAYABLES_VIEW,
-    ACCOUNTS_PERMISSIONS.BANK_RECONCILE,
-    ACCOUNTS_PERMISSIONS.FUND_TRANSFER,
-  ],
-  accounts_clerk: [
-    ACCOUNTS_PERMISSIONS.COA_VIEW,
-    ACCOUNTS_PERMISSIONS.VOUCHER_VIEW,
-    ACCOUNTS_PERMISSIONS.VOUCHER_CREATE,
-    ACCOUNTS_PERMISSIONS.VOUCHER_EDIT,
-    ACCOUNTS_PERMISSIONS.REPORT_VIEW,
-    ACCOUNTS_PERMISSIONS.RECEIVABLES_VIEW,
-    ACCOUNTS_PERMISSIONS.PAYABLES_VIEW,
-  ],
-  accounts_viewer: [
-    ACCOUNTS_PERMISSIONS.COA_VIEW,
-    ACCOUNTS_PERMISSIONS.VOUCHER_VIEW,
-    ACCOUNTS_PERMISSIONS.REPORT_VIEW,
-    ACCOUNTS_PERMISSIONS.RECEIVABLES_VIEW,
-    ACCOUNTS_PERMISSIONS.PAYABLES_VIEW,
-  ],
-};
-
-const STORAGE_KEY = "ds_accounts_user_permissions";
-
-/** Dev fallback — grant all permissions until auth integration */
-export function getUserAccountsPermissions(): AccountsPermissionCode[] {
-  if (typeof window === "undefined") return ROLE_PERMISSION_PRESETS.accounts_admin;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as AccountsPermissionCode[];
-  } catch {
-    /* use default */
-  }
-  return ROLE_PERMISSION_PRESETS.accounts_admin;
+function getSessionUserId(): number {
+  if (typeof window === "undefined") return 1;
+  const raw = localStorage.getItem(SESSION_USER_KEY);
+  const id = raw ? parseInt(raw, 10) : 1;
+  return Number.isFinite(id) ? id : 1;
 }
 
-export function hasAccountsPermission(code: AccountsPermissionCode): boolean {
-  return getUserAccountsPermissions().includes(code);
+function getCoaSubmodulePerm(): SubmodulePermission | null {
+  const employees = loadEmployees();
+  const user = employees.find((e) => e.id === getSessionUserId());
+  return user?.permissions?.web?.[COA_PERM_MODULE]?.[COA_PERM_SUBMODULE] ?? null;
 }
 
-export function requireAccountsPermission(
-  code: AccountsPermissionCode,
-): { allowed: boolean; message: string } {
-  const allowed = hasAccountsPermission(code);
-  return {
-    allowed,
-    message: allowed
-      ? ""
-      : `You do not have permission (${code}) to perform this action.`,
-  };
-}
-
-/** COA ledger CRUD permission shorthand */
-export function canCoa(action: "view" | "create" | "edit" | "delete"): boolean {
-  const map = {
-    view: ACCOUNTS_PERMISSIONS.COA_VIEW,
-    create: ACCOUNTS_PERMISSIONS.COA_LEDGER_CREATE,
-    edit: ACCOUNTS_PERMISSIONS.COA_LEDGER_EDIT,
-    delete: ACCOUNTS_PERMISSIONS.COA_LEDGER_DELETE,
-  } as const;
-  return hasAccountsPermission(map[action]);
+/** Demo default: full access when permission row is absent */
+export function canCoa(action: CoaPermAction): boolean {
+  const perm = getCoaSubmodulePerm();
+  if (!perm) return true;
+  return !!perm[action];
 }

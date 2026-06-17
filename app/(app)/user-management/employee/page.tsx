@@ -20,16 +20,14 @@ import {
 import {
   Plus, Download, MoreVertical, Eye, Edit2, Trash2,
   Users, CheckCircle2, XCircle, X, AlertTriangle, Key,
-  Calendar, Clock, MoreHorizontal, ChevronDown, FileText,
+  Calendar, Clock, MoreHorizontal,
 } from "lucide-react";
 import {
   type Employee,
   loadEmployees, saveEmployees, todayStr,
   downloadEmployeeCSV, validateCircularReporting,
   EMPLOYEE_TYPES,
-  applyEmployeeStatusChange,
 } from "./employee-data";
-import { EmployeeListingStatusCell } from "./components/EmployeeListingStatusCell";
 
 // Listing Container and Master Listing Imports
 import { ListingContainer } from "@/components/layout/ListingContainer";
@@ -38,11 +36,12 @@ import { ColumnConfig, FilterState, SortState } from "@/components/listing/types
 
 // ── Seed / Temp Master Data ──────────────────────────────────────────────────
 const DEPARTMENTS = [
-  { id: 1, name: "Accounts" },
+  { id: 1, name: "Sales" },
   { id: 2, name: "HR" },
-  { id: 3, name: "Procurement" },
-  { id: 4, name: "Warehouse" },
-  { id: 5, name: "Admin" },
+  { id: 3, name: "Accounts" },
+  { id: 4, name: "Procurement" },
+  { id: 5, name: "Field Force" },
+  { id: 6, name: "Operations" },
 ];
 
 const ROLES = [
@@ -66,7 +65,7 @@ const TERRITORIES = [
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   active:   { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
   inactive: { bg: "bg-slate-100",  text: "text-slate-600",   dot: "bg-slate-400"   },
-  draft:    { bg: "bg-amber-50",    text: "text-amber-700",    dot: "bg-amber-500"    },
+  draft:    { bg: "bg-blue-50",    text: "text-blue-700",    dot: "bg-blue-500"    },
   archived: { bg: "bg-red-50",     text: "text-red-700",     dot: "bg-red-400"     },
 };
 
@@ -83,21 +82,6 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const cfg = {
-    active: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    inactive: "border-slate-200 bg-slate-100 text-slate-700",
-    draft: "border-amber-200 bg-amber-50 text-amber-700",
-    archived: "border-red-200 bg-red-50 text-red-700",
-  }[status] ?? "border-slate-200 bg-slate-100 text-slate-700";
-
-  return (
-    <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium border inline-flex items-center justify-center whitespace-nowrap", cfg)}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
-    </span>
-  );
-}
-
 // ── Toast ─────────────────────────────────────────────────────────────────────
 interface ToastState { msg: string; type: "success" | "error" }
 
@@ -109,8 +93,8 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
       toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
     )}>
       {toast.type === "success"
-        ? <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
-        : <XCircle className="flex-shrink-0 w-4 h-4" />}
+        ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+        : <XCircle className="w-4 h-4 flex-shrink-0" />}
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
         <X className="w-3.5 h-3.5" />
@@ -190,7 +174,7 @@ function PasswordResetModal({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
-            <Key className="w-4 h-4 text-brand-600" />
+            <Key className="w-4 h-4 text-blue-600" />
             Reset Password
           </DialogTitle>
           <DialogDescription className="pt-1">
@@ -205,7 +189,7 @@ function PasswordResetModal({
               value={state.newPassword}
               onChange={e => onChange("newPassword", e.target.value)}
               placeholder="Enter new password (min 8 chars)"
-              className="w-full px-3 text-sm border rounded-md h-9 border-input"
+              className="h-9 text-sm w-full border border-input rounded-md px-3"
             />
             {state.errors.newPassword && (
               <p className="text-xs text-red-500">{state.errors.newPassword}</p>
@@ -218,7 +202,7 @@ function PasswordResetModal({
               value={state.confirmPassword}
               onChange={e => onChange("confirmPassword", e.target.value)}
               placeholder="Re-enter password"
-              className="w-full px-3 text-sm border rounded-md h-9 border-input"
+              className="h-9 text-sm w-full border border-input rounded-md px-3"
             />
             {state.errors.confirmPassword && (
               <p className="text-xs text-red-500">{state.errors.confirmPassword}</p>
@@ -255,20 +239,10 @@ function PasswordResetModal({
   );
 }
 
-type StatusTab = "all" | "active" | "inactive" | "draft";
-const USER_TAB_KEY = "user-list-status-tab";
-
-function readStoredStatusTab(): StatusTab {
-  if (typeof window === "undefined") return "all";
-  const v = sessionStorage.getItem(USER_TAB_KEY);
-  return v === "active" || v === "inactive" || v === "draft" ? v : "all";
-}
-
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function EmployeeListingPage() {
   const router = useRouter();
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [statusTab, setStatusTab] = useState<StatusTab>("all");
 
   // Listing State
   const [filters, setFilters] = useState<FilterState>({});
@@ -277,11 +251,7 @@ export default function EmployeeListingPage() {
   const [pageSize, setPageSize] = useState(10);
 
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [confirmTarget, setConfirmTarget] = useState<{
-    type: string;
-    employee: Employee;
-    nextStatus?: "active" | "inactive";
-  } | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<{ type: string; employee: Employee } | null>(null);
   const [passwordReset, setPasswordReset] = useState<PasswordResetState>({
     open: false,
     employee: null,
@@ -295,7 +265,6 @@ export default function EmployeeListingPage() {
   useEffect(() => {
     const loaded = loadEmployees();
     setEmployees(loaded);
-    setStatusTab(readStoredStatusTab());
   }, []);
 
   // Auto-dismiss toast
@@ -310,8 +279,6 @@ export default function EmployeeListingPage() {
     let result = employees.filter(e => {
       // Exclude archived employees from listing
       if (e.status === "archived") return false;
-
-      if (statusTab !== "all" && e.status !== statusTab) return false;
 
       // Search
       const searchVal = filters.search as string;
@@ -369,7 +336,7 @@ export default function EmployeeListingPage() {
     }
 
     return result;
-  }, [employees, filters, sort, statusTab]);
+  }, [employees, filters, sort]);
 
   const paginated = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -387,34 +354,22 @@ export default function EmployeeListingPage() {
     };
   }, [employees]);
 
-  const handleStatusTabChange = (tab: string) => {
-    const next = tab as StatusTab;
-    setStatusTab(next);
-    sessionStorage.setItem(USER_TAB_KEY, next);
-    setPage(1);
-  };
-
-  const handleStatusToggleRequest = (emp: Employee, nextStatus: "active" | "inactive") => {
-    setConfirmTarget({ type: "status", employee: emp, nextStatus });
-  };
-
-  const handleActivateBlocked = (gaps: string[]) => {
-    setToast({ msg: gaps[0] || "Complete required profile data before activation", type: "error" });
+  const handleStatusToggle = (emp: Employee) => {
+    setConfirmTarget({ type: "status", employee: emp });
   };
 
   const confirmStatusChange = () => {
-    if (!confirmTarget || confirmTarget.type !== "status" || !confirmTarget.nextStatus) return;
+    if (!confirmTarget || confirmTarget.type !== "status") return;
     const emp = confirmTarget.employee;
-    const nextStatus = confirmTarget.nextStatus;
-    const updated = employees.map((e) =>
-      e.id === emp.id ? applyEmployeeStatusChange(e, nextStatus) : e,
+    const newStatus = emp.status === "active" ? "inactive" : "active";
+    const updated = employees.map(e =>
+      e.id === emp.id
+        ? { ...e, status: newStatus as any, updatedBy: "Admin", updatedDate: todayStr(), lastStatusChange: todayStr() }
+        : e
     );
     setEmployees(updated);
     saveEmployees(updated);
-    setToast({
-      msg: `User ${nextStatus === "active" ? "activated" : "deactivated"} successfully`,
-      type: "success",
-    });
+    setToast({ msg: `Employee ${newStatus === "active" ? "activated" : "deactivated"}`, type: "success" });
     setConfirmTarget(null);
   };
 
@@ -564,18 +519,7 @@ export default function EmployeeListingPage() {
         { label: "Inactive", value: "inactive" },
         { label: "Draft", value: "draft" },
       ],
-      render: (_val, row) => (
-        <EmployeeListingStatusCell
-          status={row.status}
-          employee={row}
-          onToggleRequest={
-            row.status === "active" || row.status === "inactive" || row.status === "draft"
-              ? (next) => handleStatusToggleRequest(row, next)
-              : undefined
-          }
-          onActivateBlocked={handleActivateBlocked}
-        />
-      ),
+      render: (val, row) => <StatusPill status={row.status} />,
     },
     {
       key: "actions",
@@ -600,14 +544,17 @@ export default function EmployeeListingPage() {
             <DropdownMenuItem onClick={() => router.push(`/user-management/employee/${row.id}/edit`)} className="cursor-pointer">
               <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => handleStatusToggle(row)} className="cursor-pointer">
+              {row.status === "active" ? "Deactivate" : "Activate"}
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handlePasswordReset(row)} className="cursor-pointer">
               <Key className="w-3.5 h-3.5 mr-2" /> Reset Password
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => handleDelete(row)} className="text-red-600 cursor-pointer focus:bg-red-50 focus:text-red-600">
+            <DropdownMenuItem onClick={() => handleDelete(row)} className="cursor-pointer text-red-600 focus:bg-red-50 focus:text-red-600">
               <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
             </DropdownMenuItem>
-            
           </DropdownMenuContent>
         </DropdownMenu>
       ),
@@ -618,50 +565,33 @@ export default function EmployeeListingPage() {
     <ListingContainer
       title="User"
       titleIcon={Users}
-      tabs={[
-        { value: "all", label: `All (${stats.total})` },
-        { value: "active", label: `Active (${stats.active})` },
-        { value: "inactive", label: `Inactive (${stats.inactive})` },
-        { value: "draft", label: `Draft (${stats.draft})` },
-      ]}
-      activeTab={statusTab}
-      onTabChange={handleStatusTabChange}
       metrics={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
-            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-brand-600">
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center flex-shrink-0">
               <Users className="w-4 h-4 text-white" />
             </div>
             <div>
-              <p className="text-base font-bold leading-none text-foreground">{stats.total}</p>
+              <p className="text-base font-bold text-foreground leading-none">{stats.total}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Total Users</p>
             </div>
           </div>
-          <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
-            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-600">
+          <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center flex-shrink-0">
               <CheckCircle2 className="w-4 h-4 text-white" />
             </div>
             <div>
-              <p className="text-base font-bold leading-none text-foreground">{stats.active}</p>
+              <p className="text-base font-bold text-foreground leading-none">{stats.active}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Active</p>
             </div>
           </div>
-          <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
-            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-slate-400">
+          <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-slate-400 flex items-center justify-center flex-shrink-0">
               <XCircle className="w-4 h-4 text-white" />
             </div>
             <div>
-              <p className="text-base font-bold leading-none text-foreground">{stats.inactive}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Inactive</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
-            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-amber-500">
-              <FileText className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <p className="text-base font-bold leading-none text-foreground">{stats.draft}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Draft</p>
+              <p className="text-base font-bold text-foreground leading-none">{stats.inactive + stats.draft}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Inactive / Draft</p>
             </div>
           </div>
         </div>
@@ -693,15 +623,9 @@ export default function EmployeeListingPage() {
         open={confirmTarget?.type === "status"}
         onClose={() => setConfirmTarget(null)}
         onConfirm={confirmStatusChange}
-        title={
-          confirmTarget?.nextStatus === "active" ? "Activate User" : "Deactivate User"
-        }
-        description={
-          confirmTarget?.nextStatus === "active"
-            ? "Are you sure you want to activate this user?"
-            : "Are you sure you want to deactivate this user?"
-        }
-        confirmLabel={confirmTarget?.nextStatus === "active" ? "Activate" : "Deactivate"}
+        title={confirmTarget?.employee?.status === "active" ? "Deactivate Employee" : "Activate Employee"}
+        description={`Are you sure you want to ${confirmTarget?.employee?.status === "active" ? "deactivate" : "activate"} ${confirmTarget?.employee?.fullName}?`}
+        confirmLabel={confirmTarget?.employee?.status === "active" ? "Deactivate" : "Activate"}
       />
 
       <ConfirmDialog

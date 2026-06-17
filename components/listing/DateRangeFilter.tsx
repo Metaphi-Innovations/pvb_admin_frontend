@@ -55,10 +55,7 @@ export function DateRangeFilter({ value, onChange, header }: DateRangeFilterProp
           <Filter className="w-3.5 h-3.5" />
         </button>
       </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className="w-64 space-y-3 rounded-xl border border-border bg-white p-3.5 shadow-lg"
-      >
+      <PopoverContent align="start" className="w-64 p-3.5 space-y-3">
         <div className="flex items-center justify-between border-b pb-2">
           <span className="text-xs font-semibold text-foreground">Filter {header}</span>
           {isFiltered && (
@@ -79,7 +76,7 @@ export function DateRangeFilter({ value, onChange, header }: DateRangeFilterProp
               type="date"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
-              className="h-9 rounded-lg border-border bg-white text-xs shadow-sm"
+              className="h-8 text-xs"
             />
           </div>
           <div className="space-y-1">
@@ -88,7 +85,7 @@ export function DateRangeFilter({ value, onChange, header }: DateRangeFilterProp
               type="date"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
-              className="h-9 rounded-lg border-border bg-white text-xs shadow-sm"
+              className="h-8 text-xs"
             />
           </div>
         </div>

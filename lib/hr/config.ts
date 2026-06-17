@@ -14,11 +14,12 @@ export const BRANCH_OPTIONS = [
 ];
 
 export const DEPARTMENT_OPTIONS = [
-  { value: "Accounts", label: "Accounts" },
+  { value: "Sales", label: "Sales" },
   { value: "HR", label: "HR" },
+  { value: "Accounts", label: "Accounts" },
   { value: "Procurement", label: "Procurement" },
-  { value: "Warehouse", label: "Warehouse" },
-  { value: "Admin", label: "Admin" },
+  { value: "Field Force", label: "Field Force" },
+  { value: "Operations", label: "Operations" },
 ];
 
 /** @deprecated Reference only — roles are managed in User Management Role Master */

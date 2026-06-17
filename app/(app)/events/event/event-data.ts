@@ -43,9 +43,6 @@ export const SEED: Event[] = [
     expectedAttendees: 80,
     actualAttendees: 72,
     status: "completed",
-    userAttendeeIds: [1, 2, 3],
-    farmerAttendeeIds: [1, 2, 3, 4],
-    distributorAttendeeIds: [1, 2],
   },
   {
     id: 2,
@@ -61,9 +58,6 @@ export const SEED: Event[] = [
     expectedAttendees: 50,
     actualAttendees: 48,
     status: "completed",
-    userAttendeeIds: [2, 6],
-    farmerAttendeeIds: [5, 6, 7],
-    distributorAttendeeIds: [3, 6, 100004],
   },
   {
     id: 3,
@@ -79,9 +73,6 @@ export const SEED: Event[] = [
     expectedAttendees: 200,
     actualAttendees: 0,
     status: "upcoming",
-    userAttendeeIds: [1, 4, 5],
-    farmerAttendeeIds: [8, 9, 10],
-    distributorAttendeeIds: [5, 10, 100011],
   },
   {
     id: 4,
@@ -97,9 +88,6 @@ export const SEED: Event[] = [
     expectedAttendees: 40,
     actualAttendees: 0,
     status: "upcoming",
-    userAttendeeIds: [6, 9],
-    farmerAttendeeIds: [11, 12, 13],
-    distributorAttendeeIds: [12, 14],
   },
   {
     id: 5,
@@ -115,9 +103,6 @@ export const SEED: Event[] = [
     expectedAttendees: 500,
     actualAttendees: 0,
     status: "upcoming",
-    userAttendeeIds: [4, 5, 10],
-    farmerAttendeeIds: [14, 15, 16],
-    distributorAttendeeIds: [17, 100021, 100024],
   },
   {
     id: 6,
@@ -133,9 +118,6 @@ export const SEED: Event[] = [
     expectedAttendees: 30,
     actualAttendees: 28,
     status: "completed",
-    userAttendeeIds: [3, 7],
-    farmerAttendeeIds: [17, 18, 19, 20],
-    distributorAttendeeIds: [18, 20, 100006],
   },
 ];
 

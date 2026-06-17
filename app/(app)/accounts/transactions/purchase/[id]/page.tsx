@@ -1,7 +1,5 @@
-import PurchaseViewPageClient from "../../../purchase/PurchaseViewPageClient";
+import { redirect } from "next/navigation";
 
-type PageProps = { params: { id: string } };
-
-export default function PurchaseViewPage({ params }: PageProps) {
-  return <PurchaseViewPageClient purchaseId={Number(params.id)} />;
+export default function LegacyRedirect() {
+  redirect("/accounts/vouchers?tab=purchase");
 }

@@ -28,10 +28,8 @@ export const DEFAULT_FORMULATION_FORM: FormulationForm = {
 };
 
 export const FORMULATION_SEED: FormulationRecord[] = [
-  { id: 1, formulationName: "Wettable Powder", formulationCode: "FORM-001", description: "Wettable powder formulation", status: "active", createdBy: "Admin", updatedBy: "Admin", createdAt: "2024-01-10", updatedAt: "2024-01-10" },
-  { id: 2, formulationName: "Granules", formulationCode: "FORM-002", description: "Granular formulation", status: "active", createdBy: "Admin", updatedBy: "Admin", createdAt: "2024-01-15", updatedAt: "2024-01-15" },
-  { id: 3, formulationName: "Liquid", formulationCode: "FORM-003", description: "Liquid formulation", status: "active", createdBy: "Admin", updatedBy: "Admin", createdAt: "2024-01-20", updatedAt: "2024-01-20" },
-  { id: 4, formulationName: "Suspension", formulationCode: "FORM-004", description: "Suspension formulation", status: "active", createdBy: "Admin", updatedBy: "Admin", createdAt: "2024-01-25", updatedAt: "2024-01-25" },
+  { id: 1, formulationName: "Liquid", formulationCode: "FORM-001", description: "Liquid formulation", status: "active", createdBy: "Admin", updatedBy: "Admin", createdAt: "2024-01-10", updatedAt: "2024-01-10" },
+  { id: 2, formulationName: "Granular", formulationCode: "FORM-002", description: "Granular formulation", status: "active", createdBy: "Admin", updatedBy: "Admin", createdAt: "2024-01-15", updatedAt: "2024-01-15" },
 ];
 
 export function formulationToForm(r: FormulationRecord): FormulationForm {

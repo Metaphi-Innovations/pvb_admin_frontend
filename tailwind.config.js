@@ -19,12 +19,12 @@ module.exports = {
           200: "#FFCB90",
           300: "#FFAA55",
           400: "#FF8C2A",
-          500: "#E57A1F",  // Primary Orange
-          600: "#E57A1F",  // Primary CTA buttons, active states
-          700: "#D96C10",  // Primary Hover
-          800: "#B4550E",
-          900: "#7C2F06",
-          950: "#4A1603",
+          500: "#F47920",  // logo orange
+          600: "#D96A10",  // primary CTA buttons, active states
+          700: "#B85508",  // hover on active, active link color
+          800: "#94400A",
+          900: "#6B2D07",
+          950: "#3D1503",
         },
         // Secondary: Deep navy from the "Sutra" wordmark + shield border
         navy: {
@@ -47,11 +47,11 @@ module.exports = {
           200: "#B0E0B0",
           300: "#7CC87C",
           400: "#50AF50",
-          500: "#2E8B3A",
-          600: "#16A34A",  // Success #16A34A
-          700: "#15803D",
-          800: "#137032",
-          900: "#0F5C28",
+          500: "#33913A",
+          600: "#267A2E",  // logo leaf green — active/approved states
+          700: "#1A5F22",
+          800: "#134A1A",
+          900: "#0C3514",
         },
         // Retained supporting palettes (used in existing components)
         sage: {
@@ -101,53 +101,6 @@ module.exports = {
           700: "#735d44",
           800: "#604d3b",
           900: "#524134",
-        },
-        /**
-         * ERP color audit override:
-         * Replace Tailwind framework default "blue/indigo/sky" palettes with
-         * Dharitri Sutra ERP primary + hover shades.
-         *
-         * This prevents accidental usage of framework default colors from
-         * visually leaking into the UI while we migrate components module-by-module.
-         */
-        blue: {
-          50: "#FFF3E8",
-          100: "#FFE4C4",
-          200: "#FFCB90",
-          300: "#FFAA55",
-          400: "#FF8C2A",
-          500: "#E57A1F",
-          600: "#E57A1F",
-          700: "#D96C10",
-          800: "#B4550E",
-          900: "#7C2F06",
-          950: "#4A1603",
-        },
-        indigo: {
-          50: "#FFF3E8",
-          100: "#FFE4C4",
-          200: "#FFCB90",
-          300: "#FFAA55",
-          400: "#FF8C2A",
-          500: "#E57A1F",
-          600: "#E57A1F",
-          700: "#D96C10",
-          800: "#B4550E",
-          900: "#7C2F06",
-          950: "#4A1603",
-        },
-        sky: {
-          50: "#FFF3E8",
-          100: "#FFE4C4",
-          200: "#FFCB90",
-          300: "#FFAA55",
-          400: "#FF8C2A",
-          500: "#E57A1F",
-          600: "#E57A1F",
-          700: "#D96C10",
-          800: "#B4550E",
-          900: "#7C2F06",
-          950: "#4A1603",
         },
         // ── Semantic ──────────────────────────────────────────────────
         background:  "hsl(var(--background))",

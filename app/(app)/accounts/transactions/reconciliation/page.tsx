@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { RECONCILIATION_LIST_PATH } from "@/app/(app)/accounts/bank-reconciliation/reconciliation-utils";
+import { ACCOUNTS_HOME_HREF } from "@/lib/accounts/accounts-nav";
 
-export default function LegacyReconciliationRedirect() {
-  redirect(RECONCILIATION_LIST_PATH);
+export default function LegacyRedirect() {
+  redirect(ACCOUNTS_HOME_HREF);
 }

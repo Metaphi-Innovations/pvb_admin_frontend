@@ -26,31 +26,6 @@ import {
   ClipboardList, Target, Activity, Flag, Building2,
   Navigation, ChevronLeft, Check,
 } from "lucide-react";
-import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-
-function DemoFilterSelect({
-  placeholder,
-  options = [],
-  className,
-}: {
-  placeholder: string;
-  options?: { value: string; label: string }[];
-  className?: string;
-}) {
-  const [value, setValue] = useState("");
-  const opts = options.length
-    ? options
-    : [{ value: "", label: placeholder }];
-  return (
-    <AutocompleteSelect
-      options={opts}
-      value={value}
-      onChange={setValue}
-      placeholder={placeholder}
-      className={className ?? "h-8 text-xs"}
-    />
-  );
-}
 
 // ── Status System ─────────────────────────────────────────────────────────────
 type BeatStatus =
@@ -60,7 +35,7 @@ type BeatStatus =
 
 const STATUS_CONFIG: Record<BeatStatus, { label: string; color: string; bg: string; border: string; dot: string }> = {
   draft:          { label: "Draft",               color: "text-slate-600",   bg: "bg-slate-100",   border: "border-slate-200",  dot: "bg-slate-400" },
-  planned:        { label: "Planned",             color: "text-brand-700",    bg: "bg-brand-50",     border: "border-brand-200",   dot: "bg-brand-500" },
+  planned:        { label: "Planned",             color: "text-blue-700",    bg: "bg-blue-50",     border: "border-blue-200",   dot: "bg-blue-500" },
   assigned:       { label: "Assigned",            color: "text-violet-700",  bg: "bg-violet-50",   border: "border-violet-200", dot: "bg-violet-500" },
   "in-progress":  { label: "In Progress",         color: "text-amber-700",   bg: "bg-amber-50",    border: "border-amber-200",  dot: "bg-amber-500" },
   completed:      { label: "Completed",           color: "text-green-700",   bg: "bg-green-50",    border: "border-green-200",  dot: "bg-green-500" },
@@ -247,10 +222,14 @@ function FilterBar() {
           <span>Jan 1 – Jan 31, 2024</span>
         </div>
         {["State", "District", "City", "Territory", "Location"].map((f) => (
-          <DemoFilterSelect key={f} placeholder={f} className="min-w-[100px] h-8 text-xs" />
+          <select key={f} className="px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground bg-white focus:outline-none focus:ring-1 focus:ring-brand-400 min-w-[100px]">
+            <option value="">{f}</option>
+          </select>
         ))}
         {["Employee", "Role", "Status", "Activity Type"].map((f) => (
-          <DemoFilterSelect key={f} placeholder={f} className="min-w-[110px] h-8 text-xs" />
+          <select key={f} className="px-2.5 py-1.5 border border-border rounded-lg text-xs text-muted-foreground bg-white focus:outline-none focus:ring-1 focus:ring-brand-400 min-w-[110px]">
+            <option value="">{f}</option>
+          </select>
         ))}
         <div className="relative">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -750,19 +729,13 @@ function CreatePlanTab() {
               {["State", "District", "City", "Territory / Zone"].map((f) => (
                 <div key={f}>
                   <label className="block text-xs font-medium text-foreground mb-1.5">{f}</label>
-                  <DemoFilterSelect
-                    placeholder={`Select ${f}`}
-                    options={
-                      f === "State"
-                        ? [{ value: "Maharashtra", label: "Maharashtra" }]
-                        : f === "District"
-                          ? [{ value: "Pune", label: "Pune" }]
-                          : f === "City"
-                            ? [{ value: "Pune", label: "Pune" }]
-                            : [{ value: "Pune North", label: "Pune North" }]
-                    }
-                    className="h-9 text-xs"
-                  />
+                  <select className="w-full px-3 py-2 border border-border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-brand-400">
+                    <option value="">Select {f}</option>
+                    {f === "State" && <option>Maharashtra</option>}
+                    {f === "District" && <option>Pune</option>}
+                    {f === "City" && <option>Pune</option>}
+                    {f === "Territory / Zone" && <option>Pune North</option>}
+                  </select>
                 </div>
               ))}
               <div>
@@ -771,11 +744,12 @@ function CreatePlanTab() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1.5">Activity Type</label>
-                <DemoFilterSelect
-                  placeholder="Select activity type"
-                  options={["Solo Visit", "Joint Work", "Demo", "Follow-up"].map((v) => ({ value: v, label: v }))}
-                  className="h-9 text-xs"
-                />
+                <select className="w-full px-3 py-2 border border-border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-brand-400">
+                  <option>Solo Visit</option>
+                  <option>Joint Work</option>
+                  <option>Demo</option>
+                  <option>Follow-up</option>
+                </select>
               </div>
             </div>
             <div>
@@ -791,22 +765,16 @@ function CreatePlanTab() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1.5">Primary Employee</label>
-                <DemoFilterSelect
-                  placeholder="Select employee"
-                  options={EMPLOYEES.map((e) => ({ value: e.name, label: `${e.name} (${e.role})` }))}
-                  className="h-9 text-xs"
-                />
+                <select className="w-full px-3 py-2 border border-border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-brand-400">
+                  {EMPLOYEES.map((e) => <option key={e.name}>{e.name} ({e.role})</option>)}
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1.5">Accompany (optional)</label>
-                <DemoFilterSelect
-                  placeholder="None"
-                  options={[
-                    { value: "", label: "None" },
-                    ...EMPLOYEES.map((e) => ({ value: e.name, label: `${e.name} (${e.role})` })),
-                  ]}
-                  className="h-9 text-xs"
-                />
+                <select className="w-full px-3 py-2 border border-border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-brand-400">
+                  <option value="">None</option>
+                  {EMPLOYEES.map((e) => <option key={e.name}>{e.name} ({e.role})</option>)}
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1.5">Reporting Manager</label>
@@ -814,20 +782,16 @@ function CreatePlanTab() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1.5">Approval Required By</label>
-                <DemoFilterSelect
-                  placeholder="Select approver"
-                  options={[
-                    { value: "vikram", label: "Vikram Singh (RSM)" },
-                    { value: "anita", label: "Anita Desai (ASM)" },
-                    { value: "ravi", label: "Ravi Mehta (ZSM)" },
-                  ]}
-                  className="h-9 text-xs"
-                />
+                <select className="w-full px-3 py-2 border border-border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-brand-400">
+                  <option>Vikram Singh (RSM)</option>
+                  <option>Anita Desai (ASM)</option>
+                  <option>Ravi Mehta (ZSM)</option>
+                </select>
               </div>
             </div>
-            <div className="bg-brand-50 border border-brand-200 rounded-lg p-3">
-              <p className="text-xs font-medium text-brand-700 mb-1">Selected Employee — Rahul Sharma</p>
-              <div className="grid grid-cols-3 gap-2 text-[11px] text-brand-600">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-xs font-medium text-blue-700 mb-1">Selected Employee — Rahul Sharma</p>
+              <div className="grid grid-cols-3 gap-2 text-[11px] text-blue-600">
                 <span>Territory: Pune North</span>
                 <span>This month: 12 plans</span>
                 <span>Completion: 83%</span>
@@ -848,16 +812,18 @@ function CreatePlanTab() {
                   <span className="w-5 h-5 rounded-full bg-brand-100 text-brand-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
                   <div className="flex-1 grid grid-cols-3 gap-2">
                     <input defaultValue={place} className="px-2 py-1.5 border border-border rounded text-xs focus:outline-none focus:ring-1 focus:ring-brand-400" />
-                    <DemoFilterSelect
-                      placeholder="Customer type"
-                      options={["Retailer", "Distributor", "Wholesaler", "Farmer"].map((v) => ({ value: v, label: v }))}
-                      className="h-8 text-xs"
-                    />
-                    <DemoFilterSelect
-                      placeholder="Activity"
-                      options={["Order Collection", "Demo", "Follow-up", "Introduction"].map((v) => ({ value: v, label: v }))}
-                      className="h-8 text-xs"
-                    />
+                    <select className="px-2 py-1.5 border border-border rounded text-xs focus:outline-none focus:ring-1 focus:ring-brand-400">
+                      <option>Retailer</option>
+                      <option>Distributor</option>
+                      <option>Wholesaler</option>
+                      <option>Farmer</option>
+                    </select>
+                    <select className="px-2 py-1.5 border border-border rounded text-xs focus:outline-none focus:ring-1 focus:ring-brand-400">
+                      <option>Order Collection</option>
+                      <option>Demo</option>
+                      <option>Follow-up</option>
+                      <option>Introduction</option>
+                    </select>
                   </div>
                   <button className="text-muted-foreground hover:text-red-500 transition-colors">
                     <XCircle className="w-4 h-4" />

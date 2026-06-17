@@ -95,10 +95,6 @@ export function getVouchersByType(type: VoucherTypeCode): AccountingVoucher[] {
     .map(normalizeVoucher);
 }
 
-export function getVoucherById(id: number): AccountingVoucher | undefined {
-  return loadVouchers().find((v) => v.id === id);
-}
-
 function normalizeVoucher(v: AccountingVoucher): AccountingVoucher {
   return {
     ...v,

@@ -43,20 +43,18 @@ function NewPOContent() {
   const persist = (submit: boolean) => {
     const list = loadPurchaseOrders();
     const today = todayStr();
-    const draft: PurchaseOrder = recalcPO({
+    const draft: PurchaseOrder = {
       id: nextId(list),
       poNumber,
       ...form,
       summary: {
         grossAmount: 0,
         totalDiscount: 0,
-        productTotal: 0,
-        additionalChargesTotal: 0,
         taxableValue: 0,
         totalCgst: 0,
         totalSgst: 0,
         totalIgst: 0,
-        otherCharges: 0,
+        otherCharges: form.otherCharges,
         grandTotal: 0,
         amountInWords: "",
       },
@@ -68,8 +66,8 @@ function NewPOContent() {
       approvedBy: "",
       approvedDate: "",
       activity: [{ date: today, action: "Created", by: CURRENT_USER }],
-    });
-    let record = draft;
+    };
+    let record = recalcPO(draft);
     if (submit) record = submitPO(record);
     savePurchaseOrders([...list, record]);
 

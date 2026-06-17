@@ -1,202 +1,81 @@
-"use client";
-
-import {
-  MASTER_CURRENT_USER,
-  masterToday,
-  type MasterStatus,
-} from "@/lib/masters/common";
+// HSN Master Data & Helpers
 
 export interface HSNMaster {
-  id: number;
-  /** Government HSN code — numeric, up to 8 digits */
-  hsnCode: string;
-  hsnDescription: string;
-  gstRate: string;
-  status: MasterStatus;
-  createdBy: string;
-  createdDate: string;
-  updatedBy: string;
-  updatedDate: string;
+	id: number;
+	hsnCode: string; // Auto Generated, e.g., "HSN-0001"
+	hsnDescription: string; // Text Area description
+	gstRate: string; // Lookup / dropdown, e.g. "18%" or "0%"
+	status: "active" | "inactive";
+	createdBy: string;
+	createdDate: string; // YYYY-MM-DD
+	updatedBy: string;
+	updatedDate: string; // YYYY-MM-DD
 }
 
-export interface HSNForm {
-  hsnCode: string;
-  hsnDescription: string;
-  gstRate: string;
-  status: MasterStatus;
-}
-
-export const DEFAULT_HSN_FORM: HSNForm = {
-  hsnCode: "",
-  hsnDescription: "",
-  gstRate: "",
-  status: "active",
-};
-
-const STORAGE_KEY = "ds_hsn_masters_v2";
-
-const LEGACY_CODE_MAP: Record<string, string> = {
-  "HSN-0001": "12099990",
-  "HSN-0002": "31010000",
-  "HSN-0003": "38089199",
-};
-
-export const HSN_SEED: HSNMaster[] = [
-  {
-    id: 1,
-    hsnCode: "12099990",
-    hsnDescription: "Vegetable seeds for planting/sowing",
-    gstRate: "0%",
-    status: "active",
-    createdBy: MASTER_CURRENT_USER,
-    createdDate: "2026-01-10",
-    updatedBy: MASTER_CURRENT_USER,
-    updatedDate: "2026-01-10",
-  },
-  {
-    id: 2,
-    hsnCode: "31010000",
-    hsnDescription: "Animal or vegetable fertilizers, whether or not mixed together",
-    gstRate: "5%",
-    status: "active",
-    createdBy: MASTER_CURRENT_USER,
-    createdDate: "2026-01-12",
-    updatedBy: MASTER_CURRENT_USER,
-    updatedDate: "2026-01-12",
-  },
-  {
-    id: 3,
-    hsnCode: "38089199",
-    hsnDescription: "Insecticides, fungicides, herbicides, put up in forms or packings",
-    gstRate: "18%",
-    status: "active",
-    createdBy: MASTER_CURRENT_USER,
-    createdDate: "2026-01-15",
-    updatedBy: MASTER_CURRENT_USER,
-    updatedDate: "2026-01-15",
-  },
+const SEED_HSN: HSNMaster[] = [
+	{
+		id: 1,
+		hsnCode: "HSN-0001",
+		hsnDescription: "Vegetable seeds for planting/sowing",
+		gstRate: "0%",
+		status: "active",
+		createdBy: "Admin",
+		createdDate: "2026-01-10",
+		updatedBy: "Admin",
+		updatedDate: "2026-01-10",
+	},
+	{
+		id: 2,
+		hsnCode: "HSN-0002",
+		hsnDescription:
+			"Animal or vegetable fertilizers, whether or not mixed together",
+		gstRate: "5%",
+		status: "active",
+		createdBy: "Admin",
+		createdDate: "2026-01-12",
+		updatedBy: "Admin",
+		updatedDate: "2026-01-12",
+	},
+	{
+		id: 3,
+		hsnCode: "HSN-0003",
+		hsnDescription:
+			"Insecticides, fungicides, herbicides, put up in forms or packings",
+		gstRate: "18%",
+		status: "active",
+		createdBy: "Admin",
+		createdDate: "2026-01-15",
+		updatedBy: "Admin",
+		updatedDate: "2026-01-15",
+	},
 ];
 
-const LEGACY_STORAGE_KEY = "ds_hsn_masters";
-
-function normalizeHsnCode(raw: string): string {
-  const trimmed = raw.trim();
-  if (LEGACY_CODE_MAP[trimmed]) return LEGACY_CODE_MAP[trimmed];
-  return trimmed.replace(/\D/g, "").slice(0, 8);
-}
-
-function migrateRecord(raw: Record<string, unknown>): HSNMaster {
-  const p = raw as Partial<HSNMaster>;
-  const hsnCode = normalizeHsnCode(String(p.hsnCode ?? ""));
-  return {
-    id: Number(p.id ?? 0),
-    hsnCode,
-    hsnDescription: String(p.hsnDescription ?? ""),
-    gstRate: String(p.gstRate ?? "18%"),
-    status: (p.status as MasterStatus) ?? "active",
-    createdBy: String(p.createdBy ?? MASTER_CURRENT_USER),
-    createdDate: String(p.createdDate ?? masterToday()),
-    updatedBy: String(p.updatedBy ?? MASTER_CURRENT_USER),
-    updatedDate: String(p.updatedDate ?? masterToday()),
-  };
-}
+const STORAGE_KEY = "ds_hsn_masters";
 
 export function loadHSNMasters(): HSNMaster[] {
-  if (typeof window === "undefined") return HSN_SEED;
-  try {
-    let raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
-      if (legacy) {
-        const migrated = (JSON.parse(legacy) as Record<string, unknown>[]).map(migrateRecord);
-        saveHSNMasters(migrated);
-        return migrated;
-      }
-      return HSN_SEED;
-    }
-    return (JSON.parse(raw) as Record<string, unknown>[]).map(migrateRecord);
-  } catch {
-    return HSN_SEED;
-  }
+	if (typeof window === "undefined") return SEED_HSN;
+	try {
+		const raw = localStorage.getItem(STORAGE_KEY);
+		return raw ? JSON.parse(raw) : SEED_HSN;
+	} catch {
+		return SEED_HSN;
+	}
 }
 
 export function saveHSNMasters(data: HSNMaster[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+	if (typeof window !== "undefined") {
+		localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+	}
 }
 
 export function nextHSNId(list: HSNMaster[]): number {
-  return list.length ? Math.max(...list.map((h) => h.id)) + 1 : 1;
+	return Math.max(0, ...list.map((h) => h.id)) + 1;
+}
+
+export function generateHSNCode(id: number): string {
+	return `HSN-${String(id).padStart(4, "0")}`;
 }
 
 export function todayStr(): string {
-  return masterToday();
-}
-
-export function hsnToForm(record: HSNMaster): HSNForm {
-  return {
-    hsnCode: record.hsnCode,
-    hsnDescription: record.hsnDescription,
-    gstRate: record.gstRate,
-    status: record.status,
-  };
-}
-
-export function formToHsn(
-  form: HSNForm,
-  id: number,
-  existing?: HSNMaster,
-): HSNMaster {
-  const now = masterToday();
-  return {
-    id,
-    hsnCode: form.hsnCode.trim(),
-    hsnDescription: form.hsnDescription.trim(),
-    gstRate: form.gstRate,
-    status: form.status,
-    createdBy: existing?.createdBy ?? MASTER_CURRENT_USER,
-    createdDate: existing?.createdDate ?? now,
-    updatedBy: MASTER_CURRENT_USER,
-    updatedDate: now,
-  };
-}
-
-export function findHsnDuplicate(
-  hsnCode: string,
-  records: HSNMaster[],
-  excludeId?: number,
-): HSNMaster | undefined {
-  const normalized = hsnCode.trim();
-  return records.find((r) => r.id !== excludeId && r.hsnCode === normalized);
-}
-
-export function sanitizeHsnCodeInput(value: string): string {
-  return value.replace(/\D/g, "").slice(0, 8);
-}
-
-export function validateHsnForm(
-  form: HSNForm,
-  records: HSNMaster[],
-  excludeId?: number,
-): Record<string, string> {
-  const errors: Record<string, string> = {};
-  const code = sanitizeHsnCodeInput(form.hsnCode);
-
-  if (!code) {
-    errors.hsnCode = "HSN code is required.";
-  } else if (code.length > 8) {
-    errors.hsnCode = "HSN code must be at most 8 digits.";
-  } else if (findHsnDuplicate(code, records, excludeId)) {
-    errors.hsnCode = "This HSN code already exists.";
-  }
-
-  if (!form.hsnDescription.trim()) {
-    errors.hsnDescription = "HSN description is required.";
-  }
-
-  if (!form.gstRate) {
-    errors.gstRate = "GST rate is required.";
-  }
-
-  return errors;
+	return new Date().toISOString().slice(0, 10);
 }

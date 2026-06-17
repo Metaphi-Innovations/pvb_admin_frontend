@@ -14,15 +14,11 @@ import { loadVouchers } from "../../../vouchers/voucher-data";
 import {
   NODE_LEVEL_LABELS,
   canAddLedgerUnder,
-  canAddSubLedgerUnder,
   canDeleteLedger,
-  canDeleteSubLedger,
   canEditLedger,
-  canEditSubLedger,
   getAncestorPath,
   getChildGroups,
   getChildLedgers,
-  getChildSubLedgers,
   isStructuralNode,
   parentGroupLabel,
 } from "../chart-of-accounts-data";
@@ -36,7 +32,6 @@ interface CoaNodeDetailProps {
   canDelete: boolean;
   onSelect: (node: ChartOfAccount) => void;
   onAddLedger: (parentGroupId: number) => void;
-  onAddSubLedger: (parentLedgerId: number) => void;
   onEditLedger: (ledger: ChartOfAccount) => void;
   onDeleteLedger: (ledger: ChartOfAccount) => void;
 }
@@ -106,7 +101,6 @@ export function CoaNodeDetail({
   canDelete,
   onSelect,
   onAddLedger,
-  onAddSubLedger,
   onEditLedger,
   onDeleteLedger,
 }: CoaNodeDetailProps) {
@@ -119,7 +113,7 @@ export function CoaNodeDetail({
   }, [node?.id]);
 
   const ledgerTransactions = useMemo(() => {
-    if (!node || (node.nodeLevel !== "ledger" && node.nodeLevel !== "sub_ledger")) return [];
+    if (!node || node.nodeLevel !== "ledger") return [];
     const rows: {
       date: string;
       voucher: string;
@@ -162,14 +156,7 @@ export function CoaNodeDetail({
   const childGroups = isStructuralNode(node) ? getChildGroups(records, node.id) : [];
   const childLedgers = isStructuralNode(node) ? getChildLedgers(records, node.id) : [];
   const isLedger = node.nodeLevel === "ledger";
-  const isSubLedger = node.nodeLevel === "sub_ledger";
-  const isUserAccount = isLedger || isSubLedger;
   const allowAddHere = canCreate && canAddLedgerUnder(node, records);
-  const allowAddSubHere = canCreate && isLedger && canAddSubLedgerUnder(node);
-  const childSubLedgers = isLedger ? getChildSubLedgers(records, node.id) : [];
-  const childLedgersOnly = isStructuralNode(node)
-    ? childLedgers.filter((c) => c.nodeLevel === "ledger")
-    : [];
   const visualLevel = resolveCoaVisualLevel(node, records);
   const Icon = VISUAL_ICON[visualLevel];
   const primaryHead = path.find((p) => p.nodeLevel === "primary_head");
@@ -190,7 +177,7 @@ export function CoaNodeDetail({
                 </h2>
                 {node.isSystem && isStructuralNode(node) && (
                   <span className="inline-flex items-center gap-1 text-[10px] text-amber-800 bg-amber-50 border border-amber-200/60 rounded-md px-2 py-0.5 font-medium">
-                    <Lock className="w-3 h-3" /> Locked
+                    <Lock className="w-3 h-3" /> System
                   </span>
                 )}
               </div>
@@ -214,22 +201,12 @@ export function CoaNodeDetail({
                   <Plus className="w-3.5 h-3.5" /> Add Ledger
                 </Button>
               )}
-              {allowAddSubHere && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs gap-1"
-                  onClick={() => onAddSubLedger(node.id)}
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add Sub-Ledger
-                </Button>
-              )}
-              {isUserAccount && canEdit && (isSubLedger ? canEditSubLedger(node) : canEditLedger(node)) && (
+              {isLedger && canEdit && canEditLedger(node) && (
                 <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => onEditLedger(node)}>
                   <Pencil className="w-3.5 h-3.5" /> Edit
                 </Button>
               )}
-              {isUserAccount && canDelete && (isSubLedger ? canDeleteSubLedger(node) : canDeleteLedger(node)) && (
+              {isLedger && canDelete && canDeleteLedger(node) && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -271,7 +248,7 @@ export function CoaNodeDetail({
         </div>
 
         {/* Body */}
-        {isUserAccount ? (
+        {isLedger ? (
           <Tabs value={ledgerTab} onValueChange={setLedgerTab} className="flex flex-col flex-1 min-h-0">
             <div className="flex-shrink-0 px-6 border-b border-border/40 bg-white">
               <TabsList className="bg-transparent p-0 h-auto border-0 gap-4">
@@ -284,11 +261,6 @@ export function CoaNodeDetail({
                 <TabsTrigger value="mapping" className="text-sm data-[state=active]:text-orange-700">
                   Mapping
                 </TabsTrigger>
-                {isLedger && (
-                  <TabsTrigger value="subledgers" className="text-sm data-[state=active]:text-orange-700">
-                    Sub-Ledgers ({childSubLedgers.length})
-                  </TabsTrigger>
-                )}
               </TabsList>
             </div>
             <TabsContent value="overview" className="flex-1 overflow-auto m-0 px-6 py-5">
@@ -376,43 +348,6 @@ export function CoaNodeDetail({
                 ))}
               </div>
             </TabsContent>
-            {isLedger && (
-              <TabsContent value="subledgers" className="flex-1 overflow-auto m-0">
-                {childSubLedgers.length === 0 ? (
-                  <EmptyState
-                    message="No sub-ledgers under this ledger yet."
-                    action={
-                      allowAddSubHere ? (
-                        <Button
-                          size="sm"
-                          className="h-8 text-xs bg-brand-600 text-white gap-1"
-                          onClick={() => onAddSubLedger(node.id)}
-                        >
-                          <Plus className="w-3.5 h-3.5" /> Add Sub-Ledger
-                        </Button>
-                      ) : undefined
-                    }
-                  />
-                ) : (
-                  <div className="divide-y divide-border/30">
-                    {childSubLedgers.map((sl) => (
-                      <button
-                        key={sl.id}
-                        type="button"
-                        onClick={() => onSelect(sl)}
-                        className="w-full flex items-center justify-between gap-4 px-6 py-3.5 text-left hover:bg-orange-50/30 transition-colors"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-foreground">{sl.accountName}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{sl.accountCode}</p>
-                        </div>
-                        <StatusBadge status={sl.status} />
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </TabsContent>
-            )}
           </Tabs>
         ) : (
           <Tabs value={structTab} onValueChange={setStructTab} className="flex flex-col flex-1 min-h-0">
@@ -422,7 +357,7 @@ export function CoaNodeDetail({
                   Child Groups ({childGroups.length})
                 </TabsTrigger>
                 <TabsTrigger value="ledgers" className="text-sm data-[state=active]:text-orange-700">
-                  Ledgers ({childLedgersOnly.length})
+                  Ledgers ({childLedgers.length})
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -451,7 +386,7 @@ export function CoaNodeDetail({
               )}
             </TabsContent>
             <TabsContent value="ledgers" className="flex-1 overflow-auto m-0">
-              {childLedgersOnly.length === 0 ? (
+              {childLedgers.length === 0 ? (
                 <EmptyState
                   message="No ledgers created under this group yet."
                   action={
@@ -468,7 +403,7 @@ export function CoaNodeDetail({
                 />
               ) : (
                 <div className="divide-y divide-border/30">
-                  {childLedgersOnly.map((l) => {
+                  {childLedgers.map((l) => {
                     const bal = computeLedgerCurrentBalance(l);
                     return (
                       <button

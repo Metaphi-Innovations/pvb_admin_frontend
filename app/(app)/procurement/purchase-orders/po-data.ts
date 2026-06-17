@@ -2,9 +2,6 @@ import { PROCUREMENT_APPROVAL, CURRENT_USER, COMPANY_BILLING } from "@/lib/procu
 import { amountInWords, calcLineAmounts, nextId, round2, todayStr } from "@/lib/procurement/utils";
 import type { ActivityEntry } from "@/lib/procurement/types";
 import type { POShortCloseInfo } from "./po-qty";
-import type { PackagingUom, ProcurementAdditionalCharge } from "@/lib/procurement/procurement-line-utils";
-import { calcTotalQtyBase, sumAdditionalCharges, enrichProductForProcurement } from "@/lib/procurement/procurement-line-utils";
-import type { PriceSource } from "@/lib/pricing/resolve-pricing";
 
 export type { POShortCloseInfo } from "./po-qty";
 export { canShortClosePO, getPOQtySummary, shortClosePO } from "./po-qty";
@@ -39,7 +36,7 @@ export function normalizePOStatus(status: string): POStatus {
 }
 
 function normalizePO(po: PurchaseOrder): PurchaseOrder {
-  return migratePO(po);
+  return { ...po, status: normalizePOStatus(po.status) };
 }
 
 export interface POLineItem {
@@ -48,12 +45,6 @@ export interface POLineItem {
   productCode: string;
   productName: string;
   description: string;
-  sku: string;
-  baseUnit: string;
-  packagingUnit: string;
-  conversionQty: number;
-  orderUom: PackagingUom;
-  orderedQtyPack: number;
   uom: string;
   orderedQty: number;
   unitPrice: number;
@@ -69,7 +60,6 @@ export interface POLineItem {
   /** Fallback when GRN not linked by PO number */
   receivedQty?: number;
   shortClosedQty?: number;
-  cpSource?: PriceSource | "manual";
 }
 
 export interface POAttachment {
@@ -91,13 +81,10 @@ export interface POTerm {
 export interface POSummary {
   grossAmount: number;
   totalDiscount: number;
-  productTotal: number;
-  additionalChargesTotal: number;
   taxableValue: number;
   totalCgst: number;
   totalSgst: number;
   totalIgst: number;
-  /** @deprecated use additionalChargesTotal */
   otherCharges: number;
   grandTotal: number;
   amountInWords: string;
@@ -121,10 +108,6 @@ export interface PurchaseOrder {
   creditDays: number;
   deliveryTerms: string;
   expectedDeliveryDate: string;
-  state: string;
-  warehouseId: number | null;
-  warehouseName: string;
-  deliveryAddress: string;
   notes: string;
   sourcePrId: number | null;
   sourcePrNumber: string;
@@ -140,8 +123,6 @@ export interface PurchaseOrder {
   lines: POLineItem[];
   terms: POTerm[];
   attachments: POAttachment[];
-  additionalCharges: ProcurementAdditionalCharge[];
-  /** @deprecated migrated to additionalCharges */
   otherCharges: number;
   summary: POSummary;
   status: POStatus;
@@ -155,69 +136,9 @@ export interface PurchaseOrder {
   shortClose?: POShortCloseInfo;
 }
 
-const STORAGE_KEY = "ds_procurement_purchase_orders_v2";
+const STORAGE_KEY = "ds_procurement_purchase_orders";
 
-function migratePOLine(line: Partial<POLineItem>): POLineItem {
-  const enriched = line.productId ? enrichProductForProcurement(line.productId) : null;
-  const orderUom = (line.orderUom ?? (line.uom as PackagingUom) ?? "Unit") as PackagingUom;
-  const orderedQtyPack = line.orderedQtyPack ?? line.orderedQty ?? 1;
-  const conversionQty = line.conversionQty ?? enriched?.conversionQty ?? 1;
-  const orderedQty =
-    line.orderedQty ??
-    calcTotalQtyBase(orderUom, orderedQtyPack, conversionQty);
-  return {
-    uid: line.uid ?? `pl-${Date.now()}`,
-    productId: line.productId ?? 0,
-    productCode: line.productCode ?? enriched?.productCode ?? "",
-    productName: line.productName ?? enriched?.productName ?? "",
-    description: line.description ?? "",
-    sku: line.sku ?? enriched?.sku ?? "",
-    baseUnit: line.baseUnit ?? enriched?.baseUnit ?? "Unit",
-    packagingUnit: line.packagingUnit ?? enriched?.packagingUnit ?? "Box",
-    conversionQty,
-    orderUom,
-    orderedQtyPack,
-    uom: line.uom ?? orderUom,
-    orderedQty,
-    unitPrice: line.unitPrice ?? 0,
-    discountPct: line.discountPct ?? 0,
-    cgstPct: line.cgstPct ?? 9,
-    sgstPct: line.sgstPct ?? 9,
-    igstPct: line.igstPct ?? 0,
-    grossAmount: line.grossAmount ?? 0,
-    taxAmount: line.taxAmount ?? 0,
-    netAmount: line.netAmount ?? 0,
-    deliverySchedule: line.deliverySchedule ?? "",
-    prLineUid: line.prLineUid,
-    receivedQty: line.receivedQty,
-    shortClosedQty: line.shortClosedQty,
-    cpSource: line.cpSource,
-  };
-}
-
-function migratePO(po: PurchaseOrder): PurchaseOrder {
-  const additionalCharges =
-    po.additionalCharges ??
-    (po.otherCharges
-      ? [{ uid: "legacy-freight", chargeName: "Other Charges", amount: po.otherCharges, remarks: "" }]
-      : []);
-  const normalized: PurchaseOrder = {
-    ...po,
-    status: normalizePOStatus(po.status),
-    state: po.state ?? po.shipping?.branch ? "" : "",
-    warehouseId: po.warehouseId ?? null,
-    warehouseName: po.warehouseName ?? po.shipping?.shipToLocation ?? "",
-    deliveryAddress: po.deliveryAddress ?? po.shipping?.address ?? "",
-    additionalCharges,
-    lines: (po.lines ?? []).map((l) => migratePOLine(l)),
-  };
-  return recalcPO(normalized);
-}
-
-function buildSummary(
-  lines: POLineItem[],
-  additionalCharges: ProcurementAdditionalCharge[],
-): POSummary {
+function buildSummary(lines: POLineItem[], otherCharges: number): POSummary {
   let grossAmount = 0;
   let totalDiscount = 0;
   let taxableValue = 0;
@@ -244,24 +165,20 @@ function buildSummary(
 
   grossAmount = round2(grossAmount);
   totalDiscount = round2(totalDiscount);
-  const productTotal = round2(taxableValue);
-  const additionalChargesTotal = round2(sumAdditionalCharges(additionalCharges));
-  taxableValue = round2(productTotal + additionalChargesTotal);
+  taxableValue = round2(taxableValue);
   totalCgst = round2(totalCgst);
   totalSgst = round2(totalSgst);
   totalIgst = round2(totalIgst);
-  const grandTotal = round2(taxableValue + totalCgst + totalSgst + totalIgst);
+  const grandTotal = round2(taxableValue + totalCgst + totalSgst + totalIgst + otherCharges);
 
   return {
     grossAmount,
     totalDiscount,
-    productTotal,
-    additionalChargesTotal,
     taxableValue,
     totalCgst,
     totalSgst,
     totalIgst,
-    otherCharges: additionalChargesTotal,
+    otherCharges: round2(otherCharges),
     grandTotal,
     amountInWords: amountInWords(grandTotal),
   };
@@ -288,11 +205,11 @@ export function recalcPOLines(lines: POLineItem[]): POLineItem[] {
 
 export function recalcPO(po: PurchaseOrder): PurchaseOrder {
   const lines = recalcPOLines(po.lines);
-  const summary = buildSummary(lines, po.additionalCharges ?? []);
-  return { ...po, lines, summary, otherCharges: summary.additionalChargesTotal };
+  const summary = buildSummary(lines, po.otherCharges);
+  return { ...po, lines, summary };
 }
 
-const RAW_SEED = [
+const SEED: PurchaseOrder[] = [
   {
     id: 1,
     poNumber: "PO-2024-0001",
@@ -343,10 +260,9 @@ const RAW_SEED = [
         deliverySchedule: "2024-02-05",
         prLineUid: "l1",
       },
-    ] as POLineItem[],
+    ],
     terms: [],
     attachments: [],
-    additionalCharges: [{ uid: "c1", chargeName: "Freight Charges", amount: 500, remarks: "" }],
     otherCharges: 500,
     summary: buildSummary(
       [
@@ -368,8 +284,8 @@ const RAW_SEED = [
           netAmount: 35824.8,
           deliverySchedule: "",
         },
-      ] as POLineItem[],
-      [{ uid: "c1", chargeName: "Freight Charges", amount: 500, remarks: "" }],
+      ],
+      500,
     ),
     status: "approved",
     createdBy: "Admin",
@@ -432,10 +348,9 @@ const RAW_SEED = [
         netAmount: 45000,
         deliverySchedule: "",
       },
-    ] as POLineItem[],
+    ],
     terms: [],
     attachments: [],
-    additionalCharges: [],
     otherCharges: 0,
     summary: buildSummary(
       [
@@ -457,8 +372,8 @@ const RAW_SEED = [
           netAmount: 45000,
           deliverySchedule: "",
         },
-      ] as POLineItem[],
-      [],
+      ],
+      0,
     ),
     status: "pending_approval",
     createdBy: "Admin",
@@ -474,24 +389,16 @@ const RAW_SEED = [
   },
 ];
 
-const SEED = (RAW_SEED as unknown as PurchaseOrder[]).map(migratePO);
-
 export function loadPurchaseOrders(): PurchaseOrder[] {
   if (typeof window === "undefined") return SEED.map(normalizePO);
   try {
-    const legacy = localStorage.getItem("ds_procurement_purchase_orders");
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw && legacy) {
-      const migrated = (JSON.parse(legacy) as PurchaseOrder[]).map(normalizePO);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-      return migrated;
-    }
     if (!raw) {
-      const seeded = SEED.map(normalizePO);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
-      return seeded;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED));
+      return SEED.map(normalizePO);
     }
-    return (JSON.parse(raw) as PurchaseOrder[]).map(normalizePO);
+    const list = (JSON.parse(raw) as PurchaseOrder[]).map(normalizePO);
+    return list;
   } catch {
     return SEED.map(normalizePO);
   }

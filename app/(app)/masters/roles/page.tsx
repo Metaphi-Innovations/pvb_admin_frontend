@@ -110,13 +110,11 @@ function StatusPill({ status }: { status: string }) {
 const GEO_BADGE_CFG: Record<GeoLevel, { bg: string; text: string }> = {
   Country:   { bg: "bg-blue-100",   text: "text-blue-700"   },
   Zone:      { bg: "bg-indigo-100", text: "text-indigo-700" },
-  Region:    { bg: "bg-purple-100", text: "text-purple-700" },
   State:     { bg: "bg-teal-100",   text: "text-teal-700"   },
+  Region:    { bg: "bg-purple-100", text: "text-purple-700" },
   Area:      { bg: "bg-amber-100",  text: "text-amber-700"  },
   Territory: { bg: "bg-orange-100", text: "text-orange-700" },
-  District:  { bg: "bg-rose-100",   text: "text-rose-700"   },
-  City:      { bg: "bg-indigo-100", text: "text-indigo-700" },
-  Town:      { bg: "bg-violet-100", text: "text-violet-700" },
+  Locality:  { bg: "bg-rose-100",   text: "text-rose-700"   },
   None:      { bg: "bg-slate-100",  text: "text-slate-600"  },
 };
 

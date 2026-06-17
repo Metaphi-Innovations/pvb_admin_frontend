@@ -65,7 +65,6 @@ export default function SplitSalesOrderPage() {
       deliveryDate: hydrated.deliveryDate,
       status: hydrated.status === "draft" ? "draft" : "confirmed",
       lineItems: [createEmptyLineItem()],
-      additionalExpenses: [],
       warehouseId: hydrated.warehouseId ?? null,
       warehouseName: hydrated.warehouseName ?? "",
     });

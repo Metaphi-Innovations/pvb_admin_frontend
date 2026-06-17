@@ -37,10 +37,6 @@ import {
   type NoteWorkflowStatus,
 } from "./debit-notes-data";
 import { DEBIT_NOTES_BREADCRUMB, DEBIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
-import {
-  formatVendorDropdownLabel,
-  formatVendorDropdownSublabel,
-} from "@/lib/masters/entity-display";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -96,8 +92,8 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
     () =>
       vendors.map((v) => ({
         value: String(v.id),
-        label: formatVendorDropdownLabel(v),
-        sub: formatVendorDropdownSublabel(v),
+        label: `${v.vendorCode} — ${v.vendorName}`,
+        sub: [v.mobile, v.email].filter(Boolean).join(" · "),
       })),
     [vendors],
   );

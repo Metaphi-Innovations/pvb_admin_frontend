@@ -39,8 +39,6 @@ export function downloadInvoicePdf(invoice: InvoiceRecord): void {
   ${escapeHtml(rec.billingAddress)}<br/>
   ${rec.customerGst ? `GSTIN: ${escapeHtml(rec.customerGst)}` : ""}<br/>
   ${escapeHtml(rec.customerMobile)} · ${escapeHtml(rec.customerEmail)}</p>
-  ${rec.lutNumber ? `<p><strong>LUT No.:</strong> ${escapeHtml(rec.lutNumber)}</p>` : ""}
-  ${rec.lutDeclaration ? `<p class="muted" style="margin-top:8px;font-weight:600;color:#333">${escapeHtml(rec.lutDeclaration)}</p>` : ""}
   <p class="muted">Due: ${rec.dueDate}${rec.referenceNo ? ` · Ref: ${escapeHtml(rec.referenceNo)}` : ""}</p>
   <table>
     <thead><tr>

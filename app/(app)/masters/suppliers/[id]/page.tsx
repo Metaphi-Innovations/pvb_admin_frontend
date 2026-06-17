@@ -4,13 +4,15 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
-  RecordDetailPage,
-  RecordKvRow,
-  RecordSectionCard,
-  RecordStatusPill,
-} from "@/components/record-detail";
-import { Building2, Clock, FileText, IndianRupee, Mail, MapPin, Pencil, Phone, Truck } from "lucide-react";
+  ArrowLeft,
+  Building2,
+  Edit2,
+  UserCheck,
+  UserX,
+} from "lucide-react";
 import {
   getPaymentTermLabel,
   loadSuppliers,
@@ -19,11 +21,66 @@ import {
   type SupplierStatus,
 } from "../supplier-data";
 
-function TypeBadge({ label }: { label: string }) {
+const STATUS_CFG: Record<
+  SupplierStatus,
+  { bg: string; text: string; dot: string; label: string }
+> = {
+  active: {
+    bg: "bg-emerald-50",
+    text: "text-emerald-700",
+    dot: "bg-emerald-500",
+    label: "Active",
+  },
+  inactive: {
+    bg: "bg-slate-100",
+    text: "text-slate-600",
+    dot: "bg-slate-400",
+    label: "Inactive",
+  },
+};
+
+function InfoRow({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value?: string;
+  mono?: boolean;
+}) {
   return (
-    <span className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700">
-      {label}
+    <div className="flex items-start justify-between gap-4 border-b border-border/50 px-3 py-2.5 last:border-0">
+      <span className="text-[11px] font-medium text-muted-foreground">
+        {label}
+      </span>
+      <span
+        className={cn(
+          "text-right text-xs font-medium text-foreground",
+          mono && "font-mono",
+        )}
+      >
+        {value ? value : "-"}
+      </span>
+    </div>
+  );
+}
+
+function StatusPill({ status }: { status: SupplierStatus }) {
+  const cfg = STATUS_CFG[status];
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium", cfg.bg, cfg.text)}>
+      <span className={cn("h-1.5 w-1.5 rounded-full", cfg.dot)} />
+      {cfg.label}
     </span>
+  );
+}
+
+function DetailCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-border bg-white p-3.5">
+      <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{title}</p>
+      <div>{children}</div>
+    </div>
   );
 }
 
@@ -32,7 +89,6 @@ export default function SupplierDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [records, setRecords] = useState<Supplier[]>([]);
-  const [activeTab, setActiveTab] = useState("overview");
 
   useEffect(() => {
     const list = loadSuppliers();
@@ -61,8 +117,11 @@ export default function SupplierDetailPage() {
     return (
       <AppLayout>
         <div className="py-16 text-center">
-          <p className="text-sm text-[#6B80A0]">Supplier not found.</p>
-          <Link href="/masters/suppliers" className="mt-2 inline-block text-xs text-[#1554B4]">
+          <p className="text-sm text-muted-foreground">Supplier not found.</p>
+          <Link
+            href="/masters/suppliers"
+            className="mt-2 inline-block text-xs text-brand-600 hover:underline"
+          >
             Back to listing
           </Link>
         </div>
@@ -70,128 +129,93 @@ export default function SupplierDetailPage() {
     );
   }
 
-  const tabs = [
-    { value: "overview", label: "Overview" },
-    { value: "tax", label: "Tax & Compliance" },
-    { value: "bank", label: "Bank Details" },
-    { value: "po", label: "PO History", count: 0 },
-    { value: "grn", label: "GRN History", count: 0 },
-    { value: "activity", label: "Activity" },
-  ];
-
-  const kpis = [
-    { icon: Truck, iconBg: "#E8F4FD", iconColor: "#1554B4", value: "0", label: "Total POs" },
-    { icon: IndianRupee, iconBg: "#E6F7EF", iconColor: "#1E9E61", value: "₹ 0.00", label: "Total Value" },
-    { icon: Clock, iconBg: "#FFF4E6", iconColor: "#E87B35", value: "0", label: "Pending GRN" },
-    { icon: Clock, iconBg: "#F3EEFF", iconColor: "#7C5CBF", value: "—", label: "Last PO" },
-    { icon: IndianRupee, iconBg: "#FEECEC", iconColor: "#D14343", value: "₹ 0.00", label: "Outstanding" },
-  ];
-
-  const renderTab = () => {
-    switch (activeTab) {
-      case "overview":
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <RecordSectionCard title="Supplier Details" icon={Building2} accent="blue">
-              <RecordKvRow label="Supplier Name" value={supplier.supplierName} highlight />
-              <RecordKvRow label="Code" value={supplier.supplierCode} mono copy />
-              <RecordKvRow label="Mobile" value={supplier.mobile} mono link href={`tel:${supplier.mobile}`} />
-              <RecordKvRow label="Email" value={supplier.email || "—"} link={!!supplier.email} href={supplier.email ? `mailto:${supplier.email}` : undefined} />
-              <RecordKvRow
-                label="Status"
-                value={<RecordStatusPill label={supplier.status === "active" ? "Active" : "Inactive"} variant={supplier.status} />}
-                isLast
-              />
-            </RecordSectionCard>
-            <RecordSectionCard title="Address" icon={MapPin} accent="purple">
-              <RecordKvRow label="Address" value={supplier.address} isLast />
-            </RecordSectionCard>
-          </div>
-        );
-      case "tax":
-        return (
-          <RecordSectionCard title="Tax & Registration" icon={FileText} accent="blue">
-            <RecordKvRow label="GSTIN" value={supplier.gstin} mono copy />
-            <RecordKvRow label="CIB Regn #" value={supplier.cibRegn} />
-            <RecordKvRow label="CIB Expiry" value={supplier.cibRegnExpiry} />
-            <RecordKvRow label="FCO Regn #" value={supplier.fcoRegn} />
-            <RecordKvRow label="FCO Expiry" value={supplier.fcoRegnExpiry} isLast />
-          </RecordSectionCard>
-        );
-      case "bank":
-        return (
-          <RecordSectionCard title="Bank Details" icon={IndianRupee} accent="green">
-            <p className="text-sm text-[#6B80A0] py-4">No bank details on file.</p>
-          </RecordSectionCard>
-        );
-      case "po":
-      case "grn":
-        return (
-          <RecordSectionCard title={activeTab === "po" ? "PO History" : "GRN History"} icon={Truck} accent="blue">
-            <p className="text-sm text-[#6B80A0] py-4">No records yet.</p>
-          </RecordSectionCard>
-        );
-      case "activity":
-        return (
-          <RecordSectionCard title="Activity" icon={Clock} accent="slate">
-            <p className="text-sm text-[#6B80A0] py-4">No activity recorded.</p>
-          </RecordSectionCard>
-        );
-      default:
-        return null;
-    }
-  };
-
   return (
-    <RecordDetailPage
-        listHref="/masters/suppliers"
-        listLabel="Suppliers"
-        recordName={supplier.supplierName}
-        recordCode={supplier.supplierCode}
-        typeBadge={<TypeBadge label="Supplier" />}
-        statusLabel={supplier.status === "active" ? "Active" : "Inactive"}
-        statusVariant={supplier.status}
-        metaItems={[
-          { label: supplier.mobile, icon: Phone, href: `tel:${supplier.mobile}` },
-          ...(supplier.email ? [{ label: supplier.email, icon: Mail, href: `mailto:${supplier.email}` }] : []),
-        ]}
-        kpis={kpis}
-        tabs={tabs}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        active={supplier.status === "active"}
-        onActiveChange={(on) => updateStatus(on ? "active" : "inactive")}
-        onEdit={() => router.push(`/masters/suppliers/${supplier.id}/edit`)}
-        secondaryAction={{
-          label: "New PO",
-          onClick: () => router.push("/procurement/purchase-orders/new"),
-        }}
-        sidebar={{
-          quickActions: [
-            {
-              label: "New PO",
-              icon: Truck,
-              onClick: () => router.push("/procurement/purchase-orders/new"),
-              variant: "primary",
-            },
-            {
-              label: "Edit Supplier",
-              icon: Pencil,
-              onClick: () => router.push(`/masters/suppliers/${supplier.id}/edit`),
-              variant: "outline",
-            },
-          ],
-          summary: [
-            { label: "Payment Terms", value: getPaymentTermLabel(supplier.paymentTerms), highlight: true },
-            { label: "GSTIN", value: supplier.gstin || "—" },
-            { label: "Created By", value: supplier.createdBy },
-            { label: "Created", value: supplier.createdDate },
-            { label: "Updated", value: supplier.updatedDate },
-          ],
-          activity: [],
-        }}
-      >
-        {renderTab()}
-      </RecordDetailPage>
+    <AppLayout>
+      <div className="max-w-[800px] mx-auto space-y-5">
+        {/* Header */}
+        <div className="flex items-start gap-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 -ml-2"
+            onClick={() => router.push("/masters/suppliers")}
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div className="flex-grow min-w-0">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center flex-shrink-0">
+                <Building2 className="w-5 h-5 text-brand-600" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-foreground truncate">{supplier.supplierName}</h1>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {supplier.supplierCode} • {supplier.mobile} • {supplier.email || "No email"}
+                </p>
+              </div>
+              <StatusPill status={supplier.status} />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() =>
+                updateStatus(supplier.status === "active" ? "inactive" : "active")
+              }
+            >
+              {supplier.status === "active" ? (
+                <UserX className="h-3.5 w-3.5" />
+              ) : (
+                <UserCheck className="h-3.5 w-3.5" />
+              )}
+              {supplier.status === "active" ? "Deactivate" : "Activate"}
+            </Button>
+            <Link href={`/masters/suppliers/${supplier.id}/edit`}>
+              <Button
+                size="sm"
+                className="h-8 gap-1.5 bg-brand-600 text-xs text-white hover:bg-brand-700"
+              >
+                <Edit2 className="h-3.5 w-3.5" /> Edit
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+        {/* Content Cards */}
+        <div className="grid grid-cols-2 gap-3">
+          <DetailCard title="Supplier Details">
+            <InfoRow label="Supplier Name" value={supplier.supplierName} />
+            <InfoRow label="Mobile Number" value={supplier.mobile} mono />
+            <InfoRow label="Email Address" value={supplier.email} />
+            <InfoRow label="Status" value={supplier.status === "active" ? "Active" : "Inactive"} />
+            <InfoRow
+              label="Payment Terms"
+              value={getPaymentTermLabel(supplier.paymentTerms)}
+            />
+          </DetailCard>
+
+          <DetailCard title="Tax & Registration">
+            <InfoRow label="GSTIN" value={supplier.gstin} mono />
+            <InfoRow label="CIB Regn #" value={supplier.cibRegn} />
+            <InfoRow label="CIB Regn Expiry" value={supplier.cibRegnExpiry} />
+            <InfoRow label="FCO Regn #" value={supplier.fcoRegn} />
+            <InfoRow label="FCO Regn Expiry" value={supplier.fcoRegnExpiry} />
+          </DetailCard>
+
+          <DetailCard title="Address">
+            <InfoRow label="Address" value={supplier.address} />
+          </DetailCard>
+
+          <DetailCard title="Audit">
+            <InfoRow label="Created By" value={supplier.createdBy} />
+            <InfoRow label="Created Date" value={supplier.createdDate} />
+            <InfoRow label="Updated By" value={supplier.updatedBy} />
+            <InfoRow label="Updated Date" value={supplier.updatedDate} />
+          </DetailCard>
+        </div>
+      </div>
+    </AppLayout>
   );
 }

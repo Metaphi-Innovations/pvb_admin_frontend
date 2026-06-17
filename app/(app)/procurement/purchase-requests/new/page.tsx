@@ -43,12 +43,13 @@ export default function NewPRPage() {
       mode="create"
       prNumber={prNumber}
       status="draft"
+      saveLabel="Save"
+      onSave={() => persist(false)}
       footer={
         <PRFormFooter
           onCancel={() => router.push("/procurement/purchase-requests")}
           onSaveDraft={() => persist(false)}
           onSubmit={() => persist(true)}
-          saveLabel="Save Purchase Request"
         />
       }
     >

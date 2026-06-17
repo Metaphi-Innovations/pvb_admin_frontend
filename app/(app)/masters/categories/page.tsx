@@ -31,6 +31,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetBody,
+  SheetFooter,
+} from "@/components/ui/sheet";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -43,12 +52,11 @@ import { Label } from "@/components/ui/label";
 import { loadCategories, saveCategories, type Category, type CategoryStatus, todayStr, nextCategoryId, generateCategoryCode } from "./category-data";
 import { MiniKPICard } from "@/components/ui/KPICard";
 import { CategoryForm, DEFAULT_CATEGORY_FORM, type CategoryFormValues, validateCategoryForm } from "./components/CategoryForm";
-import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
+import { MasterFormGrid, MasterViewRow } from "@/components/masters/MasterModule";
 
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { applyFilters } from "@/components/listing/filter-utils";
-import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
 type SortKey = "categoryCode" | "categoryName" | "description" | "status";
 
@@ -69,6 +77,25 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100"><X className="h-3.5 w-3.5" /></button>
     </div>
+  );
+}
+
+function StatusToggle({ record, onToggle }: { record: Category; onToggle: (item: Category) => void }) {
+  const active = record.status === "active";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(record);
+      }}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+        active ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
+      )}
+    >
+      {active ? "Active" : "Inactive"}
+    </button>
   );
 }
 
@@ -117,9 +144,6 @@ export default function CategoryMasterPage() {
       filterable: true,
       filterType: "text",
       width: "120px",
-      render: (val, row) => (
-        <span className="font-mono text-xs text-brand-700">{row.categoryCode}</span>
-      ),
     },
     {
       key: "categoryName",
@@ -128,9 +152,6 @@ export default function CategoryMasterPage() {
       filterable: true,
       filterType: "text",
       width: "220px",
-      render: (val, row) => (
-        <span className="text-xs font-semibold text-foreground">{row.categoryName}</span>
-      ),
     },
     {
       key: "description",
@@ -139,6 +160,22 @@ export default function CategoryMasterPage() {
       filterable: true,
       filterType: "text",
       width: "320px",
+    },
+    {
+      key: "createdBy",
+      header: "Created By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
     },
     {
       key: "status",
@@ -152,26 +189,8 @@ export default function CategoryMasterPage() {
       ],
       width: "110px",
       render: (val, row) => (
-        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
+        <StatusToggle record={row} onToggle={toggleStatus} />
       ),
-    },
-    {
-      key: "createdBy",
-      header: "Created",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />,
-    },
-    {
-      key: "updatedBy",
-      header: "Updated",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />,
     },
   ];
 
@@ -400,45 +419,93 @@ export default function CategoryMasterPage() {
         />
       </div>
 
-      <MasterListingSheets
-        sheetMode={sheetMode}
-        active={active}
-        onClose={closeSheet}
-        onEdit={() => active && openEdit(active)}
-        onSave={persist}
-        sheetTitle={sheetTitle}
-        icon={Folder}
-        viewDrawer={
-          active
-            ? buildSimpleMasterViewDrawer<Category>({
-                drawerTitle: "Category",
-                getRecordCode: (r) => r.categoryCode,
-                basicInfo: (r) => [
-                  { label: "Category Name", value: r.categoryName },
-                  { label: "Category Code", value: r.categoryCode, mono: true },
-                ],
-                description: (r) => r.description,
-                showDescription: true,
-              })(active)
-            : { title: "Category", basicInfo: [] }
-        }
-        formContent={
-          <CategoryForm
-            form={form}
-            onChange={setForm}
-            errors={errors}
-            onClearError={(key) =>
-              setErrors((prev) => {
-                const copy = { ...prev };
-                delete copy[key];
-                return copy;
-              })
-            }
-          />
-        }
-        statusActive={form.status === "active"}
-        onStatusChange={(v) => setForm((f) => ({ ...f, status: v ? "active" : "inactive" }))}
-      />
+      <Sheet open={sheetMode !== null} onOpenChange={(o) => !o && closeSheet()}>
+        <SheetContent>
+          <SheetHeader>
+            <div className="flex items-start gap-3 pr-8">
+              <div className="flex items-center justify-center border w-9 h-9 rounded-xl bg-brand-50 border-brand-100">
+                <Folder className="w-4 h-4 text-brand-600" />
+              </div>
+              <div>
+                <SheetTitle className="text-base">{sheetTitle}</SheetTitle>
+                <SheetDescription className="text-xs">
+                  {sheetMode === "view" ? "Read-only details" : "Compact category form"}
+                </SheetDescription>
+              </div>
+            </div>
+          </SheetHeader>
+
+          <SheetBody>
+            {sheetMode === "view" && active ? (
+              <div className="space-y-4">
+                <div className="px-3 border rounded-lg border-border/60 bg-muted/10">
+                  <MasterViewRow label="Category Name" value={active.categoryName} />
+                  <MasterViewRow label="Category Code" value={<span className="font-mono">{active.categoryCode}</span>} />
+                  <MasterViewRow label="Description" value={active.description || "—"} />
+                  <MasterViewRow label="Status" value={active.status === "active" ? "Active" : "Inactive"} />
+                </div>
+                <div className="grid grid-cols-2 gap-3 pt-2 text-xs border-t">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
+                    <p className="font-medium">{active.createdBy}</p>
+                    <p className="text-muted-foreground">{active.createdDate}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Updated By</p>
+                    <p className="font-medium">{active.updatedBy}</p>
+                    <p className="text-muted-foreground">{active.updatedDate}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <CategoryForm
+                  form={form}
+                  onChange={setForm}
+                  errors={errors}
+                  onClearError={(key) =>
+                    setErrors((prev) => {
+                      const copy = { ...prev };
+                      delete copy[key];
+                      return copy;
+                    })
+                  }
+                />
+              </div>
+            )}
+          </SheetBody>
+
+          <SheetFooter>
+            {sheetMode === "view" ? (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Back
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+                  onClick={() => active && openEdit(active)}
+                >
+                  Edit
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+                  onClick={persist}
+                >
+                  Save
+                </Button>
+              </>
+            )}
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <DialogContent className="max-w-sm">

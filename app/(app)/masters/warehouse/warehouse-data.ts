@@ -16,19 +16,6 @@ export interface WarehouseContact {
   mobileNumber: string;
   emailAddress: string;
   isPrimary?: boolean;
-  mobileCountryCode?: string;
-}
-
-export interface WarehouseDocument {
-  uid: string;
-  documentTypeId?: string;
-  documentName: string;
-  file?: File;
-  fileUrl?: string;
-  uploaded: boolean;
-  fileName: string;
-  uploadedAt: string;
-  size: string;
 }
 
 export interface WarehouseMaster {
@@ -36,7 +23,6 @@ export interface WarehouseMaster {
   warehouseCode: string; // Auto Generated, e.g. "WH-0001"
   warehouseName: string;
   warehouseType: WarehouseType;
-  gstApplicable: boolean;
   gstNumber: string;
   contactPerson: string;
   mobileNumber: string;
@@ -46,12 +32,12 @@ export interface WarehouseMaster {
   district: string;
   city: string;
   pincode: string;
+  capacity: number; // Decimal
   manager: string;
   status: WarehouseStatus;
   operatedBy: OperatedBy;
   customerType?: string;
   contacts: WarehouseContact[];
-  documents: WarehouseDocument[];
   createdBy: string;
   createdDate: string;
   updatedBy: string;
@@ -164,7 +150,7 @@ export function getCitiesForDistrict(district: string): string[] {
 
 // ─── Seed data ─────────────────────────────────────────────────────
 const STORAGE_KEY = "ds_warehouse_masters";
-const SEED_VERSION = 3;
+const SEED_VERSION = 2;
 
 const SEED: WarehouseMaster[] = [
   {
@@ -172,7 +158,6 @@ const SEED: WarehouseMaster[] = [
     warehouseCode: "WH-0001",
     warehouseName: "Central Distribution Hub",
     warehouseType: "Central Warehouse",
-    gstApplicable: true,
     gstNumber: "27AABCT1234F1ZA",
     contactPerson: "Suresh Mehta",
     mobileNumber: "9876543210",
@@ -182,6 +167,7 @@ const SEED: WarehouseMaster[] = [
     district: "Pune",
     city: "Pune",
     pincode: "411028",
+    capacity: 50000,
     manager: "Suresh Mehta",
     status: "active",
     operatedBy: "Self",
@@ -194,7 +180,6 @@ const SEED: WarehouseMaster[] = [
         isPrimary: true,
       }
     ],
-    documents: [],
     createdBy: "Admin",
     createdDate: "2026-01-10",
     updatedBy: "Admin",
@@ -205,7 +190,6 @@ const SEED: WarehouseMaster[] = [
     warehouseCode: "WH-0002",
     warehouseName: "North Zone Regional Store",
     warehouseType: "Regional Warehouse",
-    gstApplicable: true,
     gstNumber: "27AABCT5678G2ZB",
     contactPerson: "Priya Kulkarni",
     mobileNumber: "9876543211",
@@ -215,6 +199,7 @@ const SEED: WarehouseMaster[] = [
     district: "Nagpur",
     city: "Nagpur",
     pincode: "440018",
+    capacity: 20000,
     manager: "Priya Kulkarni",
     status: "active",
     operatedBy: "Self",
@@ -227,7 +212,6 @@ const SEED: WarehouseMaster[] = [
         isPrimary: true,
       }
     ],
-    documents: [],
     createdBy: "Admin",
     createdDate: "2026-01-15",
     updatedBy: "Admin",
@@ -238,7 +222,6 @@ const SEED: WarehouseMaster[] = [
     warehouseCode: "WH-0003",
     warehouseName: "South Zone Depot",
     warehouseType: "State Warehouse",
-    gstApplicable: true,
     gstNumber: "36AABCT9012H3ZC",
     contactPerson: "Raju Bhandari",
     mobileNumber: "9876543212",
@@ -248,6 +231,7 @@ const SEED: WarehouseMaster[] = [
     district: "Hyderabad",
     city: "Hyderabad",
     pincode: "500032",
+    capacity: 15000,
     manager: "Raju Bhandari",
     status: "active",
     operatedBy: "C&F Agent",
@@ -261,7 +245,6 @@ const SEED: WarehouseMaster[] = [
         isPrimary: true,
       }
     ],
-    documents: [],
     createdBy: "Admin",
     createdDate: "2026-02-01",
     updatedBy: "Admin",
@@ -272,7 +255,6 @@ const SEED: WarehouseMaster[] = [
     warehouseCode: "WH-0004",
     warehouseName: "East Zone Depot",
     warehouseType: "Regional Warehouse",
-    gstApplicable: true,
     gstNumber: "21AABCT3456I4ZD",
     contactPerson: "Anil Patil",
     mobileNumber: "9876543213",
@@ -282,6 +264,7 @@ const SEED: WarehouseMaster[] = [
     district: "Bhubaneswar",
     city: "Bhubaneswar",
     pincode: "751002",
+    capacity: 12000,
     manager: "Anil Patil",
     status: "inactive",
     operatedBy: "C&F Agent",
@@ -295,7 +278,6 @@ const SEED: WarehouseMaster[] = [
         isPrimary: true,
       }
     ],
-    documents: [],
     createdBy: "Admin",
     createdDate: "2026-02-05",
     updatedBy: "Admin",
@@ -306,7 +288,6 @@ const SEED: WarehouseMaster[] = [
     warehouseCode: "WH-0005",
     warehouseName: "Gujarat Distribution Center",
     warehouseType: "Distributor Warehouse",
-    gstApplicable: true,
     gstNumber: "24AABCT7890J5ZE",
     contactPerson: "Mohan Sharma",
     mobileNumber: "9876543214",
@@ -316,6 +297,7 @@ const SEED: WarehouseMaster[] = [
     district: "Ahmedabad",
     city: "Ahmedabad",
     pincode: "382330",
+    capacity: 18000,
     manager: "Mohan Sharma",
     status: "active",
     operatedBy: "Self",
@@ -328,7 +310,6 @@ const SEED: WarehouseMaster[] = [
         isPrimary: true,
       }
     ],
-    documents: [],
     createdBy: "Admin",
     createdDate: "2026-02-10",
     updatedBy: "Admin",
@@ -339,7 +320,6 @@ const SEED: WarehouseMaster[] = [
     warehouseCode: "WH-0006",
     warehouseName: "Mumbai Transit Point",
     warehouseType: "Transit Warehouse",
-    gstApplicable: true,
     gstNumber: "27AABCT2345K6ZF",
     contactPerson: "Kavya Reddy",
     mobileNumber: "9876543215",
@@ -349,6 +329,7 @@ const SEED: WarehouseMaster[] = [
     district: "Mumbai",
     city: "Thane",
     pincode: "421302",
+    capacity: 8000,
     manager: "Kavya Reddy",
     status: "under_maintenance",
     operatedBy: "C&F Agent",
@@ -362,7 +343,6 @@ const SEED: WarehouseMaster[] = [
         isPrimary: true,
       }
     ],
-    documents: [],
     createdBy: "Admin",
     createdDate: "2026-02-15",
     updatedBy: "Admin",
@@ -373,7 +353,6 @@ const SEED: WarehouseMaster[] = [
     warehouseCode: "WH-0007",
     warehouseName: "Chennai Cold Storage",
     warehouseType: "Cold Storage Warehouse",
-    gstApplicable: true,
     gstNumber: "33AABCT6789L7ZG",
     contactPerson: "Ramesh Thakur",
     mobileNumber: "9876543216",
@@ -383,6 +362,7 @@ const SEED: WarehouseMaster[] = [
     district: "Chennai",
     city: "Ambattur",
     pincode: "600058",
+    capacity: 5000,
     manager: "Ramesh Thakur",
     status: "closed",
     operatedBy: "Self",
@@ -395,7 +375,6 @@ const SEED: WarehouseMaster[] = [
         isPrimary: true,
       }
     ],
-    documents: [],
     createdBy: "Admin",
     createdDate: "2026-03-01",
     updatedBy: "Admin",
@@ -406,7 +385,6 @@ const SEED: WarehouseMaster[] = [
     warehouseCode: "WH-0008",
     warehouseName: "Jaipur State Warehouse",
     warehouseType: "State Warehouse",
-    gstApplicable: true,
     gstNumber: "08AABCT4567M8ZH",
     contactPerson: "Deepak Gupta",
     mobileNumber: "9876543217",
@@ -416,6 +394,7 @@ const SEED: WarehouseMaster[] = [
     district: "Jaipur",
     city: "Jaipur",
     pincode: "302022",
+    capacity: 22000,
     manager: "Deepak Gupta",
     status: "active",
     operatedBy: "Self",
@@ -428,7 +407,6 @@ const SEED: WarehouseMaster[] = [
         isPrimary: true,
       }
     ],
-    documents: [],
     createdBy: "Admin",
     createdDate: "2026-03-10",
     updatedBy: "Admin",

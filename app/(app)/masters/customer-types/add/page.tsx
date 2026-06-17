@@ -12,10 +12,8 @@ import {
   saveCustomerTypes,
   nextCustomerTypeId,
   generateCustomerTypeCode,
-  validateCustomerTypeInitialCode,
   type CustomerTypeRecord,
 } from "../customer-type-data";
-import { normalizeInitialCode } from "@/lib/masters/code-generation";
 import {
   CustomerTypeForm,
   DEFAULT_CUSTOMER_TYPE_FORM,
@@ -28,10 +26,8 @@ export default function AddCustomerTypePage() {
   const [form, setForm] = useState<CustomerTypeFormValues>(DEFAULT_CUSTOMER_TYPE_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
     const list = loadCustomerTypes();
     setForm((prev) => ({ ...prev, customerTypeCode: generateCustomerTypeCode(list) }));
   }, []);
@@ -45,9 +41,6 @@ export default function AddCustomerTypePage() {
 
   const handleSave = () => {
     const validation = validateCustomerTypeForm(form);
-    const list = loadCustomerTypes();
-    const initialErr = validateCustomerTypeInitialCode(form.initialCode, list);
-    if (initialErr) validation.initialCode = initialErr;
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
       setToast({ msg: "Please fix the errors before saving.", type: "error" });
@@ -55,33 +48,20 @@ export default function AddCustomerTypePage() {
       return;
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const list = loadCustomerTypes();
     const newRecord: CustomerTypeRecord = {
       id: nextCustomerTypeId(list),
       customerTypeCode: form.customerTypeCode.trim() || generateCustomerTypeCode(list),
-      initialCode: normalizeInitialCode(form.initialCode),
       customerType: form.customerType.trim(),
       description: form.description.trim(),
       documentTypes: form.documentTypes || [],
       status: "active",
-      createdBy: "Admin",
-      createdDate: today,
-      updatedBy: "Admin",
-      updatedDate: today,
     };
 
     saveCustomerTypes([...list, newRecord]);
     setToast({ msg: "Customer Type added successfully.", type: "success" });
     setTimeout(() => router.push("/masters/customer-types"), 900);
   };
-
-  if (!mounted) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
-    );
-  }
 
   return (
     <FormContainer

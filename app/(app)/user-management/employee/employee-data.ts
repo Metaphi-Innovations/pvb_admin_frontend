@@ -1,21 +1,4 @@
-// ── Employee Master — types, seed data, validation, and storage helpers ──────
-
-import { loadRoles, loadPermissionTemplates } from "../roles/roles-data";
-import type { EmployeeDocument, EmployeeActivityEntry } from "./employee-documents";
-
-export type { EmployeeDocument, EmployeeActivityEntry } from "./employee-documents";
-export {
-  applyEmployeeStatusChange,
-  canActivateEmployee,
-  computeProfileCompletion,
-  ALL_EMPLOYEE_DOCUMENT_TYPES,
-  EMPLOYEE_DOCUMENT_TYPE_GROUPS,
-  EMPLOYEE_DOCUMENT_MAX_BYTES,
-  EMPLOYEE_DOCUMENT_ACCEPT,
-  PROFILE_DOCUMENT_TYPES,
-  DOCUMENT_STATUS_STYLES,
-  newDocumentId,
-} from "./employee-documents";
+﻿// ── Employee Master — types, seed data, validation, and storage helpers ──────
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -56,7 +39,6 @@ export interface Employee {
   fullName: string;
   email: string;                // Unique
   mobile: string;               // 10-digit, unique
-  password?: string;
   countryCode?: string;         // e.g. "+91"
   alternativeMobile?: string;
   bloodGroup: "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-" | "Unknown";
@@ -74,24 +56,7 @@ export interface Employee {
   reportingManager: string;
   status: "active" | "inactive" | "draft" | "archived";
   joiningDate: string;
-  // Address (structured — preferred)
-  currentAddressLine1?: string;
-  currentAddressLine2?: string;
-  currentStateId?: number | null;
-  currentCityId?: number | null;
-  currentPincodeId?: number | null;
-  permanentAddressLine1?: string;
-  permanentAddressLine2?: string;
-  permanentStateId?: number | null;
-  permanentCityId?: number | null;
-  permanentPincodeId?: number | null;
-  emergencyAddressLine1?: string;
-  emergencyAddressLine2?: string;
-  emergencyStateId?: number | null;
-  emergencyCityId?: number | null;
-  emergencyPincodeId?: number | null;
-  sameAsCurrentAddress?: boolean;
-  // Address (legacy flat strings — kept for display / exports)
+  // Address
   currentAddress?: string;
   permanentAddress?: string;
   emergencyContactName: string;
@@ -101,24 +66,14 @@ export interface Employee {
   // Geography (Field Users)
   geoZone?: string;
   geoRegion?: string;
-  geoState?: string;
   geoArea?: string;
   territory?: string;
-  geoDistrict?: string;
-  geoCity?: string;
-  geoTown?: string;
-  /** @deprecated use geoTown */
   geoLocality?: string;
   geoMappings?: Array<{
     geoZone?: string;
     geoRegion?: string;
-    geoState?: string;
     geoArea?: string;
     territory?: string;
-    geoDistrict?: string;
-    geoCity?: string;
-    geoTown?: string;
-    /** @deprecated use geoTown */
     geoLocality?: string;
   }>;
   // Permissions
@@ -140,12 +95,11 @@ export interface Employee {
   pincode?: string;
   address?: string;
   state?: string;
+  geoState?: string;
   relativeName?: string;
   correspondenceAddress?: string;
   remarks?: string;
   profilePhotoPath?: string;
-  documents?: EmployeeDocument[];
-  activityLog?: EmployeeActivityEntry[];
   // Audit
   createdBy: string;
   createdDate: string;
@@ -218,12 +172,12 @@ export const ROLE_GEO_FIELDS: Record<string, string[]> = {
   "SPM":    [],                                                       // National — no geo mapping (Institutional top level)
   "ZSM":    ["Zone"],                                                 // Zonal
   "RSM":    ["Zone", "Region"],                                       // Regional
-  "ASM":    ["Zone", "Region", "State", "Area"],
-  "KAM":    ["Zone", "Region", "State", "Area"],
-  "TM":     ["Zone", "Region", "State", "Area", "Territory"],
-  "FMO":    ["Zone", "Region", "State", "Area", "Territory"],
-  "DO":     ["Zone", "Region", "State", "Area", "Territory", "District", "City", "Town"],
-  "Intern": ["Zone", "Region", "State", "Area", "Territory", "District", "City", "Town"],
+  "ASM":    ["Zone", "Region", "Area"],                               // Area
+  "KAM":    ["Zone", "Region", "Area"],                               // Area (same level as ASM)
+  "TM":     ["Zone", "Region", "Area", "Territory"],                  // Territory
+  "FMO":    ["Zone", "Region", "Area", "Territory"],                  // Territory
+  "DO":     ["Zone", "Region", "Area", "Territory", "Locality"],      // Locality
+  "Intern": ["Zone", "Region", "Area", "Territory", "Locality"],      // Locality
 };
 
 // ── Web Portal Permission Registry ─────────────────────────────────────────────
@@ -450,62 +404,82 @@ export function migratePermissions(raw: any): UserPermissions {
 
 /** Auto-suggest sensible defaults based on selected role. Admin can override after. */
 export function roleDefaultPermissions(role: string): UserPermissions {
-  const p = defaultPermissions();
-  try {
-    const roles = loadRoles();
-    const templates = loadPermissionTemplates();
-    
-    // Find the role in roles-data.ts by matching roleName or role string
-    const matchedRole = roles.find(r => r.roleName.toLowerCase() === role.toLowerCase());
-    if (!matchedRole) {
-      // Fallback to SPM/NSM check
-      if (["NSM", "SPM"].includes(role)) {
-        return fullPermissions();
-      }
-      return p;
-    }
-    
-    const template = templates[matchedRole.id] || templates[String(matchedRole.id)];
-    if (!template) return p;
+  const full = fullPermissions();
+  const empty = defaultPermissions();
 
-    if (template.accessType === "web" && Array.isArray(template.webPermissions)) {
-      template.webPermissions.forEach((perm: any) => {
-        let mKey = perm.moduleKey || perm.module || perm.moduleId || perm.moduleName;
-        const aKey = perm.actionKey || perm.action || perm.permission;
-        if (mKey && aKey) {
-          if (mKey === "sales.customers") {
-            mKey = "masters.customerMaster";
-          }
-          const parts = mKey.split(".");
-          if (parts.length >= 2) {
-            const modId = parts[0];
-            const subId = parts[1];
-            if (p.web[modId] && p.web[modId][subId]) {
-              (p.web[modId][subId] as any)[aKey] = true;
-            }
-          }
-        }
-      });
-    } else if (template.accessType === "mobile" && Array.isArray(template.mobilePermissions)) {
-      template.mobilePermissions.forEach((perm: any) => {
-        const mKey = perm.moduleKey || perm.module || perm.moduleId || perm.moduleName;
-        const aKey = perm.actionKey || perm.action || perm.permission;
-        if (mKey && aKey) {
-          const parts = mKey.split(".");
-          if (parts.length >= 2) {
-            const grpId = parts[0];
-            const featId = parts[1];
-            if (p.mobile[grpId] && p.mobile[grpId][featId]) {
-              (p.mobile[grpId][featId] as any)[aKey] = true;
-            }
-          }
-        }
-      });
-    }
-  } catch (err) {
-    console.error("Error loading dynamic role defaults:", err);
+  // National / top-level admin → full access
+  if (["NSM", "SPM"].includes(role)) return full;
+
+  // Domain-specific admin roles
+  if (role === "Procurement Head") {
+    const p = defaultPermissions();
+    p.web["procurement"] = full.web["procurement"];
+    p.web["masters"]     = full.web["masters"];
+    p.web["reports"]     = full.web["reports"];
+    return p;
   }
-  return p;
+  if (role === "Accounts Manager" || role === "Finance Manager") {
+    const p = defaultPermissions();
+    p.web["accounts"] = full.web["accounts"];
+    p.web["reports"]  = full.web["reports"];
+    return p;
+  }
+  if (role === "HR Admin") {
+    const p = defaultPermissions();
+    p.web["hr"]      = full.web["hr"];
+    p.web["reports"] = full.web["reports"];
+    return p;
+  }
+  if (role === "Operations Manager" || role === "Back Office Manager") {
+    const p = defaultPermissions();
+    p.web["procurement"] = full.web["procurement"];
+    p.web["sales"]       = full.web["sales"];
+    p.web["reports"]     = full.web["reports"];
+    return p;
+  }
+
+  // Field users — primarily mobile
+  if (["DO", "Intern"].includes(role)) {
+    const p = defaultPermissions();
+    p.mobile["fieldOps"]   = full.mobile["fieldOps"];
+    p.mobile["salesOps"]   = full.mobile["salesOps"];
+    p.mobile["farmerOps"]  = full.mobile["farmerOps"];
+    p.mobile["dataOps"]    = full.mobile["dataOps"];
+    return p;
+  }
+  if (["FMO", "TM"].includes(role)) {
+    const p = defaultPermissions();
+    p.mobile["fieldOps"]    = full.mobile["fieldOps"];
+    p.mobile["salesOps"]    = full.mobile["salesOps"];
+    p.mobile["farmerOps"]   = full.mobile["farmerOps"];
+    p.mobile["masterAccess"]= full.mobile["masterAccess"];
+    p.mobile["dataOps"]     = full.mobile["dataOps"];
+    return p;
+  }
+  if (["ASM", "KAM", "RSM"].includes(role)) {
+    const p = defaultPermissions();
+    p.mobile["fieldOps"]    = full.mobile["fieldOps"];
+    p.mobile["salesOps"]    = full.mobile["salesOps"];
+    p.mobile["masterAccess"]= full.mobile["masterAccess"];
+    p.mobile["hrOps"]       = full.mobile["hrOps"];
+    p.mobile["dataOps"]     = full.mobile["dataOps"];
+    p.web["sales"]   = full.web["sales"];
+    p.web["reports"] = full.web["reports"];
+    return p;
+  }
+  if (role === "ZSM") {
+    const p = defaultPermissions();
+    p.mobile["fieldOps"]    = full.mobile["fieldOps"];
+    p.mobile["salesOps"]    = full.mobile["salesOps"];
+    p.mobile["masterAccess"]= full.mobile["masterAccess"];
+    p.mobile["hrOps"]       = full.mobile["hrOps"];
+    p.web["sales"]          = full.web["sales"];
+    p.web["hr"]             = full.web["hr"];
+    p.web["reports"]        = full.web["reports"];
+    return p;
+  }
+
+  return empty;
 }
 
 // Legacy compat
@@ -585,96 +559,19 @@ export function validateCircularReporting(
 
 export const SEED_EMPLOYEES: Employee[] = [
   {
-    id: 1,
-    employeeId: "EMP-0001",
-    firstName: "Rajesh",
-    lastName: "Kumar",
-    fullName: "Rajesh Kumar",
-    email: "rajesh.kumar@paramverse.bio",
-    mobile: "9876543210",
-    countryCode: "+91",
-    alternativeMobile: "9988776655",
-    bloodGroup: "B+",
-    gender: "Male",
-    dob: "1985-05-15",
-    employeeType: "Full-time",
-    departmentId: 1,
-    department: "Sales",
-    roleType: "Field User",
-    salesType: "Retail Sales",
-    roleId: 106,
-    role: "RSM",
-    geoZone: "West",
-    geoRegion: "Mumbai",
-    territory: "Mumbai Region",
-    emergencyContactName: "Priya Kumar",
-    emergencyContactMobile: "9876543215",
+    id: 1, employeeId: "EMP-0001", firstName: "Rajesh", lastName: "Kumar",
+    fullName: "Rajesh Kumar", email: "rajesh.kumar@paramverse.bio",
+    mobile: "9876543210", countryCode: "+91", bloodGroup: "B+", gender: "Male",
+    dob: "1985-05-15", employeeType: "Full-time",
+    departmentId: 1, department: "Sales", roleType: "Field User",
+    salesType: "Retail Sales", roleId: 106, role: "RSM",
+    geoZone: "West", geoRegion: "Mumbai", territory: "Mumbai Region",
+    emergencyContactName: "Priya Kumar", emergencyContactMobile: "9876543215",
     emergencyContactRelation: "Spouse",
-    emergencyContactAddress: "123 Business Park, Mumbai 400001",
     currentAddress: "123 Business Park, Mumbai 400001",
-    permanentAddress: "Flat 101, Star Heights, FC Road, Pune 411004",
-    geoMappings: [
-      {
-        geoZone: "West",
-        geoRegion: "Mumbai",
-        geoArea: "Central Mumbai",
-        territory: "Mumbai Region",
-        geoTown: "Kothrud Town",
-      }
-    ],
-    approvalLevel1Id: 4,
-    approvalLevel1Name: "Priya Patel",
-    approvalLevel1Role: "HR Manager",
-    approvalLevel2Id: 5,
-    approvalLevel2Name: "Arjun Verma",
-    approvalLevel2Role: "Accounts Manager",
-    permissions: fullPermissions(),
-    reportingManagerId: null,
-    reportingManager: "",
-    status: "active",
-    joiningDate: "2018-03-20",
-    createdBy: "Admin",
-    createdDate: "2024-01-10",
-    updatedBy: "Admin",
-    updatedDate: "2024-01-10",
-    lastStatusChange: "2024-01-10",
-    documents: [
-      {
-        id: "doc-seed-1",
-        documentType: "Aadhaar Card",
-        documentNumber: "XXXX-XXXX-1234",
-        status: "verified",
-        fileName: "rajesh-aadhaar.pdf",
-        fileUrl: "data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvTWVkaWFCb3hbMCAwIDMgM10+PgplbmRvYmoKeHJlZgowIDQKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAp0cmFpbGVyCjw8L1NpemUgNC9Sb290IDEgMCBSL0luZm8gNCAwIFI+PgpzdGFydHhyZWYKMTg5CiUlRU9G",
-        mimeType: "application/pdf",
-        uploadedBy: "Admin",
-        uploadedOn: "2024-01-10",
-        verifiedBy: "Priya Patel",
-        verifiedDate: "2024-01-11",
-      },
-      {
-        id: "doc-seed-2",
-        documentType: "PAN Card",
-        documentNumber: "ABCDE1234F",
-        status: "uploaded",
-        fileName: "rajesh-pan.jpg",
-        fileUrl: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDABALDA4MChAODQ4SERATGCgaGBYWGDEjJR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2P/2wBDAQwNDR8REiUeHyAeJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pJS4pL/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCwAA//2Q==",
-        mimeType: "image/jpeg",
-        uploadedBy: "Admin",
-        uploadedOn: "2024-01-10",
-      },
-      {
-        id: "doc-seed-3",
-        documentType: "Photograph",
-        status: "uploaded",
-        fileName: "rajesh-photo.png",
-        fileUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-        mimeType: "image/png",
-        uploadedBy: "Admin",
-        uploadedOn: "2024-01-10",
-      },
-    ],
-    activityLog: [],
+    reportingManagerId: null, reportingManager: "", status: "active",
+    joiningDate: "2018-03-20", createdBy: "Admin", createdDate: "2024-01-10",
+    updatedBy: "Admin", updatedDate: "2024-01-10", lastStatusChange: "2024-01-10",
   },
   {
     id: 2, employeeId: "EMP-0002", firstName: "Anjali", lastName: "Sharma",
@@ -700,7 +597,7 @@ export const SEED_EMPLOYEES: Employee[] = [
     departmentId: 5, department: "Field Force", roleType: "Field User",
     salesType: "Retail Sales", roleId: 101, role: "DO",
     geoZone: "West", geoRegion: "Mumbai", geoArea: "Central Mumbai",
-    territory: "West Territory", geoTown: "Kothrud Town",
+    territory: "Matunga Territory", geoLocality: "Matunga East",
     emergencyContactName: "Neha Singh", emergencyContactMobile: "9876543217",
     emergencyContactRelation: "Spouse",
     currentAddress: "789 Residential Complex, Mumbai 400019",
@@ -775,7 +672,7 @@ export const SEED_EMPLOYEES: Employee[] = [
     departmentId: 5, department: "Field Force", roleType: "Field User",
     salesType: "Retail Sales", roleId: 101, role: "DO",
     geoZone: "South", geoRegion: "Bangalore", geoArea: "East Bangalore",
-    territory: "South Territory", geoTown: "Whitefield Town",
+    territory: "Indiranagar Territory", geoLocality: "Indiranagar",
     emergencyContactName: "Suresh Desai", emergencyContactMobile: "8765432116",
     emergencyContactRelation: "Parent",
     currentAddress: "567 Garden View, Bangalore 560038",
@@ -817,7 +714,7 @@ export const SEED_EMPLOYEES: Employee[] = [
 // ── localStorage Helpers ──────────────────────────────────────────────────────
 
 const EMPLOYEE_KEY = "ds_employees";
-const EMPLOYEE_VERSION = 6;
+const EMPLOYEE_VERSION = 2;
 
 interface StoredEmployeeData {
   version: number;
@@ -828,43 +725,18 @@ export function loadEmployees(): Employee[] {
   if (typeof window === "undefined") return [...SEED_EMPLOYEES];
   try {
     const raw = localStorage.getItem(EMPLOYEE_KEY);
-    const getSeeded = () => SEED_EMPLOYEES.map(emp => {
-      // Map seed employees permissions to their role template defaults
-      const perms = emp.role === "HR Admin" ? fullPermissions() : roleDefaultPermissions(emp.role);
-      return {
-        ...emp,
-        permissions: perms,
-      };
-    });
     if (!raw) {
-      const seeded = getSeeded();
-      localStorage.setItem(EMPLOYEE_KEY, JSON.stringify({ version: EMPLOYEE_VERSION, employees: seeded }));
-      return seeded;
+      localStorage.setItem(EMPLOYEE_KEY, JSON.stringify({ version: EMPLOYEE_VERSION, employees: SEED_EMPLOYEES }));
+      return [...SEED_EMPLOYEES];
     }
     const parsed = JSON.parse(raw) as StoredEmployeeData;
     if (parsed.version !== EMPLOYEE_VERSION) {
-      if (parsed.version === 5 && Array.isArray(parsed.employees)) {
-        const migrated = parsed.employees.map((e: Employee) => ({
-          ...e,
-          documents: e.documents ?? [],
-          activityLog: e.activityLog ?? [],
-        }));
-        localStorage.setItem(
-          EMPLOYEE_KEY,
-          JSON.stringify({ version: EMPLOYEE_VERSION, employees: migrated }),
-        );
-        return migrated;
-      }
-      const seeded = getSeeded();
-      localStorage.setItem(EMPLOYEE_KEY, JSON.stringify({ version: EMPLOYEE_VERSION, employees: seeded }));
-      return seeded;
+      localStorage.setItem(EMPLOYEE_KEY, JSON.stringify({ version: EMPLOYEE_VERSION, employees: SEED_EMPLOYEES }));
+      return [...SEED_EMPLOYEES];
     }
-    return parsed.employees || getSeeded();
+    return parsed.employees || [...SEED_EMPLOYEES];
   } catch {
-    return SEED_EMPLOYEES.map(emp => ({
-      ...emp,
-      permissions: roleDefaultPermissions(emp.role),
-    }));
+    return [...SEED_EMPLOYEES];
   }
 }
 

@@ -34,7 +34,6 @@ import { MiniKPICard } from "@/components/ui/KPICard";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { ListingUserCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
 interface ToastState {
   msg: string;
@@ -53,6 +52,34 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100"><X className="h-3.5 w-3.5" /></button>
     </div>
+  );
+}
+
+function StatusToggle({
+  record,
+  onToggle,
+}: {
+  record: CustomerTypeRecord;
+  onToggle: (item: CustomerTypeRecord) => void;
+}) {
+  const active = record.status === "active";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(record);
+      }}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+        active
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
+      )}
+      title="Click to toggle status"
+    >
+      {active ? "Active" : "Inactive"}
+    </button>
   );
 }
 
@@ -78,54 +105,25 @@ export default function CustomerTypesPage() {
 
   const columns: ColumnConfig<CustomerTypeRecord>[] = [
     {
-      key: "customerType",
-      header: "Customer Type Name",
+      key: "customerTypeCode",
+      header: "Customer Type Code",
       sortable: true,
       filterable: true,
       filterType: "text",
-      width: "200px",
+      width: "180px",
+      render: (val, row) => <span className="font-mono font-medium text-foreground">{row.customerTypeCode}</span>,
+    },
+    {
+      key: "customerType",
+      header: "Customer Type",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "240px",
       render: (val, row) => (
         <Link href={`/masters/customer-types/${row.id}`} className="font-semibold text-foreground hover:text-brand-700">
           {row.customerType}
         </Link>
-      ),
-    },
-    {
-      key: "initialCode",
-      header: "Initial Code",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (_val, row) => (
-        <span className="font-mono font-medium text-foreground">{row.initialCode}</span>
-      ),
-    },
-    {
-      key: "description",
-      header: "Description",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "320px",
-      render: (val, row) => row.description || "—",
-    },
-    {
-      key: "createdBy",
-      header: "Created By",
-      sortable: true,
-      width: "150px",
-      render: (_val, row) => (
-        <ListingUserCell name={row.createdBy} date={row.createdDate} />
-      ),
-    },
-    {
-      key: "updatedBy",
-      header: "Updated By",
-      sortable: true,
-      width: "150px",
-      render: (_val, row) => (
-        <ListingUserCell name={row.updatedBy} date={row.updatedDate} />
       ),
     },
     {
@@ -139,9 +137,28 @@ export default function CustomerTypesPage() {
         { label: "Inactive", value: "inactive" },
       ],
       width: "120px",
-      render: (val, row) => (
-        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
-      ),
+      render: (val, row) => <StatusToggle record={row} onToggle={toggleStatus} />,
+    },
+    {
+      key: "description",
+      header: "Description",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "480px",
+      render: (val, row) => row.description || "—",
+    },
+    {
+      key: "createdBy",
+      header: "Created By",
+      width: "120px",
+      render: () => "Admin",
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      width: "120px",
+      render: () => "Admin",
     },
   ];
 
@@ -175,7 +192,6 @@ export default function CustomerTypesPage() {
       const q = String(filters.search).trim().toLowerCase();
       result = result.filter(
         (r) =>
-          r.initialCode.toLowerCase().includes(q) ||
           r.customerTypeCode.toLowerCase().includes(q) ||
           r.customerType.toLowerCase().includes(q) ||
           r.description.toLowerCase().includes(q)
@@ -200,11 +216,7 @@ export default function CustomerTypesPage() {
 
   const toggleStatus = (record: CustomerTypeRecord) => {
     const nextStatus: "active" | "inactive" = record.status === "active" ? "inactive" : "active";
-    const updated = records.map((item) =>
-      item.id === record.id
-        ? { ...item, status: nextStatus, updatedBy: "Admin", updatedDate: new Date().toISOString().slice(0, 10) }
-        : item,
-    );
+    const updated = records.map((item) => (item.id === record.id ? { ...item, status: nextStatus } : item));
     saveCustomerTypes(updated);
     setRecords(updated);
     setToast({ msg: `Customer Type status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`, type: "success" });
@@ -230,15 +242,14 @@ export default function CustomerTypesPage() {
 
   const handleExport = () => {
     try {
-      const headers = ["ID", "Customer Type Name", "Initial Code", "Description", "Status"];
+      const headers = ["ID", "Customer Type Code", "Customer Type", "Description"];
       const csvRows = [headers.join(",")];
       for (const r of records) {
         const row = [
           r.id,
+          `"${r.customerTypeCode.replace(/"/g, '""')}"`,
           `"${r.customerType.replace(/"/g, '""')}"`,
-          r.initialCode,
           `"${r.description.replace(/"/g, '""')}"`,
-          r.status,
         ];
         csvRows.push(row.join(","));
       }
@@ -288,7 +299,7 @@ export default function CustomerTypesPage() {
           addLabel="Add Customer Type"
           onExport={handleExport}
           emptyMessage="customer types"
-          searchPlaceholder="Search customer type, initial code, description..."
+          searchPlaceholder="Search customer type code, customer type, description..."
           currentFilters={filters}
           currentSort={sort}
         />

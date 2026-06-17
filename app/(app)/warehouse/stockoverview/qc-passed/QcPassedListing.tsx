@@ -5,7 +5,6 @@ import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { Eye, CheckCircle2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { QcPassedStockRecord } from "../types";
 import {
   PRODUCT_OPTIONS,
@@ -79,75 +78,13 @@ export function QcPassedListing({ qcPassedForWarehouse }: QcPassedListingProps) 
   }, [processed, page, pageSize]);
 
   const columns: ColumnConfig<QcPassedStockRecord>[] = [
-    {
-      key: "product",
-      header: "Product",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: PRODUCT_OPTIONS,
-      render: (val, row) => (
-        <Link href={`/warehouse/stockoverview/view/${row.id}`} className="block group/name">
-          <span className="text-xs font-semibold text-foreground group-hover/name:text-brand-700">{row.product}</span>
-        </Link>
-      ),
-    },
-    {
-      key: "warehouse",
-      header: "Warehouse",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: WAREHOUSE_OPTIONS,
-      render: (val, row) => <span className="text-xs text-foreground">{row.warehouse}</span>,
-    },
-    {
-      key: "batchNumber",
-      header: "Batch Number",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "130px",
-      render: (val, row) => <span className="font-mono text-xs text-foreground">{row.batchNumber}</span>,
-    },
-    {
-      key: "availableQuantity",
-      header: "Available Qty",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      align: "right",
-      width: "130px",
-      render: (val) => <span className="text-xs font-medium tabular-nums text-foreground">{val != null ? val.toLocaleString() : "—"}</span>,
-    },
-    {
-      key: "reservedQuantity",
-      header: "Reserved Qty",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      align: "right",
-      width: "130px",
-      render: (val) => <span className="text-xs font-medium tabular-nums text-foreground">{val != null ? val.toLocaleString() : "—"}</span>,
-    },
-    {
-      key: "manufacturingDate",
-      header: "Mfg Date",
-      sortable: true,
-      filterable: true,
-      filterType: "date",
-      width: "140px",
-      render: (val, row) => <span className="text-xs text-foreground">{row.manufacturingDate}</span>,
-    },
-    {
-      key: "expiryDate",
-      header: "Expiry Date",
-      sortable: true,
-      filterable: true,
-      filterType: "date",
-      width: "140px",
-      render: (val, row) => <span className="text-xs text-foreground">{row.expiryDate}</span>,
-    },
+    { key: "product", header: "Product", sortable: true, filterable: true, filterType: "dropdown", filterOptions: PRODUCT_OPTIONS },
+    { key: "warehouse", header: "Warehouse", sortable: true, filterable: true, filterType: "dropdown", filterOptions: WAREHOUSE_OPTIONS },
+    { key: "batchNumber", header: "Batch Number", sortable: true, filterable: true, filterType: "text", width: "130px" },
+    { key: "availableQuantity", header: "Available Qty", sortable: true, filterable: true, filterType: "text", align: "center", width: "130px" },
+    { key: "reservedQuantity", header: "Reserved Qty", sortable: true, filterable: true, filterType: "text", align: "center", width: "130px" },
+    { key: "manufacturingDate", header: "Mfg Date", sortable: true, filterable: true, filterType: "date", width: "140px" },
+    { key: "expiryDate", header: "Expiry Date", sortable: true, filterable: true, filterType: "date", width: "140px" },
     {
       key: "status",
       header: "Status",
@@ -159,7 +96,7 @@ export function QcPassedListing({ qcPassedForWarehouse }: QcPassedListingProps) 
       render: (val: any) => {
         const cfg = STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: val };
         return (
-          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+          <span className={`inline-flex items-center text-xs px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
             {cfg.label}
           </span>
         );

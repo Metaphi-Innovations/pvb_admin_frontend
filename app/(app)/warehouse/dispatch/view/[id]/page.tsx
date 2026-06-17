@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { RecordDetailPage } from "@/components/record-detail";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
-import { Truck, Package, Building, User, Calendar, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Truck, Package, Building, User, Calendar, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import { getDispatchById } from "../../services";
 import { DispatchRecord } from "../../types";
@@ -22,57 +22,25 @@ export default function ViewDispatchPage() {
 
   if (!record) {
     return (
-      <RecordDetailPage
-        listHref="/warehouse/dispatch"
-        listLabel="Dispatch"
-        recordName="Dispatch Details"
-        statusLabel="Loading"
-        statusVariant="neutral"
-      >
+      <FormContainer title="Dispatch Details" onBack={() => router.push("/warehouse/dispatch")}>
         <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading dispatch record...</div>
-      </RecordDetailPage>
+      </FormContainer>
     );
   }
 
   const statusConfig = DELIVERY_STATUS_BADGE_CONFIG[record.deliveryStatus] || { bg: "bg-slate-100 text-slate-600 border-slate-200", label: record.deliveryStatus };
-  const statusVariant =
-    record.deliveryStatus === "Delivered" ? "active" :
-    record.deliveryStatus === "Cancelled" || record.deliveryStatus === "Returned" ? "blocked" :
-    record.deliveryStatus === "Pending Dispatch" ? "draft" : "neutral";
 
   return (
-    <RecordDetailPage
-      listHref="/warehouse/dispatch"
-      listLabel="Dispatch"
-      recordName={record.dispatchNumber}
-      recordCode={record.salesOrderNumber}
-      statusLabel={statusConfig.label}
-      statusVariant={statusVariant}
-      metaItems={[
-        { icon: User, label: record.customer },
-        { icon: Building, label: record.warehouse },
-        { icon: Calendar, label: record.dispatchDate },
-      ]}
-      onEdit={record.deliveryStatus !== "Delivered" ? () => router.push(`/warehouse/dispatch/edit/${record.id}`) : undefined}
-      sidebar={{
-        summary: [
-          { label: "Vehicle", value: record.vehicleNumber, highlight: true },
-          { label: "Driver", value: record.driverName },
-          { label: "Transporter", value: record.transporterName || "—" },
-          { label: "Products", value: record.products.length },
-        ],
-        quickActions:
-          record.deliveryStatus !== "Delivered"
-            ? [
-                {
-                  label: "Edit Dispatch",
-                  icon: Truck,
-                  variant: "primary" as const,
-                  onClick: () => router.push(`/warehouse/dispatch/edit/${record.id}`),
-                },
-              ]
-            : [],
-      }}
+    <FormContainer
+      title={record.dispatchNumber}
+      description={`Outbound shipment details for ${record.customer}`}
+      onBack={() => router.push("/warehouse/dispatch")}
+      actions={
+        <span className={`inline-flex items-center text-xs px-3 py-1 rounded-full font-semibold border ${statusConfig.bg}`}>
+          {statusConfig.label}
+        </span>
+      }
+      noCard={true}
     >
       <div className="space-y-6">
 
@@ -183,7 +151,18 @@ export default function ViewDispatchPage() {
           </div>
         )}
 
+        {/* Actions */}
+        <div className="flex items-center justify-end gap-3 border-t pt-4">
+          <Button variant="outline" size="sm" className="h-8 text-xs font-semibold" onClick={() => router.push("/warehouse/dispatch")}>
+            Back to List
+          </Button>
+          {record.deliveryStatus !== "Delivered" && (
+            <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5" onClick={() => router.push(`/warehouse/dispatch/edit/${record.id}`)}>
+              Edit Dispatch
+            </Button>
+          )}
+        </div>
       </div>
-    </RecordDetailPage>
+    </FormContainer>
   );
 }

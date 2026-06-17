@@ -3,15 +3,44 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import {
-  RecordDetailPage,
-  RecordKvRow,
-  RecordSectionCard,
-  RecordStatusPill,
-} from "@/components/record-detail";
-import { CheckCircle2, Clock, Pencil, Tag, X } from "lucide-react";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ArrowLeft, Edit2, Tag, CheckCircle2, X } from "lucide-react";
 import { loadCategories, saveCategories, type Category, type CategoryStatus, todayStr } from "../category-data";
+
+const STATUS_CFG: Record<CategoryStatus, { bg: string; text: string; dot: string; label: string }> = {
+  active: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Active" },
+  inactive: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400", label: "Inactive" },
+};
+
+function StatusPill({ status }: { status: CategoryStatus }) {
+  const st = STATUS_CFG[status];
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium", st.bg, st.text)}>
+      <span className={cn("h-1.5 w-1.5 rounded-full", st.dot)} />
+      {st.label}
+    </span>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value?: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-border/60 px-3 py-2.5 last:border-0">
+      <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
+      <span className="text-right text-xs font-medium text-foreground">{value ? value : "-"}</span>
+    </div>
+  );
+}
+
+function DetailCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-border bg-white p-3.5">
+      <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{title}</p>
+      <div>{children}</div>
+    </div>
+  );
+}
 
 interface ToastState {
   msg: string;
@@ -41,7 +70,6 @@ export default function CategoryDetailPage() {
   const [category, setCategory] = useState<Category | null>(null);
   const [records, setRecords] = useState<Category[]>([]);
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [activeTab, setActiveTab] = useState("overview");
 
   useEffect(() => {
     const items = loadCategories();
@@ -57,25 +85,16 @@ export default function CategoryDetailPage() {
 
   if (!category) {
     return (
-      <RecordDetailPage
-        listHref="/masters/categories"
-        listLabel="Categories"
-        recordName="Not found"
-        statusLabel="—"
-        statusVariant="neutral"
-      >
+      <AppLayout>
         <div className="py-16 text-center">
           <p className="text-sm text-muted-foreground">Category not found.</p>
-          <Link href="/masters/categories" className="mt-2 inline-block text-xs text-brand-600 hover:underline">
-            Back to listing
-          </Link>
         </div>
-      </RecordDetailPage>
+      </AppLayout>
     );
   }
 
-  const toggleStatus = (on: boolean) => {
-    const nextStatus: CategoryStatus = on ? "active" : "inactive";
+  const toggleStatus = () => {
+    const nextStatus: CategoryStatus = category.status === "active" ? "inactive" : "active";
     const updated = records.map((item) =>
       item.id === category.id
         ? { ...item, status: nextStatus, updatedBy: "Admin", updatedDate: todayStr() }
@@ -84,80 +103,50 @@ export default function CategoryDetailPage() {
     setRecords(updated);
     saveCategories(updated);
     setCategory(updated.find((item) => item.id === category.id) ?? null);
-    setToast({
-      msg: `Category status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`,
-      type: "success",
-    });
-  };
-
-  const tabs = [{ value: "overview", label: "Overview" }];
-
-  const renderTabContent = () => {
-    if (activeTab !== "overview") return null;
-
-    return (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <RecordSectionCard title="Basic Details" icon={Tag} accent="blue">
-          <RecordKvRow label="Category Code" value={category.categoryCode} mono copy />
-          <RecordKvRow label="Category Name" value={category.categoryName} highlight />
-          <RecordKvRow label="Description" value={category.description} />
-          <RecordKvRow
-            label="Status"
-            value={
-              <RecordStatusPill
-                label={category.status === "active" ? "Active" : "Inactive"}
-                variant={category.status}
-              />
-            }
-            isLast
-          />
-        </RecordSectionCard>
-
-        <RecordSectionCard title="Audit Details" icon={Clock} accent="slate">
-          <RecordKvRow label="Created By" value={category.createdBy} />
-          <RecordKvRow label="Created Date" value={category.createdDate} />
-          <RecordKvRow label="Updated By" value={category.updatedBy} />
-          <RecordKvRow label="Updated Date" value={category.updatedDate} isLast />
-        </RecordSectionCard>
-      </div>
-    );
+    setToast({ msg: `Category status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`, type: "success" });
   };
 
   return (
-    <>
-      <RecordDetailPage
-        listHref="/masters/categories"
-        listLabel="Categories"
-        recordName={category.categoryName}
-        recordCode={category.categoryCode}
-        statusLabel={category.status === "active" ? "Active" : "Inactive"}
-        statusVariant={category.status}
-        tabs={tabs}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        active={category.status === "active"}
-        onActiveChange={toggleStatus}
-        onEdit={() => router.push(`/masters/categories/${category.id}/edit`)}
-        sidebar={{
-          quickActions: [
-            {
-              label: "Edit Category",
-              icon: Pencil,
-              onClick: () => router.push(`/masters/categories/${category.id}/edit`),
-              variant: "primary",
-            },
-          ],
-          summary: [
-            { label: "Code", value: category.categoryCode, highlight: true },
-            { label: "Description", value: category.description || "—" },
-            { label: "Created", value: category.createdDate },
-            { label: "Updated", value: category.updatedDate },
-          ],
-        }}
-      >
-        {renderTabContent()}
-      </RecordDetailPage>
+    <AppLayout>
+      <div className="mx-auto max-w-[800px] space-y-5">
+        <div className="flex items-start gap-4">
+          <Button variant="ghost" size="sm" className="h-8 px-2 -ml-2" onClick={() => router.push("/masters/categories")}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex-1">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-brand-100 bg-brand-50">
+                <Tag className="h-5 w-5 text-brand-600" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-foreground">{category.categoryName}</h1>
+                <p className="mt-0.5 text-xs text-muted-foreground">{category.categoryCode}</p>
+              </div>
+              <StatusPill status={category.status} />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={toggleStatus}>
+              {category.status === "active" ? "Deactivate" : "Activate"}
+            </Button>
+            <Link href={`/masters/categories/${category.id}/edit`}>
+              <Button size="sm" className="h-8 gap-1.5 bg-brand-600 text-xs text-white hover:bg-brand-700">
+                <Edit2 className="h-3.5 w-3.5" /> Edit
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <DetailCard title="Basic Details">
+            <InfoRow label="Category Code" value={category.categoryCode} />
+            <InfoRow label="Category Name" value={category.categoryName} />
+            <InfoRow label="Description" value={category.description} />
+            <InfoRow label="Status" value={<StatusPill status={category.status} />} />
+          </DetailCard>
+        </div>
+      </div>
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-    </>
+    </AppLayout>
   );
 }

@@ -1,19 +1,27 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { cn } from "@/lib/utils";
+import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import {
   CheckCircle2,
   Edit2,
   Eye,
   Microscope,
+  XCircle,
   X,
   Trash2,
-  AlertTriangle,
 } from "lucide-react";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetBody,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import {
   Dialog,
   DialogContent,
@@ -22,45 +30,32 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { MasterFormGrid, MasterField, compactInput } from "@/components/masters/MasterModule";
-import { MasterListingSheets } from "@/components/masters/MasterListingSheets";
-import { MasterDrawerSection } from "@/components/masters/MasterRecordDrawer";
+import { Switch } from "@/components/ui/switch";
+import { MiniKPICard } from "@/components/ui/KPICard";
+import { MasterFormGrid, MasterViewRow } from "@/components/masters/MasterModule";
+import { NameCodeDescriptionFields } from "@/components/masters/simpleFields";
 import {
   DEFAULT_CFU_FORM,
   formToCfu,
   CFU_SEED,
   CFU_STORAGE_KEY,
   cfuToForm,
-  validateCfuForm,
   type CfuForm,
   type CfuRecord,
+  validateCfuForm,
 } from "./cfu-data";
 import {
   loadMasterRecords,
   saveMasterRecords,
+  nextMasterCode,
   masterToday,
+  MASTER_CURRENT_USER,
   type MasterStatus,
 } from "@/lib/masters/common";
+
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { applyFilters } from "@/components/listing/filter-utils";
-import { ListingUserCell, AuditUserRow, ListingStatusToggle, isActiveStatus } from "@/components/listing";
-import { ListingContainer } from "@/components/layout/ListingContainer";
-
-type StatusTab = "all" | "active" | "inactive";
-const CFU_TAB_KEY = "cfu-list-status-tab";
-
-const STATUS_TABS: { value: StatusTab; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "active", label: "Active" },
-  { value: "inactive", label: "Inactive" },
-];
-
-function readStoredStatusTab(): StatusTab {
-  if (typeof window === "undefined") return "all";
-  const v = sessionStorage.getItem(CFU_TAB_KEY);
-  return v === "active" || v === "inactive" ? v : "all";
-}
 
 interface ToastState {
   msg: string;
@@ -75,7 +70,7 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
         toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
       )}
     >
-      <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
+      <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
         <X className="h-3.5 w-3.5" />
@@ -84,15 +79,37 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
   );
 }
 
+function StatusToggle({ record, onToggle }: { record: CfuRecord; onToggle: (item: CfuRecord) => void }) {
+  const active = record.status === "active";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggle(record);
+      }}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+        active
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
+      )}
+    >
+      {active ? "Active" : "Inactive"}
+    </button>
+  );
+}
+
 export default function CfuMasterPage() {
   const [records, setRecords] = useState<CfuRecord[]>([]);
   const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "cfuName", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "cfuCode", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [statusTab, setStatusTab] = useState<StatusTab>("all");
 
+  // Sheet & Dialog states
   const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
   const [active, setActive] = useState<CfuRecord | null>(null);
   const [form, setForm] = useState<CfuForm>(DEFAULT_CFU_FORM);
@@ -101,7 +118,6 @@ export default function CfuMasterPage() {
 
   useEffect(() => {
     setRecords(loadMasterRecords<CfuRecord>(CFU_STORAGE_KEY, CFU_SEED));
-    setStatusTab(readStoredStatusTab());
   }, []);
 
   useEffect(() => {
@@ -110,23 +126,11 @@ export default function CfuMasterPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const handleStatusTabChange = (tab: string) => {
-    const next = tab as StatusTab;
-    setStatusTab(next);
-    sessionStorage.setItem(CFU_TAB_KEY, next);
-    setPage(1);
-  };
-
   const toggleStatus = (record: CfuRecord) => {
     const nextStatus: MasterStatus = record.status === "active" ? "inactive" : "active";
     const updated = records.map((item) =>
       item.id === record.id
-        ? {
-            ...item,
-            status: nextStatus,
-            updatedBy: "Admin User",
-            updatedAt: masterToday(),
-          }
+        ? { ...item, status: nextStatus, updatedBy: MASTER_CURRENT_USER, updatedAt: masterToday() }
         : item,
     );
     setRecords(updated);
@@ -137,16 +141,15 @@ export default function CfuMasterPage() {
     });
   };
 
-  const statusTabCounts = useMemo(
-    () => ({
-      all: records.length,
-      active: records.filter((r) => r.status === "active").length,
-      inactive: records.filter((r) => r.status === "inactive").length,
-    }),
-    [records],
-  );
-
   const columns: ColumnConfig<CfuRecord>[] = [
+    {
+      key: "cfuCode",
+      header: "CFU Code",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "130px",
+    },
     {
       key: "cfuName",
       header: "CFU Name",
@@ -154,15 +157,6 @@ export default function CfuMasterPage() {
       filterable: true,
       filterType: "text",
       width: "220px",
-      render: (_val, row) => (
-        <button
-          type="button"
-          onClick={() => openView(row)}
-          className="text-xs font-semibold text-foreground hover:text-brand-600 hover:underline text-left"
-        >
-          {row.cfuName}
-        </button>
-      ),
     },
     {
       key: "description",
@@ -171,27 +165,22 @@ export default function CfuMasterPage() {
       filterable: true,
       filterType: "text",
       width: "320px",
-      render: (val) => (
-        <span className="text-xs text-muted-foreground">{val ? String(val) : "—"}</span>
-      ),
     },
     {
       key: "createdBy",
       header: "Created By",
       sortable: true,
-      width: "150px",
-      render: (_val, row) => (
-        <ListingUserCell name={row.createdBy} date={row.createdAt} />
-      ),
+      filterable: true,
+      filterType: "text",
+      width: "110px",
     },
     {
       key: "updatedBy",
       header: "Updated By",
       sortable: true,
-      width: "150px",
-      render: (_val, row) => (
-        <ListingUserCell name={row.updatedBy} date={row.updatedAt} />
-      ),
+      filterable: true,
+      filterType: "text",
+      width: "110px",
     },
     {
       key: "status",
@@ -204,11 +193,8 @@ export default function CfuMasterPage() {
         { label: "Inactive", value: "inactive" },
       ],
       width: "100px",
-      render: (_val, row) => (
-        <ListingStatusToggle
-          active={isActiveStatus(row.status)}
-          onChange={() => toggleStatus(row)}
-        />
+      render: (val, row) => (
+        <StatusToggle record={row} onToggle={toggleStatus} />
       ),
     },
   ];
@@ -238,21 +224,21 @@ export default function CfuMasterPage() {
   const filtered = useMemo(() => {
     let result = [...records];
 
-    if (statusTab !== "all") {
-      result = result.filter((r) => r.status === statusTab);
-    }
-
+    // Search filter
     if (filters.search) {
       const q = String(filters.search).trim().toLowerCase();
       result = result.filter(
         (r) =>
+          r.cfuCode.toLowerCase().includes(q) ||
           r.cfuName.toLowerCase().includes(q) ||
-          (r.description || "").toLowerCase().includes(q),
+          (r.description || "").toLowerCase().includes(q)
       );
     }
 
+    // Apply column filters
     result = applyFilters(result, filters);
 
+    // Sorting
     if (sort.key && sort.direction !== "none") {
       result.sort((a, b) => {
         const aVal = String(a[sort.key as keyof CfuRecord] ?? "").toLowerCase();
@@ -263,7 +249,7 @@ export default function CfuMasterPage() {
     }
 
     return result;
-  }, [records, filters, sort, statusTab]);
+  }, [records, filters, sort]);
 
   const paginated = useMemo(() => {
     const startOffset = (page - 1) * pageSize;
@@ -272,10 +258,15 @@ export default function CfuMasterPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [filters, sort, pageSize, statusTab]);
+  }, [filters, sort, pageSize]);
 
   const openAdd = () => {
-    setForm({ ...DEFAULT_CFU_FORM });
+    const codes = records.map((r) => r.cfuCode);
+    const code = nextMasterCode("CFU-", codes);
+    setForm({
+      ...DEFAULT_CFU_FORM,
+      cfuCode: code,
+    });
     setErrors({});
     setActive(null);
     setSheetMode("add");
@@ -301,31 +292,23 @@ export default function CfuMasterPage() {
 
   const persist = () => {
     const mode = sheetMode === "add" ? "add" : "edit";
-    const list = loadMasterRecords<CfuRecord>(CFU_STORAGE_KEY, CFU_SEED);
-    const fieldErrors = validateCfuForm(
-      form,
-      list,
-      mode === "edit" ? active?.id : undefined,
-    );
-    if (Object.keys(fieldErrors).length > 0) {
-      setErrors(fieldErrors);
+    const err = validateCfuForm(form);
+    if (err) {
+      setErrors({ _form: err });
       return;
     }
-
+    const list = loadMasterRecords<CfuRecord>(CFU_STORAGE_KEY, CFU_SEED);
     let updatedList: CfuRecord[];
     if (mode === "add") {
       const id = list.length ? Math.max(...list.map((r) => r.id)) + 1 : 1;
       updatedList = [...list, formToCfu(form, id)];
       setToast({ msg: "CFU added successfully", type: "success" });
     } else if (active) {
-      updatedList = list.map((r) =>
-        r.id === active.id ? formToCfu(form, active.id, active) : r,
-      );
+      updatedList = list.map((r) => (r.id === active.id ? formToCfu(form, active.id, active) : r));
       setToast({ msg: "CFU updated successfully", type: "success" });
     } else {
       return;
     }
-
     saveMasterRecords(CFU_STORAGE_KEY, updatedList);
     setRecords(updatedList);
     closeSheet();
@@ -333,56 +316,42 @@ export default function CfuMasterPage() {
 
   const confirmDelete = () => {
     if (!deleteTarget) return;
-    const updated = records.map((r) =>
-      r.id === deleteTarget.id
-        ? {
-            ...r,
-            status: "inactive" as MasterStatus,
-            updatedBy: "Admin User",
-            updatedAt: masterToday(),
-          }
-        : r,
+    const list = loadMasterRecords<CfuRecord>(CFU_STORAGE_KEY, CFU_SEED).filter(
+      (r) => r.id !== deleteTarget.id,
     );
-    saveMasterRecords(CFU_STORAGE_KEY, updated);
-    setRecords(updated);
+    saveMasterRecords(CFU_STORAGE_KEY, list);
+    setRecords(list);
     setDeleteTarget(null);
-    setToast({ msg: `"${deleteTarget.cfuName}" marked as inactive`, type: "success" });
+    setToast({ msg: "CFU deleted successfully", type: "success" });
   };
 
   const handleExport = () => {
     try {
-      const headers = [
-        "ID",
-        "CFU Name",
-        "Description",
-        "Status",
-        "Created By",
-        "Updated By",
-        "Created At",
-        "Updated At",
-      ];
+      const headers = ["ID", "CFU Code", "CFU Name", "Description", "Status", "Created By", "Updated By", "Created At", "Updated At"];
       const csvRows = [headers.join(",")];
       for (const r of records) {
-        csvRows.push(
-          [
-            r.id,
-            `"${r.cfuName.replace(/"/g, '""')}"`,
-            `"${(r.description || "").replace(/"/g, '""')}"`,
-            r.status,
-            r.createdBy,
-            r.updatedBy,
-            r.createdAt,
-            r.updatedAt,
-          ].join(","),
-        );
+        const row = [
+          r.id,
+          `"${r.cfuCode.replace(/"/g, '""')}"`,
+          `"${r.cfuName.replace(/"/g, '""')}"`,
+          `"${(r.description || "").replace(/"/g, '""')}"`,
+          r.status,
+          r.createdBy,
+          r.updatedBy,
+          r.createdAt,
+          r.updatedAt,
+        ];
+        csvRows.push(row.join(","));
       }
       const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.href = url;
-      link.download = `cfu_export_${masterToday()}.csv`;
+      link.setAttribute("href", url);
+      link.setAttribute("download", `cfu_export_${masterToday()}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
       link.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(link);
       setToast({ msg: "CFUs exported successfully", type: "success" });
     } catch {
       setToast({ msg: "Failed to export CFUs", type: "error" });
@@ -393,159 +362,176 @@ export default function CfuMasterPage() {
     sheetMode === "add"
       ? "Add CFU"
       : sheetMode === "edit"
-        ? "Edit CFU"
-        : "View CFU";
-
-  const viewDrawer = active
-    ? {
-        title: active.cfuName,
-        subtitle: "Read-only CFU details",
-        status: active.status,
-        basicInfo: [
-          { label: "CFU Name", value: active.cfuName },
-          {
-            label: "Description",
-            value: active.description?.trim() ? active.description : "—",
-          },
-        ],
-        showDescription: false,
-        children: (
-          <MasterDrawerSection title="Audit Information">
-            <div className="space-y-4">
-              <AuditUserRow label="Created By" name={active.createdBy} />
-              <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground">Created Date</p>
-                <p className="text-sm font-medium text-foreground font-mono">
-                  {active.createdAt}
-                </p>
-              </div>
-              <AuditUserRow label="Updated By" name={active.updatedBy} />
-              <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground">Updated Date</p>
-                <p className="text-sm font-medium text-foreground font-mono">
-                  {active.updatedAt}
-                </p>
-              </div>
-            </div>
-          </MasterDrawerSection>
-        ),
-      }
-    : { title: "CFU", basicInfo: [] };
+      ? "Edit CFU"
+      : "View CFU";
 
   return (
-    <ListingContainer
-      title="CFU Master"
-      titleIcon={Microscope}
-      tabs={STATUS_TABS.map((t) => ({
-        value: t.value,
-        label: `${t.label} (${statusTabCounts[t.value]})`,
-      }))}
-      activeTab={statusTab}
-      onTabChange={handleStatusTabChange}
-    >
-      <MasterListing<CfuRecord>
-        columns={columns}
-        data={paginated}
-        totalRecords={filtered.length}
-        page={page}
-        pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={setPageSize}
-        onSortChange={setSort}
-        onFilterChange={setFilters}
-        actions={actions}
-        onAdd={openAdd}
-        addLabel="Add CFU"
-        onExport={handleExport}
-        emptyMessage="CFU records"
-        searchPlaceholder="Search CFU name or description..."
-        currentFilters={filters}
-        currentSort={sort}
-      />
+    <AppLayout>
+      <div className="space-y-5">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">CFU Master</h1>
+          <p className="mt-0.5 text-xs text-muted-foreground">Colony forming unit definitions</p>
+        </div>
 
-      <MasterListingSheets
-        sheetMode={sheetMode}
-        active={active}
-        onClose={closeSheet}
-        onEdit={() => active && openEdit(active)}
-        onSave={persist}
-        sheetTitle={sheetTitle}
-        icon={Microscope}
-        viewDrawer={viewDrawer}
-        statusActive={form.status === "active"}
-        onStatusChange={
-          sheetMode === "add" || sheetMode === "edit"
-            ? (isActive) =>
-                setForm((prev) => ({
-                  ...prev,
-                  status: isActive ? "active" : "inactive",
-                }))
-            : undefined
-        }
-        formContent={
-          sheetMode !== "view" ? (
-            <MasterFormGrid>
-              <MasterField label="CFU Name" required error={errors.cfuName} className="sm:col-span-2">
-                <Input
-                  autoFocus
-                  className={compactInput()}
-                  value={form.cfuName}
-                  onChange={(e) => setForm((prev) => ({ ...prev, cfuName: e.target.value }))}
-                  placeholder="e.g. 1×10⁸ cells/ml"
-                />
-              </MasterField>
-              <MasterField label="Description" className="sm:col-span-2">
-                <Textarea
-                  className="text-xs min-h-[72px] resize-none"
-                  value={form.description}
-                  onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-                  placeholder="Optional description"
-                />
-              </MasterField>
-            </MasterFormGrid>
-          ) : null
-        }
-      />
+        <div className="grid grid-cols-3 gap-3">
+          <MiniKPICard label="Total CFUs" value={records.length} icon={Microscope} accent={true} />
+          <MiniKPICard
+            label="Active"
+            value={records.filter((r) => r.status === "active").length}
+            icon={CheckCircle2}
+            accent={false}
+          />
+          <MiniKPICard
+            label="Inactive"
+            value={records.filter((r) => r.status === "inactive").length}
+            icon={XCircle}
+            accent={false}
+          />
+        </div>
+
+        <MasterListing<CfuRecord>
+          columns={columns}
+          data={paginated}
+          totalRecords={filtered.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          onSortChange={setSort}
+          onFilterChange={setFilters}
+          actions={actions}
+          onAdd={openAdd}
+          addLabel="Add CFU"
+          onExport={handleExport}
+          emptyMessage="CFUs"
+          searchPlaceholder="Search CFU code, name, description..."
+          currentFilters={filters}
+          currentSort={sort}
+        />
+      </div>
+
+      <Sheet open={sheetMode !== null} onOpenChange={(o) => !o && closeSheet()}>
+        <SheetContent>
+          <SheetHeader>
+            <div className="flex items-start gap-3 pr-8">
+              <div className="w-9 h-9 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center">
+                <Microscope className="w-4 h-4 text-brand-600" />
+              </div>
+              <div>
+                <SheetTitle className="text-base">{sheetTitle}</SheetTitle>
+                <SheetDescription className="text-xs">
+                  {sheetMode === "view" ? "Read-only details" : "Compact CFU form"}
+                </SheetDescription>
+              </div>
+            </div>
+          </SheetHeader>
+
+          <SheetBody>
+            {sheetMode === "view" && active ? (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-border/60 bg-muted/10 px-3">
+                  <MasterViewRow label="CFU Name" value={active.cfuName} />
+                  <MasterViewRow label="CFU Code" value={<span className="font-mono">{active.cfuCode}</span>} />
+                  <MasterViewRow label="Description" value={active.description || "—"} />
+                  <MasterViewRow label="Status" value={active.status === "active" ? "Active" : "Inactive"} />
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs pt-2 border-t">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
+                    <p className="font-medium">{active.createdBy}</p>
+                    <p className="text-muted-foreground">{active.createdAt}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Updated By</p>
+                    <p className="font-medium">{active.updatedBy}</p>
+                    <p className="text-muted-foreground">{active.updatedAt}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
+                <MasterFormGrid>
+                  <NameCodeDescriptionFields
+                    form={{ name: form.cfuName, code: form.cfuCode, description: form.description }}
+                    setForm={(u) =>
+                      setForm((prev) => {
+                        const n = typeof u === "function" ? u({ name: prev.cfuName, code: prev.cfuCode, description: prev.description }) : u;
+                        return { ...prev, cfuName: n.name, cfuCode: n.code, description: n.description };
+                      })
+                    }
+                    errors={{}}
+                    labels={{ name: "CFU Name", code: "CFU Code" }}
+                  />
+                </MasterFormGrid>
+                <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/20">
+                  <div>
+                    <p className="text-xs font-medium">Status</p>
+                    <p className="text-[11px] text-muted-foreground">{form.status === "active" ? "Active" : "Inactive"}</p>
+                  </div>
+                  <Switch
+                    checked={form.status === "active"}
+                    onCheckedChange={(checked) =>
+                      setForm((prev) => ({ ...prev, status: checked ? "active" : "inactive" }))
+                    }
+                  />
+                </div>
+              </div>
+            )}
+          </SheetBody>
+
+          <SheetFooter>
+            {sheetMode === "view" ? (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Back
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                  onClick={() => active && openEdit(active)}
+                >
+                  Edit
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                  onClick={persist}
+                >
+                  Save
+                </Button>
+              </>
+            )}
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-50 border border-amber-200">
-                <AlertTriangle className="w-4 h-4 text-amber-500" />
-              </div>
-              Deactivate CFU?
-            </DialogTitle>
-            <DialogDescription className="text-xs pt-1">
-              {deleteTarget && (
-                <>
-                  <strong className="text-foreground">{deleteTarget.cfuName}</strong> will be
-                  marked as inactive. It will remain visible in the All and Inactive tabs.
-                </>
-              )}
+            <DialogTitle className="text-sm">Delete record?</DialogTitle>
+            <DialogDescription className="text-xs">
+              This action cannot be undone. The record will be permanently removed.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => setDeleteTarget(null)}
-            >
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
               Cancel
             </Button>
-            <Button
-              size="sm"
-              className="h-8 text-xs text-white bg-red-600 hover:bg-red-700"
-              onClick={confirmDelete}
-            >
-              Mark Inactive
+            <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" onClick={confirmDelete}>
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-    </ListingContainer>
+    </AppLayout>
   );
 }

@@ -11,6 +11,8 @@ interface PRFormLayoutProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   headerActions?: React.ReactNode;
+  onSave?: () => void;
+  saveLabel?: string;
 }
 
 export function PRFormLayout({
@@ -21,25 +23,12 @@ export function PRFormLayout({
   headerActions,
 }: PRFormLayoutProps) {
   const router = useRouter();
-  const title =
-    mode === "create"
-      ? "Add Purchase Request"
-      : mode === "edit"
-        ? "Edit Purchase Request"
-        : "Purchase Request";
-  const description =
-    mode === "create"
-      ? "Procurement > Purchase Request > Add"
-      : mode === "edit"
-        ? "Procurement > Purchase Request > Edit"
-        : prNumber
-          ? `Procurement > Purchase Request > ${prNumber}`
-          : "Procurement > Purchase Request";
+  const title = mode === "create" ? "Create Purchase Request" : mode === "edit" ? "Edit Purchase Request" : "Purchase Request";
 
   return (
     <FormContainer
       title={title}
-      description={description}
+      description={prNumber ? `PR Number: ${prNumber}` : "New Purchase Request"}
       onBack={() => router.push("/procurement/purchase-requests")}
       actions={
         <div className="flex items-center gap-2">

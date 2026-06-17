@@ -1,7 +1,5 @@
-import PaymentViewPageClient from "../../../payments/PaymentViewPageClient";
+import { redirect } from "next/navigation";
 
-type PageProps = { params: { id: string } };
-
-export default function PaymentViewPage({ params }: PageProps) {
-  return <PaymentViewPageClient paymentId={Number(params.id)} />;
+export default function LegacyRedirect() {
+  redirect("/accounts/vouchers?tab=payment");
 }

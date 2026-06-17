@@ -7,7 +7,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { APPLICABLE_TO_OPTIONS, type TermsMaster } from "../terms-data";
 
 export interface TermFormState {
@@ -80,13 +79,15 @@ export default function TermSheet({
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Applicable To</Label>
-            <AutocompleteSelect
-              options={APPLICABLE_TO_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+            <select
               value={form.applicableTo}
-              onChange={(v) => setForm((p) => ({ ...p, applicableTo: v as TermFormState["applicableTo"] }))}
-              placeholder="Select applicable to…"
-              className="h-8 text-xs"
-            />
+              onChange={(e) => setForm((p) => ({ ...p, applicableTo: e.target.value as TermFormState["applicableTo"] }))}
+              className="w-full h-8 text-xs border border-border rounded-lg px-2"
+            >
+              {APPLICABLE_TO_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
           </div>
           <div className="flex items-center justify-between">
             <Label className="text-xs">Default Term</Label>

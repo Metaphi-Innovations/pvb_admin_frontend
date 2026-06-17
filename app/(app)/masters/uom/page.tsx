@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetBody, SheetFooter } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -26,13 +27,11 @@ import {
   generateUOMCode,
 } from "./uom-data";
 import { MiniKPICard } from "@/components/ui/KPICard";
-import { MasterFormGrid } from "@/components/masters/MasterModule";
-import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
+import { MasterFormGrid, MasterViewRow } from "@/components/masters/MasterModule";
 
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { applyFilters } from "@/components/listing/filter-utils";
-import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
 interface ToastState {
   msg: string;
@@ -53,6 +52,28 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
         <X className="h-3.5 w-3.5" />
       </button>
     </div>
+  );
+}
+
+function StatusToggle({ record, onToggle }: { record: UOMMaster; onToggle: (item: UOMMaster) => void }) {
+  const active = record.status === "active";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggle(record);
+      }}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+        active
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
+      )}
+    >
+      {active ? "Active" : "Inactive"}
+    </button>
   );
 }
 
@@ -123,9 +144,6 @@ export default function UOMPage() {
       filterable: true,
       filterType: "text",
       width: "110px",
-      render: (val, row) => (
-        <span className="font-mono text-xs text-brand-700">{row.uomId}</span>
-      ),
     },
     {
       key: "unitName",
@@ -134,9 +152,6 @@ export default function UOMPage() {
       filterable: true,
       filterType: "text",
       width: "220px",
-      render: (val, row) => (
-        <span className="text-xs font-semibold text-foreground">{row.unitName}</span>
-      ),
     },
     {
       key: "shortName",
@@ -145,6 +160,22 @@ export default function UOMPage() {
       filterable: true,
       filterType: "text",
       width: "130px",
+    },
+    {
+      key: "createdBy",
+      header: "Created By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
     },
     {
       key: "status",
@@ -158,29 +189,7 @@ export default function UOMPage() {
       ],
       width: "100px",
       render: (val, row) => (
-        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
-      ),
-    },
-    {
-      key: "createdDate",
-      header: "Created",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val, row) => (
-        <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />
-      ),
-    },
-    {
-      key: "updatedDate",
-      header: "Updated",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val, row) => (
-        <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />
+        <StatusToggle record={row} onToggle={toggleStatus} />
       ),
     },
   ];
@@ -417,74 +426,139 @@ export default function UOMPage() {
         />
       </div>
 
-      <MasterListingSheets
-        sheetMode={sheetMode}
-        active={active}
-        onClose={closeSheet}
-        onEdit={() => active && openEdit(active)}
-        onSave={persist}
-        sheetTitle={sheetTitle}
-        icon={Ruler}
-        viewDrawer={
-          active
-            ? buildSimpleMasterViewDrawer<UOMMaster>({
-                drawerTitle: "Unit",
-                getRecordCode: (r) => r.uomId,
-                basicInfo: (r) => [
-                  { label: "Unit Name", value: r.unitName },
-                  { label: "Unit ID", value: r.uomId, mono: true },
-                  { label: "Short Name", value: r.shortName },
-                ],
-                showDescription: false,
-              })(active)
-            : { title: "Unit", basicInfo: [] }
-        }
-        formContent={
-          <div className="space-y-4">
-            {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
-            <MasterFormGrid>
-              <div className="col-span-2 space-y-1">
-                <Label className="text-xs font-medium">Unit ID</Label>
-                <Input
-                  value={sheetMode === "add" ? nextAutoCode : active?.uomId || ""}
-                  disabled
-                  className="h-8 text-xs cursor-not-allowed bg-muted/30 text-muted-foreground"
-                />
+      <Sheet open={sheetMode !== null} onOpenChange={(o) => !o && closeSheet()}>
+        <SheetContent>
+          <SheetHeader>
+            <div className="flex items-start gap-3 pr-8">
+              <div className="flex items-center justify-center border w-9 h-9 rounded-xl bg-brand-50 border-brand-100">
+                <Ruler className="w-4 h-4 text-brand-600" />
               </div>
-              <div className="col-span-2 space-y-1">
-                <Label className="text-xs font-medium">
-                  Unit Name <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  value={form.unitName}
-                  onChange={(e) => {
-                    setForm((prev) => ({ ...prev, unitName: e.target.value }));
-                    setErrors((prev) => ({ ...prev, unitName: "" }));
-                  }}
-                  placeholder="e.g., Kilogram"
-                  className={cn("h-8 text-xs", errors.unitName && "border-red-400 focus-visible:ring-red-300")}
-                />
-                {errors.unitName && <p className="text-[11px] text-red-500 mt-1">{errors.unitName}</p>}
+              <div>
+                <SheetTitle className="text-base">{sheetTitle}</SheetTitle>
+                <SheetDescription className="text-xs">
+                  {sheetMode === "view" ? "Read-only details" : "Compact unit form"}
+                </SheetDescription>
               </div>
-              <div className="col-span-2 space-y-1">
-                <Label className="text-xs font-medium">
-                  Short Name <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  value={form.shortName}
-                  onChange={(e) => {
-                    setForm((prev) => ({ ...prev, shortName: e.target.value }));
-                    setErrors((prev) => ({ ...prev, shortName: "" }));
-                  }}
-                  placeholder="e.g., KG"
-                  className={cn("h-8 text-xs", errors.shortName && "border-red-400 focus-visible:ring-red-300")}
-                />
-                {errors.shortName && <p className="text-[11px] text-red-500 mt-1">{errors.shortName}</p>}
+            </div>
+          </SheetHeader>
+
+          <SheetBody>
+            {sheetMode === "view" && active ? (
+              <div className="space-y-4">
+                <div className="px-3 border rounded-lg border-border/60 bg-muted/10">
+                  <MasterViewRow label="Unit Name" value={active.unitName} />
+                  <MasterViewRow label="Unit ID" value={<span className="font-mono">{active.uomId}</span>} />
+                  <MasterViewRow label="Short Name" value={active.shortName} />
+                  <MasterViewRow label="Status" value={active.status === "active" ? "Active" : "Inactive"} />
+                </div>
+                <div className="grid grid-cols-2 gap-3 pt-2 text-xs border-t">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
+                    <p className="font-medium">{active.createdBy}</p>
+                    <p className="text-muted-foreground">{active.createdDate}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Updated By</p>
+                    <p className="font-medium">{active.updatedBy}</p>
+                    <p className="text-muted-foreground">{active.updatedDate}</p>
+                  </div>
+                </div>
               </div>
-            </MasterFormGrid>
-          </div>
-        }
-      />
+            ) : (
+              <div className="space-y-4">
+                {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
+                <MasterFormGrid>
+                  {/* Unit ID (Auto) */}
+                  <div className="col-span-2 space-y-1">
+                     <Label className="text-xs font-medium">Unit ID</Label>
+                    <Input
+                      value={sheetMode === "add" ? nextAutoCode : active?.uomId || ""}
+                      disabled
+                      className="h-8 text-xs cursor-not-allowed bg-muted/30 text-muted-foreground"
+                    />
+                  </div>
+
+                  {/* Unit Name */}
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-xs font-medium">
+                      Unit Name <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      value={form.unitName}
+                      onChange={(e) => {
+                        setForm((prev) => ({ ...prev, unitName: e.target.value }));
+                        setErrors((prev) => ({ ...prev, unitName: "" }));
+                      }}
+                      placeholder="e.g., Kilogram"
+                      className={cn("h-8 text-xs", errors.unitName && "border-red-400 focus-visible:ring-red-300")}
+                    />
+                    {errors.unitName && <p className="text-[11px] text-red-500 mt-1">{errors.unitName}</p>}
+                  </div>
+
+                  {/* Unit Short Name */}
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-xs font-medium">
+                      Short Name <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      value={form.shortName}
+                      onChange={(e) => {
+                        setForm((prev) => ({ ...prev, shortName: e.target.value }));
+                        setErrors((prev) => ({ ...prev, shortName: "" }));
+                      }}
+                      placeholder="e.g., KG"
+                      className={cn("h-8 text-xs", errors.shortName && "border-red-400 focus-visible:ring-red-300")}
+                    />
+                    {errors.shortName && <p className="text-[11px] text-red-500 mt-1">{errors.shortName}</p>}
+                  </div>
+                </MasterFormGrid>
+                {/* <div className="flex items-center justify-between p-3 border rounded-lg border-border bg-muted/20">
+                  <div>
+                    <p className="text-xs font-medium">Status</p>
+                    <p className="text-[11px] text-muted-foreground">{form.status === "active" ? "Active" : "Inactive"}</p>
+                  </div>
+                  <Switch
+                    checked={form.status === "active"}
+                    onCheckedChange={(checked) =>
+                      setForm((prev) => ({ ...prev, status: checked ? "active" : "inactive" }))
+                    }
+                  />
+                </div> */}
+              </div>
+            )}
+          </SheetBody>
+
+          <SheetFooter>
+            {sheetMode === "view" ? (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Back
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+                  onClick={() => active && openEdit(active)}
+                >
+                  Edit
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+                  onClick={persist}
+                >
+                  Save
+                </Button>
+              </>
+            )}
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <DialogContent className="max-w-sm">

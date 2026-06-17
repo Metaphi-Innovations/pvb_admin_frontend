@@ -1,134 +1,70 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import { AppLayout } from "@/components/layout/AppLayout";
-import {
-  RecordDetailPage,
-  RecordKvRow,
-  RecordMiniTable,
-  RecordSectionCard,
-  RecordStatusPill,
-  StatusBadge,
-} from "@/components/record-detail";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import {
-  AlertCircle,
+  ArrowLeft,
+  Edit2,
+  User,
   Ban,
-  Calendar,
-  CheckCircle,
   CheckCircle2,
-  CreditCard,
-  Eye,
-  FileText,
-  Info,
-  IndianRupee,
-  Landmark,
-  MapPin,
-  Mail,
-  Phone,
-  Plus,
-  Pencil,
   ShieldAlert,
-  ShoppingCart,
-  Clock,
-  TrendingUp,
-  Wallet,
+  Eye,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-	type Customer,
-	type CustomerStatus,
-	loadCustomers,
-	saveCustomers,
-	todayStr,
-	CUSTOMER_TYPE_LABELS,
-	PAYMENT_TERMS_OPTIONS,
-	formatMobile,
-	formatCreditLimit,
-	getActiveGSTMasters,
-	getActiveTDSMasters,
+  type Customer,
+  type CustomerStatus,
+  loadCustomers,
+  saveCustomers,
+  todayStr,
+  CUSTOMER_TYPE_LABELS,
+  PAYMENT_TERMS_OPTIONS,
+  formatMobile,
+  formatCreditLimit,
+  getActiveGSTMasters,
+  getActiveTDSMasters,
 } from "../customer-data";
-import { formatTdsSummary } from "../../tds/tds-data";
+import { CustomerStatusControl } from "../components/CustomerStatusControl";
 import { readCustomerPermissions } from "../customer-permissions";
-import { loadOrders } from "@/app/(app)/sales/orders/orders-data";
-import { formatMoney } from "@/lib/accounts/money-format";
-import {
-	deriveGstRegistered,
-	getGstCategoryLabel,
-} from "@/lib/masters/gst-compliance";
-import { ComplianceRegistrationViewRows } from "@/components/masters/ComplianceRegistrationViewRows";
 
-const STATUS_VARIANT: Record<
-  CustomerStatus,
-  "active" | "inactive" | "draft" | "blocked"
-> = {
-  active: "active",
-  inactive: "inactive",
-  draft: "draft",
-  blocked: "blocked",
+const STATUS_CFG: Record<CustomerStatus, { bg: string; text: string; dot: string; label: string }> = {
+  active: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Active" },
+  inactive: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400", label: "Inactive" },
+  draft: { bg: "bg-blue-50", text: "text-blue-700", dot: "bg-blue-500", label: "Draft" },
+  blocked: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-400", label: "Blocked" },
 };
 
-const STATUS_LABEL: Record<CustomerStatus, string> = {
-  active: "Active",
-  inactive: "Inactive",
-  draft: "Draft",
-  blocked: "Blocked",
-};
-
-function TypeBadge({ label }: { label: string }) {
+function InfoRow({ label, value, mono }: { label: string; value?: React.ReactNode; mono?: boolean }) {
   return (
-    <span className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700">
-      {label}
+    <div className="flex items-start justify-between gap-4 border-b border-border/60 px-3 py-2.5 last:border-0">
+      <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
+      <span className={cn("text-right text-xs font-medium text-foreground", mono && "font-mono")}>
+        {value !== undefined && value !== "" ? value : "-"}
+      </span>
+    </div>
+  );
+}
+
+function StatusPill({ status }: { status: CustomerStatus }) {
+  const st = STATUS_CFG[status];
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium", st.bg, st.text)}>
+      <span className={cn("h-1.5 w-1.5 rounded-full", st.dot)} />
+      {st.label}
     </span>
   );
 }
 
-const COMPLIANCE_TONES = {
-  green: { bg: "#ECFDF5", icon: "#10B981", Icon: CheckCircle2, badgeBg: "#ECFDF5", badgeTx: "#166534", badgeBd: "#86EFAC" },
-  amber: { bg: "#FFFBEB", icon: "#D97706", Icon: AlertCircle, badgeBg: "#FFFBEB", badgeTx: "#92400E", badgeBd: "#FDE68A" },
-  blue: { bg: "#EFF6FF", icon: "#3B82F6", Icon: Info, badgeBg: "#EFF6FF", badgeTx: "#1D4ED8", badgeBd: "#93C5FD" },
-} as const;
-
-function ComplianceRow({
-  tone,
-  label,
-  value,
-  badge,
-  isLast,
-}: {
-  tone: keyof typeof COMPLIANCE_TONES;
-  label: string;
-  value: string;
-  badge: string;
-  isLast?: boolean;
-}) {
-  const t = COMPLIANCE_TONES[tone];
-  const Icon = t.Icon;
+function DetailCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div
-      className="flex items-center gap-3 py-2"
-      style={{ borderBottom: isLast ? "none" : "1px solid #F0F3FA" }}
-    >
-      <div
-        className="flex items-center justify-center flex-shrink-0 rounded-full"
-        style={{ width: "28px", height: "28px", background: t.bg }}
-      >
-        <Icon className="w-3.5 h-3.5" style={{ color: t.icon }} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-[12.5px] font-medium text-[#3D5473] leading-tight">{label}</p>
-        <p className="text-[11px] text-[#6B80A0] truncate">{value}</p>
-      </div>
-      <span
-        className="inline-flex items-center rounded-md border text-[11px] font-bold flex-shrink-0"
-        style={{ background: t.badgeBg, color: t.badgeTx, borderColor: t.badgeBd, padding: "2px 9px" }}
-      >
-        {badge}
-      </span>
+    <div className="rounded-xl border border-border bg-white p-3.5">
+      <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{title}</p>
+      <div>{children}</div>
     </div>
   );
 }
@@ -139,62 +75,29 @@ export default function CustomerDetailPage() {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [records, setRecords] = useState<Customer[]>([]);
   const [perms, setPerms] = useState(readCustomerPermissions);
-  const [activeTab, setActiveTab] = useState("overview");
-  const [blockOpen, setBlockOpen] = useState(false);
-  const [blockReason, setBlockReason] = useState("");
-  const [blockError, setBlockError] = useState("");
-  const [previewDoc, setPreviewDoc] = useState<{
-    title: string;
-    fileUrl: string;
-    fileName: string;
-  } | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<{ title: string; fileUrl: string; fileName: string } | null>(null);
 
-	useEffect(() => {
-		setPerms(readCustomerPermissions());
-		const list = loadCustomers();
-		setRecords(list);
-		setCustomer(list.find((c) => c.id === Number(id)) ?? null);
-	}, [id]);
+  useEffect(() => {
+    setPerms(readCustomerPermissions());
+    const list = loadCustomers();
+    setRecords(list);
+    setCustomer(list.find((c) => c.id === Number(id)) ?? null);
+  }, [id]);
 
-  const orders = useMemo(() => {
-    if (!customer) return [];
-    return loadOrders().filter((o) => o.customerId === customer.id);
-  }, [customer]);
-
-  const orderStats = useMemo(() => {
-    const totalValue = orders.reduce((s, o) => s + o.totalAmount, 0);
-    const pending = orders
-      .filter((o) => o.status === "pending_approval" || o.status === "draft")
-      .reduce((s, o) => s + o.totalAmount, 0);
-    const last = [...orders].sort((a, b) => b.orderDate.localeCompare(a.orderDate))[0];
-    return {
-      count: orders.length,
-      totalValue,
-      pending,
-      lastDate: last?.orderDate ?? "—",
-    };
-  }, [orders]);
-
-  const updateStatus = (customerId: number, status: CustomerStatus, reason = "") => {
+  const updateStatus = (customerId: number, status: CustomerStatus, blockReason = "") => {
     const today = todayStr();
     const updated = records.map((r) => {
       if (r.id !== customerId) return r;
       return {
         ...r,
         status,
-        blockReason: status === "blocked" ? reason : "",
+        blockReason: status === "blocked" ? blockReason : "",
         updatedBy: "Admin",
         updatedDate: today,
         lastStatusChange: today,
         statusHistory: [
           ...r.statusHistory,
-          {
-            date: today,
-            from: r.status,
-            to: status,
-            by: "Admin",
-            reason: reason || `Status → ${status}`,
-          },
+          { date: today, from: r.status, to: status, by: "Admin", reason: blockReason || `Status -> ${status}` },
         ],
       };
     });
@@ -205,694 +108,261 @@ export default function CustomerDetailPage() {
 
   if (!perms.canView) {
     return (
-      <AppLayout>
-        <div className="flex flex-col items-center gap-3 py-16 text-center">
-          <ShieldAlert className="w-10 h-10 text-amber-600" />
-          <h1 className="text-lg font-bold">Access restricted</h1>
-          <Link href="/masters/customers" className="text-xs text-[#1554B4] hover:underline">
-            Back to listing
-          </Link>
+      <div className="flex flex-col items-center gap-3 py-16 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-amber-200 bg-amber-50">
+          <ShieldAlert className="h-6 w-6 text-amber-600" />
         </div>
-      </AppLayout>
+        <h1 className="text-lg font-bold text-foreground">Access restricted</h1>
+        <p className="max-w-md text-sm text-muted-foreground">You do not have permission to view this customer.</p>
+        <Link href="/masters/customers" className="mt-2 text-xs text-brand-600 hover:underline">
+          Back to listing
+        </Link>
+      </div>
     );
   }
 
   if (!customer) {
     return (
-      <AppLayout>
-        <div className="py-16 text-center">
-          <p className="text-sm text-[#6B80A0]">Customer not found.</p>
-          <Link href="/masters/customers" className="mt-2 inline-block text-xs text-[#1554B4]">
-            Back to listing
-          </Link>
-        </div>
-      </AppLayout>
+      <div className="py-16 text-center">
+        <p className="text-sm text-muted-foreground">Customer not found.</p>
+        <Link href="/masters/customers" className="mt-2 inline-block text-xs text-brand-600 hover:underline">
+          Back to listing
+        </Link>
+      </div>
     );
   }
 
   const gst = getActiveGSTMasters().find((g) => g.id === customer.gstMasterId);
   const tds = getActiveTDSMasters().find((t) => t.id === customer.tdsMasterId);
-  const payLabel =
-    PAYMENT_TERMS_OPTIONS.find((p) => p.value === customer.paymentTerms)?.label ??
-    customer.paymentTerms;
-  const typeLabel =
-    CUSTOMER_TYPE_LABELS[customer.customerType.toLowerCase()] ?? customer.customerType;
-  const canToggle =
-    perms.canEdit && customer.status !== "blocked" && customer.status !== "draft";
-
-  const tabs = [
-    { value: "overview", label: "Overview" },
-    { value: "tax", label: "Tax & Compliance" },
-    { value: "bank", label: "Bank Details" },
-    { value: "commercial", label: "Commercial" },
-    { value: "orders", label: "Orders", count: orders.length },
-    { value: "activity", label: "Activity" },
-  ];
-
-  const pendingZero = orderStats.pending <= 0;
-  const kpis = [
-    {
-      icon: ShoppingCart,
-      iconBg: "#EEF3FB",
-      iconColor: "#0C3F8A",
-      value: String(orderStats.count),
-      label: "Total Orders",
-    },
-    {
-      icon: TrendingUp,
-      iconBg: "#E6F7EF",
-      iconColor: "#1E9E61",
-      value: formatMoney(orderStats.totalValue),
-      label: "Total Value",
-    },
-    {
-      icon: CreditCard,
-      iconBg: "#FFFBEB",
-      iconColor: "#D97706",
-      value: formatCreditLimit(customer.creditLimit),
-      label: "Credit Limit",
-    },
-    {
-      icon: Calendar,
-      iconBg: "#F5F3FF",
-      iconColor: "#7C3AED",
-      value: orderStats.lastDate,
-      label: "Last Order",
-    },
-    {
-      icon: pendingZero ? CheckCircle : AlertCircle,
-      iconBg: pendingZero ? "#ECFDF5" : "#FEF2F2",
-      iconColor: pendingZero ? "#10B981" : "#DC2626",
-      value: formatMoney(orderStats.pending),
-      label: "Pending Amount",
-    },
-  ];
-
-  // Credit utilization (used ≈ pending/outstanding amount)
-  const creditLimit = customer.creditLimit;
-  const creditUsed = orderStats.pending;
-  const creditAvailable = Math.max(creditLimit - creditUsed, 0);
-  const creditPct = creditLimit > 0 ? Math.min(Math.round((creditUsed / creditLimit) * 100), 100) : 0;
-  const shortINR = (n: number) => {
-    if (n >= 1e7) return `₹${(n / 1e7).toFixed(1)}Cr`;
-    if (n >= 1e5) return `₹${(n / 1e5).toFixed(1)}L`;
-    if (n >= 1e3) return `₹${(n / 1e3).toFixed(1)}K`;
-    return `₹${n}`;
-  };
-
-  const orderColumns = [
-    {
-      key: "so",
-      header: "Order #",
-      render: (r: (typeof orders)[number]) => (
-        <span className="font-mono font-bold text-[#1554B4]">{r.soNumber}</span>
-      ),
-    },
-    {
-      key: "date",
-      header: "Date",
-      render: (r: (typeof orders)[number]) => (
-        <span className="text-[13px] text-[#3D5473]">{r.orderDate}</span>
-      ),
-    },
-    {
-      key: "items",
-      header: "Items",
-      align: "center" as const,
-      render: (r: (typeof orders)[number]) => (
-        <span className="text-[13px] font-semibold">{r.items ?? "—"}</span>
-      ),
-    },
-    {
-      key: "amt",
-      header: "Amount",
-      align: "right" as const,
-      render: (r: (typeof orders)[number]) => (
-        <span className="text-[13px] font-bold tabular-nums">{formatMoney(r.totalAmount)}</span>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      render: (r: (typeof orders)[number]) => <StatusBadge status={r.status} />,
-    },
-  ];
-
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case "overview":
-        return (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <RecordSectionCard title="Basic Details" icon={FileText} accent="blue">
-              <RecordKvRow label="Customer Name" value={customer.customerName} highlight />
-              <RecordKvRow
-                label="Customer Code"
-                value={customer.customerCode}
-                mono
-                copy
-              />
-              <RecordKvRow
-                label="Mobile"
-                value={formatMobile(customer.countryCode, customer.mobile)}
-                mono
-                link
-                href={`tel:${customer.mobile}`}
-              />
-              <RecordKvRow
-                label="Email"
-                value={customer.email || "—"}
-                link={!!customer.email}
-                href={customer.email ? `mailto:${customer.email}` : undefined}
-              />
-              <RecordKvRow label="Customer Type" value={typeLabel} />
-              <RecordKvRow
-                label="Status"
-                value={
-                  <RecordStatusPill
-                    label={STATUS_LABEL[customer.status]}
-                    variant={STATUS_VARIANT[customer.status]}
-                  />
-                }
-                isLast
-              />
-            </RecordSectionCard>
-
-            <RecordSectionCard title="Territory & Location" icon={MapPin} accent="purple">
-              <RecordKvRow label="Territory" value={customer.territoryName} highlight />
-              <RecordKvRow label="State" value={customer.stateName} />
-              <RecordKvRow label="District" value={customer.districtName} />
-              <RecordKvRow label="Pin Code" value={customer.pincode} mono />
-              <RecordKvRow label="Address" value={customer.address} isLast />
-            </RecordSectionCard>
-
-            <div className="lg:col-span-2">
-              <RecordSectionCard title="Recent Orders" icon={ShoppingCart} accent="green">
-                <RecordMiniTable
-                  columns={orderColumns}
-                  rows={[...orders]
-                    .sort((a, b) => b.orderDate.localeCompare(a.orderDate))
-                    .slice(0, 5)}
-                  onRowClick={(r) => router.push(`/sales/orders/${r.id}`)}
-                  viewAllHref={`/sales/orders?customer=${customer.id}`}
-                  viewAllLabel={`View all ${orders.length} orders`}
-                />
-              </RecordSectionCard>
+  const payLabel = PAYMENT_TERMS_OPTIONS.find((p) => p.value === customer.paymentTerms)?.label ?? customer.paymentTerms;
+  return (
+    <FormContainer
+      title={customer.customerName}
+      description={`${customer.customerCode} • ${formatMobile(customer.countryCode, customer.mobile)} • ${customer.email || "No email"}`}
+      onBack={() => router.push("/masters/customers")}
+      actions={
+        <div className="flex items-center gap-2">
+          <StatusPill status={customer.status} />
+          <CustomerStatusControl customer={customer} onStatusChange={updateStatus} canEdit={perms.canEdit} />
+          {perms.canEdit && (
+            <Link href={`/masters/customers/${customer.id}/edit`}>
+              <Button size="sm" className="h-9 gap-1.5 bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700 rounded-lg">
+                <Edit2 className="w-3.5 h-3.5" /> Edit
+              </Button>
+            </Link>
+          )}
+        </div>
+      }
+      noCard={true}
+    >
+      <div className="max-w-[800px] mx-auto space-y-5">
+        {customer.status === "blocked" && customer.blockReason && (
+          <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+            <Ban className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-500" />
+            <div>
+              <p className="text-xs font-semibold text-red-700">Blocked - not allowed in transactions</p>
+              <p className="mt-0.5 text-xs text-red-600">{customer.blockReason}</p>
             </div>
           </div>
-        );
+        )}
 
-      case "tax":
-        return (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <RecordSectionCard title="Tax & Registration" icon={FileText} accent="orange">
-              <RecordKvRow label="MSME Registered" value={customer.msmeRegistered ? "Yes" : "No"} />
-              {customer.msmeRegistered && (
-                <RecordKvRow label="MSME Number" value={customer.msmeNumber || "—"} mono copy />
-              )}
-              <RecordKvRow
-                label="GST Registered"
-                value={
-                  deriveGstRegistered(
-                    customer.gstApplicable,
-                    customer.gstin,
-                    customer.gstCategory,
-                  )
-                    ? "Yes"
-                    : "No"
-                }
-              />
-              {deriveGstRegistered(
-                customer.gstApplicable,
-                customer.gstin,
-                customer.gstCategory,
-              ) && (
+        {customer.status === "inactive" && (
+          <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+            <p className="text-xs text-amber-700">Inactive customer - hidden from new transaction customer dropdowns.</p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <DetailCard title="Basic Details">
+              <InfoRow label="Customer Name" value={customer.customerName} />
+              <InfoRow label="Mobile" value={formatMobile(customer.countryCode, customer.mobile)} mono />
+              <InfoRow label="Email" value={customer.email} />
+              <InfoRow label="Customer Type" value={CUSTOMER_TYPE_LABELS[customer.customerType.toLowerCase()] ?? customer.customerType} />
+              <InfoRow label="Status" value={<StatusPill status={customer.status} />} />
+            </DetailCard>
+
+            <DetailCard title="Tax & Registration">
+              <InfoRow label="GST Applicable" value={customer.gstApplicable ? "Yes" : "No"} />
+              {customer.gstApplicable && (
                 <>
-                  <RecordKvRow
-                    label="GST Registration Type"
-                    value={getGstCategoryLabel(customer.gstCategory ?? "regular")}
-                  />
-                  <RecordKvRow label="GSTIN" value={customer.gstin} mono copy />
-                  <RecordKvRow
-                    label="GST Code"
-                    value={gst ? `${gst.gstId} (${gst.gstPercentage}%)` : "—"}
-                    mono
-                  />
+                  <InfoRow label="GSTIN" value={customer.gstin} mono />
+                  <InfoRow label="GST Code" value={gst ? `${gst.gstId} (${gst.gstPercentage}%)` : "-"} mono />
                 </>
               )}
-              <RecordKvRow label="PAN Number" value={customer.pan || "—"} mono copy />
-              <RecordKvRow label="TAN Number" value={customer.tan || "—"} mono />
-              <RecordKvRow label="TDS Applicable" value={customer.tdsApplicable ? "Yes" : "No"} />
+              <InfoRow label="TDS Applicable" value={customer.tdsApplicable ? "Yes" : "No"} />
               {customer.tdsApplicable && (
-                <RecordKvRow
-                  label="TDS Section"
-                  value={tds ? `${formatTdsSummary(tds)} — ${tds.sectionName}` : "—"}
-                  mono
-                />
+                <InfoRow label="TDS Section" value={tds ? `${tds.tdsCode} - ${tds.tdsRate}%` : "-"} mono />
               )}
-              <ComplianceRegistrationViewRows
-                values={customer}
-                lastRowProps={{ isLast: true }}
-              />
-            </RecordSectionCard>
+              <InfoRow label="TAN #" value={customer.tan} mono />
+              <InfoRow label="CIB Regn #" value={customer.cibRegn} />
+              <InfoRow label="FCO Regn #" value={customer.fcoRegn} />
+              <InfoRow label="FSSAI #" value={customer.fssai} />
+            </DetailCard>
 
-            <RecordSectionCard title="Compliance Status" icon={CheckCircle} accent="green">
-              <ComplianceRow
-                tone="green"
-                label="GSTIN Registered"
-                value={customer.gstin || "—"}
-                badge="Verified"
-              />
-              <ComplianceRow
-                tone="green"
-                label="TDS Active"
-                value={customer.tdsApplicable ? "Enabled" : "Not enabled"}
-                badge="Active"
-              />
-              <ComplianceRow
-                tone="blue"
-                label="TAN #"
-                value={customer.tan || "—"}
-                badge="On File"
-              />
-              <ComplianceRow
-                tone="green"
-                label="FSSAI Registered"
-                value={
-                  (customer.fssaiRegistered ?? !!customer.fssai?.trim()) ? "Yes" : "No"
-                }
-                badge={
-                  (customer.fssaiRegistered ?? !!customer.fssai?.trim()) ? "Valid" : "N/A"
-                }
-              />
-              {(customer.fssaiRegistered ?? !!customer.fssai?.trim()) && (
-                <ComplianceRow
-                  tone="green"
-                  label="FSSAI Number"
-                  value={customer.fssai || "—"}
-                  badge="On File"
-                />
-              )}
-              <ComplianceRow
-                tone="amber"
-                label="CIB Registered"
-                value={
-                  (customer.cibRegistered ?? !!customer.cibRegn?.trim()) ? "Yes" : "No"
-                }
-                badge={
-                  (customer.cibRegistered ?? !!customer.cibRegn?.trim()) ? "Review" : "N/A"
-                }
-              />
-              {(customer.cibRegistered ?? !!customer.cibRegn?.trim()) && (
-                <ComplianceRow
-                  tone="amber"
-                  label="CIB Registration Number"
-                  value={customer.cibRegn || "—"}
-                  badge="On File"
-                />
-              )}
-              <ComplianceRow
-                tone="blue"
-                label="FCO Registered"
-                value={
-                  (customer.fcoRegistered ?? !!customer.fcoRegn?.trim()) ? "Yes" : "No"
-                }
-                badge={
-                  (customer.fcoRegistered ?? !!customer.fcoRegn?.trim()) ? "On File" : "N/A"
-                }
-                isLast={
-                  !(customer.fcoRegistered ?? !!customer.fcoRegn?.trim())
-                }
-              />
-              {(customer.fcoRegistered ?? !!customer.fcoRegn?.trim()) && (
-                <ComplianceRow
-                  tone="blue"
-                  label="FCO Registration Number"
-                  value={customer.fcoRegn || "—"}
-                  badge="On File"
-                  isLast
-                />
-              )}
-            </RecordSectionCard>
-          </div>
-        );
+            <DetailCard title="Address & Territory">
+              <InfoRow label="Address" value={customer.address} />
+              <InfoRow label="State" value={customer.stateName} />
+              <InfoRow label="District" value={customer.districtName} />
+              <InfoRow label="Territory" value={customer.territoryName} />
+              <InfoRow label="Pin Code" value={customer.pincode} mono />
+              <InfoRow label="Sales Man" value={customer.salesManName} />
+            </DetailCard>
 
-      case "bank":
-        return (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <RecordSectionCard title="Bank Details" icon={Wallet} accent="green">
-              {(!customer.accountHolderName || customer.accountHolderName === "-") && (
-                <div
-                  className="flex items-center gap-2 mb-3"
-                  style={{
-                    background: "#FFFBEB",
-                    borderLeft: "3px solid #D97706",
-                    padding: "8px 12px",
-                    borderRadius: "0 6px 6px 0",
-                  }}
-                >
-                  <AlertCircle className="w-3.5 h-3.5 text-[#D97706] flex-shrink-0" />
-                  <span className="text-[12px] text-[#92400E]">Account holder name not added</span>
-                </div>
-              )}
-              <RecordKvRow label="Account Holder" value={customer.accountHolderName} highlight />
-              <RecordKvRow label="Bank Name" value={customer.bankName} />
-              <RecordKvRow label="Branch" value={customer.branch || customer.bankBranchAddress} />
-              <RecordKvRow label="Account #" value={customer.bankAccountNo} mono copy />
-              <RecordKvRow label="IFSC" value={customer.ifscCode} mono copy />
-              <RecordKvRow label="SWIFT" value={customer.swiftCode} mono isLast />
-            </RecordSectionCard>
+            <DetailCard title="Commercial Details">
+              <InfoRow label="Credit Limit" value={formatCreditLimit(customer.creditLimit)} />
+              <InfoRow label="Interest Rate" value={customer.interestRate ? `${customer.interestRate}%` : "-"} />
+              <InfoRow label="Payment Terms" value={payLabel} />
+            </DetailCard>
 
-            <RecordSectionCard title="Additional Accounts" icon={Landmark} accent="blue">
-              <div className="flex flex-col items-center px-4 py-6 text-center">
-                <div
-                  className="flex items-center justify-center mb-3"
-                  style={{
-                    width: "48px",
-                    height: "48px",
-                    borderRadius: "12px",
-                    background: "#F0F2F8",
-                    border: "1.5px dashed #C4CEDF",
-                  }}
-                >
-                  <Landmark className="w-5 h-5 text-[#9AAAC5]" />
-                </div>
-                <p className="text-[13px] font-semibold text-[#3D5473]">No additional accounts</p>
-                <p className="text-[12px] text-[#6B80A0] mt-0.5">
-                  Add accounts for different payment types
-                </p>
-                <button
-                  type="button"
-                  className="mt-4 inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#6B80A0] transition-colors hover:text-[#1554B4] hover:bg-[#EEF3FB]"
-                  style={{
-                    border: "1.5px dashed #C4CEDF",
-                    borderRadius: "8px",
-                    padding: "7px 14px",
-                  }}
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add Bank Account
-                </button>
-              </div>
-            </RecordSectionCard>
-          </div>
-        );
+            <DetailCard title="Bank Details">
+              <InfoRow label="Account Holder Name" value={customer.accountHolderName} />
+              <InfoRow label="Bank Name" value={customer.bankName} />
+              <InfoRow label="Branch Name" value={customer.branch || customer.bankBranchAddress} />
+              <InfoRow label="Bank A/c #" value={customer.bankAccountNo} mono />
+              <InfoRow label="IFSC Code" value={customer.ifscCode} mono />
+              <InfoRow label="SWIFT Code" value={customer.swiftCode} />
+            </DetailCard>
 
-      case "commercial":
-        return (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <RecordSectionCard title="Commercial Details" icon={IndianRupee} accent="orange">
-              <RecordKvRow label="Credit Limit" value={formatCreditLimit(customer.creditLimit)} amount highlight />
-              <RecordKvRow
-                label="Interest Rate"
-                value={customer.interestRate ? `${customer.interestRate}%` : "—"}
-              />
-              <RecordKvRow label="Payment Terms" value={payLabel} />
-              <RecordKvRow label="Sales Man" value={customer.salesManName} isLast />
-            </RecordSectionCard>
+            <DetailCard title="Record Info">
+              <InfoRow label="Created By" value={customer.createdBy} />
+              <InfoRow label="Created Date" value={customer.createdDate} />
+              <InfoRow label="Updated By" value={customer.updatedBy} />
+              <InfoRow label="Updated Date" value={customer.updatedDate} />
+              <InfoRow label="Status Changes" value={customer.statusHistory.length} />
+            </DetailCard>
+        </div>
 
-            <RecordSectionCard title="Credit Usage" icon={CreditCard} accent="green">
-              <div className="pt-2">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[28px] font-extrabold text-[#0A1628] leading-none">
-                    {shortINR(creditUsed)}
-                  </span>
-                  <span className="text-[13px] text-[#6B80A0]">
-                    used of {shortINR(creditLimit)} limit
-                  </span>
-                </div>
-
-                <div className="relative" style={{ margin: "14px 0" }}>
-                  <div style={{ height: "10px", background: "#E4EAF4", borderRadius: "5px" }}>
-                    <div
-                      style={{
-                        width: `${creditPct}%`,
-                        height: "10px",
-                        background: "#1E9E61",
-                        borderRadius: "5px",
-                        transition: "width .4s ease",
-                      }}
-                    />
-                  </div>
-                  <span
-                    className="absolute -top-4 text-[11px] text-[#1E9E61] font-medium"
-                    style={{ left: `calc(${creditPct}% - 16px)` }}
-                  >
-                    {creditPct}%
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-3 mt-3">
-                  <div className="pr-3">
-                    <p className="text-[11px] text-[#6B80A0]">Credit Limit</p>
-                    <p className="text-[13px] font-bold text-[#0A1628]">{shortINR(creditLimit)}</p>
-                  </div>
-                  <div className="px-3 border-l border-[#F0F3FA]">
-                    <p className="text-[11px] text-[#6B80A0]">Used</p>
-                    <p
-                      className="text-[13px] font-bold"
-                      style={{ color: creditPct > 80 ? "#DC2626" : "#0A1628" }}
-                    >
-                      {shortINR(creditUsed)}
-                    </p>
-                  </div>
-                  <div className="px-3 border-l border-[#F0F3FA]">
-                    <p className="text-[11px] text-[#6B80A0]">Available</p>
-                    <p className="text-[13px] font-bold text-[#1E9E61]">{shortINR(creditAvailable)}</p>
+        {/* Document Section */}
+        {((customer.documents?.requiredDocuments && customer.documents.requiredDocuments.some(d => d.fileName)) ||
+          (customer.documents?.additionalDocuments && customer.documents.additionalDocuments.length > 0)) && (
+          <div className="rounded-xl border border-border bg-white p-4">
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Uploaded Documents</p>
+            
+            <div className="space-y-4">
+              {/* Required Documents */}
+              {customer.documents?.requiredDocuments && customer.documents.requiredDocuments.some(d => d.fileName) && (
+                <div>
+                  <p className="text-xs font-semibold text-foreground mb-2">Required Documents</p>
+                  <div className="overflow-x-auto rounded-lg border border-border">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/20 text-muted-foreground font-semibold">
+                          <th className="py-2 px-3 w-12 text-center">Sr.</th>
+                          <th className="py-2 px-3">Document Name</th>
+                          <th className="py-2 px-3">File Name</th>
+                          <th className="py-2 px-3 w-28 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {customer.documents.requiredDocuments
+                          .filter(d => d.fileName)
+                          .map((doc, idx) => (
+                            <tr key={doc.documentTypeId} className="border-b border-border/60 last:border-0 hover:bg-muted/10">
+                              <td className="py-2 px-3 text-center text-muted-foreground">{idx + 1}</td>
+                              <td className="py-2 px-3 font-medium text-foreground">{doc.documentName}</td>
+                              <td className="py-2 px-3 text-muted-foreground">{doc.fileName}</td>
+                              <td className="py-2 px-3 text-right">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-[11px] px-2.5 gap-1"
+                                  onClick={() => setPreviewDoc({ title: doc.documentName, fileUrl: doc.fileUrl!, fileName: doc.fileName! })}
+                                >
+                                  <Eye className="w-3.5 h-3.5" /> View
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
+              )}
 
-                <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-[#F0F3FA]">
-                  <span
-                    className="inline-flex items-center rounded-md text-[11px] font-semibold"
-                    style={{ background: "#EEF3FB", color: "#0C3F8A", padding: "3px 9px" }}
-                  >
-                    {payLabel}
-                  </span>
-                  {customer.interestRate ? (
-                    <span
-                      className="inline-flex items-center rounded-md text-[11px] font-semibold"
-                      style={{ background: "#FFFBEB", color: "#92400E", padding: "3px 9px" }}
-                    >
-                      {customer.interestRate}% p.a.
-                    </span>
-                  ) : null}
+              {/* Additional Documents */}
+              {customer.documents?.additionalDocuments && customer.documents.additionalDocuments.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-foreground mb-2">Additional Documents</p>
+                  <div className="overflow-x-auto rounded-lg border border-border">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/20 text-muted-foreground font-semibold">
+                          <th className="py-2 px-3 w-12 text-center">Sr.</th>
+                          <th className="py-2 px-3">Document Title</th>
+                          <th className="py-2 px-3">File Name</th>
+                          <th className="py-2 px-3 w-28 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {customer.documents.additionalDocuments.map((doc, idx) => (
+                          <tr key={doc.id} className="border-b border-border/60 last:border-0 hover:bg-muted/10">
+                            <td className="py-2 px-3 text-center text-muted-foreground">{idx + 1}</td>
+                            <td className="py-2 px-3 font-medium text-foreground">{doc.title}</td>
+                            <td className="py-2 px-3 text-muted-foreground">{doc.fileName}</td>
+                            <td className="py-2 px-3 text-right">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-[11px] px-2.5 gap-1"
+                                onClick={() => setPreviewDoc({ title: doc.title, fileUrl: doc.fileUrl!, fileName: doc.fileName! })}
+                              >
+                                <Eye className="w-3.5 h-3.5" /> View
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            </RecordSectionCard>
-          </div>
-        );
-
-      case "orders":
-        return (
-          <RecordSectionCard title="Order History" icon={ShoppingCart} accent="blue">
-            <RecordMiniTable
-              columns={orderColumns}
-              rows={[...orders].sort((a, b) => b.orderDate.localeCompare(a.orderDate))}
-              onRowClick={(r) => router.push(`/sales/orders/${r.id}`)}
-            />
-          </RecordSectionCard>
-        );
-
-      case "activity":
-        return (
-          <RecordSectionCard title="Status History" icon={Clock} accent="slate">
-            {customer.statusHistory.length === 0 ? (
-              <p className="py-3 text-sm text-muted-foreground">No activity recorded.</p>
-            ) : (
-              [...customer.statusHistory]
-                .reverse()
-                .map((h, i, arr) => (
-                  <RecordKvRow
-                    key={`${h.date}-${i}`}
-                    label={h.date}
-                    value={`${h.from} → ${h.to} (${h.by})${h.reason ? ` — ${h.reason}` : ""}`}
-                    isLast={i === arr.length - 1}
-                  />
-                ))
-            )}
-          </RecordSectionCard>
-        );
-
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <>
-      <RecordDetailPage
-      alert={
-        customer.status === "blocked" && customer.blockReason ? (
-          <div className="flex items-start gap-2 px-4 py-3 mb-4 border border-red-200 rounded-lg bg-red-50">
-            <Ban className="mt-0.5 h-4 w-4 text-red-500 flex-shrink-0" />
-            <p className="text-xs text-red-700">{customer.blockReason}</p>
-          </div>
-        ) : undefined
-      }
-      listHref="/masters/customers"
-      listLabel="Customers"
-      recordName={customer.customerName}
-      recordCode={customer.customerCode}
-        typeBadge={<TypeBadge label={typeLabel} />}
-        statusLabel={STATUS_LABEL[customer.status]}
-        statusVariant={STATUS_VARIANT[customer.status]}
-        metaItems={[
-          {
-            label: formatMobile(customer.countryCode, customer.mobile),
-            icon: Phone,
-            href: `tel:${customer.mobile}`,
-          },
-          ...(customer.email
-            ? [{ label: customer.email, icon: Mail, href: `mailto:${customer.email}` }]
-            : []),
-          {
-            label: [customer.territoryName, customer.stateName].filter(Boolean).join(" · ") || "—",
-            icon: MapPin,
-          },
-        ]}
-        kpis={kpis}
-        tabs={tabs}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        active={customer.status === "active"}
-        onActiveChange={
-          canToggle
-            ? (on) => updateStatus(customer.id, on ? "active" : "inactive")
-            : undefined
-        }
-        toggleDisabled={!canToggle}
-        onEdit={perms.canEdit ? () => router.push(`/masters/customers/${customer.id}/edit`) : undefined}
-        secondaryAction={{
-          label: "New Order",
-          onClick: () => router.push(`/sales/orders/new?customerId=${customer.id}`),
-        }}
-        moreActions={
-          perms.canEdit
-            ? [
-                ...(customer.status !== "blocked"
-                  ? [
-                      {
-                        label: "Block Customer",
-                        onClick: () => {
-                          setBlockReason(customer.blockReason || "");
-                          setBlockError("");
-                          setBlockOpen(true);
-                        },
-                        destructive: true,
-                      },
-                    ]
-                  : [
-                      {
-                        label: "Unblock Customer",
-                        onClick: () => updateStatus(customer.id, "active"),
-                      },
-                    ]),
-                ...(customer.status === "draft"
-                  ? [
-                      {
-                        label: "Mark Active",
-                        onClick: () => updateStatus(customer.id, "active"),
-                      },
-                    ]
-                  : []),
-              ]
-            : undefined
-        }
-        sidebar={{
-          quickActions: [
-            {
-              label: "New Order",
-              icon: ShoppingCart,
-              onClick: () => router.push(`/sales/orders/new?customerId=${customer.id}`),
-              variant: "primary",
-            },
-            ...(perms.canEdit
-              ? [
-                  {
-                    label: "Edit Customer",
-                    icon: Pencil,
-                    onClick: () => router.push(`/masters/customers/${customer.id}/edit`),
-                    variant: "outline" as const,
-                  },
-                ]
-              : []),
-            {
-              label: "View Orders",
-              icon: Eye,
-              onClick: () => router.push(`/sales/orders?customer=${customer.id}`),
-              variant: "outline" as const,
-            },
-          ],
-          summary: [
-            { label: "Credit Limit", value: formatCreditLimit(customer.creditLimit), highlight: true },
-            { label: "Payment Terms", value: payLabel },
-            { label: "Sales Man", value: customer.salesManName || "—" },
-            { label: "Territory", value: customer.territoryName || "—" },
-            { label: "Created", value: customer.createdDate },
-            { label: "Updated", value: customer.updatedDate },
-          ],
-          activity: [...customer.statusHistory]
-            .slice(-5)
-            .reverse()
-            .map((h, i) => ({
-              id: `${h.date}-${i}`,
-              title: `${h.from} → ${h.to}`,
-              subtitle: h.reason || `By ${h.by}`,
-              date: h.date,
-            })),
-        }}
-      >
-        {renderTabContent()}
-      </RecordDetailPage>
-
-      <Dialog open={blockOpen} onOpenChange={setBlockOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-sm">Block customer</DialogTitle>
-          </DialogHeader>
-          <div className="py-2 space-y-3">
-            <Label className="text-xs">Reason</Label>
-            <Textarea
-              value={blockReason}
-              onChange={(e) => setBlockReason(e.target.value)}
-              className="text-xs min-h-[80px]"
-            />
-            {blockError && <p className="text-xs text-red-600">{blockError}</p>}
-            <Button
-              size="sm"
-              className="w-full text-white bg-red-600 hover:bg-red-700"
-              onClick={() => {
-                if (!blockReason.trim()) {
-                  setBlockError("Block reason is required");
-                  return;
-                }
-                updateStatus(customer.id, "blocked", blockReason.trim());
-                setBlockOpen(false);
-              }}
-            >
-              Confirm Block
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!previewDoc} onOpenChange={(o) => !o && setPreviewDoc(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-sm">{previewDoc?.title}</DialogTitle>
-          </DialogHeader>
-          {previewDoc && (
-            <div className="flex justify-center p-4">
-              {/\.(jpe?g|png|webp|gif)$/i.test(previewDoc.fileName) ? (
-                <img src={previewDoc.fileUrl} alt={previewDoc.title} className="max-h-[50vh] object-contain" />
-              ) : (
-                <a href={previewDoc.fileUrl} target="_blank" rel="noreferrer" className="text-[#1554B4] text-sm">
-                  Open {previewDoc.fileName}
-                </a>
               )}
             </div>
-          )}
+          </div>
+        )}
+      </div>
+
+      {/* Image / PDF Preview Modal */}
+      <Dialog open={!!previewDoc} onOpenChange={(open) => !open && setPreviewDoc(null)}>
+        <DialogContent className="max-w-2xl bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-semibold">{previewDoc?.title}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center justify-center p-4 border border-dashed rounded-lg border-border bg-muted/10 min-h-[300px]">
+            {previewDoc && (
+              /\.(jpe?g|png|webp|gif)$/i.test(previewDoc.fileName) ? (
+                <img
+                  src={previewDoc.fileUrl}
+                  alt={previewDoc.title}
+                  className="max-h-[50vh] max-w-full object-contain rounded-md animate-in zoom-in-95 duration-200"
+                />
+              ) : (
+                <div className="text-center space-y-4">
+                  <div className="inline-flex p-3 rounded-full bg-brand-50 border border-brand-100 text-brand-600">
+                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">{previewDoc.fileName}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">This file type cannot be previewed directly.</p>
+                  </div>
+                  <a
+                    href={previewDoc.fileUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 text-xs font-medium text-white hover:bg-brand-700 transition-colors"
+                  >
+                    Open in new tab
+                  </a>
+                </div>
+              )
+            )}
+          </div>
         </DialogContent>
       </Dialog>
-    </>
+    </FormContainer>
   );
 }

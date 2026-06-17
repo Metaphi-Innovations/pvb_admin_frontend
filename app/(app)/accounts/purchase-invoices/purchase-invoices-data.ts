@@ -8,8 +8,6 @@ import {
   type PurchaseOrder,
 } from "@/app/(app)/procurement/purchase-orders/po-data";
 import { todayStr } from "@/lib/procurement/utils";
-import type { ProcurementAdditionalCharge } from "@/lib/procurement/procurement-line-utils";
-import { sumAdditionalCharges } from "@/lib/procurement/procurement-line-utils";
 
 export type PurchaseDebitStatus = "no_debit" | "partially_debited" | "fully_debited";
 export type POCreditDebitStatus = "open" | "partially_returned" | "closed";
@@ -33,9 +31,6 @@ export interface PurchaseInvoiceLine {
   productId: number | null;
   productName: string;
   description: string;
-  batchNumber?: string;
-  mfgDate?: string;
-  expDate?: string;
   invoiceQty: number;
   unit: string;
   unitPrice: number;
@@ -44,22 +39,6 @@ export interface PurchaseInvoiceLine {
   taxAmount: number;
   debitedQty: number;
   debitedAmount: number;
-}
-
-/** OCR / API invoice ingestion payload (future-ready) */
-export interface PurchaseInvoiceOcrPayload {
-  source: "manual" | "ocr" | "api";
-  rawText?: string;
-  confidence?: number;
-  extractedAt?: string;
-  vendorGstin?: string;
-  lineItems?: Array<{
-    description: string;
-    qty: number;
-    rate: number;
-    amount: number;
-    hsn?: string;
-  }>;
 }
 
 export interface PurchaseInvoiceRecord {
@@ -75,12 +54,8 @@ export interface PurchaseInvoiceRecord {
   poId: number | null;
   poNumber: string;
   poDate: string;
-  grnId: string | null;
-  grnNo: string;
   source: PurchaseSource;
   lineItems: PurchaseInvoiceLine[];
-  additionalCharges: ProcurementAdditionalCharge[];
-  productAmount: number;
   subtotal: number;
   taxAmount: number;
   grandTotal: number;
@@ -91,16 +66,13 @@ export interface PurchaseInvoiceRecord {
   poAdjustmentStatus: POCreditDebitStatus;
   remarks: string;
   attachment: PurchaseAttachment | null;
-  ocrPayload?: PurchaseInvoiceOcrPayload | null;
-  matchStatus?: "pending" | "matched" | "partial_match" | "mismatch";
-  activity?: Array<{ date: string; time?: string; action: string; by: string; remarks?: string }>;
   createdBy: string;
   updatedBy: string;
   createdAt: string;
   updatedAt: string;
 }
 
-const STORAGE_KEY = "ds_accounts_purchase_invoices_v2";
+const STORAGE_KEY = "ds_accounts_purchase_invoices_v1";
 
 function lineFromPO(line: POLineItem): PurchaseInvoiceLine {
   const taxPct = line.cgstPct + line.sgstPct + line.igstPct;
@@ -140,19 +112,8 @@ function normalizePI(rec: PurchaseInvoiceRecord): PurchaseInvoiceRecord {
   let debitStatus: PurchaseDebitStatus = "no_debit";
   if (amountDebited > 0 && amountDebited < rec.grandTotal) debitStatus = "partially_debited";
   if (amountDebited >= rec.grandTotal && rec.grandTotal > 0) debitStatus = "fully_debited";
-  const productAmount =
-    rec.productAmount ??
-    rec.lineItems.reduce((s, l) => s + l.lineAmount, 0);
-  const additionalCharges = rec.additionalCharges ?? [];
-  const additionalTotal = sumAdditionalCharges(additionalCharges);
-  const subtotal = rec.subtotal ?? productAmount + additionalTotal;
   return {
     ...rec,
-    grnId: rec.grnId ?? null,
-    grnNo: rec.grnNo ?? "",
-    additionalCharges,
-    productAmount: Math.round(productAmount * 100) / 100,
-    subtotal: Math.round(subtotal * 100) / 100,
     amountPaid: Math.round(amountPaid * 100) / 100,
     amountDebited: Math.round(amountDebited * 100) / 100,
     balanceDebitAllowed: Math.round(balanceDebitAllowed * 100) / 100,
@@ -162,21 +123,13 @@ function normalizePI(rec: PurchaseInvoiceRecord): PurchaseInvoiceRecord {
     remarks: rec.remarks ?? "",
     poDate: rec.poDate ?? "",
     source: rec.source ?? (rec.poId ? "po_invoice" : "manual_entry"),
-    ocrPayload: rec.ocrPayload ?? null,
-    activity: rec.activity ?? [],
   };
 }
 
 export function loadPurchaseInvoices(): PurchaseInvoiceRecord[] {
   if (typeof window === "undefined") return [];
   try {
-    const legacy = localStorage.getItem("ds_accounts_purchase_invoices_v1");
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw && legacy) {
-      const migrated = (JSON.parse(legacy) as PurchaseInvoiceRecord[]).map(normalizePI);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-      return migrated;
-    }
     const list: PurchaseInvoiceRecord[] = raw ? JSON.parse(raw) : [];
     const normalized = list.map(normalizePI);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
@@ -273,10 +226,7 @@ export function createPurchaseFromPOUpload(
 
   const all = loadPurchaseInvoices();
   const lines = po.lines.map(lineFromPO);
-  const productAmount = lines.reduce((s, l) => s + l.lineAmount, 0);
-  const additionalCharges = po.additionalCharges ?? [];
-  const additionalTotal = sumAdditionalCharges(additionalCharges);
-  const subtotal = Math.round((productAmount + additionalTotal) * 100) / 100;
+  const subtotal = Math.round(input.invoiceAmount * 100) / 100;
   const taxAmount = Math.round(input.taxAmount * 100) / 100;
   const grandTotal = Math.round(input.totalAmount * 100) / 100;
 
@@ -291,12 +241,8 @@ export function createPurchaseFromPOUpload(
     poId: po.id,
     poNumber: po.poNumber,
     poDate: po.poDate,
-    grnId: null,
-    grnNo: "",
     source: "po_invoice",
     lineItems: lines,
-    additionalCharges: [...additionalCharges],
-    productAmount,
     subtotal,
     taxAmount,
     grandTotal,
@@ -378,8 +324,6 @@ export function createManualPurchaseEntry(input: ManualPurchaseInput): PurchaseI
         : [];
 
   const all = loadPurchaseInvoices();
-  const productAmount = lines.reduce((s, l) => s + l.lineAmount, 0);
-  const additionalCharges = po?.additionalCharges ?? [];
   const rec = normalizePI({
     id: all.length ? Math.max(...all.map((r) => r.id)) + 1 : 1,
     invoiceNo: nextPurchaseNo(all),
@@ -391,12 +335,8 @@ export function createManualPurchaseEntry(input: ManualPurchaseInput): PurchaseI
     poId: po?.id ?? null,
     poNumber: po?.poNumber ?? "",
     poDate: po?.poDate ?? "",
-    grnId: null,
-    grnNo: "",
     source: "manual_entry",
     lineItems: lines,
-    additionalCharges: [...additionalCharges],
-    productAmount,
     subtotal: Math.round(input.invoiceAmount * 100) / 100,
     taxAmount: Math.round(input.taxAmount * 100) / 100,
     grandTotal: Math.round(input.totalAmount * 100) / 100,

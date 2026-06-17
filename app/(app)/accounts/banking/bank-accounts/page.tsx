@@ -1,5 +1,6 @@
-import BankAccountsMasterClient from "@/app/(app)/accounts/masters/bank-accounts/BankAccountsMasterClient";
+import { redirect } from "next/navigation";
+import { ACCOUNTS_HOME_HREF } from "@/lib/accounts/accounts-nav";
 
-export default function BankingBankAccountsPage() {
-  return <BankAccountsMasterClient />;
+export default function BankingRedirect() {
+  redirect(ACCOUNTS_HOME_HREF);
 }

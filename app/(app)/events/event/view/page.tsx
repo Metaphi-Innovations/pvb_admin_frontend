@@ -2,12 +2,10 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { RecordDetailPage } from "@/components/record-detail";
+import { AppLayout } from "@/components/layout/AppLayout";
 import { cn } from "@/lib/utils";
-import { Calendar, ChevronLeft, ChevronRight, MapPin, Users } from "lucide-react";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import {
-  LEVELS,
   type GeoLevel,
   type GeoNode,
   loadGeoNodes,
@@ -25,10 +23,6 @@ import {
   loadDistributors,
 } from "../../../database/distributor/distributor-data";
 import {
-  type Farmer,
-  SEED as FARMER_SEED,
-} from "../../../database/farmer/farmer-data";
-import {
   type Event,
   EVENTS_STORAGE_KEY,
   VIEW_EVENT_STORAGE_KEY,
@@ -40,8 +34,29 @@ import {
 } from "../event-data";
 
 const CUSTOMER_DISTRIBUTOR_ID_OFFSET = 100000;
-const LOCATION_LEVELS: GeoLevel[] = LEVELS;
-type AttendanceTab = "users" | "farmers" | "distributors";
+const LOCATION_LEVELS: GeoLevel[] = ["Zone", "State", "Region", "Area", "Territory", "Locality", "Pincode"];
+const FARMER_NAMES = [
+  "Ramesh Patel",
+  "Suresh Kumar",
+  "Mahesh Singh",
+  "Prakash Rao",
+  "Rajan Verma",
+  "Haridas Patil",
+  "Gopal Nair",
+  "Bharat Das",
+  "Lakshmi Reddy",
+  "Sunita Chauhan",
+  "Devendra Yadav",
+  "Manjunath Gowda",
+  "Pooja Jat",
+  "Ajay Boro",
+  "Rekha Pawar",
+  "Tsering Namgyal",
+  "Imran Sheikh",
+  "Nirmala Sahu",
+  "Joseph Mathew",
+  "Kavita Solanki",
+] as const;
 
 function formatTitleCase(value: string) {
   return value
@@ -49,6 +64,10 @@ function formatTitleCase(value: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function formatListOrDash(values: string[]) {
+  return values.length > 0 ? values.join(", ") : "-";
 }
 
 function withSuffix(value: string, suffix: string) {
@@ -65,34 +84,30 @@ function inferZoneFromState(state: string) {
 
 function resolveLocationDisplay(event: Event, geoNodes: GeoNode[]) {
   const fallbackDistrict = event.district || event.state || "Event Area";
-  const fallbackTown = event.venue || event.district || event.state || "Event Town";
+  const fallbackLocality = event.venue || event.district || event.state || "Event Locality";
   const fallback = {
     Zone: inferZoneFromState(event.state || ""),
-    Region: withSuffix(fallbackDistrict, "Region"),
     State: event.state || "-",
+    Region: withSuffix(fallbackDistrict, "Region"),
     Area: withSuffix(fallbackDistrict, "Area"),
     Territory: withSuffix(fallbackDistrict, "Territory"),
-    District: withSuffix(fallbackDistrict, "District"),
-    City: event.venue || event.district || event.state || "Event City",
-    Town: fallbackTown,
+    Locality: fallbackLocality,
     Pincode: event.district || event.state || "Event Pincode",
   };
 
   const getNodeName = (level: GeoLevel) => {
     const nodeId = event.location?.[level];
-    if (!nodeId) return fallback[level as keyof typeof fallback];
-    return geoNodes.find((node) => node.id === nodeId)?.name ?? fallback[level as keyof typeof fallback];
+    if (!nodeId) return fallback[level];
+    return geoNodes.find((node) => node.id === nodeId)?.name ?? fallback[level];
   };
 
   return {
     Zone: getNodeName("Zone"),
-    Region: getNodeName("Region"),
     State: getNodeName("State"),
+    Region: getNodeName("Region"),
     Area: getNodeName("Area"),
     Territory: getNodeName("Territory"),
-    District: getNodeName("District"),
-    City: getNodeName("City"),
-    Town: getNodeName("Town"),
+    Locality: getNodeName("Locality"),
     Pincode: getNodeName("Pincode"),
   };
 }
@@ -126,81 +141,8 @@ function InfoField({
   return (
     <div className={cn("space-y-1.5", className)}>
       <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
-      <div className="min-h-[36px] rounded-lg border border-border bg-white px-3 py-2 text-xs text-foreground shadow-sm">
+      <div className="min-h-[36px] rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground shadow-sm">
         {value}
-      </div>
-    </div>
-  );
-}
-
-interface AttendanceColumn<T> {
-  header: string;
-  cell: (row: T) => React.ReactNode;
-  className?: string;
-}
-
-function AttendanceTable<T>({
-  rows,
-  columns,
-  emptyMessage,
-  getRowKey,
-}: {
-  rows: T[];
-  columns: AttendanceColumn<T>[];
-  emptyMessage: string;
-  getRowKey: (row: T, index: number) => string;
-}) {
-  return (
-    <div className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border bg-muted/40">
-              {columns.map((column) => (
-                <th
-                  key={column.header}
-                  className={cn(
-                    "px-4 py-3 text-left text-xs font-semibold whitespace-nowrap text-foreground",
-                    column.className,
-                  )}
-                >
-                  {column.header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={columns.length}
-                  className="px-4 py-6 text-center text-xs text-muted-foreground"
-                >
-                  {emptyMessage}
-                </td>
-              </tr>
-            ) : (
-              rows.map((row, index) => (
-                <tr
-                  key={getRowKey(row, index)}
-                  className="border-b border-border/60 last:border-b-0"
-                >
-                  {columns.map((column) => (
-                    <td
-                      key={column.header}
-                      className={cn(
-                        "px-4 py-2 text-xs align-top text-foreground whitespace-nowrap",
-                        column.className,
-                      )}
-                    >
-                      {column.cell(row)}
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
       </div>
     </div>
   );
@@ -214,8 +156,6 @@ export default function EventViewPage() {
   const [users, setUsers] = useState<Employee[]>([]);
   const [distributors, setDistributors] = useState<Distributor[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [activeAttendanceTab, setActiveAttendanceTab] =
-    useState<AttendanceTab>("users");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -250,156 +190,50 @@ export default function EventViewPage() {
     setViewEvent(selectedEvent ?? events[0] ?? null);
   }, [events]);
 
-  useEffect(() => {
-    setActiveAttendanceTab("users");
-  }, [viewEvent?.id]);
-
   const currentEventIndex = useMemo(
     () => (viewEvent ? events.findIndex((event) => event.id === viewEvent.id) : -1),
     [events, viewEvent],
+  );
+  const userLabelMap = useMemo(
+    () => new Map(users.map((user) => [user.id, user.fullName])),
+    [users],
+  );
+  const farmerLabelMap = useMemo(
+    () => new Map<number, string>(FARMER_NAMES.map((name, index) => [index + 1, name])),
+    [],
+  );
+  const distributorLabelMap = useMemo(
+    () =>
+      new Map([
+        ...distributors.map((distributor) => [distributor.id, distributor.firmName] as const),
+        ...customers.map((customer) => [CUSTOMER_DISTRIBUTOR_ID_OFFSET + customer.id, customer.customerName] as const),
+      ]),
+    [customers, distributors],
   );
   const locationDisplay = useMemo(
     () => (viewEvent ? resolveLocationDisplay(viewEvent, geoNodes) : null),
     [geoNodes, viewEvent],
   );
-  const farmerMap = useMemo(
-    () => new Map<number, Farmer>(FARMER_SEED.map((farmer) => [farmer.id, farmer])),
-    [],
-  );
-  const distributorMap = useMemo(
-    () =>
-      new Map<number, Distributor>(
-        distributors.map((distributor) => [distributor.id, distributor]),
-      ),
-    [distributors],
-  );
-  const customerDistributorMap = useMemo(
-    () =>
-      new Map<number, Customer>(
-        customers.map((customer) => [customer.id, customer]),
-      ),
-    [customers],
-  );
-  const userAttendanceRows = useMemo(
+  const viewEventUsers = useMemo(
     () =>
       (viewEvent?.userAttendeeIds ?? [])
-        .map((id) => users.find((user) => user.id === id))
-        .filter((user): user is Employee => Boolean(user)),
-    [users, viewEvent],
+        .map((id) => userLabelMap.get(id))
+        .filter((value): value is string => Boolean(value)),
+    [userLabelMap, viewEvent],
   );
-  const farmerAttendanceRows = useMemo(
+  const viewEventFarmers = useMemo(
     () =>
       (viewEvent?.farmerAttendeeIds ?? [])
-        .map((id) => farmerMap.get(id))
-        .filter((farmer): farmer is Farmer => Boolean(farmer)),
-    [farmerMap, viewEvent],
+        .map((id) => farmerLabelMap.get(id))
+        .filter((value): value is string => Boolean(value)),
+    [farmerLabelMap, viewEvent],
   );
-  const distributorAttendanceRows = useMemo(
+  const viewEventDistributors = useMemo(
     () =>
       (viewEvent?.distributorAttendeeIds ?? [])
-        .map((id) => {
-          if (id >= CUSTOMER_DISTRIBUTOR_ID_OFFSET) {
-            const customer = customerDistributorMap.get(id - CUSTOMER_DISTRIBUTOR_ID_OFFSET);
-            if (!customer) return null;
-
-            return {
-              key: `customer-${customer.id}`,
-              name: customer.customerName,
-              mobile: customer.mobile || "-",
-              district: customer.districtName || "-",
-              state: customer.stateName || "-",
-              source: "Customer Master",
-              detail: customer.customerType || "-",
-            };
-          }
-
-          const distributor = distributorMap.get(id);
-          if (!distributor) return null;
-
-          return {
-            key: `distributor-${distributor.id}`,
-            name: distributor.firmName,
-            mobile: distributor.phoneNumber || "-",
-            district: distributor.district || "-",
-            state: distributor.state || "-",
-            source: "Distributor Listing",
-            detail: distributor.distributorCategory || "-",
-          };
-        })
-        .filter(
-          (
-            distributor,
-          ): distributor is {
-            key: string;
-            name: string;
-            mobile: string;
-            district: string;
-            state: string;
-            source: string;
-            detail: string;
-          } => Boolean(distributor),
-        ),
-    [customerDistributorMap, distributorMap, viewEvent],
-  );
-  const userAttendanceColumns = useMemo<AttendanceColumn<Employee>[]>(
-    () => [
-      {
-        header: "User ID",
-        cell: (user) => (
-          <span className="font-mono font-semibold text-brand-700">
-            {user.employeeId}
-          </span>
-        ),
-      },
-      { header: "User Name", cell: (user) => user.fullName },
-      { header: "Role", cell: (user) => user.role || "-" },
-      { header: "Department", cell: (user) => user.department || "-" },
-      { header: "Mobile", cell: (user) => user.mobile || "-", className: "font-mono" },
-      {
-        header: "Status",
-        cell: (user) => formatTitleCase(user.status),
-      },
-    ],
-    [],
-  );
-  const farmerAttendanceColumns = useMemo<AttendanceColumn<Farmer>[]>(
-    () => [
-      {
-        header: "Farmer ID",
-        cell: (farmer) => (
-          <span className="font-mono font-semibold text-brand-700">
-            {`FMR-${String(farmer.id).padStart(3, "0")}`}
-          </span>
-        ),
-      },
-      { header: "Farmer Name", cell: (farmer) => farmer.name },
-      { header: "Mobile", cell: (farmer) => farmer.phoneNumber, className: "font-mono" },
-      { header: "Village", cell: (farmer) => farmer.village },
-      { header: "District", cell: (farmer) => farmer.district },
-      { header: "Current Crop", cell: (farmer) => farmer.currentCrop },
-    ],
-    [],
-  );
-  const distributorAttendanceColumns = useMemo<
-    AttendanceColumn<{
-      key: string;
-      name: string;
-      mobile: string;
-      district: string;
-      state: string;
-      source: string;
-      detail: string;
-    }>[]
-  >(
-    () => [
-      { header: "Name", cell: (row) => row.name },
-      { header: "Mobile", cell: (row) => row.mobile, className: "font-mono" },
-      { header: "District", cell: (row) => row.district },
-      { header: "State", cell: (row) => row.state },
-      { header: "Source", cell: (row) => row.source },
-      { header: "Category / Type", cell: (row) => row.detail },
-    ],
-    [],
+        .map((id) => distributorLabelMap.get(id))
+        .filter((value): value is string => Boolean(value)),
+    [distributorLabelMap, viewEvent],
   );
 
   const handleStepViewEvent = (direction: -1 | 1) => {
@@ -419,90 +253,60 @@ export default function EventViewPage() {
     router.push("/events/event");
   };
 
-  if (!viewEvent || !locationDisplay) {
-    return (
-      <RecordDetailPage
-        listHref="/events/event"
-        listLabel="Events"
-        recordName="Event Details"
-        statusLabel="Loading"
-        statusVariant="neutral"
-      >
-        <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading event...</div>
-      </RecordDetailPage>
-    );
-  }
-
-  const statusVariant =
-    viewEvent.status === "completed" ? "active" :
-    viewEvent.status === "cancelled" ? "blocked" : "neutral";
-
   return (
-    <RecordDetailPage
-      listHref="/events/event"
-      listLabel="Events"
-      recordName={viewEvent.title}
-      recordCode={viewEvent.eventCode}
-      statusLabel={formatTitleCase(viewEvent.status)}
-      statusVariant={statusVariant}
-      typeBadge={
-        <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold", TYPE_COLORS[viewEvent.type])}>
-          {formatTitleCase(viewEvent.type)}
-        </span>
-      }
-      metaItems={[
-        { icon: Calendar, label: formatDateRange(viewEvent.startDate, viewEvent.endDate) },
-        { icon: MapPin, label: locationDisplay.Town || locationDisplay.Pincode },
-        { icon: Users, label: viewEvent.organizer || "—" },
-      ]}
-      headerActions={
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            aria-label="Previous event"
-            disabled={currentEventIndex <= 0}
-            onClick={() => handleStepViewEvent(-1)}
-            className={cn(
-              "inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted",
-              currentEventIndex <= 0 ? "cursor-not-allowed opacity-40" : "hover:text-foreground",
-            )}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            aria-label="Next event"
-            disabled={currentEventIndex < 0 || currentEventIndex >= events.length - 1}
-            onClick={() => handleStepViewEvent(1)}
-            className={cn(
-              "inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted",
-              currentEventIndex < 0 || currentEventIndex >= events.length - 1
-                ? "cursor-not-allowed opacity-40"
-                : "hover:text-foreground",
-            )}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-      }
-      sidebar={{
-        summary: [
-          { label: "Expected Attendees", value: viewEvent.expectedAttendees, highlight: true },
-          { label: "Actual Attendees", value: viewEvent.actualAttendees },
-          { label: "Users Invited", value: viewEvent.userAttendeeIds?.length ?? 0 },
-          { label: "Farmers Invited", value: viewEvent.farmerAttendeeIds?.length ?? 0 },
-          { label: "Distributors Invited", value: viewEvent.distributorAttendeeIds?.length ?? 0 },
-        ],
-        quickActions: [
-          {
-            label: "Back to List",
-            onClick: handleCloseView,
-            variant: "outline",
-          },
-        ],
-      }}
-    >
-      <>
+    <AppLayout>
+      <div className="space-y-4">
+        <section className="rounded-xl border border-border bg-white shadow-sm">
+          <div className="flex items-start justify-between gap-4 px-5 py-4">
+            <div>
+              <h1 className="text-base font-semibold text-foreground">
+                {viewEvent?.eventCode} - Event Details
+              </h1>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                View-only event schedule, attendance, and geography details
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                aria-label="Previous event"
+                disabled={currentEventIndex <= 0}
+                onClick={() => handleStepViewEvent(-1)}
+                className={cn(
+                  "inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted",
+                  currentEventIndex <= 0 ? "cursor-not-allowed opacity-40" : "hover:text-foreground",
+                )}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="Next event"
+                disabled={currentEventIndex < 0 || currentEventIndex >= events.length - 1}
+                onClick={() => handleStepViewEvent(1)}
+                className={cn(
+                  "inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted",
+                  currentEventIndex < 0 || currentEventIndex >= events.length - 1
+                    ? "cursor-not-allowed opacity-40"
+                    : "hover:text-foreground",
+                )}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleCloseView}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              >
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {viewEvent && locationDisplay && (
+          <>
             <SectionCard title="Event Information">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <InfoField label="Event Name" value={viewEvent.title} />
@@ -541,52 +345,23 @@ export default function EventViewPage() {
             </SectionCard>
 
             <SectionCard title="Attendance">
-              <Tabs
-                value={activeAttendanceTab}
-                onValueChange={(value) =>
-                  setActiveAttendanceTab(value as AttendanceTab)
-                }
-                className="space-y-4"
-              >
-                <TabsList className="w-full gap-0 overflow-x-auto">
-                  <TabsTrigger value="users" className="text-xs">
-                    {`Users (${userAttendanceRows.length})`}
-                  </TabsTrigger>
-                  <TabsTrigger value="farmers" className="text-xs">
-                    {`Farmers (${farmerAttendanceRows.length})`}
-                  </TabsTrigger>
-                  <TabsTrigger value="distributors" className="text-xs">
-                    {`Distributors (${distributorAttendanceRows.length})`}
-                  </TabsTrigger>
-                </TabsList>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+                <InfoField label="Expected Attendees" value={viewEvent.expectedAttendees} />
+                <InfoField label="Actual Attendees" value={viewEvent.actualAttendees} />
+                <InfoField label="Users Invited" value={viewEvent.userAttendeeIds?.length ?? 0} />
+                <InfoField label="Farmers Invited" value={viewEvent.farmerAttendeeIds?.length ?? 0} />
+                <InfoField label="Distributors Invited" value={viewEvent.distributorAttendeeIds?.length ?? 0} />
+              </div>
 
-                <TabsContent value="users" className="m-0">
-                  <AttendanceTable
-                    rows={userAttendanceRows}
-                    columns={userAttendanceColumns}
-                    emptyMessage="No users linked to this event."
-                    getRowKey={(user) => String(user.id)}
-                  />
-                </TabsContent>
-
-                <TabsContent value="farmers" className="m-0">
-                  <AttendanceTable
-                    rows={farmerAttendanceRows}
-                    columns={farmerAttendanceColumns}
-                    emptyMessage="No farmers linked to this event."
-                    getRowKey={(farmer) => String(farmer.id)}
-                  />
-                </TabsContent>
-
-                <TabsContent value="distributors" className="m-0">
-                  <AttendanceTable
-                    rows={distributorAttendanceRows}
-                    columns={distributorAttendanceColumns}
-                    emptyMessage="No distributors linked to this event."
-                    getRowKey={(row) => row.key}
-                  />
-                </TabsContent>
-              </Tabs>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <InfoField label="Users" value={formatListOrDash(viewEventUsers)} />
+                <InfoField label="Farmers" value={formatListOrDash(viewEventFarmers)} />
+                <InfoField
+                  label="Distributors"
+                  value={formatListOrDash(viewEventDistributors)}
+                  className="lg:col-span-2"
+                />
+              </div>
             </SectionCard>
 
             <SectionCard title="Location">
@@ -597,6 +372,8 @@ export default function EventViewPage() {
               </div>
             </SectionCard>
           </>
-    </RecordDetailPage>
+        )}
+      </div>
+    </AppLayout>
   );
 }

@@ -93,9 +93,6 @@ export function ThreeWayMatchSection({ po, refreshKey = 0 }: { po: PurchaseOrder
                   <td className="px-2 py-1.5 tabular-nums text-red-700">{l.qcRejectedQty}</td>
                   <td className="px-2 py-1.5">
                     <ProcBadge status={l.lineStatus} />
-                    {l.mismatchReason && (
-                      <span className="block text-[9px] text-red-600 mt-0.5">{l.mismatchReason}</span>
-                    )}
                   </td>
                 </tr>
               ))

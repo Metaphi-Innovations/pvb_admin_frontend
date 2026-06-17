@@ -13,21 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Eye, Download, Trash2, Upload } from "lucide-react";
-import {
-	isSezGstCategory,
-	getSezSupplyTypeLabel,
-} from "@/lib/masters/gst-compliance";
-import {
-	LUT_SUPPLY_DECLARATION,
-	resolveSezLutSupply,
-} from "@/lib/settings/gst-tax-config";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
-import {
-  formatCustomerDropdownLabel,
-  formatCustomerDropdownSublabel,
-} from "@/lib/masters/entity-display";
 import { InvoiceLinesEditor } from "./components/InvoiceLinesEditor";
 import {
   calculateInvoiceTotals,
@@ -57,6 +44,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const router = useRouter();
   const isEdit = invoiceId != null;
   const customers = useMemo(() => getCustomersForInvoice(), []);
+  const products = useMemo(() => getProductsForInvoice(), []);
 
   const [invoiceNo, setInvoiceNo] = useState("");
   const [customerId, setCustomerId] = useState<string>("");
@@ -64,10 +52,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [customerMobile, setCustomerMobile] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerGst, setCustomerGst] = useState("");
-  const [customerGstCategory, setCustomerGstCategory] = useState("");
-  const [sezSupplyType, setSezSupplyType] = useState("");
-  const [lutNumber, setLutNumber] = useState("");
-  const [lutDeclaration, setLutDeclaration] = useState("");
   const [billingAddress, setBillingAddress] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const [dueDate, setDueDate] = useState("");
@@ -76,33 +60,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [lines, setLines] = useState([createEmptyLine()]);
   const [attachments, setAttachments] = useState<InvoiceAttachment[]>([]);
   const [error, setError] = useState<string | null>(null);
-
-  const products = useMemo(
-    () => getProductsForInvoice(customerId ? Number(customerId) : undefined),
-    [customerId],
-  );
-
-  const customerOptions = useMemo(
-    () => [
-      { value: "manual", label: "Manual entry" },
-      ...customers.map((c) => ({
-        value: String(c.id),
-        label: formatCustomerDropdownLabel(c),
-        sublabel: formatCustomerDropdownSublabel(c),
-        searchText: [
-          c.customerCode,
-          c.customerName,
-          c.customerType,
-          c.mobile,
-          c.email,
-          c.gstin,
-        ]
-          .filter(Boolean)
-          .join(" "),
-      })),
-    ],
-    [customers],
-  );
 
   useEffect(() => {
     const d = new Date();
@@ -127,10 +84,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setCustomerMobile(rec.customerMobile);
     setCustomerEmail(rec.customerEmail);
     setCustomerGst(rec.customerGst);
-    setCustomerGstCategory(rec.customerGstCategory ?? "");
-    setSezSupplyType(rec.sezSupplyType ?? "");
-    setLutNumber(rec.lutNumber ?? "");
-    setLutDeclaration(rec.lutDeclaration ?? "");
     setBillingAddress(rec.billingAddress);
     setInvoiceDate(rec.invoiceDate);
     setDueDate(rec.dueDate);
@@ -142,40 +95,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
 
   const totals = useMemo(() => calculateInvoiceTotals(lines), [lines]);
 
-  const showSezSupply = isSezGstCategory(customerGstCategory);
-
-  const sezLutResolution = useMemo(
-    () =>
-      showSezSupply
-        ? resolveSezLutSupply({
-            customerGstCategory,
-            transactionDate: invoiceDate,
-          })
-        : { appliesLut: false },
-    [showSezSupply, customerGstCategory, invoiceDate],
-  );
-
-  useEffect(() => {
-    if (!showSezSupply) {
-      setSezSupplyType("");
-      setLutNumber("");
-      setLutDeclaration("");
-      return;
-    }
-
-    if (sezLutResolution.appliesLut) {
-      setSezSupplyType("lut_bond");
-      setLutNumber(sezLutResolution.lutNumber ?? "");
-      setLutDeclaration(sezLutResolution.declaration ?? LUT_SUPPLY_DECLARATION);
-      setLines((prev) => prev.map((line) => ({ ...line, taxPct: 0 })));
-      return;
-    }
-
-    setSezSupplyType("with_igst");
-    setLutNumber("");
-    setLutDeclaration("");
-  }, [showSezSupply, sezLutResolution.appliesLut, sezLutResolution.lutNumber, sezLutResolution.declaration, invoiceDate]);
-
   const onCustomerChange = (id: string) => {
     setCustomerId(id);
     const c = customers.find((x) => x.id === Number(id));
@@ -185,10 +104,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       setCustomerMobile(f.customerMobile);
       setCustomerEmail(f.customerEmail);
       setCustomerGst(f.customerGst);
-      setCustomerGstCategory(f.customerGstCategory ?? "");
-      setSezSupplyType("");
-      setLutNumber("");
-      setLutDeclaration("");
       setBillingAddress(f.billingAddress);
     }
   };
@@ -220,12 +135,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     customerMobile: customerMobile.trim(),
     customerEmail: customerEmail.trim(),
     customerGst: customerGst.trim(),
-    customerGstCategory: customerGstCategory || undefined,
-    sezSupplyType: showSezSupply && sezSupplyType
-      ? (sezSupplyType as "lut_bond" | "with_igst")
-      : undefined,
-    lutNumber: sezLutResolution.appliesLut ? lutNumber : undefined,
-    lutDeclaration: sezLutResolution.appliesLut ? lutDeclaration : undefined,
     billingAddress: billingAddress.trim(),
     lineItems: lines.filter((l) => l.productName || l.productId),
     attachments,
@@ -282,16 +191,19 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1 sm:col-span-2">
                 <Label className="text-xs">Customer from Master *</Label>
-                <AutocompleteSelect
-                  options={customerOptions}
-                  value={customerId || "manual"}
-                  onChange={(v) =>
-                    v === "manual" ? onCustomerChange("") : onCustomerChange(String(v))
-                  }
-                  placeholder="Select customer"
-                  searchPlaceholder="Search by code, name, type, mobile…"
-                  className="h-8 text-xs"
-                />
+                <Select value={customerId || "manual"} onValueChange={(v) => (v === "manual" ? setCustomerId("") : onCustomerChange(v))}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Select customer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual" className="text-xs">Manual entry</SelectItem>
+                    {customers.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)} className="text-xs">
+                        {c.customerCode} — {c.customerName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Customer Name *</Label>
@@ -307,39 +219,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">GST Number</Label>
-                <Input className="h-8 text-xs font-mono" value={customerGst} onChange={(e) => setCustomerGst(e.target.value)} />
+                <Input className="h-8 text-xs" value={customerGst} onChange={(e) => setCustomerGst(e.target.value)} />
               </div>
-              {showSezSupply && (
-                <div className="space-y-2 sm:col-span-2 rounded-lg border border-border/60 bg-muted/20 p-3">
-                  <p className="text-xs font-medium text-foreground">
-                    SEZ Customer — {getSezSupplyTypeLabel(sezSupplyType)}
-                  </p>
-                  {sezLutResolution.appliesLut ? (
-                    <>
-                      <p className="text-[11px] text-muted-foreground">
-                        Active LUT found for company GSTIN and financial year. IGST
-                        will not be charged.
-                      </p>
-                      <div className="space-y-1">
-                        <Label className="text-xs">LUT Number</Label>
-                        <Input
-                          className="h-8 text-xs bg-muted/30 font-mono"
-                          readOnly
-                          value={lutNumber || "—"}
-                        />
-                      </div>
-                      <p className="text-[11px] font-medium text-brand-800">
-                        {lutDeclaration || LUT_SUPPLY_DECLARATION}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-[11px] text-muted-foreground">
-                      No active LUT for this financial year. IGST will be charged
-                      normally.
-                    </p>
-                  )}
-                </div>
-              )}
               <div className="space-y-1 sm:col-span-2">
                 <Label className="text-xs">Billing Address</Label>
                 <Textarea className="min-h-[56px] text-xs resize-none" value={billingAddress} onChange={(e) => setBillingAddress(e.target.value)} />

@@ -181,7 +181,6 @@ export default function EditCustomerPage() {
         errors={errors}
         onSetErrors={setErrors}
         onClearError={clearErr}
-        customerCode={customerCode}
       />
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}

@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/dialog";
 
 import { ReorderLevel } from "../types";
-import Link from "next/link";
 import { deleteReorder } from "../services";
 import { PRODUCT_OPTIONS, STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
 
@@ -24,7 +23,7 @@ interface WarehouseWiseListingProps {
 function StatusBadge({ status }: { status: string }) {
   const cfg = STATUS_BADGE_CONFIG[status] || { bg: "bg-slate-100 text-slate-600 border-slate-200", dot: "bg-slate-400" };
   return (
-    <span className={`inline-flex items-center gap-1.5 text-[11px] px-2.5 py-0.5 rounded-full font-semibold border ${cfg.bg}`}>
+    <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-semibold border ${cfg.bg}`}>
       <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
       {status}
     </span>
@@ -86,9 +85,8 @@ export function WarehouseWiseListing({ warehouseRecords, selectedWarehouse, relo
     key: key as keyof ReorderLevel,
     header,
     sortable: true,
-    align: "right" as const,
+    align: "center" as const,
     width: w,
-    render: (val) => <span className="font-mono text-xs tabular-nums">{val}</span>
   });
 
   const columns: ColumnConfig<ReorderLevel>[] = [
@@ -99,22 +97,13 @@ export function WarehouseWiseListing({ warehouseRecords, selectedWarehouse, relo
       filterable: true,
       filterType: "dropdown",
       filterOptions: PRODUCT_OPTIONS,
-      width: "160px",
-      render: (val, row) => (
-        <Link
-          href={`/warehouse/reorder-level/view/${row.id}`}
-          className="text-xs font-bold text-foreground hover:underline"
-        >
-          {val}
-        </Link>
-      )
     },
     {
       key: "sku",
       header: "SKU",
       sortable: true,
       width: "130px",
-      render: (v: any) => <span className="font-mono text-xs text-foreground font-semibold">{v}</span>,
+      render: (v: any) => <span className="font-mono text-xs text-brand-700 font-bold">{v}</span>,
     },
     numCol("currentStock", "Current Stock"),
     numCol("reservedStock", "Reserved Stock", "130px"),

@@ -2,7 +2,7 @@
 
 import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronRight, Lock } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { ChartOfAccount } from "../../../data";
 import {
   countLedgersUnder,
@@ -91,8 +91,7 @@ function TreeNode({
   const isSelected = selectedId === node.id;
   const visualLevel = resolveCoaVisualLevel(node, records);
   const Icon = VISUAL_ICON[visualLevel];
-  const isLedger = node.nodeLevel === "ledger" || node.nodeLevel === "sub_ledger";
-  const isSystemLocked = node.isSystem && node.nodeLevel !== "ledger" && node.nodeLevel !== "sub_ledger";
+  const isLedger = node.nodeLevel === "ledger";
   const ledgerCount = !isLedger ? countLedgersUnder(records, node.id) : 0;
   const isPrimaryHead = node.nodeLevel === "primary_head";
 
@@ -197,9 +196,6 @@ function TreeNode({
               )}
             >
               {node.accountName}
-              {isSystemLocked && (
-                <Lock className="inline w-3 h-3 ml-1 text-amber-600 opacity-80" aria-label="System locked" />
-              )}
               {!isLedger && ledgerCount > 0 && !isSidebar && (
                 <span className="ml-1.5 text-[10px] font-normal text-muted-foreground tabular-nums whitespace-nowrap">
                   ({ledgerCount})

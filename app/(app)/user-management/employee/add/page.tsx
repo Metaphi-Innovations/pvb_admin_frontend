@@ -8,11 +8,12 @@ import { type Employee, loadEmployees, saveEmployees } from "../employee-data";
 import { cn } from "@/lib/utils";
 
 const DEPARTMENTS = [
-  { id: 1, name: "Accounts" },
+  { id: 1, name: "Sales" },
   { id: 2, name: "HR" },
-  { id: 3, name: "Procurement" },
-  { id: 4, name: "Warehouse" },
-  { id: 5, name: "Admin" },
+  { id: 3, name: "Accounts" },
+  { id: 4, name: "Procurement" },
+  { id: 5, name: "Field Force" },
+  { id: 6, name: "Operations" },
 ];
 
 interface ToastState { msg: string; type: "success" | "error" }

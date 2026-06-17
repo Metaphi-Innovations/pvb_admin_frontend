@@ -32,6 +32,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetBody,
+  SheetFooter,
+} from "@/components/ui/sheet";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -41,8 +50,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { MiniKPICard } from "@/components/ui/KPICard";
-import { MasterFormGrid, MasterField, compactInput } from "@/components/masters/MasterModule";
-import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
+import { MasterFormGrid, MasterField, MasterViewRow, compactInput } from "@/components/masters/MasterModule";
 import {
   DEFAULT_UNIT_FORM,
   formToUnit,
@@ -61,8 +69,6 @@ import {
   MASTER_CURRENT_USER,
   type MasterStatus,
 } from "@/lib/masters/common";
-import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
-import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 
 type SortKey = "unitCode" | "unitName" | "symbol" | "description" | "status" | "createdBy" | "updatedBy";
 
@@ -85,6 +91,27 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
         <X className="h-3.5 w-3.5" />
       </button>
     </div>
+  );
+}
+
+function StatusToggle({ record, onToggle }: { record: UnitRecord; onToggle: (item: UnitRecord) => void }) {
+  const active = record.status === "active";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(record);
+      }}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+        active
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
+      )}
+    >
+      {active ? "Active" : "Inactive"}
+    </button>
   );
 }
 
@@ -458,15 +485,7 @@ export default function UnitMasterPage() {
                     className="w-[320px]"
                   />
                   <SortTh
-                    label="Status"
-                    colKey="status"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={handleSort}
-                    className="w-[110px]"
-                  />
-                  <SortTh
-                    label="Created"
+                    label="Created By"
                     colKey="createdBy"
                     sortKey={sortKey}
                     sortDir={sortDir}
@@ -474,12 +493,20 @@ export default function UnitMasterPage() {
                     className="w-[130px]"
                   />
                   <SortTh
-                    label="Updated"
+                    label="Updated By"
                     colKey="updatedBy"
                     sortKey={sortKey}
                     sortDir={sortDir}
                     onSort={handleSort}
                     className="w-[130px]"
+                  />
+                  <SortTh
+                    label="Status"
+                    colKey="status"
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                    className="w-[110px]"
                   />
                   <th className="sticky right-0 z-30 w-[80px] min-w-[80px] h-11 px-3 text-left text-[13px] font-semibold whitespace-nowrap bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]">
                     Actions
@@ -512,14 +539,14 @@ export default function UnitMasterPage() {
                       <td className="px-3 py-2.5 text-xs text-foreground whitespace-nowrap font-medium">
                         {row.description || "—"}
                       </td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                        {row.createdBy}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                        {row.updatedBy}
+                      </td>
                       <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
-                        <ListingAuditCell name={row.createdBy} date={row.createdAt} variant="created" />
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
-                        <ListingAuditCell name={row.updatedBy} date={row.updatedAt} variant="updated" />
+                        <StatusToggle record={row} onToggle={toggleStatus} />
                       </td>
                       <td
                         className="sticky right-0 z-20 w-[80px] min-w-[80px] px-3 py-2.5 bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]"
@@ -575,19 +602,20 @@ export default function UnitMasterPage() {
               )}
             </p>
             <div className="flex items-center gap-2">
-              <AutocompleteSelect
-                options={[10, 25, 50, 100].map((value) => ({
-                  value: String(value),
-                  label: `${value} / page`,
-                }))}
-                value={String(pageSize)}
-                onChange={(v) => {
-                  setPageSize(Number(v));
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
                   setPage(1);
                 }}
-                placeholder="Page size…"
-                className="h-7 text-xs w-28"
-              />
+                className="px-2 text-xs bg-white border rounded-md h-7 border-border text-foreground"
+              >
+                {[10, 25, 50, 100].map((value) => (
+                  <option key={value} value={value}>
+                    {value} / page
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
                 onClick={() => setPage((prev) => Math.max(1, prev - 1))}
@@ -612,68 +640,116 @@ export default function UnitMasterPage() {
         </div>
       </div>
 
-      <MasterListingSheets
-        sheetMode={sheetMode}
-        active={active}
-        onClose={closeSheet}
-        onEdit={() => active && openEdit(active)}
-        onSave={persist}
-        sheetTitle={sheetTitle}
-        icon={Ruler}
-        viewDrawer={
-          active
-            ? buildSimpleMasterViewDrawer<UnitRecord>({
-                drawerTitle: "Unit",
-                getRecordCode: (r) => r.unitCode,
-                basicInfo: (r) => [
-                  { label: "Unit Name", value: r.unitName },
-                  { label: "Unit Code", value: r.unitCode, mono: true },
-                  { label: "Symbol", value: r.symbol, mono: true },
-                ],
-                description: (r) => r.description,
-                showDescription: true,
-              })(active)
-            : { title: "Unit", basicInfo: [] }
-        }
-        formContent={
-          <div className="space-y-4">
-            {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
-            <MasterFormGrid>
-              <MasterField label="Unit Name" required>
-                <Input
-                  className={compactInput()}
-                  value={form.unitName}
-                  onChange={(e) => setForm((f) => ({ ...f, unitName: e.target.value }))}
-                />
-              </MasterField>
-              <MasterField label="Unit Code" required>
-                <Input
-                  className={compactInput("font-mono opacity-100 bg-background text-foreground cursor-not-allowed")}
-                  value={form.unitCode}
-                  disabled
-                  readOnly
-                  onChange={(e) => setForm((f) => ({ ...f, unitCode: e.target.value.toUpperCase() }))}
-                />
-              </MasterField>
-              <MasterField label="Symbol" required>
-                <Input
-                  className={compactInput("font-mono")}
-                  value={form.symbol}
-                  onChange={(e) => setForm((f) => ({ ...f, symbol: e.target.value.toUpperCase() }))}
-                  placeholder="KG, L, PKT"
-                />
-              </MasterField>
-              <MasterField label="Description" className="sm:col-span-2">
-                <Textarea
-                  className="text-xs min-h-[72px] resize-none"
-                  value={form.description}
-                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                />
-              </MasterField>
-            </MasterFormGrid>
-          </div>
-        }
-      />
+      <Sheet open={sheetMode !== null} onOpenChange={(o) => !o && closeSheet()}>
+        <SheetContent>
+          <SheetHeader>
+            <div className="flex items-start gap-3 pr-8">
+              <div className="flex items-center justify-center border w-9 h-9 rounded-xl bg-brand-50 border-brand-100">
+                <Ruler className="w-4 h-4 text-brand-600" />
+              </div>
+              <div>
+                <SheetTitle className="text-base">{sheetTitle}</SheetTitle>
+                <SheetDescription className="text-xs">
+                  {sheetMode === "view" ? "Read-only details" : "Compact unit form"}
+                </SheetDescription>
+              </div>
+            </div>
+          </SheetHeader>
+
+          <SheetBody>
+            {sheetMode === "view" && active ? (
+              <div className="space-y-4">
+                <div className="px-3 border rounded-lg border-border/60 bg-muted/10">
+                  <MasterViewRow label="Unit Name" value={active.unitName} />
+                  <MasterViewRow label="Unit Code" value={<span className="font-mono">{active.unitCode}</span>} />
+                  <MasterViewRow label="Symbol" value={<span className="font-mono">{active.symbol}</span>} />
+                  <MasterViewRow label="Description" value={active.description || "—"} />
+                  <MasterViewRow label="Status" value={active.status === "active" ? "Active" : "Inactive"} />
+                </div>
+                <div className="grid grid-cols-2 gap-3 pt-2 text-xs border-t">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
+                    <p className="font-medium">{active.createdBy}</p>
+                    <p className="text-muted-foreground">{active.createdAt}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Updated By</p>
+                    <p className="font-medium">{active.updatedBy}</p>
+                    <p className="text-muted-foreground">{active.updatedAt}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
+                <MasterFormGrid>
+                  <MasterField label="Unit Name" required>
+                    <Input
+                      className={compactInput()}
+                      value={form.unitName}
+                      onChange={(e) => setForm((f) => ({ ...f, unitName: e.target.value }))}
+                    />
+                  </MasterField>
+                  <MasterField label="Unit Code" required>
+                    <Input
+                      className={compactInput("font-mono opacity-100 bg-background text-foreground cursor-not-allowed")}
+                      value={form.unitCode}
+                      disabled
+                      readOnly
+                      onChange={(e) => setForm((f) => ({ ...f, unitCode: e.target.value.toUpperCase() }))}
+                    />
+                  </MasterField>
+                  <MasterField label="Symbol" required>
+                    <Input
+                      className={compactInput("font-mono")}
+                      value={form.symbol}
+                      onChange={(e) => setForm((f) => ({ ...f, symbol: e.target.value.toUpperCase() }))}
+                      placeholder="KG, L, PKT"
+                    />
+                  </MasterField>
+                  <MasterField label="Description" className="sm:col-span-2">
+                    <Textarea
+                      className="text-xs min-h-[72px] resize-none"
+                      value={form.description}
+                      onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                    />
+                  </MasterField>
+                </MasterFormGrid>
+              </div>
+            )}
+          </SheetBody>
+
+          <SheetFooter>
+            {sheetMode === "view" ? (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Back
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+                  onClick={() => active && openEdit(active)}
+                >
+                  Edit
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+                  onClick={persist}
+                >
+                  Save
+                </Button>
+              </>
+            )}
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <DialogContent className="max-w-sm">

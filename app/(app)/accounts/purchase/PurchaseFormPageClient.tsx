@@ -17,10 +17,6 @@ import {
   updateManualPurchaseEntry,
   type PurchaseAttachment,
 } from "../purchase-invoices/purchase-invoices-data";
-import {
-  formatVendorDropdownLabel,
-  formatVendorDropdownSublabel,
-} from "@/lib/masters/entity-display";
 import { formatINR, PURCHASE_BREADCRUMB, PURCHASE_LIST_PATH } from "./purchase-utils";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -52,8 +48,8 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
     () =>
       vendors.map((v) => ({
         value: String(v.id),
-        label: formatVendorDropdownLabel(v),
-        sub: formatVendorDropdownSublabel(v),
+        label: `${v.vendorCode} — ${v.vendorName}`,
+        sub: v.email,
       })),
     [vendors],
   );

@@ -1,5 +1,5 @@
-import PurchaseInvoicesPageClient from "./PurchaseInvoicesPageClient";
+import { redirect } from "next/navigation";
 
-export default function Page() {
-  return <PurchaseInvoicesPageClient />;
+export default function LegacyRedirect() {
+  redirect("/accounts/vouchers?tab=purchase");
 }

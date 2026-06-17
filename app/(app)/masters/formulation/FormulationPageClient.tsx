@@ -14,6 +14,15 @@ import {
   Trash2,
 } from "lucide-react";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetBody,
+  SheetFooter,
+} from "@/components/ui/sheet";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -23,8 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { MiniKPICard } from "@/components/ui/KPICard";
-import { MasterFormGrid } from "@/components/masters/MasterModule";
-import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
+import { MasterFormGrid, MasterViewRow } from "@/components/masters/MasterModule";
 import { NameCodeDescriptionFields } from "@/components/masters/simpleFields";
 import {
   DEFAULT_FORMULATION_FORM,
@@ -48,7 +56,6 @@ import {
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { applyFilters } from "@/components/listing/filter-utils";
-import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
 interface ToastState {
   msg: string;
@@ -69,6 +76,28 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
         <X className="h-3.5 w-3.5" />
       </button>
     </div>
+  );
+}
+
+function StatusToggle({ record, onToggle }: { record: FormulationRecord; onToggle: (item: FormulationRecord) => void }) {
+  const active = record.status === "active";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggle(record);
+      }}
+      className={cn(
+        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+        active
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
+      )}
+    >
+      {active ? "Active" : "Inactive"}
+    </button>
   );
 }
 
@@ -107,7 +136,7 @@ export default function FormulationMasterPage() {
     setRecords(updated);
     saveMasterRecords(FORMULATION_STORAGE_KEY, updated);
     setToast({
-      msg: `Form status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`,
+      msg: `Formulation status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`,
       type: "success",
     });
   };
@@ -115,25 +144,19 @@ export default function FormulationMasterPage() {
   const columns: ColumnConfig<FormulationRecord>[] = [
     {
       key: "formulationCode",
-      header: "Form Code",
+      header: "Formulation Code",
       sortable: true,
       filterable: true,
       filterType: "text",
       width: "130px",
-      render: (val, row) => (
-        <span className="font-mono text-xs text-brand-700">{row.formulationCode}</span>
-      ),
     },
     {
       key: "formulationName",
-      header: "Form Name",
+      header: "Formulation Name",
       sortable: true,
       filterable: true,
       filterType: "text",
       width: "220px",
-      render: (val, row) => (
-        <span className="text-xs font-semibold text-foreground">{row.formulationName}</span>
-      ),
     },
     {
       key: "description",
@@ -142,6 +165,22 @@ export default function FormulationMasterPage() {
       filterable: true,
       filterType: "text",
       width: "320px",
+    },
+    {
+      key: "createdBy",
+      header: "Created By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "110px",
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "110px",
     },
     {
       key: "status",
@@ -155,26 +194,8 @@ export default function FormulationMasterPage() {
       ],
       width: "100px",
       render: (val, row) => (
-        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
+        <StatusToggle record={row} onToggle={toggleStatus} />
       ),
-    },
-    {
-      key: "createdBy",
-      header: "Created",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "110px",
-      render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdAt} variant="created" />,
-    },
-    {
-      key: "updatedBy",
-      header: "Updated",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "110px",
-      render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedAt} variant="updated" />,
     },
   ];
 
@@ -281,10 +302,10 @@ export default function FormulationMasterPage() {
     if (mode === "add") {
       const id = list.length ? Math.max(...list.map((r) => r.id)) + 1 : 1;
       updatedList = [...list, formToFormulation(form, id)];
-      setToast({ msg: "Form added successfully", type: "success" });
+      setToast({ msg: "Formulation added successfully", type: "success" });
     } else if (active) {
       updatedList = list.map((r) => (r.id === active.id ? formToFormulation(form, active.id, active) : r));
-      setToast({ msg: "Form updated successfully", type: "success" });
+      setToast({ msg: "Formulation updated successfully", type: "success" });
     } else {
       return;
     }
@@ -301,12 +322,12 @@ export default function FormulationMasterPage() {
     saveMasterRecords(FORMULATION_STORAGE_KEY, list);
     setRecords(list);
     setDeleteTarget(null);
-    setToast({ msg: "Form deleted successfully", type: "success" });
+    setToast({ msg: "Formulation deleted successfully", type: "success" });
   };
 
   const handleExport = () => {
     try {
-      const headers = ["ID", "Form Code", "Form Name", "Description", "Status", "Created By", "Updated By", "Created At", "Updated At"];
+      const headers = ["ID", "Formulation Code", "Formulation Name", "Description", "Status", "Created By", "Updated By", "Created At", "Updated At"];
       const csvRows = [headers.join(",")];
       for (const r of records) {
         const row = [
@@ -331,25 +352,25 @@ export default function FormulationMasterPage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      setToast({ msg: "Forms exported successfully", type: "success" });
+      setToast({ msg: "Formulations exported successfully", type: "success" });
     } catch {
-      setToast({ msg: "Failed to export forms", type: "error" });
+      setToast({ msg: "Failed to export formulations", type: "error" });
     }
   };
 
   const sheetTitle =
     sheetMode === "add"
-      ? "Add Form"
+      ? "Add Formulation"
       : sheetMode === "edit"
-      ? "Edit Form"
-      : "View Form";
+      ? "Edit Formulation"
+      : "View Formulation";
 
   return (
     <AppLayout>
       <div className="space-y-5">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Form Master</h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">Product form types (e.g. Liquid, Granules)</p>
+          <h1 className="text-xl font-bold text-foreground">Formulation Master</h1>
+          <p className="mt-0.5 text-xs text-muted-foreground">Product formulation types</p>
         </div>
 
         {/* <div className="grid grid-cols-3 gap-3">
@@ -380,58 +401,118 @@ export default function FormulationMasterPage() {
           onFilterChange={setFilters}
           actions={actions}
           onAdd={openAdd}
-          addLabel="Add Form"
+          addLabel="Add Formulation"
           onExport={handleExport}
-          emptyMessage="forms"
-          searchPlaceholder="Search form code, name, description..."
+          emptyMessage="formulations"
+          searchPlaceholder="Search formulation code, name, description..."
           currentFilters={filters}
           currentSort={sort}
         />
       </div>
 
-      <MasterListingSheets
-        sheetMode={sheetMode}
-        active={active}
-        onClose={closeSheet}
-        onEdit={() => active && openEdit(active)}
-        onSave={persist}
-        sheetTitle={sheetTitle}
-        icon={FlaskConical}
-        viewDrawer={
-          active
-            ? buildSimpleMasterViewDrawer<FormulationRecord>({
-                drawerTitle: "Form",
-                getRecordCode: (r) => r.formulationCode,
-                basicInfo: (r) => [
-                  { label: "Form Name", value: r.formulationName },
-                  { label: "Form Code", value: r.formulationCode, mono: true },
-                ],
-                description: (r) => r.description,
-                showDescription: true,
-              })(active)
-            : { title: "Form", basicInfo: [] }
-        }
-        formContent={
-          <div className="space-y-4">
-            {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
-            <MasterFormGrid>
-              <NameCodeDescriptionFields
-                form={{ name: form.formulationName, code: form.formulationCode, description: form.description }}
-                setForm={(u) =>
-                  setForm((prev) => {
-                    const n = typeof u === "function" ? u({ name: prev.formulationName, code: prev.formulationCode, description: prev.description }) : u;
-                    return { ...prev, formulationName: n.name, formulationCode: n.code, description: n.description };
-                  })
-                }
-                errors={{}}
-                labels={{ name: "Form Name", code: "Form Code" }}
-                codeDisabled
-                codeFirst
-              />
-            </MasterFormGrid>
-          </div>
-        }
-      />
+      <Sheet open={sheetMode !== null} onOpenChange={(o) => !o && closeSheet()}>
+        <SheetContent>
+          <SheetHeader>
+            <div className="flex items-start gap-3 pr-8">
+              <div className="flex items-center justify-center border w-9 h-9 rounded-xl bg-brand-50 border-brand-100">
+                <FlaskConical className="w-4 h-4 text-brand-600" />
+              </div>
+              <div>
+                <SheetTitle className="text-base">{sheetTitle}</SheetTitle>
+                <SheetDescription className="text-xs">
+                  {sheetMode === "view" ? "Read-only details" : "Compact formulation form"}
+                </SheetDescription>
+              </div>
+            </div>
+          </SheetHeader>
+
+          <SheetBody>
+            {sheetMode === "view" && active ? (
+              <div className="space-y-4">
+                <div className="px-3 border rounded-lg border-border/60 bg-muted/10">
+                  <MasterViewRow label="Formulation Name" value={active.formulationName} />
+                  <MasterViewRow label="Formulation Code" value={<span className="font-mono">{active.formulationCode}</span>} />
+                  <MasterViewRow label="Description" value={active.description || "—"} />
+                  <MasterViewRow label="Status" value={active.status === "active" ? "Active" : "Inactive"} />
+                </div>
+                <div className="grid grid-cols-2 gap-3 pt-2 text-xs border-t">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
+                    <p className="font-medium">{active.createdBy}</p>
+                    <p className="text-muted-foreground">{active.createdAt}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Updated By</p>
+                    <p className="font-medium">{active.updatedBy}</p>
+                    <p className="text-muted-foreground">{active.updatedAt}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
+                <MasterFormGrid>
+                  <NameCodeDescriptionFields
+                    form={{ name: form.formulationName, code: form.formulationCode, description: form.description }}
+                    setForm={(u) =>
+                      setForm((prev) => {
+                        const n = typeof u === "function" ? u({ name: prev.formulationName, code: prev.formulationCode, description: prev.description }) : u;
+                        return { ...prev, formulationName: n.name, formulationCode: n.code, description: n.description };
+                      })
+                    }
+                    errors={{}}
+                    labels={{ name: "Formulation Name", code: "Formulation Code" }}
+                    codeDisabled
+                    codeFirst
+                  />
+                </MasterFormGrid>
+                {/* <div className="flex items-center justify-between p-3 border rounded-lg border-border bg-muted/20">
+                  <div>
+                    <p className="text-xs font-medium">Status</p>
+                    <p className="text-[11px] text-muted-foreground">{form.status === "active" ? "Active" : "Inactive"}</p>
+                  </div>
+                  <Switch
+                    checked={form.status === "active"}
+                    onCheckedChange={(checked) =>
+                      setForm((prev) => ({ ...prev, status: checked ? "active" : "inactive" }))
+                    }
+                  />
+                </div> */}
+              </div>
+            )}
+          </SheetBody>
+
+          <SheetFooter>
+            {sheetMode === "view" ? (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Back
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+                  onClick={() => active && openEdit(active)}
+                >
+                  Edit
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" className="h-8 text-xs" onClick={closeSheet}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs text-white bg-brand-600 hover:bg-brand-700"
+                  onClick={persist}
+                >
+                  Save
+                </Button>
+              </>
+            )}
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <DialogContent className="max-w-sm">

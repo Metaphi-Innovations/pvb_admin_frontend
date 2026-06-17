@@ -64,9 +64,9 @@ export function DocumentTypeForm({
         </div>
       </div>
 
-      <div className="pt-1 space-y-2">
+      <div className="pt-1 space-y-4">
         {/* Code */}
-        <div className="space-y-1 max-w-[200px]">
+        <div className="space-y-1">
           <Label className="text-xs font-medium">
             Document Type Code <span className="text-red-500">*</span>
           </Label>
@@ -87,7 +87,7 @@ export function DocumentTypeForm({
         </div>
 
         {/* Title */}
-        <div className="space-y-1 max-w-[400px]">
+        <div className="space-y-1">
           <Label className="text-xs font-medium">
             Title <span className="text-red-500">*</span>
           </Label>
@@ -107,7 +107,7 @@ export function DocumentTypeForm({
         </div>
 
         {/* Description */}
-        <div className="space-y-1 max-w-[500px]">
+        <div className="space-y-1">
           <Label className="text-xs font-medium">Description</Label>
           <Textarea
             value={form.description}

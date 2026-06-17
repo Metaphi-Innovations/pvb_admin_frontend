@@ -48,41 +48,57 @@ export default function ReorderLevelPage() {
           <MiniKPICard label="Low Stock" value={stats.lowStock} icon={ShieldAlert} accent={false} />
         </div>
       }
-      tabs={[
-        { value: "warehouse-wise", label: "Warehouse Wise", icon: BarChart2 },
-        { value: "product-overview", label: "Product Overview", icon: Layers }
-      ]}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      actions={
-        activeTab === "warehouse-wise" ? (
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Warehouse:</span>
-            <AutocompleteSelect
-              options={WAREHOUSE_OPTIONS}
-              value={selectedWarehouse}
-              onChange={setSelectedWarehouse}
-              placeholder="Select warehouse..."
-              searchPlaceholder="Search warehouse..."
-              className="h-9 w-[200px] text-xs rounded-lg border-border bg-white focus:ring-1 focus:ring-brand-500"
-            />
-          </div>
-        ) : null
-      }
     >
-      {/* TAB 1: Warehouse Wise */}
-      <TabsContent value="warehouse-wise" className="mt-0 outline-none">
-        <WarehouseWiseListing 
-          warehouseRecords={warehouseRecords} 
-          selectedWarehouse={selectedWarehouse} 
-          reload={reload} 
-        />
-      </TabsContent>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
+          <TabsList className="bg-muted/50 p-0.5 border border-border/60 rounded-xl inline-flex">
+            <TabsTrigger
+              value="warehouse-wise"
+              className="text-xs font-semibold px-4 py-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-brand-700"
+            >
+              <BarChart2 className="w-3.5 h-3.5 mr-1.5" />
+              Warehouse Wise
+            </TabsTrigger>
+            <TabsTrigger
+              value="product-overview"
+              className="text-xs font-semibold px-4 py-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-brand-700"
+            >
+              <Layers className="w-3.5 h-3.5 mr-1.5" />
+              Product Overview
+            </TabsTrigger>
+          </TabsList>
 
-      {/* TAB 2: Product Overview */}
-      <TabsContent value="product-overview" className="mt-0 outline-none">
-        <ProductOverviewListing allRecords={allRecords} />
-      </TabsContent>
+          {/* Warehouse selector — only on Warehouse Wise tab */}
+          {activeTab === "warehouse-wise" && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Warehouse:</span>
+              <AutocompleteSelect
+                options={WAREHOUSE_OPTIONS}
+                value={selectedWarehouse}
+                onChange={setSelectedWarehouse}
+                placeholder="Select warehouse..."
+                searchPlaceholder="Search warehouse..."
+                className="h-9 w-[200px] text-xs rounded-lg border-border bg-white focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* TAB 1: Warehouse Wise */}
+        <TabsContent value="warehouse-wise" className="mt-0 outline-none">
+          <WarehouseWiseListing 
+            warehouseRecords={warehouseRecords} 
+            selectedWarehouse={selectedWarehouse} 
+            reload={reload} 
+          />
+        </TabsContent>
+
+        {/* TAB 2: Product Overview */}
+        <TabsContent value="product-overview" className="mt-0 outline-none">
+          <ProductOverviewListing allRecords={allRecords} />
+        </TabsContent>
+      </Tabs>
     </ListingContainer>
   );
 }

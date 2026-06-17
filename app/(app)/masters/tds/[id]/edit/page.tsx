@@ -1,27 +1,24 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import { ActiveInactiveToggle } from "@/components/ui/ActiveInactiveToggle";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Save, AlertCircle } from "lucide-react";
 import {
-  type TDSMaster,
-  TDS_APPLICABLE_TO_OPTIONS,
+  ArrowLeft,
+  Save,
+  AlertCircle,
+} from "lucide-react";
+import {
+  TDSMaster,
   loadTDSMasters,
   saveTDSMasters,
-  tdsToForm,
-  formToTds,
-  validateTdsForm,
-  getTdsSectionCode,
+  todayStr,
 } from "../../tds-data";
-import { TdsRateInput } from "../../TdsRateInput";
 
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
@@ -33,65 +30,88 @@ function FieldError({ msg }: { msg?: string }) {
   );
 }
 
+function SectionHead({ label, sub }: { label: string; sub?: string }) {
+  return (
+    <div className="mb-2.5 mt-0.5">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
+      {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
 export default function EditTDSPage() {
   const router = useRouter();
   const params = useParams();
   const id = parseInt(params.id as string);
 
   const [record, setRecord] = useState<TDSMaster | null>(null);
-  const [form, setForm] = useState(tdsToForm({
-    id: 0,
-    sectionCode: "",
-    sectionName: "",
-    tdsRate: "",
-    applicableTo: [],
-    status: "active",
-    createdBy: "",
-    createdDate: "",
-    updatedBy: "",
-    updatedDate: "",
-  }));
+  const [form, setForm] = useState({
+    tdsCode: "",
+    tdsRate: 0,
+    status: "active" as "active" | "inactive",
+    remarks: "",
+  });
   const [errors, setErrors] = useState<Record<string, string>>({});
-
-  const applicableOptions = useMemo(
-    () => TDS_APPLICABLE_TO_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
-    [],
-  );
 
   useEffect(() => {
     const records = loadTDSMasters();
-    const found = records.find((r) => r.id === id);
+    const found = records.find(r => r.id === id);
     if (!found) {
       router.push("/masters/tds");
       return;
     }
     setRecord(found);
-    setForm(tdsToForm(found));
+    setForm({
+      tdsCode: found.tdsCode,
+      tdsRate: found.tdsRate,
+      status: found.status === "archived" ? "inactive" : found.status,
+      remarks: found.remarks || "",
+    });
   }, [id, router]);
 
-  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-    if (errors[key as string]) {
-      setErrors((prev) => {
+  const set = (key: string, value: any) => {
+    setForm(prev => ({ ...prev, [key]: value }));
+    if (errors[key]) {
+      setErrors(prev => {
         const copy = { ...prev };
-        delete copy[key as string];
+        delete copy[key];
         return copy;
       });
     }
   };
 
-  const handleSave = () => {
-    if (!record) return;
-    const records = loadTDSMasters();
-    const fieldErrors = validateTdsForm(form, records, record.id);
-    if (Object.keys(fieldErrors).length > 0) {
-      setErrors(fieldErrors);
-      return;
+  const validate = (): boolean => {
+    const e: Record<string, string> = {};
+    if (!form.tdsCode.trim()) e.tdsCode = "TDS Code is required";
+    if (form.tdsRate === undefined || form.tdsRate === null || form.tdsRate < 0) {
+      e.tdsRate = "TDS Rate is required and must be non-negative";
     }
-    const updated = records.map((r) =>
-      r.id === id ? formToTds(form, id, record) : r,
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSave = () => {
+    if (!validate() || !record) return;
+    const records = loadTDSMasters();
+    const updated = records.map(r =>
+      r.id === id
+        ? {
+            ...r,
+            tdsCode: form.tdsCode,
+            tdsRate: form.tdsRate,
+            status: form.status,
+            remarks: form.remarks,
+            updatedBy: "Admin",
+            updatedDate: todayStr(),
+            lastStatusChange: form.status !== record.status ? todayStr() : r.lastStatusChange,
+          }
+        : r
     );
     saveTDSMasters(updated);
+    
+    // Set pending toast message for the listing page
+    localStorage.setItem("tds_toast_message", "TDS updated successfully");
+    
     router.push("/masters/tds");
   };
 
@@ -108,6 +128,7 @@ export default function EditTDSPage() {
   return (
     <AppLayout>
       <div className="flex flex-col" style={{ minHeight: "calc(100vh - 104px)" }}>
+        {/* Sticky Header */}
         <div className="sticky top-0 z-10 bg-white border-b border-border px-4 py-2 flex items-center gap-2.5 flex-shrink-0">
           <button
             type="button"
@@ -117,13 +138,11 @@ export default function EditTDSPage() {
             <ArrowLeft className="w-4 h-4 text-muted-foreground" />
           </button>
           <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold leading-none">Edit TDS Section</h2>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Masters → TDS → {getTdsSectionCode(record)}
-            </p>
+            <h2 className="text-sm font-semibold leading-none">Edit TDS</h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Masters → TDS Master → Edit</p>
           </div>
           <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
-            {getTdsSectionCode(record)}
+            {record.tdsCode}
           </span>
           <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => router.back()}>
             Discard
@@ -137,81 +156,70 @@ export default function EditTDSPage() {
           </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4 max-w-2xl">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
+        {/* Form Content */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          <SectionHead label="TDS Details" />
+          <div className="grid grid-cols-4 gap-3">
+            {/* TDS Code */}
+            <div className="col-span-2 space-y-1">
               <Label className="text-xs font-medium">
-                TDS Section Code <span className="text-red-500">*</span>
+                TDS Code <span className="text-red-500">*</span>
               </Label>
               <Input
-                value={form.sectionCode}
                 disabled
                 readOnly
-                className="h-8 text-xs font-mono bg-muted/30 cursor-not-allowed"
+                value={form.tdsCode}
+                onChange={e => set("tdsCode", e.target.value)}
+                placeholder="Auto-generated code"
+                className={cn("h-8 text-xs bg-muted/30 text-muted-foreground cursor-not-allowed", errors.tdsCode && "border-red-400 focus-visible:ring-red-300")}
               />
+              <FieldError msg={errors.tdsCode} />
             </div>
 
-            <div className="space-y-1">
+            {/* TDS Rate (%) */}
+            <div className="col-span-1 space-y-1">
               <Label className="text-xs font-medium">
-                TDS Rate % <span className="text-red-500">*</span>
+                TDS Rate (%) <span className="text-red-500">*</span>
               </Label>
-              <TdsRateInput
+              <Input
+                type="number"
                 value={form.tdsRate}
-                onChange={(value) => set("tdsRate", value)}
-                className={cn("h-8 text-xs", errors.tdsRate && "border-red-400")}
+                onChange={e => set("tdsRate", parseFloat(e.target.value) || 0)}
+                placeholder="e.g., 1, 5, 10"
+                step="0.01"
+                min="0"
+                className={cn("h-8 text-xs", errors.tdsRate && "border-red-400 focus-visible:ring-red-300")}
               />
               <FieldError msg={errors.tdsRate} />
             </div>
 
-            <div className="sm:col-span-2 space-y-1">
-              <Label className="text-xs font-medium">
-                TDS Section Name <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                value={form.sectionName}
-                onChange={(e) => set("sectionName", e.target.value)}
-                className={cn("h-8 text-xs", errors.sectionName && "border-red-400")}
-              />
-              <FieldError msg={errors.sectionName} />
-            </div>
-
-            <div className="sm:col-span-2 space-y-1">
-              <Label className="text-xs font-medium">Applicable To</Label>
-              <AutocompleteSelect
-                multiple
-                options={applicableOptions}
-                value={form.applicableTo}
-                onChange={(value) =>
-                  set("applicableTo", Array.isArray(value) ? value : [])
-                }
-                placeholder="Select applicable categories…"
-                className="h-8 text-xs"
-              />
-            </div>
-
-            <div className="sm:col-span-2 space-y-1">
-              <Label className="text-xs font-medium">Description</Label>
+            {/* Remarks */}
+            <div className="col-span-2 space-y-1">
+              <Label className="text-xs font-medium">Remarks</Label>
               <Textarea
-                value={form.description}
-                onChange={(e) => set("description", e.target.value)}
+                value={form.remarks}
+                onChange={e => set("remarks", e.target.value)}
+                placeholder="Optional notes about this TDS rate"
                 rows={3}
-                className="text-xs min-h-[72px] resize-none"
+                className="text-xs rounded-lg resize-none min-h-[38px]"
               />
             </div>
+          </div>
 
-            <div className="sm:col-span-2 flex items-center justify-between rounded-lg border border-border px-3 py-2">
+          {/* Audit Info */}
+          <div className="mt-6 border-t pt-4">
+            <SectionHead label="Record Info" />
+            <div className="grid grid-cols-4 gap-3 text-xs">
               <div>
-                <p className="text-xs font-medium text-foreground">Status</p>
-                <p className="text-[11px] text-muted-foreground">
-                  {form.status === "active" ? "Active" : "Inactive"}
-                </p>
+                <p className="text-[10px] text-muted-foreground uppercase">Created By</p>
+                <p className="font-medium">{record.createdBy}</p>
+                <p className="text-muted-foreground">{record.createdDate}</p>
               </div>
-              <ActiveInactiveToggle
-                active={form.status === "active"}
-                onChange={(isActive) =>
-                  set("status", isActive ? "active" : "inactive")
-                }
-              />
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase">Updated By</p>
+                <p className="font-medium">{record.updatedBy}</p>
+                <p className="text-muted-foreground">{record.updatedDate}</p>
+              </div>
             </div>
           </div>
         </div>

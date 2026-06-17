@@ -1,25 +1,16 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { RecordDetailPage } from "@/components/record-detail";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import {
-  Calendar, Building, AlertCircle,
+  ArrowLeft, Calendar, Building, Package, Tag, AlertCircle,
   Layers, CheckSquare, ShieldAlert, FileText, ClipboardCheck, User
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getStockById } from "../../services";
 import { StockRecordUnion } from "../../types";
 import { STATUS_BADGE_CONFIG } from "../../constants";
-
-function stockStatusVariant(status: string): "active" | "inactive" | "draft" | "blocked" | "neutral" {
-  const s = status.toLowerCase();
-  if (s.includes("available") || s.includes("reserved")) return "active";
-  if (s.includes("reject") || s.includes("expired") || s.includes("low stock")) return "blocked";
-  if (s.includes("pending") || s.includes("progress") || s.includes("awaiting")) return "draft";
-  if (s.includes("disposed") || s.includes("out of stock")) return "inactive";
-  return "neutral";
-}
 
 export default function ViewStockDetailsPage({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -34,13 +25,7 @@ export default function ViewStockDetailsPage({ params }: { params: { id: string 
 
   if (!stockUnion) {
     return (
-      <RecordDetailPage
-        listHref="/warehouse/stockoverview"
-        listLabel="Stock Overview"
-        recordName="Stock Record Not Found"
-        statusLabel="Not Found"
-        statusVariant="blocked"
-      >
+      <FormContainer title="Stock Details" onBack={() => router.push("/warehouse/stockoverview")}>
         <div className="max-w-[800px] mx-auto text-center py-12 space-y-4">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
           <h1 className="text-base font-bold text-foreground">Stock Record Not Found</h1>
@@ -49,66 +34,24 @@ export default function ViewStockDetailsPage({ params }: { params: { id: string 
             Go Back
           </Button>
         </div>
-      </RecordDetailPage>
+      </FormContainer>
     );
   }
 
   const { type, data } = stockUnion;
   const statusCfg = STATUS_BADGE_CONFIG[data.status] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: data.status };
-  const grnData = data as unknown as Record<string, unknown>;
-  const qcData = data as unknown as Record<string, unknown>;
 
   return (
-    <RecordDetailPage
-      listHref="/warehouse/stockoverview"
-      listLabel="Stock Overview"
-      recordName={data.product}
-      recordCode={data.batchNumber}
-      statusLabel={statusCfg.label}
-      statusVariant={stockStatusVariant(data.status)}
-      metaItems={[
-        { icon: Building, label: data.warehouse },
-        ...(type === "grn-pending"
-          ? [{ icon: FileText, label: String(grnData.grnNo ?? "") }]
-          : []),
-      ]}
-      sidebar={{
-        summary: [
-          ...(type === "qc-passed"
-            ? [
-                { label: "Available Qty", value: String(qcData.availableQuantity ?? "—"), highlight: true },
-                { label: "Reserved Qty", value: String(qcData.reservedQuantity ?? "—") },
-                { label: "Threshold", value: String(qcData.threshold ?? "—") },
-              ]
-            : []),
-          ...(type === "rejected"
-            ? [
-                { label: "Rejected Qty", value: `${qcData.rejectedQuantity ?? "—"} Units`, highlight: true },
-                { label: "QC Number", value: String(qcData.qcNumber ?? "—") },
-                { label: "Inspector", value: String(qcData.inspector ?? "—") },
-              ]
-            : []),
-          ...(type === "grn-pending"
-            ? [
-                { label: "Received Qty", value: `${grnData.receivedQuantity ?? "—"} Units`, highlight: true },
-                { label: "Vendor", value: String(grnData.vendor ?? "—") },
-                { label: "GRN Date", value: String(grnData.grnDate ?? "—") },
-              ]
-            : []),
-        ],
-        quickActions:
-          type === "grn-pending"
-            ? [
-                {
-                  label: "Generate QC Report",
-                  icon: ClipboardCheck,
-                  variant: "primary" as const,
-                  onClick: () =>
-                    router.push(`/warehouse/grnqc/qc/create?grnId=${String(grnData.grnNo ?? "")}`),
-                },
-              ]
-            : [],
-      }}
+    <FormContainer
+      title={data.product}
+      description={`Batch Details for ${data.batchNumber}`}
+      onBack={() => router.push("/warehouse/stockoverview")}
+      actions={
+        <span className={`inline-flex items-center text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${statusCfg.bg}`}>
+          {statusCfg.label}
+        </span>
+      }
+      noCard={true}
     >
       <div className="space-y-6">
 
@@ -355,10 +298,20 @@ export default function ViewStockDetailsPage({ params }: { params: { id: string 
 
             {/* QC Status Information */}
             <div className="bg-white rounded-xl border border-border p-4 shadow-sm space-y-4">
-              <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
-                <ClipboardCheck className="w-4 h-4 text-brand-600" />
-                QC Status Information
-              </h2>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b pb-2 gap-3">
+                <h2 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <ClipboardCheck className="w-4 h-4 text-brand-600" />
+                  QC Status Information
+                </h2>
+                <Button
+                  size="sm"
+                  className="bg-brand-600 hover:bg-brand-700 text-white text-[11px] h-7 px-3 flex items-center gap-1"
+                  onClick={() => router.push(`/warehouse/grnqc/qc/create?grnId=${(data as any).grnNo}`)}
+                >
+                  <ClipboardCheck className="w-3.5 h-3.5" />
+                  Generate QC Report
+                </Button>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
                 <div>
                   <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Current Status</p>
@@ -387,6 +340,6 @@ export default function ViewStockDetailsPage({ params }: { params: { id: string 
           </div>
         )}
       </div>
-    </RecordDetailPage>
+    </FormContainer>
   );
 }

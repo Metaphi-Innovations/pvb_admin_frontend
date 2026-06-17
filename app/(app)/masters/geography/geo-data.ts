@@ -1,200 +1,116 @@
 ﻿// ── Geography Master — shared types, seed data, storage helpers ───────────────
 
-export type GeoLevel =
-  | "Zone"
-  | "Region"
-  | "State"
-  | "Area"
-  | "Territory"
-  | "District"
-  | "City"
-  | "Town"
-  | "Pincode";
+export type GeoLevel = "Zone" | "State" | "Region" | "Area" | "Territory" | "Locality" | "Pincode";
 
 export interface GeoNode {
   id: number;
   level: GeoLevel;
   name: string;
+  code: string;
   parentId: number | null;
   pincode: string;
   status: "active" | "inactive";
-  createdBy: string;
   createdDate: string;
-  updatedBy: string;
   updatedDate: string;
 }
 
-export const DEFAULT_GEO_USER = "Admin";
-
 // ── Constants ─────────────────────────────────────────────────────────────────
-export const LEVELS: GeoLevel[] = [
-  "Zone",
-  "Region",
-  "State",
-  "Area",
-  "Territory",
-  "District",
-  "City",
-  "Town",
-  "Pincode",
-];
+export const LEVELS: GeoLevel[] = ["Zone", "State", "Region", "Area", "Territory", "Locality", "Pincode"];
 
 export const LEVEL_INDEX: Record<GeoLevel, number> = {
-  Zone: 0,
-  Region: 1,
-  State: 2,
-  Area: 3,
-  Territory: 4,
-  District: 5,
-  City: 6,
-  Town: 7,
-  Pincode: 8,
+  Zone: 0, State: 1, Region: 2, Area: 3, Territory: 4, Locality: 5, Pincode: 6,
 };
 
 export const PARENT_LEVEL: Record<GeoLevel, GeoLevel | null> = {
-  Zone: null,
-  Region: "Zone",
-  State: "Region",
-  Area: "State",
-  Territory: "Area",
-  District: "Territory",
-  City: "District",
-  Town: "City",
-  Pincode: "Town",
+  Zone: null, State: "Zone", Region: "State",
+  Area: "Region", Territory: "Area", Locality: "Territory", Pincode: "Locality",
 };
 
 export const CHILD_LEVEL: Record<GeoLevel, GeoLevel | null> = {
-  Zone: "Region",
-  Region: "State",
-  State: "Area",
-  Area: "Territory",
-  Territory: "District",
-  District: "City",
-  City: "Town",
-  Town: "Pincode",
-  Pincode: null,
+  Zone: "State", State: "Region", Region: "Area",
+  Area: "Territory", Territory: "Locality", Locality: "Pincode", Pincode: null,
 };
-
-/** Bump when hierarchy or schema changes — triggers localStorage reset */
-export const GEO_SCHEMA_VERSION = 3;
-
-function seedNode(
-  partial: Omit<GeoNode, "createdBy" | "updatedBy"> & Partial<Pick<GeoNode, "createdBy" | "updatedBy">>,
-): GeoNode {
-  return {
-    createdBy: partial.createdBy ?? DEFAULT_GEO_USER,
-    updatedBy: partial.updatedBy ?? DEFAULT_GEO_USER,
-    ...partial,
-  };
-}
 
 // ── Seed data ─────────────────────────────────────────────────────────────────
 export const SEED_NODES: GeoNode[] = [
-  // West Zone chain
-  seedNode({ id: 1, level: "Zone", name: "West Zone", parentId: null, pincode: "", status: "active", createdDate: "2024-01-01", updatedDate: "2024-01-01" }),
-  seedNode({ id: 2, level: "Zone", name: "South Zone", parentId: null, pincode: "", status: "active", createdDate: "2024-01-01", updatedDate: "2024-01-01" }),
-  seedNode({ id: 3, level: "Region", name: "Maharashtra Region", parentId: 1, pincode: "", status: "active", createdDate: "2024-01-02", updatedDate: "2024-01-02" }),
-  seedNode({ id: 4, level: "Region", name: "Karnataka Region", parentId: 2, pincode: "", status: "active", createdDate: "2024-01-02", updatedDate: "2024-01-02" }),
-  seedNode({ id: 5, level: "State", name: "Maharashtra State", parentId: 3, pincode: "", status: "active", createdDate: "2024-01-02", updatedDate: "2024-01-02" }),
-  seedNode({ id: 6, level: "State", name: "Karnataka State", parentId: 4, pincode: "", status: "active", createdDate: "2024-01-02", updatedDate: "2024-01-02" }),
-  seedNode({ id: 7, level: "Area", name: "Pune Area", parentId: 5, pincode: "", status: "active", createdDate: "2024-01-03", updatedDate: "2024-01-03" }),
-  seedNode({ id: 8, level: "Area", name: "Bengaluru Area", parentId: 6, pincode: "", status: "active", createdDate: "2024-01-03", updatedDate: "2024-01-03" }),
-  seedNode({ id: 9, level: "Territory", name: "West Territory", parentId: 7, pincode: "", status: "active", createdDate: "2024-01-04", updatedDate: "2024-01-04" }),
-  seedNode({ id: 10, level: "Territory", name: "South Territory", parentId: 8, pincode: "", status: "inactive", createdDate: "2024-01-04", updatedDate: "2024-06-01", updatedBy: "System Admin" }),
-  seedNode({ id: 11, level: "District", name: "Pune District", parentId: 9, pincode: "", status: "active", createdDate: "2024-01-05", updatedDate: "2024-01-05" }),
-  seedNode({ id: 12, level: "District", name: "Bengaluru District", parentId: 10, pincode: "", status: "inactive", createdDate: "2024-01-05", updatedDate: "2024-06-01", updatedBy: "System Admin" }),
-  seedNode({ id: 13, level: "City", name: "Pune City", parentId: 11, pincode: "", status: "active", createdDate: "2024-01-05", updatedDate: "2024-01-05" }),
-  seedNode({ id: 14, level: "City", name: "Bengaluru City", parentId: 12, pincode: "", status: "inactive", createdDate: "2024-01-05", updatedDate: "2024-06-01", updatedBy: "System Admin" }),
-  seedNode({ id: 15, level: "Town", name: "Kothrud Town", parentId: 13, pincode: "", status: "active", createdDate: "2024-01-06", updatedDate: "2024-01-06" }),
-  seedNode({ id: 16, level: "Town", name: "Whitefield Town", parentId: 14, pincode: "", status: "inactive", createdDate: "2024-01-06", updatedDate: "2024-06-01", updatedBy: "System Admin" }),
-  seedNode({ id: 17, level: "Pincode", name: "411038", parentId: 15, pincode: "411038", status: "active", createdDate: "2024-01-07", updatedDate: "2024-01-07" }),
-  seedNode({ id: 18, level: "Pincode", name: "560066", parentId: 16, pincode: "560066", status: "inactive", createdDate: "2024-01-07", updatedDate: "2024-06-01", updatedBy: "System Admin" }),
-  // Extra pincodes for pagination testing
-  seedNode({ id: 19, level: "Pincode", name: "411001", parentId: 15, pincode: "411001", status: "active", createdDate: "2024-02-01", updatedDate: "2024-02-01" }),
-  seedNode({ id: 20, level: "Pincode", name: "411002", parentId: 15, pincode: "411002", status: "active", createdDate: "2024-02-01", updatedDate: "2024-02-01" }),
-  seedNode({ id: 21, level: "Pincode", name: "411003", parentId: 15, pincode: "411003", status: "active", createdDate: "2024-02-02", updatedDate: "2024-02-02" }),
-  // East Zone chain (full 9-level hierarchy)
-  seedNode({ id: 22, level: "Zone", name: "East Zone", parentId: null, pincode: "", status: "active", createdDate: "2024-03-01", updatedDate: "2024-03-01" }),
-  seedNode({ id: 23, level: "Region", name: "West Bengal Region", parentId: 22, pincode: "", status: "active", createdDate: "2024-03-01", updatedDate: "2024-03-01" }),
-  seedNode({ id: 24, level: "State", name: "West Bengal State", parentId: 23, pincode: "", status: "active", createdDate: "2024-03-02", updatedDate: "2024-03-02" }),
-  seedNode({ id: 25, level: "Area", name: "Kolkata Area", parentId: 24, pincode: "", status: "active", createdDate: "2024-03-02", updatedDate: "2024-03-02" }),
-  seedNode({ id: 26, level: "Territory", name: "Central Territory", parentId: 25, pincode: "", status: "active", createdDate: "2024-03-03", updatedDate: "2024-03-03" }),
-  seedNode({ id: 27, level: "District", name: "Kolkata District", parentId: 26, pincode: "", status: "active", createdDate: "2024-03-03", updatedDate: "2024-03-03" }),
-  seedNode({ id: 28, level: "City", name: "Kolkata City", parentId: 27, pincode: "", status: "active", createdDate: "2024-03-04", updatedDate: "2024-03-04" }),
-  seedNode({ id: 29, level: "Town", name: "Salt Lake Town", parentId: 28, pincode: "", status: "active", createdDate: "2024-03-04", updatedDate: "2024-03-04" }),
-  seedNode({ id: 30, level: "Pincode", name: "700091", parentId: 29, pincode: "700091", status: "active", createdDate: "2024-03-05", updatedDate: "2024-03-05" }),
+  // Zones
+  { id: 1,  level: "Zone",      name: "West Zone",              code: "WZ",  parentId: null, pincode: "", status: "active", createdDate: "2024-01-01", updatedDate: "2024-01-01" },
+  { id: 2,  level: "Zone",      name: "South Zone",             code: "SZ",  parentId: null, pincode: "", status: "active", createdDate: "2024-01-01", updatedDate: "2024-01-01" },
+  // States
+  { id: 3,  level: "State",     name: "Maharashtra",            code: "MH",  parentId: 1,    pincode: "", status: "active", createdDate: "2024-01-01", updatedDate: "2024-01-01" },
+  { id: 4,  level: "State",     name: "Gujarat",                code: "GJ",  parentId: 1,    pincode: "", status: "active", createdDate: "2024-01-01", updatedDate: "2024-01-01" },
+  { id: 5,  level: "State",     name: "Karnataka",              code: "KA",  parentId: 2,    pincode: "", status: "active", createdDate: "2024-01-01", updatedDate: "2024-01-01" },
+  { id: 6,  level: "State",     name: "Tamil Nadu",             code: "TN",  parentId: 2,    pincode: "", status: "active", createdDate: "2024-01-01", updatedDate: "2024-01-01" },
+  // Regions
+  { id: 7,  level: "Region",    name: "Mumbai Region",          code: "",    parentId: 3,    pincode: "", status: "active", createdDate: "2024-01-02", updatedDate: "2024-01-02" },
+  { id: 8,  level: "Region",    name: "Pune Region",            code: "",    parentId: 3,    pincode: "", status: "active", createdDate: "2024-01-02", updatedDate: "2024-01-02" },
+  { id: 9,  level: "Region",    name: "Ahmedabad Region",       code: "",    parentId: 4,    pincode: "", status: "active", createdDate: "2024-01-02", updatedDate: "2024-01-02" },
+  { id: 10, level: "Region",    name: "Surat Region",           code: "",    parentId: 4,    pincode: "", status: "active", createdDate: "2024-01-02", updatedDate: "2024-01-02" },
+  { id: 11, level: "Region",    name: "Bangalore Region",       code: "",    parentId: 5,    pincode: "", status: "active", createdDate: "2024-01-02", updatedDate: "2024-01-02" },
+  { id: 12, level: "Region",    name: "Mysore Region",          code: "",    parentId: 5,    pincode: "", status: "active", createdDate: "2024-01-02", updatedDate: "2024-01-02" },
+  { id: 13, level: "Region",    name: "Chennai Region",         code: "",    parentId: 6,    pincode: "", status: "active", createdDate: "2024-01-02", updatedDate: "2024-01-02" },
+  { id: 14, level: "Region",    name: "Coimbatore Region",      code: "",    parentId: 6,    pincode: "", status: "active", createdDate: "2024-01-02", updatedDate: "2024-01-02" },
+  // Areas
+  { id: 15, level: "Area",      name: "Mumbai Central Area",    code: "",    parentId: 7,    pincode: "", status: "active", createdDate: "2024-01-03", updatedDate: "2024-01-03" },
+  { id: 16, level: "Area",      name: "Mumbai North Area",      code: "",    parentId: 7,    pincode: "", status: "active", createdDate: "2024-01-03", updatedDate: "2024-01-03" },
+  { id: 17, level: "Area",      name: "Mumbai South Area",      code: "",    parentId: 7,    pincode: "", status: "active", createdDate: "2024-01-03", updatedDate: "2024-01-03" },
+  { id: 18, level: "Area",      name: "Pune Central Area",      code: "",    parentId: 8,    pincode: "", status: "active", createdDate: "2024-01-03", updatedDate: "2024-01-03" },
+  { id: 19, level: "Area",      name: "Bangalore East Area",    code: "",    parentId: 11,   pincode: "", status: "active", createdDate: "2024-01-03", updatedDate: "2024-01-03" },
+  { id: 20, level: "Area",      name: "Bangalore West Area",    code: "",    parentId: 11,   pincode: "", status: "active", createdDate: "2024-01-03", updatedDate: "2024-01-03" },
+  { id: 21, level: "Area",      name: "Chennai Central Area",   code: "",    parentId: 13,   pincode: "", status: "active", createdDate: "2024-01-03", updatedDate: "2024-01-03" },
+  { id: 22, level: "Area",      name: "Chennai South Area",     code: "",    parentId: 13,   pincode: "", status: "active", createdDate: "2024-01-03", updatedDate: "2024-01-03" },
+  // Territories
+  { id: 23, level: "Territory", name: "Dadar-Parel Territory",    code: "",  parentId: 15,   pincode: "", status: "active", createdDate: "2024-01-04", updatedDate: "2024-01-04" },
+  { id: 24, level: "Territory", name: "Matunga Territory",        code: "",  parentId: 15,   pincode: "", status: "active", createdDate: "2024-01-04", updatedDate: "2024-01-04" },
+  { id: 25, level: "Territory", name: "Borivali-Kandivali Terr.", code: "",  parentId: 16,   pincode: "", status: "active", createdDate: "2024-01-04", updatedDate: "2024-01-04" },
+  { id: 26, level: "Territory", name: "Malad Territory",          code: "",  parentId: 16,   pincode: "", status: "active", createdDate: "2024-01-04", updatedDate: "2024-01-04" },
+  { id: 27, level: "Territory", name: "Indiranagar Territory",    code: "",  parentId: 19,   pincode: "", status: "active", createdDate: "2024-01-04", updatedDate: "2024-01-04" },
+  { id: 28, level: "Territory", name: "Whitefield Territory",     code: "",  parentId: 19,   pincode: "", status: "active", createdDate: "2024-01-04", updatedDate: "2024-01-04" },
+  { id: 29, level: "Territory", name: "T. Nagar Territory",       code: "",  parentId: 21,   pincode: "", status: "active", createdDate: "2024-01-04", updatedDate: "2024-01-04" },
+  { id: 30, level: "Territory", name: "Nungambakkam Territory",   code: "",  parentId: 21,   pincode: "", status: "active", createdDate: "2024-01-04", updatedDate: "2024-01-04" },
+  // Localities
+  { id: 31, level: "Locality",  name: "Dadar Locality",        code: "",  parentId: 23,  pincode: "", status: "active", createdDate: "2024-01-05", updatedDate: "2024-01-05" },
+  { id: 32, level: "Locality",  name: "Parel Locality",        code: "",  parentId: 23,  pincode: "", status: "active", createdDate: "2024-01-05", updatedDate: "2024-01-05" },
+  { id: 33, level: "Locality",  name: "Borivali East Locality",code: "",  parentId: 25,  pincode: "", status: "active", createdDate: "2024-01-05", updatedDate: "2024-01-05" },
+  { id: 34, level: "Locality",  name: "Indiranagar Locality",  code: "",  parentId: 27,  pincode: "", status: "active", createdDate: "2024-01-05", updatedDate: "2024-01-05" },
+  { id: 35, level: "Locality",  name: "T. Nagar Locality",     code: "",  parentId: 29,  pincode: "", status: "active", createdDate: "2024-01-05", updatedDate: "2024-01-05" },
+  // Pincodes
+  { id: 36, level: "Pincode",   name: "Dadar",         code: "",  parentId: 31,  pincode: "400014", status: "active", createdDate: "2024-01-06", updatedDate: "2024-01-06" },
+  { id: 37, level: "Pincode",   name: "Parel",         code: "",  parentId: 32,  pincode: "400012", status: "active", createdDate: "2024-01-06", updatedDate: "2024-01-06" },
+  { id: 38, level: "Pincode",   name: "Borivali East", code: "",  parentId: 33,  pincode: "400066", status: "active", createdDate: "2024-01-06", updatedDate: "2024-01-06" },
+  { id: 39, level: "Pincode",   name: "Indiranagar",   code: "",  parentId: 34,  pincode: "560038", status: "active", createdDate: "2024-01-06", updatedDate: "2024-01-06" },
+  { id: 40, level: "Pincode",   name: "T. Nagar",      code: "",  parentId: 35,  pincode: "600017", status: "active", createdDate: "2024-01-06", updatedDate: "2024-01-06" },
 ];
 
 // ── localStorage helpers ──────────────────────────────────────────────────────
 const GEO_KEY = "ds_geo_nodes";
-const GEO_VERSION_KEY = "ds_geo_schema_version";
-
-function normalizeNode(raw: Record<string, unknown>): GeoNode {
-  return {
-    id: raw.id as number,
-    level: raw.level as GeoLevel,
-    name: raw.name as string,
-    parentId: raw.parentId as number | null,
-    pincode: (raw.pincode as string) ?? "",
-    status: (raw.status as "active" | "inactive") ?? "active",
-    createdBy: (raw.createdBy as string) ?? DEFAULT_GEO_USER,
-    createdDate: (raw.createdDate as string) ?? todayStr(),
-    updatedBy: (raw.updatedBy as string) ?? DEFAULT_GEO_USER,
-    updatedDate: (raw.updatedDate as string) ?? todayStr(),
-  };
-}
-
-function needsSchemaReset(parsed: unknown[]): boolean {
-  const storedVersion =
-    typeof window !== "undefined"
-      ? Number(localStorage.getItem(GEO_VERSION_KEY) ?? 0)
-      : 0;
-  if (storedVersion < 2) return true;
-  if (parsed.some((n) => (n as { level?: string }).level === "Locality")) return true;
-  if (parsed.some((n) => "code" in (n as object))) return true;
-  const levels = new Set(parsed.map((n) => (n as { level?: string }).level));
-  if (!levels.has("District") || !levels.has("City") || !levels.has("Town")) return true;
-  return false;
-}
 
 export function loadGeoNodes(): GeoNode[] {
   if (typeof window === "undefined") return [...SEED_NODES];
   try {
     const raw = localStorage.getItem(GEO_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw) as unknown[];
-      if (needsSchemaReset(parsed)) {
+      const parsed = JSON.parse(raw) as GeoNode[];
+      // If stored data has no Locality nodes, it's from the old 6-level hierarchy — reset to seed
+      const hasLocality = parsed.some(n => n.level === "Locality");
+      if (!hasLocality) {
         localStorage.setItem(GEO_KEY, JSON.stringify(SEED_NODES));
-        localStorage.setItem(GEO_VERSION_KEY, String(GEO_SCHEMA_VERSION));
         return [...SEED_NODES];
       }
-      const nodes = parsed.map((n) => normalizeNode(n as Record<string, unknown>));
-      if (Number(localStorage.getItem(GEO_VERSION_KEY) ?? 0) < GEO_SCHEMA_VERSION) {
-        localStorage.setItem(GEO_VERSION_KEY, String(GEO_SCHEMA_VERSION));
-      }
-      return nodes;
+      return parsed;
     }
-  } catch {
-    /* ignore */
-  }
-  localStorage.setItem(GEO_KEY, JSON.stringify(SEED_NODES));
-  localStorage.setItem(GEO_VERSION_KEY, String(GEO_SCHEMA_VERSION));
+  } catch { /* ignore */ }
   return [...SEED_NODES];
 }
 
 export function saveGeoNodes(nodes: GeoNode[]): void {
   if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(GEO_KEY, JSON.stringify(nodes));
-    localStorage.setItem(GEO_VERSION_KEY, String(GEO_SCHEMA_VERSION));
-  } catch {
-    /* ignore */
-  }
+  try { localStorage.setItem(GEO_KEY, JSON.stringify(nodes)); } catch { /* ignore */ }
 }
 
 // ── Utility helpers ───────────────────────────────────────────────────────────
 export function nextGeoId(nodes: GeoNode[]): number {
-  return Math.max(0, ...nodes.map((n) => n.id)) + 1;
+  return Math.max(0, ...nodes.map(n => n.id)) + 1;
 }
 
 export function todayStr(): string {
@@ -208,210 +124,21 @@ export function getAncestorPath(node: GeoNode, nodes: GeoNode[]): GeoNode[] {
   while (cur) {
     path.unshift(cur);
     if (cur.parentId === null) break;
-    cur = nodes.find((n) => n.id === cur!.parentId);
+    cur = nodes.find(n => n.id === cur!.parentId);
   }
   return path;
 }
 
 /** Direct children only */
 export function getChildren(nodeId: number, nodes: GeoNode[]): GeoNode[] {
-  return nodes.filter((n) => n.parentId === nodeId);
-}
-
-/** All descendants at any depth */
-export function getAllDescendants(nodeId: number, nodes: GeoNode[]): GeoNode[] {
-  const result: GeoNode[] = [];
-  function walk(id: number) {
-    for (const child of getChildren(id, nodes)) {
-      result.push(child);
-      walk(child.id);
-    }
-  }
-  walk(nodeId);
-  return result;
-}
-
-/** Active children at a specific level under a parent subtree */
-export function getActiveChildrenAtLevel(
-  parentId: number,
-  childLevel: GeoLevel,
-  nodes: GeoNode[],
-): GeoNode[] {
-  const result: GeoNode[] = [];
-  function walk(id: number) {
-    for (const child of nodes.filter((n) => n.parentId === id && n.status === "active")) {
-      if (child.level === childLevel) result.push(child);
-      else if (LEVEL_INDEX[child.level] < LEVEL_INDEX[childLevel]) walk(child.id);
-    }
-  }
-  walk(parentId);
-  return result;
+  return nodes.filter(n => n.parentId === nodeId);
 }
 
 /** True if any descendant at any depth is active */
 export function hasActiveDescendants(nodeId: number, nodes: GeoNode[]): boolean {
-  for (const child of nodes.filter((n) => n.parentId === nodeId)) {
+  for (const child of nodes.filter(n => n.parentId === nodeId)) {
     if (child.status === "active") return true;
     if (hasActiveDescendants(child.id, nodes)) return true;
   }
   return false;
-}
-
-/** Get nodes of a level that are descendants of an ancestor (by name match at ancestor level) */
-export function getNodesUnderAncestor(
-  ancestorLevel: GeoLevel,
-  ancestorName: string,
-  targetLevel: GeoLevel,
-  nodes?: GeoNode[],
-): GeoNode[] {
-  const list = nodes ?? loadGeoNodes();
-  const ancestor = list.find(
-    (n) => n.level === ancestorLevel && n.name === ancestorName && n.status === "active",
-  );
-  if (!ancestor) return [];
-  return getActiveChildrenAtLevel(ancestor.id, targetLevel, list);
-}
-
-/** Duplicate check under same parent */
-export function findGeoDuplicate(
-  level: GeoLevel,
-  name: string,
-  parentId: number | null,
-  nodes: GeoNode[],
-  excludeId?: number,
-): GeoNode | undefined {
-  const trimmed = name.trim().toLowerCase();
-  return nodes.find(
-    (n) =>
-      n.id !== excludeId &&
-      n.level === level &&
-      n.parentId === parentId &&
-      n.name.trim().toLowerCase() === trimmed,
-  );
-}
-
-/** Validate parent change does not break hierarchy */
-export function validateParentChange(
-  node: GeoNode,
-  newParentId: number | null,
-  nodes: GeoNode[],
-): string | null {
-  const requiredParent = PARENT_LEVEL[node.level];
-
-  if (requiredParent === null) {
-    return newParentId !== null ? "Zone nodes cannot have a parent." : null;
-  }
-  if (newParentId === null) {
-    return `Parent (${requiredParent}) is required for ${node.level}.`;
-  }
-  if (newParentId === node.id) {
-    return "A node cannot be its own parent.";
-  }
-
-  const newParent = nodes.find((n) => n.id === newParentId);
-  if (!newParent) return "Selected parent was not found.";
-  if (newParent.level !== requiredParent) {
-    return `Parent must be a ${requiredParent}, not ${newParent.level}.`;
-  }
-  if (newParent.status !== "active") {
-    return `Parent "${newParent.name}" is inactive. Activate the parent first.`;
-  }
-
-  const descendants = getAllDescendants(node.id, nodes);
-  if (descendants.some((d) => d.id === newParentId)) {
-    return "Cannot move a node under one of its own descendants.";
-  }
-
-  return null;
-}
-
-// ── Delete helpers (soft delete with cascade) ─────────────────────────────────
-
-export interface GeoDeletePreview {
-  canDelete: boolean;
-  reason?: string;
-  descendantCount: number;
-  activeDescendantCount: number;
-}
-
-export type GeoDeleteResult =
-  | { ok: true; nodes: GeoNode[]; deactivatedCount: number }
-  | { ok: false; reason: string };
-
-/** Preview soft-delete impact */
-export function getGeoDeletePreview(nodeId: number, nodes: GeoNode[]): GeoDeletePreview {
-  const node = nodes.find((n) => n.id === nodeId);
-  if (!node) {
-    return { canDelete: false, reason: "Geography node not found.", descendantCount: 0, activeDescendantCount: 0 };
-  }
-
-  const descendants = getAllDescendants(nodeId, nodes);
-  const activeDescendantCount = descendants.filter((d) => d.status === "active").length;
-
-  return {
-    canDelete: true,
-    descendantCount: descendants.length,
-    activeDescendantCount,
-  };
-}
-
-/**
- * Soft-delete a geography node and cascade-deactivate all descendants.
- */
-export function deleteGeoNode(
-  nodeId: number,
-  nodes: GeoNode[],
-  updatedBy = DEFAULT_GEO_USER,
-): GeoDeleteResult {
-  const preview = getGeoDeletePreview(nodeId, nodes);
-  if (!preview.canDelete) {
-    return { ok: false, reason: preview.reason ?? "Cannot delete this geography node." };
-  }
-
-  const idsToDeactivate = new Set([
-    nodeId,
-    ...getAllDescendants(nodeId, nodes).map((d) => d.id),
-  ]);
-  const today = todayStr();
-
-  const updated = nodes.map((n) =>
-    idsToDeactivate.has(n.id)
-      ? { ...n, status: "inactive" as const, updatedDate: today, updatedBy }
-      : n,
-  );
-
-  return { ok: true, nodes: updated, deactivatedCount: idsToDeactivate.size };
-}
-
-export function resolvePincodeLocation(
-  pincode: string,
-  nodes?: GeoNode[],
-): { city: string; state: string } | null {
-  const list = nodes ?? loadGeoNodes();
-  const code = pincode.trim();
-  if (!/^\d{6}$/.test(code)) return null;
-
-  const pinNode = list.find(
-    (n) => n.level === "Pincode" && n.pincode === code && n.status === "active",
-  );
-  if (!pinNode) return null;
-
-  let city = "";
-  let state = "";
-  let current: GeoNode | undefined = pinNode;
-
-  while (current?.parentId != null) {
-    const parent = list.find((n) => n.id === current!.parentId);
-    if (!parent) break;
-    if (parent.level === "City" || parent.level === "Town") {
-      city = parent.name.replace(/\s+(City|Town)$/i, "");
-    }
-    if (parent.level === "State") {
-      state = parent.name.replace(/\s+State$/i, "");
-    }
-    current = parent;
-  }
-
-  if (!city && !state) return null;
-  return { city, state };
 }

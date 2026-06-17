@@ -3,8 +3,7 @@ export function todayStr(): string {
 }
 
 export function formatCurrency(n: number): string {
-  const val = Number.isFinite(n) ? n : 0;
-  return `₹${val.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
 export function round2(n: number): number {

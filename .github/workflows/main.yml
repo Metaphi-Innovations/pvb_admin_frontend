@@ -2,7 +2,7 @@ name: Frontend Deploy - pvb.dev.metaphi.in
 on:
   push:
     branches:
-      - staging
+      - main
 
 jobs:
   deploy:
@@ -29,4 +29,5 @@ jobs:
         run: npm i && npm run build
 
       - name: pm2 restart
-        run: pm2 restart pvb.dev.metaphi.in
+        run: pm2 restart pvb.uat.metaphi.in
+

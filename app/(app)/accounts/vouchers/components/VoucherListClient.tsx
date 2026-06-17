@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
@@ -14,7 +13,6 @@ interface VoucherListClientProps {
 }
 
 export function VoucherListClient({ voucherType, embedded }: VoucherListClientProps) {
-  const router = useRouter();
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -85,11 +83,7 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
                 </tr>
               ) : (
                 visible.map((v) => (
-                  <tr
-                    key={v.id}
-                    className="border-b border-border/40 hover:bg-brand-50/30 cursor-pointer"
-                    onClick={() => router.push(`/accounts/vouchers/view/${v.id}`)}
-                  >
+                  <tr key={v.id} className="border-b border-border/40 hover:bg-brand-50/30">
                     <td className="px-3 py-2 text-xs">{v.date}</td>
                     <td className="px-3 py-2 text-xs font-medium">{v.voucherNumber}</td>
                     <td className="px-3 py-2 text-xs text-muted-foreground">{v.referenceNo || "—"}</td>

@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -589,19 +588,20 @@ export default function SuppliersPage() {
               )}
             </p>
             <div className="flex items-center gap-2">
-              <AutocompleteSelect
-                options={[10, 25, 50, 100].map((value) => ({
-                  value: String(value),
-                  label: `${value} / page`,
-                }))}
-                value={String(pageSize)}
-                onChange={(v) => {
-                  setPageSize(Number(v));
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
                   setPage(1);
                 }}
-                placeholder="Page size…"
-                className="h-7 text-xs w-28"
-              />
+                className="px-2 text-xs bg-white border rounded-md h-7 border-border text-foreground"
+              >
+                {[10, 25, 50, 100].map((value) => (
+                  <option key={value} value={value}>
+                    {value} / page
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
                 onClick={() => setPage((prev) => Math.max(1, prev - 1))}

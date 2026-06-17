@@ -11,13 +11,6 @@ import type { QcRecord } from "@/app/(app)/warehouse/grnqc/qc/types";
 
 export type ThreeWayMatchStatus = "pending" | "matched" | "partial_match" | "mismatch";
 
-export type ThreeWayMismatchReason =
-  | "QUANTITY MISMATCH"
-  | "RATE MISMATCH"
-  | "AMOUNT MISMATCH"
-  | "GST MISMATCH"
-  | null;
-
 export interface ThreeWayMatchLine {
   productCode: string;
   productName: string;
@@ -31,7 +24,6 @@ export interface ThreeWayMatchLine {
   poAmount: number;
   invoiceAmount: number;
   lineStatus: ThreeWayMatchStatus;
-  mismatchReason: ThreeWayMismatchReason;
 }
 
 export interface ThreeWayMatchResult {
@@ -61,13 +53,6 @@ export const THREE_WAY_MATCH_LABELS: Record<ThreeWayMatchStatus, string> = {
   matched: "Matched",
   partial_match: "Partial Match",
   mismatch: "Mismatch",
-};
-
-export const THREE_WAY_MISMATCH_LABELS: Record<Exclude<ThreeWayMismatchReason, null>, string> = {
-  "QUANTITY MISMATCH": "Quantity Mismatch",
-  "RATE MISMATCH": "Rate Mismatch",
-  "AMOUNT MISMATCH": "Amount Mismatch",
-  "GST MISMATCH": "GST Mismatch",
 };
 
 const AMOUNT_TOLERANCE = 1;
@@ -139,25 +124,6 @@ function qcCompletedForGrns(grns: GrnRecord[], qcs: QcRecord[]): boolean {
   });
 }
 
-export function deriveMismatchReason(
-  line: Pick<
-    ThreeWayMatchLine,
-    "poQty" | "grnQty" | "invoiceQty" | "poRate" | "invoiceRate" | "poAmount" | "invoiceAmount"
-  >,
-): ThreeWayMismatchReason {
-  const qtyMismatch =
-    Math.abs(line.poQty - line.grnQty) > QTY_TOLERANCE ||
-    Math.abs(line.grnQty - line.invoiceQty) > QTY_TOLERANCE ||
-    Math.abs(line.poQty - line.invoiceQty) > QTY_TOLERANCE;
-  const rateMismatch = Math.abs(line.poRate - line.invoiceRate) >= 0.01;
-  const amountMismatch = Math.abs(line.poAmount - line.invoiceAmount) > AMOUNT_TOLERANCE;
-
-  if (qtyMismatch) return "QUANTITY MISMATCH";
-  if (rateMismatch) return "RATE MISMATCH";
-  if (amountMismatch) return "AMOUNT MISMATCH";
-  return null;
-}
-
 export function computeLineMatchStatus(
   line: Pick<
     ThreeWayMatchLine,
@@ -224,17 +190,10 @@ export function computeThreeWayMatch(po: PurchaseOrder): ThreeWayMatchResult {
     };
   });
 
-  const lines: ThreeWayMatchLine[] = rawLines.map((l) => {
-    const lineStatus = computeLineMatchStatus(l, matchReady);
-    return {
-      ...l,
-      lineStatus,
-      mismatchReason:
-        lineStatus === "mismatch" || lineStatus === "partial_match"
-          ? deriveMismatchReason(l)
-          : null,
-    };
-  });
+  const lines: ThreeWayMatchLine[] = rawLines.map((l) => ({
+    ...l,
+    lineStatus: computeLineMatchStatus(l, matchReady),
+  }));
 
   const poTotalQty = lines.reduce((s, l) => s + l.poQty, 0);
   const grnTotalQty = lines.reduce((s, l) => s + l.grnQty, 0);

@@ -57,13 +57,13 @@ export default function EditPRPage() {
       mode="edit"
       prNumber={pr.prNumber}
       status={pr.status}
+      onSave={() => persist(false)}
       footer={
         <PRFormFooter
           onCancel={() => router.push("/procurement/purchase-requests")}
           onSaveDraft={() => persist(false)}
           onSubmit={() => persist(true)}
           showSubmit={["draft", "rejected"].includes(pr.status)}
-          saveLabel="Update Purchase Request"
         />
       }
     >

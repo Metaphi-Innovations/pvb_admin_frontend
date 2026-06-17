@@ -29,14 +29,14 @@ import {
   WAREHOUSE_OPTIONS,
 } from "./constants";
 
-import Link from "next/link";
-
 interface DispatchListingProps {
   rawDispatches: DispatchRecord[];
+  selectedWarehouse: string;
+  setSelectedWarehouse: (value: string) => void;
   reload: () => void;
 }
 
-export function DispatchListing({ rawDispatches, reload }: DispatchListingProps) {
+export function DispatchListing({ rawDispatches, selectedWarehouse, setSelectedWarehouse, reload }: DispatchListingProps) {
   const router = useRouter();
 
   // Table state
@@ -95,41 +95,10 @@ export function DispatchListing({ rawDispatches, reload }: DispatchListingProps)
 
   // Columns
   const columns: ColumnConfig<DispatchRecord>[] = [
-    {
-      key: "dispatchNumber",
-      header: "Dispatch No",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "135px",
-      render: (val, row) => (
-        <Link
-          href={`/warehouse/dispatch/view/${row.id}`}
-          className="font-mono text-xs font-semibold text-brand-700 hover:underline"
-        >
-          {val}
-        </Link>
-      )
-    },
-    {
-      key: "salesOrderNumber",
-      header: "Sales Order No",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "140px",
-      render: (val) => <span className="font-mono text-xs font-semibold">{val}</span>
-    },
-    { key: "customer", header: "Customer", sortable: true, filterable: true, filterType: "dropdown", filterOptions: CUSTOMER_OPTIONS, width: "160px" },
-    {
-      key: "vehicleNumber",
-      header: "Vehicle No",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val) => <span className="font-mono text-xs">{val}</span>
-    },
+    { key: "dispatchNumber", header: "Dispatch No", sortable: true, filterable: true, filterType: "text", width: "135px" },
+    { key: "salesOrderNumber", header: "Sales Order No", sortable: true, filterable: true, filterType: "text", width: "140px" },
+    { key: "customer", header: "Customer", sortable: true, filterable: true, filterType: "dropdown", filterOptions: CUSTOMER_OPTIONS },
+    { key: "vehicleNumber", header: "Vehicle No", sortable: true, filterable: true, filterType: "text", width: "120px" },
     { key: "driverName", header: "Driver Name", sortable: true, filterable: true, filterType: "text" },
     { key: "transporterName", header: "Transporter", sortable: true },
     { key: "dispatchDate", header: "Dispatch Date", sortable: true, filterable: true, filterType: "date", width: "135px" },
@@ -144,7 +113,7 @@ export function DispatchListing({ rawDispatches, reload }: DispatchListingProps)
       render: (val: any) => {
         const cfg = DELIVERY_STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-600 border-slate-200", label: val };
         return (
-          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+          <span className={`inline-flex items-center text-xs px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
             {cfg.label}
           </span>
         );
@@ -215,6 +184,21 @@ export function DispatchListing({ rawDispatches, reload }: DispatchListingProps)
 
   return (
     <div className="space-y-4">
+      {/* Warehouse Selector */}
+      <div className="flex items-center justify-end gap-2">
+        <span className="text-xs font-semibold text-muted-foreground">Warehouse:</span>
+        <AutocompleteSelect
+          options={[
+            { value: "All", label: "All Warehouses" },
+            ...WAREHOUSE_OPTIONS
+          ]}
+          value={selectedWarehouse}
+          onChange={setSelectedWarehouse}
+          placeholder="All Warehouses"
+          searchPlaceholder="Search warehouse..."
+          className="h-9 w-[200px] text-xs rounded-lg border-border bg-white focus:ring-1 focus:ring-brand-500 shadow-none focus:outline-none"
+        />
+      </div>
 
       <MasterListing<DispatchRecord>
         columns={columns}

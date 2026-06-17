@@ -6,7 +6,6 @@ import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/compon
 import { Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { PackingRecord } from "../types";
-import Link from "next/link";
 import {
   CUSTOMER_OPTIONS,
   PACKED_BY_OPTIONS,
@@ -76,48 +75,11 @@ export function DonePackingListing({ packingsForWarehouse }: DonePackingListingP
 
   // Columns
   const columns: ColumnConfig<PackingRecord>[] = [
-    {
-      key: "packingNo",
-      header: "Packing No",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "130px",
-      render: (val, row) => (
-        <Link
-          href={`/warehouse/packing/view/${row.id}`}
-          className="font-mono text-xs font-semibold text-brand-700 hover:underline"
-        >
-          {val}
-        </Link>
-      )
-    },
-    {
-      key: "salesOrderNo",
-      header: "Sales Order No",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "135px",
-      render: (val) => <span className="font-mono text-xs font-semibold">{val}</span>
-    },
-    { key: "customer", header: "Customer", sortable: true, filterable: true, filterType: "dropdown", filterOptions: CUSTOMER_OPTIONS, width: "160px" },
-    {
-      key: "totalItems",
-      header: "Total Items",
-      sortable: true,
-      align: "right",
-      width: "110px",
-      render: (val) => <span className="font-mono text-xs tabular-nums">{val}</span>
-    },
-    {
-      key: "packedQuantity",
-      header: "Packed Quantity",
-      sortable: true,
-      align: "right",
-      width: "130px",
-      render: (val) => <span className="font-mono text-xs tabular-nums">{val}</span>
-    },
+    { key: "packingNo", header: "Packing No", sortable: true, filterable: true, filterType: "text", width: "130px" },
+    { key: "salesOrderNo", header: "Sales Order No", sortable: true, filterable: true, filterType: "text", width: "135px" },
+    { key: "customer", header: "Customer", sortable: true, filterable: true, filterType: "dropdown", filterOptions: CUSTOMER_OPTIONS },
+    { key: "totalItems", header: "Total Items", sortable: true, align: "center", width: "110px" },
+    { key: "packedQuantity", header: "Packed Quantity", sortable: true, align: "center", width: "130px" },
     { key: "packingDate", header: "Packing Date", sortable: true, filterable: true, filterType: "date", width: "140px" },
     { key: "packedBy", header: "Packed By", sortable: true, filterable: true, filterType: "dropdown", filterOptions: PACKED_BY_OPTIONS, width: "130px" },
     {
@@ -131,7 +93,7 @@ export function DonePackingListing({ packingsForWarehouse }: DonePackingListingP
       render: (val: any) => {
         const cfg = STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: val };
         return (
-          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+          <span className={`inline-flex items-center text-xs px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
             {cfg.label}
           </span>
         );

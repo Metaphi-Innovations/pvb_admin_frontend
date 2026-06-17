@@ -1,4 +1,4 @@
-// ── Customer Master — permission keys (CRUD only, no export/import) ─────────
+﻿// ── Customer Master — permission keys (CRUD only, no export/import) ─────────
 
 import { loadEmployees } from "../../user-management/employee/employee-data";
 import type { SubmodulePermission } from "../../user-management/employee/employee-data";
@@ -47,8 +47,6 @@ function getCustomerSubmodulePerm(): SubmodulePermission | null {
  */
 export function hasCustomerPermission(action: CustomerPermAction): boolean {
   if (typeof window === "undefined") return true;
-  // Automatically bypass permission restriction in local development
-  if (process.env.NODE_ENV === "development") return true;
 
   const employees = loadEmployees();
   const user = employees.find((e) => e.id === getSessionUserId());

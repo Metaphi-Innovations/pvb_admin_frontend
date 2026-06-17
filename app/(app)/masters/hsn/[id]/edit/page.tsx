@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -8,19 +8,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Save, AlertCircle } from "lucide-react";
-import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import { ActiveInactiveToggle } from "@/components/ui/ActiveInactiveToggle";
 import {
-	type HSNMaster,
+	ArrowLeft,
+	Save,
+	AlertCircle,
+} from "lucide-react";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+import {
+	HSNMaster,
 	loadHSNMasters,
 	saveHSNMasters,
-	hsnToForm,
-	formToHsn,
-	validateHsnForm,
-	sanitizeHsnCodeInput,
+	todayStr,
 } from "../../hsn-data";
 import { loadGSTMasters } from "../../../gst/gst-data";
+
+
 
 function FieldError({ msg }: { msg?: string }) {
 	if (!msg) return null;
@@ -32,23 +40,29 @@ function FieldError({ msg }: { msg?: string }) {
 	);
 }
 
+function SectionHead({ label, sub }: { label: string; sub?: string }) {
+	return (
+		<div className='mb-2.5 mt-0.5'>
+			<p className='text-[10px] font-bold uppercase tracking-widest text-muted-foreground'>
+				{label}
+			</p>
+			{sub && <p className='text-[11px] text-muted-foreground mt-0.5'>{sub}</p>}
+		</div>
+	);
+}
+
 export default function EditHSNPage() {
 	const router = useRouter();
 	const params = useParams();
 	const id = parseInt(params.id as string);
 
 	const [record, setRecord] = useState<HSNMaster | null>(null);
-	const [form, setForm] = useState(hsnToForm({
-		id: 0,
+	const [form, setForm] = useState({
 		hsnCode: "",
 		hsnDescription: "",
 		gstRate: "",
-		status: "active",
-		createdBy: "",
-		createdDate: "",
-		updatedBy: "",
-		updatedDate: "",
-	}));
+		status: "active" as "active" | "inactive",
+	});
 	const [errors, setErrors] = useState<Record<string, string>>({});
 
 	useEffect(() => {
@@ -59,30 +73,30 @@ export default function EditHSNPage() {
 			return;
 		}
 		setRecord(found);
-		setForm(hsnToForm(found));
+		setForm({
+			hsnCode: found.hsnCode,
+			hsnDescription: found.hsnDescription,
+			gstRate: found.gstRate,
+			status: found.status,
+		});
 	}, [id, router]);
 
-	const gstOptions = useMemo(() => {
+	const gstRatesList = React.useMemo(() => {
 		try {
-			const list = loadGSTMasters().filter((g) => g.status === "active");
-			if (list.length > 0) {
-				return [...list]
-					.sort((a, b) => a.gstPercentage - b.gstPercentage)
-					.map((g) => ({
-						value: `${g.gstPercentage}%`,
-						label: `${g.gstPercentage}%`,
-					}));
+			const list = loadGSTMasters();
+			if (list && list.length > 0) {
+				const sorted = [...list].sort(
+					(a, b) => a.gstPercentage - b.gstPercentage,
+				);
+				return Array.from(new Set(sorted.map((g) => `${g.gstPercentage}%`)));
 			}
 		} catch {
 			// ignore
 		}
-		return ["0%", "5%", "12%", "18%", "28%"].map((rate) => ({
-			value: rate,
-			label: rate,
-		}));
+		return ["0%", "5%", "12%", "18%", "28%"];
 	}, []);
 
-	const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
+	const set = (key: string, value: any) => {
 		setForm((prev) => ({ ...prev, [key]: value }));
 		if (errors[key]) {
 			setErrors((prev) => {
@@ -93,20 +107,31 @@ export default function EditHSNPage() {
 		}
 	};
 
+	const validate = (): boolean => {
+		const e: Record<string, string> = {};
+		if (!form.hsnCode.trim()) e.hsnCode = "HSN Code is required";
+		if (!form.hsnDescription.trim())
+			e.hsnDescription = "HSN Description is required";
+		if (!form.gstRate) e.gstRate = "GST Rate is required";
+		setErrors(e);
+		return Object.keys(e).length === 0;
+	};
+
 	const handleSave = () => {
-		if (!record) return;
+		if (!validate() || !record) return;
 		const records = loadHSNMasters();
-		const normalizedForm = {
-			...form,
-			hsnCode: sanitizeHsnCodeInput(form.hsnCode),
-		};
-		const fieldErrors = validateHsnForm(normalizedForm, records, record.id);
-		if (Object.keys(fieldErrors).length > 0) {
-			setErrors(fieldErrors);
-			return;
-		}
 		const updated = records.map((r) =>
-			r.id === id ? formToHsn(normalizedForm, id, record) : r,
+			r.id === id
+				? {
+						...r,
+						hsnCode: form.hsnCode,
+						hsnDescription: form.hsnDescription,
+						gstRate: form.gstRate,
+						status: form.status,
+						updatedBy: "Admin",
+						updatedDate: todayStr(),
+					}
+				: r,
 		);
 		saveHSNMasters(updated);
 		router.push("/masters/hsn");
@@ -128,6 +153,7 @@ export default function EditHSNPage() {
 				className='flex flex-col'
 				style={{ minHeight: "calc(100vh - 104px)" }}
 			>
+				{/* Sticky Header */}
 				<div className='sticky top-0 z-10 bg-white border-b border-border px-4 py-2 flex items-center gap-2.5 flex-shrink-0'>
 					<button
 						type='button'
@@ -162,70 +188,63 @@ export default function EditHSNPage() {
 					</Button>
 				</div>
 
-				<div className='flex-1 overflow-y-auto px-5 py-4 max-w-2xl'>
-					<div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
-						<div className='space-y-1'>
+				{/* Form Content */}
+				<div className='flex-1 overflow-y-auto px-5 py-4'>
+					<SectionHead label='HSN Details' />
+					<div className='grid grid-cols-4 gap-3'>
+						{/* HSN Code */}
+						<div className='col-span-2 space-y-1'>
 							<Label className='text-xs font-medium'>
 								HSN Code <span className='text-red-500'>*</span>
 							</Label>
 							<Input
 								value={form.hsnCode}
-								onChange={(e) =>
-									set("hsnCode", sanitizeHsnCodeInput(e.target.value))
-								}
-								placeholder='e.g. 38089199'
-								className={cn("h-8 text-xs font-mono", errors.hsnCode && "border-red-400")}
-								inputMode='numeric'
-								maxLength={8}
+								disabled
+								readOnly
+								className='h-8 text-xs bg-muted/30 text-muted-foreground cursor-not-allowed'
 							/>
-							<FieldError msg={errors.hsnCode} />
 						</div>
 
-						<div className='space-y-1'>
+						{/* GST Rate */}
+						<div className='col-span-2 space-y-1'>
 							<Label className='text-xs font-medium'>
 								GST Rate <span className='text-red-500'>*</span>
 							</Label>
-							<AutocompleteSelect
-								options={gstOptions}
+							<Select
 								value={form.gstRate}
-								onChange={(value) => set("gstRate", value)}
-								placeholder='Select GST rate…'
-								error={!!errors.gstRate}
-								className='h-8 text-xs'
-							/>
+								onValueChange={(v) => set("gstRate", v)}
+							>
+								<SelectTrigger className={cn("h-8 text-xs bg-background w-full", errors.gstRate && "border-red-400 focus:ring-red-300")}>
+									<SelectValue placeholder='Select GST rate…' />
+								</SelectTrigger>
+								<SelectContent className='bg-white border shadow-lg border-border z-[350]'>
+									{gstRatesList.map((rate) => (
+										<SelectItem key={rate} value={rate} className='text-xs'>
+											{rate}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
 							<FieldError msg={errors.gstRate} />
 						</div>
 
-						<div className='sm:col-span-2 space-y-1'>
+						{/* HSN Description */}
+						<div className='col-span-4 space-y-1'>
 							<Label className='text-xs font-medium'>
 								HSN Description <span className='text-red-500'>*</span>
 							</Label>
 							<Textarea
 								value={form.hsnDescription}
 								onChange={(e) => set("hsnDescription", e.target.value)}
-								placeholder='Describe this HSN code…'
+								placeholder='Describe this HSN code...'
 								rows={3}
 								className={cn(
-									"text-xs rounded-lg resize-none min-h-[72px]",
-									errors.hsnDescription && "border-red-400",
+									"text-xs rounded-lg resize-none min-h-[38px]",
+									errors.hsnDescription &&
+										"border-red-400 focus-visible:ring-red-300",
 								)}
 							/>
 							<FieldError msg={errors.hsnDescription} />
-						</div>
-
-						<div className='sm:col-span-2 flex items-center justify-between rounded-lg border border-border px-3 py-2'>
-							<div>
-								<p className='text-xs font-medium text-foreground'>Status</p>
-								<p className='text-[11px] text-muted-foreground'>
-									{form.status === "active" ? "Active" : "Inactive"}
-								</p>
-							</div>
-							<ActiveInactiveToggle
-								active={form.status === "active"}
-								onChange={(isActive) =>
-									set("status", isActive ? "active" : "inactive")
-								}
-							/>
 						</div>
 					</div>
 				</div>

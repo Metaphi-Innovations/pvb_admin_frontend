@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
-import { RecordDetailPage } from "@/components/record-detail";
+import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Calendar, FileText, CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -9,8 +9,8 @@ import { getQcById } from "../../mock-data";
 import { QcRecord } from "../../types";
 
 const STATUS_CONFIG = {
-  pending: { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Pending", variant: "draft" as const },
-  completed: { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "Completed", variant: "active" as const },
+  pending: { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Pending" },
+  completed: { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "Completed" },
 };
 
 export default function ViewQcPage({ params }: { params: { id: string } }) {
@@ -37,13 +37,7 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
 
   if (!qc) {
     return (
-      <RecordDetailPage
-        listHref="/warehouse/grnqc"
-        listLabel="GRN & QC"
-        recordName="QC Record Not Found"
-        statusLabel="Not Found"
-        statusVariant="blocked"
-      >
+      <FormContainer title="QC Details" onBack={() => router.push("/warehouse/grnqc")}>
         <div className="max-w-[800px] mx-auto text-center py-12 space-y-4">
           <AlertTriangle className="w-12 h-12 text-red-500 mx-auto" />
           <h1 className="text-base font-bold text-foreground">QC Record Not Found</h1>
@@ -52,38 +46,23 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
             Go Back
           </Button>
         </div>
-      </RecordDetailPage>
+      </FormContainer>
     );
   }
 
-  const statusCfg = STATUS_CONFIG[qc.status] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Unknown", variant: "neutral" as const };
-  const totalAccepted = qc.items.reduce((sum, it) => sum + it.acceptedQty, 0);
-  const totalRejected = qc.items.reduce((sum, it) => sum + it.rejectedQty, 0);
-  const totalReceived = qc.items.reduce((sum, it) => sum + it.receivedQty, 0);
+  const statusCfg = STATUS_CONFIG[qc.status] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Unknown" };
 
   return (
-    <RecordDetailPage
-      listHref="/warehouse/grnqc"
-      listLabel="GRN & QC"
-      recordName={qc.qcNo}
-      recordCode={qc.grnNo}
-      statusLabel={statusCfg.label}
-      statusVariant={statusCfg.variant}
-      metaItems={[
-        { icon: FileText, label: qc.poNumber ?? "—" },
-        { icon: CheckCircle2, label: qc.vendorName },
-        { icon: Calendar, label: qc.inspectionDate },
-      ]}
-      sidebar={{
-        summary: [
-          { label: "GRN No.", value: qc.grnNo, highlight: true },
-          { label: "Vendor", value: qc.vendorName },
-          { label: "Total Received", value: totalReceived },
-          { label: "Accepted Qty", value: totalAccepted },
-          { label: "Rejected Qty", value: totalRejected },
-          { label: "Products", value: qc.items.length },
-        ],
-      }}
+    <FormContainer
+      title={qc.qcNo}
+      description="QC Inspection Summary"
+      onBack={() => router.push("/warehouse/grnqc")}
+      actions={
+        <span className={`inline-flex items-center text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${statusCfg.bg}`}>
+          {statusCfg.label}
+        </span>
+      }
+      noCard={true}
     >
       <div className="w-full space-y-6">
         {/* Section 1: Header Info Cards */}
@@ -214,6 +193,6 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
           )}
         </div>
       </div>
-    </RecordDetailPage>
+    </FormContainer>
   );
 }

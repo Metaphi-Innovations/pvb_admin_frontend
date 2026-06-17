@@ -11,95 +11,100 @@ import { ArrowLeft, Save, AlertCircle, MapPin } from "lucide-react";
 import {
   type GeoNode, type GeoLevel,
   LEVELS, PARENT_LEVEL, loadGeoNodes, saveGeoNodes, nextGeoId, todayStr,
-  DEFAULT_GEO_USER, findGeoDuplicate,
 } from "../geo-data";
-import { ActiveInactiveToggle } from "@/components/ui/ActiveInactiveToggle";
-import { StatusBadge } from "@/components/record-detail/StatusBadge";
-import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+import { LevelBadge } from "../components/LevelBadge";
 
+// ── Placeholder per level ─────────────────────────────────────────────────────
 const NAME_PLACEHOLDER: Record<GeoLevel, string> = {
-  Zone: "e.g. West Zone",
-  Region: "e.g. Maharashtra Region",
-  State: "e.g. Maharashtra State",
-  Area: "e.g. Pune Area",
-  Territory: "e.g. West Territory",
-  District: "e.g. Pune District",
-  City: "e.g. Pune City",
-  Town: "e.g. Kothrud Town",
-  Pincode: "e.g. 411038",
+  Zone: "e.g. West Zone", State: "e.g. Maharashtra", Region: "e.g. Mumbai Region",
+  Area: "e.g. Mumbai Central Area", Territory: "e.g. Dadar-Parel Territory",
+  Locality: "e.g. Dadar Locality", Pincode: "e.g. 400014",
 };
 
-const HIERARCHY_HINT =
-  "Zone → Region → State → Area → Territory → District → City → Town → Pincode";
+// ── Toggle button: Active / Inactive ─────────────────────────────────────────
+function StatusToggle({ value, onChange }: { value: "active" | "inactive"; onChange: (v: "active" | "inactive") => void }) {
+  return (
+    <div className="flex rounded-lg border border-border overflow-hidden h-9">
+      {(["active", "inactive"] as const).map(opt => (
+        <button
+          key={opt}
+          type="button"
+          onClick={() => onChange(opt)}
+          className={cn(
+            "flex-1 text-xs font-medium transition-colors px-3",
+            value === opt
+              ? opt === "active"
+                ? "bg-emerald-600 text-white"
+                : "bg-slate-500 text-white"
+              : "text-muted-foreground hover:bg-muted",
+          )}
+        >
+          {opt.charAt(0).toUpperCase() + opt.slice(1)}
+        </button>
+      ))}
+    </div>
+  );
+}
 
+// ── Main ─────────────────────────────────────────────────────────────────────
 export default function AddGeographyPage() {
   const router = useRouter();
+  const nodes = loadGeoNodes();
 
   const [form, setForm] = useState({
     level: "" as GeoLevel | "",
     parentId: null as number | null,
     name: "",
+    code: "",
     pincode: "",
     status: "active" as "active" | "inactive",
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const nodes = useMemo(() => loadGeoNodes(), []);
-
+  // Nodes eligible as parent (one level above, active only)
   const parentOptions = useMemo(() => {
     if (!form.level) return [];
     const requiredParentLevel = PARENT_LEVEL[form.level];
-    if (!requiredParentLevel) return [];
-    return nodes.filter((n) => n.level === requiredParentLevel && n.status === "active");
+    if (!requiredParentLevel) return []; // Zone
+    return nodes.filter(n => n.level === requiredParentLevel && n.status === "active");
   }, [form.level, nodes]);
 
-  const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }));
 
   const handleLevelChange = (level: GeoLevel | "") => {
-    setForm({
-      level,
-      parentId: null,
-      name: "",
-      pincode: "",
-      status: form.status,
-    });
+    set("level", level);
+    set("parentId", null); // Clear parent when level changes
     setErrors({});
-  };
-
-  const handlePincodeChange = (value: string) => {
-    const digits = value.replace(/\D/g, "").slice(0, 6);
-    setForm((f) => ({ ...f, pincode: digits, name: digits }));
   };
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
-    const isPincode = form.level === "Pincode";
-    const nameValue = isPincode ? form.pincode.trim() : form.name.trim();
-
     if (!form.level) { e.level = "Level is required"; }
-    if (!isPincode && !form.name.trim()) { e.name = "Name is required"; }
-    if (!isPincode && form.name.trim().length > 100) { e.name = "Name must be 100 characters or less"; }
+    if (!form.name.trim()) { e.name = "Name is required"; }
+    if (form.name.trim().length > 100) { e.name = "Name must be 100 characters or less"; }
     if (form.level && PARENT_LEVEL[form.level] !== null && !form.parentId) {
-      e.parentId = isPincode
-        ? "Select a town for this pincode"
-        : "Parent is required for this level";
+      e.parentId = "Parent is required for this level";
     }
-    if (isPincode && !form.pincode.trim()) {
-      e.pincode = "Pincode is required";
+    if (form.level === "Pincode" && !form.pincode.trim()) {
+      e.pincode = "Pincode is required for Pincode level";
     }
     if (form.pincode && !/^\d{6}$/.test(form.pincode)) {
       e.pincode = "Pincode must be exactly 6 digits";
     }
-    if (form.level && nameValue) {
-      const parent = form.parentId ? nodes.find((n) => n.id === form.parentId) : null;
-      const duplicate = findGeoDuplicate(form.level as GeoLevel, nameValue, form.parentId, nodes);
+    if (form.code && !/^[A-Z0-9]{1,10}$/.test(form.code)) {
+      e.code = "Code must be alphanumeric, max 10 characters";
+    }
+    // Duplicate check
+    if (form.level && form.name.trim()) {
+      const parent = form.parentId ? nodes.find(n => n.id === form.parentId) : null;
+      const duplicate = nodes.find(n =>
+        n.level === form.level &&
+        n.name.toLowerCase() === form.name.trim().toLowerCase() &&
+        n.parentId === form.parentId,
+      );
       if (duplicate) {
-        const msg = isPincode
-          ? `Pincode ${nameValue} already exists${parent ? ` under ${parent.name}` : ""}.`
-          : `A ${form.level} with this name already exists${parent ? ` under ${parent.name}` : ""}.`;
-        if (isPincode) e.pincode = msg;
-        else e.name = msg;
+        e.name = `A ${form.level} with this name already exists${parent ? ` under ${parent.name}` : ""}.`;
       }
     }
     setErrors(e);
@@ -109,19 +114,16 @@ export default function AddGeographyPage() {
   const handleSave = () => {
     if (!validate()) return;
     const all = loadGeoNodes();
-    const today = todayStr();
-    const isPincode = form.level === "Pincode";
     const newNode: GeoNode = {
       id: nextGeoId(all),
       level: form.level as GeoLevel,
-      name: isPincode ? form.pincode.trim() : form.name.trim(),
+      name: form.name.trim(),
+      code: form.code,
       parentId: form.parentId,
-      pincode: isPincode ? form.pincode.trim() : form.pincode,
+      pincode: form.pincode,
       status: form.status,
-      createdBy: DEFAULT_GEO_USER,
-      createdDate: today,
-      updatedBy: DEFAULT_GEO_USER,
-      updatedDate: today,
+      createdDate: todayStr(),
+      updatedDate: todayStr(),
     };
     saveGeoNodes([...all, newNode]);
     router.push("/masters/geography");
@@ -130,6 +132,8 @@ export default function AddGeographyPage() {
   return (
     <AppLayout>
       <div className="max-w-[560px] mx-auto">
+
+        {/* ── Header ── */}
         <div className="flex items-center gap-3 mb-5">
           <button
             onClick={() => router.push("/masters/geography")}
@@ -143,6 +147,7 @@ export default function AddGeographyPage() {
           </div>
         </div>
 
+        {/* ── Form card ── */}
         <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-border flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-brand-50 border border-brand-100 flex items-center justify-center flex-shrink-0">
@@ -150,17 +155,19 @@ export default function AddGeographyPage() {
             </div>
             <div>
               <p className="text-xs font-semibold text-foreground">New Geography Node</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">{HIERARCHY_HINT}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Zone → State → Region → Area → Territory → Locality → Pincode</p>
             </div>
           </div>
 
           <div className="p-5 space-y-4">
+
+            {/* 1. Level */}
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">
                 Level <span className="text-red-500">*</span>
               </Label>
               <div className="flex flex-wrap gap-1.5">
-                {LEVELS.map((l) => (
+                {LEVELS.map(l => (
                   <button
                     key={l}
                     type="button"
@@ -183,27 +190,26 @@ export default function AddGeographyPage() {
               )}
             </div>
 
+            {/* 2. Parent (hidden for Zone) */}
             {form.level && PARENT_LEVEL[form.level] !== null && (
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium">
-                  {form.level === "Pincode" ? "Town" : `Parent (${PARENT_LEVEL[form.level]})`}{" "}
-                  <span className="text-red-500">*</span>
+                  Parent ({PARENT_LEVEL[form.level]}) <span className="text-red-500">*</span>
                 </Label>
-                {form.level === "Pincode" && (
-                  <p className="text-[11px] text-muted-foreground -mt-0.5">
-                    Select the town this pincode belongs to
-                  </p>
-                )}
-                <AutocompleteSelect
-                  options={parentOptions.map((n) => ({ value: String(n.id), label: n.name }))}
-                  value={form.parentId != null ? String(form.parentId) : ""}
-                  onChange={(v) => set("parentId", v ? Number(v) : null)}
-                  placeholder={`Select ${form.level === "Pincode" ? "Town" : PARENT_LEVEL[form.level]}…`}
-                  searchPlaceholder={`Search ${form.level === "Pincode" ? "town" : PARENT_LEVEL[form.level]!.toLowerCase()}…`}
-                  error={!!errors.parentId}
-                  className="h-9 text-sm"
-                />
-                {parentOptions.length === 0 && (
+                <select
+                  value={form.parentId ?? ""}
+                  onChange={e => set("parentId", e.target.value ? Number(e.target.value) : null)}
+                  className={cn(
+                    "w-full h-9 px-3 text-sm border rounded-lg bg-background appearance-none cursor-pointer",
+                    errors.parentId ? "border-red-400" : "border-border",
+                  )}
+                >
+                  <option value="">Select {PARENT_LEVEL[form.level]}…</option>
+                  {parentOptions.map(n => (
+                    <option key={n.id} value={n.id}>{n.name}</option>
+                  ))}
+                </select>
+                {parentOptions.length === 0 && form.level && (
                   <p className="text-[11px] text-amber-600">
                     No active {PARENT_LEVEL[form.level]} nodes found. Add one first.
                   </p>
@@ -216,15 +222,56 @@ export default function AddGeographyPage() {
               </div>
             )}
 
-            {form.level === "Pincode" ? (
+            {/* 3. Name */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">
+                Name <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                value={form.name}
+                onChange={e => set("name", e.target.value)}
+                placeholder={form.level ? NAME_PLACEHOLDER[form.level] : "Select a level first"}
+                maxLength={100}
+                className={cn("h-9 text-sm rounded-lg", errors.name && "border-red-400")}
+              />
+              {errors.name && (
+                <p className="text-xs text-red-500 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {errors.name}
+                </p>
+              )}
+            </div>
+
+            {/* 4. Code */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Code <span className="text-muted-foreground text-[11px]">(optional)</span></Label>
+              <Input
+                value={form.code}
+                onChange={e => set("code", e.target.value.toUpperCase().slice(0, 10))}
+                placeholder="e.g. WZ"
+                maxLength={10}
+                className={cn("h-9 text-sm rounded-lg font-mono", errors.code && "border-red-400")}
+              />
+              {errors.code && (
+                <p className="text-xs text-red-500 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {errors.code}
+                </p>
+              )}
+              <p className="text-[11px] text-muted-foreground">Auto-converts to uppercase. Max 10 characters.</p>
+            </div>
+
+            {/* 5. Pincode (Pincode only) */}
+            {form.level === "Pincode" && (
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium">
                   Pincode <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   value={form.pincode}
-                  onChange={(e) => handlePincodeChange(e.target.value)}
-                  placeholder="e.g. 411038"
+                  onChange={e => {
+                    const v = e.target.value.replace(/\D/g, "").slice(0, 6);
+                    set("pincode", v);
+                  }}
+                  placeholder="e.g. 400014"
                   maxLength={6}
                   inputMode="numeric"
                   className={cn("h-9 text-sm rounded-lg font-mono", errors.pincode && "border-red-400")}
@@ -234,49 +281,36 @@ export default function AddGeographyPage() {
                     <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {errors.pincode}
                   </p>
                 )}
-                <p className="text-[11px] text-muted-foreground">Enter 6-digit pincode. It will be saved as the record name.</p>
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">
-                  Name <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  value={form.name}
-                  onChange={(e) => set("name", e.target.value)}
-                  placeholder={form.level ? NAME_PLACEHOLDER[form.level] : "Select a level first"}
-                  maxLength={100}
-                  className={cn("h-9 text-sm rounded-lg", errors.name && "border-red-400")}
-                />
-                {errors.name && (
-                  <p className="text-xs text-red-500 flex items-center gap-1">
-                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {errors.name}
-                  </p>
-                )}
+                <p className="text-[11px] text-muted-foreground">Exactly 6 numeric digits.</p>
               </div>
             )}
 
+            {/* 6. Status */}
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Status</Label>
-              <div className="flex items-center gap-3">
-                <ActiveInactiveToggle
-                  active={form.status === "active"}
-                  onChange={(active) => set("status", active ? "active" : "inactive")}
-                />
-                <StatusBadge status={form.status} />
-              </div>
+              <StatusToggle value={form.status} onChange={v => set("status", v)} />
             </div>
+
           </div>
 
+          {/* Form footer */}
           <div className="px-5 py-4 border-t border-border bg-muted/20 flex items-center justify-end gap-2">
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.push("/masters/geography")}>
+            <Button
+              variant="outline" size="sm" className="h-8 text-xs"
+              onClick={() => router.push("/masters/geography")}
+            >
               Cancel
             </Button>
-            <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" onClick={handleSave}>
+            <Button
+              size="sm"
+              className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+              onClick={handleSave}
+            >
               <Save className="w-3.5 h-3.5" /> Save
             </Button>
           </div>
         </div>
+
       </div>
     </AppLayout>
   );
