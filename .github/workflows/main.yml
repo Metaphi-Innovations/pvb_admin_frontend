@@ -23,6 +23,7 @@ jobs:
           rsync -av --exclude='.git' \
                     --exclude='node_modules' \
                     --exclude='.env' \
+                    --exclude='pvb.dev.metaphi.in/app/(app/)/masters/vendor-type/VendorTypePageClient.tsx' \
                     ./ /var/www/pvb.dev.metaphi.in/
       - name: Install dependencies
         working-directory: /var/www/pvb.dev.metaphi.in
