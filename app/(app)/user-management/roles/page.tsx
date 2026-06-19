@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,15 +17,20 @@ import {
   Clock, MoreHorizontal
 } from "lucide-react";
 import {
-  type Role, DEPARTMENTS, MOCK_USER_COUNTS,
+  type Role, type RolePermissionTemplate, DEPARTMENTS, MOCK_USER_COUNTS,
   loadRoles, saveRoles, todayStr,
+  loadPermissionTemplates, savePermissionTemplates,
+  type PermissionTemplate, loadNewPermissionTemplates, saveNewPermissionTemplates,
 } from "./roles-data";
 import RoleDetailSheet from "./components/RoleDetailSheet";
+import { type UserPermissions } from "../employee/employee-data";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Listing Container and Master Listing Imports
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
+import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type ConfirmKind = "toggle-status" | "delete";
@@ -100,8 +105,8 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
       bg,
     )}>
       {toast.type === "success"
-        ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-        : <XCircle className="w-4 h-4 flex-shrink-0" />}
+        ? <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
+        : <XCircle className="flex-shrink-0 w-4 h-4" />}
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
         <X className="w-3.5 h-3.5" />
@@ -157,49 +162,6 @@ function ConfirmDialog({ open, onClose, config }: ConfirmDialogProps) {
   );
 }
 
-// ── Status Configuration ──────────────────────────────────────────────────────
-const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
-  active:   { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
-  inactive: { bg: "bg-slate-100",  text: "text-slate-600",   dot: "bg-slate-400"   },
-  draft:    { bg: "bg-blue-50",    text: "text-blue-700",    dot: "bg-blue-500"    },
-  archived: { bg: "bg-red-50",     text: "text-red-700",     dot: "bg-red-400"     },
-};
-
-function StatusToggle({ record, onToggle }: { record: Role; onToggle: (item: Role) => void }) {
-  const active = record.status === "active";
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onToggle(record);
-      }}
-      className={cn(
-        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-        active
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
-      )}
-    >
-      {active ? "Active" : "Inactive"}
-    </button>
-  );
-}
-
-function AuditCell({ name, date }: { name?: string; date?: string }) {
-  return (
-    <div className="space-y-0.5">
-      <p className="text-[11px] font-semibold leading-4 text-brand-700">
-        {name || "—"}
-      </p>
-      <p className="text-[10px] font-mono leading-3 text-muted-foreground">
-        {date || "—"}
-      </p>
-    </div>
-  );
-}
-
 // ── KPI Card ─────────────────────────────────────────────────────────────────
 interface KpiCardProps {
   label: string;
@@ -210,7 +172,7 @@ interface KpiCardProps {
 
 function KpiCard({ label, value, icon: Icon, bgClass = "bg-brand-600" }: KpiCardProps) {
   return (
-    <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
+    <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
       <div className={cn(
         "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
         bgClass,
@@ -218,7 +180,7 @@ function KpiCard({ label, value, icon: Icon, bgClass = "bg-brand-600" }: KpiCard
         <Icon className="w-4 h-4 text-white" />
       </div>
       <div>
-        <p className="text-base font-bold text-foreground leading-none">{value}</p>
+        <p className="text-base font-bold leading-none text-foreground">{value}</p>
         <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{label}</p>
       </div>
     </div>
@@ -228,8 +190,13 @@ function KpiCard({ label, value, icon: Icon, bgClass = "bg-brand-600" }: KpiCard
 // ── RolesPage (main) ─────────────────────────────────────────────────────────
 export default function RolesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const defaultTab = searchParams.get("tab") || "roles";
+  const [activeTab, setActiveTab] = useState(defaultTab);
 
   const [roles,         setRoles]         = useState<Role[]>([]);
+  const [permTemplates, setPermTemplates] = useState<Record<string | number, RolePermissionTemplate>>({});
+  const [newTemplates,  setNewTemplates]  = useState<PermissionTemplate[]>([]);
   
   // Listing state
   const [filters, setFilters] = useState<FilterState>({});
@@ -237,11 +204,62 @@ export default function RolesPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  // New Templates listing state
+  const [templateFilters, setTemplateFilters] = useState<FilterState>({});
+  const [templateSort, setTemplateSort] = useState<SortState>({ key: "templateName", direction: "asc" });
+  const [templatePage, setTemplatePage] = useState(1);
+  const [templatePageSize, setTemplatePageSize] = useState(10);
+
   const [viewRole,      setViewRole]      = useState<Role | null>(null);
   const [toast,         setToast]         = useState<ToastState | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget | null>(null);
 
-  useEffect(() => { setRoles(loadRoles()); }, []);
+  useEffect(() => {
+    setRoles(loadRoles());
+    setPermTemplates(loadPermissionTemplates());
+    setNewTemplates(loadNewPermissionTemplates());
+  }, []);
+
+  const toggleTemplateStatus = (tpl: PermissionTemplate) => {
+    const nextStatus: "Active" | "Inactive" = tpl.status === "Active" ? "Inactive" : "Active";
+    const next = newTemplates.map(t =>
+      t.id === tpl.id ? { ...t, status: nextStatus, updatedAt: todayStr() } : t
+    );
+    setNewTemplates(next);
+    saveNewPermissionTemplates(next);
+    showToast("Template status updated to " + nextStatus);
+  };
+
+  const handleTemplateDelete = (tpl: PermissionTemplate) => {
+    if (confirm(`Are you sure you want to delete template "${tpl.templateName}"?`)) {
+      const next = newTemplates.filter(t => t.id !== tpl.id);
+      setNewTemplates(next);
+      saveNewPermissionTemplates(next);
+      showToast("Template deleted successfully");
+    }
+  };
+
+  const filteredTemplates = useMemo(() => {
+    let t = [...newTemplates];
+    const searchVal = templateFilters.search as string;
+    if (searchVal?.trim()) {
+      const q = searchVal.toLowerCase();
+      t = t.filter(x => x.templateName.toLowerCase().includes(q));
+    }
+    if (templateSort.key && templateSort.direction !== "none") {
+      t.sort((a, b) => {
+        const av = String(a[templateSort.key as keyof PermissionTemplate] ?? "").toLowerCase();
+        const bv = String(b[templateSort.key as keyof PermissionTemplate] ?? "").toLowerCase();
+        return templateSort.direction === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      });
+    }
+    return t;
+  }, [newTemplates, templateFilters, templateSort]);
+
+  const paginatedTemplates = useMemo(() => {
+    const start = (templatePage - 1) * templatePageSize;
+    return filteredTemplates.slice(start, start + templatePageSize);
+  }, [filteredTemplates, templatePage, templatePageSize]);
 
   const showToast = useCallback((msg: string, type: "success" | "error" = "success") => {
     setToast({ msg, type });
@@ -348,6 +366,93 @@ export default function RolesPage() {
     setRoles(next); saveRoles(next);
     showToast("Role " + (newStatus === "active" ? "activated" : "deactivated"));
   };
+  const handleOpenPermissionTemplate = (role: Role) => {
+    router.push(`/user-management/roles/${role.id}/permissions`);
+  };
+
+  const templateColumns: ColumnConfig<PermissionTemplate>[] = [
+    {
+      key: "templateName",
+      header: "Template Name",
+      sortable: true,
+      render: (val, row) => (
+        <span className="text-xs font-semibold text-foreground">
+          {row.templateName}
+        </span>
+      ),
+    },
+    {
+      key: "accessType",
+      header: "Access Type",
+      sortable: true,
+      render: (val, row) => (
+        <span className={cn(
+          "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border capitalize",
+          row.accessType === "web"
+            ? "bg-brand-50 border-brand-100 text-brand-700"
+            : "bg-blue-50 border-blue-100 text-blue-700"
+        )}>
+          {row.accessType === "web" ? "Web Portal" : "Mobile App"}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      render: (val, row) => (
+        <ListingStatusToggle
+          active={isActiveStatus(row.status)}
+          onChange={() => toggleTemplateStatus(row)}
+        />
+      ),
+    },
+    {
+      key: "createdAt",
+      header: "Created",
+      render: (val, row) => (
+        <ListingAuditCell name="Admin" date={row.createdAt} variant="created" />
+      ),
+    },
+    {
+      key: "updatedAt",
+      header: "Updated",
+      render: (val, row) => (
+        <ListingAuditCell name="Admin" date={row.updatedAt} variant="updated" />
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      sticky: true,
+      render: (val, row) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="p-1.5 hover:bg-muted rounded-md transition-colors">
+              <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44 z-[200]">
+            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
+              Actions
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => router.push(`/user-management/roles/templates/${row.id}/view`)} className="cursor-pointer">
+              <Eye className="w-3.5 h-3.5 mr-2" /> View
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push(`/user-management/roles/templates/${row.id}/edit`)} className="cursor-pointer">
+              <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => handleTemplateDelete(row)} className="text-red-600 cursor-pointer focus:bg-red-50 focus:text-red-600">
+              <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ];
 
   const cfg = getConfirmConfig(confirmTarget, confirmDelete, confirmToggleStatus);
 
@@ -358,7 +463,7 @@ export default function RolesPage() {
       sortable: true,
       render: (val, row) => (
         <button
-          className="text-xs font-semibold text-foreground hover:text-brand-600 transition-colors text-left"
+          className="text-xs font-semibold text-left transition-colors text-foreground hover:text-brand-600"
           onClick={() => router.push(`/user-management/roles/${row.id}`)}
         >
           {row.roleName}
@@ -392,17 +497,26 @@ export default function RolesPage() {
         { label: "Active", value: "active" },
         { label: "Inactive", value: "inactive" },
       ],
-      render: (val, row) => <StatusToggle record={row} onToggle={toggleStatus} />,
+      render: (val, row) => (
+        <ListingStatusToggle
+          active={isActiveStatus(row.status)}
+          onChange={() => toggleStatus(row)}
+        />
+      ),
     },
     {
       key: "createdBy",
-      header: "Created By",
-      render: (val, row) => <AuditCell name={row.createdBy} date={row.createdDate} />,
+      header: "Created",
+      render: (val, row) => (
+        <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />
+      ),
     },
     {
       key: "updatedDate",
       header: "Updated",
-      render: (val, row) => <AuditCell name={row.updatedBy} date={row.updatedDate} />,
+      render: (val, row) => (
+        <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />
+      ),
     },
     {
       key: "actions",
@@ -428,11 +542,11 @@ export default function RolesPage() {
               <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => handleQuickToggle(row)} className="cursor-pointer">
+            {/* <DropdownMenuItem onClick={() => handleQuickToggle(row)} className="cursor-pointer">
               {row.status === "active" ? "Deactivate" : "Activate"}
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => handleDelete(row)} className="cursor-pointer text-red-600 focus:bg-red-50 focus:text-red-600">
+            <DropdownMenuSeparator /> */}
+            <DropdownMenuItem onClick={() => handleDelete(row)} className="text-red-600 cursor-pointer focus:bg-red-50 focus:text-red-600">
               <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -453,26 +567,64 @@ export default function RolesPage() {
         </div>
       }
     >
-      <div>
-        <MasterListing<Role>
-          columns={columns}
-          data={paginated}
-          totalRecords={filtered.length}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-          onSortChange={setSort}
-          onFilterChange={setFilters}
-          emptyMessage="roles"
-          searchPlaceholder="Search role or department…"
-          onAdd={openAdd}
-          addLabel="Add Role"
-          onExport={undefined}
-          currentFilters={filters}
-          currentSort={sort}
-        />
-      </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="border-b border-border w-full justify-start rounded-none h-auto p-0 bg-transparent space-x-6">
+          <TabsTrigger
+            value="roles"
+            className="rounded-none border-b-2 border-transparent px-1 pb-3 pt-2 text-xs font-semibold text-muted-foreground data-[state=active]:border-brand-600 data-[state=active]:text-brand-650 bg-transparent shadow-none hover:text-brand-650 transition-all"
+          >
+            Roles
+          </TabsTrigger>
+          <TabsTrigger
+            value="templates"
+            className="rounded-none border-b-2 border-transparent px-1 pb-3 pt-2 text-xs font-semibold text-muted-foreground data-[state=active]:border-brand-600 data-[state=active]:text-brand-650 bg-transparent shadow-none hover:text-brand-650 transition-all"
+          >
+            Template
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="roles" className="m-0 outline-none">
+          <MasterListing<Role>
+            columns={columns}
+            data={paginated}
+            totalRecords={filtered.length}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            onSortChange={setSort}
+            onFilterChange={setFilters}
+            emptyMessage="roles"
+            searchPlaceholder="Search role or department…"
+            onAdd={openAdd}
+            addLabel="Add Role"
+            onExport={undefined}
+            currentFilters={filters}
+            currentSort={sort}
+          />
+        </TabsContent>
+
+        <TabsContent value="templates" className="m-0 outline-none">
+          <MasterListing<PermissionTemplate>
+            columns={templateColumns}
+            data={paginatedTemplates}
+            totalRecords={filteredTemplates.length}
+            page={templatePage}
+            pageSize={templatePageSize}
+            onPageChange={setTemplatePage}
+            onPageSizeChange={setTemplatePageSize}
+            onSortChange={setTemplateSort}
+            onFilterChange={setTemplateFilters}
+            emptyMessage="templates"
+            searchPlaceholder="Search template name…"
+            onAdd={() => router.push("/user-management/roles/templates/add")}
+            addLabel="Add Template"
+            onExport={undefined}
+            currentFilters={templateFilters}
+            currentSort={templateSort}
+          />
+        </TabsContent>
+      </Tabs>
 
       <RoleDetailSheet
         open={viewRole !== null}
@@ -480,6 +632,7 @@ export default function RolesPage() {
         role={viewRole}
         onEdit={(role) => { setViewRole(null); openEdit(role); }}
       />
+
 
       {cfg !== null && (
         <ConfirmDialog

@@ -11,16 +11,50 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  Plus, Search, ChevronRight, ChevronDown, Edit2,
-  Globe, CheckCircle2, XCircle, X, MapPin, Layers, Save, AlertTriangle,
+  Plus, ChevronRight, ChevronDown,
+  Globe, CheckCircle2, XCircle, X, MapPin, Layers, Save,
+  Eye, Edit2, Trash2,
 } from "lucide-react";
+import { StatusBadge } from "@/components/record-detail/StatusBadge";
+import { ListingStatusToggle } from "@/components/listing/ListingStatusToggle";
 import {
   type GeoNode, type GeoLevel,
   LEVELS, CHILD_LEVEL, loadGeoNodes, saveGeoNodes, todayStr,
-  getAncestorPath,
+  getAncestorPath, DEFAULT_GEO_USER,
 } from "./geo-data";
 import { LevelBadge, LEVEL_DOT } from "./components/LevelBadge";
 import { GeographyBreadcrumb } from "./components/GeographyBreadcrumb";
+import { GeographyDeleteDialog } from "./components/GeographyDeleteDialog";
+
+type StatusTab = "all" | "active" | "inactive";
+const GEO_LIST_TAB_KEY = "geography-list-status-tab";
+const STATUS_TABS: { value: StatusTab; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+];
+
+function readStoredStatusTab(): StatusTab {
+  if (typeof window === "undefined") return "all";
+  const v = sessionStorage.getItem(GEO_LIST_TAB_KEY);
+  return v === "active" || v === "inactive" ? v : "all";
+}
+
+/** Nearest visible ancestor for tree display when intermediate parents are filtered out */
+function displayParentId(
+  node: GeoNode,
+  visibleIds: Set<number>,
+  allNodes: GeoNode[],
+): number | null {
+  if (node.parentId === null) return null;
+  let cur: number | null = node.parentId;
+  while (cur !== null) {
+    if (visibleIds.has(cur)) return cur;
+    const parent = allNodes.find((n) => n.id === cur);
+    cur = parent?.parentId ?? null;
+  }
+  return null;
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ToastState { msg: string; type: "success" | "error" }
@@ -33,7 +67,6 @@ interface QuickAddState {
 
 interface QuickAddForm {
   name: string;
-  code: string;
   pincode: string;
 }
 
@@ -45,52 +78,15 @@ interface QuickAddErrors {
 // ── Level card accent (summary cards) ─────────────────────────────────────────
 const LEVEL_CARD: Record<GeoLevel, { bg: string; text: string; border: string }> = {
   Zone: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
-  State: { bg: "bg-teal-50", text: "text-teal-700", border: "border-teal-200" },
   Region: { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200" },
+  State: { bg: "bg-teal-50", text: "text-teal-700", border: "border-teal-200" },
   Area: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
   Territory: { bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-200" },
-  Locality: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
+  District: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
+  City: { bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-200" },
+  Town: { bg: "bg-violet-50", text: "text-violet-700", border: "border-violet-200" },
   Pincode: { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200" },
 };
-
-// ── Confirm Dialog ────────────────────────────────────────────────────────────
-function ConfirmDialog({
-  open, onClose, onConfirm, title, description, confirmLabel = "Confirm", destructive,
-}: {
-  open: boolean; onClose: () => void; onConfirm: () => void;
-  title: string; description: string; confirmLabel?: string; destructive?: boolean;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <div className={cn(
-              "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-              destructive ? "bg-red-50 border border-red-200" : "bg-amber-50 border border-amber-200",
-            )}>
-              <AlertTriangle className={cn("w-4 h-4", destructive ? "text-red-500" : "text-amber-500")} />
-            </div>
-            {title}
-          </DialogTitle>
-          <DialogDescription className="pt-1">{description}</DialogDescription>
-        </DialogHeader>
-        <div className="flex items-center justify-end gap-2 pt-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onClose}>Cancel</Button>
-          <Button
-            size="sm"
-            className={cn("h-8 text-xs gap-1.5",
-              destructive ? "bg-red-600 hover:bg-red-700 text-white" : "bg-brand-600 hover:bg-brand-700 text-white"
-            )}
-            onClick={() => { onConfirm(); onClose(); }}
-          >
-            {confirmLabel}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
@@ -119,25 +115,33 @@ function QuickAddDialog({
   onClose: () => void;
   onSave: (form: QuickAddForm) => void;
 }) {
-  const [form, setForm] = useState<QuickAddForm>({ name: "", code: "", pincode: "" });
+  const [form, setForm] = useState<QuickAddForm>({ name: "", pincode: "" });
   const [errors, setErrors] = useState<QuickAddErrors>({});
 
   // Reset form when dialog opens
   useEffect(() => {
     if (state.open) {
-      setForm({ name: "", code: "", pincode: "" });
+      setForm({ name: "", pincode: "" });
       setErrors({});
     }
   }, [state.open]);
 
   const validate = (): boolean => {
     const e: QuickAddErrors = {};
-    if (!form.name.trim()) e.name = "Name is required";
-    if (state.childLevel === "Pincode" && form.pincode && !/^[1-9][0-9]{5}$/.test(form.pincode.trim())) {
-      e.pincode = "Enter a valid 6-digit pincode";
+    const isPincode = state.childLevel === "Pincode";
+    if (isPincode) {
+      if (!form.pincode.trim()) e.pincode = "Pincode is required";
+      else if (!/^\d{6}$/.test(form.pincode.trim())) e.pincode = "Enter a valid 6-digit pincode";
+    } else if (!form.name.trim()) {
+      e.name = "Name is required";
     }
     setErrors(e);
     return Object.keys(e).length === 0;
+  };
+
+  const handlePincodeChange = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 6);
+    setForm((f) => ({ ...f, pincode: digits, name: digits }));
   };
 
   const handleSave = () => {
@@ -185,47 +189,38 @@ function QuickAddDialog({
             </div>
           </div>
 
-          {/* Name */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">
-              {state.childLevel} Name <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              placeholder={`e.g. Mumbai ${state.childLevel}`}
-              value={form.name}
-              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              className={cn("h-9 text-sm rounded-lg", errors.name && "border-red-400 focus-visible:ring-red-300")}
-              autoFocus
-            />
-            {errors.name && (
-              <p className="text-xs text-red-500">{errors.name}</p>
-            )}
-          </div>
-
-          {/* Code (optional) */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Code <span className="text-muted-foreground font-normal">(optional)</span></Label>
-            <Input
-              placeholder="e.g. MUM"
-              value={form.code}
-              onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))}
-              className="h-9 text-sm rounded-lg font-mono"
-            />
-          </div>
-
-          {/* Pincode — only for Pincode */}
-          {state.childLevel === "Pincode" && (
+          {state.childLevel === "Pincode" ? (
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Pincode <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Label className="text-xs font-medium">
+                Pincode <span className="text-red-500">*</span>
+              </Label>
               <Input
-                placeholder="6-digit pincode"
+                placeholder="e.g. 411038"
                 value={form.pincode}
-                onChange={e => setForm(f => ({ ...f, pincode: e.target.value }))}
+                onChange={(e) => handlePincodeChange(e.target.value)}
                 maxLength={6}
+                inputMode="numeric"
                 className={cn("h-9 text-sm rounded-lg font-mono", errors.pincode && "border-red-400 focus-visible:ring-red-300")}
+                autoFocus
               />
               {errors.pincode && (
                 <p className="text-xs text-red-500">{errors.pincode}</p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">
+                {state.childLevel} Name <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                placeholder={`e.g. Mumbai ${state.childLevel}`}
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                className={cn("h-9 text-sm rounded-lg", errors.name && "border-red-400 focus-visible:ring-red-300")}
+                autoFocus
+              />
+              {errors.name && (
+                <p className="text-xs text-red-500">{errors.name}</p>
               )}
             </div>
           )}
@@ -246,9 +241,9 @@ function QuickAddDialog({
   );
 }
 
-// ── Tree row component ────────────────────────────────────────────────────────
+// ── Tree row component (legacy — kept for reference; listing uses MasterListing) ──
 function TreeRow({
-  node, depth, nodes, expandedIds, toggleExpand, onQuickAdd, onEdit, onToggleStatus, router,
+  node, depth, nodes, expandedIds, toggleExpand, onQuickAdd, onEdit, router,
 }: {
   node: GeoNode;
   depth: number;
@@ -257,7 +252,6 @@ function TreeRow({
   toggleExpand: (id: number) => void;
   onQuickAdd: (parentNode: GeoNode) => void;
   onEdit: (id: number) => void;
-  onToggleStatus: (node: GeoNode) => void;
   router: ReturnType<typeof useRouter>;
 }) {
   const children = nodes.filter(n => n.parentId === node.id);
@@ -294,12 +288,6 @@ function TreeRow({
             <span className="text-xs font-semibold text-foreground truncate">
               {node.name}
             </span>
-            {/* Code badge */}
-            {node.code && (
-              <span className="font-mono text-[10px] font-semibold text-brand-700 bg-brand-50 border border-brand-100 px-1.5 py-px rounded flex-shrink-0">
-                {node.code}
-              </span>
-            )}
             {/* Quick add button — only appears on row hover, only if there's a child level */}
             {childLevel && (
               <button
@@ -318,12 +306,9 @@ function TreeRow({
           <LevelBadge level={node.level} />
         </td>
 
-        {/* Pincode */}
+        {/* Status */}
         <td className="px-3 py-2.5 flex-[0.8]">
-          {node.level === "Pincode" && node.pincode
-            ? <span className="font-mono text-xs text-muted-foreground">{node.pincode}</span>
-            : <span className="text-muted-foreground/30 text-xs">—</span>
-          }
+          <StatusBadge status={node.status} />
         </td>
 
         {/* Actions */}
@@ -347,7 +332,6 @@ function TreeRow({
           toggleExpand={toggleExpand}
           onQuickAdd={onQuickAdd}
           onEdit={onEdit}
-          onToggleStatus={onToggleStatus}
           router={router}
         />
       )}
@@ -364,7 +348,6 @@ function TreeRows(props: {
   toggleExpand: (id: number) => void;
   onQuickAdd: (parentNode: GeoNode) => void;
   onEdit: (id: number) => void;
-  onToggleStatus: (node: GeoNode) => void;
   router: ReturnType<typeof useRouter>;
 }) {
   const { nodes, parentId, depth, ...rest } = props;
@@ -382,7 +365,7 @@ function TreeRows(props: {
 // ── Listing Container and Master Listing Imports ─────────────────────────────────
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListing } from "@/components/listing/MasterListing";
-import { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
+import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 
 // ── Main List Page ─────────────────────────────────────────────────────────────
 export default function GeographyListPage() {
@@ -390,20 +373,23 @@ export default function GeographyListPage() {
   const [nodes, setNodes] = useState<GeoNode[]>([]);
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Tree expand state — default: Zone nodes expanded
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set([1, 2]));
+
+  const [statusTab, setStatusTab] = useState<StatusTab>("all");
+  const [deleteTarget, setDeleteTarget] = useState<GeoNode | null>(null);
 
   // Quick add dialog state
   const [quickAdd, setQuickAdd] = useState<QuickAddState>({
     open: false,
     parentNode: null,
-    childLevel: "State",
+    childLevel: "Region",
   });
 
-  // Confirm dialog state
-  const [confirmNode, setConfirmNode] = useState<GeoNode | null>(null);
-  const [confirmMsg, setConfirmMsg] = useState({ title: "", description: "", isDeactivate: false });
+  // Confirm dialog state — removed (status changes via Edit form only)
 
   // Toast
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -416,8 +402,40 @@ export default function GeographyListPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  // Load on mount
-  useEffect(() => { setNodes(loadGeoNodes()); }, []);
+  // Load on mount + restore status tab
+  useEffect(() => {
+    setNodes(loadGeoNodes());
+    setStatusTab(readStoredStatusTab());
+  }, []);
+
+  // Refresh data when returning to the page (e.g. after edit)
+  useEffect(() => {
+    const onFocus = () => setNodes(loadGeoNodes());
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
+  const handleStatusTabChange = useCallback((tab: string) => {
+    const next = tab as StatusTab;
+    setStatusTab(next);
+    sessionStorage.setItem(GEO_LIST_TAB_KEY, next);
+  }, []);
+
+  const statusTabCounts = useMemo(() => ({
+    all: nodes.length,
+    active: nodes.filter((n) => n.status === "active").length,
+    inactive: nodes.filter((n) => n.status === "inactive").length,
+  }), [nodes]);
+
+  const visibleNodes = useMemo(() => {
+    if (statusTab === "all") return nodes;
+    return nodes.filter((n) => n.status === statusTab);
+  }, [nodes, statusTab]);
+
+  const visibleIds = useMemo(
+    () => new Set(visibleNodes.map((n) => n.id)),
+    [visibleNodes],
+  );
 
   const toggleExpand = (id: number) => {
     setExpandedIds(prev => {
@@ -427,14 +445,14 @@ export default function GeographyListPage() {
     });
   };
 
-  // Summary counts per level
+  // Summary counts per level (respects status tab)
   const levelCounts = useMemo<Record<GeoLevel, number>>(() => {
     const counts = {} as Record<GeoLevel, number>;
     for (const l of LEVELS) {
-      counts[l] = nodes.filter(n => n.level === l && n.status === "active").length;
+      counts[l] = visibleNodes.filter((n) => n.level === l).length;
     }
     return counts;
-  }, [nodes]);
+  }, [visibleNodes]);
 
   const searchVal = (filters.search as string) || "";
   const filterLevel = (filters.level as string) || "";
@@ -455,8 +473,10 @@ export default function GeographyListPage() {
   // Tree expand structure flattened for MasterListing
   const treeData = useMemo(() => {
     const result: (GeoNode & { depth: number })[] = [];
-    function traverse(parentId: number | null, depth: number) {
-      const children = nodes.filter(n => n.parentId === parentId);
+    function traverse(displayParent: number | null, depth: number) {
+      const children = visibleNodes.filter(
+        (n) => displayParentId(n, visibleIds, nodes) === displayParent,
+      );
       for (const child of children) {
         result.push({ ...child, depth });
         if (expandedIds.has(child.id)) {
@@ -466,16 +486,15 @@ export default function GeographyListPage() {
     }
     traverse(null, 0);
     return result;
-  }, [nodes, expandedIds]);
+  }, [visibleNodes, visibleIds, nodes, expandedIds]);
 
   const displayData = useMemo(() => {
     if (hasFilters) {
-      let r = [...nodes];
+      let r = [...visibleNodes];
       if (searchVal.trim()) {
         const t = searchVal.toLowerCase();
         r = r.filter(n =>
           n.name.toLowerCase().includes(t) ||
-          n.code.toLowerCase().includes(t) ||
           (n.pincode && n.pincode.includes(t)),
         );
       }
@@ -485,53 +504,87 @@ export default function GeographyListPage() {
       return r.map(n => ({ ...n, depth: 0 }));
     }
     return treeData;
-  }, [nodes, hasFilters, searchVal, filterLevel, treeData]);
+  }, [visibleNodes, hasFilters, searchVal, filterLevel, treeData]);
 
-  // ── Status toggle logic ──────────────────────────────────────────────────────
-  const handleToggleStatus = (node: GeoNode) => {
-    if (node.status === "active") {
-      // Deactivate: check active children
-      const hasActiveChildren = nodes.some(n => n.parentId === node.id && n.status === "active");
-      if (hasActiveChildren) {
-        showToast("Cannot deactivate. Deactivate all children first.", "error");
-        return;
-      }
-      setConfirmMsg({
-        title: `Deactivate "${node.name}"?`,
-        description: "This will hide it from all assignment dropdowns.",
-        isDeactivate: true,
-      });
-      setConfirmNode(node);
-    } else {
-      // Activate: check parent is active
-      if (node.parentId !== null) {
-        const parent = nodes.find(n => n.id === node.parentId);
+  useEffect(() => {
+    setPage(1);
+  }, [filters, sort, pageSize, statusTab]);
+
+  const paginatedData = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return displayData.slice(start, start + pageSize);
+  }, [displayData, page, pageSize]);
+
+  const handleView = (id: number) => router.push(`/masters/geography/${id}`);
+  const handleEdit = (id: number) => router.push(`/masters/geography/${id}/edit`);
+
+  const actions = useMemo<ActionItemConfig<GeoNode & { depth: number }>[]>(() => [
+    {
+      label: "View",
+      action: "view",
+      icon: Eye,
+      onClick: (row) => handleView(row.id),
+    },
+    {
+      label: "Edit",
+      action: "edit",
+      icon: Edit2,
+      onClick: (row) => handleEdit(row.id),
+    },
+    {
+      label: "Delete",
+      action: "delete",
+      icon: Trash2,
+      variant: "destructive",
+      onClick: (row) => setDeleteTarget(row),
+    },
+  ], []);
+
+  const handleDeleted = (deactivatedCount: number) => {
+    setNodes(loadGeoNodes());
+    setDeleteTarget(null);
+    showToast(
+      deactivatedCount > 1
+        ? `Geography and ${deactivatedCount - 1} child record(s) deactivated.`
+        : "Geography deactivated successfully.",
+    );
+  };
+
+  const handleToggleStatus = useCallback((row: GeoNode, active: boolean) => {
+    if (active === (row.status === "active")) return;
+
+    if (active) {
+      if (row.parentId !== null) {
+        const parent = nodes.find((n) => n.id === row.parentId);
         if (parent && parent.status !== "active") {
           showToast(`Cannot activate. Parent "${parent.name}" is inactive. Activate the parent first.`, "error");
           return;
         }
       }
-      // Activate directly
-      const updated = nodes.map(n =>
-        n.id === node.id ? { ...n, status: "active" as const, updatedDate: todayStr() } : n,
+    } else {
+      const hasActiveChildren = nodes.some(
+        (n) => n.parentId === row.id && n.status === "active",
       );
-      setNodes(updated);
-      saveGeoNodes(updated);
-      showToast("Geography activated successfully.");
+      if (hasActiveChildren) {
+        showToast("Deactivate all child nodes before deactivating this geography.", "error");
+        return;
+      }
     }
-  };
 
-  const confirmDeactivate = () => {
-    if (!confirmNode) return;
-    const updated = nodes.map(n =>
-      n.id === confirmNode.id ? { ...n, status: "inactive" as const, updatedDate: todayStr() } : n,
+    const updated = nodes.map((n) =>
+      n.id === row.id
+        ? {
+            ...n,
+            status: active ? ("active" as const) : ("inactive" as const),
+            updatedDate: todayStr(),
+            updatedBy: DEFAULT_GEO_USER,
+          }
+        : n,
     );
-    setNodes(updated);
     saveGeoNodes(updated);
-    showToast("Geography deactivated successfully.");
-  };
-
-  const handleEdit = (id: number) => router.push(`/masters/geography/${id}/edit`);
+    setNodes(updated);
+    showToast(`Geography ${active ? "activated" : "deactivated"} successfully.`);
+  }, [nodes, showToast]);
 
   // ── Quick Add ─────────────────────────────────────────────────────────────
   const handleQuickAdd = (parentNode: GeoNode) => {
@@ -544,23 +597,26 @@ export default function GeographyListPage() {
 
   const handleQuickAddSave = (form: QuickAddForm) => {
     const allNodes = loadGeoNodes();
+    const isPincode = quickAdd.childLevel === "Pincode";
+    const name = isPincode ? form.pincode.trim() : form.name.trim();
     const newId = Math.max(0, ...allNodes.map(n => n.id)) + 1;
     const newNode: GeoNode = {
       id: newId,
       level: quickAdd.childLevel,
-      name: form.name.trim(),
-      code: form.code.trim(),
+      name,
       parentId: quickAdd.parentNode?.id ?? null,
-      pincode: form.pincode.trim(),
+      pincode: isPincode ? form.pincode.trim() : form.pincode.trim(),
       status: "active",
+      createdBy: DEFAULT_GEO_USER,
       createdDate: todayStr(),
+      updatedBy: DEFAULT_GEO_USER,
       updatedDate: todayStr(),
     };
     const updated = [...allNodes, newNode];
     saveGeoNodes(updated);
     setNodes(updated);
     setQuickAdd({ open: false, parentNode: null, childLevel: "State" });
-    showToast(`${quickAdd.childLevel} "${form.name.trim()}" added successfully.`);
+    showToast(`${quickAdd.childLevel} "${name}" added successfully.`);
   };
 
   const closeQuickAdd = () => {
@@ -572,7 +628,9 @@ export default function GeographyListPage() {
       key: "name",
       header: "Geography Name",
       render: (val, row) => {
-        const hasChildren = nodes.some(n => n.parentId === row.id);
+        const hasChildren = visibleNodes.some(
+          (n) => displayParentId(n, visibleIds, nodes) === row.id,
+        );
         const isExpanded = expandedIds.has(row.id);
         const childLevel = CHILD_LEVEL[row.level];
         const indentPx = row.depth * 20 + 16;
@@ -587,11 +645,6 @@ export default function GeographyListPage() {
                   <span className="text-xs font-semibold text-foreground truncate">
                     {row.name}
                   </span>
-                  {row.code && (
-                    <span className="font-mono text-[10px] font-semibold text-brand-700 bg-brand-50 border border-brand-100 px-1.5 py-px rounded flex-shrink-0">
-                      {row.code}
-                    </span>
-                  )}
                   {childLevel && (
                     <button
                       onClick={(e) => {
@@ -639,11 +692,6 @@ export default function GeographyListPage() {
             <span className="text-xs font-semibold text-foreground truncate">
               {row.name}
             </span>
-            {row.code && (
-              <span className="font-mono text-[10px] font-semibold text-brand-700 bg-brand-50 border border-brand-100 px-1.5 py-px rounded flex-shrink-0">
-                {row.code}
-              </span>
-            )}
             {childLevel && (
               <button
                 onClick={(e) => {
@@ -670,40 +718,30 @@ export default function GeographyListPage() {
       render: (val, row) => <LevelBadge level={row.level} />
     },
     {
-      key: "pincode",
-      header: "Pincode",
-      width: "120px",
-      render: (val, row) => {
-        return row.level === "Pincode" && row.pincode ? (
-          <span className="font-mono text-xs text-muted-foreground">{row.pincode}</span>
-        ) : (
-          <span className="text-muted-foreground/30 text-xs">—</span>
-        );
-      }
+      key: "status",
+      header: "Status",
+      width: "140px",
+      render: (_val, row) => (
+        <ListingStatusToggle
+          active={row.status === "active"}
+          onChange={(active) => handleToggleStatus(row, active)}
+        />
+      ),
     },
-    {
-      key: "actions",
-      header: "",
-      align: "right",
-      sticky: true,
-      width: "80px",
-      render: (val, row) => (
-        <button
-          onClick={() => handleEdit(row.id)}
-          className="h-7 px-2.5 text-[11px] font-medium border border-border rounded-md hover:bg-muted transition-colors flex items-center gap-1"
-        >
-          <Edit2 className="w-3 h-3" /> Edit
-        </button>
-      )
-    }
-  ], [nodes, expandedIds, hasFilters]);
+  ], [nodes, visibleNodes, visibleIds, expandedIds, hasFilters, handleToggleStatus]);
 
   return (
     <ListingContainer
       title="Geography"
       titleIcon={Globe}
+      tabs={STATUS_TABS.map((t) => ({
+        value: t.value,
+        label: `${t.label} (${statusTabCounts[t.value]})`,
+      }))}
+      activeTab={statusTab}
+      onTabChange={handleStatusTabChange}
       metrics={
-        <div className="grid grid-cols-7 gap-2">
+        <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
           {LEVELS.map(level => {
             const cfg = LEVEL_CARD[level];
             const isActive = filterLevel === level;
@@ -733,20 +771,21 @@ export default function GeographyListPage() {
       <div className="space-y-4">
         <MasterListing<GeoNode & { depth: number }>
           columns={columns}
-          data={displayData}
+          data={paginatedData}
           totalRecords={displayData.length}
-          page={1}
-          pageSize={1000}
-          onPageChange={() => {}}
-          onPageSizeChange={() => {}}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
           onSortChange={setSort}
           onFilterChange={setFilters}
           onAdd={() => router.push("/masters/geography/add")}
           addLabel="Add Geography"
           emptyMessage="geography nodes"
-          searchPlaceholder="Search name, code, pincode…"
+          searchPlaceholder="Search geography name or pincode…"
           currentFilters={filters}
           currentSort={sort}
+          actions={actions}
         />
 
         {/* Footer note */}
@@ -767,15 +806,12 @@ export default function GeographyListPage() {
         onSave={handleQuickAddSave}
       />
 
-      {/* ── Deactivate Confirm Dialog ── */}
-      <ConfirmDialog
-        open={!!confirmNode}
-        onClose={() => setConfirmNode(null)}
-        onConfirm={confirmDeactivate}
-        title={confirmMsg.title}
-        description={confirmMsg.description}
-        confirmLabel="Deactivate"
-        destructive
+      <GeographyDeleteDialog
+        node={deleteTarget}
+        nodes={nodes}
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onDeleted={handleDeleted}
       />
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}

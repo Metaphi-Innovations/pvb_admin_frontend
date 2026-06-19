@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import EmployeeClaimsPageClient from "./EmployeeClaimsPageClient";
 
-export default function LegacyRedirect() {
-  redirect("/accounts/vouchers?tab=journal");
+export default function Page() {
+  return <EmployeeClaimsPageClient />;
 }

@@ -47,6 +47,7 @@ import {
 import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
+import { ListingAuditCell } from "@/components/listing";
 
 function StatusBadge({ status }: { status: WarehouseStatus }) {
   const cfg = {
@@ -60,15 +61,6 @@ function StatusBadge({ status }: { status: WarehouseStatus }) {
     <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium border inline-flex items-center justify-center whitespace-nowrap", cfg)}>
       {formatStatus(status)}
     </span>
-  );
-}
-
-function AuditCell({ name, date }: { name: string; date?: string }) {
-  return (
-    <div className="space-y-0.5">
-      <p className="text-[11px] font-semibold leading-4 text-brand-700">{name}</p>
-      {date ? <p className="text-[10px] font-mono leading-3 text-muted-foreground">{date}</p> : null}
-    </div>
   );
 }
 
@@ -236,15 +228,7 @@ export default function WarehouseListPage() {
       width: "90px",
       render: (val, row) => <span className="font-mono text-xs text-foreground">{row.pincode || "—"}</span>,
     },
-    {
-      key: "capacity",
-      header: "Capacity",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "100px",
-      render: (val, row) => row.capacity ? row.capacity.toLocaleString("en-IN") : "—",
-    },
+
     {
       key: "manager",
       header: "Manager",
@@ -387,7 +371,7 @@ export default function WarehouseListPage() {
       filterable: true,
       filterType: "text",
       width: "120px",
-      render: (val, row) => <AuditCell name={row.createdBy} date={row.createdDate} />,
+      render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />,
     },
     {
       key: "updatedBy",
@@ -396,7 +380,7 @@ export default function WarehouseListPage() {
       filterable: true,
       filterType: "text",
       width: "120px",
-      render: (val, row) => <AuditCell name={row.updatedBy} date={row.updatedDate} />,
+      render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />,
     },
   ];
 
@@ -461,13 +445,13 @@ export default function WarehouseListPage() {
     const headers = [
       "Warehouse Code", "Warehouse Name", "Warehouse Type", "GST Number",
       "Contact Person", "Mobile Number", "Email Address", "Address",
-      "State", "District", "City", "Pincode", "Capacity",
+      "State", "District", "City", "Pincode",
       "Manager", "Operated By", "Status",
     ];
     const rows = filtered.map(r => [
       r.warehouseCode, r.warehouseName, r.warehouseType, r.gstNumber,
       r.contactPerson, r.mobileNumber, r.emailAddress, `"${r.address}"`,
-      r.state, r.district, r.city, r.pincode, String(r.capacity),
+      r.state, r.district, r.city, r.pincode,
       r.manager, r.operatedBy, formatStatus(r.status),
     ]);
     const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
@@ -496,7 +480,7 @@ export default function WarehouseListPage() {
         <div>
           <h1 className="text-xl font-bold text-foreground">Warehouse Master</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Manage warehouse locations, capacity, and operations
+            Manage warehouse locations and operations
           </p>
         </div>
 

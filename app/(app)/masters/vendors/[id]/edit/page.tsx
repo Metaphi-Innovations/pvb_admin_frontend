@@ -37,7 +37,6 @@ export default function EditVendorPage() {
   const router = useRouter();
   const id = Number(params.id);
   const [form, setForm] = useState<VendorFormValues | null>(null);
-  const [vendorCode, setVendorCode] = useState("");
   const [status, setStatus] = useState<"active" | "inactive">("active");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
@@ -48,7 +47,6 @@ export default function EditVendorPage() {
       return;
     }
     setForm(vendorToForm(v));
-    setVendorCode(v.vendorCode);
     setStatus(v.status);
   }, [id, router]);
 
@@ -63,7 +61,7 @@ export default function EditVendorPage() {
     if (!existing) return;
     const updated = formToVendor(form, {
       id,
-      vendorCode,
+      vendorCode: existing.vendorCode,
       status,
       createdBy: existing.createdBy,
       createdDate: existing.createdDate,
@@ -82,10 +80,15 @@ export default function EditVendorPage() {
   return (
     <FormContainer
       title="Edit Vendor"
-      description={`Masters → Vendor Master → ${vendorCode}`}
+      description={`Masters → Vendor Master → ${vendor?.vendorName ?? "Edit"}`}
       onBack={() => router.push(`/masters/vendors/${id}`)}
       actions={
         <div className="flex items-center gap-2">
+          {vendor?.vendorCode && (
+            <span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
+              {vendor.vendorCode}
+            </span>
+          )}
           <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.push(`/masters/vendors/${id}`)}>
             Cancel
           </Button>
@@ -95,7 +98,7 @@ export default function EditVendorPage() {
         </div>
       }
     >
-      <VendorForm form={form} onChange={setForm} vendorCode={vendorCode} />
+      <VendorForm form={form} onChange={setForm} vendorCode={vendor?.vendorCode} />
       {toast && <Toast msg={toast.msg} type={toast.type} onDismiss={() => setToast(null)} />}
     </FormContainer>
   );

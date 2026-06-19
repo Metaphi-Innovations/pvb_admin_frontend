@@ -21,8 +21,8 @@ export function RecordStatusToggle({
       onClick={() => !disabled && onChange(!active)}
       className={cn(
         "relative inline-flex h-[21px] w-[38px] shrink-0 items-center rounded-full transition-colors duration-200",
-        "outline-none focus-visible:ring-2 focus-visible:ring-[#1554B4]/30",
-        active ? "bg-[#1E9E61]" : "bg-slate-300",
+      "outline-none focus-visible:ring-2 focus-visible:ring-[#E57A1F]/30",
+      active ? "bg-[#E57A1F]" : "bg-[#E5E7EB]",
         disabled && "opacity-50 cursor-not-allowed",
       )}
     >

@@ -12,6 +12,7 @@ export function resolveCoaVisualLevel(
   node: ChartOfAccount,
   records: ChartOfAccount[],
 ): CoaVisualLevel {
+  if (node.nodeLevel === "sub_ledger") return "sub_ledger";
   if (node.nodeLevel === "ledger") return "ledger";
   if (canAddLedgerUnder(node, records)) return "leaf_group";
   return node.nodeLevel;
@@ -23,6 +24,7 @@ export const VISUAL_BADGE_LABEL: Record<CoaVisualLevel, string> = {
   sub_group: "Sub Group",
   leaf_group: "Leaf Group",
   ledger: "Ledger",
+  sub_ledger: "Sub-Ledger",
 };
 
 export const VISUAL_ICON: Record<CoaVisualLevel, LucideIcon> = {
@@ -31,6 +33,7 @@ export const VISUAL_ICON: Record<CoaVisualLevel, LucideIcon> = {
   sub_group: Layers,
   leaf_group: FileText,
   ledger: BookOpen,
+  sub_ledger: BookOpen,
 };
 
 export const VISUAL_BADGE_CLASS: Record<CoaVisualLevel, string> = {
@@ -39,6 +42,7 @@ export const VISUAL_BADGE_CLASS: Record<CoaVisualLevel, string> = {
   sub_group: "bg-purple-50 text-purple-800 border-purple-200/70",
   leaf_group: "bg-emerald-50 text-emerald-800 border-emerald-200/70",
   ledger: "bg-slate-100 text-slate-600 border-slate-200/80",
+  sub_ledger: "bg-slate-50 text-slate-700 border-slate-200/80",
 };
 
 export const VISUAL_ICON_CLASS: Record<CoaVisualLevel, string> = {
@@ -47,6 +51,7 @@ export const VISUAL_ICON_CLASS: Record<CoaVisualLevel, string> = {
   sub_group: "text-purple-600",
   leaf_group: "text-emerald-600",
   ledger: "text-slate-500",
+  sub_ledger: "text-slate-600",
 };
 
 export const VISUAL_ROW_CLASS: Record<CoaVisualLevel, string> = {
@@ -55,6 +60,7 @@ export const VISUAL_ROW_CLASS: Record<CoaVisualLevel, string> = {
   sub_group: "text-[12px] font-medium text-foreground/80",
   leaf_group: "text-[12px] font-medium text-foreground/85",
   ledger: "text-[12px] font-medium text-foreground/75",
+  sub_ledger: "text-[12px] font-medium text-foreground/70",
 };
 
 /** @deprecated Use VISUAL_* with resolveCoaVisualLevel */
@@ -68,6 +74,7 @@ export const LEVEL_ROW_CLASS: Record<CoaNodeLevel, string> = {
   account_group: VISUAL_ROW_CLASS.account_group,
   sub_group: VISUAL_ROW_CLASS.sub_group,
   ledger: VISUAL_ROW_CLASS.ledger,
+  sub_ledger: VISUAL_ROW_CLASS.sub_ledger,
 };
 
 export const LEVEL_SELECTED_ROW_CLASS: Record<CoaNodeLevel, string> = {
@@ -75,6 +82,7 @@ export const LEVEL_SELECTED_ROW_CLASS: Record<CoaNodeLevel, string> = {
   account_group: "text-[13px] font-semibold text-brand-900",
   sub_group: "text-[13px] font-semibold text-brand-900",
   ledger: "text-[12px] font-semibold text-foreground",
+  sub_ledger: "text-[12px] font-semibold text-foreground",
 };
 
 export const LEVEL_TITLE_CLASS: Record<CoaNodeLevel, string> = {
@@ -82,4 +90,5 @@ export const LEVEL_TITLE_CLASS: Record<CoaNodeLevel, string> = {
   account_group: "text-lg font-semibold text-foreground",
   sub_group: "text-base font-semibold text-foreground/90",
   ledger: "text-lg font-semibold text-foreground",
+  sub_ledger: "text-base font-semibold text-foreground/90",
 };

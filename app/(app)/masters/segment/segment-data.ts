@@ -5,7 +5,7 @@ import {
   type MasterStatus,
 } from "@/lib/masters/common";
 
-export const SEGMENT_STORAGE_KEY = "ds_master_segment_v1";
+export const SEGMENT_STORAGE_KEY = "ds_master_segment_v2";
 
 export interface SegmentRecord extends BaseMasterRecord {
   segmentName: string;
@@ -28,31 +28,93 @@ export const DEFAULT_SEGMENT_FORM: SegmentForm = {
 };
 
 export const SEGMENT_SEED: SegmentRecord[] = [
-  { id: 1, segmentName: "Retail", segmentCode: "SEG-001", description: "Retail channel", status: "active", createdBy: "Admin", updatedBy: "Admin", createdAt: "2024-01-10", updatedAt: "2024-01-10" },
-  { id: 2, segmentName: "Institutional", segmentCode: "SEG-002", description: "Institutional buyers", status: "active", createdBy: "Admin", updatedBy: "Admin", createdAt: "2024-01-12", updatedAt: "2024-01-12" },
+  {
+    id: 1,
+    segmentName: "Rakshak",
+    segmentCode: "SEG-001",
+    description: "",
+    status: "active",
+    createdBy: "Admin User",
+    updatedBy: "Admin User",
+    createdAt: "2024-01-10",
+    updatedAt: "2024-01-10",
+  },
+  {
+    id: 2,
+    segmentName: "Poshak",
+    segmentCode: "SEG-002",
+    description: "",
+    status: "active",
+    createdBy: "Admin User",
+    updatedBy: "Admin User",
+    createdAt: "2024-01-12",
+    updatedAt: "2024-01-12",
+  },
+  {
+    id: 3,
+    segmentName: "Amritam",
+    segmentCode: "SEG-003",
+    description: "",
+    status: "active",
+    createdBy: "Admin User",
+    updatedBy: "Admin User",
+    createdAt: "2024-01-15",
+    updatedAt: "2024-01-15",
+  },
 ];
 
 export function segmentToForm(r: SegmentRecord): SegmentForm {
-  return { segmentName: r.segmentName, segmentCode: r.segmentCode, description: r.description, status: r.status };
+  return {
+    segmentName: r.segmentName,
+    segmentCode: r.segmentCode,
+    description: r.description,
+    status: r.status,
+  };
 }
 
-export function formToSegment(form: SegmentForm, id: number, existing?: SegmentRecord): SegmentRecord {
+export function formToSegment(
+  form: SegmentForm,
+  id: number,
+  existing?: SegmentRecord,
+): SegmentRecord {
   const now = masterToday();
   return {
     id,
     segmentName: form.segmentName.trim(),
-    segmentCode: form.segmentCode.trim(),
+    segmentCode: form.segmentCode.trim().toUpperCase(),
     description: form.description.trim(),
     status: form.status,
     createdBy: existing?.createdBy ?? MASTER_CURRENT_USER,
-    updatedBy: MASTER_CURRENT_USER,
+    updatedBy: "Admin User",
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };
 }
 
-export function validateSegmentForm(form: SegmentForm): string | null {
-  if (!form.segmentName.trim()) return "Segment name is required.";
-  if (!form.segmentCode.trim()) return "Segment code is required.";
-  return null;
+export function findSegmentDuplicate(
+  code: string,
+  records: SegmentRecord[],
+  excludeId?: number,
+): SegmentRecord | undefined {
+  const normalized = code.trim().toUpperCase();
+  return records.find(
+    (r) => r.id !== excludeId && r.segmentCode.trim().toUpperCase() === normalized,
+  );
+}
+
+export function validateSegmentForm(
+  form: SegmentForm,
+  records: SegmentRecord[],
+  excludeId?: number,
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!form.segmentName.trim()) {
+    errors.segmentName = "Segment name is required.";
+  }
+  if (!form.segmentCode.trim()) {
+    errors.segmentCode = "Segment code is required.";
+  } else if (findSegmentDuplicate(form.segmentCode, records, excludeId)) {
+    errors.segmentCode = "Segment code must be unique.";
+  }
+  return errors;
 }

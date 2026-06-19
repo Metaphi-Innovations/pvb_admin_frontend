@@ -1,13 +1,28 @@
 "use client";
 
+import { loadMasterRecords } from "@/lib/masters/common";
+import { SEGMENT_STORAGE_KEY, SEGMENT_SEED, type SegmentRecord } from "../segment/segment-data";
+import { loadCategories } from "../categories/category-data";
+import {
+  FORMULATION_STORAGE_KEY,
+  FORMULATION_SEED,
+  type FormulationRecord,
+} from "../formulation/formulation-data";
+import { CFU_SEED, CFU_STORAGE_KEY, type CfuRecord } from "../cfu/cfu-data";
+import { loadGSTMasters, type GSTMaster } from "../gst/gst-data";
+import { loadHSNMasters } from "../hsn/hsn-data";
+
 export type ProductStatus = "active" | "inactive";
 
 export type ProductAssetMediaKind = "image" | "video" | "pdf" | "document" | "spreadsheet";
+
+export type ProductAssetRole = "image" | "brochure" | "label" | "link";
 
 export interface ProductAsset {
   id: string;
   type: "media" | "link";
   mediaKind?: ProductAssetMediaKind;
+  assetRole?: ProductAssetRole;
   name: string;
   title?: string;
   url: string;
@@ -25,27 +40,166 @@ export interface ProductAsset {
 
 export type ProductMediaItem = ProductAsset;
 
+export interface ProductImage {
+  id: string;
+  name: string;
+  url: string;
+  previewUrl?: string;
+  size?: string;
+  sizeBytes?: number;
+  mimeType?: string;
+  uploaded?: boolean;
+  createdAt?: string;
+}
+
+export interface ProductUrl {
+  id: string;
+  url: string;
+  createdAt?: string;
+}
+
+const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
+
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function isValidProductUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value.trim());
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function isAllowedProductImageFile(file: File): boolean {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const mime = file.type.toLowerCase();
+  return (
+    mime.startsWith("image/") &&
+    (IMAGE_EXTENSIONS.has(ext) ||
+      ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(mime))
+  );
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+export async function createProductImageFromFile(file: File): Promise<ProductImage> {
+  const dataUrl = await readFileAsDataUrl(file);
+  return {
+    id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: file.name,
+    url: dataUrl,
+    previewUrl: dataUrl,
+    size: formatFileSize(file.size),
+    sizeBytes: file.size,
+    mimeType: file.type,
+    uploaded: true,
+    createdAt: todayStr(),
+  };
+}
+
+export function createProductUrl(url: string): ProductUrl {
+  const trimmed = url.trim();
+  return {
+    id: `url-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    url: trimmed,
+    createdAt: todayStr(),
+  };
+}
+
+function legacyAssetToImage(item: ProductAsset): ProductImage | null {
+  const isImage =
+    item.type === "media" &&
+    (item.mediaKind === "image" || item.kind === "image");
+  if (!isImage) return null;
+  const url = item.url ?? item.previewUrl ?? item.src ?? "";
+  if (!url) return null;
+  return {
+    id: item.id,
+    name: item.name,
+    url,
+    previewUrl: item.previewUrl ?? item.src ?? url,
+    size: item.size ?? item.sizeLabel,
+    mimeType: item.fileType,
+    uploaded: item.uploaded ?? true,
+    createdAt: item.createdAt,
+  };
+}
+
+function legacyAssetToUrl(item: ProductAsset): ProductUrl | null {
+  if (item.type !== "link" && item.assetRole !== "link" && item.kind !== "link") {
+    return null;
+  }
+  const url = item.url?.trim();
+  if (!url) return null;
+  return {
+    id: item.id,
+    url,
+    createdAt: item.createdAt,
+  };
+}
+
+export function getProductImages(product: Pick<Product, "productImages" | "assets" | "mediaItems">): ProductImage[] {
+  if (product.productImages?.length) return product.productImages;
+  const legacy = product.assets ?? product.mediaItems ?? [];
+  return legacy
+    .map(legacyAssetToImage)
+    .filter((item): item is ProductImage => item !== null);
+}
+
+export function getProductUrls(product: Pick<Product, "productUrls" | "assets" | "mediaItems">): ProductUrl[] {
+  if (product.productUrls?.length) return product.productUrls;
+  const legacy = product.assets ?? product.mediaItems ?? [];
+  return legacy
+    .map(legacyAssetToUrl)
+    .filter((item): item is ProductUrl => item !== null);
+}
+
+export function getImagePreviewUrl(image: ProductImage): string {
+  return image.previewUrl ?? image.url;
+}
+
 export interface Product {
   id: number;
-  productId: string;
+  /** @deprecated Legacy product code — not shown in UI. Use `sku` instead. */
+  productId?: string;
   productName: string;
+  scientificName?: string;
   category: string;
   subCategory: string;
   segment: string;
-  formulation: string;
+  /** Product form (e.g. Wettable Powder, Liquid) — was `formulation` */
+  form: string;
+  /** CFU count from CFU Master (e.g. 1×10⁸ cells/ml) */
+  cfu?: string;
+  /** @deprecated use `form` */
+  formulation?: string;
   hsnCode: string;
+  hsnId?: number;
   gstRate: string;
+  gstId?: number;
   sku: string;
-  cropApplicable: string;
-  mrp: number;
-  costPrice: number;
-  distributorPrice: number;
   status: ProductStatus;
   createdBy: string;
   createdDate: string;
   updatedBy: string;
   updatedDate: string;
+  productImages?: ProductImage[];
+  productUrls?: ProductUrl[];
+  /** @deprecated Merged media store — use productImages + productUrls */
   assets?: ProductAsset[];
+  /** @deprecated Use productImages + productUrls */
   mediaItems?: ProductAsset[];
   baseUnit?: string;
   packagingUnit?: string;
@@ -66,13 +220,24 @@ export function detectAssetKind(file: File): ProductAssetMediaKind {
   return "document";
 }
 
-export function createMediaItem(file: File, kind?: ProductAssetMediaKind): ProductAsset {
-  const mediaKind = kind ?? detectAssetKind(file);
+export function createMediaItem(file: File, role?: ProductAssetRole): ProductAsset {
+  const mediaKind = detectAssetKind(file);
   const objectUrl = URL.createObjectURL(file);
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  let assetRole: ProductAssetRole = role ?? "image";
+  if (!role) {
+    if (mediaKind === "pdf") assetRole = "brochure";
+    else if (mediaKind === "image") assetRole = "image";
+    else assetRole = "brochure";
+  }
+  if (ext.includes("label") || file.name.toLowerCase().includes("label")) {
+    assetRole = "label";
+  }
   return {
     id: `${file.name}-${file.size}-${file.lastModified}`,
     type: "media",
     mediaKind,
+    assetRole,
     name: file.name,
     url: objectUrl,
     file,
@@ -92,6 +257,7 @@ export function createLinkMediaItem(title: string, url: string): ProductAsset {
   return {
     id: `${title}-${url}`,
     type: "link",
+    assetRole: "link",
     name: title || url,
     title,
     url,
@@ -101,64 +267,118 @@ export function createLinkMediaItem(title: string, url: string): ProductAsset {
   };
 }
 
-export const PRODUCT_CATEGORY_OPTIONS = [
-  { value: "seeds", label: "Seeds" },
-  { value: "fertilizers", label: "Fertilizers" },
-  { value: "pesticides", label: "Pesticides" },
-  { value: "bio-products", label: "Bio Products" },
-  { value: "equipment", label: "Equipment" },
-];
+export interface MasterSelectOption {
+  value: string;
+  label: string;
+  sublabel?: string;
+}
 
-export const PRODUCT_SUBCATEGORY_OPTIONS = [
-  { value: "hybrid-seeds", label: "Hybrid Seeds" },
-  { value: "water-soluble-fertilizers", label: "Water Soluble Fertilizers" },
-  { value: "fungicides", label: "Fungicides" },
-  { value: "herbicides", label: "Herbicides" },
-  { value: "insecticides", label: "Insecticides" },
-];
+export function getAssetDisplayType(item: ProductAsset): string {
+  if (item.type === "link" || item.assetRole === "link") return "External URL";
+  if (item.assetRole === "brochure") return "Product Brochure";
+  if (item.assetRole === "label") return "Product Label Artwork";
+  if (item.mediaKind === "image" || item.kind === "image") return "Product Image";
+  if (item.mediaKind === "pdf") return "Product Brochure";
+  return "Document";
+}
 
-export const PRODUCT_SEGMENT_OPTIONS = [
-  { value: "premium", label: "Premium" },
-  { value: "economy", label: "Economy" },
-  { value: "commercial", label: "Commercial" },
-  { value: "retail", label: "Retail" },
-  { value: "institutional", label: "Institutional" },
-];
+export function loadActiveSegmentOptions(): MasterSelectOption[] {
+  if (typeof window === "undefined") {
+    return SEGMENT_SEED.filter((s) => s.status === "active").map((s) => ({
+      value: s.segmentName,
+      label: s.segmentName,
+    }));
+  }
+  return loadMasterRecords<SegmentRecord>(SEGMENT_STORAGE_KEY, SEGMENT_SEED)
+    .filter((s) => s.status === "active")
+    .map((s) => ({ value: s.segmentName, label: s.segmentName }));
+}
 
-export const PRODUCT_FORMULATION_OPTIONS = [
-  { value: "liquid", label: "Liquid" },
-  { value: "powder", label: "Powder" },
-  { value: "granules", label: "Granules" },
-  { value: "tablets", label: "Tablets" },
-  { value: "suspension", label: "Suspension" },
-  { value: "ec", label: "Emulsifiable Concentrate (EC)" },
-  { value: "wp", label: "Wettable Powder (WP)" },
-];
+export function loadActiveCategoryOptions(): MasterSelectOption[] {
+  return loadCategories()
+    .filter((c) => c.status === "active")
+    .map((c) => ({ value: c.categoryName, label: c.categoryName }));
+}
 
-export const PRODUCT_UNIT_OPTIONS = [
-  { value: "kg", label: "KG" },
-  { value: "gram", label: "Gram" },
-  { value: "liter", label: "Liter" },
-  { value: "ml", label: "ML" },
-  { value: "packet", label: "Packet" },
-  { value: "bottle", label: "Bottle" },
-  { value: "box", label: "Box" },
-  { value: "drum", label: "Drum" },
-];
+export function loadActiveFormOptions(): MasterSelectOption[] {
+  if (typeof window === "undefined") {
+    return FORMULATION_SEED.filter((f) => f.status === "active").map((f) => ({
+      value: f.formulationName,
+      label: f.formulationName,
+    }));
+  }
+  return loadMasterRecords<FormulationRecord>(FORMULATION_STORAGE_KEY, FORMULATION_SEED)
+    .filter((f) => f.status === "active")
+    .map((f) => ({ value: f.formulationName, label: f.formulationName }));
+}
 
-export const PRODUCT_GST_OPTIONS = [
-  { value: "0%", label: "0%" },
-  { value: "5%", label: "5%" },
-  { value: "12%", label: "12%" },
-  { value: "18%", label: "18%" },
-  { value: "28%", label: "28%" },
-];
+export function loadActiveCfuOptions(): MasterSelectOption[] {
+  if (typeof window === "undefined") {
+    return CFU_SEED.filter((c) => c.status === "active").map((c) => ({
+      value: c.cfuName,
+      label: c.cfuName,
+      sublabel: c.description || undefined,
+    }));
+  }
+  return loadMasterRecords<CfuRecord>(CFU_STORAGE_KEY, CFU_SEED)
+    .filter((c) => c.status === "active")
+    .map((c) => ({
+      value: c.cfuName,
+      label: c.cfuName,
+      sublabel: c.description || undefined,
+    }));
+}
 
-export const PRODUCT_REORDER_LEVEL_OPTIONS = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-];
+export function loadActiveGstOptions(): MasterSelectOption[] {
+  return loadGSTMasters()
+    .filter((g) => g.status === "active")
+    .map((g) => ({
+      value: `${g.gstPercentage}%`,
+      label: `${g.gstPercentage}%`,
+      sublabel: g.gstId,
+    }));
+}
+
+export function formatGstPercentage(value: number): string {
+  return `${value}%`;
+}
+
+export interface ResolvedProductTax {
+  hsnId: number;
+  hsnCode: string;
+  gstRate: string;
+  gstId?: number;
+}
+
+export function findGstMasterByRate(gstRate: string): GSTMaster | undefined {
+  const trimmed = gstRate.trim().replace(/%$/, "");
+  if (!trimmed) return undefined;
+  const pct = parseFloat(trimmed);
+  if (isNaN(pct)) return undefined;
+  return loadGSTMasters().find(
+    (g) =>
+      g.status === "active" && Math.abs(g.gstPercentage - pct) < 0.001,
+  );
+}
+
+/** Resolve HSN + GST from HSN Master for Product auto-mapping */
+export function resolveProductTaxFromHsn(
+  hsnCode: string,
+): ResolvedProductTax | null {
+  const code = hsnCode.trim();
+  if (!code) return null;
+  const hsn = loadHSNMasters().find(
+    (h) => h.hsnCode === code && h.status === "active",
+  );
+  if (!hsn || !hsn.gstRate?.trim()) return null;
+  const gst = findGstMasterByRate(hsn.gstRate);
+  return {
+    hsnId: hsn.id,
+    hsnCode: hsn.hsnCode,
+    gstRate: hsn.gstRate,
+    gstId: gst?.id,
+  };
+}
 
 export const PRODUCT_STATUS_OPTIONS = [
   { value: "active", label: "Active" },
@@ -172,17 +392,14 @@ const SEED_PRODUCTS: Product[] = [
     id: 1,
     productId: "PRD-0001",
     productName: "Dharitri Hybrid Corn Gold",
+    scientificName: "Zea mays",
     category: "Seeds",
     subCategory: "",
-    segment: "Premium",
-    formulation: "Powder",
+    segment: "Rakshak",
+    form: "Granules",
     hsnCode: "1209",
     gstRate: "0%",
     sku: "SEED-CORN-001",
-    cropApplicable: "Corn",
-    mrp: 1450,
-    costPrice: 0,
-    distributorPrice: 0,
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-01-10",
@@ -191,42 +408,30 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "KG",
     packagingUnit: "Bag",
     conversionQuantity: 25,
-    assets: [
+    productImages: [
       {
         id: "prd-1-media-1",
-        type: "media",
-        mediaKind: "image",
         name: "dharitri-hybrid-corn-gold.jpg",
         url: "https://images.unsplash.com/photo-1464226184884-fa280b77c399?auto=format&fit=crop&w=1200&q=80",
+        previewUrl: "https://images.unsplash.com/photo-1464226184884-fa280b77c399?auto=format&fit=crop&w=1200&q=80",
+        size: "245 KB",
         uploaded: true,
         createdAt: "2026-06-03",
       },
       {
         id: "prd-1-media-2",
-        type: "media",
-        mediaKind: "image",
         name: "dharitri-pack-shot.jpg",
         url: "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=1200&q=80",
+        previewUrl: "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=1200&q=80",
+        size: "198 KB",
         uploaded: true,
         createdAt: "2026-06-03",
       },
-      {
-        id: "prd-1-doc-1",
-        type: "media",
-        mediaKind: "pdf",
-        name: "product-brochure.pdf",
-        url: "https://example.com/documents/product-brochure.pdf",
-        size: "1.2 MB",
-        uploaded: true,
-        createdAt: "2026-06-03",
-      },
+    ],
+    productUrls: [
       {
         id: "prd-1-link-1",
-        type: "link",
-        name: "Official Product Page",
-        title: "Official Product Page",
         url: "https://example.com/products/dharitri-hybrid-corn-gold",
-        uploaded: true,
         createdAt: "2026-06-03",
       },
     ],
@@ -235,17 +440,14 @@ const SEED_PRODUCTS: Product[] = [
     id: 2,
     productId: "PRD-0002",
     productName: "NutriGrow WS 19:19:19",
+    scientificName: "NPK 19:19:19",
     category: "Fertilizers",
     subCategory: "",
-    segment: "Commercial",
-    formulation: "Powder",
+    segment: "Poshak",
+    form: "Wettable Powder",
     hsnCode: "3105",
     gstRate: "5%",
     sku: "FERT-WSF-019",
-    cropApplicable: "Vegetables",
-    mrp: 1325,
-    costPrice: 0,
-    distributorPrice: 0,
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-01-18",
@@ -254,33 +456,31 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "KG",
     packagingUnit: "Box",
     conversionQuantity: 10,
-    assets: [
+    productImages: [
       {
         id: "prd-2-media-1",
-        type: "media",
-        mediaKind: "image",
         name: "nutrigrow-wsf-191919.jpg",
         url: "https://images.unsplash.com/photo-1465433360938-e1e1f5a7f7d6?auto=format&fit=crop&w=1200&q=80",
+        previewUrl: "https://images.unsplash.com/photo-1465433360938-e1e1f5a7f7d6?auto=format&fit=crop&w=1200&q=80",
+        size: "210 KB",
         uploaded: true,
         createdAt: "2026-06-03",
       },
     ],
+    productUrls: [],
   },
   {
     id: 3,
     productId: "PRD-0003",
     productName: "Shield EC Crop Guard",
+    scientificName: "Cypermethrin 10% EC",
     category: "Pesticides",
     subCategory: "",
-    segment: "Retail",
-    formulation: "Emulsifiable Concentrate (EC)",
+    segment: "Rakshak",
+    form: "Liquid",
     hsnCode: "3808",
     gstRate: "18%",
     sku: "PEST-EC-221",
-    cropApplicable: "Cotton",
-    mrp: 680,
-    costPrice: 0,
-    distributorPrice: 0,
     status: "inactive",
     createdBy: "Admin",
     createdDate: "2026-02-03",
@@ -289,23 +489,22 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "Liter",
     packagingUnit: "Drum",
     conversionQuantity: 200,
-    assets: [],
+    productImages: [],
+    productUrls: [],
   },
   {
     id: 4,
     productId: "PRD-0004",
     productName: "BioRoot Vital Suspension",
+    scientificName: "Trichoderma viride",
     category: "Bio Products",
     subCategory: "",
-    segment: "Institutional",
-    formulation: "Suspension",
+    segment: "Amritam",
+    form: "Suspension",
+    cfu: "1×10⁸ cells/ml",
     hsnCode: "3002",
     gstRate: "12%",
     sku: "BIO-SUS-104",
-    cropApplicable: "Paddy",
-    mrp: 890,
-    costPrice: 0,
-    distributorPrice: 0,
     status: "inactive",
     createdBy: "Admin",
     createdDate: "2026-02-16",
@@ -314,35 +513,58 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "Gram",
     packagingUnit: "Packet",
     conversionQuantity: 50,
-    assets: [],
+    productImages: [],
+    productUrls: [],
   },
 ];
 
 function migrateProduct(raw: Record<string, unknown>): Product {
-  const p = raw as Partial<Product> & { mediaItems?: ProductAsset[] };
-  const assets = Array.isArray(p.assets) ? (p.assets as ProductAsset[]) : Array.isArray(p.mediaItems) ? (p.mediaItems as ProductAsset[]) : [];
+  const p = raw as Partial<Product> & {
+    mediaItems?: ProductAsset[];
+    formulation?: string;
+    cropApplicable?: string;
+  };
+  const legacyAssets = Array.isArray(p.assets)
+    ? (p.assets as ProductAsset[])
+    : Array.isArray(p.mediaItems)
+      ? (p.mediaItems as ProductAsset[])
+      : [];
+  const productImages =
+    Array.isArray(p.productImages) && p.productImages.length > 0
+      ? p.productImages
+      : legacyAssets
+          .map(legacyAssetToImage)
+          .filter((item): item is ProductImage => item !== null);
+  const productUrls =
+    Array.isArray(p.productUrls) && p.productUrls.length > 0
+      ? p.productUrls
+      : legacyAssets
+          .map(legacyAssetToUrl)
+          .filter((item): item is ProductUrl => item !== null);
   return {
     id: p.id ?? 0,
     productId: p.productId ?? "",
     productName: p.productName ?? "",
+    scientificName: p.scientificName ?? "",
     category: p.category ?? "",
     subCategory: p.subCategory ?? "",
     segment: p.segment ?? "",
-    formulation: p.formulation ?? "",
+    form: p.form ?? p.formulation ?? "",
+    cfu: p.cfu ?? "",
     hsnCode: p.hsnCode ?? "",
-    gstRate: p.gstRate ?? "18%",
+    hsnId: p.hsnId !== undefined ? Number(p.hsnId) : undefined,
+    gstRate: p.gstRate ?? "",
+    gstId: p.gstId !== undefined ? Number(p.gstId) : undefined,
     sku: p.sku ?? "",
-    cropApplicable: p.cropApplicable ?? "",
-    mrp: Number(p.mrp ?? 0),
-    costPrice: Number(p.costPrice ?? 0),
-    distributorPrice: Number(p.distributorPrice ?? 0),
     status: (p.status as ProductStatus) ?? "active",
     createdBy: p.createdBy ?? "Admin",
     createdDate: p.createdDate ?? todayStr(),
     updatedBy: p.updatedBy ?? "Admin",
     updatedDate: p.updatedDate ?? todayStr(),
-    assets,
-    mediaItems: assets,
+    productImages,
+    productUrls,
+    assets: legacyAssets,
+    mediaItems: legacyAssets,
     baseUnit: p.baseUnit ?? "",
     packagingUnit: p.packagingUnit ?? "",
     conversionQuantity: p.conversionQuantity !== undefined ? Number(p.conversionQuantity) : undefined,
@@ -369,12 +591,9 @@ export function nextProductId(list: Product[]): number {
   return Math.max(0, ...list.map((item) => item.id)) + 1;
 }
 
-export function generateProductCode(list: Product[]): string {
-  const maxNum = list.reduce((max, item) => {
-    const match = item.productId.match(/PRD-(\d+)/);
-    return match ? Math.max(max, parseInt(match[1], 10)) : max;
-  }, 0);
-  return `PRD-${String(maxNum + 1).padStart(4, "0")}`;
+/** @deprecated Product code is no longer generated. Use SKU as the product identifier. */
+export function generateProductCode(_list: Product[]): string {
+  return "";
 }
 
 export function formatMoney(value: number): string {

@@ -61,6 +61,8 @@ import {
   MASTER_CURRENT_USER,
   type MasterStatus,
 } from "@/lib/masters/common";
+import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 
 type SortKey = "unitCode" | "unitName" | "symbol" | "description" | "status" | "createdBy" | "updatedBy";
 
@@ -82,36 +84,6 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
         <X className="h-3.5 w-3.5" />
       </button>
-    </div>
-  );
-}
-
-function StatusToggle({ record, onToggle }: { record: UnitRecord; onToggle: (item: UnitRecord) => void }) {
-  const active = record.status === "active";
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle(record);
-      }}
-      className={cn(
-        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-        active
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
-      )}
-    >
-      {active ? "Active" : "Inactive"}
-    </button>
-  );
-}
-
-function AuditCell({ name, date }: { name: string; date?: string }) {
-  return (
-    <div className="space-y-0.5">
-      <p className="text-[11px] font-semibold leading-4 text-brand-700">{name}</p>
-      {date ? <p className="text-[10px] font-mono leading-3 text-muted-foreground">{date}</p> : null}
     </div>
   );
 }
@@ -541,13 +513,13 @@ export default function UnitMasterPage() {
                         {row.description || "—"}
                       </td>
                       <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                        <StatusToggle record={row} onToggle={toggleStatus} />
+                        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
                       </td>
                       <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
-                        <AuditCell name={row.createdBy} date={row.createdAt} />
+                        <ListingAuditCell name={row.createdBy} date={row.createdAt} variant="created" />
                       </td>
                       <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
-                        <AuditCell name={row.updatedBy} date={row.updatedAt} />
+                        <ListingAuditCell name={row.updatedBy} date={row.updatedAt} variant="updated" />
                       </td>
                       <td
                         className="sticky right-0 z-20 w-[80px] min-w-[80px] px-3 py-2.5 bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]"
@@ -603,20 +575,19 @@ export default function UnitMasterPage() {
               )}
             </p>
             <div className="flex items-center gap-2">
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
+              <AutocompleteSelect
+                options={[10, 25, 50, 100].map((value) => ({
+                  value: String(value),
+                  label: `${value} / page`,
+                }))}
+                value={String(pageSize)}
+                onChange={(v) => {
+                  setPageSize(Number(v));
                   setPage(1);
                 }}
-                className="px-2 text-xs bg-white border rounded-md h-7 border-border text-foreground"
-              >
-                {[10, 25, 50, 100].map((value) => (
-                  <option key={value} value={value}>
-                    {value} / page
-                  </option>
-                ))}
-              </select>
+                placeholder="Page size…"
+                className="h-7 text-xs w-28"
+              />
               <button
                 type="button"
                 onClick={() => setPage((prev) => Math.max(1, prev - 1))}

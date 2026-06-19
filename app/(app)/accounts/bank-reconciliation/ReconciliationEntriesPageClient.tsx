@@ -8,6 +8,8 @@ import { ModuleFiltersBar } from "@/components/module/ModuleFiltersBar";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, FileSpreadsheet, Link2 } from "lucide-react";
+import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
   getEntriesForStatement,
   getStatementById,
@@ -23,7 +25,13 @@ import { MatchEntryModal } from "./components/MatchEntryModal";
 import { MatchStatusBadge } from "./components/MatchStatusBadge";
 import { formatINR, monthYearLabel, RECONCILIATION_LIST_PATH } from "./reconciliation-utils";
 
-export default function ReconciliationEntriesPageClient({ statementId }: { statementId: number }) {
+export default function ReconciliationEntriesPageClient({
+  statementId,
+  embedded = false,
+}: {
+  statementId: number;
+  embedded?: boolean;
+}) {
   const statement = getStatementById(statementId);
   const [entries, setEntries] = useState<BankStatementEntry[]>([]);
   const [search, setSearch] = useState("");
@@ -61,16 +69,15 @@ export default function ReconciliationEntriesPageClient({ statementId }: { state
   }, [matchEntry, refresh]);
 
   if (!statement) {
-    return (
-      <AppLayout>
-        <div className="p-8 text-center text-sm text-muted-foreground">
-          Statement not found.{" "}
-          <Link href={RECONCILIATION_LIST_PATH} className="text-brand-600 underline">
-            Back to list
-          </Link>
-        </div>
-      </AppLayout>
+    const notFound = (
+      <div className="p-8 text-center text-sm text-muted-foreground">
+        Statement not found.{" "}
+        <Link href={RECONCILIATION_LIST_PATH} className="text-brand-600 underline">
+          Back to list
+        </Link>
+      </div>
     );
+    return embedded ? notFound : <AppLayout>{notFound}</AppLayout>;
   }
 
   const period = monthYearLabel(statement.month, statement.year);
@@ -84,56 +91,47 @@ export default function ReconciliationEntriesPageClient({ statementId }: { state
     }
   };
 
-  return (
-    <AppLayout>
-      <div className="max-w-[1680px] mx-auto space-y-3">
-        <PageHeader
-          title={statement.statementName}
-          description={`${statement.bankAccountName} · ${period} · ${statement.fileName}`}
-          breadcrumbs={[
-            { label: "Accounts", href: "/accounts" },
-            { label: "Bank Reconciliation", href: RECONCILIATION_LIST_PATH },
-            { label: "Entries" },
-          ]}
-          actions={
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" asChild>
-                <Link href={RECONCILIATION_LIST_PATH}>
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  Back
-                </Link>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs gap-1.5"
-                disabled={exporting || entries.length === 0}
-                onClick={handleExport}
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
-                Export Excel
-              </Button>
-            </div>
-          }
-        />
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" asChild>
+        <Link href={RECONCILIATION_LIST_PATH}>
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Back
+        </Link>
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 text-xs gap-1.5"
+        disabled={exporting || entries.length === 0}
+        onClick={handleExport}
+      >
+        <FileSpreadsheet className="w-3.5 h-3.5" />
+        Export Excel
+      </Button>
+    </div>
+  );
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-          {[
-            { label: "Total Entries", value: stats.total },
-            { label: "Matched", value: stats.matched },
-            { label: "Unmatched", value: stats.unmatched },
-            { label: "Reconciled", value: stats.reconciled },
-            { label: "Total Debit", value: formatINR(stats.totalDebit) },
-            { label: "Total Credit", value: formatINR(stats.totalCredit) },
-          ].map((c) => (
-            <div key={c.label} className="rounded-lg border bg-white px-3 py-2">
-              <p className="text-[10px] uppercase text-muted-foreground font-medium">{c.label}</p>
-              <p className="text-sm font-semibold tabular-nums mt-0.5">{c.value}</p>
-            </div>
-          ))}
+  const kpiCards = (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 p-4 border-b border-border/60 bg-muted/10">
+      {[
+        { label: "Total Entries", value: stats.total },
+        { label: "Matched", value: stats.matched },
+        { label: "Unmatched", value: stats.unmatched },
+        { label: "Reconciled", value: stats.reconciled },
+        { label: "Total Debit", value: formatINR(stats.totalDebit) },
+        { label: "Total Credit", value: formatINR(stats.totalCredit) },
+      ].map((c) => (
+        <div key={c.label} className="rounded-lg border bg-white px-3 py-2">
+          <p className="text-[10px] uppercase text-muted-foreground font-medium">{c.label}</p>
+          <p className="text-sm font-semibold tabular-nums mt-0.5">{c.value}</p>
         </div>
+      ))}
+    </div>
+  );
 
-        <ModuleFiltersBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Narration, reference, matched record…">
+  const filterBar = (
+    <ModuleFiltersBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Narration, reference, matched record…">
           <Select value={matchStatus} onValueChange={setMatchStatus}>
             <SelectTrigger className="h-8 w-[130px] text-xs bg-white">
               <SelectValue placeholder="Match status" />
@@ -184,11 +182,12 @@ export default function ReconciliationEntriesPageClient({ statementId }: { state
             </SelectContent>
           </Select>
         </ModuleFiltersBar>
+  );
 
-        <div className="page-shell overflow-hidden">
-          <div className="overflow-x-auto max-h-[calc(100vh-320px)]">
-            <table className="w-full text-table min-w-[1400px]">
-              <thead className="sticky top-0 z-10 bg-white border-b">
+  const entriesTable = (
+    <div className="flex-1 overflow-auto min-h-0">
+      <table className="w-full text-table min-w-[1400px]">
+        <thead className="sticky top-0 z-10 bg-muted/20 border-b border-border/60">
                 <tr>
                   {[
                     "Date",
@@ -222,7 +221,7 @@ export default function ReconciliationEntriesPageClient({ statementId }: { state
                   </tr>
                 ) : (
                   entries.map((e) => (
-                    <tr key={e.id} className="border-b hover:bg-brand-50/25">
+                    <tr key={e.id} className="border-b border-border/40 hover:bg-muted/20">
                       <td className="px-2.5 py-2 text-xs text-muted-foreground whitespace-nowrap">{e.transactionDate}</td>
                       <td className="px-2.5 py-2 text-xs max-w-[200px] truncate" title={e.narration}>
                         {e.narration}
@@ -262,16 +261,58 @@ export default function ReconciliationEntriesPageClient({ statementId }: { state
                 )}
               </tbody>
             </table>
-          </div>
-        </div>
-      </div>
+    </div>
+  );
 
-      <MatchEntryModal
-        entry={matchEntry}
-        open={!!matchEntry}
-        onOpenChange={(v) => !v && setMatchEntry(null)}
-        onUpdated={syncMatchEntry}
-      />
+  const matchModal = (
+    <MatchEntryModal
+      entry={matchEntry}
+      open={!!matchEntry}
+      onOpenChange={(v) => !v && setMatchEntry(null)}
+      onUpdated={syncMatchEntry}
+    />
+  );
+
+  if (embedded) {
+    return (
+      <>
+        <AccountsPageShell
+          breadcrumbs={[
+            ...accountsBreadcrumb("Banking", "Bank Reconciliation", RECONCILIATION_LIST_PATH),
+            { label: statement.statementName },
+          ]}
+          title={statement.statementName}
+          description={`${statement.bankAccountName} · ${period} · ${statement.fileName}`}
+          actions={headerActions}
+          filters={filterBar}
+          layout="split"
+        >
+          {kpiCards}
+          {entriesTable}
+        </AccountsPageShell>
+        {matchModal}
+      </>
+    );
+  }
+
+  return (
+    <AppLayout>
+      <div className="max-w-[1680px] mx-auto space-y-3">
+        <PageHeader
+          title={statement.statementName}
+          description={`${statement.bankAccountName} · ${period} · ${statement.fileName}`}
+          breadcrumbs={[
+            { label: "Accounts", href: "/accounts/masters/chart-of-accounts" },
+            { label: "Bank Reconciliation", href: RECONCILIATION_LIST_PATH },
+            { label: "Entries" },
+          ]}
+          actions={headerActions}
+        />
+        {kpiCards}
+        {filterBar}
+        <div className="page-shell overflow-hidden">{entriesTable}</div>
+      </div>
+      {matchModal}
     </AppLayout>
   );
 }

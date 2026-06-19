@@ -52,9 +52,15 @@ import {
 	getActiveGSTMasters,
 	getActiveTDSMasters,
 } from "../customer-data";
+import { formatTdsSummary } from "../../tds/tds-data";
 import { readCustomerPermissions } from "../customer-permissions";
 import { loadOrders } from "@/app/(app)/sales/orders/orders-data";
 import { formatMoney } from "@/lib/accounts/money-format";
+import {
+	deriveGstRegistered,
+	getGstCategoryLabel,
+} from "@/lib/masters/gst-compliance";
+import { ComplianceRegistrationViewRows } from "@/components/masters/ComplianceRegistrationViewRows";
 
 const STATUS_VARIANT: Record<
   CustomerStatus,
@@ -108,12 +114,12 @@ function ComplianceRow({
       style={{ borderBottom: isLast ? "none" : "1px solid #F0F3FA" }}
     >
       <div
-        className="flex flex-shrink-0 items-center justify-center rounded-full"
+        className="flex items-center justify-center flex-shrink-0 rounded-full"
         style={{ width: "28px", height: "28px", background: t.bg }}
       >
         <Icon className="w-3.5 h-3.5" style={{ color: t.icon }} />
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="flex-1 min-w-0">
         <p className="text-[12.5px] font-medium text-[#3D5473] leading-tight">{label}</p>
         <p className="text-[11px] text-[#6B80A0] truncate">{value}</p>
       </div>
@@ -201,7 +207,7 @@ export default function CustomerDetailPage() {
     return (
       <AppLayout>
         <div className="flex flex-col items-center gap-3 py-16 text-center">
-          <ShieldAlert className="h-10 w-10 text-amber-600" />
+          <ShieldAlert className="w-10 h-10 text-amber-600" />
           <h1 className="text-lg font-bold">Access restricted</h1>
           <Link href="/masters/customers" className="text-xs text-[#1554B4] hover:underline">
             Back to listing
@@ -336,7 +342,7 @@ export default function CustomerDetailPage() {
     switch (activeTab) {
       case "overview":
         return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <RecordSectionCard title="Basic Details" icon={FileText} accent="blue">
               <RecordKvRow label="Customer Name" value={customer.customerName} highlight />
               <RecordKvRow
@@ -398,11 +404,38 @@ export default function CustomerDetailPage() {
       case "tax":
         return (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <RecordSectionCard title="Tax & Registration" icon={FileText} accent="blue">
-              <RecordKvRow label="GST Applicable" value={customer.gstApplicable ? "Yes" : "No"} />
-              {customer.gstApplicable && (
+            <RecordSectionCard title="GST & Tax Registration" icon={FileText} accent="orange">
+              <RecordKvRow
+                label="GST Registered"
+                value={
+                  deriveGstRegistered(
+                    customer.gstApplicable,
+                    customer.gstin,
+                    customer.gstCategory,
+                  )
+                    ? "Yes"
+                    : "No"
+                }
+              />
+              {deriveGstRegistered(
+                customer.gstApplicable,
+                customer.gstin,
+                customer.gstCategory,
+              ) && (
                 <>
+                  <RecordKvRow
+                    label="GST Registration Type"
+                    value={getGstCategoryLabel(customer.gstCategory ?? "regular")}
+                  />
                   <RecordKvRow label="GSTIN" value={customer.gstin} mono copy />
+                  <RecordKvRow
+                    label="Registered Company Name"
+                    value={customer.registeredLegalName || "—"}
+                  />
+                  <RecordKvRow
+                    label="Registered Address"
+                    value={customer.registeredAddress || "—"}
+                  />
                   <RecordKvRow
                     label="GST Code"
                     value={gst ? `${gst.gstId} (${gst.gstPercentage}%)` : "—"}
@@ -410,51 +443,26 @@ export default function CustomerDetailPage() {
                   />
                 </>
               )}
+              <RecordKvRow label="PAN Number" value={customer.pan || "—"} mono copy />
               <RecordKvRow label="TDS Applicable" value={customer.tdsApplicable ? "Yes" : "No"} />
               {customer.tdsApplicable && (
                 <RecordKvRow
                   label="TDS Section"
-                  value={tds ? `${tds.tdsCode} — ${tds.tdsRate}%` : "—"}
+                  value={tds ? `${formatTdsSummary(tds)} — ${tds.sectionName}` : "—"}
                   mono
+                  isLast
                 />
               )}
-              <RecordKvRow label="TAN #" value={customer.tan} mono />
-              <RecordKvRow label="CIB Regn #" value={customer.cibRegn} />
-              <RecordKvRow label="FCO Regn #" value={customer.fcoRegn} />
-              <RecordKvRow label="FSSAI #" value={customer.fssai} isLast />
             </RecordSectionCard>
 
-            <RecordSectionCard title="Compliance Status" icon={CheckCircle} accent="green">
-              <ComplianceRow
-                tone="green"
-                label="GSTIN Registered"
-                value={customer.gstin || "—"}
-                badge="Verified"
-              />
-              <ComplianceRow
-                tone="green"
-                label="TDS Active"
-                value={customer.tdsApplicable ? "Enabled" : "Not enabled"}
-                badge="Active"
-              />
-              <ComplianceRow
-                tone="blue"
-                label="TAN #"
-                value={customer.tan || "—"}
-                badge="On File"
-              />
-              <ComplianceRow
-                tone="green"
-                label="FSSAI Licensed"
-                value={customer.fssai || "—"}
-                badge="Valid"
-              />
-              <ComplianceRow
-                tone="amber"
-                label="CIB Registration"
-                value={customer.cibRegn || "—"}
-                badge="Review"
-                isLast
+            <RecordSectionCard title="Business Registrations" icon={CheckCircle} accent="green">
+              <RecordKvRow label="MSME Registered" value={customer.msmeRegistered ? "Yes" : "No"} />
+              {customer.msmeRegistered && (
+                <RecordKvRow label="MSME Number" value={customer.msmeNumber || "—"} mono copy />
+              )}
+              <ComplianceRegistrationViewRows
+                values={customer}
+                lastRowProps={{ isLast: true }}
               />
             </RecordSectionCard>
           </div>
@@ -487,7 +495,7 @@ export default function CustomerDetailPage() {
             </RecordSectionCard>
 
             <RecordSectionCard title="Additional Accounts" icon={Landmark} accent="blue">
-              <div className="flex flex-col items-center text-center py-6 px-4">
+              <div className="flex flex-col items-center px-4 py-6 text-center">
                 <div
                   className="flex items-center justify-center mb-3"
                   style={{
@@ -525,10 +533,6 @@ export default function CustomerDetailPage() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <RecordSectionCard title="Commercial Details" icon={IndianRupee} accent="orange">
               <RecordKvRow label="Credit Limit" value={formatCreditLimit(customer.creditLimit)} amount highlight />
-              <RecordKvRow
-                label="Interest Rate"
-                value={customer.interestRate ? `${customer.interestRate}%` : "—"}
-              />
               <RecordKvRow label="Payment Terms" value={payLabel} />
               <RecordKvRow label="Sales Man" value={customer.salesManName} isLast />
             </RecordSectionCard>
@@ -591,14 +595,6 @@ export default function CustomerDetailPage() {
                   >
                     {payLabel}
                   </span>
-                  {customer.interestRate ? (
-                    <span
-                      className="inline-flex items-center rounded-md text-[11px] font-semibold"
-                      style={{ background: "#FFFBEB", color: "#92400E", padding: "3px 9px" }}
-                    >
-                      {customer.interestRate}% p.a.
-                    </span>
-                  ) : null}
                 </div>
               </div>
             </RecordSectionCard>
@@ -620,7 +616,7 @@ export default function CustomerDetailPage() {
         return (
           <RecordSectionCard title="Status History" icon={Clock} accent="slate">
             {customer.statusHistory.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-3">No activity recorded.</p>
+              <p className="py-3 text-sm text-muted-foreground">No activity recorded.</p>
             ) : (
               [...customer.statusHistory]
                 .reverse()
@@ -646,7 +642,7 @@ export default function CustomerDetailPage() {
       <RecordDetailPage
       alert={
         customer.status === "blocked" && customer.blockReason ? (
-          <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+          <div className="flex items-start gap-2 px-4 py-3 mb-4 border border-red-200 rounded-lg bg-red-50">
             <Ban className="mt-0.5 h-4 w-4 text-red-500 flex-shrink-0" />
             <p className="text-xs text-red-700">{customer.blockReason}</p>
           </div>
@@ -773,7 +769,7 @@ export default function CustomerDetailPage() {
           <DialogHeader>
             <DialogTitle className="text-sm">Block customer</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 py-2">
+          <div className="py-2 space-y-3">
             <Label className="text-xs">Reason</Label>
             <Textarea
               value={blockReason}
@@ -783,7 +779,7 @@ export default function CustomerDetailPage() {
             {blockError && <p className="text-xs text-red-600">{blockError}</p>}
             <Button
               size="sm"
-              className="w-full bg-red-600 hover:bg-red-700 text-white"
+              className="w-full text-white bg-red-600 hover:bg-red-700"
               onClick={() => {
                 if (!blockReason.trim()) {
                   setBlockError("Block reason is required");

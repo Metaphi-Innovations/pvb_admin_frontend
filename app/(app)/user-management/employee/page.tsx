@@ -27,7 +27,9 @@ import {
   loadEmployees, saveEmployees, todayStr,
   downloadEmployeeCSV, validateCircularReporting,
   EMPLOYEE_TYPES,
+  applyEmployeeStatusChange,
 } from "./employee-data";
+import { EmployeeListingStatusCell } from "./components/EmployeeListingStatusCell";
 
 // Listing Container and Master Listing Imports
 import { ListingContainer } from "@/components/layout/ListingContainer";
@@ -36,12 +38,11 @@ import { ColumnConfig, FilterState, SortState } from "@/components/listing/types
 
 // ── Seed / Temp Master Data ──────────────────────────────────────────────────
 const DEPARTMENTS = [
-  { id: 1, name: "Sales" },
+  { id: 1, name: "Accounts" },
   { id: 2, name: "HR" },
-  { id: 3, name: "Accounts" },
-  { id: 4, name: "Procurement" },
-  { id: 5, name: "Field Force" },
-  { id: 6, name: "Operations" },
+  { id: 3, name: "Procurement" },
+  { id: 4, name: "Warehouse" },
+  { id: 5, name: "Admin" },
 ];
 
 const ROLES = [
@@ -65,7 +66,7 @@ const TERRITORIES = [
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   active:   { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
   inactive: { bg: "bg-slate-100",  text: "text-slate-600",   dot: "bg-slate-400"   },
-  draft:    { bg: "bg-blue-50",    text: "text-blue-700",    dot: "bg-blue-500"    },
+  draft:    { bg: "bg-amber-50",    text: "text-amber-700",    dot: "bg-amber-500"    },
   archived: { bg: "bg-red-50",     text: "text-red-700",     dot: "bg-red-400"     },
 };
 
@@ -86,7 +87,7 @@ function StatusBadge({ status }: { status: string }) {
   const cfg = {
     active: "border-emerald-200 bg-emerald-50 text-emerald-700",
     inactive: "border-slate-200 bg-slate-100 text-slate-700",
-    draft: "border-blue-200 bg-blue-50 text-blue-700",
+    draft: "border-amber-200 bg-amber-50 text-amber-700",
     archived: "border-red-200 bg-red-50 text-red-700",
   }[status] ?? "border-slate-200 bg-slate-100 text-slate-700";
 
@@ -108,8 +109,8 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
       toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
     )}>
       {toast.type === "success"
-        ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-        : <XCircle className="w-4 h-4 flex-shrink-0" />}
+        ? <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
+        : <XCircle className="flex-shrink-0 w-4 h-4" />}
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
         <X className="w-3.5 h-3.5" />
@@ -189,7 +190,7 @@ function PasswordResetModal({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
-            <Key className="w-4 h-4 text-blue-600" />
+            <Key className="w-4 h-4 text-brand-600" />
             Reset Password
           </DialogTitle>
           <DialogDescription className="pt-1">
@@ -204,7 +205,7 @@ function PasswordResetModal({
               value={state.newPassword}
               onChange={e => onChange("newPassword", e.target.value)}
               placeholder="Enter new password (min 8 chars)"
-              className="h-9 text-sm w-full border border-input rounded-md px-3"
+              className="w-full px-3 text-sm border rounded-md h-9 border-input"
             />
             {state.errors.newPassword && (
               <p className="text-xs text-red-500">{state.errors.newPassword}</p>
@@ -217,7 +218,7 @@ function PasswordResetModal({
               value={state.confirmPassword}
               onChange={e => onChange("confirmPassword", e.target.value)}
               placeholder="Re-enter password"
-              className="h-9 text-sm w-full border border-input rounded-md px-3"
+              className="w-full px-3 text-sm border rounded-md h-9 border-input"
             />
             {state.errors.confirmPassword && (
               <p className="text-xs text-red-500">{state.errors.confirmPassword}</p>
@@ -254,10 +255,20 @@ function PasswordResetModal({
   );
 }
 
+type StatusTab = "all" | "active" | "inactive" | "draft";
+const USER_TAB_KEY = "user-list-status-tab";
+
+function readStoredStatusTab(): StatusTab {
+  if (typeof window === "undefined") return "all";
+  const v = sessionStorage.getItem(USER_TAB_KEY);
+  return v === "active" || v === "inactive" || v === "draft" ? v : "all";
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function EmployeeListingPage() {
   const router = useRouter();
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [statusTab, setStatusTab] = useState<StatusTab>("all");
 
   // Listing State
   const [filters, setFilters] = useState<FilterState>({});
@@ -266,7 +277,11 @@ export default function EmployeeListingPage() {
   const [pageSize, setPageSize] = useState(10);
 
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [confirmTarget, setConfirmTarget] = useState<{ type: string; employee: Employee; nextStatus?: "active" | "inactive" | "draft" } | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<{
+    type: string;
+    employee: Employee;
+    nextStatus?: "active" | "inactive";
+  } | null>(null);
   const [passwordReset, setPasswordReset] = useState<PasswordResetState>({
     open: false,
     employee: null,
@@ -280,6 +295,7 @@ export default function EmployeeListingPage() {
   useEffect(() => {
     const loaded = loadEmployees();
     setEmployees(loaded);
+    setStatusTab(readStoredStatusTab());
   }, []);
 
   // Auto-dismiss toast
@@ -294,6 +310,8 @@ export default function EmployeeListingPage() {
     let result = employees.filter(e => {
       // Exclude archived employees from listing
       if (e.status === "archived") return false;
+
+      if (statusTab !== "all" && e.status !== statusTab) return false;
 
       // Search
       const searchVal = filters.search as string;
@@ -351,7 +369,7 @@ export default function EmployeeListingPage() {
     }
 
     return result;
-  }, [employees, filters, sort]);
+  }, [employees, filters, sort, statusTab]);
 
   const paginated = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -369,22 +387,34 @@ export default function EmployeeListingPage() {
     };
   }, [employees]);
 
-  const handleStatusAction = (emp: Employee, nextStatus: "active" | "inactive" | "draft") => {
+  const handleStatusTabChange = (tab: string) => {
+    const next = tab as StatusTab;
+    setStatusTab(next);
+    sessionStorage.setItem(USER_TAB_KEY, next);
+    setPage(1);
+  };
+
+  const handleStatusToggleRequest = (emp: Employee, nextStatus: "active" | "inactive") => {
     setConfirmTarget({ type: "status", employee: emp, nextStatus });
+  };
+
+  const handleActivateBlocked = (gaps: string[]) => {
+    setToast({ msg: gaps[0] || "Complete required profile data before activation", type: "error" });
   };
 
   const confirmStatusChange = () => {
     if (!confirmTarget || confirmTarget.type !== "status" || !confirmTarget.nextStatus) return;
     const emp = confirmTarget.employee;
     const nextStatus = confirmTarget.nextStatus;
-    const updated = employees.map(e =>
-      e.id === emp.id
-        ? { ...e, status: nextStatus as any, updatedBy: "Admin", updatedDate: todayStr(), lastStatusChange: todayStr() }
-        : e
+    const updated = employees.map((e) =>
+      e.id === emp.id ? applyEmployeeStatusChange(e, nextStatus) : e,
     );
     setEmployees(updated);
     saveEmployees(updated);
-    setToast({ msg: `Employee status updated to ${nextStatus.charAt(0).toUpperCase() + nextStatus.slice(1)} successfully`, type: "success" });
+    setToast({
+      msg: `User ${nextStatus === "active" ? "activated" : "deactivated"} successfully`,
+      type: "success",
+    });
     setConfirmTarget(null);
   };
 
@@ -534,45 +564,17 @@ export default function EmployeeListingPage() {
         { label: "Inactive", value: "inactive" },
         { label: "Draft", value: "draft" },
       ],
-      render: (val, row) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className="inline-flex items-center gap-1.5 focus:outline-none pt-0.5">
-              <StatusBadge status={row.status} />
-              <ChevronDown className="w-3 h-3 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-48 bg-white border shadow-lg border-border z-[200]">
-            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
-              Status Actions
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {row.status !== "active" && (
-              <DropdownMenuItem
-                className="gap-2 text-xs cursor-pointer text-emerald-700 hover:text-emerald-900"
-                onClick={() => handleStatusAction(row, "active")}
-              >
-                <CheckCircle2 className="w-3.5 h-3.5" /> Activate
-              </DropdownMenuItem>
-            )}
-            {row.status !== "inactive" && (
-              <DropdownMenuItem
-                className="gap-2 text-xs cursor-pointer text-slate-700 hover:text-slate-900"
-                onClick={() => handleStatusAction(row, "inactive")}
-              >
-                <XCircle className="w-3.5 h-3.5" /> Deactivate
-              </DropdownMenuItem>
-            )}
-            {row.status !== "draft" && (
-              <DropdownMenuItem
-                className="gap-2 text-xs cursor-pointer text-blue-700 hover:text-blue-900"
-                onClick={() => handleStatusAction(row, "draft")}
-              >
-                <FileText className="w-3.5 h-3.5" /> Mark Draft
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+      render: (_val, row) => (
+        <EmployeeListingStatusCell
+          status={row.status}
+          employee={row}
+          onToggleRequest={
+            row.status === "active" || row.status === "inactive" || row.status === "draft"
+              ? (next) => handleStatusToggleRequest(row, next)
+              : undefined
+          }
+          onActivateBlocked={handleActivateBlocked}
+        />
       ),
     },
     {
@@ -598,17 +600,14 @@ export default function EmployeeListingPage() {
             <DropdownMenuItem onClick={() => router.push(`/user-management/employee/${row.id}/edit`)} className="cursor-pointer">
               <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => handleStatusAction(row, row.status === "active" ? "inactive" : "active")} className="cursor-pointer">
-              {row.status === "active" ? "Deactivate" : "Activate"}
-            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => handlePasswordReset(row)} className="cursor-pointer">
               <Key className="w-3.5 h-3.5 mr-2" /> Reset Password
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => handleDelete(row)} className="cursor-pointer text-red-600 focus:bg-red-50 focus:text-red-600">
+            <DropdownMenuItem onClick={() => handleDelete(row)} className="text-red-600 cursor-pointer focus:bg-red-50 focus:text-red-600">
               <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete
             </DropdownMenuItem>
+            
           </DropdownMenuContent>
         </DropdownMenu>
       ),
@@ -619,33 +618,50 @@ export default function EmployeeListingPage() {
     <ListingContainer
       title="User"
       titleIcon={Users}
+      tabs={[
+        { value: "all", label: `All (${stats.total})` },
+        { value: "active", label: `Active (${stats.active})` },
+        { value: "inactive", label: `Inactive (${stats.inactive})` },
+        { value: "draft", label: `Draft (${stats.draft})` },
+      ]}
+      activeTab={statusTab}
+      onTabChange={handleStatusTabChange}
       metrics={
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center flex-shrink-0">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
+            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-brand-600">
               <Users className="w-4 h-4 text-white" />
             </div>
             <div>
-              <p className="text-base font-bold text-foreground leading-none">{stats.total}</p>
+              <p className="text-base font-bold leading-none text-foreground">{stats.total}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Total Users</p>
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center flex-shrink-0">
+          <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
+            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-emerald-600">
               <CheckCircle2 className="w-4 h-4 text-white" />
             </div>
             <div>
-              <p className="text-base font-bold text-foreground leading-none">{stats.active}</p>
+              <p className="text-base font-bold leading-none text-foreground">{stats.active}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Active</p>
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-border p-3 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-slate-400 flex items-center justify-center flex-shrink-0">
+          <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
+            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-slate-400">
               <XCircle className="w-4 h-4 text-white" />
             </div>
             <div>
-              <p className="text-base font-bold text-foreground leading-none">{stats.inactive + stats.draft}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Inactive / Draft</p>
+              <p className="text-base font-bold leading-none text-foreground">{stats.inactive}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Inactive</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
+            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-amber-500">
+              <FileText className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <p className="text-base font-bold leading-none text-foreground">{stats.draft}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Draft</p>
             </div>
           </div>
         </div>
@@ -678,26 +694,14 @@ export default function EmployeeListingPage() {
         onClose={() => setConfirmTarget(null)}
         onConfirm={confirmStatusChange}
         title={
-          confirmTarget?.nextStatus === "active"
-            ? "Activate Employee"
-            : confirmTarget?.nextStatus === "inactive"
-            ? "Deactivate Employee"
-            : "Mark as Draft"
+          confirmTarget?.nextStatus === "active" ? "Activate User" : "Deactivate User"
         }
-        description={`Are you sure you want to ${
+        description={
           confirmTarget?.nextStatus === "active"
-            ? "activate"
-            : confirmTarget?.nextStatus === "inactive"
-            ? "deactivate"
-            : "mark as draft"
-        } ${confirmTarget?.employee?.fullName}?`}
-        confirmLabel={
-          confirmTarget?.nextStatus === "active"
-            ? "Activate"
-            : confirmTarget?.nextStatus === "inactive"
-            ? "Deactivate"
-            : "Mark Draft"
+            ? "Are you sure you want to activate this user?"
+            : "Are you sure you want to deactivate this user?"
         }
+        confirmLabel={confirmTarget?.nextStatus === "active" ? "Activate" : "Deactivate"}
       />
 
       <ConfirmDialog

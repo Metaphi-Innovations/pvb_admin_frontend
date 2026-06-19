@@ -23,40 +23,7 @@ import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { MasterRecordDrawer, masterAuditFromRecord } from "@/components/masters/MasterRecordDrawer";
-
-function AuditCell({
-  name,
-  date,
-}: {
-  name?: string;
-  date?: string;
-}) {
-  return (
-    <div className="space-y-0.5">
-      <p className="text-[11px] font-semibold leading-4 text-brand-700">{name || "—"}</p>
-      <p className="text-[10px] font-mono leading-3 text-muted-foreground">{date || "—"}</p>
-    </div>
-  );
-}
-
-function StatusToggle({ record, onToggle }: { record: DocumentTypeMaster; onToggle: (item: DocumentTypeMaster) => void }) {
-  const active = record.status === "Active";
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle(record);
-      }}
-      className={cn(
-        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-        active ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
-      )}
-    >
-      {active ? "Active" : "Inactive"}
-    </button>
-  );
-}
+import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
 export default function DocumentTypesPage() {
   const router = useRouter();
@@ -140,7 +107,7 @@ export default function DocumentTypesPage() {
       ],
       width: "160px",
       render: (val, row) => (
-        <StatusToggle record={row} onToggle={toggleStatus} />
+        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
       ),
     },
     {
@@ -150,7 +117,7 @@ export default function DocumentTypesPage() {
       filterable: true,
       filterType: "text",
       width: "120px",
-      render: (val, row) => <AuditCell name={row.createdBy} date={row.createdDate} />,
+      render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />,
     },
     {
       key: "updatedBy",
@@ -159,7 +126,7 @@ export default function DocumentTypesPage() {
       filterable: true,
       filterType: "text",
       width: "120px",
-      render: (val, row) => <AuditCell name={row.updatedBy} date={row.updatedDate} />,
+      render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />,
     },
   ];
 

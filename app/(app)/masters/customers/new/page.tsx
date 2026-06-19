@@ -10,7 +10,7 @@ import {
   loadCustomers,
   saveCustomers,
   nextCustomerId,
-  generateCustomerCode,
+  generateCustomerCodeForType,
   todayStr,
 } from "../customer-data";
 import {
@@ -54,13 +54,22 @@ export default function NewCustomerPage() {
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [form, setForm] = useState<CustomerFormValues>(DEFAULT_CUSTOMER_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [customerCode, setCustomerCode] = useState("CUST-0001");
+  const [customerCode, setCustomerCode] = useState("");
   const [toast, setToast] = useState<ToastState | null>(null);
 
   useEffect(() => {
     setAllowed(hasCustomerPermission("create"));
-    setCustomerCode(generateCustomerCode(loadCustomers()));
   }, []);
+
+  useEffect(() => {
+    if (!form.customerType) {
+      setCustomerCode("");
+      return;
+    }
+    setCustomerCode(
+      generateCustomerCodeForType(form.customerType, loadCustomers()),
+    );
+  }, [form.customerType]);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -71,6 +80,14 @@ export default function NewCustomerPage() {
 
   const persist = (asDraft: boolean) => {
     const e = validateCustomerForm(form, true);
+    if (!form.customerType) {
+      e.customerType = "Customer type is required";
+    }
+    if (!customerCode) {
+      setToast({ msg: "Select a customer type to generate customer code.", type: "error" });
+      setTimeout(() => setToast(null), 3200);
+      return;
+    }
     setErrors(e);
     if (Object.keys(e).length > 0) {
       const hasProductErrors = Object.keys(e).some((key) => key.startsWith("product_"));
@@ -155,16 +172,13 @@ export default function NewCustomerPage() {
           <span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
             {customerCode}
           </span>
-          <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
+          <Button variant="ghost" size="sm" onClick={() => router.back()}>
             Discard
           </Button>
-          <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => persist(true)}>
+          <Button variant="outline" size="sm" onClick={() => persist(true)}>
             Save Draft
           </Button>
-          <Button
-            className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
-            onClick={() => persist(false)}
-          >
+          <Button variant="default" size="sm" onClick={() => persist(false)}>
             <Save className="w-4 h-4" /> Save
           </Button>
         </div>
@@ -177,6 +191,7 @@ export default function NewCustomerPage() {
         onSetErrors={setErrors}
         onClearError={clearErr}
         isAdd={true}
+        customerCode={customerCode}
       />
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}

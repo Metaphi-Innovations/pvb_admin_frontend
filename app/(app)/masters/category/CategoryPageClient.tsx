@@ -1,12 +1,15 @@
 "use client";
 
 import { Tag } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import type { Column } from "@/components/ui/DataTable";
 import {
   MasterModule,
   MasterFormGrid,
+  MasterField,
+  compactInput,
 } from "@/components/masters/MasterModule";
-import { NameCodeDescriptionFields } from "@/components/masters/simpleFields";
 import {
   CATEGORY_SEED,
   CATEGORY_STORAGE_KEY,
@@ -21,10 +24,10 @@ import {
 const columns: Column<CategoryRecord>[] = [
   { key: "categoryName", header: "Category Name", sortable: true },
   {
-    key: "categoryCode",
-    header: "Category Code",
+    key: "description",
+    header: "Description",
     sortable: true,
-    render: (v) => <span className="font-mono text-xs">{String(v)}</span>,
+    render: (v) => <span className="text-xs text-muted-foreground">{String(v || "—")}</span>,
   },
 ];
 
@@ -37,14 +40,13 @@ export default function CategoryPageClient() {
         icon: Tag,
         storageKey: CATEGORY_STORAGE_KEY,
         seed: CATEGORY_SEED,
-        codePrefix: "CAT-",
+        codePrefix: "",
         columns,
-        searchKeys: ["categoryName", "categoryCode", "description"],
+        searchKeys: ["categoryName", "description"],
         defaultForm: DEFAULT_CATEGORY_FORM,
         getFormFromRecord: categoryToForm,
         recordFromForm: formToCategory,
         validate: (f) => validateCategoryForm(f),
-        setCodeOnForm: (f, code) => ({ ...f, categoryCode: code }),
         auditColumnVariant: "product",
         auditColumnHeaders: {
           created: "Created",
@@ -52,45 +54,26 @@ export default function CategoryPageClient() {
         },
         renderFormFields: ({ form, setForm, errors }) => (
           <MasterFormGrid>
-            <NameCodeDescriptionFields
-              form={{
-                name: form.categoryName,
-                code: form.categoryCode,
-                description: form.description,
-              }}
-              setForm={(updater) =>
-                setForm((prev) => {
-                  const next =
-                    typeof updater === "function"
-                      ? updater({
-                          name: prev.categoryName,
-                          code: prev.categoryCode,
-                          description: prev.description,
-                        })
-                      : updater;
-                  return {
-                    ...prev,
-                    categoryName: next.name,
-                    categoryCode: next.code,
-                    description: next.description,
-                  };
-                })
-              }
-              errors={{
-                name: errors.categoryName,
-                code: errors.categoryCode,
-              }}
-              labels={{ name: "Category Name", code: "Category Code" }}
-            />
+            <MasterField label="Category Name" required error={errors.categoryName}>
+              <Input
+                className={compactInput()}
+                value={form.categoryName}
+                onChange={(e) => setForm((f) => ({ ...f, categoryName: e.target.value }))}
+              />
+            </MasterField>
+            <MasterField label="Description" className="sm:col-span-2">
+              <Textarea
+                className="text-xs min-h-[72px] resize-none"
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              />
+            </MasterField>
           </MasterFormGrid>
         ),
         viewConfig: {
           drawerTitle: "Category",
-          getRecordCode: (r) => r.categoryCode,
-          basicInfo: (r) => [
-            { label: "Category Name", value: r.categoryName },
-            { label: "Category Code", value: r.categoryCode, mono: true },
-          ],
+          getRecordCode: (r) => String(r.id),
+          basicInfo: (r) => [{ label: "Category Name", value: r.categoryName }],
           description: (r) => r.description,
           showDescription: true,
         },

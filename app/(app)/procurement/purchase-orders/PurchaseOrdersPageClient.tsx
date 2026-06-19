@@ -61,9 +61,8 @@ import { UploadVendorInvoiceDialog } from "./components/UploadVendorInvoiceDialo
 import { addPOFollowUp, canAddPOFollowUp } from "./po-followup-data";
 import { canUploadPOInvoice } from "./po-invoice-utils";
 import { exportPOListingCsv } from "./po-export-utils";
-import { filterPOsForAnalytics } from "../analytics/proc-analytics-utils";
-import { computePOAnalytics } from "../analytics/po-analytics";
-import { POAnalyticsDashboard } from "../components/analytics/POAnalyticsDashboard";
+import { computePOListingKpis } from "@/lib/procurement/listing-kpis";
+import { POListingKpiRow } from "../components/listing/ListingKpiRows";
 
 type TabId = "all" | "draft" | "pending_approval" | "approved" | "rejected";
 
@@ -198,20 +197,7 @@ export default function PurchaseOrdersPageClient() {
     refresh();
   };
 
-  const analyticsBase = useMemo(() => {
-    const statusFilter = (filters.status as string[]) || [];
-    const supplierFilter = (filters.supplierName as string[]) || [];
-    const dateRange = (filters.poDate as { fromDate: string; toDate: string }) || {};
-    return filterPOsForAnalytics(records, {
-      status: statusFilter,
-      supplier: supplierFilter,
-      dateFrom: dateRange.fromDate || "",
-      dateTo: dateRange.toDate || "",
-      search: (filters.search as string) || "",
-    });
-  }, [records, filters]);
-
-  const poAnalytics = useMemo(() => computePOAnalytics(analyticsBase), [analyticsBase, followUpRev]);
+  const poListingKpis = useMemo(() => computePOListingKpis(records), [records, followUpRev, invoiceRev]);
 
   const openUpload = (po: PurchaseOrder, replace = false) => {
     setUploadTarget(po);
@@ -422,7 +408,7 @@ export default function PurchaseOrdersPageClient() {
       }))}
       activeTab={tab}
       onTabChange={(id) => setTab(id as TabId)}
-      metrics={<POAnalyticsDashboard analytics={poAnalytics} />}
+      metrics={<POListingKpiRow kpis={poListingKpis} />}
     >
       <div>
         <MasterListing<PurchaseOrder>

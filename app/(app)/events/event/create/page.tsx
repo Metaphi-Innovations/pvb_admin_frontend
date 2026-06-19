@@ -31,6 +31,8 @@ import {
   X,
 } from "lucide-react";
 import {
+  LEVELS,
+  PARENT_LEVEL,
   type GeoLevel,
   type GeoNode,
   loadGeoNodes,
@@ -111,25 +113,8 @@ const FARMER_OPTIONS: MultiSelectOption[] = FARMER_NAMES.map((label, index) => (
 
 const CUSTOMER_DISTRIBUTOR_ID_OFFSET = 100000;
 
-const LOCATION_LEVELS: GeoLevel[] = [
-  "Zone",
-  "State",
-  "Region",
-  "Area",
-  "Territory",
-  "Locality",
-  "City",
-];
-
-const LOCATION_PARENT: Record<GeoLevel, GeoLevel | null> = {
-  Zone: null,
-  State: "Zone",
-  Region: "State",
-  Area: "Region",
-  Territory: "Area",
-  Locality: "Territory",
-  City: "Locality",
-};
+const LOCATION_LEVELS: GeoLevel[] = LEVELS;
+const LOCATION_PARENT = PARENT_LEVEL;
 
 function handleScrollableWheel(event: React.WheelEvent<HTMLElement>) {
   const current = event.currentTarget;
@@ -986,7 +971,7 @@ export default function CreateEventPage() {
 
     return geoNodes
       .filter((node) => {
-        if (node.level !== level) return false;
+        if ((node.level as string) !== level) return false;
         if (!parentLevel) return true;
 
         const selectedParentId = form.location[parentLevel];
@@ -1114,17 +1099,21 @@ export default function CreateEventPage() {
     const region = selectedLocationNodes.Region;
     const area = selectedLocationNodes.Area;
     const territory = selectedLocationNodes.Territory;
-    const locality = selectedLocationNodes.Locality;
+    const district = selectedLocationNodes.District;
     const city = selectedLocationNodes.City;
+    const town = selectedLocationNodes.Town;
+    const pincode = selectedLocationNodes.Pincode;
     const currentUser = AuthService.getUserData();
     const organizerName = currentUser?.username || currentUser?.email || "Admin";
     const locationSummary = [
+      pincode?.name,
+      town?.name,
       city?.name,
-      locality?.name,
+      district?.name,
       territory?.name,
       area?.name,
-      region?.name,
       state?.name,
+      region?.name,
       zone?.name,
     ]
       .filter(Boolean)
@@ -1136,17 +1125,18 @@ export default function CreateEventPage() {
       title: form.title.trim(),
       type: "training",
       venue:
+        pincode?.name ||
+        town?.name ||
         city?.name ||
-        locality?.name ||
+        district?.name ||
         territory?.name ||
         area?.name ||
-        region?.name ||
         "Location TBD",
       district:
-        region?.name ||
-        area?.name ||
+        district?.name ||
+        city?.name ||
         territory?.name ||
-        locality?.name ||
+        area?.name ||
         "",
       state: state?.name || "",
       startDate,

@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { loadCategories, saveCategories, type Category, type CategoryStatus, todayStr, nextCategoryId, generateCategoryCode } from "./category-data";
+import { loadCategories, saveCategories, type Category, type CategoryStatus, todayStr, nextCategoryId } from "./category-data";
 import { MiniKPICard } from "@/components/ui/KPICard";
 import { CategoryForm, DEFAULT_CATEGORY_FORM, type CategoryFormValues, validateCategoryForm } from "./components/CategoryForm";
 import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
@@ -48,8 +48,9 @@ import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/m
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { applyFilters } from "@/components/listing/filter-utils";
+import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
-type SortKey = "categoryCode" | "categoryName" | "description" | "status";
+type SortKey = "categoryName" | "description" | "status";
 
 interface ToastState {
   msg: string;
@@ -71,44 +72,10 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
   );
 }
 
-function StatusToggle({ record, onToggle }: { record: Category; onToggle: (item: Category) => void }) {
-  const active = record.status === "active";
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle(record);
-      }}
-      className={cn(
-        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-        active ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
-      )}
-    >
-      {active ? "Active" : "Inactive"}
-    </button>
-  );
-}
-
-function AuditCell({
-  name,
-  date,
-}: {
-  name?: string;
-  date?: string;
-}) {
-  return (
-    <div className="space-y-0.5">
-      <p className="text-[11px] font-semibold leading-4 text-brand-700">{name || "—"}</p>
-      <p className="text-[10px] font-mono leading-3 text-muted-foreground">{date || "—"}</p>
-    </div>
-  );
-}
-
 export default function CategoryMasterPage() {
   const [records, setRecords] = useState<Category[]>([]);
   const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "categoryCode", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "categoryName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -144,17 +111,6 @@ export default function CategoryMasterPage() {
 
   const columns: ColumnConfig<Category>[] = [
     {
-      key: "categoryCode",
-      header: "Category Code",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val, row) => (
-        <span className="font-mono text-xs text-brand-700">{row.categoryCode}</span>
-      ),
-    },
-    {
       key: "categoryName",
       header: "Category Name",
       sortable: true,
@@ -185,7 +141,7 @@ export default function CategoryMasterPage() {
       ],
       width: "110px",
       render: (val, row) => (
-        <StatusToggle record={row} onToggle={toggleStatus} />
+        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
       ),
     },
     {
@@ -195,7 +151,7 @@ export default function CategoryMasterPage() {
       filterable: true,
       filterType: "text",
       width: "120px",
-      render: (val, row) => <AuditCell name={row.createdBy} date={row.createdDate} />,
+      render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />,
     },
     {
       key: "updatedBy",
@@ -204,7 +160,7 @@ export default function CategoryMasterPage() {
       filterable: true,
       filterType: "text",
       width: "120px",
-      render: (val, row) => <AuditCell name={row.updatedBy} date={row.updatedDate} />,
+      render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />,
     },
   ];
 
@@ -238,7 +194,6 @@ export default function CategoryMasterPage() {
       const q = String(filters.search).trim().toLowerCase();
       result = result.filter(
         (r) =>
-          r.categoryCode.toLowerCase().includes(q) ||
           r.categoryName.toLowerCase().includes(q) ||
           (r.description || "").toLowerCase().includes(q)
       );
@@ -270,11 +225,7 @@ export default function CategoryMasterPage() {
   }, [filters, sort, pageSize]);
 
   const openAdd = () => {
-    const code = generateCategoryCode(records);
-    setForm({
-      ...DEFAULT_CATEGORY_FORM,
-      categoryCode: code,
-    });
+    setForm({ ...DEFAULT_CATEGORY_FORM });
     setErrors({});
     setActive(null);
     setSheetMode("add");
@@ -282,7 +233,6 @@ export default function CategoryMasterPage() {
 
   const openEdit = (row: Category) => {
     setForm({
-      categoryCode: row.categoryCode,
       categoryName: row.categoryName,
       description: row.description,
       status: row.status,
@@ -316,7 +266,6 @@ export default function CategoryMasterPage() {
       const id = nextCategoryId(list);
       const newRecord: Category = {
         id,
-        categoryCode: form.categoryCode,
         categoryName: form.categoryName,
         description: form.description,
         status: form.status,
@@ -360,12 +309,11 @@ export default function CategoryMasterPage() {
 
   const handleExport = () => {
     try {
-      const headers = ["ID", "Category Code", "Category Name", "Description", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
+      const headers = ["ID", "Category Name", "Description", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
       const csvRows = [headers.join(",")];
       for (const r of records) {
         const row = [
           r.id,
-          `"${r.categoryCode.replace(/"/g, '""')}"`,
           `"${r.categoryName.replace(/"/g, '""')}"`,
           `"${(r.description || "").replace(/"/g, '""')}"`,
           r.status,
@@ -427,7 +375,7 @@ export default function CategoryMasterPage() {
           addLabel="Add Category"
           onExport={handleExport}
           emptyMessage="categories"
-          searchPlaceholder="Search category code, name, description..."
+          searchPlaceholder="Search category name, description..."
           currentFilters={filters}
           currentSort={sort}
         />
@@ -445,10 +393,9 @@ export default function CategoryMasterPage() {
           active
             ? buildSimpleMasterViewDrawer<Category>({
                 drawerTitle: "Category",
-                getRecordCode: (r) => r.categoryCode,
+                getRecordCode: (r) => String(r.id),
                 basicInfo: (r) => [
                   { label: "Category Name", value: r.categoryName },
-                  { label: "Category Code", value: r.categoryCode, mono: true },
                 ],
                 description: (r) => r.description,
                 showDescription: true,

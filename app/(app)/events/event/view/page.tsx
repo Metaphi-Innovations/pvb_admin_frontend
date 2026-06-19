@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { RecordDetailPage } from "@/components/record-detail";
 import { cn } from "@/lib/utils";
 import { Calendar, ChevronLeft, ChevronRight, MapPin, Users } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
+  LEVELS,
   type GeoLevel,
   type GeoNode,
   loadGeoNodes,
@@ -38,7 +40,7 @@ import {
 } from "../event-data";
 
 const CUSTOMER_DISTRIBUTOR_ID_OFFSET = 100000;
-const LOCATION_LEVELS: GeoLevel[] = ["Zone", "State", "Region", "Area", "Territory", "Locality", "City"];
+const LOCATION_LEVELS: GeoLevel[] = LEVELS;
 type AttendanceTab = "users" | "farmers" | "distributors";
 
 function formatTitleCase(value: string) {
@@ -63,30 +65,34 @@ function inferZoneFromState(state: string) {
 
 function resolveLocationDisplay(event: Event, geoNodes: GeoNode[]) {
   const fallbackDistrict = event.district || event.state || "Event Area";
-  const fallbackLocality = event.venue || event.district || event.state || "Event Locality";
+  const fallbackTown = event.venue || event.district || event.state || "Event Town";
   const fallback = {
     Zone: inferZoneFromState(event.state || ""),
-    State: event.state || "-",
     Region: withSuffix(fallbackDistrict, "Region"),
+    State: event.state || "-",
     Area: withSuffix(fallbackDistrict, "Area"),
     Territory: withSuffix(fallbackDistrict, "Territory"),
-    Locality: fallbackLocality,
+    District: withSuffix(fallbackDistrict, "District"),
+    City: event.venue || event.district || event.state || "Event City",
+    Town: fallbackTown,
     Pincode: event.district || event.state || "Event Pincode",
   };
 
   const getNodeName = (level: GeoLevel) => {
     const nodeId = event.location?.[level];
-    if (!nodeId) return fallback[level];
-    return geoNodes.find((node) => node.id === nodeId)?.name ?? fallback[level];
+    if (!nodeId) return fallback[level as keyof typeof fallback];
+    return geoNodes.find((node) => node.id === nodeId)?.name ?? fallback[level as keyof typeof fallback];
   };
 
   return {
     Zone: getNodeName("Zone"),
-    State: getNodeName("State"),
     Region: getNodeName("Region"),
+    State: getNodeName("State"),
     Area: getNodeName("Area"),
     Territory: getNodeName("Territory"),
-    Locality: getNodeName("Locality"),
+    District: getNodeName("District"),
+    City: getNodeName("City"),
+    Town: getNodeName("Town"),
     Pincode: getNodeName("Pincode"),
   };
 }
@@ -446,7 +452,7 @@ export default function EventViewPage() {
       }
       metaItems={[
         { icon: Calendar, label: formatDateRange(viewEvent.startDate, viewEvent.endDate) },
-        { icon: MapPin, label: locationDisplay.Locality },
+        { icon: MapPin, label: locationDisplay.Town || locationDisplay.Pincode },
         { icon: Users, label: viewEvent.organizer || "—" },
       ]}
       headerActions={

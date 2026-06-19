@@ -7,7 +7,8 @@ import { ArrowLeft, CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { loadCustomerTypes, saveCustomerTypes, type CustomerTypeRecord } from "../../customer-type-data";
+import { loadCustomerTypes, saveCustomerTypes, validateCustomerTypeInitialCode, resolveCustomerTypeCode, validateCustomerTypeCodeUnique, type CustomerTypeRecord } from "../../customer-type-data";
+import { normalizeInitialCode } from "@/lib/masters/code-generation";
 import {
   CustomerTypeForm,
   type CustomerTypeFormValues,
@@ -18,6 +19,7 @@ export default function EditCustomerTypePage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const [form, setForm] = useState<CustomerTypeFormValues | null>(null);
+  const [originalInitialCode, setOriginalInitialCode] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
@@ -25,8 +27,10 @@ export default function EditCustomerTypePage() {
     const list = loadCustomerTypes();
     const found = list.find((c) => c.id === Number(id));
     if (!found) return;
+    setOriginalInitialCode(found.initialCode);
     setForm({
       customerTypeCode: found.customerTypeCode,
+      initialCode: found.initialCode,
       customerType: found.customerType,
       description: found.description,
       documentTypes: found.documentTypes || [],
@@ -43,6 +47,17 @@ export default function EditCustomerTypePage() {
   const handleSave = () => {
     if (!form) return;
     const validation = validateCustomerTypeForm(form);
+    const list = loadCustomerTypes();
+    const initialErr = validateCustomerTypeInitialCode(form.initialCode, list, Number(id));
+    if (initialErr) validation.initialCode = initialErr;
+    const existing = list.find((c) => c.id === Number(id));
+    const customerTypeCode = resolveCustomerTypeCode(form.initialCode, list, {
+      recordId: Number(id),
+      existingCode: existing?.customerTypeCode,
+      originalInitialCode,
+    });
+    const codeErr = validateCustomerTypeCodeUnique(customerTypeCode, list, Number(id));
+    if (codeErr) validation.customerTypeCode = codeErr;
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
       setToast({ msg: "Please fix the errors before saving.", type: "error" });
@@ -50,13 +65,13 @@ export default function EditCustomerTypePage() {
       return;
     }
 
-    const list = loadCustomerTypes();
     const today = new Date().toISOString().slice(0, 10);
     const updated = list.map((c) =>
       c.id === Number(id)
           ? {
             ...c,
-            customerTypeCode: form.customerTypeCode,
+            customerTypeCode,
+            initialCode: normalizeInitialCode(form.initialCode),
             customerType: form.customerType.trim(),
             description: form.description.trim(),
             documentTypes: form.documentTypes || [],
@@ -104,9 +119,16 @@ export default function EditCustomerTypePage() {
     >
       <CustomerTypeForm
         form={form}
-        onChange={setForm}
+        onChange={(next) =>
+          setForm((prev) => {
+            if (!prev) return prev;
+            return typeof next === "function" ? next(prev) : next;
+          })
+        }
         errors={errors}
         onClearError={clearErr}
+        recordId={Number(id)}
+        originalInitialCode={originalInitialCode}
         triggerToast={(msg, type) => {
           setToast({ msg, type });
           setTimeout(() => setToast(null), 3200);

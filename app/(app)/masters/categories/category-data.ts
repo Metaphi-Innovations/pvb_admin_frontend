@@ -4,7 +4,6 @@ export type CategoryStatus = "active" | "inactive";
 
 export interface Category {
   id: number;
-  categoryCode: string;
   categoryName: string;
   description: string;
   status: CategoryStatus;
@@ -14,12 +13,11 @@ export interface Category {
   updatedDate: string;
 }
 
-const STORAGE_KEY = "pvb_categories_v1";
+const STORAGE_KEY = "pvb_categories_v2";
 
 const SEED: Category[] = [
   {
     id: 1,
-    categoryCode: "CAT-001",
     categoryName: "Fertilizers",
     description: "Chemical and organic fertilizers",
     status: "active",
@@ -30,7 +28,6 @@ const SEED: Category[] = [
   },
   {
     id: 2,
-    categoryCode: "CAT-002",
     categoryName: "Pesticides",
     description: "Insecticides, fungicides and herbicides",
     status: "active",
@@ -41,7 +38,6 @@ const SEED: Category[] = [
   },
   {
     id: 3,
-    categoryCode: "CAT-003",
     categoryName: "Seeds",
     description: "Crop seeds and planting material",
     status: "inactive",
@@ -59,7 +55,6 @@ export function todayStr() {
 function normalize(items: Partial<Category>[]): Category[] {
   return items.map((item, idx) => ({
     id: item.id ?? idx + 1,
-    categoryCode: item.categoryCode ?? `CAT-${String(idx + 1).padStart(3, "0")}`,
     categoryName: item.categoryName ?? "",
     description: item.description ?? "",
     status: item.status === "inactive" ? "inactive" : "active",
@@ -70,16 +65,24 @@ function normalize(items: Partial<Category>[]): Category[] {
   }));
 }
 
-export function loadCategories(): Category[] {
-  if (typeof window === "undefined") return SEED;
+function readStored(): Partial<Category>[] | null {
+  if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return SEED;
-    const parsed = JSON.parse(raw) as Partial<Category>[];
-    return normalize(parsed);
+    if (raw) return JSON.parse(raw) as Partial<Category>[];
+    const legacy = localStorage.getItem("pvb_categories_v1");
+    if (legacy) return JSON.parse(legacy) as Partial<Category>[];
+    return null;
   } catch {
-    return SEED;
+    return null;
   }
+}
+
+export function loadCategories(): Category[] {
+  if (typeof window === "undefined") return SEED;
+  const parsed = readStored();
+  if (!parsed) return SEED;
+  return normalize(parsed);
 }
 
 export function saveCategories(items: Category[]) {
@@ -90,8 +93,3 @@ export function saveCategories(items: Category[]) {
 export function nextCategoryId(items: Category[]) {
   return items.reduce((max, item) => Math.max(max, item.id), 0) + 1;
 }
-
-export function generateCategoryCode(items: Category[]) {
-  return `CAT-${String(items.length + 1).padStart(3, "0")}`;
-}
-

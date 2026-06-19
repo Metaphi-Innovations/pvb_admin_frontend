@@ -32,6 +32,7 @@ import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/m
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { applyFilters } from "@/components/listing/filter-utils";
+import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
 interface ToastState {
   msg: string;
@@ -52,28 +53,6 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
         <X className="h-3.5 w-3.5" />
       </button>
     </div>
-  );
-}
-
-function StatusToggle({ record, onToggle }: { record: UOMMaster; onToggle: (item: UOMMaster) => void }) {
-  const active = record.status === "active";
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onToggle(record);
-      }}
-      className={cn(
-        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-        active
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
-      )}
-    >
-      {active ? "Active" : "Inactive"}
-    </button>
   );
 }
 
@@ -179,7 +158,7 @@ export default function UOMPage() {
       ],
       width: "100px",
       render: (val, row) => (
-        <StatusToggle record={row} onToggle={toggleStatus} />
+        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
       ),
     },
     {
@@ -190,10 +169,7 @@ export default function UOMPage() {
       filterType: "text",
       width: "120px",
       render: (val, row) => (
-        <div>
-          <p className="text-[11px] font-semibold leading-4 text-brand-700">{row.createdBy}</p>
-          <p className="text-[10px] font-mono leading-3 text-muted-foreground">{row.createdDate}</p>
-        </div>
+        <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />
       ),
     },
     {
@@ -204,10 +180,7 @@ export default function UOMPage() {
       filterType: "text",
       width: "120px",
       render: (val, row) => (
-        <div>
-          <p className="text-[11px] font-semibold leading-4 text-brand-700">{row.updatedBy}</p>
-          <p className="text-[10px] font-mono leading-3 text-muted-foreground">{row.updatedDate}</p>
-        </div>
+        <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />
       ),
     },
   ];

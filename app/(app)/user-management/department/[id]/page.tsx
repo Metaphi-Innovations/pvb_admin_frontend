@@ -12,13 +12,14 @@ import {
 import { Building2, Clock, Pencil } from "lucide-react";
 import type { Department } from "../components/DepartmentSheet";
 
-const STORAGE_KEY = "ds_departments_v1";
+const STORAGE_KEY = "ds_departments_v2";
 
 const SEED: Department[] = [
-  { id: 1, code: "DEPT-001", name: "Sales", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-01-10", updatedBy: "Admin", updatedDate: "2024-01-10", lastStatusChange: "2024-01-10" },
+  { id: 1, code: "DEPT-001", name: "Accounts", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-01-15", updatedBy: "Admin", updatedDate: "2024-01-15", lastStatusChange: "2024-01-15" },
   { id: 2, code: "DEPT-002", name: "HR", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-01-12", updatedBy: "Admin", updatedDate: "2024-01-12", lastStatusChange: "2024-01-12" },
-  { id: 3, code: "DEPT-003", name: "Accounts", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-01-15", updatedBy: "Admin", updatedDate: "2024-01-15", lastStatusChange: "2024-01-15" },
-  { id: 4, code: "DEPT-004", name: "Procurement", status: "inactive", remarks: "Under restructuring", createdBy: "Admin", createdDate: "2024-01-18", updatedBy: "Admin", updatedDate: "2024-01-20", lastStatusChange: "2024-01-20" },
+  { id: 3, code: "DEPT-003", name: "Procurement", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-01-18", updatedBy: "Admin", updatedDate: "2024-01-18", lastStatusChange: "2024-01-18" },
+  { id: 4, code: "DEPT-004", name: "Warehouse", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-02-01", updatedBy: "Admin", updatedDate: "2024-02-01", lastStatusChange: "2024-02-01" },
+  { id: 5, code: "DEPT-005", name: "Admin", status: "active", remarks: "", createdBy: "Admin", createdDate: "2024-02-05", updatedBy: "Admin", updatedDate: "2024-02-05", lastStatusChange: "2024-02-05" },
 ];
 
 function loadDepartments(): Department[] {

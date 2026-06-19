@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { cn } from "@/lib/utils";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import {
   loadDistributors,
   saveDistributors,
@@ -351,17 +352,13 @@ export default function DistributorEditPage() {
               />
             </Field>
             <Field label="Gender">
-              <select
+              <AutocompleteSelect
+                options={["Male", "Female", "Other"].map((g) => ({ value: g, label: g }))}
                 value={form.gender}
-                onChange={(event) =>
-                  setField("gender", event.target.value as Distributor["gender"])
-                }
-                className={selectClass}
-              >
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-                <option value="Other">Other</option>
-              </select>
+                onChange={(v) => setField("gender", v as Distributor["gender"])}
+                placeholder="Select gender…"
+                className="h-9 text-sm"
+              />
             </Field>
             <Field label="Phone Number" required error={errors.phoneNumber}>
               <Input
