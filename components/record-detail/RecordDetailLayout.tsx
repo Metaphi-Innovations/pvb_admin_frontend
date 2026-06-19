@@ -47,6 +47,8 @@ export interface RecordDetailLayoutProps {
   moreActions?: { label: string; onClick: () => void; destructive?: boolean }[];
   sidebar?: RecordDetailSidebarProps;
   banner?: React.ReactNode;
+  /** Larger typography for CRM-style profile pages */
+  headerVariant?: "default" | "profile";
   children: React.ReactNode;
 }
 
@@ -73,8 +75,10 @@ export function RecordDetailLayout({
   moreActions,
   sidebar,
   banner,
+  headerVariant = "default",
   children,
 }: RecordDetailLayoutProps) {
+  const isProfileHeader = headerVariant === "profile";
   const showTabs = tabs && tabs.length > 0;
   const codeMeta: RecordMetaItem[] = recordCode
     ? [{ icon: FileText, label: recordCode }]
@@ -100,15 +104,30 @@ export function RecordDetailLayout({
 
         <div className="flex items-start justify-between gap-4 px-5 py-3">
           <div className="flex items-start gap-3 min-w-0 flex-1">
-            <RecordEntityAvatar name={recordName} />
+            <RecordEntityAvatar
+              name={recordName}
+              className={isProfileHeader ? "h-14 w-14 text-lg" : undefined}
+            />
             <div className="min-w-0 flex-1">
-              <div className="flex items-center flex-wrap gap-2">
-                <h1 className="text-base font-bold text-foreground leading-tight">{recordName}</h1>
+              <div className="flex items-center flex-wrap gap-2.5">
+                <h1
+                  className={cn(
+                    "font-semibold text-foreground leading-tight",
+                    isProfileHeader ? "text-[26px] tracking-tight" : "text-base font-bold",
+                  )}
+                >
+                  {recordName}
+                </h1>
                 {typeBadge}
                 <RecordStatusPill label={statusLabel} variant={statusVariant} />
               </div>
               {allMeta.length > 0 && (
-                <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-muted-foreground">
+                <div
+                  className={cn(
+                    "flex flex-wrap items-center gap-2.5 mt-1 text-muted-foreground",
+                    isProfileHeader ? "text-sm" : "text-xs mt-1.5 gap-3",
+                  )}
+                >
                   {allMeta.map((item, i) => {
                     const Icon = item.icon;
                     const isCode = i === 0 && recordCode && item.label === recordCode;
@@ -203,9 +222,16 @@ export function RecordDetailLayout({
         )}
       </div>
 
-      <div className="flex-1 bg-muted/20 p-5">
+      <div className="flex-1 bg-muted/20 p-4">
         {banner && <div className="mb-4">{banner}</div>}
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,7fr)_minmax(280px,3fr)] gap-4 w-full">
+        <div
+          className={cn(
+            "grid gap-4 w-full",
+            sidebar
+              ? "grid-cols-1 xl:grid-cols-[minmax(0,7fr)_minmax(280px,3fr)]"
+              : "grid-cols-1",
+          )}
+        >
           <main className="min-w-0 space-y-4">{children}</main>
           {sidebar && (
             <aside className="min-w-0">

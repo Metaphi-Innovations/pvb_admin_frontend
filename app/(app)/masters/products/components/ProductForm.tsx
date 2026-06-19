@@ -1,71 +1,59 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
 	AlertCircle,
-	CheckCircle2,
+	Eye,
+	Download,
 	Image as ImageIcon,
-	Package,
 	Upload,
 	X,
-	ChevronsUpDown,
-	Check,
-	FileText,
-	Link2,
 	ExternalLink,
+	Plus,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import {
-	Popover,
-	PopoverContent,
-	PopoverTrigger,
-} from "@/components/ui/popover";
 import {
 	Dialog,
 	DialogContent,
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { cn } from "@/lib/utils";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
 import { loadUOMMasters } from "../../uom/uom-data";
 import { loadHSNMasters } from "../../hsn/hsn-data";
 import {
 	type Product,
-	type ProductAsset,
+	type ProductImage,
+	type ProductUrl,
 	type ProductStatus,
-	createMediaItem,
-	createLinkMediaItem,
-	PRODUCT_CATEGORY_OPTIONS,
-	PRODUCT_FORMULATION_OPTIONS,
-	PRODUCT_GST_OPTIONS,
-	PRODUCT_SEGMENT_OPTIONS,
-	PRODUCT_STATUS_OPTIONS,
-	PRODUCT_SUBCATEGORY_OPTIONS,
+	createProductImageFromFile,
+	createProductUrl,
+	getImagePreviewUrl,
+	isAllowedProductImageFile,
+	isValidProductUrl,
+	loadActiveCategoryOptions,
+	loadActiveCfuOptions,
+	loadActiveFormOptions,
+	loadActiveSegmentOptions,
+	resolveProductTaxFromHsn,
 	todayStr,
 } from "../product-data";
 
 export interface ProductFormValues {
 	productName: string;
+	scientificName: string;
 	category: string;
-	subCategory: string;
 	segment: string;
-	formulation: string;
+	form: string;
+	cfu: string;
 	hsnCode: string;
+	hsnId: string;
 	gstRate: string;
+	gstId: string;
 	sku: string;
-	cropApplicable: string;
-	mrp: string;
-	costPrice: string;
-	distributorPrice: string;
 	status: ProductStatus;
 	baseUnit: string;
 	packagingUnit: string;
@@ -74,17 +62,16 @@ export interface ProductFormValues {
 
 export const DEFAULT_PRODUCT_FORM: ProductFormValues = {
 	productName: "",
+	scientificName: "",
 	category: "",
-	subCategory: "",
 	segment: "",
-	formulation: "",
+	form: "",
+	cfu: "",
 	hsnCode: "",
+	hsnId: "",
 	gstRate: "",
+	gstId: "",
 	sku: "",
-	cropApplicable: "",
-	mrp: "",
-	costPrice: "",
-	distributorPrice: "",
 	status: "active",
 	baseUnit: "",
 	packagingUnit: "",
@@ -92,30 +79,27 @@ export const DEFAULT_PRODUCT_FORM: ProductFormValues = {
 };
 
 export function productToFormValues(product: Product): ProductFormValues {
+	const tax =
+		typeof window !== "undefined" && product.hsnCode
+			? resolveProductTaxFromHsn(product.hsnCode)
+			: null;
+
 	return {
 		productName: product.productName,
-		category:
-			PRODUCT_CATEGORY_OPTIONS.find(
-				(option) => option.label === product.category,
-			)?.value ?? "",
-		subCategory:
-			PRODUCT_SUBCATEGORY_OPTIONS.find(
-				(option) => option.label === product.subCategory,
-			)?.value ?? "",
-		segment:
-			PRODUCT_SEGMENT_OPTIONS.find((option) => option.label === product.segment)
-				?.value ?? "",
-		formulation:
-			PRODUCT_FORMULATION_OPTIONS.find(
-				(option) => option.label === product.formulation,
-			)?.value ?? "",
+		scientificName: product.scientificName ?? "",
+		category: product.category,
+		segment: product.segment,
+		form: product.form ?? product.formulation ?? "",
+		cfu: product.cfu ?? "",
 		hsnCode: product.hsnCode,
-		gstRate: product.gstRate,
+		hsnId: tax ? String(tax.hsnId) : product.hsnId ? String(product.hsnId) : "",
+		gstRate: tax?.gstRate ?? product.gstRate,
+		gstId: tax?.gstId
+			? String(tax.gstId)
+			: product.gstId
+				? String(product.gstId)
+				: "",
 		sku: product.sku,
-		cropApplicable: product.cropApplicable,
-		mrp: String(product.mrp),
-		costPrice: String(product.costPrice),
-		distributorPrice: String(product.distributorPrice),
 		status: product.status,
 		baseUnit: product.baseUnit ?? "",
 		packagingUnit: product.packagingUnit ?? "",
@@ -124,156 +108,6 @@ export function productToFormValues(product: Product): ProductFormValues {
 				? String(product.conversionQuantity)
 				: "",
 	};
-}
-
-// ── Autocomplete (matches EmployeeForm AC) ────────────────────────────────────
-interface ACOption {
-	label: string;
-	value: string;
-	sublabel?: string;
-}
-function AC({
-	label,
-	value,
-	onChange,
-	options,
-	placeholder,
-	required,
-	error,
-	disabled,
-	searchable = true,
-}: {
-	label: string;
-	value: string;
-	onChange: (v: string) => void;
-	options: ACOption[];
-	placeholder?: string;
-	required?: boolean;
-	error?: string;
-	disabled?: boolean;
-	searchable?: boolean;
-}) {
-	const [open, setOpen] = useState(false);
-	const [q, setQ] = useState("");
-	const filtered = q
-		? options.filter(
-				(o) =>
-					o.label.toLowerCase().includes(q.toLowerCase()) ||
-					(o.sublabel && o.sublabel.toLowerCase().includes(q.toLowerCase())),
-			)
-		: options;
-	const selected = options.find((o) => o.value === value);
-	return (
-		<div className='space-y-1'>
-			<Label className='text-xs font-medium'>
-				{label}
-				{required && <span className='text-red-500 ml-0.5'>*</span>}
-			</Label>
-			<Popover
-				open={open && !disabled}
-				onOpenChange={(v) => {
-					if (!disabled) {
-						setOpen(v);
-						if (!v) setQ("");
-					}
-				}}
-			>
-				<PopoverTrigger asChild>
-					<button
-						type='button'
-						disabled={disabled}
-						className={cn(
-							"w-full h-8 px-2.5 text-xs text-left border border-border rounded-lg bg-background flex items-center justify-between transition-colors",
-							disabled
-								? "opacity-50 cursor-not-allowed bg-muted/30"
-								: "hover:bg-muted/30",
-							error && "border-red-400",
-						)}
-					>
-						<span
-							className={cn(
-								"truncate flex-1",
-								selected ? "text-foreground" : "text-muted-foreground",
-							)}
-						>
-							{selected?.label || placeholder || "Select…"}
-						</span>
-						<div className='flex items-center gap-1.5 flex-shrink-0'>
-							{selected && !disabled && (
-								<span
-									onClick={(e) => {
-										e.stopPropagation();
-										onChange("");
-									}}
-									className='p-0.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer flex items-center justify-center'
-								>
-									<X className='w-3 h-3' />
-								</span>
-							)}
-							<ChevronsUpDown className='w-3.5 h-3.5 text-muted-foreground' />
-						</div>
-					</button>
-				</PopoverTrigger>
-				<PopoverContent
-					className='w-[--radix-popover-trigger-width] p-0'
-					align='start'
-				>
-					{searchable && (
-						<div className='p-1.5 border-b border-border'>
-							<Input
-								placeholder='Search…'
-								value={q}
-								onChange={(e) => setQ(e.target.value)}
-								className='text-xs h-7 focus-visible:ring-0'
-								autoFocus
-							/>
-						</div>
-					)}
-					<div className='py-1 overflow-y-auto max-h-48'>
-						{filtered.length === 0 ? (
-							<p className='px-3 py-4 text-xs text-center text-muted-foreground'>
-								No options
-							</p>
-						) : (
-							filtered.map((opt) => (
-								<button
-									type='button'
-									key={opt.value}
-									onClick={() => {
-										onChange(opt.value);
-										setOpen(false);
-										setQ("");
-									}}
-									className={cn(
-										"w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-muted/60 transition-colors",
-										selected?.value === opt.value && "bg-brand-50",
-									)}
-								>
-									<div className='flex-1 min-w-0'>
-										<span className='block truncate'>{opt.label}</span>
-										{opt.sublabel && (
-											<span className='block text-[10px] text-muted-foreground truncate mt-0.5'>
-												{opt.sublabel}
-											</span>
-										)}
-									</div>
-									{selected?.value === opt.value && (
-										<Check className='flex-shrink-0 w-3 h-3 text-brand-600' />
-									)}
-								</button>
-							))
-						)}
-					</div>
-				</PopoverContent>
-			</Popover>
-			{error && (
-				<p className='flex items-center gap-1 text-[11px] text-red-500'>
-					<AlertCircle className='flex-shrink-0 w-3 h-3' />
-					{error}
-				</p>
-			)}
-		</div>
-	);
 }
 
 function FieldError({ msg }: { msg?: string }) {
@@ -288,11 +122,50 @@ function FieldError({ msg }: { msg?: string }) {
 
 function SectionHead({ label, sub }: { label: string; sub?: string }) {
 	return (
-		<div className='mb-2.5 mt-0.5'>
-			<p className='text-[10px] font-bold uppercase tracking-widest text-muted-foreground'>
+		<div className='mb-2.5'>
+			<p className='text-xs font-bold uppercase tracking-wider text-foreground'>
 				{label}
 			</p>
 			{sub && <p className='text-[11px] text-muted-foreground mt-0.5'>{sub}</p>}
+		</div>
+	);
+}
+
+function SelectField({
+	label,
+	required,
+	value,
+	onChange,
+	options,
+	placeholder,
+	disabled,
+	error,
+}: {
+	label: string;
+	required?: boolean;
+	value: string;
+	onChange: (v: string) => void;
+	options: { value: string; label: string }[];
+	placeholder?: string;
+	disabled?: boolean;
+	error?: string;
+}) {
+	return (
+		<div className='space-y-1'>
+			<Label className='text-xs font-medium'>
+				{label}
+				{required && <span className='text-red-500 ml-0.5'>*</span>}
+			</Label>
+			<AutocompleteSelect
+				options={options}
+				value={value}
+				onChange={onChange}
+				placeholder={placeholder ?? "Select…"}
+				disabled={disabled}
+				error={!!error}
+				className='h-8 text-xs'
+			/>
+			<FieldError msg={error} />
 		</div>
 	);
 }
@@ -302,28 +175,24 @@ export function ProductForm({
 	onChange,
 	errors,
 	onClearError,
-	assets,
-	mediaItems,
-	onAssetAdd,
-	onMediaAdd,
-	onAssetRemove,
-	onMediaRemove,
-	onAssetUpload,
-	onMediaUpload,
+	productImages = [],
+	productUrls = [],
+	onImageAdd,
+	onImageRemove,
+	onUrlAdd,
+	onUrlRemove,
 	readOnly,
 }: {
 	form: ProductFormValues;
 	onChange: (form: ProductFormValues) => void;
 	errors: Record<string, string>;
 	onClearError: (key: string) => void;
-	assets?: ProductAsset[];
-	mediaItems?: ProductAsset[];
-	onAssetAdd?: (items: ProductAsset[]) => void;
-	onMediaAdd?: (items: ProductAsset[]) => void;
-	onAssetRemove?: (id: string) => void;
-	onMediaRemove?: (id: string) => void;
-	onAssetUpload?: () => void;
-	onMediaUpload?: () => void;
+	productImages?: ProductImage[];
+	productUrls?: ProductUrl[];
+	onImageAdd?: (items: ProductImage[]) => void;
+	onImageRemove?: (id: string) => void;
+	onUrlAdd?: (item: ProductUrl) => void;
+	onUrlRemove?: (id: string) => void;
 	readOnly?: boolean;
 }) {
 	const set = <K extends keyof ProductFormValues>(
@@ -334,27 +203,36 @@ export function ProductForm({
 		onClearError(key);
 	};
 
+	const segmentOptions = useMemo(() => loadActiveSegmentOptions(), []);
+	const categoryOptions = useMemo(() => loadActiveCategoryOptions(), []);
+	const formOptions = useMemo(() => loadActiveFormOptions(), []);
+	const cfuOptions = useMemo(() => loadActiveCfuOptions(), []);
+
 	const hsnMasters = typeof window !== "undefined" ? loadHSNMasters() : [];
 	const hsnOptions = hsnMasters
 		.filter((h) => h.status === "active")
 		.map((h) => ({
 			value: h.hsnCode,
 			label: h.hsnCode,
-			sublabel: h.hsnDescription,
 		}));
 
 	const handleHSNChange = (hsnCode: string) => {
 		if (!hsnCode) {
-			onChange({ ...form, hsnCode: "", gstRate: "" });
+			onChange({ ...form, hsnCode: "", hsnId: "", gstRate: "", gstId: "" });
 			onClearError("hsnCode");
 			onClearError("gstRate");
-		} else {
-			const selectedHSN = hsnMasters.find((h) => h.hsnCode === hsnCode);
-			const gstRate = selectedHSN ? selectedHSN.gstRate : "";
-			onChange({ ...form, hsnCode, gstRate });
-			onClearError("hsnCode");
-			onClearError("gstRate");
+			return;
 		}
+		const tax = resolveProductTaxFromHsn(hsnCode);
+		onChange({
+			...form,
+			hsnCode,
+			hsnId: tax ? String(tax.hsnId) : "",
+			gstRate: tax?.gstRate ?? "",
+			gstId: tax?.gstId ? String(tax.gstId) : "",
+		});
+		onClearError("hsnCode");
+		onClearError("gstRate");
 	};
 
 	const inputCls = (key: string) =>
@@ -378,8 +256,6 @@ export function ProductForm({
 					{ value: "Bottle", label: "Bottle" },
 					{ value: "Box", label: "Box" },
 					{ value: "Drum", label: "Drum" },
-					{ value: "Ton", label: "Ton" },
-					{ value: "Piece", label: "Piece" },
 				];
 
 	const decimalInput = (key: keyof ProductFormValues, value: string) =>
@@ -387,44 +263,17 @@ export function ProductForm({
 			key,
 			value
 				.replace(/[^0-9.]/g, "")
-				.replace(
-					/(\..*)\./g,
-					"$1",
-				) as ProductFormValues[keyof ProductFormValues],
+				.replace(/(\..*)\./g, "$1") as ProductFormValues[keyof ProductFormValues],
 		);
 
-	const mediaInputRef = useRef<HTMLInputElement | null>(null);
-	const docInputRef = useRef<HTMLInputElement | null>(null);
-	const openMediaPicker = () => mediaInputRef.current?.click();
-	const openDocPicker = () => docInputRef.current?.click();
-	const [assetType, setAssetType] = useState<"media" | "link">("media");
-	const [linkTitle, setLinkTitle] = useState("");
+	const imageInputRef = useRef<HTMLInputElement | null>(null);
+	const openImagePicker = () => imageInputRef.current?.click();
 	const [linkUrl, setLinkUrl] = useState("");
-	const [previewImage, setPreviewImage] = useState<{
-		src: string;
-		name: string;
-	} | null>(null);
-	const allAssets = assets ?? mediaItems ?? [];
-	const emitAdd = onAssetAdd ?? onMediaAdd ?? (() => {});
-	const emitRemove = onAssetRemove ?? onMediaRemove ?? (() => {});
-	const emitUpload = onAssetUpload ?? onMediaUpload ?? (() => {});
-	const imageItems = allAssets.filter(
-		(item) => item.kind === "image" || item.mediaKind === "image",
-	);
-	const documentItems = allAssets.filter(
-		(item) =>
-			item.kind === "document" ||
-			item.mediaKind === "pdf" ||
-			item.mediaKind === "document" ||
-			item.mediaKind === "spreadsheet",
-	);
-	const linkItems = allAssets.filter(
-		(item) => item.kind === "link" || item.type === "link",
-	);
-	const readyCount = allAssets.filter((item) => !item.uploaded).length;
+	const [linkUrlError, setLinkUrlError] = useState("");
+	const [urlDialogOpen, setUrlDialogOpen] = useState(false);
+	const [previewImage, setPreviewImage] = useState<ProductImage | null>(null);
+	const [uploadingImages, setUploadingImages] = useState(false);
 
-	const uploadSelected = () => emitUpload();
-	const removeMedia = (id: string) => emitRemove(id);
 	const openExternal = (url?: string) => {
 		if (!url) return;
 		const trimmedUrl = url.trim();
@@ -435,70 +284,56 @@ export function ProductForm({
 		const safeUrl = isAbsoluteUrl ? trimmedUrl : `https://${trimmedUrl}`;
 		window.open(safeUrl, "_blank", "noopener,noreferrer");
 	};
-	const getAssetUrl = (item: ProductAsset) =>
-		item.url ?? item.fileUrl ?? item.previewUrl ?? item.src ?? "";
-	const getAssetTypeLabel = (item: ProductAsset) => {
-		if (item.type === "link") return "Link";
-		switch (item.mediaKind ?? item.fileType?.toLowerCase()) {
-			case "video":
-				return "Video";
-			case "pdf":
-				return "PDF";
-			case "document":
-				return "Document";
-			case "spreadsheet":
-				return "Spreadsheet";
-			default:
-				return "Image";
-		}
-	};
-	const getAssetIcon = (item: ProductAsset) => {
-		if (item.type === "link") return <Link2 className='w-4 h-4' />;
-		switch (item.mediaKind ?? item.fileType?.toLowerCase()) {
-			case "video":
-				return <FileText className='w-4 h-4' />;
-			case "pdf":
-			case "document":
-			case "spreadsheet":
-				return <FileText className='w-4 h-4' />;
-			default:
-				return <ImageIcon className='w-4 h-4' />;
-		}
-	};
-	const openAsset = (item: ProductAsset) => {
-		const url = getAssetUrl(item);
+
+	const downloadImage = (image: ProductImage) => {
+		const url = getImagePreviewUrl(image);
 		if (!url) return;
-		if (
-			item.type === "media" &&
-			(item.mediaKind === "image" || item.kind === "image")
-		) {
-			setPreviewImage({ src: url, name: item.name });
+		const anchor = document.createElement("a");
+		anchor.href = url;
+		anchor.download = image.name || "product-image";
+		anchor.target = "_blank";
+		anchor.rel = "noopener noreferrer";
+		document.body.appendChild(anchor);
+		anchor.click();
+		document.body.removeChild(anchor);
+	};
+
+	const handleImageFiles = async (files: File[]) => {
+		const valid = files.filter(isAllowedProductImageFile);
+		if (!valid.length || !onImageAdd) return;
+		setUploadingImages(true);
+		try {
+			const items = await Promise.all(valid.map(createProductImageFromFile));
+			onImageAdd(items);
+		} finally {
+			setUploadingImages(false);
+		}
+	};
+
+	const handleAddUrl = () => {
+		const trimmed = linkUrl.trim();
+		if (!trimmed) {
+			setLinkUrlError("URL is required");
 			return;
 		}
-		openExternal(url);
-	};
-	const openDocument = (item: ProductAsset) => {
-		openExternal(getAssetUrl(item));
+		if (!isValidProductUrl(trimmed)) {
+			setLinkUrlError("Enter a valid URL (https://…)");
+			return;
+		}
+		onUrlAdd?.(createProductUrl(trimmed));
+		setLinkUrl("");
+		setLinkUrlError("");
+		setUrlDialogOpen(false);
 	};
 
 	return (
 		<div className='w-full space-y-4'>
-			{/* <div className="flex items-start gap-2.5 pb-3 border-b border-border">
-        <div className="flex items-center justify-center flex-shrink-0 border rounded-lg w-7 h-7 bg-brand-50 border-brand-100">
-          <Package className="w-3.5 h-3.5 text-brand-600" />
-        </div>
-        <div>
-          <p className="text-xs font-semibold text-foreground">Product Master</p>
-          <p className="text-[11px] text-muted-foreground">Catalogue, pricing, compliance, and media</p>
-        </div>
-      </div> */}
-
-			<div className='pt-1 space-y-5 ' >
+			<div className='pt-1 space-y-4'>
+				{/* Basic Product Information */}
 				<div>
-					<SectionHead label='Basic Details & Classification' />
-					<div className='grid grid-cols-12 gap-5 md:gap-x-10'>
-						{/* Product Name */}
-						<div className='col-span-12 space-y-1 md:col-span-2'>
+					<SectionHead label='Basic Product Information' />
+					<div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3'>
+						<div className='space-y-1'>
 							<Label className='text-xs font-medium'>
 								Product Name <span className='text-red-500'>*</span>
 							</Label>
@@ -512,78 +347,70 @@ export function ProductForm({
 							<FieldError msg={errors.productName} />
 						</div>
 
-						{/* Status */}
-						{/* <div className="col-span-12 md:col-span-2">
-                <AC
-                  label="Status"
-                  value={form.status}
-                  onChange={(value) => set("status", value as ProductStatus)}
-                  options={PRODUCT_STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-                  placeholder="Select status..."
-                  disabled={readOnly}
-                />
-              </div> */}
-
-						{/* Category */}
-						<div className='col-span-12 md:col-span-2 md:gap-x-10'>
-							<AC
-								label='Category'
-								required
-								value={form.category}
-								onChange={(value) => set("category", value)}
-								options={PRODUCT_CATEGORY_OPTIONS}
-								placeholder='Select category...'
-								disabled={readOnly}
-							/>
-							<FieldError msg={errors.category} />
-						</div>
-
-						{/* Sub Category
-              <div className="col-span-12 md:col-span-3">
-                <AC
-                  label="Sub Category"
-                  required
-                  value={form.subCategory}
-                  onChange={(value) => set("subCategory", value)}
-                  options={PRODUCT_SUBCATEGORY_OPTIONS}
-                  placeholder="Select sub category..."
-                  disabled={readOnly}
-                />
-                <FieldError msg={errors.subCategory} />
-              </div> */}
-
-						{/* Segment */}
-						<div className='col-span-12 md:col-span-2 md:gap-x-10'>
-							<AC
-								label='Segment'
-								value={form.segment}
-								onChange={(value) => set("segment", value)}
-								options={PRODUCT_SEGMENT_OPTIONS}
-								placeholder='Select segment...'
+						<div className='space-y-1'>
+							<Label className='text-xs font-medium'>Scientific Name</Label>
+							<Input
+								value={form.scientificName}
+								onChange={(e) => set("scientificName", e.target.value)}
+								placeholder='e.g. Trichoderma viride'
+								className={inputCls("scientificName")}
 								disabled={readOnly}
 							/>
 						</div>
 
-						{/* Formulation */}
-						<div className='col-span-12 md:col-span-2'>
-							<AC
-								label='Formulation'
-								value={form.formulation}
-								onChange={(value) => set("formulation", value)}
-								options={PRODUCT_FORMULATION_OPTIONS}
-								placeholder='Select formulation...'
-								disabled={readOnly}
-							/>
-						</div>
+						<SelectField
+							label='Segment'
+							required
+							value={form.segment}
+							onChange={(value) => set("segment", value)}
+							options={segmentOptions}
+							placeholder='Select segment…'
+							disabled={readOnly}
+							error={errors.segment}
+						/>
+
+						<SelectField
+							label='Category'
+							required
+							value={form.category}
+							onChange={(value) => set("category", value)}
+							options={categoryOptions}
+							placeholder='Select category…'
+							disabled={readOnly}
+							error={errors.category}
+						/>
+
+						<SelectField
+							label='Form'
+							required
+							value={form.form}
+							onChange={(value) => set("form", value)}
+							options={formOptions}
+							placeholder='Select form…'
+							disabled={readOnly}
+							error={errors.form}
+						/>
+
+						<SelectField
+							label='CFU'
+							value={form.cfu}
+							onChange={(value) => set("cfu", value)}
+							options={cfuOptions}
+							placeholder='Select CFU…'
+							disabled={readOnly}
+							error={errors.cfu}
+						/>
 					</div>
 				</div>
 
-				<div className='pt-4 border-t border-border/60'>
-					<SectionHead label='Pricing & Compliance' />
-					<div className='grid grid-cols-12 gap-5'>
-						{/* Row 1 (5 fields: 2 + 3 + 2 + 3 + 2 = 12 columns) */}
-						{/* SKU */}
-						<div className='col-span-12 space-y-1 md:col-span-2'>
+				{/* Tax & Compliance */}
+				<div className='pt-3 border-t border-border/60'>
+					<SectionHead
+						label='Tax & Compliance'
+						sub='Pricing (CP, DP, RP, MRP) is maintained in Pricing Master.'
+					/>
+					<div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3'>
+						<div className='space-y-1'>
 							<Label className='text-xs font-medium'>
 								SKU <span className='text-red-500'>*</span>
 							</Label>
@@ -597,118 +424,68 @@ export function ProductForm({
 							<FieldError msg={errors.sku} />
 						</div>
 
-						{/* HSN Code (Searchable dropdown) */}
-						<div className='col-span-12 md:col-span-2'>
-							<AC
-								label='HSN Code'
-								required
-								value={form.hsnCode}
-								onChange={handleHSNChange}
-								options={hsnOptions}
-								placeholder='Select HSN code...'
-								disabled={readOnly}
-								error={errors.hsnCode}
-							/>
-						</div>
+						<SelectField
+							label='HSN Code'
+							required
+							value={form.hsnCode}
+							onChange={handleHSNChange}
+							options={hsnOptions}
+							placeholder='Select HSN code…'
+							disabled={readOnly}
+							error={errors.hsnCode}
+						/>
 
-						{/* GST Rate (Autofilled & Disabled when HSN selected) */}
-						<div className='col-span-12 md:col-span-2'>
-							<AC
-								label='GST Rate'
+						<div className='space-y-1'>
+							<Label className='text-xs font-medium'>
+								GST <span className='text-red-500'>*</span>
+							</Label>
+							<Input
 								value={form.gstRate}
-								onChange={(value) => set("gstRate", value)}
-								options={PRODUCT_GST_OPTIONS}
-								placeholder='Select GST rate...'
-								disabled={readOnly || !!form.hsnCode}
+								readOnly
+								disabled
+								placeholder='Select HSN code first'
+								className={cn(
+									"h-8 text-xs bg-muted/30 cursor-not-allowed",
+									errors.gstRate && "border-red-400",
+								)}
 							/>
+							<p className='text-[10px] text-muted-foreground leading-snug'>
+								GST is auto-filled from selected HSN code.
+							</p>
+							<FieldError msg={errors.gstRate} />
 						</div>
+					</div>
+				</div>
 
-						{/* Crop Applicable */}
-						<div className='col-span-12 space-y-1 md:col-span-2'>
-							<Label className='text-xs font-medium'>Crop Applicable</Label>
-							<Input
-								value={form.cropApplicable}
-								onChange={(e) => set("cropApplicable", e.target.value)}
-								placeholder='e.g. Cotton, Paddy'
-								className={inputCls("cropApplicable")}
-								disabled={readOnly}
-							/>
-						</div>
+				{/* Packaging Information */}
+				<div className='pt-3 border-t border-border/60'>
+					<SectionHead label='Packaging Information' />
+					<div className='grid grid-cols-1 md:grid-cols-3 gap-3'>
+						<SelectField
+							label='Base Unit'
+							required
+							value={form.baseUnit}
+							onChange={(value) => set("baseUnit", value)}
+							options={uomOptions}
+							placeholder='Select base unit…'
+							disabled={readOnly}
+							error={errors.baseUnit}
+						/>
 
-						{/* MRP */}
-						<div className='col-span-12 space-y-1 md:col-span-1'>
-							<Label className='text-xs font-medium'>MRP</Label>
-							<Input
-								value={form.mrp}
-								onChange={(e) => decimalInput("mrp", e.target.value)}
-								className={inputCls("mrp")}
-								inputMode='decimal'
-								disabled={readOnly}
-							/>
-						</div>
+						<SelectField
+							label='Packaging Unit'
+							required
+							value={form.packagingUnit}
+							onChange={(value) => set("packagingUnit", value)}
+							options={uomOptions}
+							placeholder='Select packaging unit…'
+							disabled={readOnly}
+							error={errors.packagingUnit}
+						/>
 
-						{/* Row 2 (3 fields: 4 + 4 + 4 = 12 columns) */}
-						<div className='col-span-12' />
-						{/* Base Unit */}
-						<div className='col-span-12 space-y-1 md:col-span-1'>
+						<div className='space-y-1'>
 							<Label className='text-xs font-medium'>
-								Base Unit <span className='text-red-500'>*</span>
-							</Label>
-							<Select
-								value={form.baseUnit}
-								onValueChange={(value) => set("baseUnit", value)}
-								disabled={readOnly}
-							>
-								<SelectTrigger className={cn(inputCls("baseUnit"), "pl-1 pr-0")}>
-									<SelectValue placeholder='Select base unit...' />
-								</SelectTrigger>
-								<SelectContent className='bg-white border shadow-lg border-border'>
-									{uomOptions.map((opt) => (
-										<SelectItem
-											key={opt.value}
-											value={opt.value}
-											className='text-xs'
-										>
-											{opt.label}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-							<FieldError msg={errors.baseUnit} />
-						</div>
-
-						{/* Packaging Unit */}
-						<div className='col-span-12 space-y-1 md:col-span-1'>
-							<Label className='text-xs font-medium'>
-								Packaging Unit <span className='text-red-500'>*</span>
-							</Label>
-							<Select
-								value={form.packagingUnit}
-								onValueChange={(value) => set("packagingUnit", value)}
-								disabled={readOnly}
-							>
-								<SelectTrigger className={cn(inputCls("packagingUnit"), "pl-1 pr-0")}>
-									<SelectValue placeholder='Select pack...' />
-								</SelectTrigger>
-								<SelectContent className='bg-white border shadow-lg border-border'>
-									{uomOptions.map((opt) => (
-										<SelectItem
-											key={opt.value}
-											value={opt.value}
-											className='text-xs'
-										>
-											{opt.label}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-							<FieldError msg={errors.packagingUnit} />
-						</div>
-
-						{/* Conversion Quantity */}
-						<div className='col-span-12 space-y-1 md:col-span-1'>
-							<Label className='text-xs font-medium'>
-								Conversion Qty <span className='text-red-500'>*</span>
+								Conversion Quantity <span className='text-red-500'>*</span>
 							</Label>
 							<Input
 								value={form.conversionQuantity}
@@ -725,204 +502,234 @@ export function ProductForm({
 					</div>
 				</div>
 
-				<div className='space-y-4'>
-					<div className='space-y-1'>
-						<p className='text-xs font-semibold text-foreground'>
-							Media Upload
-						</p>
-						<p className='text-[11px] text-muted-foreground'>
-							Manage all product assets in one place.
-						</p>
-					</div>
+				{/* Media & Documents */}
+				<div className='pt-3 border-t border-border/60 space-y-3'>
+					<SectionHead
+						label='Media & Documents'
+						sub='Product images and external document links.'
+					/>
 
-					{!readOnly && (
-						<div className='grid grid-cols-1 gap-3 md:grid-cols-[160px_minmax(0,1fr)]'>
-							<div className='space-y-1'>
-								<Label className='text-xs font-medium'>Type</Label>
-								<AC
-									label=''
-									value={assetType}
-									onChange={(value) => setAssetType(value as "media" | "link")}
-									options={[
-										{ value: "media", label: "Media" },
-										{ value: "link", label: "Link" },
-									]}
-									placeholder='Select type...'
-									disabled={readOnly}
-									searchable={false}
-								/>
-							</div>
-
-							{assetType === "media" ? (
-								<div className='flex flex-col gap-2 px-1 py-0 border rounded-xl border-border bg-muted/10 md:flex-row md:items-center md:justify-between'>
+					<div className='space-y-2'>
+						<div className='flex items-center justify-between gap-2'>
+							<p className='text-[11px] font-semibold text-foreground'>Product Images</p>
+							{!readOnly && (
+								<div className='flex items-center gap-2'>
 									<input
-										ref={mediaInputRef}
+										ref={imageInputRef}
 										type='file'
-										accept='image/png,image/jpeg,image/jpg,image/webp,video/mp4,video/quicktime,video/x-msvideo,.pdf,.doc,.docx,.xls,.xlsx'
+										accept='image/jpeg,image/jpg,image/png,image/webp,.jpg,.jpeg,.png,.webp'
 										multiple
 										className='hidden'
-										disabled={readOnly}
 										onChange={(e) => {
-											const files = Array.from(e.target.files ?? []);
-											const items = files.map((file) => createMediaItem(file));
-											if (items.length) emitAdd(items);
+											void handleImageFiles(Array.from(e.target.files ?? []));
 											e.currentTarget.value = "";
 										}}
 									/>
 									<Button
 										type='button'
-										className='h-8 px-4 text-xs text-white bg-brand-600 hover:bg-brand-700 md:shrink-0'
-										onClick={openMediaPicker}
-										disabled={readOnly}
+										variant='outline'
+										size='sm'
+										className='h-7 px-2.5 text-[11px] border-brand-300 hover:bg-brand-50 hover:text-brand-700'
+										onClick={openImagePicker}
+										disabled={uploadingImages}
 									>
-										Choose Files
-									</Button>
-									<div className='min-w-0 space-y-1'>
-										<p className='text-xs font-medium text-foreground'>
-											Upload Files
-										</p>
-										<p className='text-[11px] text-muted-foreground'>
-											Supported: PNG, JPG, JPEG, WEBP, PDF, DOC, DOCX, XLS,
-											XLSX, MP4, MOV, AVI
-										</p>
-										<p className='text-[11px] text-muted-foreground'>
-											Max size: 50MB per file
-										</p>
-									</div>
-								</div>
-							) : (
-								<div className='flex flex-col gap-2 px-3 py-3 border rounded-xl border-border bg-muted/10 md:flex-row md:items-end'>
-									<div className='grid flex-1 grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'>
-										<div className='space-y-1'>
-											<Label className='text-xs font-medium'>Link Title</Label>
-											<Input
-												value={linkTitle}
-												onChange={(e) => setLinkTitle(e.target.value)}
-												placeholder='e.g. Product brochure'
-												className='h-8 text-xs'
-												disabled={readOnly}
-											/>
-										</div>
-										<div className='space-y-1'>
-											<Label className='text-xs font-medium'>URL</Label>
-											<Input
-												value={linkUrl}
-												onChange={(e) => setLinkUrl(e.target.value)}
-												placeholder='https://...'
-												className='h-8 text-xs'
-												disabled={readOnly}
-											/>
-										</div>
-									</div>
-									<Button
-										type='button'
-										className='h-8 px-4 text-xs text-white bg-brand-600 hover:bg-brand-700 md:shrink-0'
-										disabled={readOnly || !linkTitle.trim() || !linkUrl.trim()}
-										onClick={() => {
-											emitAdd([
-												createLinkMediaItem(linkTitle.trim(), linkUrl.trim()),
-											]);
-											setLinkTitle("");
-											setLinkUrl("");
-										}}
-									>
-										<Link2 className='mr-1.5 h-3.5 w-3.5' /> Add Link
+										<Upload className='w-3 h-3 mr-1.5 text-brand-600' />
+										{uploadingImages ? "Uploading…" : "Upload Images"}
 									</Button>
 								</div>
 							)}
 						</div>
-					)}
 
-					<div className='space-y-3'>
-						<div className='flex items-center justify-between gap-3'>
-							<div>
-								<p className='text-xs font-semibold text-foreground'>
-									Uploaded Assets ({allAssets.length})
-								</p>
-								<p className='text-[11px] text-muted-foreground'>
-									Open or remove individual media and links from the same list.
-								</p>
-							</div>
-						</div>
-
-						{allAssets.length === 0 ? (
-							<p className='px-1 py-4 text-sm text-muted-foreground'>
-								No assets added yet.
+						{productImages.length === 0 && readOnly ? (
+							<p className='text-xs text-muted-foreground py-3 text-center border border-dashed border-border/60 rounded-lg bg-muted/10'>
+								No product images uploaded
 							</p>
 						) : (
-							<div className='space-y-3'>
-								{allAssets.map((item) => {
-									const url = getAssetUrl(item);
-									const typeLabel = getAssetTypeLabel(item);
-									const isImage =
-										item.type === "media" &&
-										(item.mediaKind === "image" || item.kind === "image");
+							<div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5'>
+								{productImages.map((image) => {
+									const preview = getImagePreviewUrl(image);
 									return (
 										<div
-											key={item.id}
-											className='p-3 bg-white border shadow-sm rounded-xl border-border'
+											key={image.id}
+											className='flex flex-col overflow-hidden border rounded-lg border-border/60 bg-white shadow-sm'
 										>
-											<div className='flex items-start justify-between gap-3'>
-												<div className='flex items-start min-w-0 gap-3'>
-													<div className='flex items-center justify-center flex-shrink-0 overflow-hidden border rounded-lg h-9 w-9 border-border bg-muted/20 text-brand-600'>
-														{isImage && url ? (
-															<img
-																src={url}
-																alt={item.name}
-																className='object-cover w-full h-full'
-															/>
-														) : (
-															getAssetIcon(item)
-														)}
+											<button
+												type='button'
+												className='relative h-[88px] w-full bg-muted/20 group/thumb'
+												onClick={() => setPreviewImage(image)}
+												title='Click to preview'
+											>
+												{preview ? (
+													<img
+														src={preview}
+														alt={image.name}
+														className='object-cover w-full h-full'
+													/>
+												) : (
+													<div className='flex items-center justify-center w-full h-full text-muted-foreground'>
+														<ImageIcon className='w-5 h-5' />
 													</div>
-													<div className='min-w-0'>
-														<p className='text-xs font-medium truncate text-foreground'>
-															{item.title || item.name}
-														</p>
-														<p className='text-[11px] text-muted-foreground truncate'>
-															{item.size ||
-																item.fileType ||
-																item.mediaKind ||
-																"Asset"}
-														</p>
-													</div>
-												</div>
-												<span
-													className={cn(
-														"inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
-														item.uploaded
-															? "bg-emerald-50 text-emerald-700"
-															: "bg-amber-50 text-amber-700",
-													)}
-												>
-													<CheckCircle2 className='w-3 h-3' />
-													{typeLabel}
+												)}
+												<span className='absolute bottom-1 right-1 rounded px-1.5 py-0.5 text-[9px] font-medium bg-black/55 text-white opacity-0 group-hover/thumb:opacity-100 transition-opacity'>
+													Click to preview
 												</span>
-											</div>
-											<div className='flex items-center justify-end gap-2 mt-3'>
-												<Button
-													type='button'
-													variant='outline'
-													className='h-8 px-3 text-[11px]'
-													onClick={() => openAsset(item)}
-													disabled={!url}
+											</button>
+											<div className='px-2 py-1.5 space-y-1 border-t border-border/40'>
+												<p
+													className='text-[10px] font-medium truncate text-foreground'
+													title={image.name}
 												>
-													Open
-												</Button>
-												{!readOnly && (
+													{image.name}
+												</p>
+												<p className='text-[9px] text-muted-foreground'>
+													{image.size || "—"}
+												</p>
+												<div className='flex items-center gap-1 pt-0.5'>
 													<Button
 														type='button'
 														variant='outline'
-														className='h-8 px-3 text-[11px] text-red-600 hover:text-red-700'
-														onClick={() => removeMedia(item.id)}
+														size='sm'
+														className='h-6 flex-1 px-1 text-[9px] gap-1'
+														onClick={() => setPreviewImage(image)}
 													>
-														Delete
+														<Eye className='w-3 h-3 shrink-0' />
+														Preview
 													</Button>
-												)}
+													<Button
+														type='button'
+														variant='outline'
+														size='sm'
+														className='h-6 w-7 px-0 shrink-0'
+														onClick={() => downloadImage(image)}
+														title='Download'
+													>
+														<Download className='w-3 h-3' />
+													</Button>
+													{!readOnly && (
+														<Button
+															type='button'
+															variant='outline'
+															size='sm'
+															className='h-6 w-7 px-0 shrink-0 text-red-600 hover:text-red-700 hover:bg-red-50'
+															onClick={() => onImageRemove?.(image.id)}
+															title='Delete'
+														>
+															<X className='w-3 h-3' />
+														</Button>
+													)}
+												</div>
 											</div>
 										</div>
 									);
 								})}
+
+								{!readOnly && (
+									<button
+										type='button'
+										onClick={openImagePicker}
+										disabled={uploadingImages}
+										className='flex flex-col items-center justify-center h-[118px] border border-dashed rounded-lg border-border/70 bg-muted/10 text-muted-foreground hover:border-brand-300 hover:bg-brand-50/40 hover:text-brand-700 transition-colors'
+									>
+										<Plus className='w-4 h-4 mb-1' />
+										<span className='text-[10px] font-medium'>Upload</span>
+									</button>
+								)}
+							</div>
+						)}
+
+						{productImages.length === 0 && !readOnly && (
+							<p className='text-[10px] text-muted-foreground'>
+								No product images uploaded. JPG, JPEG, PNG, WEBP supported.
+							</p>
+						)}
+					</div>
+
+					<div className='pt-2 space-y-2 border-t border-border/40'>
+						<div className='flex items-center justify-between gap-2'>
+							<p className='text-[11px] font-semibold text-foreground'>Document URLs</p>
+							{!readOnly && (
+								<Button
+									type='button'
+									variant='outline'
+									size='sm'
+									className='h-7 px-2.5 text-[11px] border-border hover:bg-muted/30'
+									onClick={() => {
+										setLinkUrl("");
+										setLinkUrlError("");
+										setUrlDialogOpen(true);
+									}}
+								>
+									<Plus className='w-3 h-3 mr-1.5 text-muted-foreground' /> Add URL
+								</Button>
+							)}
+						</div>
+
+						{productUrls.length === 0 ? (
+							<p className='text-xs text-muted-foreground py-3 text-center border border-dashed border-border/60 rounded-lg bg-muted/10'>
+								No document URLs added
+							</p>
+						) : (
+							<div className='overflow-hidden border rounded-lg border-border/60'>
+								<table className='w-full text-xs'>
+									<thead>
+										<tr className='border-b bg-muted/30 border-border/50'>
+											<th className='w-12 px-2 py-1.5 text-left text-[10px] font-semibold text-muted-foreground'>
+												Sr No
+											</th>
+											<th className='px-2 py-1.5 text-left text-[10px] font-semibold text-muted-foreground'>
+												URL
+											</th>
+											<th className='w-24 px-2 py-1.5 text-center text-[10px] font-semibold text-muted-foreground'>
+												Open Link
+											</th>
+											{!readOnly && (
+												<th className='w-16 px-2 py-1.5 text-center text-[10px] font-semibold text-muted-foreground'>
+													Delete
+												</th>
+											)}
+										</tr>
+									</thead>
+									<tbody>
+										{productUrls.map((item, index) => (
+											<tr key={item.id} className='border-b border-border/40 last:border-0'>
+												<td className='px-2 py-2 text-[11px] text-muted-foreground tabular-nums'>
+													{index + 1}
+												</td>
+												<td className='px-2 py-2'>
+													<p className='text-[11px] text-foreground truncate max-w-[280px] md:max-w-md' title={item.url}>
+														{item.url}
+													</p>
+												</td>
+												<td className='px-2 py-2 text-center'>
+													<Button
+														type='button'
+														variant='ghost'
+														size='icon'
+														className='w-7 h-7 text-brand-600 hover:text-brand-700 hover:bg-brand-50'
+														onClick={() => openExternal(item.url)}
+														title='Open link'
+													>
+														<ExternalLink className='w-3.5 h-3.5' />
+													</Button>
+												</td>
+												{!readOnly && (
+													<td className='px-2 py-2 text-center'>
+														<Button
+															type='button'
+															variant='ghost'
+															size='icon'
+															className='w-7 h-7 hover:bg-red-50 text-muted-foreground hover:text-red-600'
+															onClick={() => onUrlRemove?.(item.id)}
+															title='Delete'
+														>
+															<X className='w-3.5 h-3.5' />
+														</Button>
+													</td>
+												)}
+											</tr>
+										))}
+									</tbody>
+								</table>
 							</div>
 						)}
 					</div>
@@ -931,20 +738,70 @@ export function ProductForm({
 
 			<Dialog
 				open={!!previewImage}
-				onOpenChange={(open) => !open && setPreviewImage(null)}
+				onOpenChange={(open) => {
+					if (!open) setPreviewImage(null);
+				}}
 			>
-				<DialogContent className='max-w-3xl p-4 bg-white border shadow-lg border-border rounded-xl'>
+				<DialogContent className='z-[500] max-w-3xl p-4 bg-white border shadow-lg border-border rounded-xl'>
 					<DialogHeader className='pb-2 border-b border-border/50'>
 						<DialogTitle className='text-sm font-semibold truncate text-foreground'>
-							{previewImage?.name}
+							{previewImage?.name ?? "Image preview"}
 						</DialogTitle>
 					</DialogHeader>
-					<div className='flex items-center justify-center py-4 rounded-lg bg-muted/5'>
-						<img
-							src={previewImage?.src}
-							alt={previewImage?.name}
-							className='max-h-[70vh] max-w-full object-contain'
-						/>
+					<div className='flex items-center justify-center min-h-[200px] py-4 rounded-lg bg-muted/5'>
+						{previewImage && getImagePreviewUrl(previewImage) ? (
+							<img
+								src={getImagePreviewUrl(previewImage)}
+								alt={previewImage.name}
+								className='max-h-[70vh] max-w-full object-contain'
+							/>
+						) : (
+							<p className='text-sm text-muted-foreground'>Preview unavailable</p>
+						)}
+					</div>
+				</DialogContent>
+			</Dialog>
+
+			<Dialog open={urlDialogOpen} onOpenChange={setUrlDialogOpen}>
+				<DialogContent className='max-w-md p-4 bg-white border border-border rounded-xl shadow-lg'>
+					<DialogHeader className='pb-2'>
+						<DialogTitle className='text-sm font-semibold'>Add URL</DialogTitle>
+					</DialogHeader>
+					<div className='space-y-2'>
+						<div className='space-y-1'>
+							<Label className='text-xs font-medium'>
+								URL <span className='text-red-500'>*</span>
+							</Label>
+							<Input
+								value={linkUrl}
+								onChange={(e) => {
+									setLinkUrl(e.target.value);
+									if (linkUrlError) setLinkUrlError("");
+								}}
+								placeholder='Enter URL'
+								className={cn("h-8 text-xs", linkUrlError && "border-red-400")}
+							/>
+							{linkUrlError && <FieldError msg={linkUrlError} />}
+						</div>
+						<div className='flex justify-end gap-2 pt-1'>
+							<Button
+								type='button'
+								variant='outline'
+								size='sm'
+								className='h-8 text-xs'
+								onClick={() => setUrlDialogOpen(false)}
+							>
+								Cancel
+							</Button>
+							<Button
+								type='button'
+								size='sm'
+								className='h-8 text-xs text-white bg-brand-600 hover:bg-brand-700'
+								onClick={handleAddUrl}
+							>
+								Add URL
+							</Button>
+						</div>
 					</div>
 				</DialogContent>
 			</Dialog>
@@ -957,8 +814,14 @@ export function validateProductForm(
 ): Record<string, string> {
 	const errors: Record<string, string> = {};
 	if (!form.productName.trim()) errors.productName = "Product name is required";
+	if (!form.segment) errors.segment = "Segment is required";
 	if (!form.category) errors.category = "Category is required";
+	if (!form.form) errors.form = "Form is required";
 	if (!form.hsnCode.trim()) errors.hsnCode = "HSN code is required";
+	else if (!form.gstRate?.trim()) {
+		errors.gstRate =
+			"Selected HSN does not have a GST rate mapped. Choose another HSN code.";
+	}
 	if (!form.sku.trim()) errors.sku = "SKU is required";
 	if (!form.baseUnit) errors.baseUnit = "Base unit is required";
 	if (!form.packagingUnit) errors.packagingUnit = "Packaging unit is required";
@@ -977,48 +840,32 @@ export function formValuesToProduct(
 	form: ProductFormValues,
 	base: Partial<Product> & {
 		id: number;
-		productId: string;
-		assets?: ProductAsset[];
-		mediaItems?: ProductAsset[];
+		productImages?: ProductImage[];
+		productUrls?: ProductUrl[];
 	},
 ): Product {
-	const category =
-		PRODUCT_CATEGORY_OPTIONS.find((option) => option.value === form.category)
-			?.label ?? "";
-	const subCategory =
-		PRODUCT_SUBCATEGORY_OPTIONS.find(
-			(option) => option.value === form.subCategory,
-		)?.label ?? "";
-	const segment =
-		PRODUCT_SEGMENT_OPTIONS.find((option) => option.value === form.segment)
-			?.label ?? "";
-	const formulation =
-		PRODUCT_FORMULATION_OPTIONS.find(
-			(option) => option.value === form.formulation,
-		)?.label ?? "";
-
 	return {
 		id: base.id,
-		productId: base.productId,
+		productId: base.productId ?? "",
 		productName: form.productName.trim(),
-		category,
-		subCategory,
-		segment,
-		formulation,
+		scientificName: form.scientificName.trim() || undefined,
+		category: form.category,
+		subCategory: "",
+		segment: form.segment,
+		form: form.form,
+		cfu: form.cfu.trim() || undefined,
 		hsnCode: form.hsnCode.trim(),
+		hsnId: form.hsnId ? Number(form.hsnId) : undefined,
 		gstRate: form.gstRate,
+		gstId: form.gstId ? Number(form.gstId) : undefined,
 		sku: form.sku.trim().toUpperCase(),
-		cropApplicable: form.cropApplicable.trim(),
-		mrp: Number(form.mrp || 0),
-		costPrice: Number(form.costPrice || 0),
-		distributorPrice: Number(form.distributorPrice || 0),
 		status: form.status,
 		createdBy: base.createdBy ?? "Admin",
 		createdDate: base.createdDate ?? todayStr(),
 		updatedBy: "Admin",
 		updatedDate: todayStr(),
-		assets: base.assets ?? base.mediaItems ?? [],
-		mediaItems: base.assets ?? base.mediaItems ?? [],
+		productImages: base.productImages ?? [],
+		productUrls: base.productUrls ?? [],
 		baseUnit: form.baseUnit,
 		packagingUnit: form.packagingUnit,
 		conversionQuantity: form.conversionQuantity

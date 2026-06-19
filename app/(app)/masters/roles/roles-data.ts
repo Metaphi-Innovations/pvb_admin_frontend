@@ -3,45 +3,53 @@
 export type GeoLevel =
   | "Country"
   | "Zone"
-  | "State"
   | "Region"
+  | "State"
   | "Area"
   | "Territory"
-  | "Locality"
+  | "District"
+  | "City"
+  | "Town"
   | "None";
 
 export const GEO_LEVELS: GeoLevel[] = [
   "Country",
   "Zone",
-  "State",
   "Region",
+  "State",
   "Area",
   "Territory",
-  "Locality",
+  "District",
+  "City",
+  "Town",
   "None",
 ];
 
 /** Higher number = higher in hierarchy (broader scope). None = 0 (not in hierarchy). */
 export const GEO_LEVEL_ORDER: Record<GeoLevel, number> = {
-  Country:   8,
-  Zone:      7,
-  State:     6,
-  Region:    5,
-  Area:      4,
-  Territory: 3,
-  Locality:  2,
-  None:      0,
+  Country: 10,
+  Zone: 9,
+  Region: 8,
+  State: 7,
+  Area: 6,
+  Territory: 5,
+  District: 4,
+  City: 3,
+  Town: 2,
+  None: 0,
 };
 
 export const GEO_LEVEL_LABEL: Record<GeoLevel, string> = {
-  Country:   "Country",
-  Zone:      "Zone",
-  State:     "State",
-  Region:    "Region",
-  Area:      "Area",
+  Country: "Country",
+  Zone: "Zone",
+  Region: "Region",
+  State: "State",
+  Area: "Area",
   Territory: "Territory",
-  Locality:  "Locality",
-  None:      "None (Functional)",
+  District: "District",
+  City: "City",
+  Town: "Town",
+  None: "None (Functional)",
 };
 
 export interface ApprovalStep {
@@ -183,7 +191,7 @@ const SEED_ROLES: Role[] = [
     id: 7,
     roleName: "DO",
     description: "On-ground operations and last-mile distribution officer.",
-    geoLevel: "Locality",
+    geoLevel: "Town",
     approvalChain: [
       { uid: "s7-1", roleId: 1, roleName: "TM" },
       { uid: "s7-1b", roleId: 2, roleName: "FMO" },
@@ -202,7 +210,7 @@ const SEED_ROLES: Role[] = [
     id: 8,
     roleName: "Intern",
     description: "Intern in field operations. Supervised by Territory Manager.",
-    geoLevel: "Locality",
+    geoLevel: "Town",
     approvalChain: [
       { uid: "s8-1", roleId: 1, roleName: "TM" },
       { uid: "s8-1b", roleId: 2, roleName: "FMO" },

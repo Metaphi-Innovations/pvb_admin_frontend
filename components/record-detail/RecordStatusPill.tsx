@@ -10,19 +10,19 @@ export function RecordStatusPill({
   variant?: "active" | "inactive" | "draft" | "blocked" | "neutral";
 }) {
   const styles = {
-    active: "bg-emerald-50 text-emerald-700 border-emerald-200/60",
-    inactive: "bg-slate-100 text-slate-600 border-slate-200/60",
-    draft: "bg-blue-50 text-blue-700 border-blue-200/60",
-    blocked: "bg-red-50 text-red-700 border-red-200/60",
-    neutral: "bg-slate-50 text-slate-600 border-slate-200/60",
+    active: "bg-[#ECFDF5] text-[#16A34A] border-[#86EFAC]",
+    inactive: "bg-[#F3F4F6] text-[#64748B] border-[#E5E7EB]",
+    draft: "bg-[#FFFBEB] text-[#B45309] border-[#F59E0B]",
+    blocked: "bg-[#FEF2F2] text-[#DC2626] border-[#FCA5A5]",
+    neutral: "bg-[#F3F4F6] text-[#64748B] border-[#E5E7EB]",
   }[variant];
 
   const dot = {
-    active: "bg-emerald-500",
-    inactive: "bg-slate-400",
-    draft: "bg-blue-500",
-    blocked: "bg-red-400",
-    neutral: "bg-slate-400",
+    active: "bg-[#16A34A]",
+    inactive: "bg-[#9CA3AF]",
+    draft: "bg-[#F59E0B]",
+    blocked: "bg-[#DC2626]",
+    neutral: "bg-[#9CA3AF]",
   }[variant];
 
   return (

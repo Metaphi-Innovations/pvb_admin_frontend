@@ -7,6 +7,8 @@ import {
 	type Customer,
 } from "@/app/(app)/masters/customers/customer-data";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
+import { resolveSalesUnitPrice } from "@/lib/pricing/resolve-pricing";
+import type { SezSupplyType } from "@/lib/masters/gst-compliance";
 import type { PaymentMode } from "../expenses/expense-data";
 
 export type InvoiceStatus = "draft" | "sent" | "cancelled";
@@ -70,6 +72,10 @@ export interface InvoiceRecord {
 	customerMobile: string;
 	customerEmail: string;
 	customerGst: string;
+	customerGstCategory?: string;
+	sezSupplyType?: SezSupplyType;
+	lutNumber?: string;
+	lutDeclaration?: string;
 	billingAddress: string;
 	lineItems: InvoiceLineItem[];
 	subtotal: number;
@@ -225,17 +231,20 @@ export interface InvoiceProductOption {
 	unitPrice: number;
 }
 
-export function getProductsForInvoice(): InvoiceProductOption[] {
+export function getProductsForInvoice(customerId?: number): InvoiceProductOption[] {
 	return loadProducts()
 		.filter((p) => p.status === "active")
-		.map((p) => ({
-			id: p.id,
-			code: p.productId,
-			name: p.productName,
-			unit: p.baseUnit || "PCS",
-			taxPct: parseTaxPct(p.gstRate),
-			unitPrice: p.distributorPrice > 0 ? p.distributorPrice : p.mrp,
-		}));
+		.map((p) => {
+			const resolved = resolveSalesUnitPrice(p.id, customerId);
+			return {
+				id: p.id,
+				code: p.sku,
+				name: p.productName,
+				unit: p.baseUnit || "PCS",
+				taxPct: parseTaxPct(p.gstRate),
+				unitPrice: resolved.amount,
+			};
+		});
 }
 
 export function applyProductToInvoiceLine(
@@ -258,12 +267,14 @@ export function customerToInvoiceFields(c: Customer) {
 	const address = [c.address, c.districtName, c.stateName, c.pincode]
 		.filter(Boolean)
 		.join(", ");
+	const gstRegistered = !!(c.gstApplicable && c.gstin?.trim());
 	return {
 		customerId: c.id,
 		customerName: c.customerName,
 		customerMobile: mobile,
 		customerEmail: c.email,
-		customerGst: c.gstApplicable ? c.gstin : "",
+		customerGst: gstRegistered ? c.gstin : "",
+		customerGstCategory: c.gstCategory,
 		billingAddress: address,
 	};
 }
@@ -541,6 +552,10 @@ export type InvoiceFormInput = {
 	customerMobile: string;
 	customerEmail: string;
 	customerGst: string;
+	customerGstCategory?: string;
+	sezSupplyType?: SezSupplyType;
+	lutNumber?: string;
+	lutDeclaration?: string;
 	billingAddress: string;
 	lineItems: InvoiceLineItem[];
 	attachments: InvoiceAttachment[];

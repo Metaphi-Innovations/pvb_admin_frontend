@@ -12,7 +12,19 @@ import {
 	Package,
 	Info,
 } from "lucide-react";
-import { COMPANY_BILLING } from "@/lib/procurement/config";
+import { COMPANY_BILLING, PAYMENT_TERMS_OPTIONS } from "@/lib/procurement/config";
+import {
+	calcTotalQtyBase,
+	enrichProductForProcurement,
+	PACKAGING_UOM_OPTIONS,
+	type PackagingUom,
+} from "@/lib/procurement/procurement-line-utils";
+import { stateSelectOptions, warehouseSelectOptions } from "@/lib/procurement/warehouse-filter";
+import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
+import { resolvePurchaseCostPrice } from "@/lib/pricing/resolve-pricing";
+import { loadProducts } from "@/app/(app)/masters/products/product-data";
+import { AdditionalChargesEditor } from "@/components/procurement/AdditionalChargesEditor";
+import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
 import {
 	addProcurementProduct,
 	loadProcurementProducts,
@@ -52,7 +64,13 @@ export function emptyPOLine(): POLineItem {
 		productCode: "",
 		productName: "",
 		description: "",
-		uom: "",
+		sku: "",
+		baseUnit: "Unit",
+		packagingUnit: "Box",
+		conversionQty: 1,
+		orderUom: "Unit",
+		orderedQtyPack: 1,
+		uom: "Unit",
 		orderedQty: 1,
 		unitPrice: 0,
 		discountPct: 0,
@@ -63,6 +81,7 @@ export function emptyPOLine(): POLineItem {
 		taxAmount: 0,
 		netAmount: 0,
 		deliverySchedule: "",
+		cpSource: "pricing_master",
 	};
 }
 
@@ -74,26 +93,37 @@ function paymentTermDays(term: string): number {
 export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 	const pr = sourcePrId ? getPRById(sourcePrId) : null;
 	const supplier = getActiveSuppliers()[0];
-	const products = loadProcurementProducts();
 
 	const lines =
 		pr?.lines.map((l) => {
-			const p = products.find((x) => x.id === l.productId);
+			const info = enrichProductForProcurement(l.productId);
+			const cp = resolvePurchaseCostPrice(l.productId, supplier?.id);
+			const orderUom = l.requestUom ?? "Unit";
+			const orderedQtyPack = l.requestedQty;
+			const orderedQty = l.totalQtyBase ?? calcTotalQtyBase(orderUom, orderedQtyPack, info?.conversionQty ?? 1);
 			return {
 				...emptyPOLine(),
 				uid: `pl-${l.uid}`,
 				productId: l.productId,
-				productCode: l.productCode,
-				productName: l.productName,
+				productCode: info?.productCode ?? l.productCode,
+				productName: info?.productName ?? l.productName,
 				description: l.description,
-				uom: l.uom,
-				orderedQty: l.requestedQty,
-				unitPrice: p?.estimatedUnitPrice ?? 0,
+				sku: info?.sku ?? "",
+				baseUnit: info?.baseUnit ?? "Unit",
+				packagingUnit: info?.packagingUnit ?? "Box",
+				conversionQty: info?.conversionQty ?? 1,
+				orderUom,
+				orderedQtyPack,
+				uom: orderUom,
+				orderedQty,
+				unitPrice: cp.amount,
+				cpSource: cp.source,
 				prLineUid: l.uid,
 			};
 		}) ?? [];
 
 	const paymentTerms = "net-30";
+	const wh = pr?.warehouseId ? loadWarehouses().find((w) => w.id === pr.warehouseId) : null;
 	return {
 		poDate: new Date().toISOString().slice(0, 10),
 		supplierId: supplier?.id ?? 0,
@@ -110,6 +140,10 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 		creditDays: paymentTermDays(paymentTerms),
 		deliveryTerms: "",
 		expectedDeliveryDate: "",
+		state: pr?.state ?? "",
+		warehouseId: pr?.warehouseId ?? null,
+		warehouseName: pr?.warehouseName ?? wh?.warehouseName ?? "",
+		deliveryAddress: wh?.address ?? "",
 		notes: pr?.remarks ?? "",
 		sourcePrId: pr?.id ?? null,
 		sourcePrNumber: pr?.prNumber ?? "",
@@ -125,6 +159,7 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 		lines,
 		terms: [],
 		attachments: [],
+		additionalCharges: [],
 		otherCharges: 0,
 	};
 }
@@ -154,11 +189,12 @@ export function poToFormValues(po: PurchaseOrder): POFormValues {
 	};
 }
 
-function SectionHead({ label, sub }: { label: string; sub?: string }) {
+function SectionHead({ label, sub, required }: { label: string; sub?: string; required?: boolean }) {
 	return (
 		<div className="mb-2.5 mt-0.5">
-			<p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+			<p className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center">
 				{label}
+				{required && <span className="text-red-500 ml-1">*</span>}
 			</p>
 			{sub && <p className="mt-0.5 text-[11px] text-muted-foreground">{sub}</p>}
 		</div>
@@ -213,6 +249,8 @@ export function PurchaseOrderForm({
 				summary: {
 					grossAmount: 0,
 					totalDiscount: 0,
+					productTotal: 0,
+					additionalChargesTotal: 0,
 					taxableValue: 0,
 					totalCgst: 0,
 					totalSgst: 0,
@@ -248,24 +286,40 @@ export function PurchaseOrderForm({
 	const loadFromPR = (prId: number) => {
 		const pr = getPRById(prId);
 		if (!pr) return;
+		const wh = pr.warehouseId ? loadWarehouses().find((w) => w.id === pr.warehouseId) : null;
 		const lines = pr.lines.map((l) => {
-			const p = products.find((x) => x.id === l.productId);
+			const info = enrichProductForProcurement(l.productId);
+			const cp = resolvePurchaseCostPrice(l.productId, form.supplierId || undefined);
+			const orderUom = l.requestUom ?? "Unit";
+			const orderedQtyPack = l.requestedQty;
+			const orderedQty = l.totalQtyBase;
 			return {
 				...emptyPOLine(),
 				uid: `pl-${l.uid}`,
 				productId: l.productId,
-				productCode: l.productCode,
-				productName: l.productName,
+				productCode: info?.productCode ?? l.productCode,
+				productName: info?.productName ?? l.productName,
 				description: l.description,
-				uom: l.uom,
-				orderedQty: l.requestedQty,
-				unitPrice: p?.estimatedUnitPrice ?? 0,
+				sku: info?.sku ?? "",
+				baseUnit: info?.baseUnit ?? "Unit",
+				packagingUnit: info?.packagingUnit ?? "Box",
+				conversionQty: info?.conversionQty ?? 1,
+				orderUom,
+				orderedQtyPack,
+				uom: orderUom,
+				orderedQty,
+				unitPrice: cp.amount,
+				cpSource: cp.source,
 				prLineUid: l.uid,
 			};
 		});
 		patch({
 			sourcePrId: pr.id,
 			sourcePrNumber: pr.prNumber,
+			state: pr.state,
+			warehouseId: pr.warehouseId,
+			warehouseName: pr.warehouseName,
+			deliveryAddress: wh?.address ?? form.deliveryAddress,
 			notes: pr.remarks,
 			lines,
 			deliveryTerms: `From ${pr.requestedBy} (${pr.prDate})`,
@@ -273,23 +327,45 @@ export function PurchaseOrderForm({
 	};
 
 	const updateLine = (uid: string, p: Partial<POLineItem>) =>
-		patch({ lines: form.lines.map((l) => (l.uid === uid ? { ...l, ...p } : l)) });
+		patch({
+			lines: form.lines.map((l) => {
+				if (l.uid !== uid) return l;
+				const next = { ...l, ...p };
+				if ("orderedQtyPack" in p || "orderUom" in p || "conversionQty" in p) {
+					next.orderedQty = calcTotalQtyBase(
+						next.orderUom,
+						next.orderedQtyPack,
+						next.conversionQty,
+					);
+				}
+				return next;
+			}),
+		});
 
 	const addSelectedProducts = () => {
 		if (!selectedProdIds.length) return;
+		const masterProducts = loadProducts();
 		const lines = selectedProdIds
-			.map((id) => products.find((p) => p.id === id))
-			.filter((p): p is ProcurementProduct => !!p)
-			.map((p) => ({
-				...emptyPOLine(),
-				uid: `pl-${p.id}-${Date.now()}`,
-				productId: p.id,
-				productCode: p.code,
-				productName: p.name,
-				description: p.description,
-				uom: p.uom,
-				unitPrice: p.estimatedUnitPrice,
-			}));
+			.map((id) => masterProducts.find((p) => p.id === id))
+			.filter((p) => !!p)
+			.map((p) => {
+				const info = enrichProductForProcurement(p!.id)!;
+				const cp = resolvePurchaseCostPrice(p!.id, form.supplierId || undefined);
+				return {
+					...emptyPOLine(),
+					uid: `pl-${p!.id}-${Date.now()}`,
+					productId: p!.id,
+					productCode: info.productCode,
+					productName: info.productName,
+					description: info.description,
+					sku: info.sku,
+					baseUnit: info.baseUnit,
+					packagingUnit: info.packagingUnit,
+					conversionQty: info.conversionQty,
+					unitPrice: cp.amount,
+					cpSource: cp.source,
+				};
+			});
 		patch({ lines: [...form.lines, ...lines] });
 		setSelectedProdIds([]);
 		setShowProductModal(false);
@@ -316,11 +392,35 @@ export function PurchaseOrderForm({
 
 	const getRequestedQty = (line: POLineItem) => {
 		if (!line.prLineUid || !linkedPr) return null;
-		return (
-			linkedPr.lines.find((l) => l.uid === line.prLineUid)?.requestedQty ??
-			line.orderedQty
-		);
+		const prLine = linkedPr.lines.find((l) => l.uid === line.prLineUid);
+		return prLine?.totalQtyBase ?? prLine?.requestedQty ?? line.orderedQty;
 	};
+
+	const stateOptions = useMemo(() => stateSelectOptions(), []);
+	const warehouseOptions = useMemo(
+		() => warehouseSelectOptions(form.state),
+		[form.state],
+	);
+
+	const onStateChange = (state: string) => {
+		patch({ state, warehouseId: null, warehouseName: "", deliveryAddress: "" });
+	};
+
+	const onWarehouseChange = (val: string) => {
+		const wh = loadWarehouses().find((w) => String(w.id) === val);
+		patch({
+			warehouseId: wh?.id ?? null,
+			warehouseName: wh?.warehouseName ?? "",
+			deliveryAddress: wh?.address ?? form.deliveryAddress,
+			shipping: {
+				...form.shipping,
+				shipToLocation: wh?.warehouseName ?? form.shipping.shipToLocation,
+				address: wh?.address ?? form.shipping.address,
+			},
+		});
+	};
+
+	const productTotal = preview.summary.productTotal ?? preview.summary.taxableValue;
 
 	const selectSupplier = (idStr: string) => {
 		if (!idStr) {
@@ -364,7 +464,8 @@ export function PurchaseOrderForm({
 	}));
 	const supplierOptions = suppliers.map((s) => ({
 		value: String(s.id),
-		label: s.supplierName,
+		label: `${s.supplierCode} | ${s.supplierName}`,
+		sublabel: `Vendor Type: ${s.supplierType || "—"}`,
 	}));
 
 	return (
@@ -462,6 +563,61 @@ export function PurchaseOrderForm({
 								className={inputCls}
 							/>
 						</div>
+						<div className="space-y-1">
+							<Label className="text-xs font-medium">Vendor Type</Label>
+							<Input
+								value={form.supplierType || "—"}
+								readOnly
+								className={cn(inputCls, "bg-muted/30 text-muted-foreground")}
+							/>
+						</div>
+						<div className="space-y-1">
+							<Label className="text-xs font-medium">Payment Terms</Label>
+							<AutocompleteSelect
+								options={PAYMENT_TERMS_OPTIONS}
+								value={form.paymentTerms}
+								onChange={(v) =>
+									patch({
+										paymentTerms: String(v),
+										creditDays: paymentTermDays(String(v)),
+									})
+								}
+								disabled={readOnly}
+								className={inputCls}
+							/>
+						</div>
+						<div className="space-y-1">
+							<Label className="text-xs font-medium">State</Label>
+							<AutocompleteSelect
+								options={stateOptions}
+								value={form.state}
+								onChange={(v) => onStateChange(String(v))}
+								disabled={readOnly}
+								placeholder="Select state"
+								className={inputCls}
+							/>
+						</div>
+						<div className="space-y-1">
+							<Label className="text-xs font-medium">Warehouse</Label>
+							<AutocompleteSelect
+								options={warehouseOptions}
+								value={form.warehouseId ? String(form.warehouseId) : ""}
+								onChange={(v) => onWarehouseChange(String(v))}
+								disabled={readOnly || !form.state}
+								placeholder={form.state ? "Select warehouse" : "Select state first"}
+								className={inputCls}
+							/>
+						</div>
+					</div>
+					<div className="mt-3 space-y-1">
+						<Label className="text-xs font-medium">Delivery Address</Label>
+						<Textarea
+							disabled={readOnly}
+							value={form.deliveryAddress}
+							onChange={(e) => patch({ deliveryAddress: e.target.value })}
+							rows={2}
+							className="min-h-[60px] rounded-lg text-xs"
+						/>
 					</div>
 				</div>
 
@@ -519,14 +675,17 @@ export function PurchaseOrderForm({
 													Requested Qty
 												</th>
 											)}
+											<th className="w-28 px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">
+												Order UOM
+											</th>
 											<th className="w-32 px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">
 												Ordered Qty
 											</th>
-											<th className="w-24 px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">
-												Unit
+											<th className="w-28 px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">
+												Base Qty
 											</th>
 											<th className="w-28 px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">
-												Rate
+												CP (₹)
 											</th>
 											<th className="w-24 px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">
 												GST %
@@ -563,34 +722,44 @@ export function PurchaseOrderForm({
 														</td>
 													)}
 													<td className="px-3 py-2.5">
-														<Input
-															type="number"
-															min={0}
-															disabled={readOnly}
-															value={line.orderedQty}
-															onChange={(e) =>
-																updateLine(line.uid, {
-																	orderedQty: Number(e.target.value) || 0,
-																})
+														<AutocompleteSelect
+															options={PACKAGING_UOM_OPTIONS}
+															value={line.orderUom}
+															onChange={(v) =>
+																updateLine(line.uid, { orderUom: v as PackagingUom })
 															}
-															className={cn(inputCls, "w-20")}
+															disabled={readOnly}
+															className={inputCls}
 														/>
-													</td>
-													<td className="px-3 py-2.5 text-xs text-muted-foreground">
-														{line.uom || "—"}
 													</td>
 													<td className="px-3 py-2.5">
 														<Input
 															type="number"
 															min={0}
 															disabled={readOnly}
-															value={line.unitPrice}
+															value={line.orderedQtyPack}
 															onChange={(e) =>
 																updateLine(line.uid, {
-																	unitPrice: Number(e.target.value) || 0,
+																	orderedQtyPack: Number(e.target.value) || 0,
 																})
 															}
-															className={cn(inputCls, "w-24")}
+															className={cn(inputCls, "w-20")}
+														/>
+													</td>
+													<td className="px-3 py-2.5 text-xs tabular-nums text-muted-foreground">
+														{line.orderedQty} {line.baseUnit}
+													</td>
+													<td className="px-3 py-2.5">
+														<IndianRupeeInput
+															value={line.unitPrice}
+															onChange={(n) =>
+																updateLine(line.uid, {
+																	unitPrice: n,
+																	cpSource: "manual",
+																})
+															}
+															disabled={readOnly}
+															className={inputCls}
 														/>
 													</td>
 													<td className="px-3 py-2.5">
@@ -641,138 +810,93 @@ export function PurchaseOrderForm({
 				</div>
 
 				<div className="border-t border-border/60 pt-4">
-					<div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
-						<div className="flex-1 flex flex-col">
-							<SectionHead
-								label="Remarks"
-								sub="Add internal context or notes for review."
+					<AdditionalChargesEditor
+						charges={form.additionalCharges ?? []}
+						onChange={(charges) => patch({ additionalCharges: charges })}
+						readOnly={readOnly}
+						productTotal={productTotal}
+						taxTotal={totalGst}
+					/>
+				</div>
+
+				<div className="border-t border-border/60 pt-4">
+					<div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+						<div>
+							<SectionHead label="Remarks" sub="Add internal context or notes for review." />
+							<Textarea
+								disabled={readOnly}
+								value={form.notes}
+								onChange={(e) => patch({ notes: e.target.value })}
+								placeholder="Purpose or internal notes..."
+								className="min-h-[140px] rounded-xl text-xs resize-none"
 							/>
-							<div className="flex-1 flex flex-col">
-								<Textarea
-									disabled={readOnly}
-									value={form.notes}
-									onChange={(e) => patch({ notes: e.target.value })}
-									placeholder="Purpose or internal notes..."
-									className="flex-1 min-h-[160px] rounded-xl text-xs resize-none"
-								/>
-							</div>
 						</div>
 
-						<div className="flex-1 flex flex-col">
-							<div className="flex-1 rounded-xl border border-border bg-white p-3.5 flex flex-col justify-between">
-								<div>
-									<div className="mb-2.5 flex items-center justify-between gap-2">
-										<SectionHead
-											label="Attachments"
-											sub="Supporting documents."
-										/>
-										{!readOnly && (
-											<Button
-												type="button"
-												variant="outline"
-												size="sm"
-												className="h-8 gap-1.5 rounded-lg text-[11px] font-semibold"
-												onClick={() => fileRef.current?.click()}
-											>
-												<Upload className="h-3.5 w-3.5" /> Add File
-											</Button>
-										)}
-									</div>
-									{!readOnly && (
-										<input
-											ref={fileRef}
-											type="file"
-											className="hidden"
-											onChange={onFilePick}
-										/>
-									)}
-									{form.attachments.length === 0 ? (
-										<p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-											No attachments
-										</p>
-									) : (
-										<ul className="space-y-2">
-											{form.attachments.map((a) => (
-												<li
-													key={a.uid}
-													className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-xs"
+						<div className="rounded-xl border border-border bg-white p-3.5">
+							<div className="mb-2.5 flex items-center justify-between gap-2">
+								<SectionHead label="Attachments" sub="Supporting documents." />
+								{!readOnly && (
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="h-8 gap-1.5 rounded-lg text-[11px] font-semibold"
+										onClick={() => fileRef.current?.click()}
+									>
+										<Upload className="h-3.5 w-3.5" /> Add File
+									</Button>
+								)}
+							</div>
+							{!readOnly && (
+								<input ref={fileRef} type="file" className="hidden" onChange={onFilePick} />
+							)}
+							{form.attachments.length === 0 ? (
+								<p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+									No attachments
+								</p>
+							) : (
+								<ul className="space-y-2">
+									{form.attachments.map((a) => (
+										<li
+											key={a.uid}
+											className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-xs"
+										>
+											<span className="min-w-0 flex-1 truncate text-foreground">{a.name}</span>
+											{!readOnly && (
+												<button
+													type="button"
+													onClick={() =>
+														patch({
+															attachments: form.attachments.filter((x) => x.uid !== a.uid),
+														})
+													}
+													className="text-red-600"
 												>
-													<span className="min-w-0 flex-1 truncate text-foreground">
-														{a.name}
-													</span>
-													<Eye className="h-3.5 w-3.5 text-muted-foreground cursor-pointer hover:text-foreground" />
-													<Download className="h-3.5 w-3.5 text-muted-foreground cursor-pointer hover:text-foreground" />
-													{!readOnly && (
-														<button
-															type="button"
-															onClick={() =>
-																patch({
-																	attachments: form.attachments.filter(
-																		(x) => x.uid !== a.uid,
-																	),
-																})
-															}
-															className="text-red-600 transition-colors hover:text-red-700"
-														>
-															<Trash2 className="h-3.5 w-3.5" />
-														</button>
-													)}
-												</li>
-											))}
-										</ul>
-									)}
-								</div>
-							</div>
+													<Trash2 className="h-3.5 w-3.5" />
+												</button>
+											)}
+										</li>
+									))}
+								</ul>
+							)}
 						</div>
 
-						<div className="flex-1 flex flex-col">
-							<div className="flex-1 rounded-xl border border-border bg-white p-3.5 flex flex-col justify-between">
-								<div>
-									<SectionHead label="PO Summary" />
-									<div className="space-y-2 text-xs">
-										<div className="flex justify-between">
-											<span className="text-muted-foreground">Items</span>
-											<span className="font-semibold tabular-nums">
-												{form.lines.length}
-											</span>
-										</div>
-										<div className="flex justify-between">
-											<span className="text-muted-foreground">Total qty</span>
-											<span className="font-semibold tabular-nums">
-												{totalQty}
-											</span>
-										</div>
-										<div className="flex justify-between">
-											<span className="text-muted-foreground">Subtotal</span>
-											<span className="font-semibold tabular-nums">
-												{formatCurrency(preview.summary.grossAmount)}
-											</span>
-										</div>
-										<div className="flex justify-between">
-											<span className="text-muted-foreground">GST</span>
-											<span className="font-semibold tabular-nums">
-												{formatCurrency(totalGst)}
-											</span>
-										</div>
-										<div className="flex justify-between items-center border-t border-border/40 pt-2 mt-1">
-											<span className="text-muted-foreground">Other charges</span>
-											<input
-												type="number"
-												disabled={readOnly}
-												value={form.otherCharges}
-												onChange={(e) =>
-													patch({ otherCharges: Number(e.target.value) || 0 })
-												}
-												className="w-24 text-right text-xs font-semibold bg-transparent border-0 p-0 focus:outline-none focus:ring-0 tabular-nums text-foreground focus:border-0"
-											/>
-										</div>
-										<div className="flex justify-between border-t border-border/60 pt-2 mt-2">
-											<span className="font-bold text-foreground">Grand total</span>
-											<span className="font-bold text-brand-700 tabular-nums">
-												{formatCurrency(preview.summary.grandTotal)}
-											</span>
-										</div>
-									</div>
+						<div className="rounded-xl border border-border bg-white p-3.5">
+							<SectionHead label="PO Summary" />
+							<div className="space-y-2 text-xs">
+								<div className="flex justify-between">
+									<span className="text-muted-foreground">Items</span>
+									<span className="font-semibold tabular-nums">{form.lines.length}</span>
+								</div>
+								<div className="flex justify-between">
+									<span className="text-muted-foreground">Total base qty</span>
+									<span className="font-semibold tabular-nums">{totalQty}</span>
+								</div>
+								<div className="flex justify-between border-t border-border/60 pt-2">
+									<span className="font-bold text-foreground">Grand total</span>
+									<span className="font-bold text-brand-700 tabular-nums">
+										{formatCurrency(preview.summary.grandTotal)}
+									</span>
 								</div>
 							</div>
 						</div>
@@ -808,18 +932,17 @@ export function PurchaseOrderForm({
 										onChange={(e) => setProdSearch(e.target.value)}
 									/>
 								</div>
-								<select
-									className="h-[38px] px-2 text-[13px] rounded-lg border border-border bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+								<AutocompleteSelect
+									options={[
+										{ value: "", label: "All categories" },
+										...categories.map((c) => ({ value: c, label: c })),
+									]}
 									value={prodCategory}
-									onChange={(e) => setProdCategory(e.target.value)}
-								>
-									<option value="">All categories</option>
-									{categories.map((c) => (
-										<option key={c} value={c}>
-											{c}
-										</option>
-									))}
-								</select>
+									onChange={setProdCategory}
+									placeholder="All categories"
+									searchPlaceholder="Search category…"
+									className="h-[38px] text-[13px] min-w-[140px]"
+								/>
 								<Button
 									variant="outline"
 									className="h-[38px] text-xs font-semibold rounded-lg"
@@ -942,9 +1065,9 @@ export function PurchaseOrderForm({
 									/>
 								</div>
 								<div className="space-y-1">
-									<Label className="text-xs font-medium">Product Code</Label>
+									<Label className="text-xs font-medium">SKU</Label>
 									<Input
-										placeholder="e.g., PRD-0044"
+										placeholder="e.g., FERT-WSF-019"
 										value={quickProduct.code}
 										onChange={(e) =>
 											setQuickProduct((p) => ({ ...p, code: e.target.value }))

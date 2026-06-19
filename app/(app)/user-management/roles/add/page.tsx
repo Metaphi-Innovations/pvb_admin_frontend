@@ -319,7 +319,7 @@ export default function AddRolePage() {
               <GeoLevelDropdown value={form.geoLevel} onChange={(v) => set("geoLevel", v)} />
               <div className="bg-muted/30 rounded-lg border border-border p-3 text-[11px] text-muted-foreground space-y-1">
                 <p className="text-xs font-semibold text-foreground">Level hierarchy (highest → lowest)</p>
-                {["Country", "Zone", "State", "Region", "Area", "Territory", "Locality"].map((l) => (
+                {["Country", "Zone", "Region", "State", "Area", "Territory", "District", "City", "Town"].map((l) => (
                   <p key={l} className={cn("transition-colors", form.geoLevel === l ? "text-brand-700 font-semibold" : "")}>
                     {l}
                   </p>

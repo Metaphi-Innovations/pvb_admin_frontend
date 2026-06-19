@@ -1,16 +1,17 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { TabsContent } from "@/components/ui/tabs";
-import { ClipboardCheck, FileText, CheckCircle2, Clock, ShieldCheck } from "lucide-react";
+import { ClipboardCheck, FileText, CheckCircle2 } from "lucide-react";
 import { getGrnRecords } from "./grn/mock-data";
 import { getQcRecords } from "./qc/mock-data";
 import { GrnRecord } from "./grn/types";
 import { QcRecord } from "./qc/types";
 import { ListingContainer } from "@/components/layout/ListingContainer";
-import { MiniKPICard } from "@/components/ui/KPICard";
 import { GrnListing } from "./grn/GrnListing";
 import { QcListing } from "./qc/QcListing";
+import { computeGrnListingKpis } from "./grn-listing-kpis";
+import { GrnListingKpiRow } from "./GrnListingKpiRow";
 
 export default function GrnQcDashboardPage() {
   const [activeTab, setActiveTab] = useState("grn");
@@ -23,19 +24,13 @@ export default function GrnQcDashboardPage() {
     setQcList(getQcRecords());
   }, []);
 
+  const grnListingKpis = useMemo(() => computeGrnListingKpis(grnList), [grnList]);
+
   return (
     <ListingContainer
       title="GRN & QC Module"
       titleIcon={ClipboardCheck}
-      metrics={
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-          <MiniKPICard label="Total GRNs" value={grnList.length} icon={FileText} accent={true} />
-          <MiniKPICard label="Pending QC GRNs" value={grnList.filter(g => g.status === "qc_pending").length} icon={Clock} accent={false} />
-          <MiniKPICard label="Completed QC GRNs" value={grnList.filter(g => g.status === "qc_completed").length} icon={CheckCircle2} accent={false} />
-          <MiniKPICard label="Total QC Inspections" value={qcList.length} icon={ClipboardCheck} accent={false} />
-          <MiniKPICard label="Completed Inspections" value={qcList.filter(q => q.status === "completed").length} icon={ShieldCheck} accent={false} />
-        </div>
-      }
+      metrics={<GrnListingKpiRow kpis={grnListingKpis} />}
       tabs={[
         { value: "grn", label: "GRN Listing", icon: FileText },
         { value: "qc", label: "QC Listing", icon: CheckCircle2 }

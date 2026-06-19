@@ -1,18 +1,18 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Save, X, XCircle } from "lucide-react";
+import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
-  generateProductCode,
   loadProducts,
   nextProductId,
   saveProducts,
   todayStr,
-  type ProductMediaItem,
+  type ProductImage,
+  type ProductUrl,
 } from "../product-data";
 import {
   DEFAULT_PRODUCT_FORM,
@@ -26,13 +26,9 @@ export default function NewProductPage() {
   const router = useRouter();
   const [form, setForm] = useState<ProductFormValues>(DEFAULT_PRODUCT_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [productCode, setProductCode] = useState("PRD-0001");
-  const [mediaItems, setMediaItems] = useState<ProductMediaItem[]>([]);
+  const [productImages, setProductImages] = useState<ProductImage[]>([]);
+  const [productUrls, setProductUrls] = useState<ProductUrl[]>([]);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-
-  useEffect(() => {
-    setProductCode(generateProductCode(loadProducts()));
-  }, []);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -54,8 +50,8 @@ export default function NewProductPage() {
     const today = todayStr();
     const record = formValuesToProduct(form, {
       id: nextProductId(list),
-      productId: productCode,
-      mediaItems,
+      productImages,
+      productUrls,
       createdBy: "Admin",
       createdDate: today,
     });
@@ -65,20 +61,6 @@ export default function NewProductPage() {
     setTimeout(() => router.push("/masters/products"), 900);
   };
 
-  const addMedia = (items: ProductMediaItem[]) => setMediaItems((prev) => [...prev, ...items]);
-  const removeMedia = (id: string) =>
-    setMediaItems((prev) => {
-      const next = prev.filter((item) => {
-        if (item.id !== id) return true;
-        if (typeof item.url === "string" && item.url.startsWith("blob:")) {
-          URL.revokeObjectURL(item.url);
-        }
-        return false;
-      });
-      return next;
-    });
-  const uploadMedia = () => setMediaItems((prev) => prev.map((item) => (item.uploaded ? item : { ...item, uploaded: true })));
-
   return (
     <FormContainer
       title="Add Product"
@@ -86,9 +68,6 @@ export default function NewProductPage() {
       onBack={() => router.back()}
       actions={
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
-            {productCode}
-          </span>
           <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
             Discard
           </Button>
@@ -106,10 +85,12 @@ export default function NewProductPage() {
         onChange={setForm}
         errors={errors}
         onClearError={clearErr}
-        mediaItems={mediaItems}
-        onMediaAdd={addMedia}
-        onMediaRemove={removeMedia}
-        onMediaUpload={uploadMedia}
+        productImages={productImages}
+        productUrls={productUrls}
+        onImageAdd={(items) => setProductImages((prev) => [...prev, ...items])}
+        onImageRemove={(id) => setProductImages((prev) => prev.filter((item) => item.id !== id))}
+        onUrlAdd={(item) => setProductUrls((prev) => [...prev, item])}
+        onUrlRemove={(id) => setProductUrls((prev) => prev.filter((item) => item.id !== id))}
       />
 
       {toast && (

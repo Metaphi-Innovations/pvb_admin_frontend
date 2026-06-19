@@ -5,24 +5,21 @@ import {
   type MasterStatus,
 } from "@/lib/masters/common";
 
-export const CATEGORY_STORAGE_KEY = "ds_master_category_v2";
+export const CATEGORY_STORAGE_KEY = "ds_master_category_v3";
 
 export interface CategoryRecord extends BaseMasterRecord {
   categoryName: string;
-  categoryCode: string;
   description: string;
 }
 
 export interface CategoryForm {
   categoryName: string;
-  categoryCode: string;
   description: string;
   status: MasterStatus;
 }
 
 export const DEFAULT_CATEGORY_FORM: CategoryForm = {
   categoryName: "",
-  categoryCode: "",
   description: "",
   status: "active",
 };
@@ -31,7 +28,6 @@ export const CATEGORY_SEED: CategoryRecord[] = [
   {
     id: 1,
     categoryName: "Fertilizers",
-    categoryCode: "CAT-001",
     description: "Chemical and organic fertilizers",
     status: "active",
     createdBy: "Admin",
@@ -42,7 +38,6 @@ export const CATEGORY_SEED: CategoryRecord[] = [
   {
     id: 2,
     categoryName: "Pesticides",
-    categoryCode: "CAT-002",
     description: "Crop protection products",
     status: "active",
     createdBy: "Admin",
@@ -53,7 +48,6 @@ export const CATEGORY_SEED: CategoryRecord[] = [
   {
     id: 3,
     categoryName: "Seeds",
-    categoryCode: "CAT-003",
     description: "Seeds and planting material",
     status: "active",
     createdBy: "Admin",
@@ -63,15 +57,26 @@ export const CATEGORY_SEED: CategoryRecord[] = [
   },
 ];
 
+function stripLegacyCode(record: CategoryRecord & { categoryCode?: string }): CategoryRecord {
+  const { categoryCode: _code, ...rest } = record;
+  return rest;
+}
+
 export function loadCategories(): CategoryRecord[] {
   if (typeof window === "undefined") return CATEGORY_SEED;
   try {
     const raw = localStorage.getItem(CATEGORY_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify(CATEGORY_SEED));
-      return CATEGORY_SEED;
+    if (raw) {
+      return (JSON.parse(raw) as (CategoryRecord & { categoryCode?: string })[]).map(stripLegacyCode);
     }
-    return JSON.parse(raw) as CategoryRecord[];
+    const legacy = localStorage.getItem("ds_master_category_v2");
+    if (legacy) {
+      const migrated = (JSON.parse(legacy) as (CategoryRecord & { categoryCode?: string })[]).map(stripLegacyCode);
+      localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify(migrated));
+      return migrated;
+    }
+    localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify(CATEGORY_SEED));
+    return CATEGORY_SEED;
   } catch {
     return CATEGORY_SEED;
   }
@@ -80,7 +85,6 @@ export function loadCategories(): CategoryRecord[] {
 export function categoryToForm(r: CategoryRecord): CategoryForm {
   return {
     categoryName: r.categoryName,
-    categoryCode: r.categoryCode,
     description: r.description,
     status: r.status,
   };
@@ -91,7 +95,6 @@ export function formToCategory(form: CategoryForm, id: number, existing?: Catego
   return {
     id,
     categoryName: form.categoryName.trim(),
-    categoryCode: form.categoryCode.trim(),
     description: form.description.trim(),
     status: form.status,
     createdBy: existing?.createdBy ?? MASTER_CURRENT_USER,
@@ -103,6 +106,5 @@ export function formToCategory(form: CategoryForm, id: number, existing?: Catego
 
 export function validateCategoryForm(form: CategoryForm): string | null {
   if (!form.categoryName.trim()) return "Category name is required.";
-  if (!form.categoryCode.trim()) return "Category code is required.";
   return null;
 }

@@ -36,6 +36,7 @@ type SheetMode = "add" | "edit" | "view";
 interface LedgerSheetProps {
   open: boolean;
   mode: SheetMode | null;
+  kind?: "ledger" | "sub_ledger";
   form: LedgerFormValues;
   formError: string | null;
   previewCode: string;
@@ -50,6 +51,7 @@ interface LedgerSheetProps {
 export function LedgerSheet({
   open,
   mode,
+  kind = "ledger",
   form,
   formError,
   previewCode,
@@ -75,12 +77,22 @@ export function LedgerSheet({
             </div>
             <div className="min-w-0">
               <SheetTitle className="text-base">
-                {mode === "add" ? "Add Ledger" : mode === "edit" ? "Edit Ledger" : "Ledger Details"}
+                {mode === "add"
+                  ? kind === "sub_ledger"
+                    ? "Add Sub-Ledger"
+                    : "Add Ledger"
+                  : mode === "edit"
+                    ? kind === "sub_ledger"
+                      ? "Edit Sub-Ledger"
+                      : "Edit Ledger"
+                    : "Account Details"}
               </SheetTitle>
               <SheetDescription className="text-xs mt-0.5">
                 {readOnly
-                  ? "View ledger configuration."
-                  : "Ledgers can only be created under sub-groups or leaf account groups."}
+                  ? "View account configuration."
+                  : kind === "sub_ledger"
+                    ? "Sub-ledgers are leaf accounts under a ledger (Level 5)."
+                    : "Ledgers can only be created under sub-groups or leaf account groups."}
               </SheetDescription>
             </div>
           </div>
@@ -100,7 +112,8 @@ export function LedgerSheet({
 
           <div className="space-y-1">
             <Label className="text-[11px]">
-              Ledger Name <span className="text-red-500">*</span>
+              {kind === "sub_ledger" ? "Sub-Ledger Name" : "Ledger Name"}{" "}
+              <span className="text-red-500">*</span>
             </Label>
             <Input
               className="h-8 text-xs"
@@ -124,21 +137,36 @@ export function LedgerSheet({
 
           <div className="space-y-1">
             <Label className="text-[11px]">
-              Parent Group / Sub-Group <span className="text-red-500">*</span>
+              {kind === "sub_ledger" ? "Parent Ledger" : "Parent Group / Sub-Group"}{" "}
+              <span className="text-red-500">*</span>
             </Label>
-            <CoaParentGroupSelector
-              records={records}
-              value={form.parentGroupId}
-              disabled={readOnly}
-              onChange={(parentGroupId) =>
-                setForm({
-                  parentGroupId,
-                  balanceType: defaultBalanceTypeForParent(records, parentGroupId),
-                })
-              }
-            />
+            {kind === "sub_ledger" ? (
+              <Input
+                className="h-8 text-xs bg-muted/30"
+                disabled
+                readOnly
+                value={
+                  form.parentGroupId
+                    ? parentGroupLabel(records, form.parentGroupId)
+                    : "—"
+                }
+              />
+            ) : (
+              <CoaParentGroupSelector
+                records={records}
+                value={form.parentGroupId}
+                disabled={readOnly}
+                onChange={(id) => {
+                  setForm({
+                    parentGroupId: id,
+                    balanceType: defaultBalanceTypeForParent(records, id),
+                  });
+                }}
+              />
+            )}
           </div>
 
+          {kind !== "sub_ledger" && (
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-[11px]">Opening Balance</Label>
@@ -172,7 +200,9 @@ export function LedgerSheet({
               </Select>
             </div>
           </div>
+          )}
 
+          {kind !== "sub_ledger" && (
           <div className="rounded-lg border border-border/60 p-3 bg-muted/10 space-y-2.5">
             <label className="flex items-center gap-2 text-xs cursor-pointer">
               <Checkbox
@@ -191,6 +221,7 @@ export function LedgerSheet({
               TDS Applicable
             </label>
           </div>
+          )}
 
           <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5">
             <div>

@@ -1,6 +1,10 @@
-﻿import { redirect } from "next/navigation";
-import { JOURNAL_VOUCHER_HREF } from "@/lib/accounts/accounts-nav";
+﻿import { Suspense } from "react";
+import VouchersHubPageClient from "@/app/(app)/accounts/vouchers/VouchersHubPageClient";
 
-export default function VouchersIndexPage() {
-  redirect(JOURNAL_VOUCHER_HREF);
+export default function VouchersHubPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Loading…</div>}>
+      <VouchersHubPageClient />
+    </Suspense>
+  );
 }

@@ -8,12 +8,11 @@ import { type Employee, loadEmployees, saveEmployees } from "../../employee-data
 import { cn } from "@/lib/utils";
 
 const DEPARTMENTS = [
-  { id: 1, name: "Sales" },
+  { id: 1, name: "Accounts" },
   { id: 2, name: "HR" },
-  { id: 3, name: "Accounts" },
-  { id: 4, name: "Procurement" },
-  { id: 5, name: "Field Force" },
-  { id: 6, name: "Operations" },
+  { id: 3, name: "Procurement" },
+  { id: 4, name: "Warehouse" },
+  { id: 5, name: "Admin" },
 ];
 
 interface ToastState { msg: string; type: "success" | "error" }
@@ -62,6 +61,13 @@ export default function EditEmployeePage() {
     setTimeout(() => router.push(`/user-management/employee/${updated.id}`), 1500);
   };
 
+  const handleStatusSave = (updated: Employee) => {
+    const others = loadEmployees().filter(e => e.id !== updated.id);
+    saveEmployees([...others, updated]);
+    setEmployee(updated);
+    setToast({ msg: `User ${updated.status === "active" ? "activated" : updated.status === "inactive" ? "deactivated" : "status updated"}`, type: "success" });
+  };
+
   if (!employee) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -76,6 +82,7 @@ export default function EditEmployeePage() {
         mode="edit"
         employee={employee}
         onSave={handleSave}
+        onStatusSave={handleStatusSave}
         onCancel={() => router.push(`/user-management/employee/${employeeId}`)}
         departments={DEPARTMENTS}
       />

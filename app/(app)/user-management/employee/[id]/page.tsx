@@ -1,98 +1,141 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
-import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { RecordDetailPage } from "@/components/record-detail";
+import {
+  RecordDetailPage,
+  RecordMiniTable,
+  StatusBadge,
+} from "@/components/record-detail";
+import { EmployeeListingStatusCell } from "../components/EmployeeListingStatusCell";
+import { AuditUserRow } from "@/components/listing/ListingUserCell";
+import {
+  CompactField,
+  CompactInfoCard,
+  ProfileCardGrid,
+  formatProfileDate,
+} from "../components/EmployeeViewSections";
+import { EmployeeDocumentsSection } from "../components/EmployeeDocumentsSection";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  AlertTriangle, Edit2, Key, Trash2,
-  CheckCircle2, XCircle, X, User, Mail, Phone,
+  AlertTriangle,
+  Key,
+  CheckCircle2,
+  XCircle,
+  X,
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  Briefcase,
+  Shield,
+  FileText,
+  Clock,
+  Building2,
+  Monitor,
+  Smartphone,
+  Heart,
 } from "lucide-react";
+import { loadGeoNodes } from "@/app/(app)/masters/geography/geo-data";
+import {
+  type StructuredAddress,
+  formatStructuredAddress,
+} from "@/lib/address/types";
 import {
   type Employee,
-  loadEmployees, saveEmployees, todayStr,
-  PERMISSION_REGISTRY, MOBILE_PERMISSION_REGISTRY,
+  loadEmployees,
+  saveEmployees,
+  todayStr,
+  applyEmployeeStatusChange,
+  PERMISSION_REGISTRY,
+  MOBILE_PERMISSION_REGISTRY,
   migratePermissions,
-  type UserPermissions, type WebAction, type MobileAction,
-  type SubmodulePermission, type MobileFeaturePermission
+  type UserPermissions,
+  type WebAction,
+  type MobileAction,
+  type SubmodulePermission,
+  type MobileFeaturePermission,
 } from "../employee-data";
 
-// ── Status Configuration ──────────────────────────────────────────────────────
-const STATUS_CFG: Record<string, { bg: string; text: string; dot: string; label: string }> = {
-  active:   { bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", dot: "bg-emerald-500", label: "Active" },
-  inactive: { bg: "bg-slate-100 border-slate-200",  text: "text-slate-600",   dot: "bg-slate-400",   label: "Inactive" },
-  draft:    { bg: "bg-blue-50 border-blue-200",    text: "text-blue-700",    dot: "bg-blue-500",    label: "Draft" },
-  archived: { bg: "bg-red-50 border-red-200",     text: "text-red-700",     dot: "bg-red-400",     label: "Archived" },
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function displayAddress(
+  structured: StructuredAddress,
+  legacy?: string,
+  nodes?: ReturnType<typeof loadGeoNodes>,
+): string {
+  const geo = nodes ?? (typeof window !== "undefined" ? loadGeoNodes() : []);
+  const formatted = formatStructuredAddress(structured, geo);
+  if (formatted.trim()) return formatted;
+  return legacy?.trim() || "—";
+}
+
+function empCurrentAddr(emp: Employee): StructuredAddress {
+  return {
+    line1: emp.currentAddressLine1 || "",
+    line2: emp.currentAddressLine2 || "",
+    stateId: emp.currentStateId ?? null,
+    cityId: emp.currentCityId ?? null,
+    pincodeId: emp.currentPincodeId ?? null,
+  };
+}
+
+function empPermanentAddr(emp: Employee): StructuredAddress {
+  return {
+    line1: emp.permanentAddressLine1 || "",
+    line2: emp.permanentAddressLine2 || "",
+    stateId: emp.permanentStateId ?? null,
+    cityId: emp.permanentCityId ?? null,
+    pincodeId: emp.permanentPincodeId ?? null,
+  };
+}
+
+function empEmergencyAddr(emp: Employee): StructuredAddress {
+  return {
+    line1: emp.emergencyAddressLine1 || "",
+    line2: emp.emergencyAddressLine2 || "",
+    stateId: emp.emergencyStateId ?? null,
+    cityId: emp.emergencyCityId ?? null,
+    pincodeId: emp.emergencyPincodeId ?? null,
+  };
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  active: "Active",
+  inactive: "Inactive",
+  draft: "Draft",
+  archived: "Archived",
 };
 
-function StatusBadge({ status }: { status: string }) {
-  const cfg = STATUS_CFG[status] ?? STATUS_CFG.inactive;
-  return (
-    <span className={cn(
-      "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold border",
-      cfg.bg, cfg.text
-    )}>
-      <span className={cn("h-1.5 w-1.5 rounded-full flex-shrink-0", cfg.dot)} />
-      {cfg.label}
-    </span>
-  );
-}
-
-// ── Detail Field Row ─────────────────────────────────────────────────────────
-function DetailField({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value?: React.ReactNode;
-  mono?: boolean;
-}) {
-  const displayVal =
-    value !== undefined && value !== null && value !== "" ? value : "—";
-  return (
-    <div className='py-2 space-y-1 border-b border-border/50 last:border-0'>
-      <span className='text-[10px] font-semibold text-muted-foreground uppercase tracking-wider'>
-        {label}
-      </span>
-      <div
-        className={cn(
-          "text-xs font-semibold text-foreground break-all",
-          mono && "font-mono"
-        )}
-      >
-        {displayVal}
-      </div>
-    </div>
-  );
-}
-
 // ── Toast ─────────────────────────────────────────────────────────────────────
-interface ToastState { msg: string; type: "success" | "error" }
+
+interface ToastState {
+  msg: string;
+  type: "success" | "error";
+}
 
 function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
   return (
-    <div className={cn(
-      "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
-      "animate-in slide-in-from-bottom-2 fade-in-0 duration-300",
-      toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
-    )}>
-      {toast.type === "success"
-        ? <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
-        : <XCircle className="flex-shrink-0 w-4 h-4" />}
+    <div
+      className={cn(
+        "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+        "animate-in slide-in-from-bottom-2 fade-in-0 duration-300",
+        toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
+      )}
+    >
+      {toast.type === "success" ? (
+        <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
+      ) : (
+        <XCircle className="flex-shrink-0 w-4 h-4" />
+      )}
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100">
         <X className="w-3.5 h-3.5" />
@@ -102,34 +145,60 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 }
 
 // ── Confirm Dialog ────────────────────────────────────────────────────────────
+
 function ConfirmDialog({
-  open, onClose, onConfirm, title, description, confirmLabel = "Confirm", destructive,
+  open,
+  onClose,
+  onConfirm,
+  title,
+  description,
+  confirmLabel = "Confirm",
+  destructive,
 }: {
-  open: boolean; onClose: () => void; onConfirm: () => void;
-  title: string; description: string; confirmLabel?: string; destructive?: boolean;
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  description: string;
+  confirmLabel?: string;
+  destructive?: boolean;
 }) {
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
-            <div className={cn(
-              "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-              destructive ? "bg-red-50 border border-red-200" : "bg-amber-50 border border-amber-200",
-            )}>
-              <AlertTriangle className={cn("w-4 h-4", destructive ? "text-red-500" : "text-amber-500")} />
+            <div
+              className={cn(
+                "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
+                destructive
+                  ? "bg-red-50 border border-red-200"
+                  : "bg-amber-50 border border-amber-200",
+              )}
+            >
+              <AlertTriangle
+                className={cn("w-4 h-4", destructive ? "text-red-500" : "text-amber-500")}
+              />
             </div>
             {title}
           </DialogTitle>
           <DialogDescription className="pt-1 text-xs">{description}</DialogDescription>
         </DialogHeader>
         <div className="flex items-center justify-end gap-2 pt-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs font-semibold" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs font-semibold" onClick={onClose}>
+            Cancel
+          </Button>
           <Button
             size="sm"
-            className={cn("h-8 text-xs font-semibold gap-1.5 text-white",
-              destructive ? "bg-red-600 hover:bg-red-700" : "bg-brand-600 hover:bg-brand-700")}
-            onClick={() => { onConfirm(); onClose(); }}>
+            className={cn(
+              "h-8 text-xs font-semibold gap-1.5 text-white",
+              destructive ? "bg-red-600 hover:bg-red-700" : "bg-brand-600 hover:bg-brand-700",
+            )}
+            onClick={() => {
+              onConfirm();
+              onClose();
+            }}
+          >
             {confirmLabel}
           </Button>
         </div>
@@ -139,6 +208,7 @@ function ConfirmDialog({
 }
 
 // ── Password Reset Modal ──────────────────────────────────────────────────────
+
 interface PasswordResetState {
   open: boolean;
   newPassword: string;
@@ -148,14 +218,16 @@ interface PasswordResetState {
 }
 
 function PasswordResetModal({
-  state, onChange, onReset, onClose,
+  state,
+  onChange,
+  onReset,
+  onClose,
 }: {
   state: PasswordResetState;
-  onChange: (key: string, value: any) => void;
+  onChange: (key: string, value: string | boolean) => void;
   onReset: () => void;
   onClose: () => void;
 }) {
-  const [showPwd, setShowPwd] = useState(false);
   const handleGeneratePassword = () => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
     let password = "";
@@ -177,24 +249,26 @@ function PasswordResetModal({
         </DialogHeader>
         <div className="pt-1 space-y-4">
           <div className="space-y-1.5">
-            <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">New Password *</label>
-            <div className="relative">
-              <input
-                type={showPwd ? "text" : "password"}
-                value={state.newPassword}
-                onChange={(e) => onChange("newPassword", e.target.value)}
-                placeholder="Enter new password (min 8 chars)"
-                className="w-full px-3 text-sm font-semibold border rounded-lg h-9 border-border bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-500"
-              />
-            </div>
+            <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              New Password *
+            </label>
+            <input
+              type="password"
+              value={state.newPassword}
+              onChange={(e) => onChange("newPassword", e.target.value)}
+              placeholder="Enter new password (min 8 chars)"
+              className="w-full px-3 text-sm font-semibold border rounded-lg h-9 border-border bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-500"
+            />
             {state.errors.newPassword && (
               <p className="text-[10px] text-red-500 font-semibold">{state.errors.newPassword}</p>
             )}
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Confirm Password *</label>
+            <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Confirm Password *
+            </label>
             <input
-              type={showPwd ? "text" : "password"}
+              type="password"
               value={state.confirmPassword}
               onChange={(e) => onChange("confirmPassword", e.target.value)}
               placeholder="Re-enter password"
@@ -204,25 +278,15 @@ function PasswordResetModal({
               <p className="text-[10px] text-red-500 font-semibold">{state.errors.confirmPassword}</p>
             )}
           </div>
-          <div className="flex items-center justify-between gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs font-semibold"
-              onClick={handleGeneratePassword}>
-              Generate Password
-            </Button>
-            <label className="flex items-center gap-1.5 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={showPwd}
-                onChange={(e) => setShowPwd(e.target.checked)}
-                className="w-3.5 h-3.5 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-              />
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Show</span>
-            </label>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs font-semibold"
+            onClick={handleGeneratePassword}
+          >
+            Generate Password
+          </Button>
           <label className="flex items-center gap-2 pt-1 cursor-pointer">
             <input
               type="checkbox"
@@ -234,11 +298,14 @@ function PasswordResetModal({
           </label>
         </div>
         <div className="flex items-center justify-end gap-2 pt-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs font-semibold" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs font-semibold" onClick={onClose}>
+            Cancel
+          </Button>
           <Button
             size="sm"
             className="h-8 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700"
-            onClick={onReset}>
+            onClick={onReset}
+          >
             Reset Password
           </Button>
         </div>
@@ -247,134 +314,217 @@ function PasswordResetModal({
   );
 }
 
-// ── Read-only Permissions Breakdown Component ─────────────────────────────────
-function ReadOnlyPermissionsView({ permissions }: { permissions?: UserPermissions }) {
-  const [section, setSection] = useState<"web" | "mobile">("web");
+// ── Permissions (dense, section-based) ────────────────────────────────────────
+
+function PermissionsTabContent({ permissions }: { permissions?: UserPermissions }) {
+  const [channel, setChannel] = useState<"web" | "mobile">("web");
   const perms = migratePermissions(permissions);
 
   const getSub = (modId: string, subId: string): SubmodulePermission =>
-    perms.web?.[modId]?.[subId] || { view: false, create: false, edit: false, delete: false, approve: false, export: false, import: false };
+    perms.web?.[modId]?.[subId] || {
+      view: false,
+      create: false,
+      edit: false,
+      delete: false,
+      approve: false,
+      export: false,
+      import: false,
+    };
   const getMob = (grpId: string, featId: string): MobileFeaturePermission =>
-    perms.mobile?.[grpId]?.[featId] || { view: false, create: false, edit: false, delete: false, approve: false };
+    perms.mobile?.[grpId]?.[featId] || {
+      view: false,
+      create: false,
+      edit: false,
+      delete: false,
+      approve: false,
+    };
 
-  const ALL_WEB_ACTIONS: WebAction[] = ["view", "create", "edit", "delete", "approve", "export", "import"];
-  const ALL_MOBILE_ACTIONS: MobileAction[] = ["view", "create", "edit", "delete", "approve"];
-  const WEB_ACTION_LABELS: Record<WebAction, string> = { view: "View", create: "Create", edit: "Edit", delete: "Delete", approve: "Approve", export: "Export", import: "Import" };
-  const MOBILE_ACTION_LABELS: Record<MobileAction, string> = { view: "View", create: "Create", edit: "Edit", delete: "Delete", approve: "Approve" };
+  const ALL_WEB: WebAction[] = ["view", "create", "edit", "delete", "approve", "export", "import"];
+  const ALL_MOB: MobileAction[] = ["view", "create", "edit", "delete", "approve"];
+  const WEB_LABELS: Record<WebAction, string> = {
+    view: "View",
+    create: "Create",
+    edit: "Edit",
+    delete: "Delete",
+    approve: "Approve",
+    export: "Export",
+    import: "Import",
+  };
+  const MOB_LABELS: Record<MobileAction, string> = {
+    view: "View",
+    create: "Create",
+    edit: "Edit",
+    delete: "Delete",
+    approve: "Approve",
+  };
+
+  const webHasAny = PERMISSION_REGISTRY.some((mod) =>
+    mod.submodules.some((sub) =>
+      ALL_WEB.some((act) => sub.actions.includes(act) && (getSub(mod.id, sub.id) as any)[act]),
+    ),
+  );
+  const mobHasAny = MOBILE_PERMISSION_REGISTRY.some((grp) =>
+    grp.features.some((feat) =>
+      ALL_MOB.some((act) => feat.actions.includes(act) && (getMob(grp.id, feat.id) as any)[act]),
+    ),
+  );
 
   return (
-    <div className="space-y-4">
-      <div className="flex gap-1.5 pb-3 border-b border-border">
-        {([ ["web", "Web Portal"], ["mobile", "Mobile App"] ] as const).map(([key, label]) => (
-          <button key={key} type="button" onClick={() => setSection(key)}
-            className={cn(
-              "flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-semibold transition-colors border",
-              section === key ? "bg-brand-600 text-white border-brand-600" : "border-border text-muted-foreground hover:bg-muted/40",
-            )}>
-            {key === "web" ? <Monitor className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {section === "web" && (
-        <div className="space-y-3">
-          {PERMISSION_REGISTRY.map((mod) => {
-            const hasAny = mod.submodules.some((sub) => {
-              const sp = getSub(mod.id, sub.id);
-              return ALL_WEB_ACTIONS.some((act) => sub.actions.includes(act) && (sp as any)[act]);
-            });
-
-            if (!hasAny) return null;
-
-            return (
-              <div key={mod.id} className="p-4 overflow-hidden bg-white border shadow-sm border-border rounded-xl">
-                <h4 className="flex items-center gap-2 mb-3 text-xs font-bold text-foreground">
-                  <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-                  {mod.label}
-                </h4>
-                <div className="space-y-2">
-                  {mod.submodules.map((sub) => {
-                    const sp = getSub(mod.id, sub.id);
-                    const activeActions = ALL_WEB_ACTIONS.filter((act) => sub.actions.includes(act) && (sp as any)[act]);
-                    if (activeActions.length === 0) return null;
-
-                    return (
-                      <div key={sub.id} className="flex flex-col gap-1.5 py-2 border-b border-border/50 last:border-0 sm:flex-row sm:items-center justify-between">
-                        <span className="text-xs font-semibold text-foreground min-w-[150px]">{sub.label}</span>
-                        <div className="flex flex-wrap gap-1">
-                          {activeActions.map((act) => (
-                            <span key={act} className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-brand-50 text-brand-700 border border-brand-100">
-                              {WEB_ACTION_LABELS[act]}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-          {!PERMISSION_REGISTRY.some((mod) => mod.submodules.some((sub) => ALL_WEB_ACTIONS.some((act) => sub.actions.includes(act) && (getSub(mod.id, sub.id) as any)[act]))) && (
-            <div className="p-8 text-xs font-medium text-center bg-white border text-muted-foreground rounded-xl">
-              No Web Portal permissions granted.
+    <div className="space-y-3">
+      <ProfileCardGrid>
+        <CompactInfoCard title="Access Rights" icon={Shield}>
+          <div className="flex flex-wrap gap-4 py-0.5">
+            <div className="flex items-center gap-2 text-[13px]">
+              <Monitor className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-[#6B80A0]">Web Portal</span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-px text-[10px] font-semibold",
+                  webHasAny ? "bg-emerald-50 text-emerald-700" : "bg-muted text-muted-foreground",
+                )}
+              >
+                {webHasAny ? "Enabled" : "No access"}
+              </span>
             </div>
-          )}
-        </div>
-      )}
-
-      {section === "mobile" && (
-        <div className="space-y-3">
-          {MOBILE_PERMISSION_REGISTRY.map((grp) => {
-            const hasAny = grp.features.some((feat) => {
-              const fp = getMob(grp.id, feat.id);
-              return ALL_MOBILE_ACTIONS.some((act) => feat.actions.includes(act) && (fp as any)[act]);
-            });
-
-            if (!hasAny) return null;
-
-            return (
-              <div key={grp.id} className="p-4 overflow-hidden bg-white border shadow-sm border-border rounded-xl">
-                <h4 className="flex items-center gap-2 mb-3 text-xs font-bold text-foreground">
-                  <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-                  {grp.label}
-                </h4>
-                <div className="space-y-2">
-                  {grp.features.map((feat) => {
-                    const fp = getMob(grp.id, feat.id);
-                    const activeActions = ALL_MOBILE_ACTIONS.filter((act) => feat.actions.includes(act) && (fp as any)[act]);
-                    if (activeActions.length === 0) return null;
-
-                    return (
-                      <div key={feat.id} className="flex flex-col gap-1.5 py-2 border-b border-border/50 last:border-0 sm:flex-row sm:items-center justify-between">
-                        <span className="text-xs font-semibold text-foreground min-w-[150px]">{feat.label}</span>
-                        <div className="flex flex-wrap gap-1">
-                          {activeActions.map((act) => (
-                            <span key={act} className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-brand-50 text-brand-700 border border-brand-100">
-                              {MOBILE_ACTION_LABELS[act]}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-          {!MOBILE_PERMISSION_REGISTRY.some((grp) => grp.features.some((feat) => ALL_MOBILE_ACTIONS.some((act) => feat.actions.includes(act) && (getMob(grp.id, feat.id) as any)[act]))) && (
-            <div className="p-8 text-xs font-medium text-center bg-white border text-muted-foreground rounded-xl">
-              No Mobile App permissions granted.
+            <div className="flex items-center gap-2 text-[13px]">
+              <Smartphone className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-[#6B80A0]">Mobile App</span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-px text-[10px] font-semibold",
+                  mobHasAny ? "bg-emerald-50 text-emerald-700" : "bg-muted text-muted-foreground",
+                )}
+              >
+                {mobHasAny ? "Enabled" : "No access"}
+              </span>
             </div>
-          )}
+          </div>
+        </CompactInfoCard>
+      </ProfileCardGrid>
+
+      <CompactInfoCard title="Permission Matrix" icon={Shield} className="col-span-full">
+        <div className="flex gap-1 pb-3 mb-1 border-b border-border/60">
+          {(
+            [
+              ["web", "Web Portal", Monitor],
+              ["mobile", "Mobile App", Smartphone],
+            ] as const
+          ).map(([key, label, Icon]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setChannel(key)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 h-7 rounded-md text-[11px] font-semibold transition-colors border",
+                channel === key
+                  ? "bg-brand-600 text-white border-brand-600"
+                  : "border-border text-muted-foreground hover:bg-muted/40",
+              )}
+            >
+              <Icon className="w-3 h-3" />
+              {label}
+            </button>
+          ))}
         </div>
-      )}
+
+        {channel === "web" && (
+          <div className="divide-y divide-border/50">
+            {PERMISSION_REGISTRY.map((mod) => {
+              const rows = mod.submodules
+                .map((sub) => {
+                  const sp = getSub(mod.id, sub.id);
+                  const active = ALL_WEB.filter(
+                    (act) => sub.actions.includes(act) && (sp as any)[act],
+                  );
+                  if (active.length === 0) return null;
+                  return { sub, active };
+                })
+                .filter(Boolean) as { sub: { id: string; label: string }; active: WebAction[] }[];
+
+              if (rows.length === 0) return null;
+
+              return (
+                <div key={mod.id} className="py-2.5 first:pt-0 last:pb-0">
+                  <p className="text-[11px] font-bold text-foreground mb-1.5">{mod.label}</p>
+                  {rows.map(({ sub, active }) => (
+                    <div
+                      key={sub.id}
+                      className="flex flex-col gap-1 py-1.5 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <span className="text-xs text-muted-foreground min-w-[140px]">{sub.label}</span>
+                      <div className="flex flex-wrap gap-1">
+                        {active.map((act) => (
+                          <span
+                            key={act}
+                            className="inline-flex px-1.5 py-px rounded text-[10px] font-semibold bg-brand-50 text-brand-700 border border-brand-100"
+                          >
+                            {WEB_LABELS[act]}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+            {!webHasAny && (
+              <p className="py-4 text-xs text-center text-muted-foreground">No web portal permissions assigned.</p>
+            )}
+          </div>
+        )}
+
+        {channel === "mobile" && (
+          <div className="divide-y divide-border/50">
+            {MOBILE_PERMISSION_REGISTRY.map((grp) => {
+              const rows = grp.features
+                .map((feat) => {
+                  const fp = getMob(grp.id, feat.id);
+                  const active = ALL_MOB.filter(
+                    (act) => feat.actions.includes(act) && (fp as any)[act],
+                  );
+                  if (active.length === 0) return null;
+                  return { feat, active };
+                })
+                .filter(Boolean) as { feat: { id: string; label: string }; active: MobileAction[] }[];
+
+              if (rows.length === 0) return null;
+
+              return (
+                <div key={grp.id} className="py-2.5 first:pt-0 last:pb-0">
+                  <p className="text-[11px] font-bold text-foreground mb-1.5">{grp.label}</p>
+                  {rows.map(({ feat, active }) => (
+                    <div
+                      key={feat.id}
+                      className="flex flex-col gap-1 py-1.5 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <span className="text-xs text-muted-foreground min-w-[140px]">{feat.label}</span>
+                      <div className="flex flex-wrap gap-1">
+                        {active.map((act) => (
+                          <span
+                            key={act}
+                            className="inline-flex px-1.5 py-px rounded text-[10px] font-semibold bg-brand-50 text-brand-700 border border-brand-100"
+                          >
+                            {MOB_LABELS[act]}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+            {!mobHasAny && (
+              <p className="py-4 text-xs text-center text-muted-foreground">No mobile app permissions assigned.</p>
+            )}
+          </div>
+        )}
+      </CompactInfoCard>
     </div>
   );
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
+
 export default function EmployeeDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -382,8 +532,12 @@ export default function EmployeeDetailPage() {
 
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [activeSubTab, setActiveSubTab] = useState("overview");
-  const [confirmTarget, setConfirmTarget] = useState<{ type: string; employee: Employee } | null>(null);
+  const [activeTab, setActiveTab] = useState("overview");
+  const [confirmTarget, setConfirmTarget] = useState<{
+    type: string;
+    employee: Employee;
+    nextStatus?: "active" | "inactive";
+  } | null>(null);
   const [passwordReset, setPasswordReset] = useState<PasswordResetState>({
     open: false,
     newPassword: "",
@@ -392,9 +546,11 @@ export default function EmployeeDetailPage() {
     errors: {},
   });
 
+  const geoNodes = useMemo(() => (typeof window !== "undefined" ? loadGeoNodes() : []), [employee]);
+
   useEffect(() => {
     const employees = loadEmployees();
-    const emp = employees.find(e => e.id === employeeId);
+    const emp = employees.find((e) => e.id === employeeId);
     if (emp) {
       setEmployee(emp);
     } else {
@@ -409,38 +565,29 @@ export default function EmployeeDetailPage() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const handleStatusToggle = () => {
-    if (!employee) return;
-    setConfirmTarget({ type: "status", employee });
-  };
-
   const confirmStatusChange = () => {
     if (!employee || !confirmTarget) return;
-    const newStatus = employee.status === "active" ? "inactive" : "active";
+    if (!confirmTarget.nextStatus) return;
+    const newStatus = confirmTarget.nextStatus;
     const employees = loadEmployees();
-    const updated = employees.map(e =>
+    const updated = employees.map((e) =>
       e.id === employee.id
-        ? { ...e, status: newStatus as any, updatedBy: "Admin", updatedDate: todayStr(), lastStatusChange: todayStr() }
-        : e
+        ? applyEmployeeStatusChange(e, newStatus)
+        : e,
     );
     saveEmployees(updated);
-    setEmployee(updated.find(e => e.id === employee.id) || null);
+    setEmployee(updated.find((e) => e.id === employee.id) || null);
     setToast({ msg: `User ${newStatus === "active" ? "activated" : "deactivated"}`, type: "success" });
     setConfirmTarget(null);
-  };
-
-  const handleDelete = () => {
-    if (!employee) return;
-    setConfirmTarget({ type: "delete", employee });
   };
 
   const confirmDelete = () => {
     if (!employee || !confirmTarget) return;
     const employees = loadEmployees();
-    const updated = employees.map(e =>
+    const updated = employees.map((e) =>
       e.id === employee.id
-        ? { ...e, status: "archived" as const, updatedBy: "Admin", updatedDate: todayStr() }
-        : e
+        ? { ...e, status: "archived" as const, updatedBy: "Admin User", updatedDate: todayStr() }
+        : e,
     );
     saveEmployees(updated);
     setToast({ msg: "User archived", type: "success" });
@@ -448,45 +595,19 @@ export default function EmployeeDetailPage() {
     setConfirmTarget(null);
   };
 
-  const handlePasswordReset = () => {
-    setPasswordReset({
-      open: true,
-      newPassword: "",
-      confirmPassword: "",
-      sendEmail: false,
-      errors: {},
-    });
-  };
-
-  const handlePasswordResetChange = (key: string, value: any) => {
-    setPasswordReset(prev => ({ ...prev, [key]: value }));
-  };
-
   const confirmPasswordReset = () => {
     if (!employee) return;
     const errors: { newPassword?: string; confirmPassword?: string } = {};
-
-    if (!passwordReset.newPassword.trim()) {
-      errors.newPassword = "Password is required";
-    } else if (passwordReset.newPassword.length < 8) {
-      errors.newPassword = "Password must be at least 8 characters";
-    }
-
-    if (!passwordReset.confirmPassword) {
-      errors.confirmPassword = "Please confirm password";
-    } else if (passwordReset.newPassword !== passwordReset.confirmPassword) {
+    if (!passwordReset.newPassword.trim()) errors.newPassword = "Password is required";
+    else if (passwordReset.newPassword.length < 8) errors.newPassword = "Password must be at least 8 characters";
+    if (!passwordReset.confirmPassword) errors.confirmPassword = "Please confirm password";
+    else if (passwordReset.newPassword !== passwordReset.confirmPassword)
       errors.confirmPassword = "Passwords do not match";
-    }
-
     if (Object.keys(errors).length > 0) {
-      setPasswordReset(prev => ({ ...prev, errors }));
+      setPasswordReset((prev) => ({ ...prev, errors }));
       return;
     }
-
-    setToast({
-      msg: `Password reset successfully.`,
-      type: "success",
-    });
+    setToast({ msg: "Password reset successfully.", type: "success" });
     setPasswordReset({ open: false, newPassword: "", confirmPassword: "", sendEmail: false, errors: {} });
   };
 
@@ -498,24 +619,257 @@ export default function EmployeeDetailPage() {
         recordName="Employee Details"
         statusLabel="Loading"
         statusVariant="neutral"
+        tabs={[{ value: "overview", label: "Overview" }]}
+        activeTab="overview"
+        onTabChange={() => {}}
       >
-        <div className="flex items-center justify-center h-96">
-          <p className="text-sm font-semibold text-muted-foreground">Loading user...</p>
+        <div className="flex items-center justify-center h-64">
+          <p className="text-sm text-muted-foreground">Loading employee…</p>
         </div>
       </RecordDetailPage>
     );
   }
 
+  const statusVariant =
+    employee.status === "active"
+      ? "active"
+      : employee.status === "draft"
+        ? "draft"
+        : employee.status === "archived"
+          ? "blocked"
+          : "inactive";
+
   const tabs = [
-    { id: "overview", label: "Overview", icon: Info },
-    { id: "role_dept", label: "Role & Department", icon: Building2 },
-    { id: "permissions", label: "Permissions & Access", icon: UserCheck },
+    { value: "overview", label: "Overview" },
+    { value: "employment", label: "Employment" },
+    { value: "permissions", label: "Permissions" },
+    { value: "documents", label: "Documents" },
+    { value: "activity", label: "Activity Log" },
   ];
 
-  const statusVariant =
-    employee.status === "active" ? "active" :
-    employee.status === "draft" ? "draft" :
-    employee.status === "archived" ? "blocked" : "inactive";
+  const designation = employee.designation || employee.role;
+  const currentAddress = displayAddress(empCurrentAddr(employee), employee.currentAddress || employee.address, geoNodes);
+  const permanentAddress = displayAddress(empPermanentAddr(employee), employee.permanentAddress, geoNodes);
+  const emergencyAddress = displayAddress(
+    empEmergencyAddr(employee),
+    employee.emergencyContactAddress,
+    geoNodes,
+  );
+
+  const geoRows =
+    employee.geoMappings && employee.geoMappings.length > 0
+      ? employee.geoMappings
+      : employee.geoZone || employee.geoRegion || employee.territory
+        ? [
+            {
+              geoZone: employee.geoZone,
+              geoRegion: employee.geoRegion,
+              geoArea: employee.geoArea,
+              territory: employee.territory,
+              geoTown: employee.geoTown || employee.geoLocality,
+            },
+          ]
+        : [];
+
+  const auditTrail = [
+    {
+      id: "created",
+      date: employee.createdDate,
+      text: `Record created by ${employee.createdBy}`,
+    },
+    ...(employee.updatedDate !== employee.createdDate
+      ? [{ id: "updated", date: employee.updatedDate, text: `Record updated by ${employee.updatedBy}` }]
+      : []),
+    ...(employee.activityLog || []).map((entry) => ({
+      id: entry.id,
+      date: entry.date,
+      text: entry.text,
+    })),
+  ].sort((a, b) => b.date.localeCompare(a.date));
+
+  const handleStatusToggleRequest = (nextStatus: "active" | "inactive") => {
+    setConfirmTarget({ type: "status", employee, nextStatus });
+  };
+
+  const handleActivateBlocked = (gaps: string[]) => {
+    setToast({ msg: gaps[0] || "Complete required profile data before activation", type: "error" });
+  };
+
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case "overview":
+        return (
+          <ProfileCardGrid>
+            <CompactInfoCard title="Personal Information" icon={User}>
+              <CompactField label="First Name" value={employee.firstName} />
+              <CompactField label="Last Name" value={employee.lastName} />
+              <CompactField label="Gender" value={employee.gender} />
+              <CompactField label="DOB" value={formatProfileDate(employee.dob)} mono />
+              <CompactField label="Blood Group" value={employee.bloodGroup} />
+            </CompactInfoCard>
+
+            <CompactInfoCard title="Contact Information" icon={Mail}>
+              <CompactField
+                label="Mobile"
+                value={
+                  employee.mobile
+                    ? `${employee.countryCode || "+91"} ${employee.mobile}`
+                    : undefined
+                }
+                mono
+              />
+              <CompactField label="Alt. Mobile" value={employee.alternativeMobile} mono />
+              <CompactField label="Email" value={employee.email} />
+            </CompactInfoCard>
+
+            <CompactInfoCard title="Address Information" icon={MapPin}>
+              <CompactField label="Current" value={currentAddress} />
+              <CompactField label="Permanent" value={permanentAddress} />
+            </CompactInfoCard>
+
+            <CompactInfoCard title="Emergency Contact" icon={Heart}>
+              <CompactField label="Name" value={employee.emergencyContactName} />
+              <CompactField label="Relationship" value={employee.emergencyContactRelation} />
+              <CompactField label="Mobile" value={employee.emergencyContactMobile} mono />
+              <CompactField label="Address" value={emergencyAddress} />
+            </CompactInfoCard>
+          </ProfileCardGrid>
+        );
+
+      case "employment":
+        return (
+          <div className="space-y-3">
+            <ProfileCardGrid>
+              <CompactInfoCard title="Employment Details" icon={Briefcase}>
+                <CompactField label="Employee ID" value={employee.employeeId} mono />
+                <CompactField label="Department" value={employee.department} />
+                <CompactField label="Designation" value={designation} />
+                <CompactField label="Role" value={employee.role} />
+                <CompactField label="Manager" value={employee.reportingManager || "—"} />
+                <CompactField label="Joining Date" value={formatProfileDate(employee.joiningDate)} mono />
+                <CompactField label="Employment Type" value={employee.employeeType} />
+                <CompactField label="Status" value={<StatusBadge status={employee.status} />} />
+              </CompactInfoCard>
+
+              {(employee.roleType || employee.salesType) && (
+                <CompactInfoCard title="Assigned Roles" icon={Shield}>
+                  <CompactField label="Role Type" value={employee.roleType} />
+                  <CompactField label="System Role" value={employee.role} />
+                  {employee.salesType && (
+                    <CompactField label="Sales Type" value={employee.salesType} />
+                  )}
+                  <CompactField label="Department" value={employee.department} />
+                </CompactInfoCard>
+              )}
+            </ProfileCardGrid>
+
+            {geoRows.length > 0 && (
+              <CompactInfoCard title="Geography & Territory" icon={MapPin}>
+                <RecordMiniTable
+                  columns={[
+                    { key: "zone", header: "Zone", render: (r) => r.geoZone || "—" },
+                    { key: "region", header: "Region", render: (r) => r.geoRegion || "—" },
+                    { key: "area", header: "Area", render: (r) => r.geoArea || "—" },
+                    { key: "territory", header: "Territory", render: (r) => r.territory || "—" },
+                    {
+                      key: "town",
+                      header: "Town",
+                      render: (r) => r.geoTown || r.geoLocality || "—",
+                    },
+                  ]}
+                  rows={geoRows}
+                />
+              </CompactInfoCard>
+            )}
+
+            {(employee.approvalLevel1Id || employee.approvalLevel2Id || employee.approvalLevel3Id) && (
+              <ProfileCardGrid>
+                {employee.approvalLevel1Id && (
+                  <CompactInfoCard title="Level 1 Approver" icon={Shield}>
+                    <CompactField label="Name" value={employee.approvalLevel1Name} />
+                    <CompactField label="Role" value={employee.approvalLevel1Role} />
+                  </CompactInfoCard>
+                )}
+                {employee.approvalLevel2Id && (
+                  <CompactInfoCard title="Level 2 Approver" icon={Shield}>
+                    <CompactField label="Name" value={employee.approvalLevel2Name} />
+                    <CompactField label="Role" value={employee.approvalLevel2Role} />
+                  </CompactInfoCard>
+                )}
+                {employee.approvalLevel3Id && (
+                  <CompactInfoCard title="Level 3 Approver" icon={Shield}>
+                    <CompactField label="Name" value={employee.approvalLevel3Name} />
+                    <CompactField label="Role" value={employee.approvalLevel3Role} />
+                  </CompactInfoCard>
+                )}
+              </ProfileCardGrid>
+            )}
+          </div>
+        );
+
+      case "permissions":
+        return (
+          <div className="space-y-3">
+            <ProfileCardGrid>
+              <CompactInfoCard title="Assigned Roles" icon={Shield}>
+                <CompactField label="Role Type" value={employee.roleType} />
+                <CompactField label="System Role" value={employee.role} />
+                <CompactField label="Department" value={employee.department} />
+              </CompactInfoCard>
+            </ProfileCardGrid>
+            <PermissionsTabContent permissions={employee.permissions} />
+          </div>
+        );
+
+      case "documents":
+        return (
+          <EmployeeDocumentsSection
+            readOnly
+            documents={employee.documents || []}
+            employee={employee}
+          />
+        );
+
+      case "activity":
+        return (
+          <div className="space-y-3">
+            <ProfileCardGrid>
+              <CompactInfoCard title="Record Audit" icon={Clock}>
+                <div className="space-y-2 py-0.5">
+                  <AuditUserRow label="Created By" name={employee.createdBy} />
+                  <CompactField label="Created Date" value={employee.createdDate} mono />
+                  <AuditUserRow label="Updated By" name={employee.updatedBy} />
+                  <CompactField label="Updated Date" value={employee.updatedDate} mono />
+                </div>
+              </CompactInfoCard>
+
+              <CompactInfoCard title="Status History" icon={Clock}>
+                <CompactField
+                  label="Current Status"
+                  value={<StatusBadge status={employee.status} />}
+                />
+                <CompactField label="Last Changed" value={employee.lastStatusChange} mono />
+              </CompactInfoCard>
+            </ProfileCardGrid>
+
+            <CompactInfoCard title="Audit Trail" icon={Clock}>
+              {auditTrail.length === 0 ? (
+                <p className="py-2 text-[12px] text-center text-muted-foreground">
+                  No audit events recorded.
+                </p>
+              ) : (
+                auditTrail.map((entry) => (
+                  <CompactField key={entry.id} label={entry.date} value={entry.text} mono />
+                ))
+              )}
+            </CompactInfoCard>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
 
   return (
     <>
@@ -524,309 +878,46 @@ export default function EmployeeDetailPage() {
         listLabel="Employees"
         recordName={employee.fullName}
         recordCode={employee.employeeId}
-        statusLabel={employee.status.charAt(0).toUpperCase() + employee.status.slice(1)}
+        headerVariant="profile"
+        statusLabel={STATUS_LABEL[employee.status] ?? employee.status}
         statusVariant={statusVariant}
         metaItems={[
-          { icon: Mail, label: employee.email },
-          { icon: Phone, label: employee.mobile },
+          { icon: Building2, label: employee.department || "—" },
+          { icon: Briefcase, label: employee.role || designation },
         ]}
-        active={employee.status === "active"}
-        onActiveChange={() => handleStatusToggle()}
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
         onEdit={() => router.push(`/user-management/employee/${employee.id}/edit`)}
+        headerActions={
+          employee.status === "active" || employee.status === "inactive" || employee.status === "draft" ? (
+            <EmployeeListingStatusCell
+              status={employee.status}
+              employee={employee}
+              onToggleRequest={handleStatusToggleRequest}
+              onActivateBlocked={handleActivateBlocked}
+            />
+          ) : undefined
+        }
         moreActions={[
-          {
-            label: "Reset Password",
-            onClick: handlePasswordReset,
-          },
-          {
-            label: "Archive User",
-            onClick: handleDelete,
-            destructive: true,
-          },
+          { label: "Reset Password", onClick: () => setPasswordReset({ open: true, newPassword: "", confirmPassword: "", sendEmail: false, errors: {} }) },
+          { label: "Archive User", onClick: () => setConfirmTarget({ type: "delete", employee }), destructive: true },
         ]}
-        sidebar={{
-          summary: [
-            { label: "Department", value: employee.department, highlight: true },
-            { label: "Role", value: employee.role },
-            { label: "Joining Date", value: employee.joiningDate },
-            { label: "Reporting Manager", value: employee.reportingManager || "None" },
-            { label: "Created", value: employee.createdDate },
-            { label: "Updated", value: employee.updatedDate },
-          ],
-          quickActions: [
-            {
-              label: "Reset Password",
-              icon: Key,
-              onClick: handlePasswordReset,
-              variant: "outline",
-            },
-          ],
-        }}
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {/* Personal Details */}
-          <div className="border border-border rounded-xl bg-white p-3.5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2.5">Personal Details</p>
-            <div className="space-y-0">
-              <InfoRow label="Full Name" value={employee.fullName} />
-              <InfoRow label="Email" value={employee.email} />
-              <InfoRow label="Mobile" value={employee.mobile} />
-              {employee.alternativeMobile && <InfoRow label="Alt Mobile" value={employee.alternativeMobile} />}
-              <InfoRow label="Blood Group" value={employee.bloodGroup} />
-            </div>
-          </div>
-
-          {/* 4 Compact KPI blocks */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col justify-between p-4 bg-white border shadow-sm rounded-xl border-border">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                Role Type
-              </p>
-              <p className="mt-1 text-xs font-bold truncate text-foreground">
-                {employee.roleType || "—"}
-              </p>
-            </div>
-
-            <div className="flex flex-col justify-between p-4 bg-white border shadow-sm rounded-xl border-border">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                Department
-              </p>
-              <p className="mt-1 text-xs font-bold truncate text-foreground">
-                {employee.department || "—"}
-              </p>
-            </div>
-
-            <div className="flex flex-col justify-between p-4 bg-white border shadow-sm rounded-xl border-border">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                Joined Date
-              </p>
-              <p className="mt-1 text-xs font-bold truncate text-foreground">
-                {employee.joiningDate || "—"}
-              </p>
-            </div>
-
-            <div className="flex flex-col justify-between p-4 bg-white border shadow-sm rounded-xl border-border">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                Manager
-              </p>
-              <p className="mt-1 text-xs font-bold truncate text-foreground">
-                {employee.reportingManager || "None"}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* ── UNDERLINE TAB NAVIGATION ── */}
-        <div className="border-b border-border">
-          <div className="flex gap-6">
-            {tabs.map((t) => {
-              const active = activeSubTab === t.id;
-              const Icon = t.icon;
-              return (
-                <button
-                  key={t.id}
-                  className={cn(
-                    "pb-3 text-xs font-semibold border-b-2 transition-colors focus:outline-none flex items-center gap-1.5",
-                    active
-                      ? "border-brand-600 text-brand-600 font-bold"
-                      : "border-transparent text-muted-foreground hover:text-foreground",
-                  )}
-                  onClick={() => setActiveSubTab(t.id)}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* ── TAB CONTENT ── */}
-        <div className="w-full">
-          {/* TAB 1: OVERVIEW */}
-          {activeSubTab === "overview" && (
-            <div className="space-y-5">
-              <div className="p-6 space-y-6 bg-white border shadow-sm rounded-xl border-border">
-                {/* Section 1: Personal Information */}
-                <div className="space-y-3">
-                  <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
-                    Personal Information
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1">
-                    <DetailField label="First Name" value={employee.firstName} />
-                    <DetailField label="Last Name" value={employee.lastName} />
-                    <DetailField label="Full Name" value={employee.fullName} />
-                    <DetailField label="Gender" value={employee.gender} />
-                    <DetailField label="DOB" value={employee.dob} />
-                    <DetailField label="Blood Group" value={employee.bloodGroup} />
-                  </div>
-                </div>
-
-                {/* Section 2: Contact Details */}
-                <div className="pt-2 space-y-3">
-                  <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
-                    Contact Details
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1">
-                    <DetailField label="Mobile Number" value={employee.mobile ? `${employee.countryCode || "+91"} ${employee.mobile}` : "—"} mono />
-                    {/* <DetailField label="Alternative Mobile" value={employee.alternativeMobile} mono /> */}
-                    <DetailField label="Email Address" value={employee.email} />
-                    <DetailField label="Current Address" value={employee.currentAddress || employee.address} />
-                    <DetailField label="Permanent Address" value={employee.permanentAddress} />
-                  </div>
-                </div>
-
-                {/* Section 3: Account Details */}
-                <div className="pt-2 space-y-3">
-                  <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
-                    Account Details
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1">
-                    <DetailField label="Username / Login ID" value={employee.employeeId} mono />
-                    <DetailField label="Status" value={<StatusBadge status={employee.status} />} />
-                    <DetailField label="Created Date" value={employee.createdDate} />
-                    <DetailField label="Created By" value={employee.createdBy} />
-                    <DetailField label="Updated Date" value={employee.updatedDate} />
-                    <DetailField label="Updated By" value={employee.updatedBy} />
-                    <DetailField label="Last Status Change" value={employee.lastStatusChange} />
-                    {employee.remarks && <DetailField label="Remarks" value={employee.remarks} />}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: ROLE & DEPARTMENT */}
-          {activeSubTab === "role_dept" && (
-            <div className="space-y-5">
-              <div className="p-6 space-y-6 bg-white border shadow-sm rounded-xl border-border">
-                {/* Section 1: Role & Department Details */}
-                <div className="space-y-3">
-                  <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
-                    Role & Department Details
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1">
-                    <DetailField label="Role Type" value={employee.roleType} />
-                    <DetailField label="Role" value={employee.role} />
-                    <DetailField label="Department" value={employee.department} />
-                    <DetailField label="Designation" value={employee.designation || employee.role} />
-                    <DetailField label="Employee Type" value={employee.employeeType} />
-                    {employee.salesType && <DetailField label="Sales Type" value={employee.salesType} />}
-                    <DetailField label="Joining Date" value={employee.joiningDate} />
-                    <DetailField label="Reporting Manager" value={employee.reportingManager || "None"} />
-                  </div>
-                </div>
-
-                {/* Section 2: Geography Mappings */}
-                <div className="pt-2 space-y-3">
-                  <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
-                    Geography Mappings
-                  </h3>
-                  {employee.geoZone || employee.geoRegion || employee.geoArea || employee.territory || employee.geoLocality || (employee.geoMappings && employee.geoMappings.length > 0) ? (
-                    <div className="overflow-x-auto bg-white border rounded-lg border-border">
-                      <table className="w-full text-xs text-left border-collapse">
-                        <thead>
-                          <tr className="font-semibold border-b border-border bg-slate-50 text-muted-foreground">
-                            <th className="px-4 py-2">Zone</th>
-                            <th className="px-4 py-2">Region</th>
-                            <th className="px-4 py-2">Area</th>
-                            <th className="px-4 py-2">Territory</th>
-                            <th className="px-4 py-2">Locality</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {employee.geoMappings && employee.geoMappings.length > 0 ? (
-                            employee.geoMappings.map((geo, idx) => (
-                              <tr key={idx} className="font-medium border-b border-border/60 last:border-0 hover:bg-slate-50/50">
-                                <td className="px-4 py-2">{geo.geoZone || "—"}</td>
-                                <td className="px-4 py-2">{geo.geoRegion || "—"}</td>
-                                <td className="px-4 py-2">{geo.geoArea || "—"}</td>
-                                <td className="px-4 py-2">{geo.territory || "—"}</td>
-                                <td className="px-4 py-2">{geo.geoLocality || "—"}</td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr className="font-medium border-b border-border/60 last:border-0">
-                              <td className="px-4 py-2">{employee.geoZone || "—"}</td>
-                              <td className="px-4 py-2">{employee.geoRegion || "—"}</td>
-                              <td className="px-4 py-2">{employee.geoArea || "—"}</td>
-                              <td className="px-4 py-2">{employee.territory || "—"}</td>
-                              <td className="px-4 py-2">{employee.geoLocality || "—"}</td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="pl-1 text-xs italic text-muted-foreground">No geography mapping assigned to this user.</p>
-                  )}
-                </div>
-
-                {/* Section 3: Emergency Contact Details */}
-                <div className="pt-2 space-y-3">
-                  <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
-                    Emergency Contact Details
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1">
-                    <DetailField label="Contact Name" value={employee.emergencyContactName} />
-                    <DetailField label="Mobile Number" value={employee.emergencyContactMobile} mono />
-                    <DetailField label="Relation" value={employee.emergencyContactRelation} />
-                    {employee.emergencyContactAddress && <DetailField label="Address" value={employee.emergencyContactAddress} />}
-                  </div>
-                </div>
-
-                {/* Section 4: Approval Chain Details */}
-                {(employee.approvalLevel1Id || employee.approvalLevel2Id || employee.approvalLevel3Id) && (
-                  <div className="pt-2 space-y-3">
-                    <h3 className="pb-2 text-xs font-bold tracking-wider uppercase border-b text-foreground">
-                      Approval Chain Details
-                    </h3>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                      {employee.approvalLevel1Id && (
-                        <div className="p-3.5 border border-border rounded-xl bg-slate-50/50 space-y-1">
-                          <span className="text-[10px] font-bold text-brand-600 uppercase tracking-wider">Level 1 Approver</span>
-                          <p className="text-xs font-bold text-foreground">{employee.approvalLevel1Name}</p>
-                          <p className="text-[10px] text-muted-foreground font-semibold">{employee.approvalLevel1Role}</p>
-                        </div>
-                      )}
-                      {employee.approvalLevel2Id && (
-                        <div className="p-3.5 border border-border rounded-xl bg-slate-50/50 space-y-1">
-                          <span className="text-[10px] font-bold text-brand-600 uppercase tracking-wider">Level 2 Approver</span>
-                          <p className="text-xs font-bold text-foreground">{employee.approvalLevel2Name}</p>
-                          <p className="text-[10px] text-muted-foreground font-semibold">{employee.approvalLevel2Role}</p>
-                        </div>
-                      )}
-                      {employee.approvalLevel3Id && (
-                        <div className="p-3.5 border border-border rounded-xl bg-slate-50/50 space-y-1">
-                          <span className="text-[10px] font-bold text-brand-600 uppercase tracking-wider">Level 3 Approver</span>
-                          <p className="text-xs font-bold text-foreground">{employee.approvalLevel3Name}</p>
-                          <p className="text-[10px] text-muted-foreground font-semibold">{employee.approvalLevel3Role}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: PERMISSIONS & ACCESS */}
-          {activeSubTab === "permissions" && (
-            <div className="p-6 bg-white border shadow-sm rounded-xl border-border">
-              <ReadOnlyPermissionsView permissions={employee.permissions} />
-            </div>
-          )}
-        </div>
+        {renderTabContent()}
       </RecordDetailPage>
 
-      {/* Dialogs */}
       <ConfirmDialog
         open={confirmTarget?.type === "status"}
         onClose={() => setConfirmTarget(null)}
         onConfirm={confirmStatusChange}
-        title={employee?.status === "active" ? "Deactivate User" : "Activate User"}
-        description={`Are you sure you want to ${employee?.status === "active" ? "deactivate" : "activate"} ${employee?.fullName}?`}
-        confirmLabel={employee?.status === "active" ? "Deactivate" : "Activate"}
+        title={confirmTarget?.nextStatus === "active" ? "Activate User" : "Deactivate User"}
+        description={
+          confirmTarget?.nextStatus === "active"
+            ? "Are you sure you want to activate this user?"
+            : "Are you sure you want to deactivate this user?"
+        }
+        confirmLabel={confirmTarget?.nextStatus === "active" ? "Activate" : "Deactivate"}
       />
 
       <ConfirmDialog
@@ -834,19 +925,18 @@ export default function EmployeeDetailPage() {
         onClose={() => setConfirmTarget(null)}
         onConfirm={confirmDelete}
         title="Archive User"
-        description={`Are you sure you want to archive ${employee?.fullName}? This action will change their status to Archived.`}
+        description={`Are you sure you want to archive ${employee.fullName}? Their status will be set to Archived.`}
         confirmLabel="Archive"
         destructive
       />
 
       <PasswordResetModal
         state={passwordReset}
-        onChange={handlePasswordResetChange}
+        onChange={(key, value) => setPasswordReset((prev) => ({ ...prev, [key]: value, errors: {} }))}
         onReset={confirmPasswordReset}
-        onClose={() => setPasswordReset({ ...passwordReset, open: false })}
+        onClose={() => setPasswordReset((prev) => ({ ...prev, open: false }))}
       />
 
-      {/* Toast */}
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </>
   );

@@ -55,7 +55,11 @@ export function ProcCompactKpiGrid({ children, cols }: { children: React.ReactNo
     <div
       className={cn(
         "grid gap-2.5",
-        cols === 6 ? "grid-cols-2 sm:grid-cols-3 xl:grid-cols-6" : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5",
+        cols === 6
+          ? "grid-cols-2 sm:grid-cols-3 xl:grid-cols-6"
+          : cols === 5
+            ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
+            : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4",
       )}
     >
       {children}

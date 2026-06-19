@@ -39,9 +39,8 @@ import {
   approvePR,
   rejectPR,
 } from "./pr-data";
-import { filterPRsForAnalytics } from "../analytics/proc-analytics-utils";
-import { computePRAnalytics } from "../analytics/pr-analytics";
-import { PRAnalyticsDashboard } from "../components/analytics/PRAnalyticsDashboard";
+import { computePRListingKpis } from "@/lib/procurement/listing-kpis";
+import { PRListingKpiRow } from "../components/listing/ListingKpiRows";
 
 type TabId = "all" | PRListStatus;
 
@@ -174,20 +173,7 @@ export default function PurchaseRequestsPage() {
     setApprovalOpen(false);
   };
 
-  const analyticsBase = useMemo(() => {
-    const statusFilter = (filters.approvalStatus as string[]) || [];
-    const reqFilter = (filters.requestedBy as string[]) || [];
-    const dateRange = (filters.requiredByDate as { fromDate: string; toDate: string }) || {};
-    return filterPRsForAnalytics(records, {
-      status: statusFilter,
-      requestedBy: reqFilter,
-      dateFrom: dateRange.fromDate || "",
-      dateTo: dateRange.toDate || "",
-      search: (filters.search as string) || "",
-    });
-  }, [records, filters]);
-
-  const prAnalytics = useMemo(() => computePRAnalytics(analyticsBase), [analyticsBase]);
+  const prListingKpis = useMemo(() => computePRListingKpis(records), [records]);
 
   const columns: ColumnConfig<PurchaseRequest>[] = [
     {
@@ -365,7 +351,7 @@ export default function PurchaseRequestsPage() {
       }))}
       activeTab={tab}
       onTabChange={(id) => setTab(id as TabId)}
-      metrics={<PRAnalyticsDashboard analytics={prAnalytics} />}
+      metrics={<PRListingKpiRow kpis={prListingKpis} />}
     >
       <div>
         <MasterListing<PurchaseRequest>

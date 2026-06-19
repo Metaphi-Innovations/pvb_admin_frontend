@@ -17,12 +17,12 @@ import {
 	Pencil,
 	ChevronsUpDown,
 	Search,
+	Loader2,
 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CompactToggle } from "@/app/(app)/masters/vendors/components/CompactToggle";
 import {
 	Popover,
 	PopoverContent,
@@ -38,7 +38,37 @@ import {
 import { cn } from "@/lib/utils";
 import { SearchableSelect } from "./SearchableSelect";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
+import { getStandardMrp } from "@/lib/pricing/resolve-pricing";
+import {
+	GST_REGISTRATION_TYPE_DEFAULT,
+	GST_CATEGORY_UNREGISTERED,
+	deriveGstCategory,
+	deriveGstRegistered,
+	deriveGstRegistrationType,
+	buildGstCategory,
+	fetchGstRegistrationDetailsAsync,
+	gstApplicableFromCategory,
+	gstDetailsToAddressSnapshot,
+	isGstCategoryRegistered,
+	type GstAddressSnapshot,
+	MSME_NUMBER_ERROR,
+	validateMSMENumber,
+} from "@/lib/masters/gst-compliance";
+import { GstRegistrationFields, GstRegisteredToggleControl } from "@/components/masters/GstRegistrationFields";
+import { ErpFormSection } from "@/components/masters/erp/ErpFormSection";
+import { ComplianceCertificationsGrid } from "@/components/masters/erp/ComplianceCertificationsGrid";
+import { BranchAddressFields } from "@/components/masters/erp/BranchAddressFields";
+import { ERP } from "@/components/masters/erp/erp-form-styles";
+import {
+	complianceRegistrationToStored,
+	validateComplianceRegistration,
+	validateFSSAINumber,
+	FSSAI_NUMBER_ERROR,
+} from "@/lib/masters/compliance-registration";
+import { ListingStatusToggle } from "@/components/listing";
 import { Button } from "@/components/ui/button";
+import { toTdsSelectOptions } from "../../tds/tds-data";
 import {
 	type Customer,
 	type CustomerStatus,
@@ -55,12 +85,13 @@ import {
 	getActiveSalesEmployees,
 	todayStr,
 	validateGSTIN,
+	validatePAN,
 	validateMobile,
 	validateEmail,
 	validatePincode,
 	validateIFSC,
 } from "../customer-data";
-import { loadGeoNodes } from "../../geography/geo-data";
+import { loadGeoNodes, resolvePincodeLocation, getStateSelectOptions } from "../../geography/geo-data";
 import { loadCustomerTypes } from "../../customer-types/customer-type-data";
 import { loadProducts } from "../../products/product-data";
 import {
@@ -72,6 +103,9 @@ import {
 
 export interface BranchAddress {
 	address: string;
+	addressLine2?: string;
+	country?: string;
+	district?: string;
 	city: string;
 	state: string;
 	pincode: string;
@@ -133,11 +167,21 @@ export interface CustomerFormValues {
 	status: CustomerStatus;
 	blockReason: string;
 	gstApplicable: boolean;
+	gstRegistered: boolean;
+	gstRegistrationType: string;
+	gstCategory: string;
 	gstin: string;
+	registeredLegalName: string;
+	registeredAddress: string;
 	gstMasterId: string;
 	tdsApplicable: boolean;
 	tdsMasterId: string;
-	tan: string;
+	pan: string;
+	msmeRegistered: boolean;
+	msmeNumber: string;
+	fssaiRegistered: boolean;
+	cibRegistered: boolean;
+	fcoRegistered: boolean;
 	cibRegn: string;
 	fcoRegn: string;
 	fssai: string;
@@ -148,7 +192,6 @@ export interface CustomerFormValues {
 	pincode: string;
 	salesManId: string;
 	creditLimit: string;
-	interestRate: string;
 	paymentTerms: string;
 	bankName: string;
 	bankBranchAddress: string;
@@ -191,11 +234,21 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
 	status: "draft",
 	blockReason: "",
 	gstApplicable: false,
+	gstRegistered: false,
+	gstRegistrationType: GST_REGISTRATION_TYPE_DEFAULT,
+	gstCategory: GST_CATEGORY_UNREGISTERED,
 	gstin: "",
+	registeredLegalName: "",
+	registeredAddress: "",
 	gstMasterId: "",
 	tdsApplicable: false,
 	tdsMasterId: "",
-	tan: "",
+	pan: "",
+	msmeRegistered: false,
+	msmeNumber: "",
+	fssaiRegistered: false,
+	cibRegistered: false,
+	fcoRegistered: false,
 	cibRegn: "",
 	fcoRegn: "",
 	fssai: "",
@@ -206,7 +259,6 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
 	pincode: "",
 	salesManId: "",
 	creditLimit: "",
-	interestRate: "",
 	paymentTerms: "net-30",
 	bankName: "",
 	bankBranchAddress: "",
@@ -226,14 +278,37 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
 		{
 			branchName: "Main Branch",
 			isMain: true,
-			billingAddress: { address: "", city: "", state: "", pincode: "" },
-			shippingAddress: { address: "", city: "", state: "", pincode: "" },
+			billingAddress: {
+				address: "",
+				addressLine2: "",
+				country: "India",
+				district: "",
+				city: "",
+				state: "",
+				pincode: "",
+			},
+			shippingAddress: {
+				address: "",
+				addressLine2: "",
+				country: "India",
+				district: "",
+				city: "",
+				state: "",
+				pincode: "",
+			},
 			documents: [],
 		},
 	],
 };
 
 export function customerToFormValues(c: Customer): CustomerFormValues {
+	const gstCategory =
+		c.gstCategory || deriveGstCategory(c.gstApplicable, c.gstin);
+	const gstRegistered = deriveGstRegistered(
+		c.gstApplicable,
+		c.gstin,
+		gstCategory,
+	);
 	return {
 		customerName: c.customerName,
 		countryCode: c.countryCode || "+91",
@@ -242,12 +317,22 @@ export function customerToFormValues(c: Customer): CustomerFormValues {
 		customerType: c.customerType,
 		status: c.status,
 		blockReason: c.blockReason ?? "",
-		gstApplicable: c.gstApplicable,
+		gstApplicable: gstApplicableFromCategory(gstCategory),
+		gstRegistered,
+		gstRegistrationType: deriveGstRegistrationType(gstCategory),
+		gstCategory,
 		gstin: c.gstin,
+		registeredLegalName: c.registeredLegalName ?? "",
+		registeredAddress: c.registeredAddress ?? "",
 		gstMasterId: c.gstMasterId != null ? String(c.gstMasterId) : "",
 		tdsApplicable: c.tdsApplicable,
 		tdsMasterId: c.tdsMasterId != null ? String(c.tdsMasterId) : "",
-		tan: c.tan,
+		pan: c.pan ?? "",
+		msmeRegistered: c.msmeRegistered ?? false,
+		msmeNumber: c.msmeNumber ?? "",
+		fssaiRegistered: c.fssaiRegistered ?? !!c.fssai?.trim(),
+		cibRegistered: c.cibRegistered ?? !!c.cibRegn?.trim(),
+		fcoRegistered: c.fcoRegistered ?? !!c.fcoRegn?.trim(),
 		cibRegn: c.cibRegn,
 		fcoRegn: c.fcoRegn,
 		fssai: c.fssai,
@@ -258,7 +343,6 @@ export function customerToFormValues(c: Customer): CustomerFormValues {
 		pincode: c.pincode || "",
 		salesManId: c.salesManId != null ? String(c.salesManId) : "",
 		creditLimit: c.creditLimit ? String(c.creditLimit) : "",
-		interestRate: c.interestRate ? String(c.interestRate) : "",
 		paymentTerms: c.paymentTerms,
 		bankName: c.bankName,
 		bankBranchAddress: c.bankBranchAddress,
@@ -376,9 +460,12 @@ const STATUS_OPTIONS = [
 function SectionHead({ label, sub }: { label: string; sub?: string }) {
 	return (
 		<div className='mb-2.5 mt-0.5'>
-			<p className='text-[10px] font-bold uppercase tracking-widest text-muted-foreground'>
-				{label}
-			</p>
+      <div className='flex items-center gap-2'>
+        <span className='w-[3px] h-3.5 rounded-full bg-[#E57A1F] flex-shrink-0' />
+        <p className='text-[10px] font-bold uppercase tracking-widest text-[#0F172A]'>
+          {label}
+        </p>
+      </div>
 			{sub && <p className='text-[11px] text-muted-foreground mt-0.5'>{sub}</p>}
 		</div>
 	);
@@ -437,6 +524,7 @@ function CountryCodePicker({
 
 interface ProductCatalogItem {
 	productId: string;
+	numericId: number;
 	productName: string;
 	sku: string;
 	category?: string;
@@ -444,7 +532,6 @@ interface ProductCatalogItem {
 	packSize?: string;
 	hsnCode?: string;
 	gstRate?: string;
-	mrp: number;
 }
 
 function ProductSelect({
@@ -471,7 +558,9 @@ function ProductSelect({
 			.filter(Boolean)
 			.join(" | "),
 		trailing: (
-			<span className='text-[10px] text-muted-foreground'>MRP: ?{p.mrp}</span>
+			<span className='text-[10px] text-muted-foreground'>
+				MRP: {formatIndianRupeeDisplay(getStandardMrp(p.numericId))}
+			</span>
 		),
 	}));
 
@@ -526,6 +615,8 @@ interface CustomerFormProps {
 	onClearError: (key: string) => void;
 	readOnly?: boolean;
 	isAdd?: boolean;
+	/** Auto-generated code preview (add) or stored code (edit). */
+	customerCode?: string;
 }
 
 export function CustomerForm({
@@ -536,9 +627,15 @@ export function CustomerForm({
 	onClearError,
 	readOnly,
 	isAdd,
+	customerCode,
 }: CustomerFormProps) {
 	const [geoNodes] = useState(() =>
 		typeof window !== "undefined" ? loadGeoNodes() : [],
+	);
+
+	const stateOptions = useMemo(
+		() => getStateSelectOptions(geoNodes),
+		[geoNodes],
 	);
 
 	const [expandedBranches, setExpandedBranches] = useState<
@@ -548,6 +645,83 @@ export function CustomerForm({
 		Record<number, boolean>
 	>({});
 	const [bulkProductIds, setBulkProductIds] = useState<string[]>([]);
+	const [fetchingGst, setFetchingGst] = useState(false);
+	const [gstAddressSnapshot, setGstAddressSnapshot] =
+		useState<GstAddressSnapshot | null>(null);
+
+	const gstRegistered = form.gstRegistered;
+
+	const handleFetchGst = async () => {
+		if (readOnly) return;
+		if (!form.gstin.trim()) {
+			showToast("Enter GSTIN before fetching details.", "error");
+			return;
+		}
+		if (!validateGSTIN(form.gstin)) {
+			showToast("Enter a valid 15-character GSTIN.", "error");
+			return;
+		}
+		setFetchingGst(true);
+		try {
+			const details = await fetchGstRegistrationDetailsAsync(form.gstin);
+			if (!details) {
+				showToast("Could not fetch GST details. Check GSTIN format.", "error");
+				return;
+			}
+			const snap = gstDetailsToAddressSnapshot(details);
+			setGstAddressSnapshot(snap);
+			const displayName = details.tradeName || details.legalBusinessName;
+			const updatedBranches = form.branches.map((b, idx) => {
+				const isMain =
+					b.isMain || (!form.branches.some((x) => x.isMain) && idx === 0);
+				if (!isMain) return b;
+				return {
+					...b,
+					billingAddress: {
+						...snap,
+						addressLine2: snap.addressLine2 ?? "",
+						country: snap.country ?? "India",
+						district: snap.district ?? snap.city,
+					},
+					shippingAddress: {
+						...snap,
+						addressLine2: snap.addressLine2 ?? "",
+						country: snap.country ?? "India",
+						district: snap.district ?? snap.city,
+					},
+				};
+			});
+			onChange({
+				...form,
+				registeredLegalName: details.legalBusinessName || displayName,
+				registeredAddress: details.registeredAddress,
+				customerName: form.customerName.trim() || displayName,
+				pan: form.pan.trim() || form.gstin.trim().slice(2, 12),
+				branches: updatedBranches,
+			});
+			showToast("GST details fetched and applied.", "success");
+		} finally {
+			setFetchingGst(false);
+		}
+	};
+
+	const copyGstAddressToBranch = (bIdx: number) => {
+		if (!gstAddressSnapshot) {
+			showToast("Fetch GST details first to copy the registered address.", "error");
+			return;
+		}
+		const updatedBranches = form.branches.map((b, idx) =>
+			idx === bIdx
+				? {
+						...b,
+						billingAddress: { ...gstAddressSnapshot },
+						shippingAddress: { ...gstAddressSnapshot },
+					}
+				: b,
+		);
+		onChange({ ...form, branches: updatedBranches });
+		showToast("GST registered address copied to branch.", "success");
+	};
 
 	const [toastState, setToastState] = useState<ToastState | null>(null);
 	const showToast = (msg: string, type: "success" | "error") => {
@@ -655,14 +829,25 @@ export function CustomerForm({
 		});
 	}, []);
 
-	const activeProducts = useMemo(
-		() => loadProducts().filter((p) => p.status === "active"),
-		[],
-	);
+	const activeProducts = useMemo((): ProductCatalogItem[] => {
+		return loadProducts()
+			.filter((p) => p.status === "active")
+			.map((p) => ({
+				productId: p.sku,
+				numericId: p.id,
+				productName: p.productName,
+				sku: p.sku,
+				category: p.category,
+				unit: p.baseUnit,
+				packSize: p.packagingUnit,
+				hsnCode: p.hsnCode,
+				gstRate: p.gstRate,
+			}));
+	}, []);
 	const productOptions = useMemo(() => {
 		return activeProducts.map((p) => ({
 			value: p.productId,
-			label: `${p.productId} - ${p.productName}`,
+			label: `${p.sku} - ${p.productName}`,
 		}));
 	}, [activeProducts]);
 
@@ -732,7 +917,6 @@ export function CustomerForm({
 			id: newId,
 			productId: "",
 			productName: "",
-			mrp: 0,
 			price: undefined,
 			status: "Active" as const,
 		};
@@ -764,7 +948,6 @@ export function CustomerForm({
 				productId: prod.productId,
 				productName: prod.productName,
 				sku: prod.sku,
-				mrp: prod.mrp,
 				price: undefined,
 				status: "Active" as const,
 			});
@@ -834,23 +1017,170 @@ export function CustomerForm({
 		onChange({ ...form, branches: updated });
 	};
 
+	const updateBranchBillingAddress = (
+		bIdx: number,
+		addr: BranchAddress,
+		pincodeRaw?: string,
+	) => {
+		let next = { ...addr };
+		if (pincodeRaw !== undefined) {
+			const digits = pincodeRaw.replace(/\D/g, "").slice(0, 6);
+			next = { ...next, pincode: digits };
+			if (digits.length === 6 && (next.country ?? "India") === "India") {
+				const loc = resolvePincodeLocation(digits, geoNodes);
+				if (loc) {
+					if (loc.state) next.state = loc.state;
+					if (loc.district) next.district = loc.district;
+					if (loc.city) next.city = loc.city;
+					else if (loc.district) next.city = loc.district;
+				}
+			}
+		}
+		const updated = [...form.branches];
+		updated[bIdx] = { ...updated[bIdx], billingAddress: next };
+		onChange({ ...form, branches: updated });
+	};
+
+	const updateBranchShippingAddress = (
+		bIdx: number,
+		addr: BranchAddress,
+		pincodeRaw?: string,
+	) => {
+		let next = { ...addr };
+		if (pincodeRaw !== undefined) {
+			const digits = pincodeRaw.replace(/\D/g, "").slice(0, 6);
+			next = { ...next, pincode: digits };
+			if (digits.length === 6 && (next.country ?? "India") === "India") {
+				const loc = resolvePincodeLocation(digits, geoNodes);
+				if (loc) {
+					if (loc.state) next.state = loc.state;
+					if (loc.district) next.district = loc.district;
+					if (loc.city) next.city = loc.city;
+					else if (loc.district) next.city = loc.district;
+				}
+			}
+		}
+		const updated = [...form.branches];
+		updated[bIdx] = { ...updated[bIdx], shippingAddress: next };
+		onChange({ ...form, branches: updated });
+	};
+
+	const validateComplianceField = (fieldKey: string) => {
+		if (!onSetErrors) return;
+		onSetErrors((prev) => {
+			const next = { ...prev };
+			if (fieldKey === "msmeNumber" && form.msmeRegistered) {
+				if (!form.msmeNumber.trim() || !validateMSMENumber(form.msmeNumber)) {
+					next.msmeNumber = MSME_NUMBER_ERROR;
+				} else {
+					delete next.msmeNumber;
+				}
+			}
+			if (fieldKey === "fssai" && form.fssaiRegistered) {
+				if (!form.fssai.trim() || !validateFSSAINumber(form.fssai)) {
+					next.fssai = FSSAI_NUMBER_ERROR;
+				} else {
+					delete next.fssai;
+				}
+			}
+			return next;
+		});
+	};
+
 	const inputCls = (key: string) =>
 		cn(
-			"h-8 text-xs",
+			ERP.input,
 			errors[key] && "border-red-400 focus-visible:ring-red-300",
 		);
 	const textareaCls = (key?: string) =>
-		cn("text-xs resize-none", key && errors[key] && "border-red-400");
+		cn("text-xs resize-none min-h-[56px]", key && errors[key] && "border-red-400");
 	const vendorFieldClass = (key: string) =>
 		cn(
-			"h-9 text-sm border-border/70 rounded-lg bg-white shadow-none focus-visible:ring-1 focus-visible:ring-brand-500/30 placeholder:text-muted-foreground/50",
+			ERP.input,
+			"border-border/70 rounded-md bg-white shadow-none focus-visible:ring-1 focus-visible:ring-brand-500/30",
 			errors[key] && "border-red-400 focus-visible:ring-red-300",
 		);
+
+	const panTdsFooter = (
+		<div
+			className={cn(
+				ERP.grid3,
+				form.gstRegistered ? "pt-1.5 border-t border-border/50" : "",
+			)}
+		>
+			<div className={ERP.field}>
+				<Label className={ERP.label}>PAN Number</Label>
+				<Input
+					value={form.pan}
+					onChange={(e) => set("pan", e.target.value.toUpperCase())}
+					className={cn("font-mono", inputCls("pan"))}
+					disabled={readOnly}
+					maxLength={10}
+					placeholder="ABCDE1234F"
+				/>
+				<FieldError msg={errors.pan} />
+			</div>
+			<div className={ERP.field}>
+				<Label className={ERP.label}>TDS Applicable</Label>
+				<div className="flex h-8 items-center">
+					<ListingStatusToggle
+						active={form.tdsApplicable}
+						onChange={(yes) =>
+							!readOnly &&
+							onChange({
+								...form,
+								tdsApplicable: yes,
+								tdsMasterId: yes ? form.tdsMasterId : "",
+							})
+						}
+						disabled={readOnly}
+					/>
+				</div>
+			</div>
+			<div className={ERP.field}>
+				{form.tdsApplicable ? (
+					<>
+						<Label className={ERP.label}>
+							TDS Section <span className="text-red-500">*</span>
+						</Label>
+						<SearchableSelect
+							value={form.tdsMasterId}
+							onChange={(value) => set("tdsMasterId", value)}
+							options={toTdsSelectOptions(tdsMasters)}
+							placeholder="Select TDS..."
+							disabled={readOnly}
+							error={!!errors.tdsMasterId}
+						/>
+						<FieldError msg={errors.tdsMasterId} />
+					</>
+				) : null}
+			</div>
+			{gstRegistered && !isAdd && (
+				<div className={cn(ERP.field, "lg:col-span-3")}>
+					<Label className={ERP.label}>GST % / GST Code</Label>
+					<SearchableSelect
+						value={form.gstMasterId}
+						onChange={(value) => set("gstMasterId", value)}
+						options={gstMasters.map((gst) => ({
+							value: String(gst.id),
+							label: `${gst.gstId} - ${gst.gstPercentage}%`,
+							sublabel: gst.remarks,
+						}))}
+						placeholder="Select from GST Master..."
+						searchPlaceholder="Search GST code..."
+						disabled={readOnly}
+						error={!!errors.gstMasterId}
+					/>
+					<FieldError msg={errors.gstMasterId} />
+				</div>
+			)}
+		</div>
+	);
 
 	return (
 		<div className='w-full'>
 			<Tabs defaultValue='basic' className='w-full'>
-				<TabsList className='w-full mb-4'>
+				<TabsList className='w-full mb-2 h-8'>
 					<TabsTrigger value='basic' className='text-xs'>
 						Basic Details
 					</TabsTrigger>
@@ -865,74 +1195,13 @@ export function CustomerForm({
 					</TabsTrigger>
 				</TabsList>
 
-				{/* ── TAB 1: BASIC DETAILS ── */}
-				<TabsContent value='basic' className='mt-0 space-y-5'>
-					<div className='space-y-6'>
-						<div>
-							<SectionHead label='Basic Information' />
-							<div className='space-y-4 w-full'>
-								<div className='flex flex-col md:flex-row items-start justify-between gap-4 w-full'>
-									{/* Customer Name */}
-									<div className='w-full md:w-[18%] space-y-1'>
-										<Label className='text-xs font-medium'>
-											Customer Name <span className='text-red-500'>*</span>
-										</Label>
-										<Input
-											value={form.customerName}
-											onChange={(e) => set("customerName", e.target.value)}
-											placeholder='e.g. Agro Solutions Pvt Ltd'
-											className={inputCls("customerName")}
-											disabled={readOnly}
-										/>
-										<FieldError msg={errors.customerName} />
-									</div>
-
-									{/* Mobile Number */}
-									<div className='w-full md:w-[18%] space-y-1'>
-										<Label className='text-xs font-medium'>
-											Mobile Number <span className='text-red-500'>*</span>
-										</Label>
-										<div className='flex gap-1.5'>
-											<CountryCodePicker
-												value={form.countryCode}
-												onChange={(value) => set("countryCode", value)}
-												disabled={readOnly}
-												hasError={!!errors.mobile}
-											/>
-											<Input
-												value={form.mobile}
-												onChange={(e) =>
-													set(
-														"mobile",
-														e.target.value.replace(/\D/g, "").slice(0, 10),
-													)
-												}
-												placeholder='10-digit mobile'
-												className={cn("flex-1", inputCls("mobile"))}
-												inputMode='numeric'
-												disabled={readOnly}
-											/>
-										</div>
-										<FieldError msg={errors.mobile} />
-									</div>
-
-									{/* Email Address */}
-									<div className='w-full md:w-[18%] space-y-1'>
-										<Label className='text-xs font-medium'>Email Address</Label>
-										<Input
-											type='email'
-											value={form.email}
-											onChange={(e) => set("email", e.target.value)}
-											placeholder='email@company.com'
-											className={inputCls("email")}
-											disabled={readOnly}
-										/>
-										<FieldError msg={errors.email} />
-									</div>
-
-									{/* Customer Type */}
-									<div className='w-full md:w-[18%] space-y-1'>
-										<Label className='text-xs font-medium'>
+				<TabsContent value='basic' className='mt-0'>
+					<div className={ERP.sectionGap}>
+						<ErpFormSection title='Basic Information'>
+							<div className={ERP.sectionGap}>
+								<div className={ERP.grid3}>
+									<div className={ERP.field}>
+										<Label className={ERP.label}>
 											Customer Type <span className='text-red-500'>*</span>
 										</Label>
 										<SearchableSelect
@@ -975,7 +1244,7 @@ export function CustomerForm({
 													requiredDocuments: docs,
 													branches: updatedBranches,
 												});
-												onClearError("customerType");
+												onClearError('customerType');
 											}}
 											options={customerTypeOptions}
 											placeholder='Select type...'
@@ -985,258 +1254,244 @@ export function CustomerForm({
 										<FieldError msg={errors.customerType} />
 									</div>
 
-									{/* Sales Man */}
-									<div className='w-full md:w-[18%] space-y-1'>
-										<Label className='text-xs font-medium'>Sales Man</Label>
-										<SearchableSelect
-											value={form.salesManId}
-											onChange={(value) => set("salesManId", value)}
-											options={salesOptions}
-											placeholder='Search by name, ID, mobile, role...'
-											searchPlaceholder='Search sales person...'
+									<div className={ERP.field}>
+										<Label className={ERP.label}>
+											Customer Code <span className='text-red-500'>*</span>
+										</Label>
+										<Input
+											value={
+												customerCode ||
+												(form.customerType ? 'Generating…' : 'Select type first')
+											}
+											readOnly
+											disabled
+											className='h-8 text-xs font-mono bg-muted/30 cursor-not-allowed'
+										/>
+									</div>
+
+									<div className={ERP.field}>
+										<Label className={ERP.label}>
+											Customer Name <span className='text-red-500'>*</span>
+										</Label>
+										<Input
+											value={form.customerName}
+											onChange={(e) => set('customerName', e.target.value)}
+											placeholder='Legal / trade name'
+											className={inputCls('customerName')}
 											disabled={readOnly}
 										/>
-										<p className='mt-0.5 min-h-[16px] text-[11px] text-muted-foreground'>
-											Only active users are listed
-										</p>
+										<FieldError msg={errors.customerName} />
 									</div>
 								</div>
 
-								{/* Block Reason */}
-								{form.status === "blocked" && (
-									<div className='w-full space-y-1'>
-										<Label className='text-xs font-medium'>
+								<div className={ERP.grid3}>
+									<div className={ERP.field}>
+										<Label className={ERP.label}>
+											Mobile Number <span className='text-red-500'>*</span>
+										</Label>
+										<div className='flex gap-1'>
+											<CountryCodePicker
+												value={form.countryCode}
+												onChange={(value) => set('countryCode', value)}
+												disabled={readOnly}
+												hasError={!!errors.mobile}
+											/>
+											<Input
+												value={form.mobile}
+												onChange={(e) =>
+													set(
+														'mobile',
+														e.target.value.replace(/\D/g, '').slice(0, 10),
+													)
+												}
+												placeholder='10-digit'
+												className={cn('flex-1', inputCls('mobile'))}
+												inputMode='numeric'
+												disabled={readOnly}
+											/>
+										</div>
+										<FieldError msg={errors.mobile} />
+									</div>
+
+									<div className={ERP.field}>
+										<Label className={ERP.label}>Email ID</Label>
+										<Input
+											type='email'
+											value={form.email}
+											onChange={(e) => set('email', e.target.value)}
+											placeholder='email@company.com'
+											className={inputCls('email')}
+											disabled={readOnly}
+										/>
+										<FieldError msg={errors.email} />
+									</div>
+
+									<div className={ERP.field}>
+										<Label className={ERP.label}>
+											Salesman <span className='text-red-500'>*</span>
+										</Label>
+										<SearchableSelect
+											value={form.salesManId}
+											onChange={(value) => set('salesManId', value)}
+											options={salesOptions}
+											placeholder='Search sales person...'
+											searchPlaceholder='Name, ID, mobile...'
+											disabled={readOnly}
+											error={!!errors.salesManId}
+										/>
+										<FieldError msg={errors.salesManId} />
+									</div>
+								</div>
+
+								{form.status === 'blocked' && (
+									<div className={ERP.field}>
+										<Label className={ERP.label}>
 											Block Reason <span className='text-red-500'>*</span>
 										</Label>
 										<Textarea
 											value={form.blockReason}
-											onChange={(e) => set("blockReason", e.target.value)}
+											onChange={(e) => set('blockReason', e.target.value)}
 											rows={2}
-											placeholder='Reason for blocking this customer...'
-											className={textareaCls("blockReason")}
+											placeholder='Reason for blocking...'
+											className={textareaCls('blockReason')}
 											disabled={readOnly}
 										/>
 										<FieldError msg={errors.blockReason} />
 									</div>
 								)}
 							</div>
-						</div>
+						</ErpFormSection>
 
-						<div className='pt-5 border-t border-border/60'>
-							<SectionHead label='Tax & Registration' />
+						<ErpFormSection
+							title='GST & Tax Registration'
+							headerRight={
+								<GstRegisteredToggleControl
+									active={form.gstRegistered}
+									readOnly={readOnly}
+									onChange={(yes) => {
+										const gstRegistrationType = yes
+											? form.gstRegistrationType || GST_REGISTRATION_TYPE_DEFAULT
+											: GST_REGISTRATION_TYPE_DEFAULT;
+										const gstCategory = buildGstCategory(
+											yes,
+											gstRegistrationType,
+										);
+										onChange({
+											...form,
+											gstRegistered: yes,
+											gstRegistrationType,
+											gstin: yes ? form.gstin : '',
+											registeredLegalName: yes ? form.registeredLegalName : '',
+											registeredAddress: yes ? form.registeredAddress : '',
+											gstCategory,
+											gstApplicable: gstApplicableFromCategory(gstCategory),
+											gstMasterId: yes ? form.gstMasterId : '',
+										});
+										if (!yes) onClearError('gstin');
+									}}
+								/>
+							}
+						>
+							<GstRegistrationFields
+								showRegisteredToggle={false}
+								values={{
+									gstRegistered: form.gstRegistered,
+									gstRegistrationType: form.gstRegistrationType,
+									gstin: form.gstin,
+									registeredLegalName: form.registeredLegalName,
+									registeredAddress: form.registeredAddress,
+								}}
+								onChange={(gst) => {
+									const gstCategory = buildGstCategory(
+										gst.gstRegistered,
+										gst.gstRegistrationType,
+									);
+									onChange({
+										...form,
+										...gst,
+										gstCategory,
+										gstApplicable: gstApplicableFromCategory(gstCategory),
+										gstMasterId: gst.gstRegistered ? form.gstMasterId : '',
+										registeredLegalName: gst.gstRegistered
+											? (gst.registeredLegalName ?? form.registeredLegalName)
+											: '',
+										registeredAddress: gst.gstRegistered
+											? (gst.registeredAddress ?? form.registeredAddress)
+											: '',
+									});
+									if (!gst.gstRegistered) onClearError('gstin');
+								}}
+								errors={errors}
+								readOnly={readOnly}
+								fetchingGst={fetchingGst}
+								onFetchGst={handleFetchGst}
+								footer={panTdsFooter}
+							/>
+						</ErpFormSection>
 
-							{/* Row 2+: Registration Fields & Conditional Fields */}
-							<div className='grid grid-cols-1 gap-3 md:grid-cols-7'>
-								{/* CIB Regn # */}
-								<div className='space-y-1'>
-									<Label className='text-xs font-medium'>CIB Regn #</Label>
-									<Input
-										value={form.cibRegn}
-										onChange={(e) => set("cibRegn", e.target.value)}
-										disabled={readOnly}
-										className='h-8 text-xs'
-									/>
-								</div>
-
-								{/* FCO Regn # */}
-								<div className='space-y-1'>
-									<Label className='text-xs font-medium'>FCO Regn #</Label>
-									<Input
-										value={form.fcoRegn}
-										onChange={(e) => set("fcoRegn", e.target.value)}
-										disabled={readOnly}
-										className='h-8 text-xs'
-									/>
-								</div>
-
-								{/* TAN # */}
-								<div className='space-y-1'>
-									<Label className='text-xs font-medium'>TAN #</Label>
-									<Input
-										value={form.tan}
-										onChange={(e) => set("tan", e.target.value)}
-										className={inputCls("tan")}
-										disabled={readOnly}
-									/>
-								</div>
-
-								{/* FSSAI # */}
-								<div className='space-y-1'>
-									<Label className='text-xs font-medium'>FSSAI #</Label>
-									<Input
-										value={form.fssai}
-										onChange={(e) => set("fssai", e.target.value)}
-										disabled={readOnly}
-										className='h-8 text-xs'
-									/>
-								</div>
-								{/* Row 1: Toggle Fields */}
-								<div className='grid grid-cols-1 gap-3 mb-4 md:grid-cols-2'>
-									{/* GST Applicable */}
-									<div className='space-y-1'>
-										<Label className='text-xs font-medium'>
-											GST Applicable
-										</Label>
-										<CompactToggle
-											checked={form.gstApplicable}
-											onCheckedChange={(yes) =>
-												onChange({
-													...form,
-													gstApplicable: yes,
-													gstin: yes ? form.gstin : "",
-													gstMasterId: yes ? form.gstMasterId : "",
-												})
-											}
-											disabled={readOnly}
-											activeLabel='Yes'
-											inactiveLabel='No'
-										/>
-									</div>
-
-									{/* TDS Applicable */}
-									<div className='space-y-1'>
-										<Label className='text-xs font-medium'>
-											TDS Applicable
-										</Label>
-										<CompactToggle
-											checked={form.tdsApplicable}
-											onCheckedChange={(yes) =>
-												onChange({
-													...form,
-													tdsApplicable: yes,
-													tdsMasterId: yes ? form.tdsMasterId : "",
-												})
-											}
-											disabled={readOnly}
-											activeLabel='Yes'
-											inactiveLabel='No'
-										/>
-									</div>
-								</div>
-
-								{/* Conditional: GSTIN (when GST Applicable is ON) */}
-								{form.gstApplicable && (
-									<div className='space-y-1'>
-										<Label className='text-xs font-medium'>
-											GSTIN <span className='text-red-500'>*</span>
-										</Label>
-										<Input
-											value={form.gstin}
-											onChange={(e) =>
-												set("gstin", e.target.value.toUpperCase())
-											}
-											placeholder='27AABCU9603R1ZX'
-											className={cn("font-mono", inputCls("gstin"))}
-											disabled={readOnly}
-										/>
-										<FieldError msg={errors.gstin} />
-									</div>
-								)}
-								{/* Conditional: GST Master (when GST Applicable is ON and not Add mode) */}
-								{form.gstApplicable && !isAdd && (
-									<div className='space-y-1'>
-										<Label className='text-xs font-medium'>
-											GST % / GST Code
-										</Label>
-										<SearchableSelect
-											value={form.gstMasterId}
-											onChange={(value) => set("gstMasterId", value)}
-											options={gstMasters.map((gst) => ({
-												value: String(gst.id),
-												label: `${gst.gstId} - ${gst.gstPercentage}%`,
-												sublabel: gst.remarks,
-											}))}
-											placeholder='Select from GST Master...'
-											searchPlaceholder='Search GST code...'
-											disabled={readOnly || !form.gstApplicable}
-											error={!!errors.gstMasterId}
-										/>
-										<FieldError msg={errors.gstMasterId} />
-									</div>
-								)}
-
-								{/* Conditional: TDS Master (when TDS Applicable is ON) */}
-								{form.tdsApplicable && (
-									<div className='space-y-1'>
-										<Label className='text-xs font-medium'>
-											TDS % / TDS Section
-										</Label>
-										<SearchableSelect
-											value={form.tdsMasterId}
-											onChange={(value) => set("tdsMasterId", value)}
-											options={tdsMasters.map((tds) => ({
-												value: String(tds.id),
-												label: `${tds.tdsCode} - ${tds.tdsRate}%`,
-												sublabel: tds.remarks,
-											}))}
-											placeholder='Select from TDS Master...'
-											disabled={readOnly}
-											error={!!errors.tdsMasterId}
-										/>
-										<FieldError msg={errors.tdsMasterId} />
-									</div>
-								)}
-							</div>
-						</div>
+						<ErpFormSection title='Compliance & Certifications' bodyClassName='p-2'>
+							<ComplianceCertificationsGrid
+								values={{
+									msmeRegistered: form.msmeRegistered,
+									msmeNumber: form.msmeNumber,
+									fssaiRegistered: form.fssaiRegistered,
+									fssai: form.fssai,
+									cibRegistered: form.cibRegistered,
+									cibRegn: form.cibRegn,
+									fcoRegistered: form.fcoRegistered,
+									fcoRegn: form.fcoRegn,
+								}}
+								onChange={(compliance) =>
+									onChange({
+										...form,
+										...compliance,
+									})
+								}
+								errors={errors}
+								readOnly={readOnly}
+								onFieldBlur={validateComplianceField}
+							/>
+						</ErpFormSection>
 					</div>
 				</TabsContent>
 
 				{/* ── TAB 3: BANK & COMMERCIAL ── */}
-				<TabsContent value='commercial' className='mt-0 space-y-5'>
-					<div>
-						<SectionHead label='Bank & Commercial' />
-						<div className='grid grid-cols-6 gap-4'>
-							{/* Credit Limit */}
-							<div className='col-span-1 space-y-1'>
-								<Label className='text-xs font-medium'>Credit Limit</Label>
-								<Input
-									type='number'
-									min={0}
-									step='0.01'
-									value={form.creditLimit}
-									onChange={(e) => set("creditLimit", e.target.value)}
-									placeholder='0.00'
-									className={inputCls("creditLimit")}
-									disabled={readOnly}
-								/>
-								<FieldError msg={errors.creditLimit} />
+				<TabsContent value='commercial' className='mt-0'>
+					<div className={ERP.sectionGap}>
+						<ErpFormSection title='Credit Terms'>
+							<div className={ERP.grid2}>
+								<div className={ERP.field}>
+									<Label className={ERP.label}>Credit Limit</Label>
+									<Input
+										type='number'
+										min={0}
+										step='0.01'
+										value={form.creditLimit}
+										onChange={(e) => set('creditLimit', e.target.value)}
+										placeholder='0.00'
+										className={inputCls('creditLimit')}
+										disabled={readOnly}
+									/>
+									<FieldError msg={errors.creditLimit} />
+								</div>
+								<div className={ERP.field}>
+									<Label className={ERP.label}>Payment Terms</Label>
+									<SearchableSelect
+										value={form.paymentTerms}
+										onChange={(value) => set('paymentTerms', value)}
+										options={PAYMENT_TERMS_OPTIONS.map((option) => ({
+											value: option.value,
+											label: option.label,
+										}))}
+										placeholder='Select terms...'
+										disabled={readOnly}
+									/>
+								</div>
 							</div>
+						</ErpFormSection>
 
-							{/* Interest Rate */}
-							<div className='col-span-1 space-y-1'>
-								<Label className='text-xs font-medium'>Interest Rate (%)</Label>
-								<Input
-									type='number'
-									min={0}
-									max={100}
-									step='0.01'
-									value={form.interestRate}
-									onChange={(e) => set("interestRate", e.target.value)}
-									placeholder='0.00'
-									className={inputCls("interestRate")}
-									disabled={readOnly}
-								/>
-								<FieldError msg={errors.interestRate} />
-							</div>
-
-							{/* Payment Terms */}
-							<div className='col-span-1 space-y-1'>
-								<Label className='text-xs font-medium'>Payment Terms</Label>
-								<SearchableSelect
-									value={form.paymentTerms}
-									onChange={(value) => set("paymentTerms", value)}
-									options={PAYMENT_TERMS_OPTIONS.map((option) => ({
-										value: option.value,
-										label: option.label,
-									}))}
-									placeholder='Select payment terms...'
-									disabled={readOnly}
-								/>
-							</div>
-						</div>
-
-						{/* Bank Details Grid */}
-						<div className='grid grid-cols-1 pt-4 mt-4 border-t md:grid-cols-5 gap-x-3 gap-y-3 border-border/60'>
+						<ErpFormSection title='Bank Details'>
+							<div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2'>
 							{/* Account Holder Name */}
 							<div className='space-y-1'>
 								<Label className='text-xs font-medium text-foreground'>
@@ -1343,18 +1598,22 @@ export function CustomerForm({
 								/>
 								<FieldError msg={errors.swiftCode} />
 							</div>
-						</div>
+							</div>
+						</ErpFormSection>
 					</div>
 				</TabsContent>
 
-				{/* ── TAB 4: PRODUCT MAPPING ── */}
-				<TabsContent value='product' className='mt-0 space-y-5'>
+				<TabsContent value='product' className='mt-0 space-y-3'>
 					<div>
-
+						<div className='mb-2'>
+							<p className='text-xs font-bold uppercase tracking-wider text-foreground'>
+								Product Mappings
+							</p>
+						</div>
 
 						{!readOnly && (
-							<div className='mb-4 rounded-lg border border-border bg-muted/20 p-3'>
-								<div className='grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto]'>
+							<div className='mb-3 rounded-lg border border-border bg-muted/20 p-2.5'>
+								<div className='grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end'>
 									<div className='space-y-1'>
 										<label className='text-xs font-medium text-foreground'>
 											Products
@@ -1399,28 +1658,33 @@ export function CustomerForm({
 						)}
 
 						{!form.customerProducts || form.customerProducts.length === 0 ? (
-							<div className='py-6 text-center border border-dashed rounded-lg border-border'>
+							<div className='py-4 text-center border border-dashed rounded-lg border-border'>
 								<p className='text-xs text-muted-foreground'>
-									No products — click Add Product
+									No products mapped — select and add products above
 								</p>
 							</div>
 						) : (
-							<div className='overflow-hidden bg-white border shadow-sm border-border rounded-xl'>
+							<div className='overflow-hidden bg-white border border-border rounded-lg'>
 								<div className='overflow-x-auto'>
-									<table className='w-full min-w-[640px]'>
+									<table className='w-full min-w-[900px] text-xs'>
 										<thead>
 											<tr className='border-b bg-muted/40 border-border'>
 												{[
-													{ h: "Product", className: "" },
-													{ h: "MRP", className: "w-36" },
-													{ h: "Price", className: "w-36" },
-													...(!readOnly ? [{ h: "", className: "w-12" }] : []),
-												].map(({ h, className }) => (
+													"Product",
+													"SKU",
+													"Category",
+													"HSN",
+													"GST",
+													"MRP",
+													"Price",
+													...(!readOnly ? [""] : []),
+												].map((h) => (
 													<th
 														key={h || "actions"}
 														className={cn(
-															"px-2 py-2 text-left text-xs font-semibold text-foreground whitespace-nowrap",
-															className,
+															"px-2 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap",
+															h === "Price" || h === "MRP" ? "w-28" : "",
+															h === "" ? "w-10" : "",
 														)}
 													>
 														{h}
@@ -1432,6 +1696,9 @@ export function CustomerForm({
 											{form.customerProducts.map((p, idx) => {
 												const hasProductError = !!errors[`product_${idx}_id`];
 												const hasPriceError = !!errors[`product_${idx}_price`];
+												const prodMeta = activeProducts.find(
+													(item) => item.productId === p.productId,
+												);
 
 												return (
 													<tr
@@ -1439,7 +1706,7 @@ export function CustomerForm({
 														className='border-b border-border/60 hover:bg-muted/10'
 													>
 														{/* Product */}
-														<td className='px-2 py-1.5 min-w-[240px]'>
+														<td className='px-2 py-1.5 min-w-[180px]'>
 															{readOnly ? (
 																<span className='text-xs font-medium text-foreground'>
 																	{p.productName
@@ -1470,7 +1737,6 @@ export function CustomerForm({
 																				productId: prod.productId,
 																				productName: prod.productName,
 																				sku: prod.sku,
-																				mrp: prod.mrp,
 																			});
 																			clearProductFieldError(idx);
 																		}}
@@ -1484,30 +1750,34 @@ export function CustomerForm({
 															)}
 														</td>
 
-														{/* MRP */}
-														<td className='px-2 py-1.5 w-36'>
-															{readOnly ? (
-																<span className='text-xs text-muted-foreground whitespace-nowrap'>
-																	{p.mrp !== undefined && p.mrp !== null
-																		? `₹${p.mrp.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-																		: "—"}
-																</span>
-															) : (
-																<Input
-																	type='text'
-																	value={
-																		p.mrp !== undefined && p.mrp !== null
-																			? `₹${p.mrp.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-																			: "—"
-																	}
-																	readOnly
-																	className='text-xs cursor-not-allowed pointer-events-none select-none h-7 bg-muted/40 text-muted-foreground border-border'
-																/>
-															)}
+														<td className='px-2 py-1.5 font-mono text-muted-foreground'>
+															{prodMeta?.sku || p.sku || "—"}
+														</td>
+														<td className='px-2 py-1.5 text-muted-foreground'>
+															{prodMeta?.category || "—"}
+														</td>
+														<td className='px-2 py-1.5 font-mono text-muted-foreground'>
+															{prodMeta?.hsnCode || "—"}
+														</td>
+														<td className='px-2 py-1.5 text-muted-foreground'>
+															{prodMeta?.gstRate ? `${prodMeta.gstRate}%` : "—"}
 														</td>
 
-														{/* Price */}
-														<td className='px-2 py-1.5 w-36'>
+														{/* MRP (Pricing Master) */}
+														<td className='px-2 py-1.5 w-28'>
+															<span className='text-muted-foreground whitespace-nowrap font-mono'>
+																{(() => {
+																	if (!prodMeta) return "—";
+																	const mrp = getStandardMrp(prodMeta.numericId);
+																	return mrp > 0
+																		? formatIndianRupeeDisplay(mrp)
+																		: "—";
+																})()}
+															</span>
+														</td>
+
+														{/* Customer Price (overrides DP/RP) */}
+														<td className='px-2 py-1.5 w-28'>
 															{readOnly ? (
 																<span className='text-xs font-semibold text-foreground whitespace-nowrap'>
 																	{p.price !== undefined && p.price !== null
@@ -1585,7 +1855,6 @@ export function CustomerForm({
 								<Button
 									type='button'
 									size='sm'
-									className='h-8 text-xs gap-1.5 px-3 bg-brand-600 text-white hover:bg-brand-700'
 									onClick={() => {
 										const newIdx = form.branches.length;
 										onChange({
@@ -1596,12 +1865,18 @@ export function CustomerForm({
 													branchName: `Branch #${newIdx + 1}`,
 													billingAddress: {
 														address: "",
+														addressLine2: "",
+														country: "India",
+														district: "",
 														city: "",
 														state: "",
 														pincode: "",
 													},
 													shippingAddress: {
 														address: "",
+														addressLine2: "",
+														country: "India",
+														district: "",
 														city: "",
 														state: "",
 														pincode: "",
@@ -1649,7 +1924,7 @@ export function CustomerForm({
 												}));
 											}}
 											className={cn(
-												"flex items-center justify-between gap-3 px-5 py-3 cursor-pointer hover:bg-muted/10 transition-colors select-none",
+												"flex items-center justify-between gap-2 px-3 py-2 cursor-pointer hover:bg-muted/10 transition-colors select-none",
 												isExpanded ? "border-b border-border bg-muted/5" : "",
 											)}
 										>
@@ -1754,271 +2029,99 @@ export function CustomerForm({
 
 										{/* Collapsible Details */}
 										{isExpanded && (
-											<div className='p-5 space-y-5 duration-200 animate-in fade-in-50'>
-												{/* Address Grid */}
-												<div className='grid grid-cols-2 gap-6'>
-													{/* Billing Address block */}
-													<div className='space-y-4'>
-														<div className='flex justify-between items-center border-b border-border/40 pb-1.5'>
-															<span className='text-[10px] font-bold uppercase tracking-wider text-muted-foreground'>
-																Billing Address
-															</span>
+											<div className='p-2.5 space-y-2 duration-200 animate-in fade-in-50'>
+												<ErpFormSection title='Address'>
+													{!readOnly && gstAddressSnapshot && (
+														<div className='flex justify-end mb-1'>
+															<Button
+																type='button'
+																variant='outline'
+																size='sm'
+																className='h-7 text-[10px] px-2'
+																onClick={() => copyGstAddressToBranch(bIdx)}
+															>
+																Copy GST Address
+															</Button>
 														</div>
+													)}
+													<BranchAddressFields
+														address={branch.billingAddress}
+														onChange={(addr) =>
+															updateBranchBillingAddress(bIdx, addr)
+														}
+														onPincodeChange={(pin) =>
+															updateBranchBillingAddress(
+																bIdx,
+																branch.billingAddress,
+																pin,
+															)
+														}
+														readOnly={readOnly}
+														stateOptions={stateOptions}
+														errors={
+															isMain
+																? {
+																		address: errors.mainBranchBillingAddress,
+																		state: errors.mainBranchBillingState,
+																		city: errors.mainBranchBillingCity,
+																		pincode: errors.mainBranchBillingPincode,
+																	}
+																: undefined
+														}
+													/>
+												</ErpFormSection>
 
-														<div className='space-y-3'>
-															<div className='space-y-1'>
-																<Label className='text-xs font-medium text-foreground'>
-																	Address{" "}
-																	<span className='text-red-500'>*</span>
-																</Label>
-																<Textarea
-																	value={branch.billingAddress.address}
-																	onChange={(e) => {
-																		const updated = [...form.branches];
-																		updated[bIdx].billingAddress.address =
-																			e.target.value;
-																		onChange({ ...form, branches: updated });
-																	}}
-																	rows={2}
-																	placeholder='Street, area, landmark...'
-																	className={cn(
-																		"text-xs resize-none bg-background",
-																		isMain &&
-																			errors.mainBranchBillingAddress &&
-																			"border-red-400",
-																	)}
-																	disabled={readOnly}
-																/>
-																{isMain && errors.mainBranchBillingAddress && (
-																	<FieldError
-																		msg={errors.mainBranchBillingAddress}
-																	/>
-																)}
-															</div>
-
-															<div className='grid grid-cols-3 gap-2'>
-																<div className='space-y-1'>
-																	<Label className='text-xs font-medium text-foreground'>
-																		State{" "}
-																		<span className='text-red-500'>*</span>
-																	</Label>
-																	<Input
-																		value={branch.billingAddress.state}
-																		onChange={(e) => {
-																			const updated = [...form.branches];
-																			updated[bIdx].billingAddress.state =
-																				e.target.value;
-																			onChange({ ...form, branches: updated });
-																		}}
-																		placeholder='State'
-																		className={cn(
-																			"h-8 text-xs bg-background",
-																			isMain &&
-																				errors.mainBranchBillingState &&
-																				"border-red-400",
-																		)}
-																		disabled={readOnly}
-																	/>
-																	{isMain && errors.mainBranchBillingState && (
-																		<FieldError
-																			msg={errors.mainBranchBillingState}
-																		/>
-																	)}
-																</div>
-																<div className='space-y-1'>
-																	<Label className='text-xs font-medium text-foreground'>
-																		City <span className='text-red-500'>*</span>
-																	</Label>
-																	<Input
-																		value={branch.billingAddress.city}
-																		onChange={(e) => {
-																			const updated = [...form.branches];
-																			updated[bIdx].billingAddress.city =
-																				e.target.value;
-																			onChange({ ...form, branches: updated });
-																		}}
-																		placeholder='City'
-																		className={cn(
-																			"h-8 text-xs bg-background",
-																			isMain &&
-																				errors.mainBranchBillingCity &&
-																				"border-red-400",
-																		)}
-																		disabled={readOnly}
-																	/>
-																	{isMain && errors.mainBranchBillingCity && (
-																		<FieldError
-																			msg={errors.mainBranchBillingCity}
-																		/>
-																	)}
-																</div>
-																<div className='space-y-1'>
-																	<Label className='text-xs font-medium text-foreground'>
-																		Pincode
-																	</Label>
-																	<Input
-																		value={branch.billingAddress.pincode}
-																		onChange={(e) => {
-																			const updated = [...form.branches];
-																			updated[bIdx].billingAddress.pincode =
-																				e.target.value
-																					.replace(/\D/g, "")
-																					.slice(0, 6);
-																			onChange({ ...form, branches: updated });
-																		}}
-																		placeholder='6-digit'
-																		className={cn(
-																			"h-8 text-xs bg-background",
-																			isMain &&
-																				errors.mainBranchBillingPincode &&
-																				"border-red-400",
-																		)}
-																		disabled={readOnly}
-																	/>
-																	{isMain &&
-																		errors.mainBranchBillingPincode && (
-																			<FieldError
-																				msg={errors.mainBranchBillingPincode}
-																			/>
-																		)}
-																</div>
-															</div>
+												<ErpFormSection title='Shipping Address'>
+													{!readOnly && (
+														<div className='flex justify-end mb-1'>
+															<Button
+																type='button'
+																variant='ghost'
+																size='sm'
+																className='h-6 text-[10px] px-2'
+																onClick={() => {
+																	const updated = [...form.branches];
+																	updated[bIdx] = {
+																		...updated[bIdx],
+																		shippingAddress: {
+																			...updated[bIdx].billingAddress,
+																		},
+																	};
+																	onChange({ ...form, branches: updated });
+																	showToast(
+																		'Billing address copied to shipping.',
+																		'success',
+																	);
+																}}
+															>
+																Same as billing
+															</Button>
 														</div>
-													</div>
-
-													{/* Shipping Address block */}
-													<div className='space-y-4'>
-														<div className='flex justify-between items-center border-b border-border/40 pb-1.5'>
-															<span className='text-[10px] font-bold uppercase tracking-wider text-muted-foreground'>
-																Shipping Address
-															</span>
-															{!readOnly && (
-																<button
-																	type='button'
-																	onClick={() => {
-																		const updated = [...form.branches];
-																		updated[bIdx] = {
-																			...updated[bIdx],
-																			shippingAddress: {
-																				...updated[bIdx].billingAddress,
-																			},
-																		};
-																		onChange({ ...form, branches: updated });
-																		showToast(
-																			"Billing address copied to shipping address.",
-																			"success",
-																		);
-																	}}
-																	className='text-[10px] font-medium text-brand-600 hover:text-brand-700 transition-colors'
-																>
-																	Copy Billing Address
-																</button>
-															)}
-														</div>
-
-														<div className='space-y-3'>
-															<div className='space-y-1'>
-																<Label className='text-xs font-medium text-foreground'>
-																	Address
-																</Label>
-																<Textarea
-																	value={branch.shippingAddress.address}
-																	onChange={(e) => {
-																		const updated = [...form.branches];
-																		updated[bIdx].shippingAddress.address =
-																			e.target.value;
-																		onChange({ ...form, branches: updated });
-																	}}
-																	rows={2}
-																	placeholder='Street, area, landmark...'
-																	className='text-xs resize-none bg-background'
-																	disabled={readOnly}
-																/>
-															</div>
-
-															<div className='grid grid-cols-3 gap-2'>
-																<div className='space-y-1'>
-																	<Label className='text-xs font-medium text-foreground'>
-																		State
-																	</Label>
-																	<Input
-																		value={branch.shippingAddress.state}
-																		onChange={(e) => {
-																			const updated = [...form.branches];
-																			updated[bIdx].shippingAddress.state =
-																				e.target.value;
-																			onChange({ ...form, branches: updated });
-																		}}
-																		placeholder='State'
-																		className='h-8 text-xs bg-background'
-																		disabled={readOnly}
-																	/>
-																</div>
-																<div className='space-y-1'>
-																	<Label className='text-xs font-medium text-foreground'>
-																		City
-																	</Label>
-																	<Input
-																		value={branch.shippingAddress.city}
-																		onChange={(e) => {
-																			const updated = [...form.branches];
-																			updated[bIdx].shippingAddress.city =
-																				e.target.value;
-																			onChange({ ...form, branches: updated });
-																		}}
-																		placeholder='City'
-																		className='h-8 text-xs bg-background'
-																		disabled={readOnly}
-																	/>
-																</div>
-																<div className='space-y-1'>
-																	<Label className='text-xs font-medium text-foreground'>
-																		Pincode
-																	</Label>
-																	<Input
-																		value={branch.shippingAddress.pincode}
-																		onChange={(e) => {
-																			const updated = [...form.branches];
-																			updated[bIdx].shippingAddress.pincode =
-																				e.target.value
-																					.replace(/\D/g, "")
-																					.slice(0, 6);
-																			onChange({ ...form, branches: updated });
-																		}}
-																		placeholder='6-digit'
-																		className='h-8 text-xs bg-background'
-																		disabled={readOnly}
-																	/>
-																</div>
-															</div>
-														</div>
-													</div>
-												</div>
+													)}
+													<BranchAddressFields
+														address={branch.shippingAddress}
+														onChange={(addr) =>
+															updateBranchShippingAddress(bIdx, addr)
+														}
+														onPincodeChange={(pin) =>
+															updateBranchShippingAddress(
+																bIdx,
+																branch.shippingAddress,
+																pin,
+															)
+														}
+														readOnly={readOnly}
+														stateOptions={stateOptions}
+													/>
+												</ErpFormSection>
 
 												{/* Branch Documents Section */}
 												<div className='pt-3 space-y-3 border-t border-border/40'>
-													<div
-														onClick={() => {
-															setExpandedChecklists((prev) => ({
-																...prev,
-																[bIdx]: !prev[bIdx],
-															}));
-														}}
-														className='flex items-center justify-between p-2 transition-colors border rounded-lg cursor-pointer select-none hover:bg-muted/10 bg-muted/5 border-border/40'
-													>
-														<p className='text-[10px] font-bold uppercase tracking-wider text-muted-foreground'>
-															Document Upload Checklist
-														</p>
-														<ChevronDown
-															className={cn(
-																"w-3.5 h-3.5 text-muted-foreground transition-transform duration-200",
-																expandedChecklists[bIdx] && "rotate-180",
-															)}
-														/>
-													</div>
+													<p className='text-xs font-bold uppercase tracking-wider text-foreground flex items-center leading-none'>
+														Document Upload Checklist <span className='text-red-500 ml-1'>*</span>
+													</p>
 
-													{expandedChecklists[bIdx] && (
-														<div className='space-y-4 duration-200 animate-in fade-in-50'>
+													<div className='space-y-4 duration-200 animate-in fade-in-50'>
 															{!form.customerType ? (
 																<p className='text-xs italic text-muted-foreground'>
 																	Please select a Customer Type in Basic Details
@@ -2255,7 +2358,6 @@ export function CustomerForm({
 																</>
 															)}
 														</div>
-													)}
 												</div>
 											</div>
 										)}
@@ -2353,15 +2455,24 @@ export function validateCustomerForm(
 		e.mobile = "Enter a valid 10-digit mobile number";
 	if (form.email.trim() && !validateEmail(form.email))
 		e.email = "Enter a valid email address";
-	if (form.gstApplicable) {
+	if (form.gstRegistered) {
 		if (!form.gstin.trim())
-			e.gstin = "GSTIN is required when GST is applicable";
+			e.gstin = "GSTIN is required when GST registered";
 		else if (!validateGSTIN(form.gstin)) e.gstin = "Invalid GSTIN format";
 		if (!isAdd && !form.gstMasterId)
 			e.gstMasterId = "Select GST code from master";
 	}
+	if (!form.salesManId) e.salesManId = "Salesman is required";
+	if (form.pan.trim() && !validatePAN(form.pan))
+		e.pan = "Enter a valid PAN number (e.g. ABCDE1234F)";
+	if (form.msmeRegistered) {
+		if (!form.msmeNumber.trim() || !validateMSMENumber(form.msmeNumber)) {
+			e.msmeNumber = MSME_NUMBER_ERROR;
+		}
+	}
 	if (form.tdsApplicable && !form.tdsMasterId)
 		e.tdsMasterId = "Select TDS section from master";
+	Object.assign(e, validateComplianceRegistration(form));
 
 	// Validate Main Branch
 	const mainBranch =
@@ -2379,10 +2490,9 @@ export function validateCustomerForm(
 		if (!mainBranch.billingAddress.state.trim()) {
 			e.mainBranchBillingState = "Main Branch billing state is required";
 		}
-		if (
-			mainBranch.billingAddress.pincode.trim() &&
-			!validatePincode(mainBranch.billingAddress.pincode)
-		) {
+		if (!mainBranch.billingAddress.pincode.trim()) {
+			e.mainBranchBillingPincode = "Pincode is required";
+		} else if (!validatePincode(mainBranch.billingAddress.pincode)) {
 			e.mainBranchBillingPincode = "Enter a valid 6-digit pincode";
 		}
 	}
@@ -2434,11 +2544,6 @@ export function validateCustomerForm(
 
 	if (form.creditLimit.trim() && isNaN(parseFloat(form.creditLimit)))
 		e.creditLimit = "Invalid amount";
-	if (form.interestRate.trim()) {
-		const ir = parseFloat(form.interestRate);
-		if (isNaN(ir) || ir < 0 || ir > 100)
-			e.interestRate = "Interest rate must be 0-100";
-	}
 	if (form.accountNumber && form.accountNumber !== form.confirmAccountNumber) {
 		e.confirmAccountNumber = "Account number mismatch";
 	}
@@ -2488,24 +2593,47 @@ export function formValuesToCustomer(
 		countryCode: form.countryCode,
 		mobile: form.mobile.trim(),
 		email: form.email.trim(),
-		gstApplicable: form.gstApplicable,
-		gstin: form.gstApplicable ? form.gstin.trim().toUpperCase() : "",
+		gstApplicable: form.gstRegistered,
+		gstCategory: buildGstCategory(
+			form.gstRegistered,
+			form.gstRegistrationType,
+		),
+		gstin: form.gstRegistered ? form.gstin.trim().toUpperCase() : "",
+		registeredLegalName: form.gstRegistered
+			? form.registeredLegalName.trim()
+			: "",
+		registeredAddress: form.gstRegistered
+			? form.registeredAddress.trim()
+			: "",
 		gstMasterId:
-			form.gstApplicable && form.gstMasterId ? Number(form.gstMasterId) : null,
+			form.gstRegistered && form.gstMasterId
+				? Number(form.gstMasterId)
+				: null,
 		tdsApplicable: form.tdsApplicable,
 		tdsMasterId:
 			form.tdsApplicable && form.tdsMasterId ? Number(form.tdsMasterId) : null,
-		tan: form.tan.trim(),
-		cibRegn: form.cibRegn.trim(),
-		fcoRegn: form.fcoRegn.trim(),
-		fssai: form.fssai.trim(),
+		pan: form.pan.trim().toUpperCase(),
+		tan: "",
+		msmeRegistered: form.msmeRegistered,
+		msmeNumber: form.msmeRegistered ? form.msmeNumber.trim() : "",
+		...complianceRegistrationToStored({
+			fssaiRegistered: form.fssaiRegistered,
+			fssai: form.fssai,
+			cibRegistered: form.cibRegistered,
+			cibRegn: form.cibRegn,
+			fcoRegistered: form.fcoRegistered,
+			fcoRegn: form.fcoRegn,
+		}),
 
 		// For backwards compatibility and listing/view pages:
 		address: cleanMainBranch?.billingAddress?.address?.trim() || "",
 		stateId: form.stateId ? Number(form.stateId) : null,
 		stateName: cleanMainBranch?.billingAddress?.state?.trim() || "",
 		districtId: form.districtId ? Number(form.districtId) : null,
-		districtName: cleanMainBranch?.billingAddress?.city?.trim() || "",
+		districtName:
+			cleanMainBranch?.billingAddress?.district?.trim() ||
+			cleanMainBranch?.billingAddress?.city?.trim() ||
+			"",
 		territoryId: form.territoryId ? Number(form.territoryId) : null,
 		territoryName: "",
 		pincode: cleanMainBranch?.billingAddress?.pincode?.trim() || "",
@@ -2515,7 +2643,7 @@ export function formValuesToCustomer(
 			sales?.fullName ??
 			(sales ? `${sales.firstName} ${sales.lastName}`.trim() : ""),
 		creditLimit: parseFloat(form.creditLimit) || 0,
-		interestRate: parseFloat(form.interestRate) || 0,
+		interestRate: 0,
 		paymentTerms: form.paymentTerms,
 		bankName: form.bankName.trim(),
 		bankBranchAddress: form.branch.trim(),

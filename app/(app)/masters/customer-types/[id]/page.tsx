@@ -51,8 +51,8 @@ export default function CustomerTypeDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <RecordSectionCard title="Customer Type Info" icon={User} accent="blue">
           <RecordKvRow label="Customer Type ID" value={String(customerType.id)} mono />
-          <RecordKvRow label="Customer Type Code" value={customerType.customerTypeCode} mono copy />
-          <RecordKvRow label="Customer Type" value={customerType.customerType} highlight />
+          <RecordKvRow label="Customer Type" value={customerType.customerType} />
+          <RecordKvRow label="Initial Code" value={customerType.initialCode} mono copy highlight />
           <RecordKvRow label="Description" value={customerType.description} isLast />
         </RecordSectionCard>
 
@@ -89,7 +89,7 @@ export default function CustomerTypeDetailPage() {
       listHref="/masters/customer-types"
       listLabel="Customer Types"
       recordName={customerType.customerType}
-      recordCode={customerType.customerTypeCode}
+      recordCode={customerType.initialCode}
       statusLabel={customerType.status === "active" ? "Active" : "Inactive"}
       statusVariant={customerType.status}
       tabs={tabs}
@@ -106,7 +106,7 @@ export default function CustomerTypeDetailPage() {
           },
         ],
         summary: [
-          { label: "Code", value: customerType.customerTypeCode, highlight: true },
+          { label: "Initial Code", value: customerType.initialCode, highlight: true },
           { label: "Documents Required", value: String(docCount) },
           { label: "Description", value: customerType.description || "—" },
         ],

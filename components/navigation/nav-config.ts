@@ -69,18 +69,20 @@ export const NAV_ITEMS: NavItem[] = [
     icon: BookOpen,
     children: [
       { label: "Category", href: "/masters/categories" },
-      // { label: "CFU", href: "/masters/cfu" },
+      { label: "CFU", href: "/masters/cfu" },
       { label: "Customer Type", href: "/masters/customer-types" },
       { label: "Customers", href: "/masters/customers" },
       { label: "Document Type", href: "/masters/document-types" },
-      { label: "Formulation", href: "/masters/formulation" },
+      { label: "Form", href: "/masters/formulation" },
       { label: "GST", href: "/masters/gst" },
       { label: "HSN", href: "/masters/hsn" },
       { label: "Products", href: "/masters/products" },
+      { label: "Pricing", href: "/masters/pricing" },
       { label: "Scheme", href: "/masters/scheme" },
       { label: "Segment", href: "/masters/segment" },
       { label: "TDS", href: "/masters/tds" },
       { label: "Unit", href: "/masters/uom" },
+      { label: "Vendor Type", href: "/masters/vendor-type" },
       { label: "Vendor Master", href: "/masters/vendors" },
       { label: "Warehouse", href: "/masters/warehouse" },
     ],
@@ -89,9 +91,10 @@ export const NAV_ITEMS: NavItem[] = [
     id: "procurement",
     label: "Procurement",
     icon: ShoppingCart,
+    href: "/procurement/purchase-requests",
     children: [
-      { label: "Purchase Requests", href: "/procurement/purchase-requests" },
-      { label: "Purchase Orders", href: "/procurement/purchase-orders" },
+      { label: "Purchase Request", href: "/procurement/purchase-requests" },
+      { label: "Purchase Order", href: "/procurement/purchase-orders" },
     ],
   },
   {
@@ -188,6 +191,21 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Settings,
     iconOnly: true,
     href: "/settings",
+    menuLayout: "sidebar",
+    groupedChildren: [
+      {
+        label: "GST & Tax Configuration",
+        description:
+          "Financial-year wise LUT records, company GSTIN mapping, and SEZ supply rules.",
+        icon: Receipt,
+        children: [
+          {
+            label: "GST & Tax Configuration",
+            href: "/settings/gst-tax-configuration",
+          },
+        ],
+      },
+    ],
   },
 ];
 

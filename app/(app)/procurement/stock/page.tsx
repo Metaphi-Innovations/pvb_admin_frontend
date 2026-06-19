@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -142,7 +142,7 @@ export default function StockLedgerPage() {
             <table className="w-full">
               <thead>
                 <tr className="bg-muted/40 border-b border-border">
-                  <SortTh label="Code"         colKey="productCode"   sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-24" />
+                  <SortTh label="SKU"         colKey="productCode"   sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="w-24" />
                   <SortTh label="Product"       colKey="productName"   sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <SortTh label="Category"      colKey="category"      sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <SortTh label="Warehouse"     colKey="warehouse"     sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />

@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
-import { ACCOUNTS_HOME_HREF } from "@/lib/accounts/accounts-nav";
+import AccountingSettingsPageClient from "./AccountingSettingsPageClient";
 
-export default function SettingsRedirect() {
-  redirect(ACCOUNTS_HOME_HREF);
+export default function Page() {
+  return <AccountingSettingsPageClient />;
 }

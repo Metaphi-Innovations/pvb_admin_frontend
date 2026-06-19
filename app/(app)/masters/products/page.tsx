@@ -4,32 +4,22 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   CheckCircle2,
-  ChevronDown,
   Edit2,
   Eye,
   Package,
-  UserCheck,
-  UserX,
   XCircle,
 } from "lucide-react";
-import { type Product, type ProductStatus, formatMoney, loadProducts, saveProducts } from "./product-data";
+import { type Product, type ProductStatus, loadProducts, saveProducts } from "./product-data";
+import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
+import { getStandardMrp } from "@/lib/pricing/resolve-pricing";
 
 import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
+import { ListingUserCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
 function KpiCard({
   label,
@@ -54,34 +44,6 @@ function KpiCard({
         <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{label}</p>
       </div>
     </div>
-  );
-}
-
-function StatusToggle({
-  record,
-  onToggle,
-}: {
-  record: Product;
-  onToggle: (id: number, status: ProductStatus) => void;
-}) {
-  const active = record.status === "active";
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onToggle(record.id, active ? "inactive" : "active");
-      }}
-      className={cn(
-        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-        active
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-          : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
-      )}
-    >
-      {active ? "Active" : "Inactive"}
-    </button>
   );
 }
 
@@ -111,17 +73,6 @@ export default function ProductsPage() {
 
   const columns: ColumnConfig<Product>[] = [
     {
-      key: "productId",
-      header: "Product Code",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val, row) => (
-        <span className="font-mono text-xs text-brand-700">{row.productId}</span>
-      ),
-    },
-    {
       key: "productName",
       header: "Product Name",
       sortable: true,
@@ -135,82 +86,64 @@ export default function ProductsPage() {
       ),
     },
     {
-      key: "category",
-      header: "Category",
+      key: "scientificName",
+      header: "Scientific Name",
       sortable: true,
       filterable: true,
-      filterType: "dropdown",
-      filterOptions: Array.from(new Set(records.map((item) => item.category))).sort().map(v => ({ label: v, value: v })),
-      width: "130px",
+      filterType: "text",
+      width: "160px",
+      render: (val, row) => row.scientificName || "—",
     },
     {
-      key: "segment",
-      header: "Segment",
+      key: "sku",
+      header: "SKU",
       sortable: true,
       filterable: true,
-      filterType: "dropdown",
-      filterOptions: Array.from(new Set(records.map((item) => item.segment))).sort().map(v => ({ label: v, value: v })),
-      width: "130px",
-    },
-    {
-      key: "formulation",
-      header: "Formulation",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: Array.from(new Set(records.map((item) => item.formulation))).sort().map(v => ({ label: v, value: v })),
-      width: "220px",
+      filterType: "text",
+      width: "140px",
+      render: (val, row) => <span className="font-mono text-xs">{row.sku}</span>,
     },
     {
       key: "baseUnit",
       header: "Base Unit",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
       width: "110px",
       render: (val, row) => row.baseUnit || "—",
     },
     {
       key: "packagingUnit",
       header: "Packaging Unit",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
       width: "130px",
       render: (val, row) => row.packagingUnit || "—",
     },
     {
       key: "conversionQuantity",
       header: "Conversion Qty",
-      width: "140px",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "130px",
       render: (val, row) => row.conversionQuantity ?? "—",
     },
     {
-      key: "hsnCode",
-      header: "HSN Code",
-      width: "110px",
-      render: (val, row) => <span className="font-mono">{row.hsnCode}</span>,
-    },
-    {
-      key: "gstRate",
-      header: "GST Rate",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: Array.from(new Set(records.map((item) => item.gstRate))).sort().map(v => ({ label: v, value: v })),
-      width: "100px",
-    },
-    {
-      key: "sku",
-      header: "SKU",
-      width: "140px",
-      render: (val, row) => <span className="font-mono">{row.sku}</span>,
-    },
-    {
-      key: "cropApplicable",
-      header: "Crop Applicable",
-      width: "140px",
-      render: (val, row) => row.cropApplicable || "—",
-    },
-    {
-      key: "mrp",
+      key: "standardMrp",
       header: "MRP",
+      sortable: true,
       width: "120px",
-      render: (val, row) => <span className="font-semibold">{formatMoney(row.mrp)}</span>,
+      align: "right",
+      render: (_val, row) => {
+        const mrp = getStandardMrp(row.id);
+        return (
+          <span className="font-semibold text-xs tabular-nums">
+            {mrp > 0 ? formatIndianRupeeDisplay(mrp) : "—"}
+          </span>
+        );
+      },
     },
     {
       key: "status",
@@ -224,35 +157,28 @@ export default function ProductsPage() {
       ],
       width: "110px",
       render: (val, row) => (
-        <StatusToggle record={row} onToggle={updateStatus} />
+        <ListingStatusToggle
+          active={isActiveStatus(row.status)}
+          onChange={() => updateStatus(row.id, isActiveStatus(row.status) ? "inactive" : "active")}
+        />
       ),
     },
     {
-      key: "createdDate",
-      header: "Created",
+      key: "createdBy",
+      header: "Created By",
       sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val, row) => (
-        <div>
-          <p className="text-[11px] font-semibold leading-4 text-brand-700">{row.createdBy}</p>
-          <p className="text-[10px] font-mono leading-3 text-muted-foreground">{row.createdDate}</p>
-        </div>
+      width: "150px",
+      render: (_val, row) => (
+        <ListingUserCell name={row.createdBy} date={row.createdDate} />
       ),
     },
     {
-      key: "updatedDate",
-      header: "Updated",
+      key: "updatedBy",
+      header: "Updated By",
       sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val, row) => (
-        <div>
-          <p className="text-[11px] font-semibold leading-4 text-brand-700">{row.updatedBy}</p>
-          <p className="text-[10px] font-mono leading-3 text-muted-foreground">{row.updatedDate}</p>
-        </div>
+      width: "150px",
+      render: (_val, row) => (
+        <ListingUserCell name={row.updatedBy} date={row.updatedDate} />
       ),
     },
   ];
@@ -281,8 +207,8 @@ export default function ProductsPage() {
       result = result.filter(
         (item) =>
           item.productName.toLowerCase().includes(q) ||
-          item.sku.toLowerCase().includes(q) ||
-          item.hsnCode.toLowerCase().includes(q)
+          (item.scientificName || "").toLowerCase().includes(q) ||
+          item.sku.toLowerCase().includes(q)
       );
     }
 
@@ -292,9 +218,9 @@ export default function ProductsPage() {
     // Sorting
     if (sort.key && sort.direction !== "none") {
       result.sort((a, b) => {
-        if (sort.key === "gstRate") {
-          const av = parseInt(a.gstRate, 10);
-          const bv = parseInt(b.gstRate, 10);
+        if (sort.key === "standardMrp") {
+          const av = getStandardMrp(a.id);
+          const bv = getStandardMrp(b.id);
           return sort.direction === "asc" ? av - bv : bv - av;
         }
         const av = String(a[sort.key as keyof Product] ?? "").toLowerCase();
@@ -317,37 +243,29 @@ export default function ProductsPage() {
 
   const handleExport = () => {
     const headers = [
-      "Product Code",
       "Product Name",
-      "Category",
-      "Segment",
-      "Formulation",
+      "Scientific Name",
+      "SKU",
       "Base Unit",
       "Packaging Unit",
-      "Conversion Quantity",
-      "HSN Code",
-      "GST Rate",
-      "SKU",
-      "Crop Applicable",
+      "Conversion Qty",
       "MRP",
       "Status",
+      "Created By",
+      "Updated By",
     ];
 
-    const rows = filtered.map(item => [
-      item.productId,
+    const rows = filtered.map((item) => [
       item.productName,
-      item.category,
-      item.segment,
-      item.formulation,
+      item.scientificName || "",
+      item.sku,
       item.baseUnit || "",
       item.packagingUnit || "",
       item.conversionQuantity !== undefined ? item.conversionQuantity : "",
-      item.hsnCode,
-      item.gstRate,
-      item.sku,
-      item.cropApplicable || "",
-      item.mrp,
+      getStandardMrp(item.id) || "",
       item.status,
+      item.createdBy,
+      item.updatedBy,
     ]);
 
     const csvString = [
@@ -405,7 +323,7 @@ export default function ProductsPage() {
           addLabel="Add Product"
           onExport={handleExport}
           emptyMessage="products"
-          searchPlaceholder="Search product, SKU, HSN..."
+          searchPlaceholder="Search product name, scientific name, SKU..."
           currentFilters={filters}
           currentSort={sort}
         />
