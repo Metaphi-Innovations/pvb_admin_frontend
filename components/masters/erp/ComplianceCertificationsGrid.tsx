@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { ListingStatusToggle } from "@/components/listing";
 import { cn } from "@/lib/utils";
 import { ERP } from "./erp-form-styles";
-import { normalizeUdyamInput } from "@/lib/masters/gst-compliance";
+import { formatUdyamInput } from "@/lib/masters/gst-compliance";
 import {
 	FSSAI_HELPER_TEXT,
 	normalizeFssaiInput,
@@ -68,7 +68,7 @@ const ROWS: {
 ];
 
 function formatRegistrationInput(id: RowId, value: string): string {
-	if (id === "msme") return normalizeUdyamInput(value);
+	if (id === "msme") return formatUdyamInput(value);
 	if (id === "fssai") return normalizeFssaiInput(value);
 	return value;
 }
@@ -78,11 +78,13 @@ export function ComplianceCertificationsGrid({
 	onChange,
 	errors = {},
 	readOnly,
+	onFieldBlur,
 }: {
 	values: ComplianceGridValues;
 	onChange: (next: ComplianceGridValues) => void;
 	errors?: Record<string, string>;
 	readOnly?: boolean;
+	onFieldBlur?: (fieldKey: string) => void;
 }) {
 	const setToggle = (
 		toggleKey: keyof ComplianceGridValues,
@@ -106,7 +108,7 @@ export function ComplianceCertificationsGrid({
 
 	return (
 		<div className="overflow-hidden rounded border border-border/80 text-xs">
-			<div className="grid grid-cols-[minmax(88px,1fr)_72px_minmax(0,2fr)] items-center gap-x-2 border-b border-border/70 bg-muted/30 px-2 py-1">
+			<div className="grid grid-cols-[72px_64px_minmax(0,1fr)] items-center gap-x-2 border-b border-border/70 bg-muted/30 px-2 py-1">
 				<span className={cn(ERP.label, "text-muted-foreground")}>Registration</span>
 				<span className={cn(ERP.label, "text-muted-foreground text-center")}>
 					Applicable
@@ -123,7 +125,7 @@ export function ComplianceCertificationsGrid({
 					<div
 						key={row.label}
 						className={cn(
-							"grid grid-cols-[minmax(88px,1fr)_72px_minmax(0,2fr)] items-start gap-x-2 px-2 py-1",
+							"grid grid-cols-[72px_64px_minmax(0,1fr)] items-start gap-x-2 px-2 py-1",
 							idx < ROWS.length - 1 && "border-b border-border/50",
 						)}
 					>
@@ -139,17 +141,17 @@ export function ComplianceCertificationsGrid({
 								disabled={readOnly}
 							/>
 						</div>
-						<div className={ERP.field}>
+						<div className={cn(ERP.field, "min-w-0")}>
 							<Input
 								value={numberVal}
 								onChange={(e) => setNumber(row.id, row.numberKey, e.target.value)}
+								onBlur={() => enabled && onFieldBlur?.(row.errorKey)}
 								disabled={readOnly || !enabled}
 								placeholder={enabled ? row.placeholder : "—"}
 								inputMode={row.id === "fssai" ? "numeric" : "text"}
-								maxLength={row.id === "fssai" ? 14 : undefined}
+								maxLength={row.id === "fssai" ? 14 : row.id === "msme" ? 19 : undefined}
 								className={cn(
 									ERP.input,
-									"h-7",
 									row.id === "msme" && "font-mono uppercase",
 									row.id === "fssai" && "font-mono",
 									!enabled && "bg-muted/40 text-muted-foreground",

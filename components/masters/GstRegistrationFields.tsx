@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { ListingStatusToggle } from "@/components/listing";
-import { Loader2 } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
 	GST_REGISTRATION_TYPE_DEFAULT,
@@ -17,7 +17,39 @@ import { ERP } from "@/components/masters/erp/erp-form-styles";
 
 function FieldError({ msg }: { msg?: string }) {
 	if (!msg) return null;
-	return <p className="text-[10px] text-red-500 leading-tight">{msg}</p>;
+	return <p className="text-[11px] text-red-500 leading-tight">{msg}</p>;
+}
+
+/** Inline GST Registered control — label + toggle + Yes/No status */
+export function GstRegisteredToggleControl({
+	active,
+	onChange,
+	readOnly,
+}: {
+	active: boolean;
+	onChange: (active: boolean) => void;
+	readOnly?: boolean;
+}) {
+	return (
+		<div className="flex items-center gap-2">
+			<span className="text-[11px] font-medium text-foreground whitespace-nowrap">
+				GST Registered
+			</span>
+			<ListingStatusToggle
+				active={active}
+				onChange={onChange}
+				disabled={readOnly}
+			/>
+			<span
+				className={cn(
+					"text-[11px] font-semibold whitespace-nowrap",
+					active ? "text-emerald-700" : "text-muted-foreground",
+				)}
+			>
+				{active ? "Yes" : "No"}
+			</span>
+		</div>
+	);
 }
 
 export interface GstRegistrationFieldValues {
@@ -38,6 +70,7 @@ export function GstRegistrationFields({
 	inputClassName = ERP.input,
 	namePrefix: _namePrefix,
 	footer,
+	showRegisteredToggle = true,
 }: {
 	values: GstRegistrationFieldValues;
 	onChange: (next: GstRegistrationFieldValues) => void;
@@ -50,37 +83,52 @@ export function GstRegistrationFields({
 	namePrefix?: string;
 	/** PAN / TDS row rendered below GST fields */
 	footer?: React.ReactNode;
+	/** When false, parent renders toggle in section header */
+	showRegisteredToggle?: boolean;
 }) {
 	const set = <K extends keyof GstRegistrationFieldValues>(
 		key: K,
 		value: GstRegistrationFieldValues[K],
 	) => onChange({ ...values, [key]: value });
 
+	const handleGstRegisteredChange = (yes: boolean) =>
+		onChange({
+			...values,
+			gstRegistered: yes,
+			gstRegistrationType: yes
+				? values.gstRegistrationType || GST_REGISTRATION_TYPE_DEFAULT
+				: GST_REGISTRATION_TYPE_DEFAULT,
+			gstin: yes ? values.gstin : "",
+			registeredLegalName: yes ? values.registeredLegalName : "",
+			registeredAddress: yes ? values.registeredAddress : "",
+		});
+
 	return (
 		<div className="space-y-2">
-			<div className="flex items-center justify-between gap-2 rounded border border-border/60 bg-muted/15 px-2 py-1">
-				<Label className={ERP.label}>GST Registered</Label>
-				<ListingStatusToggle
-					active={values.gstRegistered}
-					onChange={(yes) =>
-						onChange({
-							...values,
-							gstRegistered: yes,
-							gstRegistrationType: yes
-								? values.gstRegistrationType || GST_REGISTRATION_TYPE_DEFAULT
-								: GST_REGISTRATION_TYPE_DEFAULT,
-							gstin: yes ? values.gstin : "",
-							registeredLegalName: yes ? values.registeredLegalName : "",
-							registeredAddress: yes ? values.registeredAddress : "",
-						})
-					}
-					disabled={readOnly}
-				/>
-			</div>
+			{showRegisteredToggle && (
+				<div className="flex flex-wrap items-center gap-2 pb-1 border-b border-border/40">
+					<GstRegisteredToggleControl
+						active={values.gstRegistered}
+						onChange={handleGstRegisteredChange}
+						readOnly={readOnly}
+					/>
+					<span className="text-[10px] text-muted-foreground">
+						{values.gstRegistered
+							? "Enter GSTIN and fetch registered details"
+							: "Customer is not GST registered"}
+					</span>
+				</div>
+			)}
+
+			{!values.gstRegistered && !showRegisteredToggle && (
+				<p className="text-[10px] text-muted-foreground pb-0.5">
+					GST registration is off. PAN and TDS fields below still apply.
+				</p>
+			)}
 
 			{values.gstRegistered && (
 				<>
-					<div className={ERP.grid3}>
+					<div className="grid grid-cols-1 gap-2 lg:grid-cols-3 lg:items-end">
 						<div className={ERP.field}>
 							<Label className={ERP.label}>
 								Registration Type <span className="text-red-500">*</span>
@@ -119,19 +167,22 @@ export function GstRegistrationFields({
 							<FieldError msg={errors.gstin} />
 						</div>
 
-						<div className={cn(ERP.field, "flex flex-col justify-end")}>
-							<Label className={cn(ERP.label, "invisible hidden sm:block")}>.</Label>
+						<div className={cn(ERP.field, "lg:pb-0")}>
+							<Label className={cn(ERP.label, "hidden lg:block invisible")}>
+								Action
+							</Label>
 							<Button
 								type="button"
-								variant="outline"
 								size="sm"
-								className="h-7 w-full text-xs"
+								className="h-8 w-auto shrink-0 whitespace-nowrap px-2.5 text-xs bg-brand-600 hover:bg-brand-700 text-white"
 								disabled={readOnly || fetchingGst || !onFetchGst}
 								onClick={onFetchGst}
 							>
 								{fetchingGst ? (
 									<Loader2 className="mr-1 h-3 w-3 animate-spin" />
-								) : null}
+								) : (
+									<Search className="mr-1 h-3 w-3" />
+								)}
 								Fetch GST Details
 							</Button>
 						</div>

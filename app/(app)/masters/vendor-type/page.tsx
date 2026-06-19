@@ -130,17 +130,6 @@ export default function VendorTypeMasterPage() {
 
   const columns: ColumnConfig<VendorTypeRecord>[] = [
     {
-      key: "vendorTypeCode",
-      header: "Vendor Type Code",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "140px",
-      render: (_val, row) => (
-        <span className="font-mono text-xs font-semibold text-brand-700">{row.vendorTypeCode}</span>
-      ),
-    },
-    {
       key: "vendorTypeName",
       header: "Vendor Type Name",
       sortable: true,
@@ -244,7 +233,6 @@ export default function VendorTypeMasterPage() {
       const q = String(filters.search).trim().toLowerCase();
       result = result.filter(
         (r) =>
-          r.vendorTypeCode.toLowerCase().includes(q) ||
           r.vendorTypeName.toLowerCase().includes(q) ||
           r.initialCode.toLowerCase().includes(q) ||
           (r.description || "").toLowerCase().includes(q),
@@ -287,7 +275,6 @@ export default function VendorTypeMasterPage() {
     try {
       const headers = [
         "ID",
-        "Vendor Type Code",
         "Vendor Type Name",
         "Initial Code",
         "Description",
@@ -298,7 +285,6 @@ export default function VendorTypeMasterPage() {
         csvRows.push(
           [
             r.id,
-            r.vendorTypeCode,
             `"${r.vendorTypeName.replace(/"/g, '""')}"`,
             r.initialCode,
             `"${(r.description || "").replace(/"/g, '""')}"`,
@@ -358,7 +344,7 @@ export default function VendorTypeMasterPage() {
           addLabel="Add Vendor Type"
           onExport={handleExport}
           emptyMessage="vendor types"
-          searchPlaceholder="Search vendor type code, name, initial code, description..."
+          searchPlaceholder="Search vendor type name, initial code, description..."
           currentFilters={filters}
           currentSort={sort}
         />

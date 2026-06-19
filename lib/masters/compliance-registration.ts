@@ -46,7 +46,7 @@ export function validateFSSAINumber(v: string): boolean {
 }
 
 export const FSSAI_NUMBER_ERROR =
-	"Please enter a valid 14-digit FSSAI License/Registration Number.";
+	"Please enter valid 14-digit FSSAI License/Registration Number.";
 
 export const FSSAI_HELPER_TEXT =
 	"Enter the 14-digit FSSAI License/Registration Number issued by FSSAI.";

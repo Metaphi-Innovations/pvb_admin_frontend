@@ -55,7 +55,7 @@ import {
 	MSME_NUMBER_ERROR,
 	validateMSMENumber,
 } from "@/lib/masters/gst-compliance";
-import { GstRegistrationFields } from "@/components/masters/GstRegistrationFields";
+import { GstRegistrationFields, GstRegisteredToggleControl } from "@/components/masters/GstRegistrationFields";
 import { ErpFormSection } from "@/components/masters/erp/ErpFormSection";
 import { ComplianceCertificationsGrid } from "@/components/masters/erp/ComplianceCertificationsGrid";
 import { BranchAddressFields } from "@/components/masters/erp/BranchAddressFields";
@@ -63,6 +63,8 @@ import { ERP } from "@/components/masters/erp/erp-form-styles";
 import {
 	complianceRegistrationToStored,
 	validateComplianceRegistration,
+	validateFSSAINumber,
+	FSSAI_NUMBER_ERROR,
 } from "@/lib/masters/compliance-registration";
 import { ListingStatusToggle } from "@/components/listing";
 import { Button } from "@/components/ui/button";
@@ -89,7 +91,7 @@ import {
 	validatePincode,
 	validateIFSC,
 } from "../customer-data";
-import { loadGeoNodes, resolvePincodeLocation } from "../../geography/geo-data";
+import { loadGeoNodes, resolvePincodeLocation, getStateSelectOptions } from "../../geography/geo-data";
 import { loadCustomerTypes } from "../../customer-types/customer-type-data";
 import { loadProducts } from "../../products/product-data";
 import {
@@ -631,6 +633,11 @@ export function CustomerForm({
 		typeof window !== "undefined" ? loadGeoNodes() : [],
 	);
 
+	const stateOptions = useMemo(
+		() => getStateSelectOptions(geoNodes),
+		[geoNodes],
+	);
+
 	const [expandedBranches, setExpandedBranches] = useState<
 		Record<number, boolean>
 	>({ 0: true });
@@ -1025,12 +1032,59 @@ export function CustomerForm({
 					if (loc.state) next.state = loc.state;
 					if (loc.district) next.district = loc.district;
 					if (loc.city) next.city = loc.city;
+					else if (loc.district) next.city = loc.district;
 				}
 			}
 		}
 		const updated = [...form.branches];
 		updated[bIdx] = { ...updated[bIdx], billingAddress: next };
 		onChange({ ...form, branches: updated });
+	};
+
+	const updateBranchShippingAddress = (
+		bIdx: number,
+		addr: BranchAddress,
+		pincodeRaw?: string,
+	) => {
+		let next = { ...addr };
+		if (pincodeRaw !== undefined) {
+			const digits = pincodeRaw.replace(/\D/g, "").slice(0, 6);
+			next = { ...next, pincode: digits };
+			if (digits.length === 6 && (next.country ?? "India") === "India") {
+				const loc = resolvePincodeLocation(digits, geoNodes);
+				if (loc) {
+					if (loc.state) next.state = loc.state;
+					if (loc.district) next.district = loc.district;
+					if (loc.city) next.city = loc.city;
+					else if (loc.district) next.city = loc.district;
+				}
+			}
+		}
+		const updated = [...form.branches];
+		updated[bIdx] = { ...updated[bIdx], shippingAddress: next };
+		onChange({ ...form, branches: updated });
+	};
+
+	const validateComplianceField = (fieldKey: string) => {
+		if (!onSetErrors) return;
+		onSetErrors((prev) => {
+			const next = { ...prev };
+			if (fieldKey === "msmeNumber" && form.msmeRegistered) {
+				if (!form.msmeNumber.trim() || !validateMSMENumber(form.msmeNumber)) {
+					next.msmeNumber = MSME_NUMBER_ERROR;
+				} else {
+					delete next.msmeNumber;
+				}
+			}
+			if (fieldKey === "fssai" && form.fssaiRegistered) {
+				if (!form.fssai.trim() || !validateFSSAINumber(form.fssai)) {
+					next.fssai = FSSAI_NUMBER_ERROR;
+				} else {
+					delete next.fssai;
+				}
+			}
+			return next;
+		});
 	};
 
 	const inputCls = (key: string) =>
@@ -1048,7 +1102,12 @@ export function CustomerForm({
 		);
 
 	const panTdsFooter = (
-		<div className={cn(ERP.grid3, form.gstRegistered ? "pt-1 border-t border-border/50" : "")}>
+		<div
+			className={cn(
+				ERP.grid3,
+				form.gstRegistered ? "pt-1.5 border-t border-border/50" : "",
+			)}
+		>
 			<div className={ERP.field}>
 				<Label className={ERP.label}>PAN Number</Label>
 				<Input
@@ -1061,9 +1120,9 @@ export function CustomerForm({
 				/>
 				<FieldError msg={errors.pan} />
 			</div>
-			<div className={cn(ERP.field, "flex flex-col justify-end")}>
+			<div className={ERP.field}>
 				<Label className={ERP.label}>TDS Applicable</Label>
-				<div className="flex h-7 items-center">
+				<div className="flex h-8 items-center">
 					<ListingStatusToggle
 						active={form.tdsApplicable}
 						onChange={(yes) =>
@@ -1078,24 +1137,24 @@ export function CustomerForm({
 					/>
 				</div>
 			</div>
-			{form.tdsApplicable ? (
-				<div className={ERP.field}>
-					<Label className={ERP.label}>
-						TDS Section <span className="text-red-500">*</span>
-					</Label>
-					<SearchableSelect
-						value={form.tdsMasterId}
-						onChange={(value) => set("tdsMasterId", value)}
-						options={toTdsSelectOptions(tdsMasters)}
-						placeholder="Select TDS..."
-						disabled={readOnly}
-						error={!!errors.tdsMasterId}
-					/>
-					<FieldError msg={errors.tdsMasterId} />
-				</div>
-			) : (
-				<div className="hidden lg:block" />
-			)}
+			<div className={ERP.field}>
+				{form.tdsApplicable ? (
+					<>
+						<Label className={ERP.label}>
+							TDS Section <span className="text-red-500">*</span>
+						</Label>
+						<SearchableSelect
+							value={form.tdsMasterId}
+							onChange={(value) => set("tdsMasterId", value)}
+							options={toTdsSelectOptions(tdsMasters)}
+							placeholder="Select TDS..."
+							disabled={readOnly}
+							error={!!errors.tdsMasterId}
+						/>
+						<FieldError msg={errors.tdsMasterId} />
+					</>
+				) : null}
+			</div>
 			{gstRegistered && !isAdd && (
 				<div className={cn(ERP.field, "lg:col-span-3")}>
 					<Label className={ERP.label}>GST % / GST Code</Label>
@@ -1206,7 +1265,7 @@ export function CustomerForm({
 											}
 											readOnly
 											disabled
-											className='h-7 text-xs font-mono bg-muted/30 cursor-not-allowed'
+											className='h-8 text-xs font-mono bg-muted/30 cursor-not-allowed'
 										/>
 									</div>
 
@@ -1303,8 +1362,38 @@ export function CustomerForm({
 							</div>
 						</ErpFormSection>
 
-						<ErpFormSection title='GST & Tax Registration'>
+						<ErpFormSection
+							title='GST & Tax Registration'
+							headerRight={
+								<GstRegisteredToggleControl
+									active={form.gstRegistered}
+									readOnly={readOnly}
+									onChange={(yes) => {
+										const gstRegistrationType = yes
+											? form.gstRegistrationType || GST_REGISTRATION_TYPE_DEFAULT
+											: GST_REGISTRATION_TYPE_DEFAULT;
+										const gstCategory = buildGstCategory(
+											yes,
+											gstRegistrationType,
+										);
+										onChange({
+											...form,
+											gstRegistered: yes,
+											gstRegistrationType,
+											gstin: yes ? form.gstin : '',
+											registeredLegalName: yes ? form.registeredLegalName : '',
+											registeredAddress: yes ? form.registeredAddress : '',
+											gstCategory,
+											gstApplicable: gstApplicableFromCategory(gstCategory),
+											gstMasterId: yes ? form.gstMasterId : '',
+										});
+										if (!yes) onClearError('gstin');
+									}}
+								/>
+							}
+						>
 							<GstRegistrationFields
+								showRegisteredToggle={false}
 								values={{
 									gstRegistered: form.gstRegistered,
 									gstRegistrationType: form.gstRegistrationType,
@@ -1360,6 +1449,7 @@ export function CustomerForm({
 								}
 								errors={errors}
 								readOnly={readOnly}
+								onFieldBlur={validateComplianceField}
 							/>
 						</ErpFormSection>
 					</div>
@@ -1967,6 +2057,7 @@ export function CustomerForm({
 															)
 														}
 														readOnly={readOnly}
+														stateOptions={stateOptions}
 														errors={
 															isMain
 																? {
@@ -2009,15 +2100,18 @@ export function CustomerForm({
 													)}
 													<BranchAddressFields
 														address={branch.shippingAddress}
-														onChange={(addr) => {
-															const updated = [...form.branches];
-															updated[bIdx] = {
-																...updated[bIdx],
-																shippingAddress: addr,
-															};
-															onChange({ ...form, branches: updated });
-														}}
+														onChange={(addr) =>
+															updateBranchShippingAddress(bIdx, addr)
+														}
+														onPincodeChange={(pin) =>
+															updateBranchShippingAddress(
+																bIdx,
+																branch.shippingAddress,
+																pin,
+															)
+														}
 														readOnly={readOnly}
+														stateOptions={stateOptions}
 													/>
 												</ErpFormSection>
 
@@ -2396,10 +2490,9 @@ export function validateCustomerForm(
 		if (!mainBranch.billingAddress.state.trim()) {
 			e.mainBranchBillingState = "Main Branch billing state is required";
 		}
-		if (
-			mainBranch.billingAddress.pincode.trim() &&
-			!validatePincode(mainBranch.billingAddress.pincode)
-		) {
+		if (!mainBranch.billingAddress.pincode.trim()) {
+			e.mainBranchBillingPincode = "Pincode is required";
+		} else if (!validatePincode(mainBranch.billingAddress.pincode)) {
 			e.mainBranchBillingPincode = "Enter a valid 6-digit pincode";
 		}
 	}

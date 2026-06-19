@@ -383,19 +383,49 @@ export function deleteGeoNode(
   return { ok: true, nodes: updated, deactivatedCount: idsToDeactivate.size };
 }
 
-export function resolvePincodeLocation(
-  pincode: string,
-  nodes?: GeoNode[],
-): { city: string; state: string; district: string } | null {
+/** GST state codes for India — shown in state dropdown labels */
+export const INDIA_STATE_GST_CODES: Record<string, string> = {
+  Maharashtra: "27",
+  Karnataka: "29",
+  Delhi: "07",
+  "Tamil Nadu": "33",
+  Gujarat: "24",
+  "West Bengal": "19",
+  "Uttar Pradesh": "09",
+};
+
+export const ADDRESS_COUNTRIES = [
+  "India",
+  "United States",
+  "United Kingdom",
+  "UAE",
+  "Singapore",
+] as const;
+
+export function getGstCodeForState(stateName: string): string | undefined {
+  const key = stateName.trim();
+  return INDIA_STATE_GST_CODES[key];
+}
+
+/** State dropdown options with GST code suffix, e.g. Maharashtra (27) */
+export function getStateSelectOptions(nodes?: GeoNode[]) {
   const list = nodes ?? loadGeoNodes();
-  const code = pincode.trim();
-  if (!/^\d{6}$/.test(code)) return null;
+  return list
+    .filter((n) => n.level === "State" && n.status === "active")
+    .map((s) => {
+      const name = s.name.replace(/\s+State$/i, "");
+      const code = getGstCodeForState(name);
+      return {
+        value: name,
+        label: code ? `${name} (${code})` : name,
+      };
+    });
+}
 
-  const pinNode = list.find(
-    (n) => n.level === "Pincode" && n.pincode === code && n.status === "active",
-  );
-  if (!pinNode) return null;
-
+function hierarchyFromPinNode(
+  pinNode: GeoNode,
+  list: GeoNode[],
+): { city: string; state: string; district: string } | null {
   let city = "";
   let state = "";
   let district = "";
@@ -416,6 +446,61 @@ export function resolvePincodeLocation(
     current = parent;
   }
 
+  if (!city && district) city = district;
   if (!city && !state && !district) return null;
   return { city, state, district };
+}
+
+/** Prefix-based fallback when pincode is not in geography master */
+function pincodePrefixFallback(
+  code: string,
+): { city: string; state: string; district: string } | null {
+  const prefixRules: { prefix: string; state: string; city?: string }[] = [
+    { prefix: "411", state: "Maharashtra", city: "Pune" },
+    { prefix: "400", state: "Maharashtra", city: "Mumbai" },
+    { prefix: "560", state: "Karnataka", city: "Bengaluru" },
+    { prefix: "700", state: "West Bengal", city: "Kolkata" },
+    { prefix: "110", state: "Delhi", city: "Delhi" },
+    { prefix: "380", state: "Gujarat", city: "Ahmedabad" },
+  ];
+  const match = prefixRules
+    .filter((r) => code.startsWith(r.prefix))
+    .sort((a, b) => b.prefix.length - a.prefix.length)[0];
+  if (match) {
+    return {
+      state: match.state,
+      city: match.city ?? "",
+      district: match.city ?? "",
+    };
+  }
+
+  const d2 = parseInt(code.slice(0, 2), 10);
+  if (d2 >= 40 && d2 <= 44) return { state: "Maharashtra", city: "", district: "" };
+  if (d2 >= 56 && d2 <= 59) return { state: "Karnataka", city: "", district: "" };
+  if (d2 >= 70 && d2 <= 74) return { state: "West Bengal", city: "", district: "" };
+  if (d2 === 7) return { state: "Delhi", city: "Delhi", district: "" };
+
+  return null;
+}
+
+export function resolvePincodeLocation(
+  pincode: string,
+  nodes?: GeoNode[],
+): { city: string; state: string; district: string } | null {
+  const list = nodes ?? loadGeoNodes();
+  const code = pincode.trim();
+  if (!/^\d{6}$/.test(code)) return null;
+
+  let pinNode = list.find(
+    (n) => n.level === "Pincode" && n.pincode === code && n.status === "active",
+  );
+  if (!pinNode) {
+    pinNode = list.find((n) => n.level === "Pincode" && n.pincode === code);
+  }
+  if (pinNode) {
+    const fromGeo = hierarchyFromPinNode(pinNode, list);
+    if (fromGeo) return fromGeo;
+  }
+
+  return pincodePrefixFallback(code);
 }
