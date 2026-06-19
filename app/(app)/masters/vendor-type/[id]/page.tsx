@@ -50,9 +50,8 @@ export default function VendorTypeDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <RecordSectionCard title="Vendor Type Info" icon={Tags} accent="blue">
           <RecordKvRow label="Vendor Type ID" value={String(vendorType.id)} mono />
-          <RecordKvRow label="Vendor Type Code" value={vendorType.vendorTypeCode} mono copy highlight />
-          <RecordKvRow label="Initial Code" value={vendorType.initialCode} mono copy />
           <RecordKvRow label="Vendor Type Name" value={vendorType.vendorTypeName} />
+          <RecordKvRow label="Initial Code" value={vendorType.initialCode} mono copy highlight />
           <RecordKvRow label="Description" value={vendorType.description} isLast />
         </RecordSectionCard>
       </div>
@@ -64,7 +63,7 @@ export default function VendorTypeDetailPage() {
       listHref="/masters/vendor-type"
       listLabel="Vendor Types"
       recordName={vendorType.vendorTypeName}
-      recordCode={vendorType.vendorTypeCode}
+      recordCode={vendorType.initialCode}
       statusLabel={vendorType.status === "active" ? "Active" : "Inactive"}
       statusVariant={vendorType.status}
       tabs={tabs}
@@ -81,8 +80,7 @@ export default function VendorTypeDetailPage() {
           },
         ],
         summary: [
-          { label: "Code", value: vendorType.vendorTypeCode, highlight: true },
-          { label: "Initial Code", value: vendorType.initialCode },
+          { label: "Initial Code", value: vendorType.initialCode, highlight: true },
           { label: "Description", value: vendorType.description || "—" },
         ],
       }}

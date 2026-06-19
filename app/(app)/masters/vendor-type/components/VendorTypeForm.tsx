@@ -121,7 +121,21 @@ export function VendorTypeForm({
 			<div className='pt-1 space-y-5'>
 				<div>
 					<SectionHead label='Vendor Type Details' required />
-					<div className='grid grid-cols-1 gap-3 md:grid-cols-4'>
+					<div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
+						<div className='space-y-1'>
+							<Label className='text-xs font-medium'>
+								Vendor Type Name <span className='text-red-500'>*</span>
+							</Label>
+							<Input
+								value={form.vendorTypeName}
+								onChange={(e) => set("vendorTypeName", e.target.value)}
+								placeholder='e.g. Creditor for Goods'
+								className={inputCls("vendorTypeName")}
+								disabled={readOnly}
+							/>
+							<FieldError msg={errors.vendorTypeName} />
+						</div>
+
 						<div className='space-y-1'>
 							<Label className='text-xs font-medium'>
 								Initial Code <span className='text-red-500'>*</span>
@@ -139,36 +153,7 @@ export function VendorTypeForm({
 							<FieldError msg={errors.initialCode} />
 						</div>
 
-						<div className='space-y-1'>
-							<Label className='text-xs font-medium'>
-								Vendor Type Name <span className='text-red-500'>*</span>
-							</Label>
-							<Input
-								value={form.vendorTypeName}
-								onChange={(e) => set("vendorTypeName", e.target.value)}
-								placeholder='e.g. Creditor for Goods'
-								className={inputCls("vendorTypeName")}
-								disabled={readOnly}
-							/>
-							<FieldError msg={errors.vendorTypeName} />
-						</div>
-
-						<div className='space-y-1'>
-							<Label className='text-xs font-medium'>Vendor Type Code</Label>
-							<Input
-								value={form.vendorTypeCode}
-								placeholder='Auto-generated from initial code'
-								className={cn(
-									inputCls("vendorTypeCode"),
-									"font-mono bg-muted/30 cursor-not-allowed",
-								)}
-								disabled
-								readOnly
-							/>
-							<FieldError msg={errors.vendorTypeCode} />
-						</div>
-
-						<div className='space-y-1 md:col-span-2 md:col-start-1'>
+						<div className='space-y-1 md:col-span-2'>
 							<Label className='text-xs font-medium'>Description</Label>
 							<Textarea
 								value={form.description}

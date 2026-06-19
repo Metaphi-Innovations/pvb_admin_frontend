@@ -373,7 +373,27 @@ export function CustomerTypeForm({
 			<div className='pt-1 space-y-5'>
 				<div>
 					<SectionHead label='Customer Type Details' required />
-					<div className='grid grid-cols-1 gap-3 md:grid-cols-4'>
+					<div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
+						{/* Customer Type */}
+						<div className='space-y-1'>
+							<Label className='text-xs font-medium'>
+								Customer Type <span className='text-red-500'>*</span>
+							</Label>
+							<Input
+								value={form.customerType}
+								onChange={(e) => set("customerType", e.target.value)}
+								placeholder='e.g. Grocery'
+								className={inputCls("customerType")}
+								disabled={readOnly}
+							/>
+							{errors.customerType && (
+								<p className='flex items-center gap-1 mt-1 text-[11px] text-red-500'>
+									<AlertCircle className='w-3.5 h-3.5 flex-shrink-0' />
+									{errors.customerType}
+								</p>
+							)}
+						</div>
+
 						{/* Initial Code */}
 						<div className='space-y-1'>
 							<Label className='text-xs font-medium'>
@@ -397,51 +417,8 @@ export function CustomerTypeForm({
 							)}
 						</div>
 
-						{/* Customer Type */}
-						<div className='space-y-1'>
-							<Label className='text-xs font-medium'>
-								Customer Type <span className='text-red-500'>*</span>
-							</Label>
-							<Input
-								value={form.customerType}
-								onChange={(e) => set("customerType", e.target.value)}
-								placeholder='e.g. Grocery'
-								className={inputCls("customerType")}
-								disabled={readOnly}
-							/>
-							{errors.customerType && (
-								<p className='flex items-center gap-1 mt-1 text-[11px] text-red-500'>
-									<AlertCircle className='w-3.5 h-3.5 flex-shrink-0' />
-									{errors.customerType}
-								</p>
-							)}
-						</div>
-
-						{/* Customer Type Code (auto-generated) */}
-						<div className='space-y-1'>
-							<Label className='text-xs font-medium'>
-								Customer Type Code
-							</Label>
-							<Input
-								value={form.customerTypeCode}
-								placeholder='Auto-generated from initial code'
-								className={cn(
-									inputCls("customerTypeCode"),
-									"font-mono bg-muted/30 cursor-not-allowed",
-								)}
-								disabled
-								readOnly
-							/>
-							{errors.customerTypeCode && (
-								<p className='flex items-center gap-1 mt-1 text-[11px] text-red-500'>
-									<AlertCircle className='w-3.5 h-3.5 flex-shrink-0' />
-									{errors.customerTypeCode}
-								</p>
-							)}
-						</div>
-
 						{/* Description */}
-						<div className='space-y-1 md:col-span-2 md:col-start-1'>
+						<div className='space-y-1 md:col-span-2'>
 							<Label className='text-xs font-medium'>Description</Label>
 							<Textarea
 								value={form.description}
