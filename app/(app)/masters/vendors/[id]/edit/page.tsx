@@ -98,7 +98,7 @@ export default function EditVendorPage() {
         </div>
       }
     >
-      <VendorForm form={form} onChange={setForm} />
+      <VendorForm form={form} onChange={setForm} vendorCode={vendor?.vendorCode} />
       {toast && <Toast msg={toast.msg} type={toast.type} onDismiss={() => setToast(null)} />}
     </FormContainer>
   );

@@ -27,16 +27,15 @@ import {
 	type VendorContact,
 	type VendorDocument,
 	type VendorProductMapping,
-	COUNTRIES,
 	emptyContact,
 	todayStr,
 	isGoodsVendorType,
 } from "../vendor-data";
 import { loadActiveVendorTypeOptions } from "../../vendor-type/vendor-type-data";
-import { PAYMENT_TERMS_OPTIONS, getActiveGeoStates } from "../../customers/customer-data";
+import { PAYMENT_TERMS_OPTIONS } from "../../customers/customer-data";
 import { getActiveTDSMasters, toTdsSelectOptions } from "../../tds/tds-data";
 import { SearchableSelect } from "../../customers/components/SearchableSelect";
-import { loadGeoNodes, resolvePincodeLocation } from "../../geography/geo-data";
+import { loadGeoNodes, resolvePincodeLocation, getStateSelectOptions } from "../../geography/geo-data";
 import { loadDocumentTypes } from "../../document-types/document-type-data";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { cn } from "@/lib/utils";
@@ -50,18 +49,24 @@ import {
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
 import { getStandardMrp } from "@/lib/pricing/resolve-pricing";
+import { GstRegistrationFields, GstRegisteredToggleControl } from "@/components/masters/GstRegistrationFields";
+import { RegisteredNumberRow } from "@/components/masters/RegisteredNumberRow";
+import { ErpFormSection } from "@/components/masters/erp/ErpFormSection";
+import { BranchAddressFields } from "@/components/masters/erp/BranchAddressFields";
+import { ERP } from "@/components/masters/erp/erp-form-styles";
+import { ListingStatusToggle } from "@/components/listing";
+import { Label } from "@/components/ui/label";
 import {
 	buildGstCategory,
 	deriveGstRegistrationType,
 	fetchGstRegistrationDetailsAsync,
 	gstApplicableFromCategory,
 	gstDetailsToAddressSnapshot,
+	GST_REGISTRATION_TYPE_DEFAULT,
+	formatUdyamInput,
+	validateGSTIN,
 	type GstAddressSnapshot,
 } from "@/lib/masters/gst-compliance";
-import { GstRegistrationFields } from "@/components/masters/GstRegistrationFields";
-import { RegisteredNumberRow } from "@/components/masters/RegisteredNumberRow";
-import { YesNoRadio } from "@/components/masters/YesNoRadio";
-import { validateGSTIN, validatePAN, validateTAN, validateMSMENumber } from "@/lib/masters/gst-compliance";
 
 const ALL_TABS = [
 	{ id: "basic", label: "Basic Details" },
@@ -394,10 +399,13 @@ export function VendorForm({
 	form,
 	onChange,
 	readOnly,
+	vendorCode,
 }: {
 	form: VendorFormValues;
 	onChange: (f: VendorFormValues) => void;
 	readOnly?: boolean;
+	/** Auto-generated code preview (add) or stored code (edit). */
+	vendorCode?: string;
 }) {
 	const [tab, setTab] = useState<TabId>("basic");
 	const [fetchingGst, setFetchingGst] = useState(false);
@@ -411,20 +419,18 @@ export function VendorForm({
 	const [gstAddressSnapshot, setGstAddressSnapshot] =
 		useState<GstAddressSnapshot | null>(null);
 
-	const [geoNodes] = useState(() =>
-		typeof window !== "undefined" ? loadGeoNodes() : [],
-	);
+	const [geoNodes, setGeoNodes] = useState<ReturnType<typeof loadGeoNodes>>([]);
+
+	useEffect(() => {
+		setGeoNodes(loadGeoNodes());
+	}, []);
 
 	const gstRegistered = form.gstRegistered;
 
 	const vendorTypeOptions = useMemo(() => loadActiveVendorTypeOptions(), []);
 	const tdsMasters = useMemo(() => getActiveTDSMasters(), []);
 	const stateOptions = useMemo(
-		() =>
-			getActiveGeoStates(geoNodes).map((s) => ({
-				value: s.name.replace(/\s+State$/i, ""),
-				label: s.name.replace(/\s+State$/i, ""),
-			})),
+		() => getStateSelectOptions(geoNodes),
 		[geoNodes],
 	);
 
@@ -567,8 +573,42 @@ export function VendorForm({
 		set("vendorProducts", updated);
 	};
 
-	const setAddr = (k: keyof VendorFormValues["billingAddress"], v: string) =>
-		set("billingAddress", { ...form.billingAddress, [k]: v });
+	const inputCls = cn(
+		ERP.input,
+		"border-border/70 rounded-md bg-white shadow-none focus-visible:ring-1 focus-visible:ring-brand-500/30",
+	);
+
+	const billingAsBranch = useMemo(
+		() => ({
+			address: form.billingAddress.line1,
+			addressLine2: form.billingAddress.line2,
+			country: form.billingAddress.country || "India",
+			city: form.billingAddress.city,
+			state: form.billingAddress.state,
+			pincode: form.billingAddress.pincode,
+			district: "",
+		}),
+		[form.billingAddress],
+	);
+
+	const setBillingFromBranch = (addr: {
+		address: string;
+		addressLine2?: string;
+		country?: string;
+		city: string;
+		state: string;
+		pincode: string;
+	}) => {
+		set("billingAddress", {
+			...form.billingAddress,
+			line1: addr.address,
+			line2: addr.addressLine2 ?? "",
+			country: addr.country ?? "India",
+			city: addr.city,
+			state: addr.state,
+			pincode: addr.pincode,
+		});
+	};
 
 	const handlePincodeChange = (pincode: string) => {
 		const digits = pincode.replace(/\D/g, "").slice(0, 6);
@@ -578,6 +618,7 @@ export function VendorForm({
 			const loc = resolvePincodeLocation(digits, geoNodes);
 			if (loc) {
 				if (loc.city) next.city = loc.city;
+				else if (loc.district) next.city = loc.district;
 				if (loc.state) next.state = loc.state;
 			}
 		}
@@ -783,277 +824,258 @@ export function VendorForm({
 
 			<div className='px-4 py-4 bg-white border border-t-0 rounded-b-lg border-border/60 md:px-5 md:py-4'>
 				{tab === "basic" && (
-					<div className='w-full space-y-4'>
-						<section>
-							<SectionDivider title='Basic Information' required />
-							<div className='grid grid-cols-12 gap-3'>
-								<Field
-									label='Vendor Name'
-									required
-									className='col-span-12 md:col-span-3'
-								>
-									<Input
-										disabled={readOnly}
-										value={form.vendorName}
-										onChange={(e) => set("vendorName", e.target.value)}
-										className={fieldClass}
-										placeholder='Trade / display name'
-									/>
-								</Field>
+					<div className={ERP.sectionGap}>
+						<ErpFormSection title='Basic Information'>
+							<div className={ERP.sectionGap}>
+								<div className={ERP.grid3}>
+									<div className={ERP.field}>
+										<Label className={ERP.label}>
+											Vendor Type <span className='text-red-500'>*</span>
+										</Label>
+										<AutocompleteSelect
+											disabled={readOnly}
+											value={form.vendorType}
+											onChange={(value) => set("vendorType", String(value))}
+											options={vendorTypeOptions}
+											placeholder='Select vendor type...'
+											className={inputCls}
+										/>
+									</div>
+									<div className={ERP.field}>
+										<Label className={ERP.label}>Vendor Code</Label>
+										<Input
+											value={
+												vendorCode ||
+												(form.vendorType ? "Generating…" : "Select type first")
+											}
+											readOnly
+											disabled
+											className='h-8 text-xs font-mono bg-muted/30 cursor-not-allowed'
+										/>
+									</div>
+									<div className={ERP.field}>
+										<Label className={ERP.label}>
+											Vendor Name <span className='text-red-500'>*</span>
+										</Label>
+										<Input
+											disabled={readOnly}
+											value={form.vendorName}
+											onChange={(e) => set("vendorName", e.target.value)}
+											className={inputCls}
+											placeholder='Trade / display name'
+										/>
+									</div>
+								</div>
 
-								<Field
-									label='Vendor Type'
-									required
-									className='col-span-12 md:col-span-3'
-								>
-									<AutocompleteSelect
-										disabled={readOnly}
-										value={form.vendorType}
-										onChange={(value) => set("vendorType", String(value))}
-										options={vendorTypeOptions}
-										placeholder='Select vendor type...'
-									/>
-								</Field>
+								<div className={ERP.grid3}>
+									<div className={ERP.field}>
+										<Label className={ERP.label}>
+											Payment Terms <span className='text-red-500'>*</span>
+										</Label>
+										<AutocompleteSelect
+											disabled={readOnly}
+											value={form.paymentTerms}
+											onChange={(value) => set("paymentTerms", String(value))}
+											options={PAYMENT_TERMS_OPTIONS.map((o) => ({
+												value: o.value,
+												label: o.label,
+											}))}
+											placeholder='Select payment terms...'
+											className={inputCls}
+										/>
+									</div>
+									<div className={ERP.field}>
+										<Label className={ERP.label}>Contact Person</Label>
+										<Input
+											disabled={readOnly}
+											value={form.contactPerson}
+											onChange={(e) => set("contactPerson", e.target.value)}
+											className={inputCls}
+											placeholder='Primary contact name'
+										/>
+									</div>
+									<div className={ERP.field}>
+										<Label className={ERP.label}>Mobile Number</Label>
+										<MobileRow
+											countryCode={form.mobileCountryCode}
+											mobile={form.mobile}
+											onCountryCode={(v) => set("mobileCountryCode", v)}
+											onMobile={(v) => set("mobile", v)}
+											disabled={readOnly}
+										/>
+									</div>
+								</div>
 
-								<Field
-									label='Payment Terms'
-									required
-									className='col-span-12 md:col-span-2'
-								>
-									<AutocompleteSelect
-										disabled={readOnly}
-										value={form.paymentTerms}
-										onChange={(value) => set("paymentTerms", String(value))}
-										options={PAYMENT_TERMS_OPTIONS.map((o) => ({
-											value: o.value,
-											label: o.label,
-										}))}
-										placeholder='Select payment terms...'
-									/>
-								</Field>
-
-								<Field
-									label='Contact Person'
-									className='col-span-12 md:col-span-2'
-								>
-									<Input
-										disabled={readOnly}
-										value={form.contactPerson}
-										onChange={(e) => set("contactPerson", e.target.value)}
-										className={fieldClass}
-										placeholder='Primary contact name'
-									/>
-								</Field>
-
-								<Field
-									label='Mobile Number'
-									className='col-span-12 md:col-span-2'
-								>
-									<MobileRow
-										countryCode={form.mobileCountryCode}
-										mobile={form.mobile}
-										onCountryCode={(v) => set("mobileCountryCode", v)}
-										onMobile={(v) => set("mobile", v)}
-										disabled={readOnly}
-									/>
-								</Field>
-
-								<Field label='Email Address' className='col-span-12 md:col-span-2'>
-									<Input
-										type='email'
-										disabled={readOnly}
-										value={form.email}
-										onChange={(e) => set("email", e.target.value)}
-										className={fieldClass}
-										placeholder='vendor@company.com'
-									/>
-								</Field>
+								<div className={ERP.grid3}>
+									<div className={ERP.field}>
+										<Label className={ERP.label}>Email Address</Label>
+										<Input
+											type='email'
+											disabled={readOnly}
+											value={form.email}
+											onChange={(e) => set("email", e.target.value)}
+											className={inputCls}
+											placeholder='vendor@company.com'
+										/>
+									</div>
+								</div>
 							</div>
-						</section>
+						</ErpFormSection>
 
-						<section>
-							<SectionDivider title='Tax & Registration' />
-							<div className='space-y-3'>
-								<GstRegistrationFields
-									namePrefix="vendor"
-									values={{
-										gstRegistered: form.gstRegistered,
-										gstRegistrationType: form.gstRegistrationType,
-										gstin: form.gstNumber,
-									}}
-									onChange={(gst) => {
-										const gstCategory = buildGstCategory(
-											gst.gstRegistered,
-											gst.gstRegistrationType,
-										);
+						<ErpFormSection
+							title='GST & Tax Registration'
+							headerRight={
+								<GstRegisteredToggleControl
+									active={form.gstRegistered}
+									readOnly={readOnly}
+									onChange={(yes) => {
+										const gstRegistrationType = yes
+											? form.gstRegistrationType || GST_REGISTRATION_TYPE_DEFAULT
+											: GST_REGISTRATION_TYPE_DEFAULT;
+										const gstCategory = buildGstCategory(yes, gstRegistrationType);
 										onChange({
 											...form,
-											gstRegistered: gst.gstRegistered,
-											gstRegistrationType: gst.gstRegistrationType,
-											gstNumber: gst.gstin,
+											gstRegistered: yes,
+											gstRegistrationType,
+											gstNumber: yes ? form.gstNumber : "",
 											gstCategory,
 											gstApplicable: gstApplicableFromCategory(gstCategory),
 										});
 									}}
-									readOnly={readOnly}
-									fetchingGst={fetchingGst}
-									onFetchGst={handleFetchGst}
-									inputClassName={fieldClass}
 								/>
-								<div className='grid grid-cols-12 gap-3'>
-									<Field label='PAN Number' required className='col-span-12 md:col-span-4'>
-										<Input
-											disabled={readOnly}
-											value={form.panNumber}
-											onChange={(e) =>
-												set("panNumber", e.target.value.toUpperCase())
-											}
-											className={cn(fieldClass, "font-mono uppercase")}
-											maxLength={10}
-											placeholder='e.g. ABCDE1234F'
-										/>
-									</Field>
-									<Field label='TAN Number' className='col-span-12 md:col-span-4'>
-										<Input
-											disabled={readOnly}
-											value={form.tanNumber}
-											onChange={(e) =>
-												set("tanNumber", e.target.value.toUpperCase())
-											}
-											className={cn(fieldClass, "font-mono uppercase")}
-											maxLength={10}
-											placeholder='AAAA99999A'
-										/>
-									</Field>
-								</div>
-								<RegisteredNumberRow
-									label="MSME Registered?"
-									registered={form.msmeRegistered}
-									onRegisteredChange={(yes) =>
-										onChange({
-											...form,
-											msmeRegistered: yes,
-											msmeNumber: yes ? form.msmeNumber : "",
-										})
-									}
-									numberLabel="MSME Number"
-									numberValue={form.msmeNumber}
-									onNumberChange={(value) => set("msmeNumber", value)}
-									numberPlaceholder="UDYAM-XX-00-0000000"
-									namePrefix="vendor-msme"
-									readOnly={readOnly}
-									inputClassName={fieldClass}
-								/>
-
-								<div className='grid grid-cols-12 gap-3 border-t border-border/40 pt-3'>
-									<div className='space-y-1 md:col-span-3'>
-										<label className='text-xs font-medium'>TDS Applicable?</label>
-										<YesNoRadio
-											name='vendor-tds'
-											value={form.tdsApplicable}
-											onChange={(yes) =>
-												onChange({
-													...form,
-													tdsApplicable: yes,
-													tdsMasterId: yes ? form.tdsMasterId : "",
-												})
-											}
-											disabled={readOnly}
-										/>
-									</div>
-									{form.tdsApplicable && (
-										<div className='space-y-1 md:col-span-5'>
-											<label className='text-xs font-medium'>
-												TDS Section <span className='text-red-500'>*</span>
-											</label>
-											<SearchableSelect
-												value={form.tdsMasterId}
-												onChange={(value) => set("tdsMasterId", value)}
-												options={toTdsSelectOptions(tdsMasters)}
-												placeholder='Select from TDS Master...'
+							}
+						>
+							<GstRegistrationFields
+								showRegisteredToggle={false}
+								namePrefix='vendor'
+								values={{
+									gstRegistered: form.gstRegistered,
+									gstRegistrationType: form.gstRegistrationType,
+									gstin: form.gstNumber,
+								}}
+								onChange={(gst) => {
+									const gstCategory = buildGstCategory(
+										gst.gstRegistered,
+										gst.gstRegistrationType,
+									);
+									onChange({
+										...form,
+										gstRegistered: gst.gstRegistered,
+										gstRegistrationType: gst.gstRegistrationType,
+										gstNumber: gst.gstin,
+										gstCategory,
+										gstApplicable: gstApplicableFromCategory(gstCategory),
+									});
+								}}
+								readOnly={readOnly}
+								fetchingGst={fetchingGst}
+								onFetchGst={handleFetchGst}
+								inputClassName={inputCls}
+								footer={
+									<div
+										className={cn(
+											ERP.grid3,
+											form.gstRegistered ? "pt-1.5 border-t border-border/50" : "",
+										)}
+									>
+										<div className={ERP.field}>
+											<Label className={ERP.label}>
+												PAN Number <span className='text-red-500'>*</span>
+											</Label>
+											<Input
 												disabled={readOnly}
+												value={form.panNumber}
+												onChange={(e) =>
+													set("panNumber", e.target.value.toUpperCase())
+												}
+												className={cn(inputCls, "font-mono uppercase")}
+												maxLength={10}
+												placeholder='ABCDE1234F'
 											/>
 										</div>
-									)}
-								</div>
-							</div>
-						</section>
+										<div className={ERP.field}>
+											<Label className={ERP.label}>TAN Number</Label>
+											<Input
+												disabled={readOnly}
+												value={form.tanNumber}
+												onChange={(e) =>
+													set("tanNumber", e.target.value.toUpperCase())
+												}
+												className={cn(inputCls, "font-mono uppercase")}
+												maxLength={10}
+												placeholder='AAAA99999A'
+											/>
+										</div>
+										<div className={ERP.field}>
+											<Label className={ERP.label}>TDS Applicable</Label>
+											<div className='flex h-8 items-center'>
+												<ListingStatusToggle
+													active={form.tdsApplicable}
+													onChange={(yes) =>
+														!readOnly &&
+														onChange({
+															...form,
+															tdsApplicable: yes,
+															tdsMasterId: yes ? form.tdsMasterId : "",
+														})
+													}
+													disabled={readOnly}
+												/>
+											</div>
+										</div>
+										<div className={ERP.field}>
+											{form.tdsApplicable ? (
+												<>
+													<Label className={ERP.label}>
+														TDS Section <span className='text-red-500'>*</span>
+													</Label>
+													<SearchableSelect
+														value={form.tdsMasterId}
+														onChange={(value) => set("tdsMasterId", value)}
+														options={toTdsSelectOptions(tdsMasters)}
+														placeholder='Select TDS...'
+														disabled={readOnly}
+													/>
+												</>
+											) : null}
+										</div>
+									</div>
+								}
+							/>
+						</ErpFormSection>
 
-						<section>
-							<SectionDivider title='Registered Address' required />
-							<div className='grid grid-cols-12 gap-3'>
-								<Field label='Address Line 1' required className='col-span-12 md:col-span-6'>
-									<Input
-										disabled={readOnly}
-										value={form.billingAddress.line1}
-										onChange={(e) => setAddr("line1", e.target.value)}
-										className={fieldClass}
-										placeholder='Building, street, area'
-									/>
-								</Field>
-								<Field label='Address Line 2' className='col-span-12 md:col-span-6'>
-									<Input
-										disabled={readOnly}
-										value={form.billingAddress.line2}
-										onChange={(e) => setAddr("line2", e.target.value)}
-										className={fieldClass}
-										placeholder='Landmark, floor (optional)'
-									/>
-								</Field>
-								<Field label='Pincode' required className='col-span-12 md:col-span-2'>
-									<Input
-										disabled={readOnly}
-										value={form.billingAddress.pincode}
-										onChange={(e) => handlePincodeChange(e.target.value)}
-										className={cn(fieldClass, "font-mono")}
-										inputMode='numeric'
-										maxLength={6}
-										placeholder='6-digit'
-									/>
-								</Field>
-								<Field label='Country' className='col-span-12 md:col-span-2'>
-									<AutocompleteSelect
-										disabled={readOnly}
-										value={form.billingAddress.country || "India"}
-										onChange={(value) =>
-											setAddr("country", String(value))
-										}
-										options={COUNTRIES.map((c) => ({ value: c, label: c }))}
-										placeholder='Country'
-										className='h-8 text-xs'
-									/>
-								</Field>
-								<Field label='State' className='col-span-12 md:col-span-4'>
-									{(form.billingAddress.country || "India") === "India" ? (
-										<AutocompleteSelect
-											disabled={readOnly}
-											value={form.billingAddress.state}
-											onChange={(value) => setAddr("state", String(value))}
-											options={stateOptions}
-											placeholder='Select state...'
-											searchPlaceholder='Search state...'
-											className='h-8 text-xs'
-										/>
-									) : (
-										<Input
-											disabled={readOnly}
-											value={form.billingAddress.state}
-											onChange={(e) => setAddr("state", e.target.value)}
-											className={fieldClass}
-										/>
-									)}
-								</Field>
-								<Field label='City' className='col-span-12 md:col-span-4'>
-									<Input
-										disabled={readOnly}
-										value={form.billingAddress.city}
-										onChange={(e) => setAddr("city", e.target.value)}
-										className={fieldClass}
-										placeholder='City / district'
-									/>
-								</Field>
-							</div>
-						</section>
+						<ErpFormSection title='Compliance & Certifications'>
+							<RegisteredNumberRow
+								label='MSME Registered?'
+								registered={form.msmeRegistered}
+								onRegisteredChange={(yes) =>
+									onChange({
+										...form,
+										msmeRegistered: yes,
+										msmeNumber: yes ? form.msmeNumber : "",
+									})
+								}
+								numberLabel='MSME Number'
+								numberValue={form.msmeNumber}
+								onNumberChange={(value) =>
+									set("msmeNumber", formatUdyamInput(value))
+								}
+								numberPlaceholder='UDYAM-MH-27-0123456'
+								namePrefix='vendor-msme'
+								readOnly={readOnly}
+								inputClassName={inputCls}
+							/>
+						</ErpFormSection>
+
+						<ErpFormSection title='Registered Address'>
+							<BranchAddressFields
+								address={billingAsBranch}
+								onChange={setBillingFromBranch}
+								onPincodeChange={handlePincodeChange}
+								readOnly={readOnly}
+								stateOptions={stateOptions}
+							/>
+						</ErpFormSection>
 					</div>
 				)}
 
