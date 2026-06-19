@@ -1,18 +1,18 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { FormContainer } from "@/components/layout/FormContainer";
+import { RecordDetailPage } from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
-import { Calendar, Building, Landmark, Receipt, AlertCircle } from "lucide-react";
+import { Calendar, Building, Landmark, Receipt, AlertCircle, ClipboardCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getGrnById } from "../../mock-data";
 import { GrnRecord } from "../../types";
 
 const STATUS_CONFIG = {
-  draft: { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Draft" },
-  submitted: { bg: "bg-blue-50 text-blue-700 border-blue-200", label: "Submitted" },
-  qc_pending: { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "QC Pending" },
-  qc_completed: { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "QC Completed" },
+  draft: { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Draft", variant: "draft" as const },
+  submitted: { bg: "bg-blue-50 text-blue-700 border-blue-200", label: "Submitted", variant: "neutral" as const },
+  qc_pending: { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "QC Pending", variant: "draft" as const },
+  qc_completed: { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "QC Completed", variant: "active" as const },
 };
 
 export default function ViewGrnPage({ params }: { params: { id: string } }) {
@@ -28,7 +28,13 @@ export default function ViewGrnPage({ params }: { params: { id: string } }) {
 
   if (!grn) {
     return (
-      <FormContainer title="GRN Details" onBack={() => router.push("/warehouse/grnqc")}>
+      <RecordDetailPage
+        listHref="/warehouse/grnqc"
+        listLabel="GRN & QC"
+        recordName="GRN Record Not Found"
+        statusLabel="Not Found"
+        statusVariant="blocked"
+      >
         <div className="max-w-[800px] mx-auto text-center py-12 space-y-4">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
           <h1 className="text-base font-bold text-foreground">GRN Record Not Found</h1>
@@ -37,34 +43,56 @@ export default function ViewGrnPage({ params }: { params: { id: string } }) {
             Go Back
           </Button>
         </div>
-      </FormContainer>
+      </RecordDetailPage>
     );
   }
 
-  const statusCfg = STATUS_CONFIG[grn.status] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Unknown" };
+  const statusCfg = STATUS_CONFIG[grn.status] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Unknown", variant: "neutral" as const };
+  const totalReceived = grn.items.reduce((sum, it) => sum + it.receivedQty, 0);
+  const totalOrdered = grn.items.reduce((sum, it) => sum + it.orderedQty, 0);
 
   return (
-    <FormContainer
-      title={grn.grnNo}
-      description="Goods Receipt Note Summary"
-      onBack={() => router.push("/warehouse/grnqc")}
-      actions={
-        <div className="flex items-center gap-2">
-          <span className={`inline-flex items-center text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${statusCfg.bg}`}>
-            {statusCfg.label}
-          </span>
-          {grn.status === "qc_pending" && (
-            <Button
-              size="sm"
-              onClick={() => router.push(`/warehouse/grnqc/qc/create?grnId=${grn.id}`)}
-              className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white rounded-lg"
-            >
-              Perform QC Check
-            </Button>
-          )}
-        </div>
+    <RecordDetailPage
+      listHref="/warehouse/grnqc"
+      listLabel="GRN & QC"
+      recordName={grn.grnNo}
+      recordCode={grn.poNumber}
+      statusLabel={statusCfg.label}
+      statusVariant={statusCfg.variant}
+      metaItems={[
+        { icon: Landmark, label: grn.vendorName },
+        { icon: Building, label: grn.warehouse },
+        { icon: Calendar, label: grn.grnDate },
+      ]}
+      secondaryAction={
+        grn.status === "qc_pending"
+          ? {
+              label: "Perform QC Check",
+              onClick: () => router.push(`/warehouse/grnqc/qc/create?grnId=${grn.id}`),
+            }
+          : undefined
       }
-      noCard={true}
+      sidebar={{
+        summary: [
+          { label: "PO Number", value: grn.poNumber, highlight: true },
+          { label: "Vendor", value: grn.vendorName },
+          { label: "Items", value: grn.items.length },
+          { label: "Total Ordered", value: totalOrdered },
+          { label: "Total Received", value: totalReceived },
+          { label: "Batches", value: grn.batches.length },
+        ],
+        quickActions:
+          grn.status === "qc_pending"
+            ? [
+                {
+                  label: "Perform QC Check",
+                  icon: ClipboardCheck,
+                  variant: "primary" as const,
+                  onClick: () => router.push(`/warehouse/grnqc/qc/create?grnId=${grn.id}`),
+                },
+              ]
+            : [],
+      }}
     >
       <div className="w-full space-y-6">
         {/* Section 1: Header Info Cards */}
@@ -159,6 +187,6 @@ export default function ViewGrnPage({ params }: { params: { id: string } }) {
           </div>
         </div>
       </div>
-    </FormContainer>
+    </RecordDetailPage>
   );
 }

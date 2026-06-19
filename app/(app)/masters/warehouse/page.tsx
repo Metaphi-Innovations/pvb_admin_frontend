@@ -47,6 +47,7 @@ import {
 import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
+import { ListingAuditCell } from "@/components/listing";
 
 function StatusBadge({ status }: { status: WarehouseStatus }) {
   const cfg = {
@@ -122,7 +123,7 @@ export default function WarehouseListPage() {
       filterType: "text",
       width: "120px",
       render: (val, row) => (
-        <span className="font-mono font-semibold text-brand-700">{row.warehouseCode}</span>
+        <span className="font-mono text-xs text-brand-700">{row.warehouseCode}</span>
       ),
     },
     {
@@ -133,8 +134,8 @@ export default function WarehouseListPage() {
       filterType: "text",
       width: "200px",
       render: (val, row) => (
-        <Link href={`/masters/warehouse/${row.id}`} className="font-semibold leading-4 text-foreground hover:text-brand-700">
-          {row.warehouseName}
+        <Link href={`/masters/warehouse/${row.id}`} className="block group/name">
+          <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">{row.warehouseName}</p>
         </Link>
       ),
     },
@@ -227,15 +228,7 @@ export default function WarehouseListPage() {
       width: "90px",
       render: (val, row) => <span className="font-mono text-xs text-foreground">{row.pincode || "—"}</span>,
     },
-    {
-      key: "capacity",
-      header: "Capacity",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "100px",
-      render: (val, row) => row.capacity ? row.capacity.toLocaleString("en-IN") : "—",
-    },
+
     {
       key: "manager",
       header: "Manager",
@@ -258,22 +251,6 @@ export default function WarehouseListPage() {
         row.operatedBy === "C&F Agent" && row.customerType
           ? `C&F Agent (${row.customerType})`
           : (row.operatedBy || "—"),
-    },
-    {
-      key: "createdBy",
-      header: "Created By",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-    },
-    {
-      key: "updatedBy",
-      header: "Updated By",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
     },
     {
       key: "status",
@@ -387,6 +364,24 @@ export default function WarehouseListPage() {
         </DropdownMenu>
       ),
     },
+    {
+      key: "createdBy",
+      header: "Created",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />,
+    },
+    {
+      key: "updatedBy",
+      header: "Updated",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />,
+    },
   ];
 
   const actions: ActionItemConfig<WarehouseMaster>[] = [
@@ -450,13 +445,13 @@ export default function WarehouseListPage() {
     const headers = [
       "Warehouse Code", "Warehouse Name", "Warehouse Type", "GST Number",
       "Contact Person", "Mobile Number", "Email Address", "Address",
-      "State", "District", "City", "Pincode", "Capacity",
+      "State", "District", "City", "Pincode",
       "Manager", "Operated By", "Status",
     ];
     const rows = filtered.map(r => [
       r.warehouseCode, r.warehouseName, r.warehouseType, r.gstNumber,
       r.contactPerson, r.mobileNumber, r.emailAddress, `"${r.address}"`,
-      r.state, r.district, r.city, r.pincode, String(r.capacity),
+      r.state, r.district, r.city, r.pincode,
       r.manager, r.operatedBy, formatStatus(r.status),
     ]);
     const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
@@ -485,7 +480,7 @@ export default function WarehouseListPage() {
         <div>
           <h1 className="text-xl font-bold text-foreground">Warehouse Master</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Manage warehouse locations, capacity, and operations
+            Manage warehouse locations and operations
           </p>
         </div>
 

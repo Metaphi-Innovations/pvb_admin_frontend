@@ -1,6 +1,11 @@
 import { redirect } from "next/navigation";
-import { ACCOUNTS_HOME_HREF } from "@/lib/accounts/accounts-nav";
+import { RECONCILIATION_LIST_PATH } from "@/app/(app)/accounts/bank-reconciliation/reconciliation-utils";
 
-export default function LegacyRedirect() {
-  redirect(ACCOUNTS_HOME_HREF);
+interface PageProps {
+  params: Promise<{ statementId: string }>;
+}
+
+export default async function LegacyReconciliationDetailRedirect({ params }: PageProps) {
+  const { statementId } = await params;
+  redirect(`${RECONCILIATION_LIST_PATH}/${statementId}`);
 }

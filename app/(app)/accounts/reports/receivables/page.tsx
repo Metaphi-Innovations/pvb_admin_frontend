@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import CustomerOutstandingReportClient from "./CustomerOutstandingReportClient";
 
-export default function ReceivablesRedirect() {
-  redirect("/accounts/reports");
+export default function CustomerOutstandingReportPage() {
+  return <CustomerOutstandingReportClient />;
 }

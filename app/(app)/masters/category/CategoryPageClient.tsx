@@ -5,7 +5,6 @@ import type { Column } from "@/components/ui/DataTable";
 import {
   MasterModule,
   MasterFormGrid,
-  MasterViewRow,
 } from "@/components/masters/MasterModule";
 import { NameCodeDescriptionFields } from "@/components/masters/simpleFields";
 import {
@@ -46,6 +45,11 @@ export default function CategoryPageClient() {
         recordFromForm: formToCategory,
         validate: (f) => validateCategoryForm(f),
         setCodeOnForm: (f, code) => ({ ...f, categoryCode: code }),
+        auditColumnVariant: "product",
+        auditColumnHeaders: {
+          created: "Created",
+          updated: "Updated",
+        },
         renderFormFields: ({ form, setForm, errors }) => (
           <MasterFormGrid>
             <NameCodeDescriptionFields
@@ -80,14 +84,16 @@ export default function CategoryPageClient() {
             />
           </MasterFormGrid>
         ),
-        renderViewDetails: (r) => (
-          <div className="rounded-lg border border-border/60 bg-muted/10 px-3">
-            <MasterViewRow label="Category Name" value={r.categoryName} />
-            <MasterViewRow label="Category Code" value={<span className="font-mono">{r.categoryCode}</span>} />
-            <MasterViewRow label="Description" value={r.description || "—"} />
-            <MasterViewRow label="Status" value={r.status === "active" ? "Active" : "Inactive"} />
-          </div>
-        ),
+        viewConfig: {
+          drawerTitle: "Category",
+          getRecordCode: (r) => r.categoryCode,
+          basicInfo: (r) => [
+            { label: "Category Name", value: r.categoryName },
+            { label: "Category Code", value: r.categoryCode, mono: true },
+          ],
+          description: (r) => r.description,
+          showDescription: true,
+        },
       }}
     />
   );

@@ -1,27 +1,45 @@
 "use client";
 
+import {
+  generateTypedMasterCode,
+  isMasterCodeEmpty,
+  normalizeInitialCode,
+  validateInitialCode,
+} from "@/lib/masters/code-generation";
+
 export interface CustomerTypeDocument {
   id: string;
-  documentTypeId: string;
+  documentTypeId?: string;
   documentName: string;
 }
 
 export interface CustomerTypeRecord {
   id: number;
   customerTypeCode: string;
+  /** Prefix for customer codes, e.g. DIS, RET */
+  initialCode: string;
   customerType: string;
   description: string;
   documentTypes: CustomerTypeDocument[];
   status: "active" | "inactive";
+  createdBy: string;
+  createdDate: string;
+  updatedBy: string;
+  updatedDate: string;
 }
 
 export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
   {
     id: 1,
     customerTypeCode: "CTY-001",
+    initialCode: "FAR",
     customerType: "Farmer",
     description: "Standard farm customer",
     status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-01-10",
+    updatedBy: "Admin",
+    updatedDate: "2026-01-10",
     documentTypes: [
       { id: "DOC-001", documentTypeId: "DT-005", documentName: "Aadhaar Card" },
       { id: "DOC-002", documentTypeId: "DT-010", documentName: "Bank Account Details with Cancelled Cheque" },
@@ -30,9 +48,14 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
   {
     id: 2,
     customerTypeCode: "CTY-002",
+    initialCode: "DIS",
     customerType: "Distributor",
     description: "Wholesale distributor partner",
     status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-01-12",
+    updatedBy: "Admin",
+    updatedDate: "2026-01-12",
     documentTypes: [
       { id: "DOC-001", documentTypeId: "DT-001", documentName: "Letter of Interest" },
       { id: "DOC-002", documentTypeId: "DT-011", documentName: "Audited Financial Statements" },
@@ -44,9 +67,14 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
   {
     id: 3,
     customerTypeCode: "CTY-003",
+    initialCode: "DLR",
     customerType: "Dealer",
     description: "Registered dealer merchant",
     status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-01-14",
+    updatedBy: "Admin",
+    updatedDate: "2026-01-14",
     documentTypes: [
       { id: "DOC-001", documentTypeId: "DT-003", documentName: "GST Registration Copy" },
       { id: "DOC-002", documentTypeId: "DT-006", documentName: "Fertilizer License" },
@@ -56,9 +84,14 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
   {
     id: 4,
     customerTypeCode: "CTY-004",
+    initialCode: "RET",
     customerType: "Retailer",
     description: "Direct retail store outlet",
     status: "inactive",
+    createdBy: "Admin",
+    createdDate: "2026-01-16",
+    updatedBy: "Admin",
+    updatedDate: "2026-01-16",
     documentTypes: [
       { id: "DOC-001", documentTypeId: "DT-008", documentName: "Shop & Establishment Registration Certificate" },
     ],
@@ -66,9 +99,14 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
   {
     id: 5,
     customerTypeCode: "CTY-005",
+    initialCode: "CF",
     customerType: "C&F",
     description: "Carrying and Forwarding agent",
     status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-01-18",
+    updatedBy: "Admin",
+    updatedDate: "2026-01-18",
     documentTypes: [
       { id: "DOC-001", documentTypeId: "DT-003", documentName: "GST Registration Copy" },
       { id: "DOC-002", documentTypeId: "DT-014", documentName: "Godown/Storage Facility Proof" },
@@ -78,9 +116,14 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
   {
     id: 6,
     customerTypeCode: "CTY-006",
+    initialCode: "CBBO",
     customerType: "CBBO",
     description: "Cluster Based Business Organization",
     status: "inactive",
+    createdBy: "Admin",
+    createdDate: "2026-01-20",
+    updatedBy: "Admin",
+    updatedDate: "2026-01-20",
     documentTypes: [
       { id: "DOC-001", documentTypeId: "DT-011", documentName: "Audited Financial Statements" },
     ],
@@ -88,9 +131,14 @@ export const CUSTOMER_TYPE_SEED: CustomerTypeRecord[] = [
   {
     id: 7,
     customerTypeCode: "CTY-007",
+    initialCode: "FPO",
     customerType: "FPO",
     description: "Farmer Producer Organization",
     status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-01-22",
+    updatedBy: "Admin",
+    updatedDate: "2026-01-22",
     documentTypes: [
       { id: "DOC-001", documentTypeId: "DT-001", documentName: "Letter of Interest" },
       { id: "DOC-002", documentTypeId: "DT-002", documentName: "FPO Registration Certificate" },
@@ -127,7 +175,25 @@ export function loadCustomerTypes(): CustomerTypeRecord[] {
       return CUSTOMER_TYPE_SEED;
     }
     if (firstRecord && !("status" in firstRecord)) {
-      const migrated = parsed.map((item, idx) => ({ ...item, status: CUSTOMER_TYPE_SEED[idx]?.status ?? "active" }));
+      const migrated = parsed.map((item, idx) => ({
+        ...item,
+        status: CUSTOMER_TYPE_SEED[idx]?.status ?? "active",
+        createdBy: CUSTOMER_TYPE_SEED[idx]?.createdBy ?? "Admin",
+        createdDate: CUSTOMER_TYPE_SEED[idx]?.createdDate ?? "2026-01-10",
+        updatedBy: CUSTOMER_TYPE_SEED[idx]?.updatedBy ?? "Admin",
+        updatedDate: CUSTOMER_TYPE_SEED[idx]?.updatedDate ?? "2026-01-10",
+      }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+      return migrated;
+    }
+    if (firstRecord && !("createdDate" in firstRecord)) {
+      const migrated = parsed.map((item, idx) => ({
+        ...item,
+        createdBy: CUSTOMER_TYPE_SEED[idx]?.createdBy ?? "Admin",
+        createdDate: CUSTOMER_TYPE_SEED[idx]?.createdDate ?? "2026-01-10",
+        updatedBy: CUSTOMER_TYPE_SEED[idx]?.updatedBy ?? "Admin",
+        updatedDate: CUSTOMER_TYPE_SEED[idx]?.updatedDate ?? "2026-01-10",
+      }));
       localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
       return migrated;
     }
@@ -135,6 +201,31 @@ export function loadCustomerTypes(): CustomerTypeRecord[] {
       // Data is old format, clear storage to force reload seed data in new format
       localStorage.removeItem(STORAGE_KEY);
       return CUSTOMER_TYPE_SEED;
+    }
+    if (firstRecord && !("initialCode" in firstRecord)) {
+      const defaultCodes: Record<string, string> = {
+        farmer: "FAR",
+        distributor: "DIS",
+        dealer: "DLR",
+        retailer: "RET",
+        "c&f": "CF",
+        cf: "CF",
+        cbbo: "CBBO",
+        fpo: "FPO",
+      };
+      const migrated = parsed.map((item, idx) => {
+        const seed = CUSTOMER_TYPE_SEED[idx];
+        const key = normalizeCustomerTypeKey(item.customerType);
+        return {
+          ...item,
+          initialCode:
+            seed?.initialCode ??
+            defaultCodes[key] ??
+            normalizeInitialCode(item.customerType.slice(0, 5)),
+        };
+      });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+      return migrated;
     }
     return parsed;
   } catch {
@@ -158,4 +249,31 @@ export function generateCustomerTypeCode(list: CustomerTypeRecord[]): string {
     return Math.max(acc, num);
   }, 0);
   return `CTY-${String(max + 1).padStart(3, "0")}`;
+}
+
+/** Normalize customer type slug/name for matching (e.g. "c&f" → "cf"). */
+export function normalizeCustomerTypeKey(value: string): string {
+  return value.toLowerCase().replace(/&/g, "").replace(/\s+/g, "");
+}
+
+export function getInitialCodeForCustomerType(typeKey: string): string | null {
+  const norm = normalizeCustomerTypeKey(typeKey);
+  const match = loadCustomerTypes().find(
+    (t) => normalizeCustomerTypeKey(t.customerType) === norm,
+  );
+  return match?.initialCode ?? null;
+}
+
+export function validateCustomerTypeInitialCode(
+  value: string,
+  records: CustomerTypeRecord[],
+  excludeId?: number,
+): string | null {
+  const existing = records
+    .filter((r) => r.id !== excludeId)
+    .map((r) => r.initialCode);
+  const exclude = excludeId
+    ? records.find((r) => r.id === excludeId)?.initialCode
+    : undefined;
+  return validateInitialCode(value, existing, exclude);
 }

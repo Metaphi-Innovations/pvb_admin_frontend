@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { X, Check } from "lucide-react";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 
 interface Department {
   id: number;
@@ -116,31 +117,33 @@ export default function DepartmentForm({ open, onClose, onSave, dept, employees,
               <label className="block text-xs font-medium text-foreground mb-1.5">
                 Parent Department
               </label>
-              <select
+              <AutocompleteSelect
+                options={[
+                  { value: "", label: "No Parent" },
+                  ...parentDepts.map((d) => ({ value: String(d.id), label: d.name })),
+                ]}
                 value={formData.parent}
-                onChange={(e) => handleChange("parent", e.target.value)}
-                className="w-full px-2.5 h-8 text-xs border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white"
-              >
-                <option value="">No Parent</option>
-                {parentDepts.map(d => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
+                onChange={(v) => handleChange("parent", v)}
+                placeholder="Select parent department…"
+                searchPlaceholder="Search department…"
+                className="h-8 text-xs"
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-foreground mb-1.5">
                 Department Head
               </label>
-              <select
+              <AutocompleteSelect
+                options={[
+                  { value: "", label: "Select Employee" },
+                  ...employees.map((emp) => ({ value: emp, label: emp })),
+                ]}
                 value={formData.head}
-                onChange={(e) => handleChange("head", e.target.value)}
-                className="w-full px-2.5 h-8 text-xs border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white"
-              >
-                <option value="">Select Employee</option>
-                {employees.map(emp => (
-                  <option key={emp} value={emp}>{emp}</option>
-                ))}
-              </select>
+                onChange={(v) => handleChange("head", v)}
+                placeholder="Select employee…"
+                searchPlaceholder="Search employee…"
+                className="h-8 text-xs"
+              />
             </div>
           </div>
 
@@ -156,25 +159,6 @@ export default function DepartmentForm({ open, onClose, onSave, dept, employees,
               className="text-xs resize-none"
               rows={2}
             />
-          </div>
-
-          {/* Status & Remarks */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1.5">
-                Status
-              </label>
-              <select
-                value={formData.status}
-                onChange={(e) => handleChange("status", e.target.value)}
-                className="w-full px-2.5 h-8 text-xs border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white"
-              >
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="archived">Archived</option>
-              </select>
-            </div>
-            <div />
           </div>
 
           {/* Remarks */}

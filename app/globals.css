@@ -5,9 +5,10 @@
 /* ── Dharitri Sutra Design Tokens ─────────────────────────────────────────── */
 @layer base {
   :root {
-    /* Warm cream canvas — less sterile than flat grey */
-    --background:         42 40% 97%;
-    --foreground:         225 45% 14%;
+    /* Warm cream canvas */
+    --background:         43 33% 96%;
+    /* Dark Text */
+    --foreground:         222 47% 11%;
 
     --card:               0 0% 100%;
     --card-foreground:    225 45% 14%;
@@ -16,29 +17,29 @@
     --popover-foreground: 225 45% 14%;
 
     /* Primary: brand orange */
-    --primary:            27 86% 46%;
+    --primary:            28 79% 51%;
     --primary-foreground: 0 0% 100%;
 
     /* Secondary: deep navy */
-    --secondary:          225 70% 35%;
+    --secondary:          215 16% 47%;
     --secondary-foreground: 0 0% 100%;
 
     --muted:              36 22% 94%;
-    --muted-foreground:   220 10% 42%;
+    --muted-foreground:   215 16% 47%;
 
-    --accent:             27 70% 55%;
+    --accent:             28 79% 51%;
     --accent-foreground:  0 0% 100%;
 
     --destructive:        0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
     /* Success: leaf green */
-    --success:            142 55% 32%;
+    --success:            142 76% 36%;
     --success-foreground: 0 0% 100%;
 
-    --border:             36 18% 86%;
-    --input:              36 18% 86%;
-    --ring:               27 86% 46%;
+    --border:             220 13% 91%;
+    --input:              220 13% 91%;
+    --ring:               28 79% 51%;
 
     --navbar-height: 56px;
     --sidebar-width: 240px;

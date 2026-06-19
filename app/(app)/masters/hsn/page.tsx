@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,47 +12,34 @@ import {
 	DialogDescription,
 	DialogFooter,
 } from "@/components/ui/dialog";
-import {
-	Sheet,
-	SheetContent,
-	SheetDescription,
-	SheetHeader,
-	SheetTitle,
-	SheetBody,
-	SheetFooter,
-} from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
 	CheckCircle2,
-	XCircle,
 	X,
 	Edit2,
 	Code2,
 	Eye,
 	Trash2,
-	AlertCircle,
+	AlertTriangle,
 } from "lucide-react";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
-import {
-	HSNMaster,
+	type HSNMaster,
+	type HSNForm,
+	DEFAULT_HSN_FORM,
 	loadHSNMasters,
 	saveHSNMasters,
-	todayStr,
+	hsnToForm,
+	formToHsn,
+	validateHsnForm,
+	sanitizeHsnCodeInput,
 	nextHSNId,
-	generateHSNCode,
+	todayStr,
 } from "./hsn-data";
 import { loadGSTMasters } from "../gst/gst-data";
-import { MiniKPICard } from "@/components/ui/KPICard";
-import { MasterViewRow } from "@/components/masters/MasterModule";
-
+import { MasterListingSheets } from "@/components/masters/MasterListingSheets";
+import { MasterFormGrid, MasterField, compactInput } from "@/components/masters/MasterModule";
+import { MasterDrawerSection } from "@/components/masters/MasterRecordDrawer";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import {
@@ -62,6 +48,29 @@ import {
 	SortState,
 	ActionItemConfig,
 } from "@/components/listing/types";
+import {
+	ListingUserCell,
+	AuditUserRow,
+	ListingStatusToggle,
+	isActiveStatus,
+} from "@/components/listing";
+import { ListingContainer } from "@/components/layout/ListingContainer";
+import type { MasterStatus } from "@/lib/masters/common";
+
+type StatusTab = "all" | "active" | "inactive";
+const HSN_TAB_KEY = "hsn-list-status-tab";
+
+const STATUS_TABS: { value: StatusTab; label: string }[] = [
+	{ value: "all", label: "All" },
+	{ value: "active", label: "Active" },
+	{ value: "inactive", label: "Inactive" },
+];
+
+function readStoredStatusTab(): StatusTab {
+	if (typeof window === "undefined") return "all";
+	const v = sessionStorage.getItem(HSN_TAB_KEY);
+	return v === "active" || v === "inactive" ? v : "all";
+}
 
 interface ToastState {
 	msg: string;
@@ -91,35 +100,6 @@ function Toast({
 	);
 }
 
-function StatusToggle({
-	record,
-	onToggle,
-}: {
-	record: HSNMaster;
-	onToggle: (item: HSNMaster) => void;
-}) {
-	const active = record.status === "active";
-	return (
-		<button
-			type='button'
-			onClick={(e) => {
-				e.stopPropagation();
-				onToggle(record);
-			}}
-			className={cn(
-				"inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-				active
-					? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-					: "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
-			)}
-		>
-			{active ? "Active" : "Inactive"}
-		</button>
-	);
-}
-
-
-
 export default function HSNPage() {
 	const [records, setRecords] = useState<HSNMaster[]>([]);
 	const [filters, setFilters] = useState<FilterState>({});
@@ -130,23 +110,20 @@ export default function HSNPage() {
 	const [page, setPage] = useState(1);
 	const [pageSize, setPageSize] = useState(10);
 	const [toast, setToast] = useState<ToastState | null>(null);
+	const [statusTab, setStatusTab] = useState<StatusTab>("all");
 
-	// Sheet & Dialog states
 	const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(
 		null,
 	);
 	const [active, setActive] = useState<HSNMaster | null>(null);
-	const [form, setForm] = useState({
-		hsnCode: "",
-		hsnDescription: "",
-		gstRate: "",
-		status: "active" as "active" | "inactive",
-	});
+	const [form, setForm] = useState<HSNForm>(DEFAULT_HSN_FORM);
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [deleteTarget, setDeleteTarget] = useState<HSNMaster | null>(null);
+	const [statusTarget, setStatusTarget] = useState<HSNMaster | null>(null);
 
 	useEffect(() => {
 		setRecords(loadHSNMasters());
+		setStatusTab(readStoredStatusTab());
 	}, []);
 
 	useEffect(() => {
@@ -155,45 +132,71 @@ export default function HSNPage() {
 		return () => clearTimeout(t);
 	}, [toast]);
 
-	const gstRatesList = useMemo(() => {
+	const gstOptions = useMemo(() => {
 		try {
-			const list = loadGSTMasters();
-			if (list && list.length > 0) {
-				const sorted = [...list].sort(
-					(a, b) => a.gstPercentage - b.gstPercentage,
-				);
-				return Array.from(new Set(sorted.map((g) => `${g.gstPercentage}%`)));
+			const list = loadGSTMasters().filter((g) => g.status === "active");
+			if (list.length > 0) {
+				return [...list]
+					.sort((a, b) => a.gstPercentage - b.gstPercentage)
+					.map((g) => ({
+						value: `${g.gstPercentage}%`,
+						label: `${g.gstPercentage}%`,
+					}));
 			}
 		} catch {
 			// ignore
 		}
-		return ["0%", "5%", "12%", "18%", "28%"];
+		return ["0%", "5%", "12%", "18%", "28%"].map((rate) => ({
+			value: rate,
+			label: rate,
+		}));
 	}, []);
 
-	useEffect(() => {
-		if (gstRatesList.length > 0 && !form.gstRate) {
-			setForm((prev) => ({ ...prev, gstRate: gstRatesList[0] }));
-		}
-	}, [gstRatesList, form.gstRate]);
+	const handleStatusTabChange = (tab: string) => {
+		const next = tab as StatusTab;
+		setStatusTab(next);
+		sessionStorage.setItem(HSN_TAB_KEY, next);
+		setPage(1);
+	};
 
-	const toggleStatus = (record: HSNMaster) => {
-		const newStatus = record.status === "active" ? "inactive" : "active";
-		const updated = records.map((r) =>
-			r.id === record.id
+	const statusTabCounts = useMemo(
+		() => ({
+			all: records.length,
+			active: records.filter((r) => r.status === "active").length,
+			inactive: records.filter((r) => r.status === "inactive").length,
+		}),
+		[records],
+	);
+
+	const applyStatusChange = (record: HSNMaster, nextStatus: MasterStatus) => {
+		const updated = records.map((item) =>
+			item.id === record.id
 				? {
-						...r,
-						status: newStatus as "active" | "inactive",
-						updatedBy: "Admin",
+						...item,
+						status: nextStatus,
+						updatedBy: "Admin User",
 						updatedDate: todayStr(),
 					}
-				: r,
+				: item,
 		);
 		setRecords(updated);
 		saveHSNMasters(updated);
 		setToast({
-			msg: `HSN status updated to ${newStatus === "active" ? "Active" : "Inactive"}`,
+			msg: `HSN status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`,
 			type: "success",
 		});
+	};
+
+	const requestStatusToggle = (record: HSNMaster) => {
+		setStatusTarget(record);
+	};
+
+	const confirmStatusChange = () => {
+		if (!statusTarget) return;
+		const nextStatus: MasterStatus =
+			statusTarget.status === "active" ? "inactive" : "active";
+		applyStatusChange(statusTarget, nextStatus);
+		setStatusTarget(null);
 	};
 
 	const columns: ColumnConfig<HSNMaster>[] = [
@@ -203,11 +206,15 @@ export default function HSNPage() {
 			sortable: true,
 			filterable: true,
 			filterType: "text",
-			width: "140px",
-			render: (val, row) => (
-				<span className='font-mono font-bold text-foreground'>
+			width: "120px",
+			render: (_val, row) => (
+				<button
+					type='button'
+					onClick={() => openView(row)}
+					className='font-mono text-xs font-semibold text-brand-700 hover:underline'
+				>
 					{row.hsnCode}
-				</span>
+				</button>
 			),
 		},
 		{
@@ -216,8 +223,12 @@ export default function HSNPage() {
 			sortable: true,
 			filterable: true,
 			filterType: "text",
-			width: "320px",
-			render: (val, row) => row.hsnDescription,
+			width: "300px",
+			render: (_val, row) => (
+				<span className='text-xs text-foreground line-clamp-2'>
+					{row.hsnDescription}
+				</span>
+			),
 		},
 		{
 			key: "gstRate",
@@ -225,25 +236,29 @@ export default function HSNPage() {
 			sortable: true,
 			filterable: true,
 			filterType: "dropdown",
-			filterOptions: gstRatesList.map((rate) => ({ label: rate, value: rate })),
-			width: "120px",
+			filterOptions: gstOptions.map((opt) => ({
+				label: opt.label,
+				value: opt.value,
+			})),
+			width: "100px",
 		},
-
 		{
 			key: "createdBy",
 			header: "Created By",
 			sortable: true,
-			filterable: true,
-			filterType: "text",
-			width: "120px",
+			width: "150px",
+			render: (_val, row) => (
+				<ListingUserCell name={row.createdBy} date={row.createdDate} />
+			),
 		},
 		{
 			key: "updatedBy",
 			header: "Updated By",
 			sortable: true,
-			filterable: true,
-			filterType: "text",
-			width: "120px",
+			width: "150px",
+			render: (_val, row) => (
+				<ListingUserCell name={row.updatedBy} date={row.updatedDate} />
+			),
 		},
 		{
 			key: "status",
@@ -255,9 +270,12 @@ export default function HSNPage() {
 				{ label: "Active", value: "active" },
 				{ label: "Inactive", value: "inactive" },
 			],
-			width: "130px",
-			render: (val, row) => (
-				<StatusToggle record={row} onToggle={toggleStatus} />
+			width: "100px",
+			render: (_val, row) => (
+				<ListingStatusToggle
+					active={isActiveStatus(row.status)}
+					onChange={() => requestStatusToggle(row)}
+				/>
 			),
 		},
 	];
@@ -287,9 +305,12 @@ export default function HSNPage() {
 	const filtered = useMemo(() => {
 		let result = [...records];
 
-		// Search filter
+		if (statusTab !== "all") {
+			result = result.filter((r) => r.status === statusTab);
+		}
+
 		if (filters.search) {
-			const q = String(filters.search).toLowerCase();
+			const q = String(filters.search).trim().toLowerCase();
 			result = result.filter(
 				(r) =>
 					r.hsnCode.toLowerCase().includes(q) ||
@@ -297,10 +318,8 @@ export default function HSNPage() {
 			);
 		}
 
-		// Apply column filters
 		result = applyFilters(result, filters);
 
-		// Sorting
 		if (sort.key && sort.direction !== "none") {
 			result.sort((a, b) => {
 				let aVal = a[sort.key as keyof HSNMaster];
@@ -315,7 +334,7 @@ export default function HSNPage() {
 		}
 
 		return result;
-	}, [records, filters, sort]);
+	}, [records, filters, sort, statusTab]);
 
 	const paginated = useMemo(() => {
 		const startOffset = (page - 1) * pageSize;
@@ -324,16 +343,12 @@ export default function HSNPage() {
 
 	useEffect(() => {
 		setPage(1);
-	}, [filters, sort, pageSize]);
+	}, [filters, sort, pageSize, statusTab]);
 
 	const openAdd = () => {
-		const nextIdVal = nextHSNId(records);
-		const code = generateHSNCode(nextIdVal);
 		setForm({
-			hsnCode: code,
-			hsnDescription: "",
-			gstRate: gstRatesList[0] || "18%",
-			status: "active",
+			...DEFAULT_HSN_FORM,
+			gstRate: gstOptions[0]?.value ?? "",
 		});
 		setErrors({});
 		setActive(null);
@@ -341,12 +356,7 @@ export default function HSNPage() {
 	};
 
 	const openEdit = (row: HSNMaster) => {
-		setForm({
-			hsnCode: row.hsnCode,
-			hsnDescription: row.hsnDescription,
-			gstRate: row.gstRate,
-			status: row.status,
-		});
+		setForm(hsnToForm(row));
 		setErrors({});
 		setActive(row);
 		setSheetMode("edit");
@@ -363,64 +373,37 @@ export default function HSNPage() {
 		setErrors({});
 	};
 
-	const setFormField = (key: string, value: any) => {
-		setForm((prev) => ({ ...prev, [key]: value }));
-		if (errors[key]) {
-			setErrors((prev) => {
-				const copy = { ...prev };
-				delete copy[key];
-				return copy;
-			});
-		}
-	};
-
-	const validate = (): boolean => {
-		const e: Record<string, string> = {};
-		if (!form.hsnCode.trim()) e.hsnCode = "HSN Code is required";
-		if (!form.hsnDescription.trim())
-			e.hsnDescription = "HSN Description is required";
-		if (!form.gstRate) e.gstRate = "GST Rate is required";
-		setErrors(e);
-		return Object.keys(e).length === 0;
-	};
-
 	const persist = () => {
-		if (!validate()) return;
+		const mode = sheetMode === "add" ? "add" : "edit";
 		const list = loadHSNMasters();
+		const normalizedForm: HSNForm = {
+			...form,
+			hsnCode: sanitizeHsnCodeInput(form.hsnCode),
+		};
+		const fieldErrors = validateHsnForm(
+			normalizedForm,
+			list,
+			mode === "edit" ? active?.id : undefined,
+		);
+		if (Object.keys(fieldErrors).length > 0) {
+			setErrors(fieldErrors);
+			return;
+		}
+
 		let updatedList: HSNMaster[];
-		if (sheetMode === "add") {
+		if (mode === "add") {
 			const id = nextHSNId(list);
-			const newRecord: HSNMaster = {
-				id,
-				hsnCode: form.hsnCode,
-				hsnDescription: form.hsnDescription,
-				gstRate: form.gstRate,
-				status: form.status,
-				createdBy: "Admin",
-				createdDate: todayStr(),
-				updatedBy: "Admin",
-				updatedDate: todayStr(),
-			};
-			updatedList = [...list, newRecord];
+			updatedList = [...list, formToHsn(normalizedForm, id)];
 			setToast({ msg: "HSN added successfully", type: "success" });
 		} else if (active) {
 			updatedList = list.map((r) =>
-				r.id === active.id
-					? {
-							...r,
-							hsnCode: form.hsnCode,
-							hsnDescription: form.hsnDescription,
-							gstRate: form.gstRate,
-							status: form.status,
-							updatedBy: "Admin",
-							updatedDate: todayStr(),
-						}
-					: r,
+				r.id === active.id ? formToHsn(normalizedForm, active.id, active) : r,
 			);
 			setToast({ msg: "HSN updated successfully", type: "success" });
 		} else {
 			return;
 		}
+
 		saveHSNMasters(updatedList);
 		setRecords(updatedList);
 		closeSheet();
@@ -428,55 +411,64 @@ export default function HSNPage() {
 
 	const confirmDelete = () => {
 		if (!deleteTarget) return;
-		const list = loadHSNMasters().filter((r) => r.id !== deleteTarget.id);
-		saveHSNMasters(list);
-		setRecords(list);
+		const updated = records.map((r) =>
+			r.id === deleteTarget.id
+				? {
+						...r,
+						status: "inactive" as MasterStatus,
+						updatedBy: "Admin User",
+						updatedDate: todayStr(),
+					}
+				: r,
+		);
+		saveHSNMasters(updated);
+		setRecords(updated);
 		setDeleteTarget(null);
-		setToast({ msg: "HSN deleted successfully", type: "success" });
+		setToast({
+			msg: `HSN ${deleteTarget.hsnCode} marked as inactive`,
+			type: "success",
+		});
 	};
 
 	const handleExport = () => {
 		try {
 			const headers = [
-				"ID",
 				"HSN Code",
 				"HSN Description",
 				"GST Rate",
 				"Status",
 				"Created By",
-				"Created Date",
 				"Updated By",
+				"Created Date",
 				"Updated Date",
 			];
 			const csvRows = [headers.join(",")];
 			for (const r of records) {
-				const row = [
-					r.id,
-					`"${r.hsnCode.replace(/"/g, '""')}"`,
-					`"${r.hsnDescription.replace(/"/g, '""')}"`,
-					r.gstRate,
-					r.status,
-					r.createdBy,
-					r.createdDate,
-					r.updatedBy,
-					r.updatedDate,
-				];
-				csvRows.push(row.join(","));
+				csvRows.push(
+					[
+						r.hsnCode,
+						`"${r.hsnDescription.replace(/"/g, '""')}"`,
+						r.gstRate,
+						r.status,
+						r.createdBy,
+						r.updatedBy,
+						r.createdDate,
+						r.updatedDate,
+					].join(","),
+				);
 			}
 			const blob = new Blob([csvRows.join("\n")], {
 				type: "text/csv;charset=utf-8;",
 			});
 			const url = URL.createObjectURL(blob);
 			const link = document.createElement("a");
-			link.setAttribute("href", url);
-			link.setAttribute("download", `hsn_export_${todayStr()}.csv`);
-			link.style.visibility = "hidden";
-			document.body.appendChild(link);
+			link.href = url;
+			link.download = `hsn_export_${todayStr()}.csv`;
 			link.click();
-			document.body.removeChild(link);
-			setToast({ msg: "HSN configs exported successfully", type: "success" });
+			URL.revokeObjectURL(url);
+			setToast({ msg: "HSN records exported successfully", type: "success" });
 		} catch {
-			setToast({ msg: "Failed to export HSN configs", type: "error" });
+			setToast({ msg: "Failed to export HSN records", type: "error" });
 		}
 	};
 
@@ -487,235 +479,205 @@ export default function HSNPage() {
 				? "Edit HSN"
 				: "View HSN";
 
-	return (
-		<AppLayout>
-			<div className='space-y-5'>
-				<div>
-					<h1 className='text-xl font-bold text-foreground'>HSN Master</h1>
-					<p className='text-xs text-muted-foreground mt-0.5'>
-						Manage Harmonized System of Nomenclature codes and GST
-						configurations
-					</p>
-				</div>
-
-				{/* <div className="grid grid-cols-3 gap-3">
-          <MiniKPICard label="Total HSN Codes" value={records.length} icon={Code2} accent={true} />
-          <MiniKPICard
-            label="Active"
-            value={records.filter((r) => r.status === "active").length}
-            icon={CheckCircle2}
-            accent={false}
-          />
-          <MiniKPICard
-            label="Inactive"
-            value={records.filter((r) => r.status === "inactive").length}
-            icon={XCircle}
-            accent={false}
-          />
-        </div> */}
-
-				<MasterListing<HSNMaster>
-					columns={columns}
-					data={paginated}
-					totalRecords={filtered.length}
-					page={page}
-					pageSize={pageSize}
-					onPageChange={setPage}
-					onPageSizeChange={setPageSize}
-					onSortChange={setSort}
-					onFilterChange={setFilters}
-					actions={actions}
-					onAdd={openAdd}
-					addLabel='Add HSN'
-					onExport={handleExport}
-					emptyMessage='HSN configs'
-					searchPlaceholder='Search HSN code, description...'
-					currentFilters={filters}
-					currentSort={sort}
-				/>
-			</div>
-
-			<Sheet open={sheetMode !== null} onOpenChange={(o) => !o && closeSheet()}>
-				<SheetContent>
-					<SheetHeader>
-						<div className='flex items-start gap-3 pr-8'>
-							<div className='flex items-center justify-center border w-9 h-9 rounded-xl bg-brand-50 border-brand-100'>
-								<Code2 className='w-4 h-4 text-brand-600' />
+	const viewDrawer = active
+		? {
+				title: active.hsnCode,
+				subtitle: "Government HSN classification",
+				status: active.status,
+				basicInfo: [
+					{ label: "HSN Code", value: active.hsnCode, mono: true },
+					{ label: "GST Rate", value: active.gstRate },
+					{
+						label: "Description",
+						value: active.hsnDescription,
+					},
+				],
+				showDescription: false,
+				children: (
+					<MasterDrawerSection title='Audit Information'>
+						<div className='space-y-4'>
+							<AuditUserRow label='Created By' name={active.createdBy} />
+							<div className='space-y-1'>
+								<p className='text-[11px] text-muted-foreground'>Created Date</p>
+								<p className='text-sm font-medium text-foreground font-mono'>
+									{active.createdDate}
+								</p>
 							</div>
-							<div>
-								<SheetTitle className='text-base'>{sheetTitle}</SheetTitle>
-								<SheetDescription className='text-xs'>
-									{sheetMode === "view"
-										? "Read-only details"
-										: "Compact HSN form"}
-								</SheetDescription>
+							<AuditUserRow label='Updated By' name={active.updatedBy} />
+							<div className='space-y-1'>
+								<p className='text-[11px] text-muted-foreground'>Updated Date</p>
+								<p className='text-sm font-medium text-foreground font-mono'>
+									{active.updatedDate}
+								</p>
 							</div>
 						</div>
-					</SheetHeader>
+					</MasterDrawerSection>
+				),
+			}
+		: { title: "HSN", basicInfo: [] };
 
-					<SheetBody>
-						{sheetMode === "view" && active ? (
-							<div className='space-y-4'>
-								<div className='px-3 border rounded-lg border-border/60 bg-muted/10'>
-									<MasterViewRow
-										label='HSN Code'
-										value={<span className='font-mono'>{active.hsnCode}</span>}
-									/>
-									<MasterViewRow
-										label='HSN Description'
-										value={active.hsnDescription}
-									/>
-									<MasterViewRow label='GST Rate' value={active.gstRate} />
+	return (
+		<ListingContainer
+			title='HSN Master'
+			titleIcon={Code2}
+			tabs={STATUS_TABS.map((t) => ({
+				value: t.value,
+				label: `${t.label} (${statusTabCounts[t.value]})`,
+			}))}
+			activeTab={statusTab}
+			onTabChange={handleStatusTabChange}
+		>
+			<MasterListing<HSNMaster>
+				columns={columns}
+				data={paginated}
+				totalRecords={filtered.length}
+				page={page}
+				pageSize={pageSize}
+				onPageChange={setPage}
+				onPageSizeChange={setPageSize}
+				onSortChange={setSort}
+				onFilterChange={setFilters}
+				actions={actions}
+				onAdd={openAdd}
+				addLabel='Add HSN'
+				onExport={handleExport}
+				emptyMessage='HSN records'
+				searchPlaceholder='Search HSN code or description...'
+				currentFilters={filters}
+				currentSort={sort}
+			/>
 
-									<MasterViewRow
-										label='Status'
-										value={active.status === "active" ? "Active" : "Inactive"}
-									/>
-								</div>
-								<div className='grid grid-cols-2 gap-3 pt-2 text-xs border-t'>
-									<div>
-										<p className='text-[10px] text-muted-foreground uppercase'>
-											Created By
-										</p>
-										<p className='font-medium'>{active.createdBy}</p>
-										<p className='text-muted-foreground'>
-											{active.createdDate}
-										</p>
-									</div>
-									<div>
-										<p className='text-[10px] text-muted-foreground uppercase'>
-											Updated By
-										</p>
-										<p className='font-medium'>{active.updatedBy}</p>
-										<p className='text-muted-foreground'>
-											{active.updatedDate}
-										</p>
-									</div>
-								</div>
-							</div>
-						) : (
-							<div className='space-y-4'>
-								{errors._form && (
-									<p className='text-xs text-red-600'>{errors._form}</p>
-								)}
-								<div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
-									<div className='space-y-1'>
-										<Label className='text-xs font-medium'>
-											HSN Code <span className='text-red-500'>*</span>
-										</Label>
-										<Input
-											value={form.hsnCode}
-											disabled
-											readOnly
-											className='h-8 text-xs cursor-not-allowed bg-muted/30 text-muted-foreground'
-										/>
-									</div>
-									<div className='space-y-1'>
-										<Label className='text-xs font-medium'>
-											GST Rate <span className='text-red-500'>*</span>
-										</Label>
-										<Select
-											value={form.gstRate}
-											onValueChange={(v) => setFormField("gstRate", v)}
-										>
-											<SelectTrigger className={cn("h-8 text-xs bg-background w-full", errors.gstRate && "border-red-400 focus:ring-red-300")}>
-												<SelectValue placeholder='Select GST rate…' />
-											</SelectTrigger>
-											<SelectContent className='bg-white border shadow-lg border-border z-[350]'>
-												{gstRatesList.map((rate) => (
-													<SelectItem key={rate} value={rate} className='text-xs'>
-														{rate}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
-										{errors.gstRate && (
-											<p className='text-[11px] text-red-500'>
-												{errors.gstRate}
-											</p>
-										)}
-									</div>
-									<div className='space-y-1 sm:col-span-2'>
-										<Label className='text-xs font-medium'>
-											HSN Description <span className='text-red-500'>*</span>
-										</Label>
-										<Textarea
-											value={form.hsnDescription}
-											onChange={(e) =>
-												setFormField("hsnDescription", e.target.value)
-											}
-											placeholder='Describe this HSN code...'
-											rows={3}
-											className={cn(
-												"text-xs rounded-lg resize-none min-h-[72px]",
-												errors.hsnDescription &&
-													"border-red-400 focus-visible:ring-red-300",
-											)}
-										/>
-										{errors.hsnDescription && (
-											<p className='text-[11px] text-red-500'>
-												{errors.hsnDescription}
-											</p>
-										)}
-									</div>
-								</div>
-								{/* <div className="flex items-center justify-between p-3 mt-4 border rounded-lg border-border bg-muted/20">
-                  <div>
-                    <p className="text-xs font-medium">Status</p>
-                    <p className="text-[11px] text-muted-foreground">{form.status === "active" ? "Active" : "Inactive"}</p>
-                  </div>
-                  <Switch
-                    checked={form.status === "active"}
-                    onCheckedChange={(checked) =>
-                      setFormField("status", checked ? "active" : "inactive")
-                    }
-                  />
-                </div> */}
-							</div>
-						)}
-					</SheetBody>
+			<MasterListingSheets
+				sheetMode={sheetMode}
+				active={active}
+				onClose={closeSheet}
+				onEdit={() => active && openEdit(active)}
+				onSave={persist}
+				sheetTitle={sheetTitle}
+				icon={Code2}
+				viewDrawer={viewDrawer}
+				statusActive={form.status === "active"}
+				onStatusChange={
+					sheetMode === "add" || sheetMode === "edit"
+						? (isActive) =>
+								setForm((prev) => ({
+									...prev,
+									status: isActive ? "active" : "inactive",
+								}))
+						: undefined
+				}
+				formContent={
+					sheetMode !== "view" ? (
+						<MasterFormGrid>
+							<MasterField
+								label='HSN Code'
+								required
+								error={errors.hsnCode}
+								className='sm:col-span-1'
+							>
+								<Input
+									autoFocus
+									className={cn(compactInput(), "font-mono")}
+									value={form.hsnCode}
+									onChange={(e) =>
+										setForm((prev) => ({
+											...prev,
+											hsnCode: sanitizeHsnCodeInput(e.target.value),
+										}))
+									}
+									placeholder='e.g. 38089199'
+									inputMode='numeric'
+									maxLength={8}
+								/>
+							</MasterField>
 
-					<SheetFooter>
-						{sheetMode === "view" ? (
-							<>
-								<Button
-									variant='outline'
-									size='sm'
+							<MasterField
+								label='GST Rate'
+								required
+								error={errors.gstRate}
+								className='sm:col-span-1'
+							>
+								<AutocompleteSelect
+									options={gstOptions}
+									value={form.gstRate}
+									onChange={(value) =>
+										setForm((prev) => ({ ...prev, gstRate: value }))
+									}
+									placeholder='Select GST rate…'
+									error={!!errors.gstRate}
 									className='h-8 text-xs'
-									onClick={closeSheet}
-								>
-									Back
-								</Button>
-								<Button
-									size='sm'
-									className='h-8 text-xs text-white bg-brand-600 hover:bg-brand-700'
-									onClick={() => active && openEdit(active)}
-								>
-									Edit
-								</Button>
-							</>
-						) : (
-							<>
-								<Button
-									variant='outline'
-									size='sm'
-									className='h-8 text-xs'
-									onClick={closeSheet}
-								>
-									Cancel
-								</Button>
-								<Button
-									size='sm'
-									className='h-8 text-xs text-white bg-brand-600 hover:bg-brand-700'
-									onClick={persist}
-								>
-									Save
-								</Button>
-							</>
-						)}
-					</SheetFooter>
-				</SheetContent>
-			</Sheet>
+								/>
+							</MasterField>
+
+							<MasterField
+								label='HSN Description'
+								required
+								error={errors.hsnDescription}
+								className='sm:col-span-2'
+							>
+								<Textarea
+									className='text-xs min-h-[72px] resize-none'
+									value={form.hsnDescription}
+									onChange={(e) =>
+										setForm((prev) => ({
+											...prev,
+											hsnDescription: e.target.value,
+										}))
+									}
+									placeholder='e.g. Insecticides, fungicides, herbicides'
+									rows={3}
+								/>
+							</MasterField>
+						</MasterFormGrid>
+					) : null
+				}
+			/>
+
+			<Dialog
+				open={!!statusTarget}
+				onOpenChange={(o) => !o && setStatusTarget(null)}
+			>
+				<DialogContent className='max-w-sm'>
+					<DialogHeader>
+						<DialogTitle className='flex items-center gap-2 text-base'>
+							<div className='w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-50 border border-amber-200'>
+								<AlertTriangle className='w-4 h-4 text-amber-500' />
+							</div>
+							{statusTarget?.status === "active"
+								? "Deactivate HSN?"
+								: "Activate HSN?"}
+						</DialogTitle>
+						<DialogDescription className='text-xs pt-1'>
+							{statusTarget && (
+								<>
+									<strong className='text-foreground font-mono'>
+										{statusTarget.hsnCode}
+									</strong>{" "}
+									will be marked as{" "}
+									{statusTarget.status === "active" ? "inactive" : "active"}.
+								</>
+							)}
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter>
+						<Button
+							variant='outline'
+							size='sm'
+							className='h-8 text-xs'
+							onClick={() => setStatusTarget(null)}
+						>
+							Cancel
+						</Button>
+						<Button
+							size='sm'
+							className='h-8 text-xs text-white bg-brand-600 hover:bg-brand-700'
+							onClick={confirmStatusChange}
+						>
+							Confirm
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 
 			<Dialog
 				open={!!deleteTarget}
@@ -723,10 +685,22 @@ export default function HSNPage() {
 			>
 				<DialogContent className='max-w-sm'>
 					<DialogHeader>
-						<DialogTitle className='text-sm'>Delete record?</DialogTitle>
-						<DialogDescription className='text-xs'>
-							This action cannot be undone. The record will be permanently
-							removed.
+						<DialogTitle className='flex items-center gap-2 text-base'>
+							<div className='w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-50 border border-amber-200'>
+								<AlertTriangle className='w-4 h-4 text-amber-500' />
+							</div>
+							Deactivate HSN?
+						</DialogTitle>
+						<DialogDescription className='text-xs pt-1'>
+							{deleteTarget && (
+								<>
+									<strong className='text-foreground font-mono'>
+										{deleteTarget.hsnCode}
+									</strong>{" "}
+									will be marked as inactive. It will remain visible in the All
+									and Inactive tabs.
+								</>
+							)}
 						</DialogDescription>
 					</DialogHeader>
 					<DialogFooter>
@@ -743,13 +717,13 @@ export default function HSNPage() {
 							className='h-8 text-xs text-white bg-red-600 hover:bg-red-700'
 							onClick={confirmDelete}
 						>
-							Delete
+							Mark Inactive
 						</Button>
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
 
 			{toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-		</AppLayout>
+		</ListingContainer>
 	);
 }

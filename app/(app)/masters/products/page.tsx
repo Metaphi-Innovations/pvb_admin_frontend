@@ -25,11 +25,14 @@ import {
   UserX,
   XCircle,
 } from "lucide-react";
-import { type Product, type ProductStatus, formatMoney, loadProducts, saveProducts } from "./product-data";
+import { type Product, type ProductStatus, loadProducts, saveProducts } from "./product-data";
+import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
+import { getStandardMrp } from "@/lib/pricing/resolve-pricing";
 
 import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
+import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
 function KpiCard({
   label,
@@ -54,20 +57,6 @@ function KpiCard({
         <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{label}</p>
       </div>
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: ProductStatus }) {
-  const cfg = {
-    active: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    inactive: "border-slate-200 bg-slate-100 text-slate-700",
-    draft: "border-amber-200 bg-amber-50 text-amber-700",
-  }[status];
-
-  return (
-    <Badge variant="outline" className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium", cfg)}>
-      {status === "draft" ? "Draft" : status === "active" ? "Active" : "Inactive"}
-    </Badge>
   );
 }
 
@@ -98,7 +87,7 @@ export default function ProductsPage() {
   const columns: ColumnConfig<Product>[] = [
     {
       key: "productId",
-      header: "Product ID",
+      header: "Product Code",
       sortable: true,
       filterable: true,
       filterType: "text",
@@ -115,12 +104,9 @@ export default function ProductsPage() {
       filterType: "text",
       width: "220px",
       render: (val, row) => (
-        <div>
-          <Link href={`/masters/products/${row.id}`} className="block group/name">
-            <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">{row.productName}</p>
-            <p className="font-mono text-[10px] text-muted-foreground mt-0.5 leading-3">{row.sku}</p>
-          </Link>
-        </div>
+        <Link href={`/masters/products/${row.id}`} className="block group/name">
+          <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">{row.productName}</p>
+        </Link>
       ),
     },
     {
@@ -142,13 +128,30 @@ export default function ProductsPage() {
       width: "130px",
     },
     {
-      key: "formulation",
-      header: "Formulation",
+      key: "scientificName",
+      header: "Scientific Name",
+      width: "160px",
+      render: (val, row) => row.scientificName || "—",
+    },
+    {
+      key: "form",
+      header: "Form",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: Array.from(new Set(records.map((item) => item.formulation))).sort().map(v => ({ label: v, value: v })),
-      width: "220px",
+      filterOptions: Array.from(new Set(records.map((item) => item.form ?? item.formulation ?? ""))).filter(Boolean).sort().map(v => ({ label: v, value: v })),
+      width: "140px",
+      render: (val, row) => row.form ?? row.formulation ?? "—",
+    },
+    {
+      key: "cfu",
+      header: "CFU",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: Array.from(new Set(records.map((item) => item.cfu ?? ""))).filter(Boolean).sort().map(v => ({ label: v, value: v })),
+      width: "140px",
+      render: (val, row) => row.cfu || "—",
     },
     {
       key: "baseUnit",
@@ -190,32 +193,18 @@ export default function ProductsPage() {
       render: (val, row) => <span className="font-mono">{row.sku}</span>,
     },
     {
-      key: "cropApplicable",
-      header: "Crop Applicable",
-      width: "140px",
-      render: (val, row) => row.cropApplicable || "—",
-    },
-    {
-      key: "mrp",
+      key: "standardMrp",
       header: "MRP",
       width: "120px",
-      render: (val, row) => <span className="font-semibold">{formatMoney(row.mrp)}</span>,
-    },
-    {
-      key: "createdBy",
-      header: "Created By",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-    },
-    {
-      key: "updatedBy",
-      header: "Updated By",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
+      align: "right",
+      render: (_val, row) => {
+        const mrp = getStandardMrp(row.id);
+        return (
+          <span className="font-semibold text-xs tabular-nums">
+            {mrp > 0 ? formatIndianRupeeDisplay(mrp) : "—"}
+          </span>
+        );
+      },
     },
     {
       key: "status",
@@ -226,54 +215,35 @@ export default function ProductsPage() {
       filterOptions: [
         { label: "Active", value: "active" },
         { label: "Inactive", value: "inactive" },
-        { label: "Draft", value: "draft" },
       ],
       width: "110px",
       render: (val, row) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className="inline-flex items-center gap-1.5 focus:outline-none">
-              <StatusBadge status={row.status} />
-              <ChevronDown className="w-3 h-3 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-40 bg-white border shadow-md border-border">
-            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
-              Status Actions
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {row.status === "active" && (
-              <>
-                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(row.id, "inactive")}>
-                  <UserX className="w-3.5 h-3.5" /> Deactivate
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(row.id, "draft")}>
-                  <Package className="w-3.5 h-3.5" /> Mark as Draft
-                </DropdownMenuItem>
-              </>
-            )}
-            {row.status === "inactive" && (
-              <>
-                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(row.id, "active")}>
-                  <UserCheck className="w-3.5 h-3.5" /> Activate
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(row.id, "draft")}>
-                  <Package className="w-3.5 h-3.5" /> Mark as Draft
-                </DropdownMenuItem>
-              </>
-            )}
-            {row.status === "draft" && (
-              <>
-                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(row.id, "active")}>
-                  <UserCheck className="w-3.5 h-3.5" /> Activate
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2 text-xs cursor-pointer" onClick={() => updateStatus(row.id, "inactive")}>
-                  <UserX className="w-3.5 h-3.5" /> Deactivate
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ListingStatusToggle
+          active={isActiveStatus(row.status)}
+          onChange={() => updateStatus(row.id, isActiveStatus(row.status) ? "inactive" : "active")}
+        />
+      ),
+    },
+    {
+      key: "createdDate",
+      header: "Created",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => (
+        <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />
+      ),
+    },
+    {
+      key: "updatedDate",
+      header: "Updated",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "120px",
+      render: (val, row) => (
+        <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />
       ),
     },
   ];
@@ -338,18 +308,19 @@ export default function ProductsPage() {
 
   const handleExport = () => {
     const headers = [
-      "Product ID",
+      "Product Code",
       "Product Name",
       "Category",
       "Segment",
-      "Formulation",
+      "Scientific Name",
+      "Form",
+      "CFU",
       "Base Unit",
       "Packaging Unit",
       "Conversion Quantity",
       "HSN Code",
       "GST Rate",
       "SKU",
-      "Crop Applicable",
       "MRP",
       "Status",
     ];
@@ -359,15 +330,16 @@ export default function ProductsPage() {
       item.productName,
       item.category,
       item.segment,
-      item.formulation,
+      item.scientificName || "",
+      item.form ?? item.formulation ?? "",
+      item.cfu || "",
       item.baseUnit || "",
       item.packagingUnit || "",
       item.conversionQuantity !== undefined ? item.conversionQuantity : "",
       item.hsnCode,
       item.gstRate,
       item.sku,
-      item.cropApplicable || "",
-      item.mrp,
+      getStandardMrp(item.id) || "",
       item.status,
     ]);
 
@@ -396,7 +368,6 @@ export default function ProductsPage() {
   const total = records.length;
   const active = records.filter((item) => item.status === "active").length;
   const inactive = records.filter((item) => item.status === "inactive").length;
-  const draft = records.filter((item) => item.status === "draft").length;
 
   return (
     <AppLayout>
@@ -406,11 +377,10 @@ export default function ProductsPage() {
           <p className="text-xs text-muted-foreground mt-0.5">Manage product catalogue, compliance, and pricing</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <KpiCard label="Total Products" value={total} icon={Package} accent />
           <KpiCard label="Active" value={active} icon={CheckCircle2} color="bg-emerald-50" />
           <KpiCard label="Inactive" value={inactive} icon={XCircle} color="bg-slate-100" />
-          <KpiCard label="Draft" value={draft} icon={Package} color="bg-amber-50" />
         </div>
 
         <MasterListing<Product>

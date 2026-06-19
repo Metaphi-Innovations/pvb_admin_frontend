@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { SUPPLIER_TYPE_OPTIONS, type Supplier } from "../supplier-data";
 
 export interface SupplierFormState {
@@ -106,12 +107,17 @@ export default function SupplierSheet({ open, onClose, onSave, supplier }: Props
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Supplier Type *</Label>
-            <select value={form.supplierType} onChange={(e) => set("supplierType", e.target.value)} className="w-full h-8 text-xs border border-border rounded-lg px-2">
-              <option value="">Select type</option>
-              {SUPPLIER_TYPE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
+            <AutocompleteSelect
+              options={[
+                { value: "", label: "Select type" },
+                ...SUPPLIER_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+              ]}
+              value={form.supplierType}
+              onChange={(v) => set("supplierType", v)}
+              placeholder="Select type…"
+              error={!!errors.supplierType}
+              className="h-8 text-xs"
+            />
             {errors.supplierType && <p className="text-[11px] text-red-600">{errors.supplierType}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">

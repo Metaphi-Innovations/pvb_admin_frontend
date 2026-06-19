@@ -27,6 +27,14 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { AuthService } from "@/services/auth.service";
+import { MasterListing } from "@/components/listing/MasterListing";
+import { applyFilters } from "@/components/listing/filter-utils";
+import {
+  ActionItemConfig,
+  ColumnConfig,
+  FilterState,
+  SortState,
+} from "@/components/listing/types";
 import {
   CalendarDays,
   CalendarRange,
@@ -46,6 +54,8 @@ import {
   X,
 } from "lucide-react";
 import {
+  LEVELS,
+  PARENT_LEVEL,
   type GeoLevel,
   type GeoNode,
   loadGeoNodes,
@@ -97,6 +107,10 @@ type EventFormErrors = Partial<
   Record<"title" | "selectedDates" | "time" | "attendees" | GeoLevel, string>
 >;
 
+type EventListRow = Event & {
+  locationText: string;
+};
+
 function handleScrollableWheel(event: React.WheelEvent<HTMLElement>) {
   const current = event.currentTarget;
   if (current.scrollHeight <= current.clientHeight) return;
@@ -145,25 +159,8 @@ const FARMER_OPTIONS: MultiSelectOption[] = FARMER_NAMES.map((label, index) => (
 const CUSTOMER_DISTRIBUTOR_ID_OFFSET = 100000;
 const PER_PAGE = 10;
 
-const LOCATION_LEVELS: GeoLevel[] = [
-  "Zone",
-  "State",
-  "Region",
-  "Area",
-  "Territory",
-  "Locality",
-  "Pincode",
-];
-
-const LOCATION_PARENT: Record<GeoLevel, GeoLevel | null> = {
-  Zone: null,
-  State: "Zone",
-  Region: "State",
-  Area: "Region",
-  Territory: "Area",
-  Locality: "Territory",
-  Pincode: "Locality",
-};
+const LOCATION_LEVELS: GeoLevel[] = LEVELS;
+const LOCATION_PARENT = PARENT_LEVEL;
 
 function todayIso() {
   return toIsoDate(new Date());
@@ -837,7 +834,8 @@ function LocationSelectField({
 export default function EventsPage() {
   const router = useRouter();
   const [events, setEvents] = useState<Event[]>(SEED);
-  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState<FilterState>({});
+  const [sort, setSort] = useState<SortState>({ key: "eventCode", direction: "asc" });
   const [page, setPage] = useState(1);
   const [openMenu, setOpenMenu] = useState<number | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -906,29 +904,62 @@ export default function EventsPage() {
     [customerDistributors, distributors],
   );
 
+  const eventRows = useMemo<EventListRow[]>(
+    () =>
+      events.map((event) => ({
+        ...event,
+        locationText:
+          event.locationSummary ??
+          [event.venue, event.district, event.state].filter(Boolean).join(", "),
+      })),
+    [events],
+  );
+
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    let result = [...eventRows];
 
-    return events.filter((event) => {
-      if (!q) return true;
+    if (filters.search) {
+      const query = String(filters.search).trim().toLowerCase();
+      result = result.filter((event) =>
+        [
+          event.title,
+          event.eventCode,
+          event.venue,
+          event.district,
+          event.state,
+          event.locationText,
+          event.organizer,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query),
+      );
+    }
 
-      return [
-        event.title,
-        event.eventCode,
-        event.venue,
-        event.district,
-        event.state,
-        event.locationSummary ?? "",
-        event.organizer,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(q);
-    });
-  }, [events, search]);
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
-  const start = (page - 1) * PER_PAGE;
-  const visibleEvents = filtered.slice(start, start + PER_PAGE);
+    result = applyFilters(result, filters);
+
+    if (sort.key && sort.direction !== "none") {
+      result.sort((a, b) => {
+        if (sort.key === "expectedAttendees" || sort.key === "actualAttendees") {
+          const diff = Number(a[sort.key]) - Number(b[sort.key]);
+          return sort.direction === "asc" ? diff : -diff;
+        }
+
+        const aValue = String(a[sort.key as keyof EventListRow] ?? "").toLowerCase();
+        const bValue = String(b[sort.key as keyof EventListRow] ?? "").toLowerCase();
+        return sort.direction === "asc"
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue);
+      });
+    }
+
+    return result;
+  }, [eventRows, filters, sort]);
+
+  const visibleEvents = useMemo(() => {
+    const startOffset = (page - 1) * PER_PAGE;
+    return filtered.slice(startOffset, startOffset + PER_PAGE);
+  }, [filtered, page]);
 
   const attendeeCount =
     form.selectedUserIds.length + form.selectedFarmerIds.length + form.selectedDistributorIds.length;
@@ -965,16 +996,13 @@ export default function EventsPage() {
   };
 
   const handleOpenCreate = () => {
-    setForm(getInitialFormState());
-    setErrors({});
-    setIsCreateOpen(true);
+    router.push("/events/event/create");
   };
 
   const handleViewEvent = (event: Event) => {
     if (typeof window !== "undefined") {
       window.sessionStorage.setItem(VIEW_EVENT_STORAGE_KEY, String(event.id));
     }
-    setOpenMenu(null);
     router.push("/events/event/view");
   };
 
@@ -1088,17 +1116,21 @@ export default function EventsPage() {
     const region = selectedLocationNodes.Region;
     const area = selectedLocationNodes.Area;
     const territory = selectedLocationNodes.Territory;
-    const locality = selectedLocationNodes.Locality;
+    const district = selectedLocationNodes.District;
+    const city = selectedLocationNodes.City;
+    const town = selectedLocationNodes.Town;
     const pincode = selectedLocationNodes.Pincode;
     const currentUser = AuthService.getUserData();
     const organizerName = currentUser?.username || currentUser?.email || "Admin";
     const locationSummary = [
       pincode?.name,
-      locality?.name,
+      town?.name,
+      city?.name,
+      district?.name,
       territory?.name,
       area?.name,
-      region?.name,
       state?.name,
+      region?.name,
       zone?.name,
     ]
       .filter(Boolean)
@@ -1109,8 +1141,8 @@ export default function EventsPage() {
       eventCode,
       title: form.title.trim(),
       type: "training",
-      venue: pincode?.name || locality?.name || territory?.name || area?.name || region?.name || "Location TBD",
-      district: region?.name || area?.name || territory?.name || locality?.name || "",
+      venue: pincode?.name || town?.name || city?.name || district?.name || territory?.name || area?.name || "Location TBD",
+      district: district?.name || city?.name || territory?.name || area?.name || "",
       state: state?.name || "",
       startDate,
       endDate,
@@ -1132,25 +1164,156 @@ export default function EventsPage() {
     handleCloseCreate();
   };
 
+  const columns = useMemo<ColumnConfig<EventListRow>[]>(
+    () => [
+      {
+        key: "eventCode",
+        header: "Event Code",
+        sortable: true,
+        filterable: true,
+        filterType: "text",
+        width: "120px",
+        render: (_, row) => (
+          <span className="font-mono text-xs font-semibold text-brand-700">
+            {row.eventCode}
+          </span>
+        ),
+      },
+      {
+        key: "title",
+        header: "Event Name",
+        sortable: true,
+        filterable: true,
+        filterType: "text",
+        width: "220px",
+        render: (_, row) => (
+          <p className="text-xs font-semibold text-foreground">{row.title}</p>
+        ),
+      },
+      {
+        key: "locationText",
+        header: "Location",
+        sortable: true,
+        filterable: true,
+        filterType: "text",
+        width: "220px",
+        render: (_, row) => (
+          <span className="block max-w-[220px] truncate" title={row.locationText}>
+            {row.locationText}
+          </span>
+        ),
+      },
+      {
+        key: "startDate",
+        header: "Date",
+        sortable: true,
+        filterable: true,
+        filterType: "date",
+        width: "150px",
+        render: (_, row) => formatDateRange(row.startDate, row.endDate),
+      },
+      {
+        key: "time",
+        header: "Time",
+        sortable: true,
+        filterable: true,
+        filterType: "text",
+        width: "120px",
+        render: (_, row) => (row.time ? formatTimeDisplay(row.time) : "-"),
+      },
+      {
+        key: "organizer",
+        header: "Organizer",
+        sortable: true,
+        filterable: true,
+        filterType: "text",
+        width: "150px",
+      },
+      {
+        key: "expectedAttendees",
+        header: "Expected",
+        sortable: true,
+        width: "100px",
+        align: "left",
+      },
+      {
+        key: "actualAttendees",
+        header: "Actual",
+        sortable: true,
+        width: "120px",
+        align: "left",
+        render: (_, row) => (
+          <span>
+            {row.status === "completed" ? row.actualAttendees : "-"}
+            {row.status === "completed" && (
+              <span
+                className={cn(
+                  "ml-1 text-[10px]",
+                  row.actualAttendees >= row.expectedAttendees
+                    ? "text-emerald-600"
+                    : "text-amber-600",
+                )}
+              >
+                ({Math.round((row.actualAttendees / row.expectedAttendees) * 100)}%)
+              </span>
+            )}
+          </span>
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: [
+          { label: "Upcoming", value: "upcoming" },
+          { label: "Ongoing", value: "ongoing" },
+          { label: "Completed", value: "completed" },
+          { label: "Cancelled", value: "cancelled" },
+        ],
+        width: "120px",
+        render: (_, row) => (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
+              STATUS_CFG[row.status].bg,
+              STATUS_CFG[row.status].text,
+            )}
+          >
+            <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_CFG[row.status].dot)} />
+            {row.status.charAt(0).toUpperCase() + row.status.slice(1)}
+          </span>
+        ),
+      },
+    ],
+    [],
+  );
+
+  const actions = useMemo<ActionItemConfig<EventListRow>[]>(
+    () => [
+      {
+        label: "View",
+        action: "view",
+        icon: Eye,
+        onClick: (event) => handleViewEvent(event),
+      },
+    ],
+    [],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters, sort]);
+
   return (
     <AppLayout>
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-foreground">Events</h1>
-            <p className="mt-0.5 text-xs text-muted-foreground">Manage trainings, demos, and farmer events</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted">
-              <Download className="h-3.5 w-3.5" /> Export
-            </button>
-            <button
-              onClick={handleOpenCreate}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand-600 px-3 text-xs font-medium text-white transition-colors hover:bg-brand-700"
-            >
-              <Plus className="h-3.5 w-3.5" /> Create Event
-            </button>
-          </div>
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Events</h1>
+          {/* <p className="mt-0.5 text-xs text-muted-foreground">
+            Manage trainings, demos, and farmer events
+          </p> */}
         </div>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1177,163 +1340,24 @@ export default function EventsPage() {
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="relative min-w-[200px] max-w-xs flex-1">
-            <Search className="pointer-events-none absolute left-2.5 top-[9px] h-3.5 w-3.5 text-muted-foreground" />
-            <input
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setPage(1);
-              }}
-              placeholder="Search events..."
-              className="h-8 w-full rounded-lg border border-border bg-white pl-8 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-brand-300"
-            />
-          </div>
-        </div>
-
-        <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/40 border-b border-border">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap">Event Code</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap">Event Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap">Location</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap">Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap">Time</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap">Organizer</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap">Expected</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap">Actual</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap">Status</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-foreground whitespace-nowrap">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleEvents.length === 0 ? (
-                  <tr>
-                    <td colSpan={11} className="px-4 py-16 text-center">
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                          <CalendarDays className="h-5 w-5 text-muted-foreground" />
-                        </div>
-                        <p className="text-sm font-medium text-foreground">No events match your search</p>
-                        <p className="text-xs text-muted-foreground">Try adjusting the search term or create a new event</p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  visibleEvents.map((event) => (
-                    <tr key={event.id} className="group border-b border-border/60 transition-colors hover:bg-muted/20">
-                      <td className="px-4 py-2 text-xs font-semibold text-brand-700 whitespace-nowrap">{event.eventCode}</td>
-                      <td className="px-4 py-2 text-xs font-semibold text-foreground whitespace-nowrap">{event.title}</td>
-                      <td className="px-4 py-2 text-xs whitespace-nowrap">
-                        <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize", TYPE_COLORS[event.type])}>
-                          {event.type}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-xs text-foreground max-w-[220px] truncate">
-                        {event.locationSummary ?? [event.venue, event.district, event.state].filter(Boolean).join(", ")}
-                      </td>
-                      <td className="px-4 py-2 text-xs text-foreground whitespace-nowrap">{formatDateRange(event.startDate, event.endDate)}</td>
-                      <td className="px-4 py-2 text-xs text-foreground whitespace-nowrap">{event.time ? formatTimeDisplay(event.time) : "-"}</td>
-                      <td className="px-4 py-2 text-xs text-foreground whitespace-nowrap">{event.organizer}</td>
-                      <td className="px-4 py-2 text-xs text-foreground whitespace-nowrap">{event.expectedAttendees}</td>
-                      <td className="px-4 py-2 text-xs text-foreground whitespace-nowrap">
-                        {event.status === "completed" ? event.actualAttendees : "-"}
-                        {event.status === "completed" && (
-                          <span
-                            className={cn(
-                              "ml-1 text-[10px]",
-                              event.actualAttendees >= event.expectedAttendees ? "text-emerald-600" : "text-amber-600",
-                            )}
-                          >
-                            ({Math.round((event.actualAttendees / event.expectedAttendees) * 100)}%)
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-xs whitespace-nowrap">
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
-                            STATUS_CFG[event.status].bg,
-                            STATUS_CFG[event.status].text,
-                          )}
-                        >
-                          <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_CFG[event.status].dot)} />
-                          {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-xs whitespace-nowrap">
-                        <div className="relative flex justify-center">
-                          <button
-                            type="button"
-                            onClick={() => setOpenMenu(openMenu === event.id ? null : event.id)}
-                            className="rounded-md p-1.5 transition-colors hover:bg-muted"
-                          >
-                            <MoreVertical className="h-4 w-4 text-muted-foreground" />
-                          </button>
-                          {openMenu === event.id && (
-                            <div className="absolute right-0 top-7 z-50 w-40 rounded-xl border border-border bg-white py-1 shadow-lg">
-                              <button
-                                type="button"
-                                onClick={() => handleViewEvent(event)}
-                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
-                              >
-                                <Eye className="h-3.5 w-3.5 text-muted-foreground" /> View
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setOpenMenu(null)}
-                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted"
-                              >
-                                <Edit className="h-3.5 w-3.5 text-muted-foreground" /> Edit
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex items-center justify-between border-t border-border bg-muted/20 px-4 py-3">
-            <p className="text-[11px] text-muted-foreground">
-              Showing{" "}
-              <span className="font-medium text-foreground">
-                {visibleEvents.length === 0 ? 0 : Math.min(start + visibleEvents.length, filtered.length)}
-              </span>{" "}
-              of <span className="font-medium text-foreground">{filtered.length}</span> records
-            </p>
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 px-3 text-xs"
-                disabled={page === 1}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-              >
-                Previous
-              </Button>
-              <span className="text-xs text-muted-foreground">
-                Page {page} of {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 px-3 text-xs"
-                disabled={page === totalPages}
-                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        </div>
+        <MasterListing<EventListRow>
+          columns={columns}
+          data={visibleEvents}
+          totalRecords={filtered.length}
+          page={page}
+          pageSize={PER_PAGE}
+          onPageChange={setPage}
+          onSortChange={setSort}
+          onFilterChange={setFilters}
+          actions={actions}
+          onAdd={handleOpenCreate}
+          addLabel="Create Event"
+          onExport={() => {}}
+          emptyMessage="events"
+          searchPlaceholder="Search events..."
+          currentFilters={filters}
+          currentSort={sort}
+        />
 
         {false && (
           <div className="space-y-3">

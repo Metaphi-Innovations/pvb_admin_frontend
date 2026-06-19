@@ -7,7 +7,8 @@ import { ArrowLeft, CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { loadCustomerTypes, saveCustomerTypes, type CustomerTypeRecord } from "../../customer-type-data";
+import { loadCustomerTypes, saveCustomerTypes, validateCustomerTypeInitialCode, type CustomerTypeRecord } from "../../customer-type-data";
+import { normalizeInitialCode } from "@/lib/masters/code-generation";
 import {
   CustomerTypeForm,
   type CustomerTypeFormValues,
@@ -27,6 +28,7 @@ export default function EditCustomerTypePage() {
     if (!found) return;
     setForm({
       customerTypeCode: found.customerTypeCode,
+      initialCode: found.initialCode,
       customerType: found.customerType,
       description: found.description,
       documentTypes: found.documentTypes || [],
@@ -43,6 +45,9 @@ export default function EditCustomerTypePage() {
   const handleSave = () => {
     if (!form) return;
     const validation = validateCustomerTypeForm(form);
+    const list = loadCustomerTypes();
+    const initialErr = validateCustomerTypeInitialCode(form.initialCode, list, Number(id));
+    if (initialErr) validation.initialCode = initialErr;
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
       setToast({ msg: "Please fix the errors before saving.", type: "error" });
@@ -50,16 +55,19 @@ export default function EditCustomerTypePage() {
       return;
     }
 
-    const list = loadCustomerTypes();
+    const today = new Date().toISOString().slice(0, 10);
     const updated = list.map((c) =>
       c.id === Number(id)
           ? {
             ...c,
             customerTypeCode: form.customerTypeCode,
+            initialCode: normalizeInitialCode(form.initialCode),
             customerType: form.customerType.trim(),
             description: form.description.trim(),
             documentTypes: form.documentTypes || [],
             status: c.status,
+            updatedBy: "Admin",
+            updatedDate: today,
           }
         : c,
     );

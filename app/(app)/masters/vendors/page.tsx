@@ -14,12 +14,13 @@ import {
   CheckCircle2,
   XCircle,
   X,
-  AlertCircle,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -27,7 +28,6 @@ import {
   type Vendor,
   loadVendors,
   saveVendors,
-  formatCreditPeriod,
   todayStr,
 } from "./vendor-data";
 import { CURRENT_USER } from "@/lib/procurement/config";
@@ -36,6 +36,7 @@ import { MiniKPICard } from "@/components/ui/KPICard";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
+import { ListingUserCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
 interface ToastState {
   msg: string;
@@ -54,25 +55,6 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
       {toast.msg}
       <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100"><X className="h-3.5 w-3.5" /></button>
     </div>
-  );
-}
-
-function StatusToggle({ record, onToggle }: { record: Vendor; onToggle: (item: Vendor) => void }) {
-  const active = record.status === "active";
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle(record);
-      }}
-      className={cn(
-        "inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-        active ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200",
-      )}
-    >
-      {active ? "Active" : "Inactive"}
-    </button>
   );
 }
 
@@ -114,14 +96,34 @@ export default function VendorMasterPage() {
 
   const confirmDelete = () => {
     if (!deleteTarget) return;
-    const updatedList = records.filter((v) => v.id !== deleteTarget.id);
+    const updatedList = records.map((v) =>
+      v.id === deleteTarget.id
+        ? {
+            ...v,
+            status: "inactive" as const,
+            updatedBy: CURRENT_USER,
+            updatedDate: todayStr(),
+          }
+        : v,
+    );
     saveVendors(updatedList);
     setRecords(updatedList);
     setDeleteTarget(null);
-    setToast({ msg: "Vendor deleted successfully", type: "success" });
+    setToast({ msg: `"${deleteTarget.vendorName}" marked as inactive`, type: "success" });
   };
 
   const columns: ColumnConfig<Vendor>[] = [
+    {
+      key: "vendorCode",
+      header: "Vendor Code",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "110px",
+      render: (_val, row) => (
+        <span className="font-mono text-xs font-semibold text-foreground">{row.vendorCode || "—"}</span>
+      ),
+    },
     {
       key: "vendorName",
       header: "Vendor Name",
@@ -129,27 +131,33 @@ export default function VendorMasterPage() {
       filterable: true,
       filterType: "text",
       width: "180px",
-      render: (val, row) => (
-        <div>
-          <button
-            type="button"
-            className="font-medium text-[13px] text-brand-700 hover:underline text-left"
-            onClick={() => router.push(`/masters/vendors/${row.id}`)}
-          >
-            {row.vendorName}
-          </button>
-          <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{row.vendorCode}</p>
-        </div>
+      render: (_val, row) => (
+        <button
+          type="button"
+          className="block group/name text-left w-full"
+          onClick={() => router.push(`/masters/vendors/${row.id}`)}
+        >
+          <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">{row.vendorName}</p>
+        </button>
       ),
     },
     {
-      key: "companyName",
-      header: "Company Name",
+      key: "vendorType",
+      header: "Vendor Type",
       sortable: true,
       filterable: true,
       filterType: "text",
-      width: "180px",
-      render: (val, row) => row.companyName || "—",
+      width: "160px",
+      render: (_val, row) => row.vendorType || "—",
+    },
+    {
+      key: "contactPerson",
+      header: "Contact Person",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "140px",
+      render: (_val, row) => row.contactPerson || "—",
     },
     {
       key: "mobile",
@@ -158,40 +166,40 @@ export default function VendorMasterPage() {
       filterable: true,
       filterType: "text",
       width: "140px",
-      render: (val, row) => (
+      render: (_val, row) => (
         <span className="font-mono text-xs text-muted-foreground">
-          {row.mobileCountryCode} {row.mobile || "—"}
+          {row.mobile ? `${row.mobileCountryCode} ${row.mobile}` : "—"}
         </span>
       ),
     },
     {
-      key: "email",
-      header: "Email ID",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "160px",
-      render: (val, row) => row.email || "—",
-    },
-    {
       key: "gstNumber",
-      header: "GSTIN",
+      header: "GST Number",
       sortable: true,
       filterable: true,
       filterType: "text",
       width: "150px",
-      render: (val, row) => (
-        <span className="font-mono text-[11px]">{row.gstApplicable ? row.gstNumber || "—" : "—"}</span>
+      render: (_val, row) => (
+        <span className="font-mono text-[11px]">{row.gstNumber || "—"}</span>
       ),
     },
     {
-      key: "creditPeriod",
-      header: "Credit Period",
+      key: "createdBy",
+      header: "Created By",
       sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val, row) => formatCreditPeriod(row),
+      width: "150px",
+      render: (_val, row) => (
+        <ListingUserCell name={row.createdBy} date={row.createdDate} />
+      ),
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      width: "150px",
+      render: (_val, row) => (
+        <ListingUserCell name={row.updatedBy} date={row.updatedDate} />
+      ),
     },
     {
       key: "status",
@@ -204,27 +212,9 @@ export default function VendorMasterPage() {
         { label: "Inactive", value: "inactive" },
       ],
       width: "110px",
-      render: (val, row) => (
-        <StatusToggle record={row} onToggle={toggleStatus} />
+      render: (_val, row) => (
+        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
       ),
-    },
-    {
-      key: "createdBy",
-      header: "Created By",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "110px",
-      render: (val, row) => row.createdBy || "—",
-    },
-    {
-      key: "updatedBy",
-      header: "Updated By",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "110px",
-      render: (val, row) => row.updatedBy || "—",
     },
   ];
 
@@ -253,35 +243,26 @@ export default function VendorMasterPage() {
   const filtered = useMemo(() => {
     let result = [...records];
 
-    // Search filter
     if (filters.search) {
       const q = String(filters.search).trim().toLowerCase();
       result = result.filter(
         (v) =>
+          (v.vendorCode || "").toLowerCase().includes(q) ||
           v.vendorName.toLowerCase().includes(q) ||
-          v.companyName.toLowerCase().includes(q) ||
-          v.vendorCode.toLowerCase().includes(q) ||
+          (v.vendorType || "").toLowerCase().includes(q) ||
+          (v.contactPerson || "").toLowerCase().includes(q) ||
           v.mobile.includes(q) ||
           v.email.toLowerCase().includes(q) ||
           v.gstNumber.toLowerCase().includes(q)
       );
     }
 
-    // Apply column filters
     result = applyFilters(result, filters);
 
-    // Sorting
     if (sort.key && sort.direction !== "none") {
       result.sort((a, b) => {
-        let av: string;
-        let bv: string;
-        if (sort.key === "creditPeriod") {
-          av = formatCreditPeriod(a);
-          bv = formatCreditPeriod(b);
-        } else {
-          av = String((a as unknown as Record<string, unknown>)[sort.key] ?? "");
-          bv = String((b as unknown as Record<string, unknown>)[sort.key] ?? "");
-        }
+        const av = String((a as unknown as Record<string, unknown>)[sort.key] ?? "");
+        const bv = String((b as unknown as Record<string, unknown>)[sort.key] ?? "");
         const cmp = av.localeCompare(bv);
         return sort.direction === "asc" ? cmp : -cmp;
       });
@@ -294,6 +275,41 @@ export default function VendorMasterPage() {
     const startOffset = (page - 1) * pageSize;
     return filtered.slice(startOffset, startOffset + pageSize);
   }, [filtered, page, pageSize]);
+
+  const handleExport = () => {
+    const rows = filtered.map((row) => ({
+      "Vendor Code": row.vendorCode || "",
+      "Vendor Name": row.vendorName,
+      "Vendor Type": row.vendorType || "",
+      "Contact Person": row.contactPerson || "",
+      "Mobile Number": `${row.mobileCountryCode} ${row.mobile || ""}`.trim(),
+      "GST Number": row.gstNumber || "",
+      Status: row.status,
+      "Created By": row.createdBy || "",
+      "Updated By": row.updatedBy || "",
+    }));
+
+    const headers = Object.keys(rows[0] || {});
+    const csv = [
+      headers.join(","),
+      ...rows.map((row) =>
+        headers
+          .map((header) => {
+            const value = String(row[header as keyof typeof row] ?? "");
+            return `"${value.replace(/"/g, '""')}"`;
+          })
+          .join(","),
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `vendor-master-${todayStr()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   useEffect(() => {
     setPage(1);
@@ -326,29 +342,29 @@ export default function VendorMasterPage() {
           actions={actions}
           onAdd={() => router.push("/masters/vendors/new")}
           addLabel="Create Vendor"
+          onExport={handleExport}
           emptyMessage="vendors"
-          searchPlaceholder="Search name, company, mobile, GSTIN…"
+          searchPlaceholder="Search vendor code, name, type, contact, GST…"
           currentFilters={filters}
           currentSort={sort}
         />
       </div>
 
-      {/* Confirm Delete Dialog */}
       {deleteTarget && (
         <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
           <DialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-base">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-red-50 border border-red-200">
-                  <AlertCircle className="w-4 h-4 text-red-500" />
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-50 border border-amber-200">
+                  <AlertTriangle className="w-4 h-4 text-amber-500" />
                 </div>
-                Delete Vendor
+                Deactivate Vendor?
               </DialogTitle>
-              <DialogDescription className="pt-1">
-                Are you sure you want to delete vendor "{deleteTarget.vendorName}"? This action cannot be undone.
+              <DialogDescription className="pt-1 text-xs">
+                <strong className="text-foreground">{deleteTarget.vendorName}</strong> will be marked as inactive.
               </DialogDescription>
             </DialogHeader>
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <DialogFooter>
               <Button
                 variant="outline"
                 size="sm"
@@ -362,14 +378,13 @@ export default function VendorMasterPage() {
                 className="h-8 text-xs text-white bg-red-600 hover:bg-red-700"
                 onClick={confirmDelete}
               >
-                Delete
+                Mark Inactive
               </Button>
-            </div>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       )}
 
-      {/* Toast */}
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </AppLayout>
   );

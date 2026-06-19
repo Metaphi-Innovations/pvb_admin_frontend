@@ -1,6 +1,13 @@
-﻿import { User, CheckCircle2, AlertTriangle, Edit2, Trash2 } from "lucide-react";
+﻿"use client";
+
+import { useState } from "react";
+import { User, CheckCircle2, AlertTriangle, Edit2 } from "lucide-react";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 
 export default function AuditLogsSection() {
+  const [userFilter, setUserFilter] = useState("all");
+  const [actionFilter, setActionFilter] = useState("all");
+
   return (
     <div className="space-y-6">
       <div>
@@ -79,17 +86,29 @@ export default function AuditLogsSection() {
         <div className="bg-muted/20 border border-border rounded-lg p-4 space-y-3">
           <div className="grid grid-cols-3 gap-2">
             <input type="date" className="text-xs px-3 py-2 border border-border rounded" />
-            <select className="text-xs px-3 py-2 border border-border rounded">
-              <option>All Users</option>
-              <option>Rajesh Kumar</option>
-              <option>Priya Desai</option>
-            </select>
-            <select className="text-xs px-3 py-2 border border-border rounded">
-              <option>All Actions</option>
-              <option>Created</option>
-              <option>Updated</option>
-              <option>Deleted</option>
-            </select>
+            <AutocompleteSelect
+              options={[
+                { value: "all", label: "All Users" },
+                { value: "rajesh", label: "Rajesh Kumar" },
+                { value: "priya", label: "Priya Desai" },
+              ]}
+              value={userFilter}
+              onChange={setUserFilter}
+              placeholder="All Users"
+              className="h-9 text-xs"
+            />
+            <AutocompleteSelect
+              options={[
+                { value: "all", label: "All Actions" },
+                { value: "created", label: "Created" },
+                { value: "updated", label: "Updated" },
+                { value: "deleted", label: "Deleted" },
+              ]}
+              value={actionFilter}
+              onChange={setActionFilter}
+              placeholder="All Actions"
+              className="h-9 text-xs"
+            />
           </div>
         </div>
       </div>
@@ -98,10 +117,9 @@ export default function AuditLogsSection() {
         <p className="text-xs text-info font-semibold mb-2">Audit Log Best Practices</p>
         <div className="space-y-1 text-xs text-info/80">
           <p>• Log all important actions (create, update, delete)</p>
-          <p>• Include timestamp, user, and action type</p>
-          <p>• Show affected entity and details</p>
-          <p>• Color code by action type</p>
-          <p>• Enable filtering and search</p>
+          <p>• Include user identity and timestamp for every entry</p>
+          <p>• Store before/after values for critical field changes</p>
+          <p>• Make audit logs read-only and tamper-resistant</p>
         </div>
       </div>
     </div>

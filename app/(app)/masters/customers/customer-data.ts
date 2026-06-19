@@ -7,6 +7,12 @@ import {
 	loadEmployees,
 	type Employee,
 } from "../../user-management/employee/employee-data";
+import {
+	generateTypedMasterCode,
+	isMasterCodeEmpty,
+} from "@/lib/masters/code-generation";
+import { getInitialCodeForCustomerType } from "../customer-types/customer-type-data";
+import { deriveGstCategory } from "@/lib/masters/gst-compliance";
 
 export type CustomerStatus = "active" | "inactive" | "draft" | "blocked";
 
@@ -23,7 +29,7 @@ export interface CustomerProductMapping {
 	productId: string;
 	productName: string;
 	sku?: string;
-	mrp?: number;
+	/** Customer-specific sales price — overrides Pricing Master DP/RP */
 	price?: number;
 	discountType?: "Percentage" | "Flat";
 	discountValue?: number;
@@ -66,10 +72,17 @@ export interface Customer {
 
 	gstApplicable: boolean;
 	gstin: string;
+	gstCategory?: string;
 	gstMasterId: number | null;
 	tdsApplicable: boolean;
 	tdsMasterId: number | null;
+	pan?: string;
 	tan: string;
+	msmeRegistered?: boolean;
+	msmeNumber?: string;
+	fssaiRegistered?: boolean;
+	cibRegistered?: boolean;
+	fcoRegistered?: boolean;
 	cibRegn: string;
 	fcoRegn: string;
 	fssai: string;
@@ -168,7 +181,7 @@ export const PAYMENT_TERMS_OPTIONS = [
 	{ value: "net-90", label: "Net 90 Days" },
 ];
 
-const STORAGE_KEY = "ds_customers";
+const STORAGE_KEY = "ds_customers_v4";
 
 const SEED_CUSTOMERS: Customer[] = [
 	{
@@ -183,10 +196,14 @@ const SEED_CUSTOMERS: Customer[] = [
 		email: "ramesh@agrosolutions.com",
 		gstApplicable: true,
 		gstin: "27AABCU9603R1ZX",
+		gstCategory: "regular",
 		gstMasterId: 4,
 		tdsApplicable: true,
 		tdsMasterId: 1,
+		pan: "AABCU9603R",
 		tan: "PNEA12345A",
+		msmeRegistered: false,
+		msmeNumber: "",
 		cibRegn: "CIB/MH/2020/001",
 		fcoRegn: "FCO/MH/2019/045",
 		fssai: "11522980000001",
@@ -207,6 +224,9 @@ const SEED_CUSTOMERS: Customer[] = [
 		bankBranchAddress: "FC Road, Pune",
 		bankAccountNo: "50100234567890",
 		ifscCode: "HDFC0001234",
+		accountHolderName: "Agro Solutions Private Limited",
+		branch: "FC Road Branch",
+		swiftCode: "HDFCINBBXXX",
 		createdBy: "Admin",
 		createdDate: "2024-01-10",
 		updatedBy: "Admin",
@@ -221,6 +241,152 @@ const SEED_CUSTOMERS: Customer[] = [
 				reason: "New customer onboarded",
 			},
 		],
+		branches: [
+			{
+				branchName: "Mumbai Corporate Office",
+				isMain: true,
+				billingAddress: {
+					address: "456 Corporate Towers, Bandra Kurla Complex",
+					city: "Mumbai",
+					state: "Maharashtra",
+					pincode: "400051",
+				},
+				shippingAddress: {
+					address: "Plot 12, BKC Logistics Zone",
+					city: "Mumbai",
+					state: "Maharashtra",
+					pincode: "400051",
+				},
+				documents: [
+					{
+						documentName: "Shop Act License",
+						required: true,
+						fileName: "shop_act_mumbai.pdf",
+						fileUrl: "/mock-documents/shop_act.pdf",
+					},
+					{
+						documentName: "GST Certificate",
+						required: true,
+						fileName: "gst_cert_mumbai.pdf",
+						fileUrl: "/mock-documents/gst_cert.pdf",
+					},
+				],
+			},
+			{
+				branchName: "Pune Warehouse Branch",
+				isMain: false,
+				billingAddress: {
+					address: "123 Market Road, Shivaji Nagar",
+					city: "Pune",
+					state: "Maharashtra",
+					pincode: "411004",
+				},
+				shippingAddress: {
+					address: "123 Market Road, Shivaji Nagar",
+					city: "Pune",
+					state: "Maharashtra",
+					pincode: "411004",
+				},
+				documents: [
+					{
+						documentName: "Rent Agreement",
+						required: false,
+						fileName: "pune_rent_agreement.pdf",
+						fileUrl: "/mock-documents/rent_agreement.pdf",
+					},
+				],
+			},
+		],
+		products: [
+			{
+				id: "m-1",
+				productId: "prod-1",
+				productName: "Organic Neem Fertilizer",
+				sku: "FERT-NEEM-1KG",
+				price: 280,
+				discountType: "Percentage",
+				discountValue: 20,
+				status: "Active",
+			},
+			{
+				id: "m-2",
+				productId: "prod-2",
+				productName: "Urea Premium Blend",
+				sku: "FERT-UREA-50KG",
+				price: 1080,
+				discountType: "Flat",
+				discountValue: 120,
+				status: "Active",
+			},
+			{
+				id: "m-3",
+				productId: "prod-3",
+				productName: "NPK Booster Spray",
+				sku: "FERT-NPK-500ML",
+				price: 450,
+				discountType: "Percentage",
+				discountValue: 0,
+				status: "Inactive",
+			},
+		],
+		customerProducts: [
+			{
+				id: "m-1",
+				productId: "prod-1",
+				productName: "Organic Neem Fertilizer",
+				sku: "FERT-NEEM-1KG",
+				price: 280,
+				discountType: "Percentage",
+				discountValue: 20,
+				status: "Active",
+			},
+			{
+				id: "m-2",
+				productId: "prod-2",
+				productName: "Urea Premium Blend",
+				sku: "FERT-UREA-50KG",
+				price: 1080,
+				discountType: "Flat",
+				discountValue: 120,
+				status: "Active",
+			},
+			{
+				id: "m-3",
+				productId: "prod-3",
+				productName: "NPK Booster Spray",
+				sku: "FERT-NPK-500ML",
+				price: 450,
+				discountType: "Percentage",
+				discountValue: 0,
+				status: "Inactive",
+			},
+		],
+		documents: {
+			requiredDocuments: [
+				{
+					documentTypeId: "doc-gst",
+					documentName: "GST Registration Certificate",
+					required: true,
+					fileName: "gst_certificate.pdf",
+					fileUrl: "/mock-documents/gst_cert.pdf",
+				},
+				{
+					documentTypeId: "doc-pan",
+					documentName: "PAN Card copy",
+					required: true,
+					fileName: "pan_card_copy.pdf",
+					fileUrl: "/mock-documents/pan_card.pdf",
+				},
+			],
+			additionalDocuments: [
+				{
+					id: "doc-add-1",
+					title: "Partnership Deed / Incorporation Certificate",
+					fileName: "inc_cert.pdf",
+					fileUrl: "/mock-documents/inc_cert.pdf",
+				},
+			],
+		},
 	},
 	{
 		id: 1001,
@@ -1746,10 +1912,21 @@ function migrateCustomer(raw: Record<string, unknown>): Customer {
 		email: c.email ?? emails[0]?.email ?? "",
 		gstApplicable: c.gstApplicable ?? !!c.gstin,
 		gstin: c.gstin ?? "",
+		gstCategory: deriveGstCategory(
+			c.gstApplicable,
+			c.gstin,
+			c.gstCategory,
+		),
 		gstMasterId: c.gstMasterId ?? null,
 		tdsApplicable: c.tdsApplicable ?? Number(c.tdsPercent) > 0,
 		tdsMasterId: c.tdsMasterId ?? null,
+		pan: c.pan ?? "",
 		tan: c.tan ?? "",
+		msmeRegistered: c.msmeRegistered ?? false,
+		msmeNumber: c.msmeNumber ?? "",
+		fssaiRegistered: c.fssaiRegistered ?? !!c.fssai?.trim(),
+		cibRegistered: c.cibRegistered ?? !!c.cibRegn?.trim(),
+		fcoRegistered: c.fcoRegistered ?? !!c.fcoRegn?.trim(),
 		cibRegn: c.cibRegn ?? "",
 		fcoRegn: c.fcoRegn ?? "",
 		fssai: c.fssai ?? "",
@@ -1797,14 +1974,36 @@ export function loadCustomers(): Customer[] {
 		const raw = localStorage.getItem(STORAGE_KEY);
 		if (!raw) return SEED_CUSTOMERS;
 		const data = JSON.parse(raw) as Record<string, unknown>[];
-		const loaded = data.map(migrateCustomer);
+		let loaded = data.map(migrateCustomer);
 		const hasReference = loaded.some(c => c.id === 1004 || c.id === 1005);
 		if (!hasReference) {
 			const refCustomers = SEED_CUSTOMERS.filter(c => c.id === 1004 || c.id === 1005);
 			if (refCustomers.length > 0) {
-				const merged = [...loaded, ...refCustomers];
-				localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-				return merged;
+				loaded = [...loaded, ...refCustomers];
+			}
+		}
+		const needsCodes = loaded.some((c) => isMasterCodeEmpty(c.customerCode));
+		if (needsCodes) {
+			const codes = loaded
+				.map((c) => c.customerCode)
+				.filter((c) => !isMasterCodeEmpty(c));
+			let changed = false;
+			loaded = loaded.map((c) => {
+				if (!isMasterCodeEmpty(c.customerCode)) return c;
+				const prefix = getInitialCodeForCustomerType(c.customerType);
+				if (!prefix) return c;
+				const code = generateTypedMasterCode(prefix, codes);
+				codes.push(code);
+				changed = true;
+				return { ...c, customerCode: code };
+			});
+			if (changed) {
+				localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
+			}
+		} else if (!hasReference) {
+			const refCustomers = SEED_CUSTOMERS.filter(c => c.id === 1004 || c.id === 1005);
+			if (refCustomers.length > 0) {
+				localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
 			}
 		}
 		return loaded;
@@ -1830,6 +2029,23 @@ export function generateCustomerCode(list: Customer[]): string {
 	return `CUST-${String(maxNum + 1).padStart(4, "0")}`;
 }
 
+/** Generate per-type customer code (e.g. DIS-001). Falls back to legacy CUST-xxxx if type has no initial code. */
+export function generateCustomerCodeForType(
+	customerType: string,
+	customers: Customer[],
+	excludeCode?: string,
+): string {
+	const initialCode = getInitialCodeForCustomerType(customerType);
+	if (!initialCode) {
+		return generateCustomerCode(customers);
+	}
+	return generateTypedMasterCode(
+		initialCode,
+		customers.map((c) => c.customerCode),
+		excludeCode,
+	);
+}
+
 export function todayStr(): string {
 	return new Date().toISOString().slice(0, 10);
 }
@@ -1839,6 +2055,8 @@ export function validateGSTIN(v: string): boolean {
 		v.trim(),
 	);
 }
+
+export { validatePAN, validateTAN, validateMSMENumber } from "@/lib/masters/gst-compliance";
 
 export function validateMobile(v: string): boolean {
 	return /^[6-9][0-9]{9}$/.test(v.trim());
@@ -1874,25 +2092,15 @@ export function getActiveTDSMasters(): TDSMaster[] {
 	return loadTDSMasters().filter((t) => t.status === "active");
 }
 
+/** Active State-level nodes */
 export function getActiveGeoStates(nodes?: GeoNode[]): GeoNode[] {
 	const list = nodes ?? loadGeoNodes();
 	return list.filter((n) => n.level === "State" && n.status === "active");
 }
 
-/** District maps to Region level in Geography Master */
+/** District nodes under a State (descendants) */
 export function getDistrictsForState(
 	stateId: number,
-	nodes?: GeoNode[],
-): GeoNode[] {
-	const list = nodes ?? loadGeoNodes();
-	return list.filter(
-		(n) =>
-			n.level === "Region" && n.parentId === stateId && n.status === "active",
-	);
-}
-
-export function getTerritoriesUnderDistrict(
-	districtId: number,
 	nodes?: GeoNode[],
 ): GeoNode[] {
 	const list = nodes ?? loadGeoNodes();
@@ -1900,12 +2108,29 @@ export function getTerritoriesUnderDistrict(
 	function walk(parentId: number) {
 		for (const child of getChildren(parentId, list)) {
 			if (child.status !== "active") continue;
-			if (child.level === "Territory") result.push(child);
-			else if (child.level !== "Pincode") walk(child.id);
+			if (child.level === "District") result.push(child);
+			else walk(child.id);
 		}
 	}
-	walk(districtId);
+	walk(stateId);
 	return result;
+}
+
+/** Territory ancestor of a District (for state → district → territory cascade) */
+export function getTerritoriesUnderDistrict(
+	districtId: number,
+	nodes?: GeoNode[],
+): GeoNode[] {
+	const list = nodes ?? loadGeoNodes();
+	let cur = list.find((n) => n.id === districtId);
+	while (cur) {
+		if (cur.parentId === null) break;
+		const parent = list.find((n) => n.id === cur!.parentId);
+		if (!parent) break;
+		if (parent.level === "Territory" && parent.status === "active") return [parent];
+		cur = parent;
+	}
+	return [];
 }
 
 export function getPincodesForTerritory(

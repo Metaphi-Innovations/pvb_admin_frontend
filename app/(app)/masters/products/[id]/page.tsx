@@ -1,237 +1,494 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Edit2, Eye, FileText, Link2, Package, UserCheck, UserX } from "lucide-react";
-import { FormContainer } from "@/components/layout/FormContainer";
+import { AppLayout } from "@/components/layout/AppLayout";
+import {
+	RecordDetailPage,
+	RecordKvRow,
+	RecordSectionCard,
+	RecordStatusPill,
+} from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { formatMoney, loadProducts, saveProducts, type Product, type ProductStatus } from "../product-data";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+	Clock,
+	FileText,
+	IndianRupee,
+	Package,
+	Pencil,
+	Tag,
+} from "lucide-react";
+import {
+	getAssetDisplayType,
+	loadProducts,
+	saveProducts,
+	type Product,
+	type ProductStatus,
+} from "../product-data";
+import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
+import { getStandardPricing } from "@/lib/pricing/resolve-pricing";
+import {
+	Dialog,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
 
-const STATUS_CFG: Record<ProductStatus, { bg: string; text: string; dot: string; label: string }> = {
-  active: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Active" },
-  inactive: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400", label: "Inactive" },
-  draft: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-500", label: "Draft" },
+const STATUS_LABEL: Record<ProductStatus | "draft", string> = {
+	active: "Active",
+	inactive: "Inactive",
+	draft: "Draft",
 };
 
-function InfoRow({ label, value, mono }: { label: string; value?: string; mono?: boolean }) {
-  return (
-    <div className="flex items-start justify-between gap-4 border-b border-border/60 px-3 py-2.5 last:border-0">
-      <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
-      <span className={cn("text-right text-xs font-medium text-foreground", mono && "font-mono")}>{value ? value : "-"}</span>
-    </div>
-  );
-}
-
-function StatusPill({ status }: { status: ProductStatus }) {
-  const cfg = STATUS_CFG[status];
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium", cfg.bg, cfg.text)}>
-      <span className={cn("h-1.5 w-1.5 rounded-full", cfg.dot)} />
-      {cfg.label}
-    </span>
-  );
-}
-
-function DetailCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-border bg-white p-3.5">
-      <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{title}</p>
-      <div>{children}</div>
-    </div>
-  );
-}
+const STATUS_VARIANT: Record<ProductStatus | "draft", "active" | "inactive" | "draft"> = {
+	active: "active",
+	inactive: "inactive",
+	draft: "draft",
+};
 
 function MediaSection({ product }: { product: Product }) {
-  const [selectedItem, setSelectedItem] = useState<{ src: string; name: string } | null>(null);
-  const items = product.assets ?? product.mediaItems ?? [];
-  const openExternal = (url?: string) => {
-    if (!url) return;
-    const trimmedUrl = url.trim();
-    const isAbsoluteUrl =
-      /^https?:\/\//i.test(trimmedUrl) ||
-      /^blob:/i.test(trimmedUrl) ||
-      /^data:/i.test(trimmedUrl);
-    const safeUrl = isAbsoluteUrl ? trimmedUrl : `https://${trimmedUrl}`;
-    window.open(safeUrl, "_blank", "noopener,noreferrer");
-  };
-  const getUrl = (item: (typeof items)[number]) => item.url ?? item.fileUrl ?? item.previewUrl ?? item.src ?? "";
-  const getLabel = (item: (typeof items)[number]) => {
-    if (item.type === "link") return "Link";
-    switch (item.mediaKind ?? item.fileType?.toLowerCase()) {
-      case "video": return "Video";
-      case "pdf": return "PDF";
-      case "document": return "Document";
-      case "spreadsheet": return "Spreadsheet";
-      default: return "Image";
-    }
-  };
+	const [selectedItem, setSelectedItem] = useState<{
+		src: string;
+		name: string;
+	} | null>(null);
+	const items = product.assets ?? product.mediaItems ?? [];
+	const openExternal = (url?: string) => {
+		if (!url) return;
+		const trimmedUrl = url.trim();
+		const isAbsoluteUrl =
+			/^https?:\/\//i.test(trimmedUrl) ||
+			/^blob:/i.test(trimmedUrl) ||
+			/^data:/i.test(trimmedUrl);
+		const safeUrl = isAbsoluteUrl ? trimmedUrl : `https://${trimmedUrl}`;
+		window.open(safeUrl, "_blank", "noopener,noreferrer");
+	};
+	const getUrl = (item: (typeof items)[number]) =>
+		item.url ?? item.fileUrl ?? item.previewUrl ?? item.src ?? "";
+	const getLabel = (item: (typeof items)[number]) => getAssetDisplayType(item);
 
-  return (
-    <div className="space-y-4">
-      <div className="space-y-1">
-        <p className="text-xs font-semibold text-foreground">Uploaded Assets ({items.length})</p>
-        <p className="text-[11px] text-muted-foreground">Read-only media, documents, spreadsheets, and links.</p>
-      </div>
-      {items.length === 0 ? (
-        <p className="px-1 py-4 text-sm text-muted-foreground">No assets uploaded.</p>
-      ) : (
-        <div className="space-y-3">
-          {items.map((item) => {
-            const url = getUrl(item);
-            const isImage = item.type === "media" && (item.mediaKind === "image" || item.kind === "image");
-            return (
-              <div key={item.id} className="rounded-xl border border-border bg-white p-3 shadow-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/20 text-brand-600">
-                      {isImage && url ? (
-                        <img src={url} alt={item.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <FileText className="h-4 w-4" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-foreground truncate">{item.title || item.name}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">{item.size || item.fileType || item.mediaKind || item.type}</p>
-                    </div>
-                  </div>
-                  <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium", item.uploaded ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>
-                    {getLabel(item)}
-                  </span>
-                </div>
-                <div className="mt-3 flex items-center justify-end gap-2">
-                  <Button type="button" variant="outline" className="h-8 px-3 text-[11px]" onClick={() => (item.type === "media" && (item.mediaKind === "image" || item.kind === "image") && url ? setSelectedItem({ src: url, name: item.name }) : openExternal(url))} disabled={!url}>
-                    Open
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+	return (
+		<div className='space-y-4'>
+			<div className='space-y-1'>
+				<p className='text-xs font-semibold text-foreground'>
+					Uploaded Assets ({items.length})
+				</p>
+				<p className='text-[11px] text-muted-foreground'>
+					Read-only media, documents, spreadsheets, and links.
+				</p>
+			</div>
+			{items.length === 0 ? (
+				<p className='px-1 py-4 text-sm text-muted-foreground'>
+					No assets uploaded.
+				</p>
+			) : (
+				<div className='space-y-3'>
+					{items.map((item) => {
+						const url = getUrl(item);
+						const isImage =
+							item.type === "media" &&
+							(item.mediaKind === "image" || item.kind === "image");
+						return (
+							<div
+								key={item.id}
+								className='rounded-xl border border-border bg-white p-3 shadow-sm'
+							>
+								<div className='flex items-start justify-between gap-3'>
+									<div className='flex items-start gap-3 min-w-0'>
+										<div className='flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/20 text-brand-600'>
+											{isImage && url ? (
+												<img
+													src={url}
+													alt={item.name}
+													className='h-full w-full object-cover'
+												/>
+											) : (
+												<FileText className='h-4 w-4' />
+											)}
+										</div>
+										<div className='min-w-0'>
+											<p className='text-xs font-medium text-foreground truncate'>
+												{item.title || item.name}
+											</p>
+											<p className='text-[11px] text-muted-foreground truncate'>
+												{item.size ||
+													item.fileType ||
+													item.mediaKind ||
+													item.type}
+											</p>
+										</div>
+									</div>
+									<span
+										className={cn(
+											"inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+											item.uploaded
+												? "bg-emerald-50 text-emerald-700"
+												: "bg-amber-50 text-amber-700",
+										)}
+									>
+										{getLabel(item)}
+									</span>
+								</div>
+								<div className='mt-3 flex items-center justify-end gap-2'>
+									<Button
+										type='button'
+										variant='outline'
+										className='h-8 px-3 text-[11px]'
+										onClick={() =>
+											item.type === "media" &&
+											(item.mediaKind === "image" || item.kind === "image") &&
+											url
+												? setSelectedItem({ src: url, name: item.name })
+												: openExternal(url)
+										}
+										disabled={!url}
+									>
+										Open
+									</Button>
+								</div>
+							</div>
+						);
+					})}
+				</div>
+			)}
 
-      <Dialog open={!!selectedItem} onOpenChange={(open) => !open && setSelectedItem(null)}>
-        <DialogContent className="max-w-3xl p-4 bg-white border border-border rounded-xl shadow-lg">
-          <DialogHeader className="pb-2 border-b border-border/50">
-            <DialogTitle className="text-sm font-semibold text-foreground truncate">{selectedItem?.name}</DialogTitle>
-          </DialogHeader>
-          <div className="flex items-center justify-center overflow-hidden bg-muted/5 rounded-lg py-4">
-            <img src={selectedItem?.src} alt={selectedItem?.name} className="max-h-[70vh] max-w-full object-contain rounded-md" />
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
+			<Dialog
+				open={!!selectedItem}
+				onOpenChange={(open) => !open && setSelectedItem(null)}
+			>
+				<DialogContent className='max-w-3xl p-4 bg-white border border-border rounded-xl shadow-lg'>
+					<DialogHeader className='pb-2 border-b border-border/50'>
+						<DialogTitle className='text-sm font-semibold text-foreground truncate'>
+							{selectedItem?.name}
+						</DialogTitle>
+					</DialogHeader>
+					<div className='flex items-center justify-center overflow-hidden bg-muted/5 rounded-lg py-4'>
+						<img
+							src={selectedItem?.src}
+							alt={selectedItem?.name}
+							className='max-h-[70vh] max-w-full object-contain rounded-md'
+						/>
+					</div>
+				</DialogContent>
+			</Dialog>
+		</div>
+	);
 }
 
 export default function ProductDetailPage() {
-  const router = useRouter();
-  const { id } = useParams<{ id: string }>();
-  const [product, setProduct] = useState<Product | null>(null);
-  const [records, setRecords] = useState<Product[]>([]);
+	const router = useRouter();
+	const { id } = useParams<{ id: string }>();
+	const [product, setProduct] = useState<Product | null>(null);
+	const [records, setRecords] = useState<Product[]>([]);
+	const [activeTab, setActiveTab] = useState("overview");
 
-  useEffect(() => {
-    const list = loadProducts();
-    setRecords(list);
-    setProduct(list.find((item) => item.id === Number(id)) ?? null);
-  }, [id]);
+	useEffect(() => {
+		const list = loadProducts();
+		setRecords(list);
+		setProduct(list.find((item) => item.id === Number(id)) ?? null);
+	}, [id]);
 
-  const updateStatus = (status: ProductStatus) => {
-    if (!product) return;
-    const updated = records.map((item) =>
-      item.id === product.id
-        ? { ...item, status, updatedBy: "Admin", updatedDate: new Date().toISOString().slice(0, 10) }
-        : item,
-    );
-    setRecords(updated);
-    saveProducts(updated);
-    setProduct(updated.find((item) => item.id === product.id) ?? null);
-  };
+	const mediaCount = useMemo(
+		() => (product?.assets ?? product?.mediaItems ?? []).length,
+		[product],
+	);
 
-  if (!product) {
-    return (
-      <div className="py-16 text-center">
-        <p className="text-sm text-muted-foreground">Product not found.</p>
-        <Link href="/masters/products" className="text-xs text-brand-600 hover:underline mt-2 inline-block">
-          Back to listing
-        </Link>
-      </div>
-    );
-  }
+	const updateStatus = (status: ProductStatus) => {
+		if (!product) return;
+		const updated = records.map((item) =>
+			item.id === product.id
+				? {
+						...item,
+						status,
+						updatedBy: "Admin",
+						updatedDate: new Date().toISOString().slice(0, 10),
+					}
+				: item,
+		);
+		setRecords(updated);
+		saveProducts(updated);
+		setProduct(updated.find((item) => item.id === product.id) ?? null);
+	};
 
-  const statusCfg = STATUS_CFG[product.status];
+	if (!product) {
+		return (
+			<AppLayout>
+				<div className='py-16 text-center'>
+					<p className='text-sm text-muted-foreground'>Product not found.</p>
+					<Link
+						href='/masters/products'
+						className='text-xs text-brand-600 hover:underline mt-2 inline-block'
+					>
+						Back to listing
+					</Link>
+				</div>
+			</AppLayout>
+		);
+	}
 
-  return (
-    <FormContainer
-      title={product.productName}
-      description={`${product.productId} • ${product.category || "No category"} • ${product.sku || "No SKU"}`}
-      onBack={() => router.push("/masters/products")}
-      actions={
-        <div className="flex items-center gap-2">
-          <StatusPill status={product.status} />
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 text-xs font-semibold rounded-lg gap-1.5"
-            onClick={() => updateStatus(product.status === "active" ? "inactive" : "active")}
-          >
-            {product.status === "active" ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
-            {product.status === "active" ? "Deactivate" : "Activate"}
-          </Button>
-          <Link href={`/masters/products/${product.id}/edit`}>
-            <Button size="sm" className="h-9 gap-1.5 bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700 rounded-lg">
-              <Edit2 className="w-3.5 h-3.5" /> Edit
-            </Button>
-          </Link>
-        </div>
-      }
-      noCard={true}
-    >
-      <div className="max-w-[800px] mx-auto space-y-5">
-        {/* Details Cards */}
-        <div className="grid grid-cols-2 gap-3">
-          <DetailCard title="Product Details">
-            <InfoRow label="Product ID" value={product.productId} mono />
-            <InfoRow label="Product Name" value={product.productName} />
-            <InfoRow label="Category" value={product.category} />
-            <InfoRow label="Segment" value={product.segment} />
-            <InfoRow label="Formulation" value={product.formulation} />
-            <InfoRow label="Base Unit" value={product.baseUnit} />
-            <InfoRow label="Packaging Unit" value={product.packagingUnit} />
-            <InfoRow label="Conversion Quantity" value={product.conversionQuantity !== undefined ? String(product.conversionQuantity) : undefined} />
-          </DetailCard>
+	const tabs = [
+		{ value: "overview", label: "Overview" },
+		...(mediaCount > 0
+			? [{ value: "media", label: "Media & Documents", count: mediaCount }]
+			: []),
+	];
 
-          <DetailCard title="Tax & Pricing">
-            <InfoRow label="HSN Code" value={product.hsnCode} mono />
-            <InfoRow label="GST Rate" value={product.gstRate} />
-            <InfoRow label="MRP" value={formatMoney(product.mrp)} />
-          </DetailCard>
+	const standardPricing = getStandardPricing(product.id);
 
-          <DetailCard title="Commercial & Stock">
-            <InfoRow label="SKU" value={product.sku} mono />
-            <InfoRow label="Crop Applicable" value={product.cropApplicable} />
-            <InfoRow label="Status" value={statusCfg.label} />
-          </DetailCard>
+	const kpis = [
+		{
+			icon: Tag,
+			iconBg: "#EEF3FB",
+			iconColor: "#0C3F8A",
+			value: product.category || "—",
+			label: "Category",
+		},
+		{
+			icon: Package,
+			iconBg: "#E6F7EF",
+			iconColor: "#1E9E61",
+			value: product.sku || "—",
+			label: "SKU",
+		},
+		{
+			icon: IndianRupee,
+			iconBg: "#FFFBEB",
+			iconColor: "#D97706",
+			value: standardPricing
+				? formatIndianRupeeDisplay(standardPricing.mrp)
+				: "—",
+			label: "MRP (Pricing Master)",
+		},
+		{
+			icon: FileText,
+			iconBg: "#F5F3FF",
+			iconColor: "#7C3AED",
+			value: product.hsnCode || "—",
+			label: "HSN Code",
+		},
+	];
 
-          <DetailCard title="Audit Details">
-            <InfoRow label="Created By" value={product.createdBy} />
-            <InfoRow label="Created Date" value={product.createdDate} />
-            <InfoRow label="Updated By" value={product.updatedBy} />
-            <InfoRow label="Updated Date" value={product.updatedDate} />
-          </DetailCard>
-        </div>
+	const renderTabContent = () => {
+		switch (activeTab) {
+			case "overview":
+				return (
+					<div className='grid grid-cols-1 lg:grid-cols-2 gap-4'>
+						<RecordSectionCard
+							title='Product Details'
+							icon={Package}
+							accent='blue'
+						>
+							<RecordKvRow
+								label='Product ID'
+								value={product.productId}
+								mono
+								copy
+							/>
+							<RecordKvRow
+								label='Product Name'
+								value={product.productName}
+								highlight
+							/>
+							<RecordKvRow
+								label='Scientific Name'
+								value={product.scientificName}
+							/>
+							<RecordKvRow label='Category' value={product.category} />
+							<RecordKvRow label='Segment' value={product.segment} />
+							<RecordKvRow
+								label='Form'
+								value={product.form ?? product.formulation}
+							/>
+							<RecordKvRow label='CFU' value={product.cfu} />
+							<RecordKvRow label='Base Unit' value={product.baseUnit} />
+							<RecordKvRow
+								label='Packaging Unit'
+								value={product.packagingUnit}
+							/>
+							<RecordKvRow
+								label='Conversion Quantity'
+								value={
+									product.conversionQuantity !== undefined
+										? String(product.conversionQuantity)
+										: undefined
+								}
+								isLast
+							/>
+						</RecordSectionCard>
 
-        {(product.assets ?? product.mediaItems ?? []).length > 0 && (
-          <DetailCard title="Media">
-            <MediaSection product={product} />
-          </DetailCard>
-        )}
-      </div>
-    </FormContainer>
-  );
+						<RecordSectionCard
+							title='Tax & Compliance'
+							icon={IndianRupee}
+							accent='orange'
+						>
+							<RecordKvRow label='HSN Code' value={product.hsnCode} mono copy />
+							<RecordKvRow
+								label='GST Rate'
+								value={
+									<div className='text-right'>
+										<span>{product.gstRate || "—"}</span>
+										<p className='text-[10px] font-normal text-muted-foreground mt-0.5'>
+											Auto-filled from HSN code
+										</p>
+									</div>
+								}
+								isLast={!standardPricing}
+							/>
+							{standardPricing && (
+								<>
+									<RecordKvRow
+										label='Cost Price (CP)'
+										value={formatIndianRupeeDisplay(standardPricing.costPrice)}
+										amount
+									/>
+									<RecordKvRow
+										label='Distributor Price (DP)'
+										value={formatIndianRupeeDisplay(standardPricing.distributorPrice)}
+										amount
+									/>
+									<RecordKvRow
+										label='Retail Price (RP)'
+										value={formatIndianRupeeDisplay(standardPricing.retailPrice)}
+										amount
+									/>
+									<RecordKvRow
+										label='MRP'
+										value={formatIndianRupeeDisplay(standardPricing.mrp)}
+										amount
+										highlight
+										isLast
+									/>
+									<p className='text-[10px] text-muted-foreground px-1 pt-1'>
+										Pricing from{" "}
+										<Link
+											href='/masters/pricing'
+											className='text-brand-600 hover:underline'
+										>
+											Pricing Master
+										</Link>
+										. Vendor and customer overrides apply at transaction level.
+									</p>
+								</>
+							)}
+							{!standardPricing && (
+								<p className='text-[10px] text-muted-foreground px-1 pt-1'>
+									No active pricing record. Add pricing in{" "}
+									<Link
+										href='/masters/pricing'
+										className='text-brand-600 hover:underline'
+									>
+										Pricing Master
+									</Link>
+									.
+								</p>
+							)}
+						</RecordSectionCard>
+
+						<RecordSectionCard
+							title='Commercial & Stock'
+							icon={Tag}
+							accent='green'
+						>
+							<RecordKvRow label='SKU' value={product.sku} mono copy />
+							<RecordKvRow
+								label='Status'
+								value={
+									<RecordStatusPill
+										label={STATUS_LABEL[product.status]}
+										variant={STATUS_VARIANT[product.status]}
+									/>
+								}
+								isLast
+							/>
+						</RecordSectionCard>
+
+						<RecordSectionCard
+							title='Audit Details'
+							icon={Clock}
+							accent='slate'
+						>
+							<RecordKvRow label='Created By' value={product.createdBy} />
+							<RecordKvRow label='Created Date' value={product.createdDate} />
+							<RecordKvRow label='Updated By' value={product.updatedBy} />
+							<RecordKvRow
+								label='Updated Date'
+								value={product.updatedDate}
+								isLast
+							/>
+						</RecordSectionCard>
+					</div>
+				);
+
+			case "media":
+				return (
+					<RecordSectionCard
+						title='Media & Documents'
+						icon={FileText}
+						accent='purple'
+					>
+						<MediaSection product={product} />
+					</RecordSectionCard>
+				);
+
+			default:
+				return null;
+		}
+	};
+
+	return (
+		<RecordDetailPage
+			listHref='/masters/products'
+			listLabel='Products'
+			recordName={product.productName}
+			recordCode={product.productId}
+			statusLabel={STATUS_LABEL[product.status]}
+			statusVariant={STATUS_VARIANT[product.status]}
+			metaItems={[
+				{ label: product.category || "No category", icon: Tag },
+				{ label: product.sku || "No SKU", icon: Package },
+			]}
+			kpis={kpis}
+			tabs={tabs}
+			activeTab={activeTab}
+			onTabChange={setActiveTab}
+			active={product.status === "active"}
+			onActiveChange={
+				(product.status as string) !== "draft"
+					? (on) => updateStatus(on ? "active" : "inactive")
+					: undefined
+			}
+			toggleDisabled={(product.status as string) === "draft"}
+			onEdit={() => router.push(`/masters/products/${product.id}/edit`)}
+			sidebar={{
+				quickActions: [
+					{
+						label: "Edit Product",
+						icon: Pencil,
+						onClick: () => router.push(`/masters/products/${product.id}/edit`),
+						variant: "primary",
+					},
+				],
+				summary: [
+					{
+						label: "Category",
+						value: product.category || "—",
+						highlight: true,
+					},
+					{ label: "SKU", value: product.sku || "—" },
+					{
+						label: "MRP",
+						value: standardPricing
+							? formatIndianRupeeDisplay(standardPricing.mrp)
+							: "—",
+					},
+					{ label: "GST Rate", value: product.gstRate ? `${product.gstRate} (from HSN)` : "—" },
+					{ label: "Created", value: product.createdDate },
+					{ label: "Updated", value: product.updatedDate },
+				],
+			}}
+		>
+			{renderTabContent()}
+		</RecordDetailPage>
+	);
 }
-
