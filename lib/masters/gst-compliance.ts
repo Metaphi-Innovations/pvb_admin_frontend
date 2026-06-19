@@ -104,9 +104,45 @@ export function validateTAN(v: string): boolean {
 }
 
 export function validateMSMENumber(v: string): boolean {
-	const trimmed = v.trim();
-	if (!trimmed) return false;
-	return /^[A-Za-z0-9]+$/.test(trimmed);
+	return /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/.test(v.trim().toUpperCase());
+}
+
+export const MSME_NUMBER_ERROR =
+	"Please enter valid UDYAM number. Example: UDYAM-MH-27-0123456";
+
+/** Uppercase; allow only UDYAM-format characters. */
+export function normalizeUdyamInput(v: string): string {
+	return v.toUpperCase().replace(/[^A-Z0-9-]/g, "");
+}
+
+/**
+ * Formats UDYAM as user types: UDYAM-XX-00-0000000
+ * First 5 chars = letters, then auto hyphen, then state letters, etc.
+ */
+export function formatUdyamInput(raw: string): string {
+	const chars = raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
+	const g1 = chars.match(/^[A-Z]{0,5}/)?.[0] ?? "";
+	const rest1 = chars.slice(g1.length);
+	const g2 = rest1.match(/^[A-Z]{0,2}/)?.[0] ?? "";
+	const rest2 = rest1.slice(g2.length);
+	const g3 = rest2.match(/^[0-9]{0,2}/)?.[0] ?? "";
+	const rest3 = rest2.slice(g3.length);
+	const g4 = rest3.match(/^[0-9]{0,7}/)?.[0] ?? "";
+
+	let result = g1;
+	if (g1.length === 5) {
+		result += "-";
+		result += g2;
+		if (g2.length === 2) {
+			result += "-";
+			result += g3;
+			if (g3.length === 2) {
+				result += "-";
+				result += g4;
+			}
+		}
+	}
+	return result;
 }
 
 export interface GstRegistrationDetails {
@@ -175,6 +211,9 @@ export async function fetchGstRegistrationDetailsAsync(
 
 export interface GstAddressSnapshot {
 	address: string;
+	addressLine2?: string;
+	country?: string;
+	district?: string;
 	city: string;
 	state: string;
 	pincode: string;
@@ -185,6 +224,8 @@ export function gstDetailsToAddressSnapshot(
 ): GstAddressSnapshot {
 	return {
 		address: details.registeredAddress,
+		country: "India",
+		district: details.district,
 		city: details.district,
 		state: details.state,
 		pincode: details.pincode,

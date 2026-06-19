@@ -19,6 +19,7 @@ import {
   gstApplicableFromCategory,
   isGstCategoryRegistered,
   validateMSMENumber,
+  MSME_NUMBER_ERROR,
   validateTAN,
   GST_REGISTRATION_TYPE_DEFAULT,
   GST_CATEGORY_UNREGISTERED,
@@ -807,9 +808,8 @@ export function validateVendorForm(form: VendorFormValues): string | null {
   }
 
   if (form.msmeRegistered) {
-    if (!form.msmeNumber.trim()) return "MSME number is required when MSME registered.";
-    if (!validateMSMENumber(form.msmeNumber)) {
-      return "MSME number must be alphanumeric.";
+    if (!form.msmeNumber.trim() || !validateMSMENumber(form.msmeNumber)) {
+      return MSME_NUMBER_ERROR;
     }
   }
 

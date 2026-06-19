@@ -5,19 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { type CategoryStatus } from "../category-data";
 
 export interface CategoryFormValues {
-  categoryCode: string;
   categoryName: string;
   description: string;
   status: CategoryStatus;
 }
 
 export const DEFAULT_CATEGORY_FORM: CategoryFormValues = {
-  categoryCode: "",
   categoryName: "",
   description: "",
   status: "active",
@@ -51,11 +48,7 @@ export function CategoryForm({
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div className="space-y-1">
-          <Label className="text-xs font-medium">Category Code</Label>
-          <Input value={form.categoryCode} readOnly className={cn(inputCls("categoryCode"), "font-mono bg-muted/30 cursor-not-allowed")} />
-        </div>
-        <div className="space-y-1">
+        <div className="space-y-1 md:col-span-2">
           <Label className="text-xs font-medium">
             Category Name <span className="text-red-500">*</span>
           </Label>
@@ -68,19 +61,6 @@ export function CategoryForm({
           />
           {errors.categoryName && <p className="text-[11px] text-red-500">{errors.categoryName}</p>}
         </div>
-        {/* <div className="space-y-1">
-          <Label className="text-xs font-medium">Status</Label>
-          <Select value={form.status} onValueChange={(value) => set("status", value as CategoryStatus)} disabled={readOnly}>
-            <SelectTrigger className={inputCls("status")}>
-              <SelectValue placeholder="Select status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="inactive">Inactive</SelectItem>
-            </SelectContent>
-          </Select>
-        </div> */}
-        <div className="hidden md:block" />
         <div className="space-y-1 md:col-span-2">
           <Label className="text-xs font-medium">Description</Label>
           <Textarea
@@ -99,7 +79,6 @@ export function CategoryForm({
 export function validateCategoryForm(form: CategoryFormValues) {
   const errors: Record<string, string> = {};
   if (!form.categoryName.trim()) errors.categoryName = "Category name is required";
-  if (!form.categoryCode.trim()) errors.categoryCode = "Category code is required";
   return errors;
 }
 
@@ -123,4 +102,3 @@ export function CategoryFormActions({
     </div>
   );
 }
-

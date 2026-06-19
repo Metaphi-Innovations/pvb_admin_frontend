@@ -3,11 +3,18 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Save, X, XCircle } from "lucide-react";
+import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { loadProducts, saveProducts } from "../../product-data";
+import {
+  getProductImages,
+  getProductUrls,
+  loadProducts,
+  saveProducts,
+  type ProductImage,
+  type ProductUrl,
+} from "../../product-data";
 import {
   formValuesToProduct,
   ProductForm,
@@ -15,7 +22,6 @@ import {
   type ProductFormValues,
   validateProductForm,
 } from "../../components/ProductForm";
-import { type ProductMediaItem } from "../../product-data";
 
 export default function EditProductPage() {
   const router = useRouter();
@@ -23,15 +29,15 @@ export default function EditProductPage() {
   const [form, setForm] = useState<ProductFormValues | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-  const [productCode, setProductCode] = useState("");
-  const [mediaItems, setMediaItems] = useState<ProductMediaItem[]>([]);
+  const [productImages, setProductImages] = useState<ProductImage[]>([]);
+  const [productUrls, setProductUrls] = useState<ProductUrl[]>([]);
 
   useEffect(() => {
     const found = loadProducts().find((item) => item.id === Number(id));
     if (!found) return;
     setForm(productToFormValues(found));
-    setProductCode(found.productId);
-    setMediaItems(found.assets ?? found.mediaItems ?? []);
+    setProductImages(getProductImages(found));
+    setProductUrls(getProductUrls(found));
   }, [id]);
 
   const clearErr = (key: string) =>
@@ -55,25 +61,15 @@ export default function EditProductPage() {
     const existing = list.find((item) => item.id === Number(id));
     if (!existing) return;
 
-    const updated = formValuesToProduct(form, { ...existing, mediaItems });
+    const updated = formValuesToProduct(form, {
+      ...existing,
+      productImages,
+      productUrls,
+    });
     saveProducts(list.map((item) => (item.id === updated.id ? updated : item)));
     setToast({ msg: "Product updated successfully.", type: "success" });
     setTimeout(() => router.push(`/masters/products/${id}`), 900);
   };
-
-  const addMedia = (items: ProductMediaItem[]) => setMediaItems((prev) => [...prev, ...items]);
-  const removeMedia = (id: string) =>
-    setMediaItems((prev) => {
-      const next = prev.filter((item) => {
-        if (item.id !== id) return true;
-        if (typeof item.url === "string" && item.url.startsWith("blob:")) {
-          URL.revokeObjectURL(item.url);
-        }
-        return false;
-      });
-      return next;
-    });
-  const uploadMedia = () => setMediaItems((prev) => prev.map((item) => (item.uploaded ? item : { ...item, uploaded: true })));
 
   if (!form) {
     return (
@@ -89,13 +85,15 @@ export default function EditProductPage() {
   return (
     <FormContainer
       title="Edit Product"
-      description={`Masters → Product Master → ${productCode}`}
+      description={`Masters → Product Master → ${form.sku || form.productName}`}
       onBack={() => router.back()}
       actions={
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
-            {productCode}
-          </span>
+          {form.sku && (
+            <span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
+              {form.sku}
+            </span>
+          )}
           <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
             Discard
           </Button>
@@ -113,10 +111,12 @@ export default function EditProductPage() {
         onChange={setForm}
         errors={errors}
         onClearError={clearErr}
-        mediaItems={mediaItems}
-        onMediaAdd={addMedia}
-        onMediaRemove={removeMedia}
-        onMediaUpload={uploadMedia}
+        productImages={productImages}
+        productUrls={productUrls}
+        onImageAdd={(items) => setProductImages((prev) => [...prev, ...items])}
+        onImageRemove={(id) => setProductImages((prev) => prev.filter((item) => item.id !== id))}
+        onUrlAdd={(item) => setProductUrls((prev) => [...prev, item])}
+        onUrlRemove={(id) => setProductUrls((prev) => prev.filter((item) => item.id !== id))}
       />
 
       {toast && (

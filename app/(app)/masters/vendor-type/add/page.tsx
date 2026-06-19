@@ -2,31 +2,32 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, CheckCircle2, Save, XCircle } from "lucide-react";
+import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  loadCustomerTypes,
-  saveCustomerTypes,
-  nextCustomerTypeId,
-  generateCustomerTypeCode,
-  validateCustomerTypeInitialCode,
-  validateCustomerTypeCodeUnique,
-  type CustomerTypeRecord,
-} from "../customer-type-data";
 import { normalizeInitialCode } from "@/lib/masters/code-generation";
+import { MASTER_CURRENT_USER, masterToday } from "@/lib/masters/common";
 import {
-  CustomerTypeForm,
-  DEFAULT_CUSTOMER_TYPE_FORM,
-  type CustomerTypeFormValues,
-  validateCustomerTypeForm,
-} from "../components/CustomerTypeForm";
+  loadVendorTypes,
+  saveVendorTypes,
+  nextVendorTypeId,
+  generateVendorTypeCode,
+  validateVendorTypeInitialCode,
+  validateVendorTypeCodeUnique,
+  findVendorTypeDuplicate,
+  type VendorTypeRecord,
+} from "../vendor-type-data";
+import {
+  VendorTypeForm,
+  DEFAULT_VENDOR_TYPE_FORM,
+  validateVendorTypeForm,
+  type VendorTypeFormValues,
+} from "../components/VendorTypeForm";
 
-export default function AddCustomerTypePage() {
+export default function AddVendorTypePage() {
   const router = useRouter();
-  const [form, setForm] = useState<CustomerTypeFormValues>(DEFAULT_CUSTOMER_TYPE_FORM);
+  const [form, setForm] = useState<VendorTypeFormValues>(DEFAULT_VENDOR_TYPE_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -43,15 +44,18 @@ export default function AddCustomerTypePage() {
     });
 
   const handleSave = () => {
-    const validation = validateCustomerTypeForm(form);
-    const list = loadCustomerTypes();
-    const initialErr = validateCustomerTypeInitialCode(form.initialCode, list);
+    const validation = validateVendorTypeForm(form);
+    const list = loadVendorTypes();
+    const initialErr = validateVendorTypeInitialCode(form.initialCode, list);
     if (initialErr) validation.initialCode = initialErr;
-    const customerTypeCode =
-      form.customerTypeCode.trim() ||
-      generateCustomerTypeCode(form.initialCode, list);
-    const codeErr = validateCustomerTypeCodeUnique(customerTypeCode, list);
-    if (codeErr) validation.customerTypeCode = codeErr;
+    if (findVendorTypeDuplicate(form.vendorTypeName, list)) {
+      validation.vendorTypeName = "Vendor type name must be unique.";
+    }
+    const vendorTypeCode =
+      form.vendorTypeCode.trim() ||
+      generateVendorTypeCode(form.initialCode, list);
+    const codeErr = validateVendorTypeCodeUnique(vendorTypeCode, list);
+    if (codeErr) validation.vendorTypeCode = codeErr;
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
       setToast({ msg: "Please fix the errors before saving.", type: "error" });
@@ -59,24 +63,23 @@ export default function AddCustomerTypePage() {
       return;
     }
 
-    const today = new Date().toISOString().slice(0, 10);
-    const newRecord: CustomerTypeRecord = {
-      id: nextCustomerTypeId(list),
-      customerTypeCode,
+    const today = masterToday();
+    const newRecord: VendorTypeRecord = {
+      id: nextVendorTypeId(list),
+      vendorTypeCode,
+      vendorTypeName: form.vendorTypeName.trim(),
       initialCode: normalizeInitialCode(form.initialCode),
-      customerType: form.customerType.trim(),
       description: form.description.trim(),
-      documentTypes: form.documentTypes || [],
-      status: "active",
-      createdBy: "Admin",
-      createdDate: today,
-      updatedBy: "Admin",
-      updatedDate: today,
+      status: form.status,
+      createdBy: MASTER_CURRENT_USER,
+      updatedBy: MASTER_CURRENT_USER,
+      createdAt: today,
+      updatedAt: today,
     };
 
-    saveCustomerTypes([...list, newRecord]);
-    setToast({ msg: "Customer Type added successfully.", type: "success" });
-    setTimeout(() => router.push("/masters/customer-types"), 900);
+    saveVendorTypes([...list, newRecord]);
+    setToast({ msg: "Vendor type added successfully.", type: "success" });
+    setTimeout(() => router.push("/masters/vendor-type"), 900);
   };
 
   if (!mounted) {
@@ -89,8 +92,8 @@ export default function AddCustomerTypePage() {
 
   return (
     <FormContainer
-      title="Add Customer Type"
-      description="Masters → Customer Type Master → Add"
+      title="Add Vendor Type"
+      description="Masters → Vendor Type Master → Add"
       onBack={() => router.back()}
       actions={
         <div className="flex items-center gap-2">
@@ -101,20 +104,16 @@ export default function AddCustomerTypePage() {
             className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
           >
-            <Save className="w-4 h-4" /> Save Customer Type
+            <Save className="w-4 h-4" /> Save Vendor Type
           </Button>
         </div>
       }
     >
-      <CustomerTypeForm
+      <VendorTypeForm
         form={form}
         onChange={setForm}
         errors={errors}
         onClearError={clearErr}
-        triggerToast={(msg, type) => {
-          setToast({ msg, type });
-          setTimeout(() => setToast(null), 3200);
-        }}
       />
 
       {toast && (

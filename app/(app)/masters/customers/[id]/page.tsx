@@ -404,11 +404,7 @@ export default function CustomerDetailPage() {
       case "tax":
         return (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <RecordSectionCard title="Tax & Registration" icon={FileText} accent="orange">
-              <RecordKvRow label="MSME Registered" value={customer.msmeRegistered ? "Yes" : "No"} />
-              {customer.msmeRegistered && (
-                <RecordKvRow label="MSME Number" value={customer.msmeNumber || "—"} mono copy />
-              )}
+            <RecordSectionCard title="GST & Tax Registration" icon={FileText} accent="orange">
               <RecordKvRow
                 label="GST Registered"
                 value={
@@ -433,6 +429,14 @@ export default function CustomerDetailPage() {
                   />
                   <RecordKvRow label="GSTIN" value={customer.gstin} mono copy />
                   <RecordKvRow
+                    label="Registered Company Name"
+                    value={customer.registeredLegalName || "—"}
+                  />
+                  <RecordKvRow
+                    label="Registered Address"
+                    value={customer.registeredAddress || "—"}
+                  />
+                  <RecordKvRow
                     label="GST Code"
                     value={gst ? `${gst.gstId} (${gst.gstPercentage}%)` : "—"}
                     mono
@@ -440,98 +444,26 @@ export default function CustomerDetailPage() {
                 </>
               )}
               <RecordKvRow label="PAN Number" value={customer.pan || "—"} mono copy />
-              <RecordKvRow label="TAN Number" value={customer.tan || "—"} mono />
               <RecordKvRow label="TDS Applicable" value={customer.tdsApplicable ? "Yes" : "No"} />
               {customer.tdsApplicable && (
                 <RecordKvRow
                   label="TDS Section"
                   value={tds ? `${formatTdsSummary(tds)} — ${tds.sectionName}` : "—"}
                   mono
+                  isLast
                 />
+              )}
+            </RecordSectionCard>
+
+            <RecordSectionCard title="Business Registrations" icon={CheckCircle} accent="green">
+              <RecordKvRow label="MSME Registered" value={customer.msmeRegistered ? "Yes" : "No"} />
+              {customer.msmeRegistered && (
+                <RecordKvRow label="MSME Number" value={customer.msmeNumber || "—"} mono copy />
               )}
               <ComplianceRegistrationViewRows
                 values={customer}
                 lastRowProps={{ isLast: true }}
               />
-            </RecordSectionCard>
-
-            <RecordSectionCard title="Compliance Status" icon={CheckCircle} accent="green">
-              <ComplianceRow
-                tone="green"
-                label="GSTIN Registered"
-                value={customer.gstin || "—"}
-                badge="Verified"
-              />
-              <ComplianceRow
-                tone="green"
-                label="TDS Active"
-                value={customer.tdsApplicable ? "Enabled" : "Not enabled"}
-                badge="Active"
-              />
-              <ComplianceRow
-                tone="blue"
-                label="TAN #"
-                value={customer.tan || "—"}
-                badge="On File"
-              />
-              <ComplianceRow
-                tone="green"
-                label="FSSAI Registered"
-                value={
-                  (customer.fssaiRegistered ?? !!customer.fssai?.trim()) ? "Yes" : "No"
-                }
-                badge={
-                  (customer.fssaiRegistered ?? !!customer.fssai?.trim()) ? "Valid" : "N/A"
-                }
-              />
-              {(customer.fssaiRegistered ?? !!customer.fssai?.trim()) && (
-                <ComplianceRow
-                  tone="green"
-                  label="FSSAI Number"
-                  value={customer.fssai || "—"}
-                  badge="On File"
-                />
-              )}
-              <ComplianceRow
-                tone="amber"
-                label="CIB Registered"
-                value={
-                  (customer.cibRegistered ?? !!customer.cibRegn?.trim()) ? "Yes" : "No"
-                }
-                badge={
-                  (customer.cibRegistered ?? !!customer.cibRegn?.trim()) ? "Review" : "N/A"
-                }
-              />
-              {(customer.cibRegistered ?? !!customer.cibRegn?.trim()) && (
-                <ComplianceRow
-                  tone="amber"
-                  label="CIB Registration Number"
-                  value={customer.cibRegn || "—"}
-                  badge="On File"
-                />
-              )}
-              <ComplianceRow
-                tone="blue"
-                label="FCO Registered"
-                value={
-                  (customer.fcoRegistered ?? !!customer.fcoRegn?.trim()) ? "Yes" : "No"
-                }
-                badge={
-                  (customer.fcoRegistered ?? !!customer.fcoRegn?.trim()) ? "On File" : "N/A"
-                }
-                isLast={
-                  !(customer.fcoRegistered ?? !!customer.fcoRegn?.trim())
-                }
-              />
-              {(customer.fcoRegistered ?? !!customer.fcoRegn?.trim()) && (
-                <ComplianceRow
-                  tone="blue"
-                  label="FCO Registration Number"
-                  value={customer.fcoRegn || "—"}
-                  badge="On File"
-                  isLast
-                />
-              )}
             </RecordSectionCard>
           </div>
         );
@@ -601,10 +533,6 @@ export default function CustomerDetailPage() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <RecordSectionCard title="Commercial Details" icon={IndianRupee} accent="orange">
               <RecordKvRow label="Credit Limit" value={formatCreditLimit(customer.creditLimit)} amount highlight />
-              <RecordKvRow
-                label="Interest Rate"
-                value={customer.interestRate ? `${customer.interestRate}%` : "—"}
-              />
               <RecordKvRow label="Payment Terms" value={payLabel} />
               <RecordKvRow label="Sales Man" value={customer.salesManName} isLast />
             </RecordSectionCard>
@@ -667,14 +595,6 @@ export default function CustomerDetailPage() {
                   >
                     {payLabel}
                   </span>
-                  {customer.interestRate ? (
-                    <span
-                      className="inline-flex items-center rounded-md text-[11px] font-semibold"
-                      style={{ background: "#FFFBEB", color: "#92400E", padding: "3px 9px" }}
-                    >
-                      {customer.interestRate}% p.a.
-                    </span>
-                  ) : null}
                 </div>
               </div>
             </RecordSectionCard>

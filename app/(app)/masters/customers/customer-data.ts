@@ -73,11 +73,14 @@ export interface Customer {
 	gstApplicable: boolean;
 	gstin: string;
 	gstCategory?: string;
+	registeredLegalName?: string;
+	registeredAddress?: string;
 	gstMasterId: number | null;
 	tdsApplicable: boolean;
 	tdsMasterId: number | null;
 	pan?: string;
-	tan: string;
+	/** @deprecated removed from UI — retained for legacy records */
+	tan?: string;
 	msmeRegistered?: boolean;
 	msmeNumber?: string;
 	fssaiRegistered?: boolean;

@@ -35,7 +35,6 @@ export default function EditCategoryPage() {
     setRecord(found);
     if (found) {
       setForm({
-        categoryCode: found.categoryCode,
         categoryName: found.categoryName,
         description: found.description,
         status: found.status,
@@ -68,7 +67,6 @@ export default function EditCategoryPage() {
       item.id === Number(id)
         ? {
             ...item,
-            categoryCode: form.categoryCode,
             categoryName: form.categoryName.trim(),
             description: form.description.trim(),
             status: form.status,
@@ -109,7 +107,7 @@ export default function EditCategoryPage() {
             <p className="text-[11px] text-muted-foreground mt-0.5">Masters → Category Master → Edit</p>
           </div>
           <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-brand-50 text-brand-700">
-            {form.categoryCode}
+            #{record.id}
           </span>
           <Button variant="outline" size="sm" className="h-7 text-[11px] px-3" onClick={() => router.back()}>
             Discard

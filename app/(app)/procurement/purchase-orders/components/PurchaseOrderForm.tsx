@@ -1065,9 +1065,9 @@ export function PurchaseOrderForm({
 									/>
 								</div>
 								<div className="space-y-1">
-									<Label className="text-xs font-medium">Product Code</Label>
+									<Label className="text-xs font-medium">SKU</Label>
 									<Input
-										placeholder="e.g., PRD-0044"
+										placeholder="e.g., FERT-WSF-019"
 										value={quickProduct.code}
 										onChange={(e) =>
 											setQuickProduct((p) => ({ ...p, code: e.target.value }))

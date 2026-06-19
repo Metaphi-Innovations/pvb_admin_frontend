@@ -25,8 +25,12 @@ export function validateComplianceRegistration(
 	values: ComplianceRegistrationValues,
 ): Record<string, string> {
 	const errors: Record<string, string> = {};
-	if (values.fssaiRegistered && !values.fssai.trim()) {
-		errors.fssai = "FSSAI number is required when FSSAI registered";
+	if (values.fssaiRegistered) {
+		if (!values.fssai.trim()) {
+			errors.fssai = FSSAI_NUMBER_ERROR;
+		} else if (!validateFSSAINumber(values.fssai)) {
+			errors.fssai = FSSAI_NUMBER_ERROR;
+		}
 	}
 	if (values.cibRegistered && !values.cibRegn.trim()) {
 		errors.cibRegn = "CIB registration number is required when CIB registered";
@@ -35,6 +39,21 @@ export function validateComplianceRegistration(
 		errors.fcoRegn = "FCO registration number is required when FCO registered";
 	}
 	return errors;
+}
+
+export function validateFSSAINumber(v: string): boolean {
+	return /^[0-9]{14}$/.test(v.trim());
+}
+
+export const FSSAI_NUMBER_ERROR =
+	"Please enter valid 14-digit FSSAI License/Registration Number.";
+
+export const FSSAI_HELPER_TEXT =
+	"Enter the 14-digit FSSAI License/Registration Number issued by FSSAI.";
+
+/** Digits only, max 14. */
+export function normalizeFssaiInput(v: string): string {
+	return v.replace(/\D/g, "").slice(0, 14);
 }
 
 export function complianceRegistrationToStored(
