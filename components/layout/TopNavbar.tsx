@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { NAV_ITEMS, type NavGroup, type NavItem } from "@/components/navigation/nav-config";
+import { arrangeAccountsMegaMenuColumns } from "@/lib/accounts/accounts-nav";
+import type { AccountsNavGroupId } from "@/lib/accounts/accounts-nav";
 import { PrefetchLink } from "@/components/navigation/PrefetchLink";
 import { prefetchNavChildren } from "@/components/navigation/NavRoutePrefetch";
 
@@ -48,6 +50,165 @@ function activeGroupIndex(pathname: string, search: string, groups: NavGroup[]):
     g.children.some((c) => isNavHrefActive(pathname, search, c.href)),
   );
   return idx >= 0 ? idx : 0;
+}
+
+function MegaMenuLink({
+  child,
+  pathname,
+  search,
+  onClose,
+}: {
+  child: { label: string; href: string; icon?: React.ComponentType<{ className?: string }>; description?: string };
+  pathname: string;
+  search: string;
+  onClose: () => void;
+}) {
+  const childActive = isNavHrefActive(pathname, search, child.href);
+  const ChildIcon = child.icon;
+  return (
+    <PrefetchLink
+      href={child.href}
+      onClick={onClose}
+      className={cn(
+        "group flex items-start gap-2.5 py-2 px-1 rounded-md transition-colors duration-100 min-w-0",
+        childActive ? "bg-brand-50 text-brand-700" : "hover:bg-brand-50/70",
+      )}
+    >
+      {ChildIcon ? (
+        <span
+          className={cn(
+            "w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 transition-colors mt-0.5",
+            childActive
+              ? "bg-brand-100 border-brand-200 text-brand-600"
+              : "bg-muted/40 border-border/60 text-muted-foreground group-hover:text-brand-600 group-hover:border-brand-200",
+          )}
+        >
+          <ChildIcon className="w-4 h-4" />
+        </span>
+      ) : (
+        <span
+          className={cn(
+            "w-2 h-2 rounded-full border flex-shrink-0 mt-2 transition-colors",
+            childActive
+              ? "border-brand-600 bg-brand-600"
+              : "border-foreground/30 group-hover:border-brand-500",
+          )}
+        />
+      )}
+      <span className="min-w-0 flex-1 pt-0.5">
+        <span
+          className={cn(
+            "block text-[13px] font-medium leading-tight",
+            childActive && "font-semibold",
+          )}
+        >
+          {child.label}
+        </span>
+        {child.description ? (
+          <span className="block text-[11px] text-muted-foreground leading-snug mt-1 line-clamp-2">
+            {child.description}
+          </span>
+        ) : null}
+      </span>
+    </PrefetchLink>
+  );
+}
+
+function HorizontalTabsMegaMenu({
+  item,
+  groupedChildren,
+  hoveredGroup,
+  setHoveredGroup,
+  pathname,
+  search,
+  onClose,
+}: {
+  item: NavItem;
+  groupedChildren: NavGroup[];
+  hoveredGroup: number;
+  setHoveredGroup: (idx: number) => void;
+  pathname: string;
+  search: string;
+  onClose: () => void;
+}) {
+  const activeGroup = groupedChildren[hoveredGroup];
+  const activeChildren = activeGroup?.children ?? [];
+  const columns = arrangeAccountsMegaMenuColumns(
+    (activeGroup?.id ?? "masters") as AccountsNavGroupId,
+    activeChildren.map((c) => ({
+      label: c.label,
+      href: c.href,
+      icon: c.icon,
+      description: c.description,
+    })),
+  );
+  const hasRightColumn = columns.right.length > 0;
+
+  return (
+    <div className="flex flex-col min-w-0">
+      <div className="flex-shrink-0 border-b border-border/50 bg-white">
+        <div className="flex gap-0.5 overflow-x-auto px-1.5 py-1 [scrollbar-width:thin]">
+          {groupedChildren.map((group, idx) => {
+            const isActive = hoveredGroup === idx;
+            return (
+              <button
+                key={group.label}
+                type="button"
+                onMouseEnter={() => setHoveredGroup(idx)}
+                onFocus={() => setHoveredGroup(idx)}
+                onClick={() => setHoveredGroup(idx)}
+                className={cn(
+                  "px-2 py-0.5 rounded text-[12px] font-medium whitespace-nowrap transition-colors outline-none flex-shrink-0",
+                  isActive
+                    ? "bg-brand-50 text-brand-700 border border-brand-100 shadow-sm"
+                    : "text-muted-foreground hover:text-brand-700 hover:bg-brand-50/60 border border-transparent",
+                )}
+              >
+                {group.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="px-3 py-2">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2 px-0.5">
+          {activeGroup?.label}
+        </p>
+        <div
+          className={cn(
+            "grid gap-x-4 gap-y-0 max-[640px]:grid-cols-1",
+            hasRightColumn ? "grid-cols-2" : "grid-cols-1",
+          )}
+        >
+          <div className="space-y-0 min-w-0">
+            {columns.left.map((child) => (
+              <MegaMenuLink
+                key={child.href}
+                child={child}
+                pathname={pathname}
+                search={search}
+                onClose={onClose}
+              />
+            ))}
+          </div>
+          {hasRightColumn ? (
+            <div className="space-y-0 min-w-0">
+              {columns.right.map((child) => (
+                <MegaMenuLink
+                  key={child.href}
+                  child={child}
+                  pathname={pathname}
+                  search={search}
+                  onClose={onClose}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export const TopNavbar = memo(function TopNavbar() {
@@ -242,26 +403,34 @@ const NavDropdown = memo(function NavDropdown({
   const children = item.children ?? [];
   const groupedChildren = item.groupedChildren ?? [];
   const hasGroups = groupedChildren.length > 0;
+  const isAccountsMenu = item.id === "accounts";
   const isSidebarMenu = item.menuLayout === "sidebar" && hasGroups;
+  const isHorizontalTabsMenu = item.menuLayout === "horizontal-tabs" && hasGroups;
   const isMasters = item.id === "masters";
   const [hoveredGroup, setHoveredGroup] = useState(0);
+  const [panelWidth, setPanelWidth] = useState(760);
 
-  const menuWidth = isSidebarMenu
-    ? 760
-    : hasGroups
-      ? groupedChildren.length > 3
-        ? 820
-        : 780
-      : isMasters
-        ? 520
-        : 300;
+  const resolveMenuWidth = () => {
+    if (isHorizontalTabsMenu) {
+      return Math.min(560, Math.max(480, window.innerWidth - 48));
+    }
+    if (isSidebarMenu) return isAccountsMenu ? 780 : 760;
+    if (hasGroups) return groupedChildren.length > 3 ? 820 : 780;
+    return isMasters ? 520 : 300;
+  };
 
   const updateMenuPosition = () => {
     const el = triggerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const maxLeft = Math.max(8, Math.min(rect.left, window.innerWidth - menuWidth - 8));
-    setMenuPos({ top: rect.bottom + 6, left: maxLeft });
+    const width = resolveMenuWidth();
+    setPanelWidth(width);
+    const margin = 24;
+    let left = isAccountsMenu ? rect.right - width : rect.left;
+    const maxLeft = window.innerWidth - width - margin;
+    if (left > maxLeft) left = maxLeft;
+    if (left < margin) left = margin;
+    setMenuPos({ top: rect.bottom + 6, left });
   };
 
   useLayoutEffect(() => {
@@ -273,7 +442,7 @@ const NavDropdown = memo(function NavDropdown({
       window.removeEventListener("resize", updateMenuPosition);
       window.removeEventListener("scroll", updateMenuPosition, true);
     };
-  }, [isOpen, menuWidth]);
+  }, [isOpen, isHorizontalTabsMenu, isSidebarMenu, hasGroups, groupedChildren.length, isMasters]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -302,10 +471,10 @@ const NavDropdown = memo(function NavDropdown({
   }, [isOpen]);
 
   useEffect(() => {
-    if (isOpen && isSidebarMenu) {
+    if (isOpen && (isSidebarMenu || isHorizontalTabsMenu)) {
       setHoveredGroup(activeGroupIndex(pathname, search, groupedChildren));
     }
-  }, [isOpen, isSidebarMenu, pathname, search, groupedChildren]);
+  }, [isOpen, isSidebarMenu, isHorizontalTabsMenu, pathname, search, groupedChildren]);
 
   // ── Close on route change ────────────────────────────────────────────────
   useEffect(() => { setIsOpen(false); }, [pathname, search]);
@@ -323,19 +492,36 @@ const NavDropdown = memo(function NavDropdown({
       ref={menuRef}
       role="menu"
       className={cn(
-        "fixed rounded-xl border border-border bg-white p-3 shadow-2xl",
+        "fixed rounded-xl border border-border bg-white shadow-2xl",
         "animate-in fade-in-0 zoom-in-95 duration-100",
+        isHorizontalTabsMenu ? "p-0 overflow-hidden" : "p-3",
       )}
       style={{
         top: menuPos.top,
         left: menuPos.left,
-        width: menuWidth,
+        width: panelWidth,
+        maxWidth: "calc(100vw - 48px)",
         zIndex: 10000,
       }}
     >
-      {hasGroups && isSidebarMenu ? (
-        <div className="flex flex-col min-h-[260px] -m-1 overflow-hidden rounded-lg">
-          {item.href && (
+      {hasGroups && isHorizontalTabsMenu ? (
+        <HorizontalTabsMegaMenu
+          item={item}
+          groupedChildren={groupedChildren}
+          hoveredGroup={hoveredGroup}
+          setHoveredGroup={setHoveredGroup}
+          pathname={pathname}
+          search={search}
+          onClose={() => setIsOpen(false)}
+        />
+      ) : hasGroups && isSidebarMenu ? (
+        <div
+          className={cn(
+            "flex flex-col -m-1 overflow-hidden rounded-lg",
+            isAccountsMenu ? "min-h-[280px]" : "min-h-[260px]",
+          )}
+        >
+          {item.href && !isAccountsMenu && (
             <PrefetchLink
               href={item.href}
               onClick={() => setIsOpen(false)}
@@ -346,7 +532,11 @@ const NavDropdown = memo(function NavDropdown({
             </PrefetchLink>
           )}
           <div className="flex flex-1 min-h-0">
-          <div className="w-[272px] flex-shrink-0 bg-muted/25 border-r border-border/80 p-2 space-y-1">
+          <div
+            className={cn(
+              "w-[272px] flex-shrink-0 bg-muted/25 border-r border-border/80 p-2 space-y-1",
+            )}
+          >
             {groupedChildren.map((group, idx) => {
               const GroupIcon = group.icon;
               const isHovered = hoveredGroup === idx;
@@ -387,6 +577,55 @@ const NavDropdown = memo(function NavDropdown({
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-3 px-1">
               {groupedChildren[hoveredGroup]?.label}
             </p>
+            {isAccountsMenu ? (
+              (() => {
+                const activeGroup = groupedChildren[hoveredGroup];
+                const activeChildren = activeGroup?.children ?? [];
+                const columns = arrangeAccountsMegaMenuColumns(
+                  (activeGroup?.id ?? "masters") as AccountsNavGroupId,
+                  activeChildren.map((c) => ({
+                    label: c.label,
+                    href: c.href,
+                    icon: c.icon,
+                    description: c.description,
+                  })),
+                );
+                const hasRightColumn = columns.right.length > 0;
+                return (
+                  <div
+                    className={cn(
+                      "grid gap-x-6 gap-y-0.5",
+                      hasRightColumn ? "grid-cols-2" : "grid-cols-1",
+                    )}
+                  >
+                    <div className="min-w-0 space-y-0">
+                      {columns.left.map((child) => (
+                        <MegaMenuLink
+                          key={child.href}
+                          child={child}
+                          pathname={pathname}
+                          search={search}
+                          onClose={() => setIsOpen(false)}
+                        />
+                      ))}
+                    </div>
+                    {hasRightColumn ? (
+                      <div className="min-w-0 space-y-0">
+                        {columns.right.map((child) => (
+                          <MegaMenuLink
+                            key={child.href}
+                            child={child}
+                            pathname={pathname}
+                            search={search}
+                            onClose={() => setIsOpen(false)}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })()
+            ) : (
             <div
               className={cn(
                 "grid gap-x-6 gap-y-0.5",
@@ -427,6 +666,7 @@ const NavDropdown = memo(function NavDropdown({
                 );
               })}
             </div>
+            )}
           </div>
           </div>
         </div>

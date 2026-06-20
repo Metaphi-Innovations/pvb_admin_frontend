@@ -33,6 +33,7 @@ import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 
 interface ToastState {
   msg: string;
@@ -59,12 +60,14 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 interface UOMForm {
   unitName: string;
   shortName: string;
+  measuringUnit: string;
   status: "active" | "inactive";
 }
 
 const DEFAULT_UOM_FORM: UOMForm = {
   unitName: "",
   shortName: "",
+  measuringUnit: "",
   status: "active",
 };
 
@@ -145,6 +148,15 @@ export default function UOMPage() {
       filterable: true,
       filterType: "text",
       width: "130px",
+    },
+    {
+      key: "measuringUnit",
+      header: "Measuring Unit",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "160px",
+      render: (val, row) => row.measuringUnit || "—",
     },
     {
       key: "status",
@@ -257,6 +269,7 @@ export default function UOMPage() {
     setForm({
       unitName: row.unitName,
       shortName: row.shortName,
+      measuringUnit: row.measuringUnit || "",
       status: row.status,
     });
     setErrors({});
@@ -291,6 +304,7 @@ export default function UOMPage() {
         uomId: generateUOMCode(nextIdVal),
         unitName: form.unitName.trim(),
         shortName: form.shortName.trim(),
+        measuringUnit: form.measuringUnit,
         status: form.status,
         createdBy: "Admin",
         createdDate: todayStr(),
@@ -306,6 +320,7 @@ export default function UOMPage() {
               ...r,
               unitName: form.unitName.trim(),
               shortName: form.shortName.trim(),
+              measuringUnit: form.measuringUnit,
               status: form.status,
               updatedBy: "Admin",
               updatedDate: todayStr(),
@@ -332,7 +347,7 @@ export default function UOMPage() {
 
   const handleExport = () => {
     try {
-      const headers = ["ID", "Unit ID", "Unit Name", "Short Name", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
+      const headers = ["ID", "Unit ID", "Unit Name", "Short Name", "Measuring Unit", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
       const csvRows = [headers.join(",")];
       for (const r of records) {
         const row = [
@@ -340,6 +355,7 @@ export default function UOMPage() {
           `"${r.uomId.replace(/"/g, '""')}"`,
           `"${r.unitName.replace(/"/g, '""')}"`,
           `"${r.shortName.replace(/"/g, '""')}"`,
+          `"${(r.measuringUnit || "").replace(/"/g, '""')}"`,
           r.status,
           r.createdBy,
           r.createdDate,
@@ -434,6 +450,7 @@ export default function UOMPage() {
                   { label: "Unit Name", value: r.unitName },
                   { label: "Unit ID", value: r.uomId, mono: true },
                   { label: "Short Name", value: r.shortName },
+                  { label: "Measuring Unit", value: r.measuringUnit || "—" },
                 ],
                 showDescription: false,
               })(active)
@@ -480,6 +497,18 @@ export default function UOMPage() {
                   className={cn("h-8 text-xs", errors.shortName && "border-red-400 focus-visible:ring-red-300")}
                 />
                 {errors.shortName && <p className="text-[11px] text-red-500 mt-1">{errors.shortName}</p>}
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs font-medium">Measuring Unit</Label>
+                <AutocompleteSelect
+                  options={records
+                    .filter((r) => r.id !== active?.id && r.status === "active")
+                    .map((r) => ({ label: r.unitName, value: r.unitName }))}
+                  value={form.measuringUnit}
+                  onChange={(val) => setForm((prev) => ({ ...prev, measuringUnit: val }))}
+                  placeholder="Select Measuring Unit"
+                  className="h-8 text-xs rounded-lg"
+                />
               </div>
             </MasterFormGrid>
           </div>

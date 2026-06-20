@@ -1,5 +1,5 @@
-import BankAccountsMasterClient from "./BankAccountsMasterClient";
+import { redirect } from "next/navigation";
 
-export default function Page() {
-  return <BankAccountsMasterClient />;
+export default function MastersBankAccountsPage() {
+  redirect("/accounts/banking/bank-accounts");
 }

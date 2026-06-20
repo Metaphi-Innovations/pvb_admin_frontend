@@ -3,6 +3,8 @@ export interface DispatchProduct {
   sku: string;
   packedQty: number;
   dispatchQty: number;
+  unitRate?: number;
+  batchNo?: string;
 }
 
 export interface DeliveryDetails {

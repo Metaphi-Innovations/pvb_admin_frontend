@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import DebitNoteFormPageClient from "../../../debit-notes/DebitNoteFormPageClient";
 
-export default function LegacyRedirect() {
-  redirect("/accounts/vouchers?tab=debit-note&mode=new");
+export default function NewDebitNotePage() {
+  return <DebitNoteFormPageClient />;
 }

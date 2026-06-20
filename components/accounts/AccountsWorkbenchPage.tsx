@@ -40,6 +40,7 @@ export function AccountsWorkbenchPage({
       description={description}
       actions={actions}
       layout="split"
+      className="h-full min-h-0"
     >
       <div className="flex-1 overflow-auto min-h-0">
         {rows.length === 0 ? (

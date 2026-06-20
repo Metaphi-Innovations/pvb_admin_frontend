@@ -102,7 +102,7 @@ export function Pagination({
               <SelectTrigger className="h-7 w-[52px] text-[11px] rounded-lg border-border bg-white px-2">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="!min-w-[75px] !w-[75px]">
                 {PAGE_SIZE_OPTIONS.map((n) => (
                   <SelectItem key={n} value={String(n)} className="text-xs">
                     {n}

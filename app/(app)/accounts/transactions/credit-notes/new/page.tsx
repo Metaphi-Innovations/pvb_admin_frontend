@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import CreditNoteFormPageClient from "../../../credit-notes/CreditNoteFormPageClient";
 
-export default function LegacyRedirect() {
-  redirect("/accounts/vouchers?tab=credit-note&mode=new");
+export default function NewCreditNotePage() {
+  return <CreditNoteFormPageClient />;
 }

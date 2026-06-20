@@ -1,5 +1,5 @@
-import BankAccountsMasterClient from "@/app/(app)/accounts/masters/bank-accounts/BankAccountsMasterClient";
+import BankAccountsPageClient from "./BankAccountsPageClient";
 
 export default function BankingBankAccountsPage() {
-  return <BankAccountsMasterClient />;
+  return <BankAccountsPageClient />;
 }

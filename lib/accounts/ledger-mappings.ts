@@ -15,6 +15,11 @@ import {
   resolveHierarchyPath,
 } from "@/lib/accounts/coa-hierarchy";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import {
+  GST_MAPPING_LEDGER_NAMES,
+  isGstMappingKey,
+  resolveGstLedger,
+} from "@/lib/accounts/gst-accounting";
 
 export type LedgerMappingKey =
   | "sales_revenue"
@@ -22,14 +27,18 @@ export type LedgerMappingKey =
   | "sales_cgst"
   | "sales_sgst"
   | "sales_igst"
+  | "sales_cogs"
   | "purchase_inventory"
   | "purchase_payable"
   | "purchase_cgst"
   | "purchase_sgst"
   | "purchase_igst"
+  | "grn_clearing"
   | "hr_claim_expense"
   | "hr_claim_payable"
   | "stock_adjustment"
+  | "stock_adjustment_gain"
+  | "stock_loss_expense"
   | "stock_inventory"
   | "cash_ledger"
   | "bank_ledger"
@@ -64,6 +73,11 @@ export const DEFAULT_MAPPING_TARGETS: Record<
   sales_cgst: { module: "sales", subGroupName: "Duties & Taxes Payable", description: "Output CGST" },
   sales_sgst: { module: "sales", subGroupName: "Duties & Taxes Payable", description: "Output SGST" },
   sales_igst: { module: "sales", subGroupName: "Duties & Taxes Payable", description: "Output IGST" },
+  sales_cogs: {
+    module: "sales",
+    subGroupName: "Cost of Goods Sold",
+    description: "Debit COGS on sales dispatch at cost price",
+  },
   purchase_inventory: {
     module: "procurement",
     subGroupName: "Inventory / Stock-in-Hand",
@@ -74,9 +88,14 @@ export const DEFAULT_MAPPING_TARGETS: Record<
     subGroupName: "Trade Payables / Sundry Creditors",
     description: "Credit vendor payable on purchase invoice",
   },
-  purchase_cgst: { module: "procurement", subGroupName: "GST Payable", description: "Input CGST" },
-  purchase_sgst: { module: "procurement", subGroupName: "GST Payable", description: "Input SGST" },
-  purchase_igst: { module: "procurement", subGroupName: "GST Payable", description: "Input IGST" },
+  purchase_cgst: { module: "procurement", subGroupName: "Duties & Taxes Payable", description: "Input CGST (ITC)" },
+  purchase_sgst: { module: "procurement", subGroupName: "Duties & Taxes Payable", description: "Input SGST (ITC)" },
+  purchase_igst: { module: "procurement", subGroupName: "Duties & Taxes Payable", description: "Input IGST (ITC)" },
+  grn_clearing: {
+    module: "procurement",
+    subGroupName: "Other Current Liabilities",
+    description: "GRN clearing / purchase accrual on goods receipt",
+  },
   hr_claim_expense: {
     module: "tada_claims",
     subGroupName: "Business Development Expenses",
@@ -89,8 +108,18 @@ export const DEFAULT_MAPPING_TARGETS: Record<
   },
   stock_adjustment: {
     module: "journal",
-    subGroupName: "Other Current Assets",
-    description: "Stock adjustment gain/loss",
+    subGroupName: "Miscellaneous Expenses",
+    description: "Stock adjustment loss (legacy)",
+  },
+  stock_loss_expense: {
+    module: "journal",
+    subGroupName: "Miscellaneous Expenses",
+    description: "Inventory loss on stock reconciliation (shortage)",
+  },
+  stock_adjustment_gain: {
+    module: "journal",
+    subGroupName: "Miscellaneous Income",
+    description: "Stock adjustment gain on reconciliation (surplus)",
   },
   stock_inventory: {
     module: "journal",
@@ -143,7 +172,13 @@ export function saveLedgerMappings(list: LedgerMapping[]) {
 export function resolveMappingLedger(
   mappingKey: LedgerMappingKey,
   partyName: string,
-  options?: { createIfMissing?: boolean; asSubLedger?: boolean },
+  options?: {
+    createIfMissing?: boolean;
+    asSubLedger?: boolean;
+    isSystemGenerated?: boolean;
+    erpSourceModule?: string;
+    erpSourceId?: number;
+  },
 ): ChartOfAccount | null {
   const mappings = loadLedgerMappings();
   const mapping = mappings.find((m) => m.mappingKey === mappingKey && m.isActive);
@@ -152,6 +187,18 @@ export function resolveMappingLedger(
   if (mapping.coaAccountId) {
     const fixed = loadChartOfAccounts().find((r) => r.id === mapping.coaAccountId);
     if (fixed) return fixed;
+  }
+
+  if (isGstMappingKey(mappingKey)) {
+    const gstLedger = resolveGstLedger(mappingKey);
+    if (gstLedger) return gstLedger;
+    const ledgerName = GST_MAPPING_LEDGER_NAMES[mappingKey];
+    if (ledgerName) {
+      const byName = loadChartOfAccounts().find(
+        (r) => r.nodeLevel === "ledger" && r.accountName === ledgerName,
+      );
+      if (byName) return byName;
+    }
   }
 
   const candidates = getLedgersUnderSubGroupName(mapping.subGroupName);
@@ -222,6 +269,9 @@ export function resolveMappingLedger(
     tdsApplicable: false,
     costCenterApplicable: false,
     bankAccountFlag: mappingKey === "bank_ledger",
+    isSystemGenerated: options?.isSystemGenerated,
+    erpSourceModule: options?.erpSourceModule,
+    erpSourceId: options?.erpSourceId,
     createdBy: ACCOUNTS_CURRENT_USER,
     updatedBy: ACCOUNTS_CURRENT_USER,
   };

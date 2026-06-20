@@ -16,6 +16,7 @@ import {
   validateVendorForm,
   generateVendorCodeForType,
 } from "../vendor-data";
+import { ensureVendorLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
 import { CURRENT_USER } from "@/lib/procurement/config";
 
 function Toast({ msg, type, onDismiss }: { msg: string; type: "success" | "error"; onDismiss: () => void }) {
@@ -69,6 +70,7 @@ export default function NewVendorPage() {
       updatedDate: today,
     });
     saveVendors([...list, record]);
+    ensureVendorLedgerFromMaster(record);
     setToast({ msg: "Vendor created.", type: "success" });
     setTimeout(() => router.push("/masters/vendors"), 700);
   };

@@ -1,5 +1,9 @@
-import { redirect } from "next/navigation";
+"use client";
 
-export default function LegacyRedirect() {
-  redirect("/accounts/vouchers?tab=purchase");
+import { use } from "react";
+import PurchaseInvoiceFormClient from "../../PurchaseInvoiceFormClient";
+
+export default function EditPurchaseInvoicePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  return <PurchaseInvoiceFormClient invoiceId={Number(id)} />;
 }

@@ -18,7 +18,7 @@ export default function EmployeeClaimsPayableClient() {
 
   return (
     <AccountsWorkbenchPage
-      section="Payables"
+      section="Purchases"
       title="Employee Claims Payable"
       description="Approved HR claims posted to Expenses Payable ledgers awaiting payment."
       columns={[

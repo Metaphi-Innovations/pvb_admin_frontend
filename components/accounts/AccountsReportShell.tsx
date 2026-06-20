@@ -29,6 +29,7 @@ export interface ReportKpi {
 export interface AccountsReportShellProps {
   title: string;
   description?: string;
+  section?: string;
   kpis?: ReportKpi[];
   columns: ReportColumn[];
   rows: Record<string, string | number>[];
@@ -39,6 +40,7 @@ export interface AccountsReportShellProps {
 export function AccountsReportShell({
   title,
   description = "Report view with filters and export. Data from local mock / posted vouchers.",
+  section = "Reports",
   kpis,
   columns,
   rows,
@@ -61,7 +63,7 @@ export function AccountsReportShell({
 
   return (
     <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Reports", title)}
+      breadcrumbs={accountsBreadcrumb(section, title)}
       title={title}
       description={description}
       actions={
@@ -71,6 +73,7 @@ export function AccountsReportShell({
       }
       filters={filters}
       layout="split"
+      className="h-full min-h-0"
     >
       {kpis && kpis.length > 0 && (
         <div className="flex-shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 border-b border-border/60 bg-muted/10">

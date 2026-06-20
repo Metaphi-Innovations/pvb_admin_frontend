@@ -29,11 +29,8 @@ import {
   validateSubLedgerForm,
   type LedgerFormValues,
 } from "./chart-of-accounts-data";
-import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
-import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { CoaNodeDetail } from "./components/CoaNodeDetail";
 import { LedgerSheet } from "./components/LedgerSheet";
-import { ChevronsDownUp, ChevronsUpDown, Plus } from "lucide-react";
 
 type SheetMode = "add" | "edit" | "view" | null;
 type SheetKind = "ledger" | "sub_ledger";
@@ -157,48 +154,19 @@ export default function ChartOfAccountsPageClient() {
   };
 
   return (
-    <>
-      <AccountsPageShell
-        breadcrumbs={accountsBreadcrumb("Masters", "Chart of Accounts")}
-        title="Chart of Accounts"
-        description="Select an account from the sidebar hierarchy. Details appear here."
-        actions={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={expandAll}>
-              <ChevronsUpDown className="w-3.5 h-3.5" /> Expand All
-            </Button>
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={collapseAll}>
-              <ChevronsDownUp className="w-3.5 h-3.5" /> Collapse All
-            </Button>
-            {canAddOnSelection && (
-              <Button
-                size="sm"
-                className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1"
-                onClick={() => openAddLedger(selectedNode!.id)}
-              >
-                <Plus className="w-3.5 h-3.5" /> Add Ledger
-              </Button>
-            )}
-          </div>
-        }
-        layout="standard"
-        className="min-h-0"
-      >
-        <div className="flex flex-1 min-h-[540px] flex-col">
-          <CoaNodeDetail
-            node={selectedNode}
-            records={records}
-            canCreate={canCreate}
-            canEdit={canEdit}
-            canDelete={canDelete}
-            onSelect={selectNode}
-            onAddLedger={openAddLedger}
-            onAddSubLedger={openAddSubLedger}
-            onEditLedger={openEditLedger}
-            onDeleteLedger={setDeleteTarget}
-          />
-        </div>
-      </AccountsPageShell>
+    <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+      <CoaNodeDetail
+        node={selectedNode}
+        records={records}
+        canCreate={canCreate}
+        canEdit={canEdit}
+        canDelete={canDelete}
+        onSelect={selectNode}
+        onAddLedger={openAddLedger}
+        onAddSubLedger={openAddSubLedger}
+        onEditLedger={openEditLedger}
+        onDeleteLedger={setDeleteTarget}
+      />
 
       <LedgerSheet
         open={!!sheetMode}
@@ -233,6 +201,6 @@ export default function ChartOfAccountsPageClient() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }

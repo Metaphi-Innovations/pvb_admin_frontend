@@ -24,11 +24,8 @@ export const VENDOR_OPTIONS = [
 // QC Passed Stock Statuses
 export const QC_PASSED_STATUS_OPTIONS = [
   { label: "Available", value: "Available" },
-  { label: "Low Stock", value: "Low Stock" },
-  { label: "Reserved", value: "Reserved" },
   { label: "Near Expiry", value: "Near Expiry" },
   { label: "Expired", value: "Expired" },
-  { label: "Out Of Stock", value: "Out Of Stock" },
 ];
 
 // Rejected Stock Statuses
@@ -50,15 +47,9 @@ export const GRN_PENDING_STATUS_OPTIONS = [
 export const STATUS_OPTIONS = QC_PASSED_STATUS_OPTIONS;
 
 export const STATUS_BADGE_CONFIG: Record<string, { bg: string; label: string }> = {
-  // QC Passed Stock badges
-  "Available": { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "Available" },
-  "Low Stock": { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Low Stock" },
-  "Reserved": { bg: "bg-blue-50 text-blue-700 border-blue-200", label: "Reserved" },
-  "Expired": { bg: "bg-rose-50 text-rose-700 border-rose-200", label: "Expired" },
+  Available: { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "Available" },
+  Expired: { bg: "bg-rose-50 text-rose-700 border-rose-200", label: "Expired" },
   "Near Expiry": { bg: "bg-orange-50 text-orange-700 border-orange-200", label: "Near Expiry" },
-  "Out Of Stock": { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Out Of Stock" },
-
-  // Rejected Stock badges
   "Rejected": { bg: "bg-rose-50 text-rose-700 border-rose-200", label: "Rejected" },
   "Under Review": { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Under Review" },
   "Disposed": { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Disposed" },

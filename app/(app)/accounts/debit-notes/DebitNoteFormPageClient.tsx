@@ -37,10 +37,13 @@ import {
   type NoteWorkflowStatus,
 } from "./debit-notes-data";
 import { DEBIT_NOTES_BREADCRUMB, DEBIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
+import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
+import { debitNoteImpactResolved } from "@/lib/accounts/resolved-impact-previews";
+import { VendorMasterPanel } from "@/components/accounts/master-fetch/VendorMasterPanel";
 import {
-  formatVendorDropdownLabel,
-  formatVendorDropdownSublabel,
-} from "@/lib/masters/entity-display";
+  vendorMasterToTransactionFields,
+  type VendorTransactionFields,
+} from "@/lib/accounts/transaction-master-fetch";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -78,6 +81,11 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
   const [debitNoteNo, setDebitNoteNo] = useState("");
   const [debitNoteDate, setDebitNoteDate] = useState(new Date().toISOString().slice(0, 10));
   const [vendorId, setVendorId] = useState("");
+  const [vendorFields, setVendorFields] = useState<VendorTransactionFields | null>(null);
+  const [billToId, setBillToId] = useState("");
+  const [shipToId, setShipToId] = useState("");
+  const [billingAddress, setBillingAddress] = useState("");
+  const [shippingAddress, setShippingAddress] = useState("");
   const [referenceType, setReferenceType] = useState<DebitNoteAgainst>("purchase_invoice");
   const [referenceSelectionId, setReferenceSelectionId] = useState("");
   const [referencePreview, setReferencePreview] = useState<DebitReferencePreview | null>(null);
@@ -91,16 +99,6 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
   const [remarks, setRemarks] = useState("");
   const [attachments, setAttachments] = useState<DebitNoteAttachment[]>([]);
   const [error, setError] = useState<string | null>(null);
-
-  const vendorOptions = useMemo(
-    () =>
-      vendors.map((v) => ({
-        value: String(v.id),
-        label: formatVendorDropdownLabel(v),
-        sub: formatVendorDropdownSublabel(v),
-      })),
-    [vendors],
-  );
 
   const piOptions = useMemo(
     () =>
@@ -132,6 +130,19 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
     [qcs],
   );
 
+  const onVendorChange = (id: string, fields: VendorTransactionFields | null) => {
+    setVendorId(id);
+    if (!fields) {
+      setVendorFields(null);
+      return;
+    }
+    setVendorFields(fields);
+    setBillToId(fields.defaultBillToId);
+    setShipToId(fields.defaultShipToId);
+    setBillingAddress(fields.billingAddress);
+    setShippingAddress(fields.shippingAddress);
+  };
+
   const selectedVendor = vendors.find((v) => v.id === Number(vendorId));
   const alreadyAdjustedNum = parseFloat(alreadyAdjusted) || 0;
 
@@ -140,7 +151,11 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
     const pre = previewToDebitForm(preview);
     setSourceInvoiceId(pre.sourceInvoiceId ?? null);
     setSourcePoId(pre.sourcePoId ?? null);
-    if (pre.vendorId) setVendorId(String(pre.vendorId));
+    if (pre.vendorId) {
+      const v = vendors.find((x) => x.id === pre.vendorId);
+      if (v) onVendorChange(String(pre.vendorId), vendorMasterToTransactionFields(v));
+      else setVendorId(String(pre.vendorId));
+    }
     setOriginalAmount(String(pre.originalAmount ?? ""));
     setAlreadyAdjusted(String(pre.alreadyAdjustedAmount ?? 0));
     if (pre.lineItems?.length) {
@@ -198,6 +213,10 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
     setDebitNoteDate(rec.debitNoteDate);
     setReferenceType(rec.againstType);
     setVendorId(rec.vendorId ? String(rec.vendorId) : "");
+    if (rec.vendorId) {
+      const v = vendors.find((x) => x.id === rec.vendorId);
+      if (v) onVendorChange(String(rec.vendorId), vendorMasterToTransactionFields(v));
+    }
     setSourceInvoiceId(rec.sourceInvoiceId);
     setSourcePoId(rec.sourcePoId);
     setOriginalAmount(String(rec.originalAmount));
@@ -303,22 +322,6 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
     }
   };
 
-  const vendorCardRows = selectedVendor
-    ? [
-        { label: "Name", value: selectedVendor.vendorName },
-        { label: "Phone", value: `${selectedVendor.mobileCountryCode} ${selectedVendor.mobile}`.trim() },
-        { label: "Email", value: selectedVendor.email },
-        { label: "GSTIN", value: selectedVendor.gstNumber },
-      ]
-    : referencePreview
-      ? [
-          { label: "Name", value: referencePreview.vendorName },
-          { label: "Phone", value: referencePreview.vendorPhone },
-          { label: "Email", value: referencePreview.vendorEmail },
-          { label: "GSTIN", value: referencePreview.vendorGstin },
-        ]
-      : [];
-
   return (
     <AccountsFormLayout
       title={isEdit ? "Edit Debit Note" : "Create Debit Note"}
@@ -338,8 +341,8 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
         </div>
       }
     >
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pb-8 items-start">
-        <div className="lg:col-span-2 space-y-4">
+      <div className="space-y-4 pb-8 w-full">
+        <div className="space-y-4">
           <Section title="Basic Details">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
@@ -351,16 +354,25 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
                 <Input type="date" className="h-8 text-xs" value={debitNoteDate} onChange={(e) => setDebitNoteDate(e.target.value)} />
               </div>
             </div>
-            <SearchableSelect
-              label="Vendor"
-              value={vendorId}
-              onChange={setVendorId}
-              options={vendorOptions}
-              placeholder="Search and select vendor…"
-              required
+            <VendorMasterPanel
+              vendors={vendors}
+              vendorId={vendorId}
+              onVendorIdChange={onVendorChange}
+              fields={vendorFields}
+              billToId={billToId}
+              shipToId={shipToId}
+              onBillToChange={(id, addr) => {
+                setBillToId(id);
+                setBillingAddress(addr);
+              }}
+              onShipToChange={(id, addr) => {
+                setShipToId(id);
+                setShippingAddress(addr);
+              }}
+              billingAddress={billingAddress}
+              shippingAddress={shippingAddress}
               disabled={referenceType !== "standalone_adjustment" && !!referencePreview}
             />
-            <CompactInfoCard rows={vendorCardRows} />
           </Section>
 
           <Section title="Reference Details">
@@ -552,7 +564,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
 
-        <div className="lg:sticky lg:top-20 space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border/40">
           <div className="rounded-lg border border-border/60 bg-white p-4 space-y-2 text-xs">
             <h2 className="text-xs font-semibold uppercase text-muted-foreground">Summary</h2>
             <div className="flex justify-between"><span className="text-muted-foreground">Taxable Amount</span><span className="tabular-nums">{formatINR(referenceType === "standalone_adjustment" ? totalDebit : lineTotals.taxableAmount)}</span></div>
@@ -562,6 +574,17 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
               <div className="flex justify-between text-muted-foreground pt-1"><span>Balance After</span><span className="tabular-nums">{formatINR(Math.max(0, original - alreadyAdjustedNum - totalDebit))}</span></div>
             )}
           </div>
+          <LedgerImpactPreview
+            lines={debitNoteImpactResolved({
+              vendorName: vendors.find((v) => String(v.id) === vendorId)?.vendorName ?? "Vendor",
+              taxable:
+                referenceType === "standalone_adjustment"
+                  ? totalDebit - lineTotals.gstAmount
+                  : lineTotals.taxableAmount,
+              taxAmount: lineTotals.gstAmount,
+              grandTotal: totalDebit,
+            })}
+          />
         </div>
       </div>
     </AccountsFormLayout>
