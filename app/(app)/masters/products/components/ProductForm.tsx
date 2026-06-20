@@ -58,6 +58,9 @@ export interface ProductFormValues {
 	baseUnit: string;
 	packagingUnit: string;
 	conversionQuantity: string;
+	unitSize: string;
+	netWeight: string;
+	grossWeight: string;
 }
 
 export const DEFAULT_PRODUCT_FORM: ProductFormValues = {
@@ -76,6 +79,9 @@ export const DEFAULT_PRODUCT_FORM: ProductFormValues = {
 	baseUnit: "",
 	packagingUnit: "",
 	conversionQuantity: "",
+	unitSize: "",
+	netWeight: "",
+	grossWeight: "",
 };
 
 export function productToFormValues(product: Product): ProductFormValues {
@@ -107,6 +113,9 @@ export function productToFormValues(product: Product): ProductFormValues {
 			product.conversionQuantity !== undefined
 				? String(product.conversionQuantity)
 				: "",
+		unitSize: product.unitSize !== undefined ? String(product.unitSize) : "",
+		netWeight: product.netWeight !== undefined ? String(product.netWeight) : "",
+		grossWeight: product.grossWeight !== undefined ? String(product.grossWeight) : "",
 	};
 }
 
@@ -199,7 +208,40 @@ export function ProductForm({
 		key: K,
 		value: ProductFormValues[K],
 	) => {
-		onChange({ ...form, [key]: value });
+		const newForm = { ...form, [key]: value };
+
+		// Auto-calculate Net Weight and Gross Weight
+		const unitSizeNum = parseFloat(newForm.unitSize);
+		const convQtyNum = parseFloat(newForm.conversionQuantity);
+		const uom = (newForm.baseUnit || "").trim().toUpperCase();
+		const isWeightOrVolume = ["KG", "KG.", "KGS", "LITER", "LITERS", "LTR", "LTRS", "GM", "GRAM", "GRAMS", "ML"].includes(uom);
+
+		if (isWeightOrVolume) {
+			if (!isNaN(unitSizeNum) && !isNaN(convQtyNum)) {
+				let calculatedNet = unitSizeNum * convQtyNum;
+				const isGramsOrMl = ["GM", "GRAM", "GRAMS", "ML"].includes(uom);
+				if (isGramsOrMl) {
+					calculatedNet = calculatedNet / 1000;
+				}
+				const netStr = calculatedNet.toFixed(2);
+				newForm.netWeight = netStr;
+
+				// Default grossWeight to netWeight if empty or previously matched netWeight
+				if (!form.grossWeight || form.grossWeight === form.netWeight) {
+					newForm.grossWeight = netStr;
+				}
+			}
+		} else {
+			// If baseUnit was changed to a discrete unit, do NOT auto-calculate. Let user input it.
+			// If they update netWeight, default grossWeight to match it
+			if (key === "netWeight") {
+				if (!form.grossWeight || form.grossWeight === form.netWeight) {
+					newForm.grossWeight = String(value);
+				}
+			}
+		}
+
+		onChange(newForm);
 		onClearError(key);
 	};
 
@@ -460,7 +502,24 @@ export function ProductForm({
 				{/* Packaging Information */}
 				<div className='pt-3 border-t border-border/60'>
 					<SectionHead label='Packaging Information' />
-					<div className='grid grid-cols-1 md:grid-cols-3 gap-3'>
+					<div className='grid grid-cols-1 md:grid-cols-4 gap-3'>
+						<div className='space-y-1'>
+							<Label className='text-xs font-medium'>
+								Unit Size <span className='text-red-500'>*</span>
+							</Label>
+							<Input
+								value={form.unitSize}
+								onChange={(e) =>
+									decimalInput("unitSize", e.target.value)
+								}
+								placeholder='e.g. 500'
+								className={inputCls("unitSize")}
+								inputMode='decimal'
+								disabled={readOnly}
+							/>
+							<FieldError msg={errors.unitSize} />
+						</div>
+
 						<SelectField
 							label='Base Unit'
 							required
@@ -498,6 +557,59 @@ export function ProductForm({
 								disabled={readOnly}
 							/>
 							<FieldError msg={errors.conversionQuantity} />
+						</div>
+					</div>
+
+					<div className='grid grid-cols-1 md:grid-cols-2 gap-3 mt-3'>
+						<div className='space-y-1'>
+							{(() => {
+								const uom = (form.baseUnit || "").trim().toUpperCase();
+								const isWeightOrVolume = ["KG", "KG.", "KGS", "LITER", "LITERS", "LTR", "LTRS", "GM", "GRAM", "GRAMS", "ML"].includes(uom);
+								return (
+									<>
+										<Label className='text-xs font-medium'>
+											Net Weight per Packaging Unit (KG) <span className='text-red-500'>*</span>
+										</Label>
+										<Input
+											value={form.netWeight}
+											onChange={(e) =>
+												decimalInput("netWeight", e.target.value)
+											}
+											placeholder='e.g. 10'
+											className={cn(
+												inputCls("netWeight"),
+												isWeightOrVolume && "bg-muted/30 cursor-not-allowed"
+											)}
+											inputMode='decimal'
+											disabled={readOnly || isWeightOrVolume}
+											readOnly={isWeightOrVolume}
+										/>
+										{isWeightOrVolume && (
+											<p className='text-[10px] text-muted-foreground leading-snug'>
+												Auto-calculated from Unit Size & Conversion Quantity.
+											</p>
+										)}
+										<FieldError msg={errors.netWeight} />
+									</>
+								);
+							})()}
+						</div>
+
+						<div className='space-y-1'>
+							<Label className='text-xs font-medium'>
+								Gross Weight per Packaging Unit (KG) <span className='text-red-500'>*</span>
+							</Label>
+							<Input
+								value={form.grossWeight}
+								onChange={(e) =>
+									decimalInput("grossWeight", e.target.value)
+								}
+								placeholder='e.g. 10.5'
+								className={inputCls("grossWeight")}
+								inputMode='decimal'
+								disabled={readOnly}
+							/>
+							<FieldError msg={errors.grossWeight} />
 						</div>
 					</div>
 				</div>
@@ -825,6 +937,11 @@ export function validateProductForm(
 	if (!form.sku.trim()) errors.sku = "SKU is required";
 	if (!form.baseUnit) errors.baseUnit = "Base unit is required";
 	if (!form.packagingUnit) errors.packagingUnit = "Packaging unit is required";
+	if (!form.unitSize) {
+		errors.unitSize = "Unit size is required";
+	} else if (isNaN(Number(form.unitSize)) || Number(form.unitSize) <= 0) {
+		errors.unitSize = "Must be a positive number";
+	}
 	if (!form.conversionQuantity) {
 		errors.conversionQuantity = "Conversion quantity is required";
 	} else if (
@@ -832,6 +949,18 @@ export function validateProductForm(
 		Number(form.conversionQuantity) <= 0
 	) {
 		errors.conversionQuantity = "Must be a positive number";
+	}
+	if (!form.netWeight) {
+		errors.netWeight = "Net weight is required";
+	} else if (isNaN(Number(form.netWeight)) || Number(form.netWeight) <= 0) {
+		errors.netWeight = "Must be a positive number";
+	}
+	if (!form.grossWeight) {
+		errors.grossWeight = "Gross weight is required";
+	} else if (isNaN(Number(form.grossWeight)) || Number(form.grossWeight) <= 0) {
+		errors.grossWeight = "Must be a positive number";
+	} else if (Number(form.grossWeight) < Number(form.netWeight)) {
+		errors.grossWeight = "Gross weight cannot be less than Net weight";
 	}
 	return errors;
 }
@@ -871,5 +1000,8 @@ export function formValuesToProduct(
 		conversionQuantity: form.conversionQuantity
 			? Number(form.conversionQuantity)
 			: undefined,
+		unitSize: form.unitSize ? Number(form.unitSize) : undefined,
+		netWeight: form.netWeight ? Number(form.netWeight) : undefined,
+		grossWeight: form.grossWeight ? Number(form.grossWeight) : undefined,
 	};
 }

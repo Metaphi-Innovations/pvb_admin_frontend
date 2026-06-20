@@ -204,6 +204,9 @@ export interface Product {
   baseUnit?: string;
   packagingUnit?: string;
   conversionQuantity?: number;
+  unitSize?: number;
+  netWeight?: number;
+  grossWeight?: number;
 }
 
 export function todayStr(): string {
@@ -408,6 +411,9 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "KG",
     packagingUnit: "Bag",
     conversionQuantity: 25,
+    unitSize: 1,
+    netWeight: 25,
+    grossWeight: 25,
     productImages: [
       {
         id: "prd-1-media-1",
@@ -456,6 +462,9 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "KG",
     packagingUnit: "Box",
     conversionQuantity: 10,
+    unitSize: 1,
+    netWeight: 10,
+    grossWeight: 10,
     productImages: [
       {
         id: "prd-2-media-1",
@@ -489,6 +498,9 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "Liter",
     packagingUnit: "Drum",
     conversionQuantity: 200,
+    unitSize: 1,
+    netWeight: 200,
+    grossWeight: 200,
     productImages: [],
     productUrls: [],
   },
@@ -513,6 +525,9 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "Gram",
     packagingUnit: "Packet",
     conversionQuantity: 50,
+    unitSize: 500,
+    netWeight: 25,
+    grossWeight: 25,
     productImages: [],
     productUrls: [],
   },
@@ -533,14 +548,14 @@ function migrateProduct(raw: Record<string, unknown>): Product {
     Array.isArray(p.productImages) && p.productImages.length > 0
       ? p.productImages
       : legacyAssets
-          .map(legacyAssetToImage)
-          .filter((item): item is ProductImage => item !== null);
+        .map(legacyAssetToImage)
+        .filter((item): item is ProductImage => item !== null);
   const productUrls =
     Array.isArray(p.productUrls) && p.productUrls.length > 0
       ? p.productUrls
       : legacyAssets
-          .map(legacyAssetToUrl)
-          .filter((item): item is ProductUrl => item !== null);
+        .map(legacyAssetToUrl)
+        .filter((item): item is ProductUrl => item !== null);
   return {
     id: p.id ?? 0,
     productId: p.productId ?? "",
@@ -568,6 +583,9 @@ function migrateProduct(raw: Record<string, unknown>): Product {
     baseUnit: p.baseUnit ?? "",
     packagingUnit: p.packagingUnit ?? "",
     conversionQuantity: p.conversionQuantity !== undefined ? Number(p.conversionQuantity) : undefined,
+    unitSize: p.unitSize !== undefined ? Number(p.unitSize) : undefined,
+    netWeight: p.netWeight !== undefined ? Number(p.netWeight) : undefined,
+    grossWeight: p.grossWeight !== undefined ? Number(p.grossWeight) : undefined,
   };
 }
 
