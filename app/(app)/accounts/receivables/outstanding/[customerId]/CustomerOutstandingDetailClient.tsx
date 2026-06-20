@@ -87,7 +87,7 @@ export default function CustomerOutstandingDetailClient() {
 
         <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
           <MiniKPICard label="Opening Balance" value={formatMoney(detail.openingBalance)} icon={IndianRupee} />
-          <MiniKPICard label="Total Sales" value={formatMoney(detail.totalSales)} icon={IndianRupee} />
+          <MiniKPICard label="Total Sales (Incl. GST)" value={formatMoney(detail.totalSales)} icon={IndianRupee} />
           <MiniKPICard label="Total Receipts" value={formatMoney(detail.totalReceipts)} icon={IndianRupee} />
           <MiniKPICard label="Credit Notes" value={formatMoney(detail.creditNotes)} icon={IndianRupee} />
           <MiniKPICard label="Debit Notes" value={formatMoney(detail.debitNotes)} icon={IndianRupee} />
@@ -96,10 +96,23 @@ export default function CustomerOutstandingDetailClient() {
       </div>
 
       <div className="flex-1 overflow-auto min-h-0">
-        <table className="w-full text-table min-w-[1000px]">
+        <table className="w-full text-table min-w-[1280px]">
           <thead className="bg-muted/20 border-b sticky top-0 z-10">
             <tr>
-              {["Invoice No", "Invoice Date", "Due Date", "Amount", "Paid", "Credit Note", "Outstanding", "Days Overdue", "Status", ""].map((h) => (
+              {[
+                "Invoice No",
+                "Invoice Date",
+                "Due Date",
+                "Taxable Value",
+                "GST Amount",
+                "Invoice Total (Incl. GST)",
+                "Paid",
+                "Credit Note",
+                "Outstanding",
+                "Days Overdue",
+                "Status",
+                "",
+              ].map((h) => (
                 <th key={h || "act"} className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -110,6 +123,8 @@ export default function CustomerOutstandingDetailClient() {
                 <td className="px-3 py-2.5 text-xs font-mono font-semibold">{inv.invoiceNo}</td>
                 <td className="px-3 py-2.5 text-xs">{inv.invoiceDate}</td>
                 <td className="px-3 py-2.5 text-xs">{inv.dueDate}</td>
+                <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.taxableValue)}</td>
+                <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.gstAmount)}</td>
                 <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.invoiceAmount)}</td>
                 <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.paidAmount)}</td>
                 <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.creditNote)}</td>

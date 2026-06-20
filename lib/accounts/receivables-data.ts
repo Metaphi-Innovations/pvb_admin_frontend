@@ -7,6 +7,7 @@ import {
   loadInvoices,
   saveInvoices,
   derivePaymentStatus,
+  getInvoiceAmountBreakup,
   type InvoiceRecord,
 } from "@/app/(app)/accounts/invoices/invoices-data";
 import { loadCustomers, type Customer } from "@/app/(app)/masters/customers/customer-data";
@@ -45,6 +46,8 @@ export interface CustomerOutstandingRow {
   territory: string;
   branch: string;
   totalInvoiceAmount: number;
+  totalTaxableValue: number;
+  totalGstAmount: number;
   paidAmount: number;
   creditNoteAdjusted: number;
   overdueAmount: number;
@@ -59,6 +62,8 @@ export interface CustomerInvoiceOutstandingRow {
   invoiceNo: string;
   invoiceDate: string;
   dueDate: string;
+  taxableValue: number;
+  gstAmount: number;
   invoiceAmount: number;
   paidAmount: number;
   creditNote: number;
@@ -258,12 +263,15 @@ function lastReceiptDateForCustomer(customerId: number, customerName: string): s
 function buildInvoiceRow(inv: InvoiceRecord, asOfDate: string): CustomerInvoiceOutstandingRow {
   const outstanding = getInvoiceOutstanding(inv);
   const daysOverdue = Math.max(0, daysBetween(inv.dueDate, asOfDate));
+  const { taxableValue, gstAmount, invoiceTotal } = getInvoiceAmountBreakup(inv);
   return {
     invoiceId: inv.id,
     invoiceNo: inv.invoiceNo,
     invoiceDate: inv.invoiceDate,
     dueDate: inv.dueDate,
-    invoiceAmount: inv.grandTotal,
+    taxableValue,
+    gstAmount,
+    invoiceAmount: invoiceTotal,
     paidAmount: inv.amountReceived,
     creditNote: inv.amountCredited ?? 0,
     outstanding,
@@ -293,7 +301,9 @@ export function computeCustomerOutstanding(asOfDate = TODAY()): CustomerOutstand
     const customer = customers.find((c) => c.id === customerId);
     if (!customer) continue;
 
-    const totalInvoiceAmount = round2(custInvoices.reduce((s, i) => s + i.grandTotal, 0));
+    const totalInvoiceAmount = round2(custInvoices.reduce((s, i) => s + getInvoiceAmountBreakup(i).invoiceTotal, 0));
+    const totalTaxableValue = round2(custInvoices.reduce((s, i) => s + getInvoiceAmountBreakup(i).taxableValue, 0));
+    const totalGstAmount = round2(custInvoices.reduce((s, i) => s + getInvoiceAmountBreakup(i).gstAmount, 0));
     const paidAmount = round2(custInvoices.reduce((s, i) => s + i.amountReceived, 0));
     const creditNoteAdjusted = round2(
       custInvoices.reduce((s, i) => s + (i.amountCredited ?? 0), 0),
@@ -331,6 +341,8 @@ export function computeCustomerOutstanding(asOfDate = TODAY()): CustomerOutstand
       territory: customer.territoryName || customer.districtName || "—",
       branch: customer.branch || customer.stateName || "—",
       totalInvoiceAmount,
+      totalTaxableValue,
+      totalGstAmount,
       paidAmount,
       creditNoteAdjusted,
       overdueAmount,

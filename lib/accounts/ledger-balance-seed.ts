@@ -18,6 +18,7 @@ import {
 } from "@/lib/accounts/inventory-accounting-data";
 import { ensurePricingDemoSeed } from "@/app/(app)/masters/pricing/pricing-data";
 import { ensureGstAccountingLedgers } from "@/lib/accounts/gst-accounting";
+import { loadBankAccountMasters } from "@/lib/accounts/bank-accounts-data";
 
 const FY_OPENING_DATE = "2026-04-01";
 
@@ -94,8 +95,65 @@ function findLedger(name: string): ChartOfAccount | undefined {
   );
 }
 
+/** Resolve demo seed shorthand (e.g. "HDFC Bank") to the actual bank account COA ledger. */
+function resolveLedger(name: string): ChartOfAccount | undefined {
+  const exact = findLedger(name);
+  if (exact) return exact;
+
+  const lower = name.trim().toLowerCase();
+
+  const bankMaster = loadBankAccountMasters().find(
+    (m) =>
+      m.bankName.toLowerCase() === lower ||
+      m.accountNickname.toLowerCase() === lower,
+  );
+  if (bankMaster) {
+    return loadChartOfAccounts().find((r) => r.id === bankMaster.coaLedgerId);
+  }
+
+  // Demo journal entries reference bank group names, not account nicknames.
+  if (lower === "hdfc bank") {
+    const hdfc = loadBankAccountMasters().find((m) => m.bankName === "HDFC Bank");
+    if (hdfc) return loadChartOfAccounts().find((r) => r.id === hdfc.coaLedgerId);
+  }
+  if (lower === "axis bank") {
+    const axis = loadBankAccountMasters().find((m) => m.bankName === "Axis Bank");
+    if (axis) return loadChartOfAccounts().find((r) => r.id === axis.coaLedgerId);
+  }
+  if (lower === "icici bank") {
+    const icici = loadBankAccountMasters().find((m) => m.bankName === "ICICI Bank");
+    if (icici) return loadChartOfAccounts().find((r) => r.id === icici.coaLedgerId);
+  }
+  if (lower === "sbi") {
+    const sbi = loadBankAccountMasters().find((m) => m.bankName === "SBI");
+    if (sbi) return loadChartOfAccounts().find((r) => r.id === sbi.coaLedgerId);
+  }
+
+  // Fallback when COA bank ledger exists but bank master record is missing.
+  const bankGroupAliases: Record<string, string> = {
+    "hdfc bank": "hdfc",
+    "axis bank": "axis",
+    "icici bank": "icici",
+    sbi: "sbi",
+  };
+  const needle = bankGroupAliases[lower];
+  if (needle) {
+    return loadChartOfAccounts().find(
+      (r) =>
+        r.bankAccountFlag &&
+        r.accountName.toLowerCase().includes(needle) &&
+        !r.accountName.toLowerCase().includes("service") &&
+        !r.accountName.toLowerCase().includes("loan") &&
+        !r.accountName.toLowerCase().includes("interest") &&
+        !r.accountName.toLowerCase().includes("deposit"),
+    );
+  }
+
+  return undefined;
+}
+
 function requireLedger(name: string): ChartOfAccount {
-  const ledger = findLedger(name);
+  const ledger = resolveLedger(name);
   if (!ledger) throw new Error(`Ledger not found: ${name}`);
   return ledger;
 }

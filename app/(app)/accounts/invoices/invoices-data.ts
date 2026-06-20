@@ -134,6 +134,24 @@ export interface InvoiceRecord {
 
 const STORAGE_KEY = "ds_accounts_invoices_v1";
 
+/** Column labels — GST-inclusive totals must be explicit across Accounts UI. */
+export const INVOICE_AMOUNT_LABELS = {
+	taxableValue: "Taxable Value",
+	gstAmount: "GST Amount",
+	invoiceTotal: "Invoice Total (Incl. GST)",
+} as const;
+
+/** Pre-GST taxable value, GST, and final payable total for a sales invoice. */
+export function getInvoiceAmountBreakup(
+	inv: Pick<InvoiceRecord, "subtotal" | "discountTotal" | "taxAmount" | "grandTotal">,
+) {
+	const taxableValue =
+		Math.round((inv.subtotal - inv.discountTotal) * 100) / 100;
+	const gstAmount = Math.round(inv.taxAmount * 100) / 100;
+	const invoiceTotal = Math.round(inv.grandTotal * 100) / 100;
+	return { taxableValue, gstAmount, invoiceTotal };
+}
+
 export function parseTaxPct(value: string | number): number {
 	if (typeof value === "number") return value;
 	const n = parseFloat(String(value).replace("%", "").trim());

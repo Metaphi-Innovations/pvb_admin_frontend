@@ -88,6 +88,45 @@ export function isDuplicateAccountNumber(accountNumber: string, excludeId?: numb
   );
 }
 
+export function findBankAccountMasterByAccountNumber(
+  accountNumber: string,
+): BankAccountMaster | undefined {
+  const normalized = normalizeAccountNumber(accountNumber);
+  if (!normalized) return undefined;
+  return loadBankAccountMasters().find(
+    (m) => normalizeAccountNumber(m.accountNumber) === normalized,
+  );
+}
+
+/**
+ * Idempotent bank account + COA ledger creation for demo seeding.
+ * Returns an existing master when the account number is already registered.
+ */
+export function ensureBankAccountWithLedger(input: CreateBankAccountInput): BankAccountMaster {
+  const existing = findBankAccountMasterByAccountNumber(input.accountNumber);
+  if (existing) {
+    syncBankLedgerDisplayNames();
+    return existing;
+  }
+
+  const records = loadChartOfAccounts();
+  const nickname = input.accountNickname.trim().toLowerCase();
+  const suffix = input.accountNumber.replace(/\D/g, "").slice(-4);
+  const coaLedger = records.find(
+    (r) =>
+      r.bankAccountFlag &&
+      (r.accountName.toLowerCase().includes(nickname) ||
+        (suffix.length >= 4 && r.accountName.includes(suffix))),
+  );
+  if (coaLedger) {
+    syncMastersFromCoaLedgers();
+    const linked = loadBankAccountMasters().find((m) => m.coaLedgerId === coaLedger.id);
+    if (linked) return linked;
+  }
+
+  return createBankAccountWithLedger(input);
+}
+
 function defaultLedgerForm(
   parentId: number,
   name: string,
@@ -371,12 +410,8 @@ export function loadBankAccountsForReconciliation(): {
 
 export function ensureDemoBankCoaStructure(): void {
   if (typeof window === "undefined") return;
-  if (loadBankAccountMasters().length > 0) {
-    syncBankLedgerDisplayNames();
-    return;
-  }
   for (const spec of DEMO_BANK_SPECS) {
-    createBankAccountWithLedger({
+    ensureBankAccountWithLedger({
       bankName: spec.bankName,
       accountNickname: spec.accountNickname,
       accountNumber: spec.accountNumber,

@@ -56,7 +56,7 @@ import {
   syncCustomerLedger,
   syncVendorLedger,
 } from "@/lib/accounts/erp-accounting-mapping";
-import { createBankAccountWithLedger } from "@/lib/accounts/bank-accounts-data";
+import { ensureBankAccountWithLedger } from "@/lib/accounts/bank-accounts-data";
 import { DEMO_BANK_SPECS } from "@/lib/accounts/banking-demo-spec";
 import { seedBankingDemoData } from "@/lib/accounts/banking-demo-seed";
 import { createLedgerQuick } from "@/app/(app)/accounts/bank-reconciliation/bank-reconciliation-data";
@@ -966,15 +966,7 @@ function setLedgerOpeningBalance(
 }
 
 function ensureBankAccount(spec: (typeof DEMO_BANKS)[number]): void {
-  const records = loadChartOfAccounts();
-  const exists = records.some(
-    (r) =>
-      r.bankAccountFlag &&
-      (r.accountName.toLowerCase().includes(spec.nickname.toLowerCase()) ||
-        r.accountName.includes(spec.accountNumber.slice(-4))),
-  );
-  if (exists) return;
-  createBankAccountWithLedger({
+  ensureBankAccountWithLedger({
     bankName: spec.bankName,
     accountNickname: spec.nickname,
     accountNumber: spec.accountNumber,
@@ -1555,50 +1547,54 @@ export function seedAccountsDemoData(force = false): void {
   if (typeof window === "undefined") return;
   if (!force && localStorage.getItem(VERSION_KEY) === ACCOUNTS_DEMO_SEED_VERSION) return;
 
-  ensureAutoPostingEnabled();
-  seedDemoMasters();
+  try {
+    ensureAutoPostingEnabled();
+    seedDemoMasters();
 
-  const customers = loadCustomers();
-  const demoInvoiceIds = new Set<number>(DEMO_SALES_INVOICES.map((spec) => spec.id));
-  const preservedInvoices = loadInvoices().filter((inv) => !demoInvoiceIds.has(inv.id));
+    const customers = loadCustomers();
+    const demoInvoiceIds = new Set<number>(DEMO_SALES_INVOICES.map((spec) => spec.id));
+    const preservedInvoices = loadInvoices().filter((inv) => !demoInvoiceIds.has(inv.id));
 
-  const invoices = DEMO_SALES_INVOICES.map((spec) => {
-    const customer = customers.find((c) => c.id === spec.customerId);
-    const link = customer ? findErpPartyLink("customer_master", customer.id) : undefined;
-    return buildSalesInvoice(
-      spec,
-      customer?.customerName ?? "Customer",
-      link?.ledgerId ?? null,
+    const invoices = DEMO_SALES_INVOICES.map((spec) => {
+      const customer = customers.find((c) => c.id === spec.customerId);
+      const link = customer ? findErpPartyLink("customer_master", customer.id) : undefined;
+      return buildSalesInvoice(
+        spec,
+        customer?.customerName ?? "Customer",
+        link?.ledgerId ?? null,
+      );
+    });
+
+    saveInvoices([...invoices, ...preservedInvoices]);
+    const creditNotes = buildDemoCreditNotes();
+    saveCreditNotes(creditNotes);
+    saveDebitNotes([]);
+    saveExpenses([]);
+
+    postAllTransactions(invoices);
+
+    for (const cn of creditNotes) {
+      maybePostCreditNote(cn);
+    }
+
+    seedPayablesDemoData(
+      (voucherNumber) => loadVouchers().find((v) => v.voucherNumber === voucherNumber)?.id,
     );
-  });
 
-  saveInvoices([...invoices, ...preservedInvoices]);
-  const creditNotes = buildDemoCreditNotes();
-  saveCreditNotes(creditNotes);
-  saveDebitNotes([]);
-  saveExpenses([]);
+    seedReceivablesDemoData(
+      (voucherNumber) => loadVouchers().find((v) => v.voucherNumber === voucherNumber)?.id,
+      (invoiceNo) => invoices.find((i) => i.invoiceNo === invoiceNo)?.id,
+    );
+    assignDemoOpeningBalances();
+    seedInventoryLedgersFromBatchRegister();
+    seedDemoAccountingVouchers();
+    seedBankingDemoData(true);
+    seedAccountsDemoBankReconciliation(true);
 
-  postAllTransactions(invoices);
-
-  for (const cn of creditNotes) {
-    maybePostCreditNote(cn);
+    localStorage.setItem(VERSION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
+  } catch (err) {
+    console.error("[accounts] demo seed failed:", err);
   }
-
-  seedPayablesDemoData(
-    (voucherNumber) => loadVouchers().find((v) => v.voucherNumber === voucherNumber)?.id,
-  );
-
-  seedReceivablesDemoData(
-    (voucherNumber) => loadVouchers().find((v) => v.voucherNumber === voucherNumber)?.id,
-    (invoiceNo) => invoices.find((i) => i.invoiceNo === invoiceNo)?.id,
-  );
-  assignDemoOpeningBalances();
-  seedInventoryLedgersFromBatchRegister();
-  seedDemoAccountingVouchers();
-  seedBankingDemoData(true);
-  seedAccountsDemoBankReconciliation(true);
-
-  localStorage.setItem(VERSION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
 }
 
 export function resetAccountsDemoData(): void {

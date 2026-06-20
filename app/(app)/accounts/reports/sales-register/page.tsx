@@ -66,9 +66,9 @@ export default function SalesRegisterPage() {
         { key: "docNo", label: "Invoice No.", mono: true },
         { key: "date", label: "Date" },
         { key: "party", label: "Customer" },
-        { key: "taxable", label: "Taxable", align: "right", money: true },
-        { key: "tax", label: "Tax", align: "right", money: true },
-        { key: "total", label: "Total", align: "right", money: true },
+        { key: "taxable", label: "Taxable Value", align: "right", money: true },
+        { key: "tax", label: "GST Amount", align: "right", money: true },
+        { key: "total", label: "Invoice Total (Incl. GST)", align: "right", money: true },
         { key: "status", label: "Status" },
       ]}
       rows={rows}

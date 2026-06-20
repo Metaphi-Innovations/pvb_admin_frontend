@@ -27,6 +27,10 @@ export interface TransactionRow {
   date: string;
   party: string;
   amount: string;
+  /** When set, list shows Taxable Value / GST Amount / Invoice Total columns. */
+  taxableValue?: string;
+  gstAmount?: string;
+  invoiceTotal?: string;
   status: string;
   branch?: string;
   viewHref?: string;
@@ -126,6 +130,11 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
   const rowCanEdit = (r: TransactionRow) =>
     config.editHref && (config.canEdit ? config.canEdit(r) : isDraftStatus(r.status));
 
+  const showGstColumns = allRows.some(
+    (r) => r.taxableValue != null && r.gstAmount != null && r.invoiceTotal != null,
+  );
+  const colSpan = showGstColumns ? 8 : 6;
+
   return (
     <>
       <AccountsPageShell
@@ -172,7 +181,15 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                 <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Number</th>
                 <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Date</th>
                 <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Party</th>
-                <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Amount</th>
+                {showGstColumns ? (
+                  <>
+                    <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Taxable Value</th>
+                    <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">GST Amount</th>
+                    <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Invoice Total (Incl. GST)</th>
+                  </>
+                ) : (
+                  <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Amount</th>
+                )}
                 <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
                 <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground min-w-[200px]">Actions</th>
               </tr>
@@ -180,7 +197,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-16 text-center">
+                  <td colSpan={colSpan} className="px-4 py-16 text-center">
                     <p className="text-sm font-medium text-foreground">No records found</p>
                     <p className="text-xs text-muted-foreground mt-1">Adjust filters or create a new entry.</p>
                   </td>
@@ -197,7 +214,15 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                     </td>
                     <td className="px-4 py-2.5 text-xs">{r.date}</td>
                     <td className="px-4 py-2.5 text-xs">{r.party}</td>
-                    <td className="px-4 py-2.5 text-xs text-right tabular-nums">{r.amount}</td>
+                    {showGstColumns ? (
+                      <>
+                        <td className="px-4 py-2.5 text-xs text-right tabular-nums">{r.taxableValue}</td>
+                        <td className="px-4 py-2.5 text-xs text-right tabular-nums">{r.gstAmount}</td>
+                        <td className="px-4 py-2.5 text-xs text-right tabular-nums font-medium">{r.invoiceTotal}</td>
+                      </>
+                    ) : (
+                      <td className="px-4 py-2.5 text-xs text-right tabular-nums">{r.amount}</td>
+                    )}
                     <td className="px-4 py-2.5">
                       <StatusBadge status={r.status} />
                     </td>
@@ -274,12 +299,29 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                 {(viewRow.viewFields ?? [
                   { label: "Date", value: viewRow.date },
                   { label: "Party", value: viewRow.party },
-                  { label: "Amount", value: viewRow.amount },
+                  ...(viewRow.taxableValue != null
+                    ? [
+                        { label: "Taxable Value", value: viewRow.taxableValue },
+                        { label: "GST Amount", value: viewRow.gstAmount ?? "—" },
+                        { label: "Invoice Total (Incl. GST)", value: viewRow.invoiceTotal ?? viewRow.amount },
+                      ]
+                    : [{ label: "Amount", value: viewRow.amount }]),
                   ...(viewRow.branch ? [{ label: "Branch", value: viewRow.branch }] : []),
                 ]).map((f) => (
                   <div key={f.label} className="space-y-1">
                     <p className="text-[11px] text-muted-foreground">{f.label}</p>
-                    <p className={cn("text-sm font-medium", f.label === "Amount" && "tabular-nums")}>{f.value}</p>
+                    <p
+                      className={cn(
+                        "text-sm font-medium",
+                        (f.label.includes("Value") ||
+                          f.label.includes("GST") ||
+                          f.label.includes("Total") ||
+                          f.label === "Amount") &&
+                          "tabular-nums",
+                      )}
+                    >
+                      {f.value}
+                    </p>
                   </div>
                 ))}
                 {viewRow.impactLines && viewRow.impactLines.length > 0 && (
