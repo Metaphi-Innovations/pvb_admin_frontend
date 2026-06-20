@@ -39,6 +39,9 @@ export interface PendingDispatchInvoiceRow {
   gstAmount: number;
   invoiceValue: number;
   status: string;
+  warehouse: string;
+  totalQty: number;
+  qtyUnit: string;
 }
 
 export interface DispatchInvoiceLineResult {
@@ -168,6 +171,54 @@ function isDispatchInvoiced(dispatchNo: string): boolean {
   );
 }
 
+function isPendingDispatchForCustomer(row: PendingDispatchInvoiceRow, customerId: number): boolean {
+  const customer = loadCustomers().find((c) => c.id === customerId);
+  if (!customer) return false;
+
+  const nameNorm = customer.customerName.trim().toLowerCase();
+  if (row.salesOrderId) {
+    const order = getOrderById(row.salesOrderId);
+    if (order?.customerId === customerId) return true;
+  }
+  const rowCustomer = findCustomerByName(row.customerName);
+  if (rowCustomer?.id === customerId) return true;
+  return row.customerName.trim().toLowerCase() === nameNorm;
+}
+
+function enrichPendingDispatchRow(
+  d: DispatchRecord,
+  row: Omit<PendingDispatchInvoiceRow, "warehouse" | "totalQty" | "qtyUnit">,
+): PendingDispatchInvoiceRow {
+  let totalQty = 0;
+  let qtyUnit = "Units";
+  d.products.forEach((p) => {
+    if (p.dispatchQty > 0) totalQty += p.dispatchQty;
+  });
+  const firstProduct = d.products.find((p) => p.dispatchQty > 0);
+  if (firstProduct) {
+    const master = findProductMaster(firstProduct.sku, firstProduct.product);
+    qtyUnit = master?.packagingUnit ?? master?.baseUnit ?? "Bags";
+  }
+  return {
+    ...row,
+    warehouse: d.warehouse,
+    totalQty,
+    qtyUnit,
+  };
+}
+
+/** All pending uninvoiced dispatches for a customer master id. */
+export function listPendingDispatchesForCustomer(customerId: number): PendingDispatchInvoiceRow[] {
+  return listPendingDispatchInvoices().filter((row) => isPendingDispatchForCustomer(row, customerId));
+}
+
+/** Most recent pending dispatch for a customer master id (name or linked sales order). */
+export function findPendingDispatchForCustomer(
+  customerId: number,
+): PendingDispatchInvoiceRow | undefined {
+  return listPendingDispatchesForCustomer(customerId)[0];
+}
+
 export function listPendingDispatchInvoices(): PendingDispatchInvoiceRow[] {
   return getDispatchRecords()
     .filter((d) => INVOICE_READY_STATUSES.has(d.deliveryStatus))
@@ -177,7 +228,7 @@ export function listPendingDispatchInvoices(): PendingDispatchInvoiceRow[] {
       const order = findOrderBySoNumber(d.salesOrderNumber);
       const customer = findCustomerByName(d.customer);
       const totals = computeDispatchInvoiceTotals(d, customer?.id ?? order?.customerId);
-      return {
+      return enrichPendingDispatchRow(d, {
         dispatchId: d.id,
         dispatchNo: d.dispatchNumber,
         soNumber: d.salesOrderNumber,
@@ -188,7 +239,7 @@ export function listPendingDispatchInvoices(): PendingDispatchInvoiceRow[] {
         gstAmount: totals.gstAmount,
         invoiceValue: totals.invoiceValue,
         status: d.deliveryStatus,
-      };
+      });
     })
     .sort((a, b) => b.dispatchDate.localeCompare(a.dispatchDate));
 }
