@@ -35,6 +35,7 @@ import {
   validatePricingForm,
   loadActiveProductOptions,
   findActivePricingForProduct,
+  parseGstPct,
   type PricingForm,
   type PricingRecord,
 } from "./pricing-data";
@@ -53,20 +54,7 @@ import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
 import { MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
 
-type StatusTab = "all" | "active" | "inactive";
-const TAB_KEY = "pricing-list-status-tab";
 
-const STATUS_TABS: { value: StatusTab; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "active", label: "Active" },
-  { value: "inactive", label: "Inactive" },
-];
-
-function readStoredStatusTab(): StatusTab {
-  if (typeof window === "undefined") return "all";
-  const v = sessionStorage.getItem(TAB_KEY);
-  return v === "active" || v === "inactive" ? v : "all";
-}
 
 interface ToastState {
   msg: string;
@@ -105,7 +93,7 @@ export default function PricingMasterPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [statusTab, setStatusTab] = useState<StatusTab>("all");
+
 
   const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
   const [active, setActive] = useState<PricingRecord | null>(null);
@@ -117,7 +105,6 @@ export default function PricingMasterPage() {
 
   useEffect(() => {
     setRecords(loadMasterRecords<PricingRecord>(PRICING_STORAGE_KEY, PRICING_SEED));
-    setStatusTab(readStoredStatusTab());
   }, []);
 
   useEffect(() => {
@@ -126,12 +113,7 @@ export default function PricingMasterPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const handleStatusTabChange = (tab: string) => {
-    const next = tab as StatusTab;
-    setStatusTab(next);
-    sessionStorage.setItem(TAB_KEY, next);
-    setPage(1);
-  };
+
 
   const toggleStatus = (record: PricingRecord) => {
     const nextStatus: MasterStatus = record.status === "active" ? "inactive" : "active";
@@ -150,11 +132,11 @@ export default function PricingMasterPage() {
     const updated = records.map((item) =>
       item.id === record.id
         ? {
-            ...item,
-            status: nextStatus,
-            updatedBy: "Admin User",
-            updatedAt: masterToday(),
-          }
+          ...item,
+          status: nextStatus,
+          updatedBy: "Admin User",
+          updatedAt: masterToday(),
+        }
         : item,
     );
     setRecords(updated);
@@ -165,14 +147,7 @@ export default function PricingMasterPage() {
     });
   };
 
-  const statusTabCounts = useMemo(
-    () => ({
-      all: records.length,
-      active: records.filter((r) => r.status === "active").length,
-      inactive: records.filter((r) => r.status === "inactive").length,
-    }),
-    [records],
-  );
+
 
   const columns: ColumnConfig<PricingRecord>[] = [
     {
@@ -204,8 +179,23 @@ export default function PricingMasterPage() {
       ),
     },
     {
+      key: "baseUnit",
+      header: "Base Unit",
+      sortable: true,
+      width: "90px",
+      render: (_val, row) => <span className="text-xs">{row.baseUnit || "—"}</span>,
+    },
+    {
+      key: "uom",
+      header: "UOM",
+      sortable: true,
+      width: "72px",
+      render: (_val, row) => <span className="text-xs">{row.uom || "—"}</span>,
+    },
+
+    {
       key: "costPrice",
-      header: "Cost Price (CP)",
+      header: "CP",
       sortable: true,
       width: "120px",
       align: "right",
@@ -298,10 +288,6 @@ export default function PricingMasterPage() {
   const filtered = useMemo(() => {
     let result = [...records];
 
-    if (statusTab !== "all") {
-      result = result.filter((r) => r.status === statusTab);
-    }
-
     if (filters.search) {
       const q = String(filters.search).trim().toLowerCase();
       result = result.filter(
@@ -328,7 +314,7 @@ export default function PricingMasterPage() {
     }
 
     return result;
-  }, [records, filters, sort, statusTab]);
+  }, [records, filters, sort]);
 
   const paginated = useMemo(() => {
     const startOffset = (page - 1) * pageSize;
@@ -337,7 +323,7 @@ export default function PricingMasterPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [filters, sort, pageSize, statusTab]);
+  }, [filters, sort, pageSize]);
 
   const openAdd = () => {
     setForm({ ...DEFAULT_PRICING_FORM });
@@ -385,6 +371,13 @@ export default function PricingMasterPage() {
       sku: product.sku,
       segment: product.segment,
       category: product.category,
+      baseUnit: product.baseUnit || prev.baseUnit,
+      uom: product.packagingUnit || prev.uom,
+      packSize: product.conversionQuantity
+        ? `${product.conversionQuantity} ${product.baseUnit || ""}`.trim()
+        : product.packagingUnit || prev.packSize,
+      unitsPerCase: product.conversionQuantity || prev.unitsPerCase,
+      gstPct: parseGstPct(product.gstRate) || prev.gstPct,
     }));
     setErrors((prev) => {
       const next = { ...prev };
@@ -430,11 +423,11 @@ export default function PricingMasterPage() {
     const updated = records.map((r) =>
       r.id === deleteTarget.id
         ? {
-            ...r,
-            status: "inactive" as MasterStatus,
-            updatedBy: "Admin User",
-            updatedAt: masterToday(),
-          }
+          ...r,
+          status: "inactive" as MasterStatus,
+          updatedBy: "Admin User",
+          updatedAt: masterToday(),
+        }
         : r,
     );
     saveMasterRecords(PRICING_STORAGE_KEY, updated);
@@ -448,6 +441,10 @@ export default function PricingMasterPage() {
       const headers = [
         "SKU",
         "Product Name",
+        "Base Unit",
+        "UOM",
+        "Units Per Case",
+        "GST %",
         "Cost Price (CP)",
         "Distributor Price (DP)",
         "Retail Price (RP)",
@@ -464,6 +461,10 @@ export default function PricingMasterPage() {
           [
             r.sku,
             `"${r.productName.replace(/"/g, '""')}"`,
+            r.baseUnit,
+            r.uom,
+            r.unitsPerCase,
+            r.gstPct,
             r.costPrice,
             r.distributorPrice,
             r.retailPrice,
@@ -498,41 +499,45 @@ export default function PricingMasterPage() {
 
   const viewDrawer = active
     ? {
-        title: active.productName,
-        subtitle: active.sku,
-        status: active.status,
-        basicInfo: [
-          { label: "SKU", value: active.sku },
-          { label: "Product Name", value: active.productName },
-          { label: "Segment", value: active.segment || "—" },
-          { label: "Category", value: active.category || "—" },
-          { label: "Cost Price (CP)", value: formatIndianRupeeDisplay(active.costPrice) },
-          { label: "Distributor Price (DP)", value: formatIndianRupeeDisplay(active.distributorPrice) },
-          { label: "Retail Price (RP)", value: formatIndianRupeeDisplay(active.retailPrice) },
-          { label: "MRP", value: formatIndianRupeeDisplay(active.mrp) },
-        ],
-        showDescription: false,
-        children: (
-          <MasterDrawerSection title="Audit Information">
-            <div className="space-y-4">
-              <AuditUserRow label="Created By" name={active.createdBy} />
-              <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground">Created Date</p>
-                <p className="text-sm font-medium text-foreground font-mono">
-                  {active.createdAt}
-                </p>
-              </div>
-              <AuditUserRow label="Updated By" name={active.updatedBy} />
-              <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground">Updated Date</p>
-                <p className="text-sm font-medium text-foreground font-mono">
-                  {active.updatedAt}
-                </p>
-              </div>
+      title: active.productName,
+      subtitle: active.sku,
+      status: active.status,
+      basicInfo: [
+        { label: "SKU", value: active.sku },
+        { label: "Product Name", value: active.productName },
+        { label: "Base Unit", value: active.baseUnit || "—" },
+        { label: "UOM", value: active.uom || "—" },
+        { label: "Units Per Case", value: String(active.unitsPerCase ?? "—") },
+        { label: "Segment", value: active.segment || "—" },
+        { label: "Category", value: active.category || "—" },
+        { label: "Cost Price (CP)", value: formatIndianRupeeDisplay(active.costPrice) },
+        { label: "Distributor Price (DP)", value: formatIndianRupeeDisplay(active.distributorPrice) },
+        { label: "Retail Price (RP)", value: formatIndianRupeeDisplay(active.retailPrice) },
+        { label: "MRP", value: formatIndianRupeeDisplay(active.mrp) },
+        { label: "GST %", value: active.gstPct != null ? `${active.gstPct}%` : "—" },
+      ],
+      showDescription: false,
+      children: (
+        <MasterDrawerSection title="Audit Information">
+          <div className="space-y-4">
+            <AuditUserRow label="Created By" name={active.createdBy} />
+            <div className="space-y-1">
+              <p className="text-[11px] text-muted-foreground">Created Date</p>
+              <p className="text-sm font-medium text-foreground font-mono">
+                {active.createdAt}
+              </p>
             </div>
-          </MasterDrawerSection>
-        ),
-      }
+            <AuditUserRow label="Updated By" name={active.updatedBy} />
+            <div className="space-y-1">
+              <p className="text-[11px] text-muted-foreground">Updated Date</p>
+              <p className="text-sm font-medium text-foreground font-mono">
+                {active.updatedAt}
+              </p>
+            </div>
+          </div>
+        </MasterDrawerSection>
+      ),
+    }
     : { title: "Pricing", basicInfo: [] };
 
   const hierarchyError = errors.pricingHierarchy;
@@ -541,12 +546,6 @@ export default function PricingMasterPage() {
     <ListingContainer
       title="Pricing Master"
       titleIcon={IndianRupee}
-      tabs={STATUS_TABS.map((t) => ({
-        value: t.value,
-        label: `${t.label} (${statusTabCounts[t.value]})`,
-      }))}
-      activeTab={statusTab}
-      onTabChange={handleStatusTabChange}
     >
       <MasterListing<PricingRecord>
         columns={columns}
@@ -581,10 +580,10 @@ export default function PricingMasterPage() {
         onStatusChange={
           sheetMode === "add" || sheetMode === "edit"
             ? (isActive) =>
-                setForm((prev) => ({
-                  ...prev,
-                  status: isActive ? "active" : "inactive",
-                }))
+              setForm((prev) => ({
+                ...prev,
+                status: isActive ? "active" : "inactive",
+              }))
             : undefined
         }
         formContent={
@@ -629,9 +628,29 @@ export default function PricingMasterPage() {
                         value={form.category || "—"}
                       />
                     </MasterField>
+                    <MasterField label="SKU">
+                      <Input
+                        readOnly
+                        className={cn(compactInput(), "bg-muted/20 font-mono")}
+                        value={form.sku || "—"}
+                      />
+                    </MasterField>
+                    <MasterField label="Base Unit">
+                      <Input
+                        readOnly
+                        className={cn(compactInput(), "bg-muted/20")}
+                        value={form.baseUnit || "—"}
+                      />
+                    </MasterField>
+                    <MasterField label="Units Per Case">
+                      <Input
+                        readOnly
+                        className={cn(compactInput(), "bg-muted/20")}
+                        value={form.unitsPerCase || ""}
+                      />
+                    </MasterField>
                   </>
                 )}
-
                 <MasterField label="Cost Price (CP)" required error={errors.costPrice}>
                   <IndianRupeeInput
                     value={form.costPrice}
@@ -657,6 +676,18 @@ export default function PricingMasterPage() {
                   <IndianRupeeInput
                     value={form.mrp}
                     onChange={(v) => setForm((prev) => ({ ...prev, mrp: v }))}
+                  />
+                </MasterField>
+
+                <MasterField label="GST %">
+                  <Input
+                    type="number"
+                    min={0}
+                    className={compactInput()}
+                    value={form.gstPct || ""}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, gstPct: parseFloat(e.target.value) || 0 }))
+                    }
                   />
                 </MasterField>
               </MasterFormGrid>

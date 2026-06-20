@@ -38,6 +38,7 @@ interface CoaParentGroupSelectorProps {
   value: number | null;
   onChange: (parentGroupId: number) => void;
   disabled?: boolean;
+  parentFilter?: (node: ChartOfAccount) => boolean;
 }
 
 export function CoaParentGroupSelector({
@@ -45,11 +46,16 @@ export function CoaParentGroupSelector({
   value,
   onChange,
   disabled,
+  parentFilter,
 }: CoaParentGroupSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
 
-  const options = useMemo(() => buildLedgerParentOptions(records), [records]);
+  const options = useMemo(() => {
+    const base = buildLedgerParentOptions(records);
+    if (!parentFilter) return base;
+    return base.filter((o) => parentFilter(o.node));
+  }, [records, parentFilter]);
   const filtered = useMemo(
     () => searchLedgerParentOptions(options, search),
     [options, search],

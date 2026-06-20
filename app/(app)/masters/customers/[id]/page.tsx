@@ -61,6 +61,8 @@ import {
 	getGstCategoryLabel,
 } from "@/lib/masters/gst-compliance";
 import { ComplianceRegistrationViewRows } from "@/components/masters/ComplianceRegistrationViewRows";
+import { ErpPartyAccountingCard } from "@/components/masters/ErpPartyAccountingCard";
+import { getCustomerAccountingSummary } from "@/lib/accounts/erp-accounting-mapping";
 
 const STATUS_VARIANT: Record<
   CustomerStatus,
@@ -174,6 +176,11 @@ export default function CustomerDetailPage() {
       lastDate: last?.orderDate ?? "—",
     };
   }, [orders]);
+
+  const accountingSummary = useMemo(
+    () => (customer ? getCustomerAccountingSummary(customer) : null),
+    [customer],
+  );
 
   const updateStatus = (customerId: number, status: CustomerStatus, reason = "") => {
     const today = todayStr();
@@ -342,7 +349,15 @@ export default function CustomerDetailPage() {
     switch (activeTab) {
       case "overview":
         return (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="space-y-4">
+            {accountingSummary && (
+              <ErpPartyAccountingCard
+                title="Accounting Integration"
+                summary={accountingSummary}
+                partyLabel="Customer"
+              />
+            )}
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <RecordSectionCard title="Basic Details" icon={FileText} accent="blue">
               <RecordKvRow label="Customer Name" value={customer.customerName} highlight />
               <RecordKvRow
@@ -598,6 +613,7 @@ export default function CustomerDetailPage() {
                 </div>
               </div>
             </RecordSectionCard>
+          </div>
           </div>
         );
 

@@ -65,6 +65,7 @@ export default function PaymentViewPageClient({ paymentId }: { paymentId: number
 
   return (
     <RecordDetailPage
+      embedded
       listHref={PAYMENTS_LIST_PATH}
       listLabel="Payments"
       recordName={payeeDisplay(record)}

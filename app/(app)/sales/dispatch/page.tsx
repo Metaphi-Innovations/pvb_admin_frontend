@@ -21,7 +21,7 @@ interface Dispatch {
 }
 
 const SEED: Dispatch[] = [
-  { id: 1, dispatchNo: "DSP-2024-001", soRef: "SO-2024-001", customer: "Green Valley Agro", vehicle: "MH-12-AB-1234", driver: "Suresh Kumar", packages: 12, weight: "450 kg", status: "delivered", dispatchDate: "2024-01-16", estimatedDelivery: "2024-01-17", territory: "North Zone" },
+  { id: 1, dispatchNo: "DSP-001", soRef: "SO-001", customer: "ABC Traders", vehicle: "MH-12-AB-1234", driver: "Suresh Kumar", packages: 100, weight: "5000 kg", status: "delivered", dispatchDate: "2026-06-05", estimatedDelivery: "2026-06-06", territory: "North Zone" },
   { id: 2, dispatchNo: "DSP-2024-002", soRef: "SO-2024-002", customer: "Kisan Fertilizers Ltd", vehicle: "GJ-05-CD-5678", driver: "Ramesh Patel", packages: 8, weight: "320 kg", status: "in-transit", dispatchDate: "2024-01-18", estimatedDelivery: "2024-01-19", territory: "South Zone" },
   { id: 3, dispatchNo: "DSP-2024-003", soRef: "SO-2024-005", customer: "Sunrise Crops", vehicle: "UP-32-EF-9012", driver: "Mohan Lal", packages: 15, weight: "600 kg", status: "delivered", dispatchDate: "2024-01-14", estimatedDelivery: "2024-01-15", territory: "North Zone" },
   { id: 4, dispatchNo: "DSP-2024-004", soRef: "SO-2024-007", customer: "BioGrow Agro", vehicle: "KA-41-GH-3456", driver: "Suresh Kumar", packages: 20, weight: "800 kg", status: "scheduled", dispatchDate: "2024-01-23", estimatedDelivery: "2024-01-24", territory: "South Zone" },

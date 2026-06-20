@@ -147,9 +147,9 @@ export default function JournalListPageClient() {
 
   return (
     <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Vouchers", "Journal", JOURNAL_VOUCHER_HREF)}
-      title="Journal"
-      description="Record double-entry journal vouchers. Debit must equal credit before posting."
+      breadcrumbs={accountsBreadcrumb("Transactions", "Journal Entry", JOURNAL_VOUCHER_HREF)}
+      title="Journal Entry"
+      description="Manual double-entry journal. Total debit must equal total credit before posting."
       actions={
         <>
           <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={exportCsv}>
@@ -169,6 +169,7 @@ export default function JournalListPageClient() {
       filters={filterBar}
       footer={paginationFooter}
       layout="split"
+      className="h-full min-h-0"
     >
       <div className="flex-1 overflow-auto min-h-0">
         <table className="w-full text-table min-w-[900px]">

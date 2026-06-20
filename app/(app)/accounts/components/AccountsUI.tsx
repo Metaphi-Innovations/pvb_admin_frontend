@@ -67,6 +67,15 @@ const STATUS_MAP: Record<string, StatusKey> = {
   unmatched: "pending",
   reconciled: "draft",
   pending: "pending",
+  unallocated: "pending",
+  partially_allocated: "partial",
+  fully_allocated: "approved",
+  follow_up_due: "partial",
+  promise_to_pay: "pending",
+  partially_collected: "partial",
+  collected: "closed",
+  escalated: "rejected",
+  overdue: "rejected",
 };
 
 export function StatusBadge({ status }: { status: string }) {

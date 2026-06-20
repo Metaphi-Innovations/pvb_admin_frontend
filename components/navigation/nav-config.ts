@@ -21,16 +21,19 @@ import { accountsMegaMenuGroups } from "@/lib/accounts/accounts-nav";
 export interface NavChild {
   label: string;
   href: string;
+  icon?: LucideIcon;
+  description?: string;
 }
 
 export interface NavGroup {
   label: string;
+  id?: string;
   description?: string;
   icon?: LucideIcon;
   children: NavChild[];
 }
 
-export type NavMenuLayout = "grid" | "sidebar";
+export type NavMenuLayout = "grid" | "sidebar" | "horizontal-tabs";
 
 export interface NavItem {
   id: string;
@@ -40,7 +43,7 @@ export interface NavItem {
   iconOnly?: boolean;
   children?: NavChild[];
   groupedChildren?: NavGroup[];
-  /** sidebar = left categories + right links on hover (HR-style mega menu) */
+  /** sidebar = left categories + right links; horizontal-tabs = compact tabbed mega menu */
   menuLayout?: NavMenuLayout;
 }
 
@@ -69,10 +72,13 @@ export const NAV_ITEMS: NavItem[] = [
     icon: BookOpen,
     children: [
       { label: "Category", href: "/masters/categories" },
+      { label: "Crop", href: "/masters/crops" },
+      { label: "Brand", href: "/masters/brands" },
       { label: "CFU", href: "/masters/cfu" },
       { label: "Customer Type", href: "/masters/customer-types" },
       { label: "Customers", href: "/masters/customers" },
       { label: "Document Type", href: "/masters/document-types" },
+      { label: "Event Type", href: "/masters/event-types" },
       { label: "Form", href: "/masters/formulation" },
       { label: "GST", href: "/masters/gst" },
       { label: "HSN", href: "/masters/hsn" },
@@ -116,10 +122,11 @@ export const NAV_ITEMS: NavItem[] = [
     icon: Warehouse,
     children: [
       { label: "GRN & QC", href: "/warehouse/grnqc" },
-      { label: "Stock Overview", href: "/warehouse/stockoverview" },
+      { label: "Batch Register", href: "/warehouse/batch-register" },
       { label: "Packing", href: "/warehouse/packing" },
       { label: "Dispatch", href: "/warehouse/dispatch" },
       { label: "Reorder Level", href: "/warehouse/reorder-level" },
+      { label: "Stock Overview", href: "/warehouse/stockoverview" },
     ],
   },
   {

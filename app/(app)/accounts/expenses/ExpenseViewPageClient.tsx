@@ -80,6 +80,7 @@ export default function ExpenseViewPageClient({ paymentId }: { paymentId: number
 
   return (
     <RecordDetailPage
+      embedded
       listHref={EXPENSE_LIST_PATH}
       listLabel="Expenses"
       recordName={record.employeeName}

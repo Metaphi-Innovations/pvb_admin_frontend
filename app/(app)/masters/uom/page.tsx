@@ -33,6 +33,7 @@ import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 
 interface ToastState {
   msg: string;
@@ -59,12 +60,16 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 interface UOMForm {
   unitName: string;
   shortName: string;
+  uom: string;
+  conversionUnit: string;
   status: "active" | "inactive";
 }
 
 const DEFAULT_UOM_FORM: UOMForm = {
   unitName: "",
   shortName: "",
+  uom: "",
+  conversionUnit: "1",
   status: "active",
 };
 
@@ -145,6 +150,22 @@ export default function UOMPage() {
       filterable: true,
       filterType: "text",
       width: "130px",
+    },
+    {
+      key: "uom",
+      header: "UOM",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "160px",
+      render: (val, row) => row.uom || "—",
+    },
+    {
+      key: "conversionUnit",
+      header: "Conversion Unit",
+      sortable: true,
+      width: "140px",
+      render: (val, row) => row.conversionUnit ?? 1,
     },
     {
       key: "status",
@@ -257,6 +278,8 @@ export default function UOMPage() {
     setForm({
       unitName: row.unitName,
       shortName: row.shortName,
+      uom: row.uom || "",
+      conversionUnit: row.conversionUnit !== undefined ? String(row.conversionUnit) : "1",
       status: row.status,
     });
     setErrors({});
@@ -291,6 +314,8 @@ export default function UOMPage() {
         uomId: generateUOMCode(nextIdVal),
         unitName: form.unitName.trim(),
         shortName: form.shortName.trim(),
+        uom: form.uom,
+        conversionUnit: parseFloat(form.conversionUnit) || 1,
         status: form.status,
         createdBy: "Admin",
         createdDate: todayStr(),
@@ -306,6 +331,8 @@ export default function UOMPage() {
               ...r,
               unitName: form.unitName.trim(),
               shortName: form.shortName.trim(),
+              uom: form.uom,
+              conversionUnit: parseFloat(form.conversionUnit) || 1,
               status: form.status,
               updatedBy: "Admin",
               updatedDate: todayStr(),
@@ -332,7 +359,7 @@ export default function UOMPage() {
 
   const handleExport = () => {
     try {
-      const headers = ["ID", "Unit ID", "Unit Name", "Short Name", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
+      const headers = ["ID", "Unit ID", "Unit Name", "Short Name", "UOM", "Conversion Unit", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
       const csvRows = [headers.join(",")];
       for (const r of records) {
         const row = [
@@ -340,6 +367,8 @@ export default function UOMPage() {
           `"${r.uomId.replace(/"/g, '""')}"`,
           `"${r.unitName.replace(/"/g, '""')}"`,
           `"${r.shortName.replace(/"/g, '""')}"`,
+          `"${(r.uom || "").replace(/"/g, '""')}"`,
+          `"${r.conversionUnit ?? 1}"`,
           r.status,
           r.createdBy,
           r.createdDate,
@@ -434,6 +463,8 @@ export default function UOMPage() {
                   { label: "Unit Name", value: r.unitName },
                   { label: "Unit ID", value: r.uomId, mono: true },
                   { label: "Short Name", value: r.shortName },
+                  { label: "UOM", value: r.uom || "—" },
+                  { label: "Conversion Unit", value: String(r.conversionUnit ?? 1) },
                 ],
                 showDescription: false,
               })(active)
@@ -480,6 +511,29 @@ export default function UOMPage() {
                   className={cn("h-8 text-xs", errors.shortName && "border-red-400 focus-visible:ring-red-300")}
                 />
                 {errors.shortName && <p className="text-[11px] text-red-500 mt-1">{errors.shortName}</p>}
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs font-medium">UOM</Label>
+                <AutocompleteSelect
+                  options={records
+                    .filter((r) => r.id !== active?.id && r.status === "active")
+                    .map((r) => ({ label: r.unitName, value: r.unitName }))}
+                  value={form.uom}
+                  onChange={(val) => setForm((prev) => ({ ...prev, uom: val }))}
+                  placeholder="Select UOM"
+                  className="h-8 text-xs rounded-lg"
+                />
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs font-medium">Conversion Unit</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={form.conversionUnit}
+                  onChange={(e) => setForm((prev) => ({ ...prev, conversionUnit: e.target.value }))}
+                  placeholder="e.g., 1000"
+                  className="h-8 text-xs"
+                />
               </div>
             </MasterFormGrid>
           </div>

@@ -1,7 +1,5 @@
-import {
-  findLedgerById,
-  validatePostingLedgerId,
-} from "@/lib/accounts/coa-hierarchy";
+import { findLedgerById, validatePostingLedgerId } from "@/lib/accounts/coa-hierarchy";
+import { validateVoucherContactLines } from "@/lib/accounts/voucher-ledger-groups";
 import { formatMoney } from "@/lib/accounts/money-format";
 import type { RecordStatus } from "../data";
 import { loadChartOfAccounts, nextId } from "../data";
@@ -23,6 +21,8 @@ export interface VoucherLine {
   debit: number;
   credit: number;
   remarks: string;
+  contactId?: number | null;
+  contactName?: string;
 }
 
 export interface AccountingVoucher {
@@ -44,27 +44,7 @@ export interface AccountingVoucher {
 
 const VOUCHER_KEY = "ds_accounts_vouchers_v1";
 
-const VOUCHER_SEED: AccountingVoucher[] = [
-  {
-    id: 1,
-    voucherType: "journal",
-    voucherNumber: "JRN-0001",
-    date: "2026-06-02",
-    financialYearId: 1,
-    financialYearName: "FY 2025-26",
-    referenceNo: "PAY-2026-05",
-    narration: "Month-end payroll accrual",
-    lines: [
-      { id: 1, ledgerId: 40002, ledgerName: "Salary Expense", debit: 80000, credit: 0, remarks: "" },
-      { id: 2, ledgerId: 20001, ledgerName: "Vendor A", debit: 0, credit: 80000, remarks: "" },
-    ],
-    totalDebit: 80000,
-    totalCredit: 80000,
-    status: "posted",
-    createdBy: "Admin",
-    updatedBy: "Admin",
-  },
-];
+const VOUCHER_SEED: AccountingVoucher[] = [];
 
 function getOrSeed(): AccountingVoucher[] {
   if (typeof window === "undefined") return VOUCHER_SEED;
@@ -181,6 +161,8 @@ export function validateVoucherForPost(
     return `Debit (${formatMoney(totalDebit)}) must equal Credit (${formatMoney(totalCredit)}).`;
   }
   if (totalDebit === 0) return "Voucher amount cannot be zero.";
+  const contactErr = validateVoucherContactLines(v.lines, records);
+  if (contactErr) return contactErr;
   return null;
 }
 

@@ -34,6 +34,7 @@ export default function VoucherViewPageClient() {
   if (!voucher) {
     return (
       <RecordDetailPage
+        embedded
         listHref="/accounts/vouchers?tab=journal"
         listLabel="Vouchers"
         recordName="Voucher not found"
@@ -58,6 +59,7 @@ export default function VoucherViewPageClient() {
 
   return (
     <RecordDetailPage
+      embedded
       listHref={listHref}
       listLabel="Vouchers"
       recordName={typeLabel}

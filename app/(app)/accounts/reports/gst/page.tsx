@@ -1,18 +1,21 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Layers, IndianRupee, Receipt } from "lucide-react";
-import {
-  AccountsReportShell,
-  ReportFilterBar,
-} from "@/components/accounts/AccountsReportShell";
+import { AccountsReportShell } from "@/components/accounts/AccountsReportShell";
 import { GST_SUMMARY_SEED } from "@/lib/accounts/accounts-mock-data";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { defaultDateRangeState } from "@/lib/accounts/report-date-presets";
+import {
+  ReportFilterRow,
+  ReportFromToDateFilter,
+  ReportBranchFilter,
+} from "@/components/accounts/ReportFilters";
 
 export default function GstSummaryPage() {
-  const [dateFrom, setDateFrom] = useState("2026-04-01");
-  const [dateTo, setDateTo] = useState("2026-06-30");
-  const [branch, setBranch] = useState("");
+  const initial = defaultDateRangeState();
+  const [dateFrom, setDateFrom] = useState(initial.from);
+  const [dateTo, setDateTo] = useState(initial.to);
+  const [branch, setBranch] = useState("all");
 
   const rows = useMemo(
     () =>
@@ -22,30 +25,23 @@ export default function GstSummaryPage() {
         inputGst: formatMoney(r.inputGst),
         netPayable: formatMoney(r.netPayable),
       })),
-    [],
+    [dateFrom, dateTo, branch],
   );
-
-  const netTotal = GST_SUMMARY_SEED.reduce((s, r) => s + r.netPayable, 0);
 
   return (
     <AccountsReportShell
       title="GST Summary"
       description="Monthly output GST, input GST and net liability summary."
-      kpis={[
-        { label: "Periods", value: String(rows.length), icon: Layers, accent: true },
-        { label: "Output GST", value: formatMoney(GST_SUMMARY_SEED.reduce((s, r) => s + r.outputGst, 0)), icon: Receipt },
-        { label: "Input GST", value: formatMoney(GST_SUMMARY_SEED.reduce((s, r) => s + r.inputGst, 0)), icon: Receipt },
-        { label: "Net Payable", value: formatMoney(netTotal), icon: IndianRupee },
-      ]}
       filters={
-        <ReportFilterBar
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          branch={branch}
-          onDateFrom={setDateFrom}
-          onDateTo={setDateTo}
-          onBranch={setBranch}
-        />
+        <ReportFilterRow>
+          <ReportFromToDateFilter
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
+          <ReportBranchFilter value={branch} onChange={setBranch} />
+        </ReportFilterRow>
       }
       columns={[
         { key: "period", label: "Period" },

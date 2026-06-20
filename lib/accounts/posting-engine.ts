@@ -22,6 +22,8 @@ import {
   type LedgerMappingKey,
 } from "@/lib/accounts/ledger-mappings";
 import { loadAccountingSettings } from "@/lib/accounts/accounting-settings-data";
+import { ensureInventoryAccountingLedgers, getCostPriceBySku, resolveSku } from "@/lib/accounts/inventory-accounting-data";
+import { ensureGstAccountingLedgers } from "@/lib/accounts/gst-accounting";
 
 export type ErpSourceModule =
   | "procurement"
@@ -58,6 +60,7 @@ export interface PostingResult {
 }
 
 function resolveLineToLedgerId(line: PostingLineInput): number | null {
+  ensureGstAccountingLedgers();
   if (line.ledgerId) return line.ledgerId;
   if (line.mappingKey) {
     const ledger = resolveMappingLedger(
@@ -190,7 +193,48 @@ export function postFromErpSource(req: ErpPostingRequest): PostingResult {
   };
 }
 
-/** Procurement: Purchase Invoice approved → accounting entries */
+/** Procurement: GRN QC passed → Dr Inventory, Cr GRN Clearing */
+export function postGrnAccepted(input: {
+  grnId: string;
+  grnNo: string;
+  date: string;
+  lines: { productName: string; sku?: string; qty: number }[];
+}): PostingResult {
+  ensureInventoryAccountingLedgers();
+  let inventoryValue = 0;
+  for (const line of input.lines) {
+    const sku = line.sku ?? resolveSku(line.productName);
+    inventoryValue += line.qty * getCostPriceBySku(sku);
+  }
+  if (inventoryValue <= 0) return { success: false, error: "No inventory value to post" };
+
+  return postFromErpSource({
+    sourceModule: "warehouse",
+    sourceDocumentId: input.grnId,
+    sourceDocumentNo: input.grnNo,
+    voucherType: "journal",
+    date: input.date,
+    narration: `GRN Accepted ${input.grnNo} — inventory accrual`,
+    lines: [
+      {
+        mappingKey: "purchase_inventory",
+        partyName: "Inventory / Stock-in-Hand",
+        debit: inventoryValue,
+        credit: 0,
+        remarks: `Stock-in — ${input.grnNo}`,
+      },
+      {
+        mappingKey: "grn_clearing",
+        partyName: "GRN Clearing / Purchase Accrual",
+        debit: 0,
+        credit: inventoryValue,
+        remarks: `GRN clearing — ${input.grnNo}`,
+      },
+    ],
+  });
+}
+
+/** Procurement: Purchase Invoice approved → clear GRN accrual & credit vendor */
 export function postPurchaseInvoice(input: {
   invoiceId: number;
   invoiceNo: string;
@@ -201,29 +245,33 @@ export function postPurchaseInvoice(input: {
   sgst: number;
   igst: number;
 }): PostingResult {
+  ensureGstAccountingLedgers();
+  ensureInventoryAccountingLedgers();
+  const total = input.taxableAmount + input.cgst + input.sgst + input.igst;
   const lines: PostingLineInput[] = [
     {
       mappingKey: "purchase_inventory",
+      partyName: "Inventory / Stock-in-Hand",
       debit: input.taxableAmount,
       credit: 0,
-      remarks: `Inventory — ${input.invoiceNo}`,
+      remarks: `Purchase — ${input.invoiceNo}`,
     },
     {
       mappingKey: "purchase_payable",
       partyName: input.vendorName,
       debit: 0,
-      credit: input.taxableAmount + input.cgst + input.sgst + input.igst,
+      credit: total,
       remarks: `Payable — ${input.vendorName}`,
     },
   ];
   if (input.cgst > 0) {
-    lines.push({ mappingKey: "purchase_cgst", debit: input.cgst, credit: 0 });
+    lines.push({ mappingKey: "purchase_cgst", debit: input.cgst, credit: 0, remarks: "Input CGST (ITC)" });
   }
   if (input.sgst > 0) {
-    lines.push({ mappingKey: "purchase_sgst", debit: input.sgst, credit: 0 });
+    lines.push({ mappingKey: "purchase_sgst", debit: input.sgst, credit: 0, remarks: "Input SGST (ITC)" });
   }
   if (input.igst > 0) {
-    lines.push({ mappingKey: "purchase_igst", debit: input.igst, credit: 0 });
+    lines.push({ mappingKey: "purchase_igst", debit: input.igst, credit: 0, remarks: "Input IGST (ITC)" });
   }
 
   return postFromErpSource({
@@ -248,6 +296,7 @@ export function postSalesInvoice(input: {
   sgst: number;
   igst: number;
 }): PostingResult {
+  ensureGstAccountingLedgers();
   const total = input.taxableAmount + input.cgst + input.sgst + input.igst;
   const lines: PostingLineInput[] = [
     {
@@ -285,6 +334,134 @@ export function postSalesInvoice(input: {
   });
 }
 
+/** Sales: COGS at cost price — Dr COGS, Cr Inventory */
+export function postSalesInvoiceCogs(input: {
+  invoiceId: number;
+  invoiceNo: string;
+  date: string;
+  lines: { productName: string; sku?: string; qty: number }[];
+}): PostingResult {
+  ensureInventoryAccountingLedgers();
+  let cogsTotal = 0;
+  for (const line of input.lines) {
+    if (line.qty <= 0) continue;
+    const sku = line.sku ?? resolveSku(line.productName);
+    cogsTotal += line.qty * getCostPriceBySku(sku);
+  }
+  if (cogsTotal <= 0) return { success: true, voucherId: undefined };
+
+  return postFromErpSource({
+    sourceModule: "sales",
+    sourceDocumentId: `${input.invoiceId}-cogs`,
+    sourceDocumentNo: `${input.invoiceNo}-COGS`,
+    voucherType: "journal",
+    date: input.date,
+    narration: `COGS — ${input.invoiceNo}`,
+    lines: [
+      {
+        mappingKey: "sales_cogs",
+        partyName: "Cost of Goods Sold — Inventory",
+        debit: cogsTotal,
+        credit: 0,
+        remarks: `COGS at CP — ${input.invoiceNo}`,
+      },
+      {
+        mappingKey: "stock_inventory",
+        partyName: "Inventory / Stock-in-Hand",
+        debit: 0,
+        credit: cogsTotal,
+        remarks: `Inventory reduction — ${input.invoiceNo}`,
+      },
+    ],
+  });
+}
+
+/** Sales: Credit Note approved → reverse revenue & reduce receivable */
+export function postCreditNote(input: {
+  creditNoteId: number;
+  creditNoteNo: string;
+  customerName: string;
+  date: string;
+  taxableAmount: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+}): PostingResult {
+  ensureGstAccountingLedgers();
+  const total = input.taxableAmount + input.cgst + input.sgst + input.igst;
+  const lines: PostingLineInput[] = [
+    {
+      mappingKey: "sales_revenue",
+      debit: input.taxableAmount,
+      credit: 0,
+      remarks: `Sales return — ${input.creditNoteNo}`,
+    },
+    {
+      mappingKey: "sales_receivable",
+      partyName: input.customerName,
+      debit: 0,
+      credit: total,
+      remarks: `Reduce outstanding — ${input.customerName}`,
+    },
+  ];
+  if (input.cgst > 0) lines.push({ mappingKey: "sales_cgst", debit: input.cgst, credit: 0 });
+  if (input.sgst > 0) lines.push({ mappingKey: "sales_sgst", debit: input.sgst, credit: 0 });
+  if (input.igst > 0) lines.push({ mappingKey: "sales_igst", debit: input.igst, credit: 0 });
+
+  return postFromErpSource({
+    sourceModule: "sales",
+    sourceDocumentId: input.creditNoteId,
+    sourceDocumentNo: input.creditNoteNo,
+    voucherType: "credit_note",
+    date: input.date,
+    narration: `Credit Note ${input.creditNoteNo} — ${input.customerName}`,
+    lines,
+  });
+}
+
+/** Procurement: Debit Note approved → reduce vendor payable */
+export function postDebitNote(input: {
+  debitNoteId: number;
+  debitNoteNo: string;
+  vendorName: string;
+  date: string;
+  taxableAmount: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+}): PostingResult {
+  ensureGstAccountingLedgers();
+  const total = input.taxableAmount + input.cgst + input.sgst + input.igst;
+  const lines: PostingLineInput[] = [
+    {
+      mappingKey: "purchase_payable",
+      partyName: input.vendorName,
+      debit: total,
+      credit: 0,
+      remarks: `Reduce payable — ${input.vendorName}`,
+    },
+    {
+      mappingKey: "purchase_inventory",
+      debit: 0,
+      credit: input.taxableAmount,
+      remarks: `Purchase return — ${input.debitNoteNo}`,
+    },
+  ];
+  if (input.cgst > 0) lines.push({ mappingKey: "purchase_cgst", debit: 0, credit: input.cgst });
+  if (input.sgst > 0) lines.push({ mappingKey: "purchase_sgst", debit: 0, credit: input.sgst });
+  if (input.igst > 0) lines.push({ mappingKey: "purchase_igst", debit: 0, credit: input.igst });
+
+  return postFromErpSource({
+    sourceModule: "procurement",
+    sourceDocumentId: input.debitNoteId,
+    sourceDocumentNo: input.debitNoteNo,
+    voucherType: "debit_note",
+    date: input.date,
+    narration: `Debit Note ${input.debitNoteNo} — ${input.vendorName}`,
+    lines,
+  });
+}
+
 /** HR: Approved employee claim → payable entry */
 export function postEmployeeClaim(input: {
   claimId: number;
@@ -315,6 +492,60 @@ export function postEmployeeClaim(input: {
         remarks: input.employeeName,
       },
     ],
+  });
+}
+
+/** Warehouse: Stock reconciliation → inventory gain/loss */
+export function postStockReconciliation(input: {
+  reconciliationId: string;
+  reconciliationNo: string;
+  date: string;
+  amount: number;
+  isIncrease: boolean;
+  narration?: string;
+}): PostingResult {
+  ensureInventoryAccountingLedgers();
+  const abs = Math.abs(input.amount);
+  const lines: PostingLineInput[] = input.isIncrease
+    ? [
+        {
+          mappingKey: "stock_inventory",
+          partyName: "Inventory / Stock-in-Hand",
+          debit: abs,
+          credit: 0,
+        },
+        {
+          mappingKey: "stock_adjustment_gain",
+          partyName: "Stock Adjustment Gain / Other Income",
+          debit: 0,
+          credit: abs,
+          remarks: input.narration,
+        },
+      ]
+    : [
+        {
+          mappingKey: "stock_loss_expense",
+          partyName: "Inventory Loss / Stock Adjustment Expense",
+          debit: abs,
+          credit: 0,
+          remarks: input.narration,
+        },
+        {
+          mappingKey: "stock_inventory",
+          partyName: "Inventory / Stock-in-Hand",
+          debit: 0,
+          credit: abs,
+        },
+      ];
+
+  return postFromErpSource({
+    sourceModule: "warehouse",
+    sourceDocumentId: input.reconciliationId,
+    sourceDocumentNo: input.reconciliationNo,
+    voucherType: "journal",
+    date: input.date,
+    narration: `Stock Reconciliation ${input.reconciliationNo}`,
+    lines,
   });
 }
 

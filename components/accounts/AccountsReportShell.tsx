@@ -2,7 +2,6 @@
 
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Download } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
@@ -29,6 +28,7 @@ export interface ReportKpi {
 export interface AccountsReportShellProps {
   title: string;
   description?: string;
+  section?: string;
   kpis?: ReportKpi[];
   columns: ReportColumn[];
   rows: Record<string, string | number>[];
@@ -39,6 +39,7 @@ export interface AccountsReportShellProps {
 export function AccountsReportShell({
   title,
   description = "Report view with filters and export. Data from local mock / posted vouchers.",
+  section = "Reports",
   kpis,
   columns,
   rows,
@@ -61,7 +62,7 @@ export function AccountsReportShell({
 
   return (
     <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Reports", title)}
+      breadcrumbs={accountsBreadcrumb(section, title)}
       title={title}
       description={description}
       actions={
@@ -71,6 +72,7 @@ export function AccountsReportShell({
       }
       filters={filters}
       layout="split"
+      className="h-full min-h-0"
     >
       {kpis && kpis.length > 0 && (
         <div className="flex-shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 border-b border-border/60 bg-muted/10">
@@ -129,39 +131,5 @@ export function AccountsReportShell({
   );
 }
 
-/** Standard report date/branch filter row */
-export function ReportFilterBar({
-  dateFrom,
-  dateTo,
-  onDateFrom,
-  onDateTo,
-  branch,
-  onBranch,
-  extra,
-}: {
-  dateFrom: string;
-  dateTo: string;
-  onDateFrom: (v: string) => void;
-  onDateTo: (v: string) => void;
-  branch: string;
-  onBranch: (v: string) => void;
-  extra?: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-wrap items-end gap-3">
-      <div className="space-y-1">
-        <label className="text-[10px] font-medium uppercase text-muted-foreground">From</label>
-        <Input type="date" className="h-8 text-xs w-36" value={dateFrom} onChange={(e) => onDateFrom(e.target.value)} />
-      </div>
-      <div className="space-y-1">
-        <label className="text-[10px] font-medium uppercase text-muted-foreground">To</label>
-        <Input type="date" className="h-8 text-xs w-36" value={dateTo} onChange={(e) => onDateTo(e.target.value)} />
-      </div>
-      <div className="space-y-1">
-        <label className="text-[10px] font-medium uppercase text-muted-foreground">Branch</label>
-        <Input className="h-8 text-xs w-32" placeholder="All" value={branch} onChange={(e) => onBranch(e.target.value)} />
-      </div>
-      {extra}
-    </div>
-  );
-}
+/** @deprecated Import from @/components/accounts/ReportFilters */
+export { ReportFilterBar } from "@/components/accounts/ReportFilters";

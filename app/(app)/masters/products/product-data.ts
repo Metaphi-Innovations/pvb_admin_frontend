@@ -204,6 +204,14 @@ export interface Product {
   baseUnit?: string;
   packagingUnit?: string;
   conversionQuantity?: number;
+  unitSize?: number;
+  netWeight?: number;
+  grossWeight?: number;
+  /** Accounting auto-mapping (ERP → COA) */
+  inventoryAccount?: string;
+  salesAccount?: string;
+  purchaseAccount?: string;
+  cogsAccount?: string;
 }
 
 export function todayStr(): string {
@@ -408,6 +416,9 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "KG",
     packagingUnit: "Bag",
     conversionQuantity: 25,
+    unitSize: 1,
+    netWeight: 25,
+    grossWeight: 25,
     productImages: [
       {
         id: "prd-1-media-1",
@@ -456,6 +467,9 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "KG",
     packagingUnit: "Box",
     conversionQuantity: 10,
+    unitSize: 1,
+    netWeight: 10,
+    grossWeight: 10,
     productImages: [
       {
         id: "prd-2-media-1",
@@ -481,7 +495,7 @@ const SEED_PRODUCTS: Product[] = [
     hsnCode: "3808",
     gstRate: "18%",
     sku: "PEST-EC-221",
-    status: "inactive",
+    status: "active",
     createdBy: "Admin",
     createdDate: "2026-02-03",
     updatedBy: "Admin",
@@ -489,6 +503,9 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "Liter",
     packagingUnit: "Drum",
     conversionQuantity: 200,
+    unitSize: 1,
+    netWeight: 200,
+    grossWeight: 200,
     productImages: [],
     productUrls: [],
   },
@@ -505,7 +522,7 @@ const SEED_PRODUCTS: Product[] = [
     hsnCode: "3002",
     gstRate: "12%",
     sku: "BIO-SUS-104",
-    status: "inactive",
+    status: "active",
     createdBy: "Admin",
     createdDate: "2026-02-16",
     updatedBy: "Admin",
@@ -513,6 +530,121 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "Gram",
     packagingUnit: "Packet",
     conversionQuantity: 50,
+    productImages: [],
+    productUrls: [],
+  },
+  {
+    id: 5,
+    productId: "PRD-0005",
+    productName: "Urea 50kg",
+    scientificName: "Urea",
+    category: "Fertilizers",
+    subCategory: "",
+    segment: "Poshak",
+    form: "Granules",
+    hsnCode: "3102",
+    gstRate: "5%",
+    sku: "FERT-UREA-50",
+    status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-03-01",
+    updatedBy: "Admin",
+    updatedDate: "2026-03-01",
+    baseUnit: "KG",
+    packagingUnit: "Bag",
+    conversionQuantity: 50,
+    productImages: [],
+    productUrls: [],
+  },
+  {
+    id: 6,
+    productId: "PRD-0006",
+    productName: "NPK 10:26:26",
+    scientificName: "NPK 10:26:26",
+    category: "Fertilizers",
+    subCategory: "",
+    segment: "Poshak",
+    form: "Granules",
+    hsnCode: "3105",
+    gstRate: "5%",
+    sku: "FERT-NPK-1026",
+    status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-03-01",
+    updatedBy: "Admin",
+    updatedDate: "2026-03-01",
+    baseUnit: "KG",
+    packagingUnit: "Bag",
+    conversionQuantity: 50,
+    productImages: [],
+    productUrls: [],
+  },
+  {
+    id: 7,
+    productId: "PRD-0007",
+    productName: "DAP 50kg",
+    scientificName: "Diammonium Phosphate",
+    category: "Fertilizers",
+    subCategory: "",
+    segment: "Poshak",
+    form: "Granules",
+    hsnCode: "3105",
+    gstRate: "5%",
+    sku: "FERT-DAP-50",
+    status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-03-01",
+    updatedBy: "Admin",
+    updatedDate: "2026-03-01",
+    baseUnit: "KG",
+    packagingUnit: "Bag",
+    conversionQuantity: 50,
+    productImages: [],
+    productUrls: [],
+  },
+  {
+    id: 8,
+    productId: "PRD-0008",
+    productName: "Zinc Sulphate 21%",
+    scientificName: "Zinc Sulphate",
+    category: "Fertilizers",
+    subCategory: "",
+    segment: "Poshak",
+    form: "Powder",
+    hsnCode: "2833",
+    gstRate: "5%",
+    sku: "FERT-ZNS-21",
+    status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-03-01",
+    updatedBy: "Admin",
+    updatedDate: "2026-03-01",
+    baseUnit: "KG",
+    packagingUnit: "Bag",
+    conversionQuantity: 25,
+    productImages: [],
+    productUrls: [],
+  },
+  {
+    id: 9,
+    productId: "PRD-0009",
+    productName: "Hybrid Maize Seed",
+    scientificName: "Zea mays",
+    category: "Seeds",
+    subCategory: "",
+    segment: "Rakshak",
+    form: "Seeds",
+    hsnCode: "1209",
+    gstRate: "0%",
+    sku: "SEED-MAIZE-001",
+    status: "active",
+    createdBy: "Admin",
+    createdDate: "2026-03-01",
+    updatedBy: "Admin",
+    updatedDate: "2026-03-01",
+    baseUnit: "KG",
+    packagingUnit: "Bag",
+    conversionQuantity: 25,
     productImages: [],
     productUrls: [],
   },
@@ -533,14 +665,14 @@ function migrateProduct(raw: Record<string, unknown>): Product {
     Array.isArray(p.productImages) && p.productImages.length > 0
       ? p.productImages
       : legacyAssets
-          .map(legacyAssetToImage)
-          .filter((item): item is ProductImage => item !== null);
+        .map(legacyAssetToImage)
+        .filter((item): item is ProductImage => item !== null);
   const productUrls =
     Array.isArray(p.productUrls) && p.productUrls.length > 0
       ? p.productUrls
       : legacyAssets
-          .map(legacyAssetToUrl)
-          .filter((item): item is ProductUrl => item !== null);
+        .map(legacyAssetToUrl)
+        .filter((item): item is ProductUrl => item !== null);
   return {
     id: p.id ?? 0,
     productId: p.productId ?? "",
@@ -568,10 +700,19 @@ function migrateProduct(raw: Record<string, unknown>): Product {
     baseUnit: p.baseUnit ?? "",
     packagingUnit: p.packagingUnit ?? "",
     conversionQuantity: p.conversionQuantity !== undefined ? Number(p.conversionQuantity) : undefined,
+    unitSize: p.unitSize !== undefined ? Number(p.unitSize) : undefined,
+    netWeight: p.netWeight !== undefined ? Number(p.netWeight) : undefined,
+    grossWeight: p.grossWeight !== undefined ? Number(p.grossWeight) : undefined,
   };
 }
 
 export function loadProducts(): Product[] {
+  if (typeof window === "undefined") return SEED_PRODUCTS;
+  ensureProductDemoSeed();
+  return loadProductsRaw();
+}
+
+function loadProductsRaw(): Product[] {
   if (typeof window === "undefined") return SEED_PRODUCTS;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -580,6 +721,21 @@ export function loadProducts(): Product[] {
   } catch {
     return SEED_PRODUCTS;
   }
+}
+
+const PRODUCT_DEMO_SEED_VERSION = "2026-jun-warehouse-v1";
+const PRODUCT_SEED_VERSION_KEY = "ds_product_seed_version";
+
+function ensureProductDemoSeed(): void {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(PRODUCT_SEED_VERSION_KEY) === PRODUCT_DEMO_SEED_VERSION) return;
+  const existing = loadProductsRaw();
+  const existingSkus = new Set(existing.map((p) => p.sku));
+  const toAdd = SEED_PRODUCTS.filter((p) => p.id >= 5 && !existingSkus.has(p.sku));
+  if (toAdd.length > 0) {
+    saveProducts([...existing, ...toAdd]);
+  }
+  localStorage.setItem(PRODUCT_SEED_VERSION_KEY, PRODUCT_DEMO_SEED_VERSION);
 }
 
 export function saveProducts(list: Product[]): void {

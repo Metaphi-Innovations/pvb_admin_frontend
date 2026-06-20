@@ -2,6 +2,7 @@ import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
 import { getCustomersForTransactionDropdown } from "@/app/(app)/masters/customers/customer-data";
 import { calcLineAmounts, loadInvoices, type InvoiceRecord } from "../invoices/invoices-data";
 import { loadOrders } from "@/app/(app)/sales/orders/orders-data";
+import { maybePostCreditNote } from "@/lib/accounts/document-posting-bridge";
 
 export type CreditNoteAgainst = "sales_invoice" | "sales_order" | "general";
 export type NoteWorkflowStatus = "draft" | "pending_approval" | "approved" | "rejected" | "cancelled";
@@ -59,6 +60,13 @@ export interface CreditNoteRecord {
   sourceOrderNo: string;
   customerId: number | null;
   customerName: string;
+  receivableLedger?: string;
+  salesperson?: string;
+  subject?: string;
+  billingAddress?: string;
+  shippingAddress?: string;
+  customerNotes?: string;
+  termsAndConditions?: string;
   originalAmount: number;
   alreadyAdjustedAmount: number;
   currentCreditAmount: number;
@@ -90,50 +98,7 @@ export const CREDIT_REASONS = [
   "Other",
 ];
 
-const SEED: CreditNoteRecord[] = [
-  {
-    id: 1,
-    creditNoteNo: "CN-0001",
-    creditNoteDate: "2026-06-01",
-    againstType: "sales_invoice",
-    sourceInvoiceId: null,
-    sourceInvoiceNo: "INV-0001",
-    sourceOrderId: null,
-    sourceOrderNo: "PO-4421",
-    customerId: 1,
-    customerName: "Agro Solutions Pvt Ltd",
-    originalAmount: 85000,
-    alreadyAdjustedAmount: 0,
-    currentCreditAmount: 12000,
-    balanceAfterAdjustment: 73000,
-    taxCreditAmount: 0,
-    lineItems: [
-      {
-        id: "l1",
-        sourceLineId: "l1",
-        productName: "NPK Blend",
-        description: "Partial return",
-        invoiceQty: 100,
-        unitPrice: 120,
-        discountPct: 0,
-        taxPct: 12,
-        gstAmount: 1440,
-        lineAmount: 12000,
-        returnQty: 10,
-        creditAmount: 12000,
-        reason: "Sales return",
-      },
-    ],
-    reason: "Sales return",
-    remarks: "Demo credit note for UI review",
-    status: "draft",
-    activity: [{ at: "2026-06-01T09:00:00.000Z", action: "created", by: "Admin", detail: "Sample credit note" }],
-    createdBy: "Admin",
-    updatedBy: "Admin",
-    createdAt: "2026-06-01T09:00:00.000Z",
-    updatedAt: "2026-06-01T09:00:00.000Z",
-  },
-];
+const SEED: CreditNoteRecord[] = [];
 
 function nextCreditNoteNo(records: CreditNoteRecord[]): string {
   const max = records.reduce((m, r) => {
@@ -214,9 +179,28 @@ export function applyReturnQtyToLines(
   );
 }
 
+export function computeCreditNoteGstSplit(lines: CreditNoteLine[]): { taxable: number; taxAmount: number; grandTotal: number } {
+  const grandTotal = lines.reduce((s, l) => s + (l.creditAmount || 0), 0);
+  let taxable = 0;
+  let taxAmount = 0;
+  for (const l of lines) {
+    if (l.creditAmount <= 0) continue;
+    const rate = 1 + (l.taxPct || 0) / 100;
+    const lineTaxable = Math.round((l.creditAmount / rate) * 100) / 100;
+    taxable += lineTaxable;
+    taxAmount += Math.round((l.creditAmount - lineTaxable) * 100) / 100;
+  }
+  return {
+    taxable: Math.round(taxable * 100) / 100,
+    taxAmount: Math.round(taxAmount * 100) / 100,
+    grandTotal: Math.round(grandTotal * 100) / 100,
+  };
+}
+
 export function normalizeCreditNote(rec: CreditNoteRecord): CreditNoteRecord {
   const lineItems = rec.lineItems.map((l) => normalizeCreditLine(l));
   const currentCreditAmount = lineItems.reduce((s, l) => s + l.creditAmount, 0);
+  const { taxAmount } = computeCreditNoteGstSplit(lineItems);
   const originalAmount = rec.originalAmount > 0 ? rec.originalAmount : currentCreditAmount;
   const balanceAfterAdjustment = Math.max(
     0,
@@ -227,6 +211,7 @@ export function normalizeCreditNote(rec: CreditNoteRecord): CreditNoteRecord {
     lineItems,
     originalAmount,
     currentCreditAmount: Math.round(currentCreditAmount * 100) / 100,
+    taxCreditAmount: taxAmount,
     balanceAfterAdjustment: Math.round(balanceAfterAdjustment * 100) / 100,
   };
 }
@@ -405,6 +390,13 @@ export type CreditNoteFormInput = {
   creditNoteDate: string;
   customerId: number | null;
   customerName: string;
+  receivableLedger?: string;
+  salesperson?: string;
+  subject?: string;
+  billingAddress?: string;
+  shippingAddress?: string;
+  customerNotes?: string;
+  termsAndConditions?: string;
   sourceInvoiceId: number | null;
   sourceInvoiceNo: string;
   sourceOrderId: number | null;
@@ -438,6 +430,13 @@ export function createCreditNote(input: CreditNoteFormInput): CreditNoteRecord {
     sourceOrderNo: input.sourceOrderNo.trim(),
     customerId: input.customerId,
     customerName: input.customerName.trim(),
+    receivableLedger: input.receivableLedger,
+    salesperson: input.salesperson,
+    subject: input.subject,
+    billingAddress: input.billingAddress,
+    shippingAddress: input.shippingAddress,
+    customerNotes: input.customerNotes,
+    termsAndConditions: input.termsAndConditions,
     originalAmount: input.originalAmount,
     alreadyAdjustedAmount: input.alreadyAdjustedAmount,
     currentCreditAmount: 0,
@@ -476,6 +475,13 @@ export function updateCreditNote(id: number, input: CreditNoteFormInput): Credit
     sourceOrderNo: input.sourceOrderNo.trim(),
     customerId: input.customerId,
     customerName: input.customerName.trim(),
+    receivableLedger: input.receivableLedger,
+    salesperson: input.salesperson,
+    subject: input.subject,
+    billingAddress: input.billingAddress,
+    shippingAddress: input.shippingAddress,
+    customerNotes: input.customerNotes,
+    termsAndConditions: input.termsAndConditions,
     originalAmount: input.originalAmount,
     alreadyAdjustedAmount: input.alreadyAdjustedAmount,
     lineItems: input.lineItems,
@@ -510,7 +516,12 @@ export function approveCreditNote(id: number): CreditNoteRecord {
   });
   all[idx] = updated;
   saveCreditNotes(all);
+  maybePostCreditNote(updated);
   return updated;
+}
+
+export function postCreditNote(id: number): CreditNoteRecord {
+  return approveCreditNote(id);
 }
 
 export function cancelCreditNote(id: number, reason: string): CreditNoteRecord {

@@ -24,6 +24,8 @@ import {
 } from "../vendor-data";
 import { getGstCategoryLabel, deriveGstRegistered } from "@/lib/masters/gst-compliance";
 import { getActiveTDSMasters, formatTdsSummary } from "../../tds/tds-data";
+import { ErpPartyAccountingCard } from "@/components/masters/ErpPartyAccountingCard";
+import { getVendorAccountingSummary } from "@/lib/accounts/erp-accounting-mapping";
 
 function formatMobile(code: string, mobile: string) {
   if (!mobile) return "—";
@@ -65,6 +67,7 @@ export default function ViewVendorPage() {
     vendor.gstNumber,
     vendor.gstCategory,
   );
+  const accountingSummary = getVendorAccountingSummary(vendor);
 
   return (
     <RecordDetailPage
@@ -131,6 +134,12 @@ export default function ViewVendorPage() {
         ],
       }}
     >
+      <div className="space-y-4">
+        <ErpPartyAccountingCard
+          title="Accounting Integration"
+          summary={accountingSummary}
+          partyLabel="Vendor"
+        />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <RecordSectionCard title="Vendor Information" icon={Building2} accent="blue">
           <RecordKvRow label="Vendor Code" value={vendor.vendorCode || "—"} mono highlight />
@@ -214,6 +223,7 @@ export default function ViewVendorPage() {
             isLast
           />
         </RecordSectionCard>
+      </div>
       </div>
     </RecordDetailPage>
   );

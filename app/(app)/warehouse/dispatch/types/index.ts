@@ -3,6 +3,8 @@ export interface DispatchProduct {
   sku: string;
   packedQty: number;
   dispatchQty: number;
+  unitRate?: number;
+  batchNo?: string;
 }
 
 export interface DeliveryDetails {
@@ -31,4 +33,23 @@ export interface DispatchRecord {
   products: DispatchProduct[];
   packingNumbers: string[];
   deliveryDetails?: DeliveryDetails;
+}
+
+export interface SalesReturnProduct {
+  product: string;
+  sku: string;
+  dispatchQty: number;
+  returnQty: number;
+}
+
+export interface SalesReturnRecord {
+  id: string;
+  returnNumber: string;
+  dispatchNumber: string;
+  salesOrderNumber: string;
+  customer: string;
+  returnDate: string;
+  warehouse: string;
+  products: SalesReturnProduct[];
+  remarks?: string;
 }

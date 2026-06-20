@@ -24,7 +24,9 @@ export function applyFilters<T = any>(records: T[], filters: FilterState): T[] {
       result = result.filter((row: any) => {
         const rowVal = row[key];
         if (!rowVal) return false;
-        return rowVal >= fromDate && rowVal <= toDate;
+        const passFrom = !fromDate || rowVal >= fromDate;
+        const passTo = !toDate || rowVal <= toDate;
+        return passFrom && passTo;
       });
     } else {
       const q = String(val).trim().toLowerCase();

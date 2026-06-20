@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import InvoiceCreatePageClient from "../../../invoices/InvoiceCreatePageClient";
 
-export default function LegacyRedirect() {
-  redirect("/accounts/vouchers?tab=sales&mode=new");
+export default function NewSalesInvoicePage() {
+  return <InvoiceCreatePageClient />;
 }

@@ -5,6 +5,7 @@ import {
 } from "@/lib/accounts/config";
 import { getActiveVendors, type Vendor } from "@/app/(app)/masters/vendors/vendor-data";
 import { loadPurchaseOrders } from "@/app/(app)/procurement/purchase-orders/po-data";
+import { maybePostDebitNote } from "@/lib/accounts/document-posting-bridge";
 import {
   getPurchaseInvoiceById,
   listCreditablePurchaseInvoices,
@@ -789,6 +790,7 @@ export function approveDebitNote(id: number): DebitNoteRecord {
   });
   all[idx] = updated;
   saveDebitNotes(all);
+  maybePostDebitNote(updated);
   return updated;
 }
 

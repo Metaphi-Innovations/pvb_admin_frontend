@@ -10,6 +10,11 @@ import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import { resolveSalesUnitPrice } from "@/lib/pricing/resolve-pricing";
 import type { SezSupplyType } from "@/lib/masters/gst-compliance";
 import type { PaymentMode } from "../expenses/expense-data";
+import { maybePostSalesInvoice } from "@/lib/accounts/document-posting-bridge";
+import { findPostedSalesInvoiceVoucher } from "@/lib/accounts/sales-invoice-accounting";
+import { customerMasterToTransactionFields } from "@/lib/accounts/transaction-master-fetch";
+import { validateProductForSalesInvoice } from "@/lib/accounts/erp-accounting-mapping";
+import { backfillInvoiceCustomerLedgerLinks } from "@/lib/accounts/invoice-ledger-match";
 
 export type InvoiceStatus = "draft" | "sent" | "cancelled";
 export type InvoicePaymentStatus = "unpaid" | "partially_paid" | "paid";
@@ -24,6 +29,7 @@ export interface InvoiceLineItem {
 	productId: number | null;
 	productName: string;
 	description: string;
+	hsn?: string;
 	qty: number;
 	unit: string;
 	unitPrice: number;
@@ -97,6 +103,29 @@ export interface InvoiceRecord {
 	cancellationReason?: string;
 	/** Future: sales order link */
 	salesOrderId?: number | null;
+	sourceDispatchId?: string;
+	customerLedgerId?: number | null;
+	dispatchNo?: string;
+	branch?: string;
+	warehouse?: string;
+	paymentTerms?: string;
+	creditDays?: number;
+	placeOfSupply?: string;
+	state?: string;
+	salesperson?: string;
+	shippingAddress?: string;
+	pan?: string;
+	contactPerson?: string;
+	gstTreatment?: string;
+	receivableLedger?: string;
+	customerNotes?: string;
+	termsAndConditions?: string;
+	internalRemarks?: string;
+	shippingCharges?: number;
+	otherCharges?: number;
+	roundOff?: number;
+	adjustment?: number;
+	tdsTcs?: number;
 	createdBy: string;
 	updatedBy: string;
 	createdAt: string;
@@ -104,6 +133,24 @@ export interface InvoiceRecord {
 }
 
 const STORAGE_KEY = "ds_accounts_invoices_v1";
+
+/** Column labels — GST-inclusive totals must be explicit across Accounts UI. */
+export const INVOICE_AMOUNT_LABELS = {
+	taxableValue: "Taxable Value",
+	gstAmount: "GST Amount",
+	invoiceTotal: "Invoice Total (Incl. GST)",
+} as const;
+
+/** Pre-GST taxable value, GST, and final payable total for a sales invoice. */
+export function getInvoiceAmountBreakup(
+	inv: Pick<InvoiceRecord, "subtotal" | "discountTotal" | "taxAmount" | "grandTotal">,
+) {
+	const taxableValue =
+		Math.round((inv.subtotal - inv.discountTotal) * 100) / 100;
+	const gstAmount = Math.round(inv.taxAmount * 100) / 100;
+	const invoiceTotal = Math.round(inv.grandTotal * 100) / 100;
+	return { taxableValue, gstAmount, invoiceTotal };
+}
 
 export function parseTaxPct(value: string | number): number {
 	if (typeof value === "number") return value;
@@ -119,7 +166,21 @@ export function calcLineAmounts(
 	const taxable = Math.max(0, base - discountAmt);
 	const taxAmt = Math.round(taxable * (line.taxPct / 100) * 100) / 100;
 	const amount = Math.round((taxable + taxAmt) * 100) / 100;
-	return { base, discountAmt, taxAmt, amount };
+	return { base, discountAmt, taxable, taxAmt, amount };
+}
+
+/** Split GST into CGST/SGST (intrastate) or IGST (interstate). */
+export function calcGstLineSplit(
+	line: Pick<InvoiceLineItem, "qty" | "unitPrice" | "discountPct" | "taxPct">,
+	interstate = false,
+) {
+	const { taxable, taxAmt, amount } = calcLineAmounts(line);
+	if (interstate) {
+		return { taxable, taxAmt, cgst: 0, sgst: 0, igst: taxAmt, lineTotal: amount };
+	}
+	const cgst = Math.round(taxAmt * 50) / 100;
+	const sgst = Math.round((taxAmt - cgst) * 100) / 100;
+	return { taxable, taxAmt, cgst, sgst, igst: 0, lineTotal: amount };
 }
 
 export function recalculateLineItem(line: InvoiceLineItem): InvoiceLineItem {
@@ -174,21 +235,28 @@ export function normalizeInvoice(rec: InvoiceRecord): InvoiceRecord {
 		}),
 	);
 	const totals = calculateInvoiceTotals(lines);
+	const chargeDelta =
+		(rec.shippingCharges ?? 0) +
+		(rec.otherCharges ?? 0) +
+		(rec.roundOff ?? 0) -
+		(rec.adjustment ?? 0) +
+		(rec.tdsTcs ?? 0);
+	const grandTotal = Math.round((totals.grandTotal + chargeDelta) * 100) / 100;
 	const amountReceived = rec.collections.reduce((s, c) => s + c.amount, 0);
 	const balanceAmount = Math.max(
 		0,
-		Math.round((totals.grandTotal - amountReceived) * 100) / 100,
+		Math.round((grandTotal - amountReceived) * 100) / 100,
 	);
 	const amountCredited = lines.reduce((s, l) => s + (l.creditedAmount ?? 0), 0);
 	const balanceCreditAllowed = Math.max(
 		0,
-		Math.round((totals.grandTotal - amountCredited) * 100) / 100,
+		Math.round((grandTotal - amountCredited) * 100) / 100,
 	);
 	const paymentStatus =
 		rec.invoiceStatus === "cancelled"
 			? rec.paymentStatus
-			: derivePaymentStatus(totals.grandTotal, amountReceived);
-	const creditStatus = deriveCreditStatus(totals.grandTotal, amountCredited);
+			: derivePaymentStatus(grandTotal, amountReceived);
+	const creditStatus = deriveCreditStatus(grandTotal, amountCredited);
 	let soAdjustmentStatus = rec.soAdjustmentStatus ?? "open";
 	if (creditStatus === "fully_credited") soAdjustmentStatus = "closed";
 	else if (amountCredited > 0) soAdjustmentStatus = "partially_returned";
@@ -197,6 +265,7 @@ export function normalizeInvoice(rec: InvoiceRecord): InvoiceRecord {
 		...rec,
 		lineItems: lines,
 		...totals,
+		grandTotal,
 		amountReceived: Math.round(amountReceived * 100) / 100,
 		balanceAmount,
 		amountCredited: Math.round(amountCredited * 100) / 100,
@@ -229,6 +298,7 @@ export interface InvoiceProductOption {
 	unit: string;
 	taxPct: number;
 	unitPrice: number;
+	hsn?: string;
 }
 
 export function getProductsForInvoice(customerId?: number): InvoiceProductOption[] {
@@ -243,6 +313,7 @@ export function getProductsForInvoice(customerId?: number): InvoiceProductOption
 				unit: p.baseUnit || "PCS",
 				taxPct: parseTaxPct(p.gstRate),
 				unitPrice: resolved.amount,
+				hsn: p.hsnCode || "",
 			};
 		});
 }
@@ -258,24 +329,30 @@ export function applyProductToInvoiceLine(
 		unit: product.unit,
 		unitPrice: product.unitPrice,
 		taxPct: product.taxPct,
+		hsn: product.hsn ?? line.hsn,
 	});
 }
 
 export function customerToInvoiceFields(c: Customer) {
-	const mobile =
-		c.countryCode && c.mobile ? `${c.countryCode} ${c.mobile}` : c.mobile;
-	const address = [c.address, c.districtName, c.stateName, c.pincode]
-		.filter(Boolean)
-		.join(", ");
-	const gstRegistered = !!(c.gstApplicable && c.gstin?.trim());
+	const f = customerMasterToTransactionFields(c);
 	return {
-		customerId: c.id,
-		customerName: c.customerName,
-		customerMobile: mobile,
-		customerEmail: c.email,
-		customerGst: gstRegistered ? c.gstin : "",
-		customerGstCategory: c.gstCategory,
-		billingAddress: address,
+		customerId: f.customerId,
+		customerCode: f.customerCode,
+		customerName: f.customerName,
+		customerMobile: f.customerMobile,
+		customerEmail: f.customerEmail,
+		customerGst: f.customerGst,
+		customerGstCategory: f.customerGstCategory,
+		billingAddress: f.billingAddress,
+		shippingAddress: f.shippingAddress,
+		pan: f.pan,
+		contactPerson: f.contactPerson,
+		paymentTerms: f.paymentTerms,
+		creditDays: f.creditDays,
+		placeOfSupply: f.placeOfSupply,
+		state: f.state,
+		gstTreatment: f.gstTreatment,
+		receivableLedger: f.receivableLedger,
 	};
 }
 
@@ -427,8 +504,11 @@ export function loadInvoices(): InvoiceRecord[] {
 		const raw = localStorage.getItem(STORAGE_KEY);
 		const list: InvoiceRecord[] = raw ? JSON.parse(raw) : SEED;
 		const normalized = list.map(normalizeInvoice);
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
-		return normalized;
+		const { invoices: linked, changed } = backfillInvoiceCustomerLedgerLinks(normalized);
+		if (changed || !raw) {
+			localStorage.setItem(STORAGE_KEY, JSON.stringify(linked));
+		}
+		return linked;
 	} catch {
 		return SEED.map(normalizeInvoice);
 	}
@@ -525,14 +605,17 @@ export function canEditInvoice(rec: InvoiceRecord): boolean {
 	if (ACCOUNTS_INVOICE_ADMIN) return true;
 	if (rec.invoiceStatus === "cancelled" || rec.paymentStatus === "paid")
 		return false;
+	if (rec.invoiceStatus === "sent" && findPostedSalesInvoiceVoucher(rec.invoiceNo)) return false;
 	return rec.invoiceStatus === "draft" || rec.invoiceStatus === "sent";
 }
 
 export function getInvoiceRowActions(
 	rec: InvoiceRecord,
-): ("view" | "edit" | "pdf" | "email" | "receive" | "cancel")[] {
+): ("view" | "edit" | "pdf" | "email" | "receive" | "cancel" | "post" | "credit_note")[] {
 	const actions: ReturnType<typeof getInvoiceRowActions> = ["view", "pdf"];
 	if (canEditInvoice(rec)) actions.push("edit");
+	if (rec.invoiceStatus === "draft") actions.push("post");
+	if (rec.invoiceStatus === "sent") actions.push("credit_note");
 	if (rec.invoiceStatus === "sent" && rec.paymentStatus !== "paid")
 		actions.push("email");
 	if (rec.invoiceStatus !== "cancelled" && rec.balanceAmount > 0)
@@ -557,12 +640,45 @@ export type InvoiceFormInput = {
 	lutNumber?: string;
 	lutDeclaration?: string;
 	billingAddress: string;
+	shippingAddress?: string;
+	pan?: string;
+	contactPerson?: string;
+	paymentTerms?: string;
+	creditDays?: number;
+	placeOfSupply?: string;
+	state?: string;
+	gstTreatment?: string;
+	receivableLedger?: string;
+	salesOrderNo?: string;
+	salesOrderId?: number | null;
+	sourceDispatchId?: string;
+	customerLedgerId?: number | null;
+	dispatchNo?: string;
+	branch?: string;
+	warehouse?: string;
+	salesperson?: string;
+	customerNotes?: string;
+	termsAndConditions?: string;
+	internalRemarks?: string;
+	shippingCharges?: number;
+	otherCharges?: number;
+	roundOff?: number;
+	adjustment?: number;
+	tdsTcs?: number;
 	lineItems: InvoiceLineItem[];
 	attachments: InvoiceAttachment[];
 	invoiceStatus: InvoiceStatus;
 };
 
 export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
+	for (const line of input.lineItems) {
+		if (!line.productId) continue;
+		const product = loadProducts().find((p) => p.id === line.productId);
+		if (product) {
+			const err = validateProductForSalesInvoice(product);
+			if (err) throw new Error(err);
+		}
+	}
 	const all = loadInvoices();
 	const id = all.length ? Math.max(...all.map((r) => r.id)) + 1 : 1;
 	const base: InvoiceRecord = {
@@ -595,6 +711,9 @@ export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
 	};
 	const rec = normalizeInvoice(base);
 	saveInvoices([...all, rec]);
+	if (rec.invoiceStatus === "sent") {
+		maybePostSalesInvoice(rec);
+	}
 	return rec;
 }
 
@@ -618,6 +737,9 @@ export function updateInvoice(
 	});
 	all[idx] = updated;
 	saveInvoices(all);
+	if (updated.invoiceStatus === "sent") {
+		maybePostSalesInvoice(updated);
+	}
 	return updated;
 }
 
@@ -637,6 +759,7 @@ export function markInvoiceSent(id: number): InvoiceRecord {
 	});
 	all[idx] = updated;
 	saveInvoices(all);
+	maybePostSalesInvoice(updated);
 	return updated;
 }
 

@@ -1,26 +1,42 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { StatusBadge, SectionTabs } from "@/app/(app)/accounts/components/AccountsUI";
-import { loadFundTransfers } from "@/lib/accounts/accounts-mock-data";
+import {
+  FUND_TRANSFER_TYPE_LABELS,
+  loadFundTransfers,
+} from "@/lib/accounts/fund-transfer-data";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { Input } from "@/components/ui/input";
+import { ensureBankingDemoOnPageLoad } from "@/lib/accounts/banking-demo-seed";
 
 export default function FundTransferPage() {
+  const router = useRouter();
   const [tab, setTab] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const records = loadFundTransfers();
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    ensureBankingDemoOnPageLoad();
+    setRefreshKey((k) => k + 1);
+  }, []);
+
+  const records = useMemo(() => {
+    void refreshKey;
+    return loadFundTransfers();
+  }, [refreshKey]);
 
   const rows = useMemo(() => {
     let list = records;
     if (tab !== "all") list = list.filter((r) => r.status === tab);
-    if (dateFrom) list = list.filter((r) => r.date >= dateFrom);
-    if (dateTo) list = list.filter((r) => r.date <= dateTo);
+    if (dateFrom) list = list.filter((r) => r.transferDate >= dateFrom);
+    if (dateTo) list = list.filter((r) => r.transferDate <= dateTo);
     return list;
   }, [records, tab, dateFrom, dateTo]);
 
@@ -28,17 +44,31 @@ export default function FundTransferPage() {
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Banking", "Fund Transfer")}
       title="Fund Transfer"
-      description="Transfers between bank and cash accounts via contra vouchers."
+      description="Transfer funds between bank and cash accounts with automatic ledger posting."
       actions={
-        <Button size="sm" className="h-8 text-xs bg-brand-600 text-white gap-1">
+        <Button
+          size="sm"
+          className="h-8 text-xs bg-brand-600 text-white gap-1"
+          onClick={() => router.push("/accounts/banking/fund-transfer/new")}
+        >
           <Plus className="w-3.5 h-3.5" /> New Transfer
         </Button>
       }
       filters={
         <div className="space-y-3">
           <div className="flex flex-wrap gap-3">
-            <Input type="date" className="h-8 text-xs w-36" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-            <Input type="date" className="h-8 text-xs w-36" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            <Input
+              type="date"
+              className="h-8 text-xs w-36"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+            />
+            <Input
+              type="date"
+              className="h-8 text-xs w-36"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+            />
           </div>
           <SectionTabs
             tabs={[
@@ -58,25 +88,59 @@ export default function FundTransferPage() {
         <table className="w-full text-table">
           <thead className="bg-muted/20 border-b border-border/60 sticky top-0">
             <tr>
-              <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">Reference</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">Date</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">From</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">To</th>
-              <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase text-muted-foreground">Amount</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">Status</th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">
+                Reference
+              </th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">
+                Date
+              </th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">
+                Type
+              </th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">
+                From
+              </th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">
+                To
+              </th>
+              <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase text-muted-foreground">
+                Amount
+              </th>
+              <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">
+                Status
+              </th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-b border-border/40 hover:bg-muted/20">
-                <td className="px-4 py-2.5 text-xs font-mono font-semibold">{r.reference}</td>
-                <td className="px-4 py-2.5 text-xs">{r.date}</td>
-                <td className="px-4 py-2.5 text-xs">{r.fromAccount}</td>
-                <td className="px-4 py-2.5 text-xs">{r.toAccount}</td>
-                <td className="px-4 py-2.5 text-xs text-right tabular-nums">{formatMoney(r.amount)}</td>
-                <td className="px-4 py-2.5"><StatusBadge status={r.status} /></td>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-16 text-center text-sm text-muted-foreground">
+                  No fund transfers yet. Create a new transfer to move funds between accounts.
+                </td>
               </tr>
-            ))}
+            ) : (
+              rows.map((r) => (
+                <tr
+                  key={r.id}
+                  className="border-b border-border/40 hover:bg-brand-50/30 cursor-pointer"
+                  onClick={() => {
+                    if (r.voucherId) router.push(`/accounts/vouchers/view/${r.voucherId}`);
+                  }}
+                >
+                  <td className="px-4 py-2.5 text-xs font-mono font-semibold text-brand-700">
+                    {r.referenceNumber}
+                  </td>
+                  <td className="px-4 py-2.5 text-xs">{r.transferDate}</td>
+                  <td className="px-4 py-2.5 text-xs">{FUND_TRANSFER_TYPE_LABELS[r.transferType]}</td>
+                  <td className="px-4 py-2.5 text-xs">{r.fromAccountName}</td>
+                  <td className="px-4 py-2.5 text-xs">{r.toAccountName}</td>
+                  <td className="px-4 py-2.5 text-xs text-right tabular-nums">{formatMoney(r.amount)}</td>
+                  <td className="px-4 py-2.5">
+                    <StatusBadge status={r.status} />
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

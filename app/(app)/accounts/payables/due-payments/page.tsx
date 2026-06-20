@@ -17,7 +17,7 @@ export default function DuePaymentsClient() {
 
   return (
     <AccountsWorkbenchPage
-      section="Payables"
+      section="Purchases"
       title="Due Payments"
       description="Consolidated view of vendor and employee claim payments due."
       columns={[
