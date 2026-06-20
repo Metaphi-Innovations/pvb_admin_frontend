@@ -5,6 +5,7 @@ import {
   loadInvoices,
   markInvoiceSent,
   saveInvoices,
+  getInvoiceAmountBreakup,
 } from "@/app/(app)/accounts/invoices/invoices-data";
 import { salesInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { formatMoney } from "@/lib/accounts/money-format";
@@ -27,26 +28,35 @@ export default function SalesInvoicesPageClient() {
         canPost: (r) => r.status === "draft",
         canEdit: (r) => r.status === "draft",
         canDelete: (r) => r.status === "draft",
-        getRow: (inv) => ({
-          id: inv.id,
-          number: inv.invoiceNo,
-          date: inv.invoiceDate,
-          party: inv.customerName,
-          amount: formatMoney(inv.grandTotal),
-          status: inv.invoiceStatus,
-          viewHref: `/accounts/transactions/invoices/${inv.id}`,
-          viewFields: [
-            { label: "Due Date", value: inv.dueDate },
-            { label: "Payment Status", value: inv.paymentStatus },
-            { label: "Reference", value: inv.referenceNo || "—" },
-          ],
-          impactLines: salesInvoiceImpactResolved({
-            customerName: inv.customerName,
-            taxable: Math.max(0, inv.grandTotal - inv.taxAmount),
-            taxAmount: inv.taxAmount,
-            grandTotal: inv.grandTotal,
-          }),
-        }),
+        getRow: (inv) => {
+          const { taxableValue, gstAmount, invoiceTotal } = getInvoiceAmountBreakup(inv);
+          return {
+            id: inv.id,
+            number: inv.invoiceNo,
+            date: inv.invoiceDate,
+            party: inv.customerName,
+            amount: formatMoney(invoiceTotal),
+            taxableValue: formatMoney(taxableValue),
+            gstAmount: formatMoney(gstAmount),
+            invoiceTotal: formatMoney(invoiceTotal),
+            status: inv.invoiceStatus,
+            viewHref: `/accounts/transactions/invoices/${inv.id}`,
+            viewFields: [
+              { label: "Taxable Value", value: formatMoney(taxableValue) },
+              { label: "GST Amount", value: formatMoney(gstAmount) },
+              { label: "Invoice Total (Incl. GST)", value: formatMoney(invoiceTotal) },
+              { label: "Due Date", value: inv.dueDate },
+              { label: "Payment Status", value: inv.paymentStatus },
+              { label: "Reference", value: inv.referenceNo || "—" },
+            ],
+            impactLines: salesInvoiceImpactResolved({
+              customerName: inv.customerName,
+              taxable: taxableValue,
+              taxAmount: gstAmount,
+              grandTotal: invoiceTotal,
+            }),
+          };
+        },
       }}
     />
   );

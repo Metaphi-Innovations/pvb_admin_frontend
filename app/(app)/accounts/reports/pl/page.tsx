@@ -1,12 +1,24 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { formatBalanceAmount, formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import { computePandLRows } from "@/lib/accounts/ledger-reports";
 import { cn } from "@/lib/utils";
 import { AccountingReportPage } from "../../components/AccountingReportPage";
+import {
+  ReportFilterRow,
+  ReportDateRangeFilter,
+  ReportBranchFilter,
+  ReportBasisFilter,
+  useReportDateRange,
+  type ReportBasis,
+} from "@/components/accounts/ReportFilters";
 
 export default function PLPage() {
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange();
+  const [branch, setBranch] = useState("all");
+  const [basis, setBasis] = useState<ReportBasis>("accrual");
+
   const { rows, net } = useMemo(() => {
     const { rows: data, net: netProfit } = computePandLRows();
     return {
@@ -19,12 +31,26 @@ export default function PLPage() {
       })),
       net: netProfit,
     };
-  }, []);
+  }, [dateFrom, dateTo, branch, basis]);
 
   return (
     <AccountingReportPage
       title="Profit & Loss"
       description="Income and expense ledgers with closing balances from voucher postings"
+      filters={
+        <ReportFilterRow>
+          <ReportDateRangeFilter
+            preset={preset}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onPresetChange={setPreset}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
+          <ReportBasisFilter value={basis} onChange={setBasis} />
+          <ReportBranchFilter value={branch} onChange={setBranch} />
+        </ReportFilterRow>
+      }
       columns={[
         { key: "head", label: "Ledger" },
         { key: "type", label: "Type" },

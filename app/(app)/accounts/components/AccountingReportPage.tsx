@@ -23,6 +23,7 @@ interface AccountingReportPageProps {
   columns: Column[];
   rows: Record<string, string | number>[];
   footer?: React.ReactNode;
+  filters?: React.ReactNode;
 }
 
 export function AccountingReportPage({
@@ -31,6 +32,7 @@ export function AccountingReportPage({
   columns,
   rows,
   footer,
+  filters,
 }: AccountingReportPageProps) {
   const exportCsv = () => {
     const header = columns.map((c) => c.label).join(",") + "\n";
@@ -56,6 +58,7 @@ export function AccountingReportPage({
           <Download className="w-3.5 h-3.5" /> Export
         </Button>
       }
+      filters={filters}
       layout="split"
       className="h-full min-h-0"
     >

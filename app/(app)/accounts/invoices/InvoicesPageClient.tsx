@@ -52,7 +52,8 @@ import { InvoiceReceivePaymentModal } from "./components/InvoiceReceivePaymentMo
 import { InvoiceCancelDialog } from "./components/InvoiceCancelDialog";
 import { exportInvoicesToExcel } from "./invoices-export";
 import { downloadInvoicePdf } from "./invoice-pdf";
-import { formatINR, INVOICES_BREADCRUMB, INVOICES_LIST_PATH } from "./invoice-utils";
+import { formatINR, INVOICES_BREADCRUMB, INVOICES_LIST_PATH, INVOICE_AMOUNT_LABELS } from "./invoice-utils";
+import { getInvoiceAmountBreakup } from "./invoices-data";
 
 const TABS = [
   { id: "all", label: "All Invoices" },
@@ -181,11 +182,11 @@ export default function InvoicesPageClient() {
                     "Invoice Date",
                     "Customer Name",
                     "Mobile",
-                    "Total",
-                    "Tax",
-                    "Grand Total",
+                    INVOICE_AMOUNT_LABELS.taxableValue,
+                    INVOICE_AMOUNT_LABELS.gstAmount,
+                    INVOICE_AMOUNT_LABELS.invoiceTotal,
                     "Received",
-                    "Balance",
+                    "Balance Due",
                     "Payment Status",
                     "Invoice Status",
                     "Created By",
@@ -209,15 +210,17 @@ export default function InvoicesPageClient() {
                     </td>
                   </tr>
                 ) : (
-                  visible.map((r) => (
+                  visible.map((r) => {
+                    const { taxableValue, gstAmount, invoiceTotal } = getInvoiceAmountBreakup(r);
+                    return (
                     <tr key={r.id} className="border-b border-border/50 hover:bg-brand-50/25">
                       <td className="px-2.5 py-2 text-xs font-mono font-medium">{r.invoiceNo}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.invoiceDate}</td>
                       <td className="px-2.5 py-2 text-xs">{r.customerName}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.customerMobile || "—"}</td>
-                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.subtotal)}</td>
-                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.taxAmount)}</td>
-                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.grandTotal)}</td>
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(taxableValue)}</td>
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(gstAmount)}</td>
+                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(invoiceTotal)}</td>
                       <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.amountReceived)}</td>
                       <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{formatINR(r.balanceAmount)}</td>
                       <td className="px-2.5 py-2">
@@ -315,7 +318,8 @@ export default function InvoicesPageClient() {
                         </DropdownMenu>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

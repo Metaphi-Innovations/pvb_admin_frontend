@@ -1,23 +1,33 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FileText, IndianRupee, Receipt } from "lucide-react";
-import {
-  AccountsReportShell,
-  ReportFilterBar,
-} from "@/components/accounts/AccountsReportShell";
+import { AccountsReportShell } from "@/components/accounts/AccountsReportShell";
 import { buildPurchaseRegisterRows } from "@/lib/accounts/register-data";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import {
+  ReportFilterRow,
+  ReportDateRangeFilter,
+  ReportBranchFilter,
+  ReportVendorFilter,
+  useReportDateRange,
+} from "@/components/accounts/ReportFilters";
 
 export default function PurchaseRegisterPage() {
-  const [dateFrom, setDateFrom] = useState("2026-04-01");
-  const [dateTo, setDateTo] = useState("2026-06-30");
-  const [branch, setBranch] = useState("");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange();
+  const [branch, setBranch] = useState("all");
+  const [vendorId, setVendorId] = useState("all");
 
-  const source = useMemo(
-    () => buildPurchaseRegisterRows(dateFrom, dateTo),
-    [dateFrom, dateTo],
-  );
+  const vendors = useMemo(() => loadVendors(), []);
+
+  const source = useMemo(() => {
+    let rows = buildPurchaseRegisterRows(dateFrom, dateTo);
+    if (vendorId !== "all") {
+      const vendor = vendors.find((v) => String(v.id) === vendorId);
+      if (vendor) rows = rows.filter((r) => r.party === vendor.vendorName);
+    }
+    return rows;
+  }, [dateFrom, dateTo, vendorId, vendors, branch]);
 
   const rows = useMemo(
     () =>
@@ -38,20 +48,19 @@ export default function PurchaseRegisterPage() {
       section="Purchases"
       title="Purchase Register"
       description="Register of purchase invoices with input tax details."
-      kpis={[
-        { label: "Documents", value: String(rows.length), icon: FileText, accent: true },
-        { label: "Total Purchase", value: formatMoney(source.reduce((s, r) => s + r.total, 0)), icon: IndianRupee },
-        { label: "Input Tax", value: formatMoney(source.reduce((s, r) => s + r.tax, 0)), icon: Receipt },
-      ]}
       filters={
-        <ReportFilterBar
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          branch={branch}
-          onDateFrom={setDateFrom}
-          onDateTo={setDateTo}
-          onBranch={setBranch}
-        />
+        <ReportFilterRow>
+          <ReportDateRangeFilter
+            preset={preset}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onPresetChange={setPreset}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
+          <ReportVendorFilter value={vendorId} onChange={setVendorId} vendors={vendors} />
+          <ReportBranchFilter value={branch} onChange={setBranch} />
+        </ReportFilterRow>
       }
       columns={[
         { key: "docNo", label: "Bill No.", mono: true },

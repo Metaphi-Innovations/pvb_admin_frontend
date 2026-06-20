@@ -14,7 +14,11 @@ import {
   getInventoryDashboardMetrics,
   type ProductValuationSummary,
 } from "@/lib/accounts/inventory-accounting-data";
-import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
+import {
+  invoiceMatchesCustomerLedger,
+  resolveCustomerIdForLedger,
+} from "@/lib/accounts/invoice-ledger-match";
+import { findErpPartyLinkByLedgerId } from "@/lib/accounts/erp-party-links";
 import {
   getBankGroups,
   getBankAccountLedgersUnderGroup,
@@ -455,10 +459,14 @@ function cashBucket(name: string): "main" | "petty" | "branch" {
   return "main";
 }
 
-function matchCustomerMasterHref(ledgerName: string): string | null {
-  const q = ledgerName.trim().toLowerCase();
-  const customer = loadCustomers().find((c) => c.customerName.trim().toLowerCase() === q);
-  return customer ? `/masters/customers/${customer.id}` : null;
+function matchCustomerMasterHref(ledgerId: number, ledgerName: string): string | null {
+  const link = findErpPartyLinkByLedgerId(ledgerId);
+  if (link?.erpSourceModule === "customer_master") {
+    return `/masters/customers/${link.erpSourceId}`;
+  }
+  const customerId = resolveCustomerIdForLedger(ledgerId, ledgerName);
+  if (customerId != null) return `/masters/customers/${customerId}`;
+  return null;
 }
 
 const ENTRY_NOTES: Record<string, string> = {
@@ -759,8 +767,7 @@ export function resolveCoaGroupContext(
           v.lines.some((line) => line.ledgerId === node.id),
       );
       const recentInvoices = loadInvoices()
-        .filter((inv) => inv.customerName?.trim().toLowerCase() === node.accountName.trim().toLowerCase())
-        .filter((inv) => inv.invoiceStatus !== "cancelled")
+        .filter((inv) => invoiceMatchesCustomerLedger(inv, node.id, node.accountName))
         .sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate))
         .slice(0, 5)
         .map((inv) => ({
@@ -789,7 +796,7 @@ export function resolveCoaGroupContext(
         outstanding,
         invoiceCount: vouchers.filter((v) => v.voucherType === "sales").length,
         paymentCount: vouchers.filter((v) => v.voucherType === "receipt").length,
-        customerMasterHref: matchCustomerMasterHref(node.accountName),
+        customerMasterHref: matchCustomerMasterHref(node.id, node.accountName),
         recentInvoices,
         recentReceipts,
       };
