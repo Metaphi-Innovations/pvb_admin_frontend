@@ -2,28 +2,40 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AppLayout } from "@/components/layout/AppLayout";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { ModuleFiltersBar } from "@/components/module/ModuleFiltersBar";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, FileSpreadsheet, Link2 } from "lucide-react";
-import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
-import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { ArrowLeft, FileSpreadsheet, Search } from "lucide-react";
 import {
   getEntriesForStatement,
   getStatementById,
   getStatementStats,
-  loadBankEntries,
-  MATCH_MODULE_OPTIONS,
   MATCH_STATUS_OPTIONS,
-  matchModuleLabel,
   type BankStatementEntry,
 } from "./bank-reconciliation-data";
 import { exportStatementEntriesToExcel } from "./bank-reconciliation-export";
+import { CategorizeEntryPanel } from "./components/CategorizeEntryPanel";
 import { MatchEntryModal } from "./components/MatchEntryModal";
 import { MatchStatusBadge } from "./components/MatchStatusBadge";
 import { formatINR, monthYearLabel, RECONCILIATION_LIST_PATH } from "./reconciliation-utils";
+
+function formatDisplayDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function StatementDetailsCell({ entry }: { entry: BankStatementEntry }) {
+  return (
+    <div className="space-y-1 py-0.5">
+      {entry.referenceNo && (
+        <p className="text-[10px] font-mono text-muted-foreground">Ref# {entry.referenceNo}</p>
+      )}
+      <p className="text-xs whitespace-normal break-words leading-relaxed">{entry.narration}</p>
+    </div>
+  );
+}
 
 export default function ReconciliationEntriesPageClient({
   statementId,
@@ -36,23 +48,21 @@ export default function ReconciliationEntriesPageClient({
   const [entries, setEntries] = useState<BankStatementEntry[]>([]);
   const [search, setSearch] = useState("");
   const [matchStatus, setMatchStatus] = useState("all");
-  const [reconStatus, setReconStatus] = useState("all");
   const [entryType, setEntryType] = useState("all");
-  const [matchedModule, setMatchedModule] = useState("all");
-  const [matchEntry, setMatchEntry] = useState<BankStatementEntry | null>(null);
+  const [activeEntries, setActiveEntries] = useState<BankStatementEntry[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [exporting, setExporting] = useState(false);
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
 
   const refresh = useCallback(() => {
     setEntries(
       getEntriesForStatement(statementId, {
         search,
         matchStatus,
-        reconciliationStatus: reconStatus,
         entryType,
-        matchedModule,
       }),
     );
-  }, [statementId, search, matchStatus, reconStatus, entryType, matchedModule]);
+  }, [statementId, search, matchStatus, entryType]);
 
   useEffect(() => {
     refresh();
@@ -60,16 +70,47 @@ export default function ReconciliationEntriesPageClient({
 
   const stats = useMemo(() => getStatementStats(statementId), [statementId, entries]);
 
-  const syncMatchEntry = useCallback(() => {
+  const syncAfterSave = useCallback(() => {
     refresh();
-    if (matchEntry) {
-      const fresh = loadBankEntries().find((e) => e.id === matchEntry.id);
-      if (fresh) setMatchEntry(fresh);
+    setSelectedIds(new Set());
+    const fresh = getEntriesForStatement(statementId);
+    if (activeEntries.length === 1) {
+      const updated = fresh.find((e) => e.id === activeEntries[0].id);
+      setActiveEntries(updated ? [updated] : []);
     }
-  }, [matchEntry, refresh]);
+  }, [refresh, statementId, activeEntries]);
+
+  useEffect(() => {
+    if (entries.length > 0 && activeEntries.length === 0) {
+      const firstUncategorized = entries.find((e) => e.matchStatus === "unmatched") ?? entries[0];
+      setActiveEntries([firstUncategorized]);
+    }
+  }, [entries, activeEntries.length]);
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === entries.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(entries.map((e) => e.id)));
+  };
+
+  const selectedEntries = useMemo(
+    () => entries.filter((e) => selectedIds.has(e.id)),
+    [entries, selectedIds],
+  );
+
+  const panelEntries =
+    selectedIds.size > 1 ? selectedEntries : activeEntries.length > 0 ? activeEntries : [];
 
   if (!statement) {
-    const notFound = (
+    return (
       <div className="p-8 text-center text-sm text-muted-foreground">
         Statement not found.{" "}
         <Link href={RECONCILIATION_LIST_PATH} className="text-brand-600 underline">
@@ -77,10 +118,10 @@ export default function ReconciliationEntriesPageClient({
         </Link>
       </div>
     );
-    return embedded ? notFound : <AppLayout>{notFound}</AppLayout>;
   }
 
   const period = monthYearLabel(statement.month, statement.year);
+  const uncategorized = stats.unmatched;
 
   const handleExport = async () => {
     setExporting(true);
@@ -91,228 +132,198 @@ export default function ReconciliationEntriesPageClient({
     }
   };
 
-  const headerActions = (
-    <div className="flex items-center gap-2">
-      <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" asChild>
-        <Link href={RECONCILIATION_LIST_PATH}>
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Back
-        </Link>
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-8 text-xs gap-1.5"
-        disabled={exporting || entries.length === 0}
-        onClick={handleExport}
-      >
-        <FileSpreadsheet className="w-3.5 h-3.5" />
-        Export Excel
-      </Button>
-    </div>
-  );
-
-  const kpiCards = (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 p-4 border-b border-border/60 bg-muted/10">
-      {[
-        { label: "Total Entries", value: stats.total },
-        { label: "Matched", value: stats.matched },
-        { label: "Unmatched", value: stats.unmatched },
-        { label: "Reconciled", value: stats.reconciled },
-        { label: "Total Debit", value: formatINR(stats.totalDebit) },
-        { label: "Total Credit", value: formatINR(stats.totalCredit) },
-      ].map((c) => (
-        <div key={c.label} className="rounded-lg border bg-white px-3 py-2">
-          <p className="text-[10px] uppercase text-muted-foreground font-medium">{c.label}</p>
-          <p className="text-sm font-semibold tabular-nums mt-0.5">{c.value}</p>
+  const body = (
+    <div className="flex flex-col h-full min-h-0 bg-white">
+      {/* Compact header */}
+      <div className="flex-shrink-0 px-3 py-2 border-b border-border/40 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" asChild>
+            <Link href={RECONCILIATION_LIST_PATH}>
+              <ArrowLeft className="w-4 h-4" />
+            </Link>
+          </Button>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold truncate">{statement.bankAccountName}</p>
+            <p className="text-[10px] text-muted-foreground truncate">
+              {period} · {uncategorized} uncategorized
+            </p>
+          </div>
         </div>
-      ))}
-    </div>
-  );
+        <div className="flex items-center gap-2 shrink-0">
+          {selectedIds.size > 0 && (
+            <Button
+              size="sm"
+              className="h-7 text-xs bg-brand-600 text-white"
+              onClick={() => setActiveEntries(selectedEntries)}
+            >
+              Categorize ({selectedIds.size})
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            disabled={exporting}
+            onClick={handleExport}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      </div>
 
-  const filterBar = (
-    <ModuleFiltersBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Narration, reference, matched record…">
-          <Select value={matchStatus} onValueChange={setMatchStatus}>
-            <SelectTrigger className="h-8 w-[130px] text-xs bg-white">
-              <SelectValue placeholder="Match status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all" className="text-xs">All match</SelectItem>
-              {MATCH_STATUS_OPTIONS.map((s) => (
-                <SelectItem key={s} value={s} className="text-xs capitalize">
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={reconStatus} onValueChange={setReconStatus}>
-            <SelectTrigger className="h-8 w-[140px] text-xs bg-white">
-              <SelectValue placeholder="Recon status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all" className="text-xs">All recon</SelectItem>
-              {MATCH_STATUS_OPTIONS.map((s) => (
-                <SelectItem key={`r-${s}`} value={s} className="text-xs capitalize">
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={entryType} onValueChange={setEntryType}>
-            <SelectTrigger className="h-8 w-[110px] text-xs bg-white">
-              <SelectValue placeholder="Type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all" className="text-xs">All types</SelectItem>
-              <SelectItem value="debit" className="text-xs">Debit</SelectItem>
-              <SelectItem value="credit" className="text-xs">Credit</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={matchedModule} onValueChange={setMatchedModule}>
-            <SelectTrigger className="h-8 w-[130px] text-xs bg-white">
-              <SelectValue placeholder="Module" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all" className="text-xs">All modules</SelectItem>
-              {MATCH_MODULE_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value} className="text-xs">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </ModuleFiltersBar>
-  );
+      {/* Filters */}
+      <div className="flex-shrink-0 px-3 py-2 border-b border-border/30 flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[160px] max-w-xs">
+          <Search className="absolute left-2 top-2 w-3.5 h-3.5 text-muted-foreground" />
+          <Input
+            className="h-8 pl-7 text-xs"
+            placeholder="Search narration, reference…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <Select value={matchStatus} onValueChange={setMatchStatus}>
+          <SelectTrigger className="h-8 w-[120px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all" className="text-xs">All status</SelectItem>
+            {MATCH_STATUS_OPTIONS.map((s) => (
+              <SelectItem key={s} value={s} className="text-xs capitalize">
+                {s}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={entryType} onValueChange={setEntryType}>
+          <SelectTrigger className="h-8 w-[120px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all" className="text-xs">All types</SelectItem>
+            <SelectItem value="debit" className="text-xs">Withdrawals</SelectItem>
+            <SelectItem value="credit" className="text-xs">Deposits</SelectItem>
+          </SelectContent>
+        </Select>
+        <span className="text-[10px] text-muted-foreground ml-auto hidden sm:inline">
+          W: {formatINR(stats.totalDebit)} · D: {formatINR(stats.totalCredit)}
+        </span>
+      </div>
 
-  const entriesTable = (
-    <div className="flex-1 overflow-auto min-h-0">
-      <table className="w-full text-table min-w-[1400px]">
-        <thead className="sticky top-0 z-10 bg-muted/20 border-b border-border/60">
+      {/* Zoho split: list + categorize panel */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Left — transactions */}
+        <div className="flex-1 min-w-0 overflow-auto border-r border-border/40">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 z-10 bg-slate-50 border-b border-border/60">
+              <tr>
+                <th className="w-8 px-2 py-2">
+                  <Checkbox
+                    checked={entries.length > 0 && selectedIds.size === entries.length}
+                    onCheckedChange={toggleSelectAll}
+                  />
+                </th>
+                <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap">
+                  Date
+                </th>
+                <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground min-w-[240px]">
+                  Statement Details
+                </th>
+                <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap">
+                  Deposits
+                </th>
+                <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap">
+                  Withdrawals
+                </th>
+                <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.length === 0 ? (
                 <tr>
-                  {[
-                    "Date",
-                    "Narration",
-                    "Debit",
-                    "Credit",
-                    "Balance",
-                    "Ref No.",
-                    "Type",
-                    "Module",
-                    "Matched Record",
-                    "Match",
-                    "Recon",
-                    "",
-                  ].map((h) => (
-                    <th
-                      key={h || "a"}
-                      className="px-2.5 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap"
-                    >
-                      {h}
-                    </th>
-                  ))}
+                  <td colSpan={6} className="py-12 text-center text-xs text-muted-foreground">
+                    No entries match filters.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {entries.length === 0 ? (
-                  <tr>
-                    <td colSpan={12} className="py-12 text-center text-xs text-muted-foreground">
-                      No entries match filters.
-                    </td>
-                  </tr>
-                ) : (
-                  entries.map((e) => (
-                    <tr key={e.id} className="border-b border-border/40 hover:bg-muted/20">
-                      <td className="px-2.5 py-2 text-xs text-muted-foreground whitespace-nowrap">{e.transactionDate}</td>
-                      <td className="px-2.5 py-2 text-xs max-w-[200px] truncate" title={e.narration}>
-                        {e.narration}
+              ) : (
+                entries.map((e) => {
+                  const isActive = activeEntries.some((a) => a.id === e.id);
+                  return (
+                    <tr
+                      key={e.id}
+                      className={`border-b border-border/30 cursor-pointer transition-colors ${
+                        isActive ? "bg-brand-50/60" : "hover:bg-slate-50/80"
+                      } ${selectedIds.has(e.id) ? "ring-1 ring-inset ring-brand-200" : ""}`}
+                      onClick={() => {
+                        setActiveEntries([e]);
+                        if (selectedIds.size <= 1) setSelectedIds(new Set());
+                      }}
+                    >
+                      <td className="px-2 py-2 align-top" onClick={(ev) => ev.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIds.has(e.id)}
+                          onCheckedChange={() => toggleSelect(e.id)}
+                        />
                       </td>
-                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{e.debit > 0 ? formatINR(e.debit) : "—"}</td>
-                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums">{e.credit > 0 ? formatINR(e.credit) : "—"}</td>
-                      <td className="px-2.5 py-2 text-xs text-right font-medium tabular-nums text-muted-foreground">
-                        {e.balance > 0 ? formatINR(e.balance) : "—"}
+                      <td className="px-2 py-2 text-xs text-muted-foreground whitespace-nowrap align-top">
+                        {formatDisplayDate(e.transactionDate)}
                       </td>
-                      <td className="px-2.5 py-2 text-xs font-mono">{e.referenceNo || "—"}</td>
-                      <td className="px-2.5 py-2 text-xs capitalize">{e.entryType}</td>
-                      <td className="px-2.5 py-2 text-xs">{matchModuleLabel(e.matchedModule)}</td>
-                      <td className="px-2.5 py-2 text-xs max-w-[160px] truncate" title={e.matchedRecordLabel || e.ledgerName}>
-                        {e.matchedRecordLabel || e.ledgerName || "—"}
+                      <td className="px-2 py-2 align-top max-w-[360px]">
+                        <StatementDetailsCell entry={e} />
                       </td>
-                      <td className="px-2.5 py-2">
+                      <td className="px-2 py-2 text-xs text-right tabular-nums align-top font-medium text-green-600">
+                        {e.credit > 0 ? formatINR(e.credit) : "—"}
+                      </td>
+                      <td className="px-2 py-2 text-xs text-right tabular-nums align-top font-medium text-red-600">
+                        {e.debit > 0 ? formatINR(e.debit) : "—"}
+                      </td>
+                      <td className="px-2 py-2 align-top">
                         <MatchStatusBadge status={e.matchStatus} />
                       </td>
-                      <td className="px-2.5 py-2">
-                        <MatchStatusBadge status={e.reconciliationStatus} />
-                      </td>
-                      <td className="px-2.5 py-2 text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-[10px] gap-1"
-                          onClick={() => {
-                            setMatchEntry(e);
-                          }}
-                        >
-                          <Link2 className="w-3 h-3" />
-                          Match
-                        </Button>
-                      </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-    </div>
-  );
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
 
-  const matchModal = (
-    <MatchEntryModal
-      entry={matchEntry}
-      open={!!matchEntry}
-      onOpenChange={(v) => !v && setMatchEntry(null)}
-      onUpdated={syncMatchEntry}
-    />
+        {/* Right — categorize panel (always visible) */}
+        <div className="w-[380px] shrink-0 flex flex-col min-h-0 bg-white hidden lg:flex">
+          <CategorizeEntryPanel entries={panelEntries} onUpdated={syncAfterSave} />
+        </div>
+      </div>
+
+      {/* Mobile categorize sheet */}
+      <div className="lg:hidden shrink-0 border-t border-border/40 p-2">
+        {panelEntries.length > 0 ? (
+          <Button
+            size="sm"
+            className="w-full h-8 text-xs bg-brand-600 text-white"
+            onClick={() => setMobilePanelOpen(true)}
+          >
+            Categorize Manually
+            {selectedIds.size > 1 ? ` (${selectedIds.size})` : ""}
+          </Button>
+        ) : (
+          <p className="text-xs text-center text-muted-foreground">Select a transaction to categorize</p>
+        )}
+      </div>
+
+      <MatchEntryModal
+        entries={panelEntries}
+        open={mobilePanelOpen && panelEntries.length > 0}
+        onOpenChange={setMobilePanelOpen}
+        onUpdated={syncAfterSave}
+      />
+    </div>
   );
 
   if (embedded) {
-    return (
-      <>
-        <AccountsPageShell
-          breadcrumbs={[
-            ...accountsBreadcrumb("Banking", "Bank Reconciliation", RECONCILIATION_LIST_PATH),
-            { label: statement.statementName },
-          ]}
-          title={statement.statementName}
-          description={`${statement.bankAccountName} · ${period} · ${statement.fileName}`}
-          actions={headerActions}
-          filters={filterBar}
-          layout="split"
-        >
-          {kpiCards}
-          {entriesTable}
-        </AccountsPageShell>
-        {matchModal}
-      </>
-    );
+    return <div className="-mx-4 -my-3 flex flex-col h-full min-h-0">{body}</div>;
   }
 
-  return (
-    <AppLayout>
-      <div className="max-w-[1680px] mx-auto space-y-3">
-        <PageHeader
-          title={statement.statementName}
-          description={`${statement.bankAccountName} · ${period} · ${statement.fileName}`}
-          breadcrumbs={[
-            { label: "Accounts", href: "/accounts/masters/chart-of-accounts" },
-            { label: "Bank Reconciliation", href: RECONCILIATION_LIST_PATH },
-            { label: "Entries" },
-          ]}
-          actions={headerActions}
-        />
-        {kpiCards}
-        {filterBar}
-        <div className="page-shell overflow-hidden">{entriesTable}</div>
-      </div>
-      {matchModal}
-    </AppLayout>
-  );
+  return body;
 }

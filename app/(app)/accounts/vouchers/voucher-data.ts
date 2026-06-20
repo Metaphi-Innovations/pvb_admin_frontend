@@ -1,7 +1,5 @@
-import {
-  findLedgerById,
-  validatePostingLedgerId,
-} from "@/lib/accounts/coa-hierarchy";
+import { findLedgerById, validatePostingLedgerId } from "@/lib/accounts/coa-hierarchy";
+import { validateVoucherContactLines } from "@/lib/accounts/voucher-ledger-groups";
 import { formatMoney } from "@/lib/accounts/money-format";
 import type { RecordStatus } from "../data";
 import { loadChartOfAccounts, nextId } from "../data";
@@ -23,6 +21,8 @@ export interface VoucherLine {
   debit: number;
   credit: number;
   remarks: string;
+  contactId?: number | null;
+  contactName?: string;
 }
 
 export interface AccountingVoucher {
@@ -181,6 +181,8 @@ export function validateVoucherForPost(
     return `Debit (${formatMoney(totalDebit)}) must equal Credit (${formatMoney(totalCredit)}).`;
   }
   if (totalDebit === 0) return "Voucher amount cannot be zero.";
+  const contactErr = validateVoucherContactLines(v.lines, records);
+  if (contactErr) return contactErr;
   return null;
 }
 

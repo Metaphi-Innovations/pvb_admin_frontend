@@ -15,6 +15,8 @@ import {
   type CreditNoteRecord,
 } from "./credit-notes-data";
 import { CREDIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
+import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
+import { creditNoteImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -62,6 +64,7 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
 
   return (
     <RecordDetailPage
+      embedded
       listHref={CREDIT_NOTES_LIST_PATH}
       listLabel="Credit Notes"
       recordName={record.customerName}
@@ -125,6 +128,15 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
       }}
     >
       <div className="space-y-4">
+        <LedgerImpactPreview
+          title="Accounting Entry — reduces customer outstanding"
+          lines={creditNoteImpactResolved({
+            customerName: record.customerName,
+            taxable: Math.max(0, record.currentCreditAmount - (record.taxCreditAmount ?? 0)),
+            taxAmount: record.taxCreditAmount ?? 0,
+            grandTotal: record.currentCreditAmount,
+          })}
+        />
         <NoteWorkflowBadge status={record.status} />
 
         <div className="rounded-lg border border-brand-200/50 bg-brand-50/20 p-3 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">

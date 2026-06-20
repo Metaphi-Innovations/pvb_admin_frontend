@@ -360,6 +360,32 @@ export default function ProductDetailPage() {
 						</RecordSectionCard>
 
 						<RecordSectionCard
+							title='Accounting Mapping'
+							icon={FileText}
+							accent='green'
+						>
+							<RecordKvRow label='HSN Code' value={product.hsnCode} mono copy />
+							<RecordKvRow label='GST Rate' value={product.gstRate || "—"} />
+							<RecordKvRow
+								label='Inventory Account'
+								value={product.inventoryAccount ?? "Inventory / Stock in Hand"}
+							/>
+							<RecordKvRow
+								label='Sales Account'
+								value={product.salesAccount ?? "Sales"}
+							/>
+							<RecordKvRow
+								label='Purchase Account'
+								value={product.purchaseAccount ?? "Purchases"}
+							/>
+							<RecordKvRow
+								label='COGS Account'
+								value={product.cogsAccount ?? "Cost of Goods Sold"}
+								isLast
+							/>
+						</RecordSectionCard>
+
+						<RecordSectionCard
 							title='Tax & Compliance'
 							icon={IndianRupee}
 							accent='orange'

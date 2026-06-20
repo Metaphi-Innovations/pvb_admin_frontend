@@ -16,6 +16,8 @@ import {
 } from "./debit-notes-data";
 import { downloadDebitNotePdf } from "./debit-note-pdf";
 import { DEBIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
+import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
+import { debitNoteImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
@@ -61,6 +63,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
 
   return (
     <RecordDetailPage
+      embedded
       listHref={DEBIT_NOTES_LIST_PATH}
       listLabel="Debit Notes"
       recordName={record.vendorName}
@@ -141,6 +144,15 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
       }}
     >
       <div className="space-y-4">
+        <LedgerImpactPreview
+          title="Accounting Entry — reduces vendor outstanding"
+          lines={debitNoteImpactResolved({
+            vendorName: record.vendorName,
+            taxable: record.taxableAmount,
+            taxAmount: record.gstAmount,
+            grandTotal: record.currentDebitAmount,
+          })}
+        />
         <NoteWorkflowBadge status={record.status} />
 
         <div className="rounded-lg border border-border/60 bg-white p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">

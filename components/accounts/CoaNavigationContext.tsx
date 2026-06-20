@@ -18,6 +18,8 @@ import {
   loadChartOfAccounts,
 } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
+import { backfillCoaMasterLinks } from "@/lib/accounts/coa-master-link";
+import { backfillErpPartyLedgers } from "@/lib/accounts/erp-accounting-mapping";
 
 const FULL_COA_SEED: ChartOfAccount[] = [...SYSTEM_COA_NODES];
 
@@ -68,6 +70,8 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
   useEffect(() => {
     if (mountedRef.current) return;
     mountedRef.current = true;
+    backfillErpPartyLedgers();
+    backfillCoaMasterLinks();
     const loaded = readCoaRecords();
     setRecords(loaded);
     setExpandedIds(defaultExpandedIds(loaded));
@@ -95,7 +99,7 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
   );
 
   useEffect(() => {
-    const nodeParam = searchParams.get("node");
+    const nodeParam = searchParams.get("node") ?? searchParams.get("ledger");
     if (nodeParam) {
       const id = Number(nodeParam);
       if (!Number.isNaN(id)) setSelectedId(id);

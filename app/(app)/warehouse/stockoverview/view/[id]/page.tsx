@@ -77,8 +77,7 @@ export default function ViewStockDetailsPage({ params }: { params: { id: string 
           ...(type === "qc-passed"
             ? [
                 { label: "Available Qty", value: String(qcData.availableQuantity ?? "—"), highlight: true },
-                { label: "Reserved Qty", value: String(qcData.reservedQuantity ?? "—") },
-                { label: "Threshold", value: String(qcData.threshold ?? "—") },
+                { label: "Stock Status", value: String(qcData.status ?? "—") },
               ]
             : []),
           ...(type === "rejected"
@@ -161,16 +160,8 @@ export default function ViewStockDetailsPage({ params }: { params: { id: string 
                     <p className="text-sm font-extrabold text-foreground mt-1">{(data as any).availableQuantity}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Reserved Qty</p>
-                    <p className="text-xs font-bold text-muted-foreground mt-1">{(data as any).reservedQuantity}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Low Stock Threshold</p>
-                    <p className="text-xs font-semibold text-muted-foreground mt-1">{(data as any).threshold}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Total Lot Quantity</p>
-                    <p className="text-xs font-bold text-foreground mt-1">{(data as any).availableQuantity + (data as any).reservedQuantity}</p>
+                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Stock Status</p>
+                    <p className="text-xs font-bold text-foreground mt-1">{(data as any).status}</p>
                   </div>
                 </div>
               </div>

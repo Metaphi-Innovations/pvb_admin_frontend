@@ -12,6 +12,8 @@ export interface HSNMaster {
   hsnCode: string;
   hsnDescription: string;
   gstRate: string;
+  productCategory?: string;
+  effectiveDate?: string;
   status: MasterStatus;
   createdBy: string;
   createdDate: string;
@@ -23,6 +25,8 @@ export interface HSNForm {
   hsnCode: string;
   hsnDescription: string;
   gstRate: string;
+  productCategory: string;
+  effectiveDate: string;
   status: MasterStatus;
 }
 
@@ -30,6 +34,8 @@ export const DEFAULT_HSN_FORM: HSNForm = {
   hsnCode: "",
   hsnDescription: "",
   gstRate: "",
+  productCategory: "",
+  effectiveDate: "",
   status: "active",
 };
 
@@ -44,9 +50,11 @@ const LEGACY_CODE_MAP: Record<string, string> = {
 export const HSN_SEED: HSNMaster[] = [
   {
     id: 1,
-    hsnCode: "12099990",
-    hsnDescription: "Vegetable seeds for planting/sowing",
-    gstRate: "0%",
+    hsnCode: "31021010",
+    hsnDescription: "Urea — nitrogenous fertilizer",
+    gstRate: "5%",
+    productCategory: "Fertilizer",
+    effectiveDate: "2026-01-01",
     status: "active",
     createdBy: MASTER_CURRENT_USER,
     createdDate: "2026-01-10",
@@ -55,9 +63,11 @@ export const HSN_SEED: HSNMaster[] = [
   },
   {
     id: 2,
-    hsnCode: "31010000",
-    hsnDescription: "Animal or vegetable fertilizers, whether or not mixed together",
-    gstRate: "5%",
+    hsnCode: "31052000",
+    hsnDescription: "NPK — mineral or chemical fertilizers",
+    gstRate: "12%",
+    productCategory: "Fertilizer",
+    effectiveDate: "2026-01-01",
     status: "active",
     createdBy: MASTER_CURRENT_USER,
     createdDate: "2026-01-12",
@@ -66,14 +76,29 @@ export const HSN_SEED: HSNMaster[] = [
   },
   {
     id: 3,
-    hsnCode: "38089199",
-    hsnDescription: "Insecticides, fungicides, herbicides, put up in forms or packings",
+    hsnCode: "38089340",
+    hsnDescription: "Pesticides — herbicides, fungicides, insecticides",
     gstRate: "18%",
+    productCategory: "Pesticide",
+    effectiveDate: "2026-01-01",
     status: "active",
     createdBy: MASTER_CURRENT_USER,
     createdDate: "2026-01-15",
     updatedBy: MASTER_CURRENT_USER,
     updatedDate: "2026-01-15",
+  },
+  {
+    id: 4,
+    hsnCode: "12099990",
+    hsnDescription: "Vegetable seeds for planting/sowing",
+    gstRate: "0%",
+    productCategory: "Seeds",
+    effectiveDate: "2026-01-01",
+    status: "active",
+    createdBy: MASTER_CURRENT_USER,
+    createdDate: "2026-01-10",
+    updatedBy: MASTER_CURRENT_USER,
+    updatedDate: "2026-01-10",
   },
 ];
 
@@ -93,6 +118,8 @@ function migrateRecord(raw: Record<string, unknown>): HSNMaster {
     hsnCode,
     hsnDescription: String(p.hsnDescription ?? ""),
     gstRate: String(p.gstRate ?? "18%"),
+    productCategory: String(p.productCategory ?? ""),
+    effectiveDate: String(p.effectiveDate ?? ""),
     status: (p.status as MasterStatus) ?? "active",
     createdBy: String(p.createdBy ?? MASTER_CURRENT_USER),
     createdDate: String(p.createdDate ?? masterToday()),
@@ -138,6 +165,8 @@ export function hsnToForm(record: HSNMaster): HSNForm {
     hsnCode: record.hsnCode,
     hsnDescription: record.hsnDescription,
     gstRate: record.gstRate,
+    productCategory: record.productCategory ?? "",
+    effectiveDate: record.effectiveDate ?? "",
     status: record.status,
   };
 }
@@ -153,6 +182,8 @@ export function formToHsn(
     hsnCode: form.hsnCode.trim(),
     hsnDescription: form.hsnDescription.trim(),
     gstRate: form.gstRate,
+    productCategory: form.productCategory.trim(),
+    effectiveDate: form.effectiveDate.trim(),
     status: form.status,
     createdBy: existing?.createdBy ?? MASTER_CURRENT_USER,
     createdDate: existing?.createdDate ?? now,

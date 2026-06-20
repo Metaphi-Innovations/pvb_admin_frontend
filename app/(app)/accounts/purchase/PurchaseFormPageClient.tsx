@@ -22,6 +22,8 @@ import {
   formatVendorDropdownSublabel,
 } from "@/lib/masters/entity-display";
 import { formatINR, PURCHASE_BREADCRUMB, PURCHASE_LIST_PATH } from "./purchase-utils";
+import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
+import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -46,6 +48,11 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
   const [totalAmount, setTotalAmount] = useState("");
   const [remarks, setRemarks] = useState("");
   const [attachment, setAttachment] = useState<PurchaseAttachment | null>(null);
+  const [poRef, setPoRef] = useState("");
+  const [grnRef, setGrnRef] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [branch, setBranch] = useState("Head Office");
+  const [warehouse, setWarehouse] = useState("Central Warehouse");
   const [error, setError] = useState<string | null>(null);
 
   const vendorOptions = useMemo(
@@ -142,7 +149,8 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
         </div>
       }
     >
-      <div className="max-w-[720px] space-y-4 pb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pb-8 items-start">
+        <div className="lg:col-span-2 max-w-[720px] space-y-4">
         <p className="text-[11px] text-muted-foreground">
           Use for exceptional cases only. Normal flow: upload vendor invoice on a PO in Procurement.
         </p>
@@ -187,6 +195,26 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
               <Label className="text-xs">Total Amount *</Label>
               <Input type="number" className="h-8 text-xs" value={totalAmount} onChange={(e) => onAmountChange("total", e.target.value)} />
             </div>
+            <div className="space-y-1">
+              <Label className="text-xs">PO Reference</Label>
+              <Input className="h-8 text-xs font-mono" value={poRef} onChange={(e) => setPoRef(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">GRN Reference</Label>
+              <Input className="h-8 text-xs font-mono" value={grnRef} onChange={(e) => setGrnRef(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Due Date</Label>
+              <Input type="date" className="h-8 text-xs" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Branch</Label>
+              <Input className="h-8 text-xs" value={branch} onChange={(e) => setBranch(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Warehouse</Label>
+              <Input className="h-8 text-xs" value={warehouse} onChange={(e) => setWarehouse(e.target.value)} />
+            </div>
           </div>
         </Section>
 
@@ -213,10 +241,18 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
           <Textarea className="min-h-[72px] text-xs resize-none" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Required…" />
         </Section>
 
-        {totalAmount && (
-          <p className="text-xs text-right font-semibold text-brand-700">Total: {formatINR(parseFloat(totalAmount) || 0)}</p>
-        )}
         {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
+        <div className="lg:sticky lg:top-20 space-y-4">
+          <LedgerImpactPreview
+            lines={purchaseInvoiceImpactResolved({
+              vendorName: vendorOptions.find((v) => v.value === vendorId)?.label ?? "Vendor",
+              taxable: parseFloat(invoiceAmount) || 0,
+              taxAmount: parseFloat(taxAmount) || 0,
+              grandTotal: parseFloat(totalAmount) || 0,
+            })}
+          />
+        </div>
       </div>
     </AccountsFormLayout>
   );

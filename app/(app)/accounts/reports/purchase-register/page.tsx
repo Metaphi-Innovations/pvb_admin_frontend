@@ -6,7 +6,7 @@ import {
   AccountsReportShell,
   ReportFilterBar,
 } from "@/components/accounts/AccountsReportShell";
-import { PURCHASE_REGISTER_SEED } from "@/lib/accounts/accounts-mock-data";
+import { buildPurchaseRegisterRows } from "@/lib/accounts/register-data";
 import { formatMoney } from "@/lib/accounts/money-format";
 
 export default function PurchaseRegisterPage() {
@@ -14,9 +14,14 @@ export default function PurchaseRegisterPage() {
   const [dateTo, setDateTo] = useState("2026-06-30");
   const [branch, setBranch] = useState("");
 
+  const source = useMemo(
+    () => buildPurchaseRegisterRows(dateFrom, dateTo),
+    [dateFrom, dateTo],
+  );
+
   const rows = useMemo(
     () =>
-      PURCHASE_REGISTER_SEED.map((r) => ({
+      source.map((r) => ({
         docNo: r.docNo,
         date: r.date,
         party: r.party,
@@ -25,17 +30,18 @@ export default function PurchaseRegisterPage() {
         total: formatMoney(r.total),
         status: r.status,
       })),
-    [],
+    [source],
   );
 
   return (
     <AccountsReportShell
+      section="Purchases"
       title="Purchase Register"
       description="Register of purchase invoices with input tax details."
       kpis={[
         { label: "Documents", value: String(rows.length), icon: FileText, accent: true },
-        { label: "Total Purchase", value: formatMoney(PURCHASE_REGISTER_SEED.reduce((s, r) => s + r.total, 0)), icon: IndianRupee },
-        { label: "Input Tax", value: formatMoney(PURCHASE_REGISTER_SEED.reduce((s, r) => s + r.tax, 0)), icon: Receipt },
+        { label: "Total Purchase", value: formatMoney(source.reduce((s, r) => s + r.total, 0)), icon: IndianRupee },
+        { label: "Input Tax", value: formatMoney(source.reduce((s, r) => s + r.tax, 0)), icon: Receipt },
       ]}
       filters={
         <ReportFilterBar

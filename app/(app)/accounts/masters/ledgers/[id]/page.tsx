@@ -12,7 +12,11 @@ import { BookOpen, IndianRupee } from "lucide-react";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { loadChartOfAccounts, type ChartOfAccount } from "../../../data";
 import { computeLedgerCurrentBalance } from "../ledgers-utils";
-import { loadVouchers, type AccountingVoucher, type VoucherLine } from "../../../vouchers/voucher-data";
+import {
+  buildLedgerStatement,
+  collectLedgerTransactions,
+} from "@/lib/accounts/ledger-detail-utils";
+import { formatMoney } from "@/lib/accounts/money-format";
 
 export default function LedgerViewPage() {
   const router = useRouter();
@@ -30,24 +34,17 @@ export default function LedgerViewPage() {
     return computeLedgerCurrentBalance(ledger);
   }, [ledger]);
 
-  const transactions = useMemo(() => {
+  const statement = useMemo(() => {
     if (!ledger) return [];
-    const rows: { id: string; date: string; voucher: string; debit: number; credit: number }[] = [];
-    loadVouchers().forEach((v: AccountingVoucher) => {
-      v.lines.forEach((line: VoucherLine) => {
-        if (line.ledgerId === ledger.id) {
-          rows.push({
-            id: `${v.id}-${line.id}`,
-            date: v.date,
-            voucher: v.voucherNumber,
-            debit: line.debit,
-            credit: line.credit,
-          });
-        }
-      });
-    });
-    return rows.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 20);
+    const txns = collectLedgerTransactions(ledger.id);
+    return buildLedgerStatement(ledger, txns);
   }, [ledger]);
+
+  const totals = useMemo(() => {
+    const totalDebit = statement.reduce((s, r) => s + r.debit, 0);
+    const totalCredit = statement.reduce((s, r) => s + r.credit, 0);
+    return { totalDebit, totalCredit };
+  }, [statement]);
 
   if (!ledger) {
     return (
@@ -84,18 +81,18 @@ export default function LedgerViewPage() {
           icon: IndianRupee,
           iconBg: "#FFF4E6",
           iconColor: "#D96A10",
-          value: `₹${Math.abs(balance.amount).toLocaleString("en-IN")}`,
-          label: balance.balanceType === "Debit" ? "Dr Balance" : "Cr Balance",
+          value: formatMoney(Math.abs(balance.amount)),
+          label: `${balance.balanceType} Balance`,
         },
         {
           icon: BookOpen,
           iconBg: "#E8F4FD",
           iconColor: "#1554B4",
-          value: String(transactions.length),
-          label: "Recent Txns",
+          value: String(statement.length),
+          label: "Transactions",
         },
       ]}
-      tabs={[OVERVIEW_TAB, { value: "transactions", label: "Transactions", count: transactions.length }]}
+      tabs={[OVERVIEW_TAB, { value: "transactions", label: "Transactions", count: statement.length }]}
       activeTab={activeTab}
       onTabChange={setActiveTab}
       onEdit={() => router.push(`/accounts/masters/chart-of-accounts?node=${ledger.id}`)}
@@ -111,56 +108,74 @@ export default function LedgerViewPage() {
         summary: [
           { label: "Ledger Code", value: ledger.accountCode, highlight: true },
           { label: "Type", value: ledger.accountType },
-          { label: "Opening Balance", value: String(ledger.openingBalance) },
+          {
+            label: "Opening Balance",
+            value: `${formatMoney(ledger.openingBalance)} ${ledger.balanceType}`,
+          },
+          { label: "Closing Balance", value: `${formatMoney(Math.abs(balance.amount))} ${balance.balanceType}`, highlight: true },
         ],
       }}
     >
       {activeTab === "overview" ? (
-        <RecordSectionCard title="Ledger Details" icon={BookOpen} accent="blue">
-          <div className="space-y-2 text-xs">
-            <div className="flex justify-between py-2 border-b border-border/50">
-              <span className="text-muted-foreground">Name</span>
-              <span className="font-medium">{ledger.accountName}</span>
+        <RecordSectionCard title="Ledger Summary" icon={BookOpen} accent="blue">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="rounded-lg border border-border/60 p-3 bg-muted/10">
+              <p className="text-[10px] uppercase text-muted-foreground">Opening Balance</p>
+              <p className="font-semibold mt-1 tabular-nums">
+                {formatMoney(ledger.openingBalance)} {ledger.balanceType}
+              </p>
             </div>
-            <div className="flex justify-between py-2 border-b border-border/50">
-              <span className="text-muted-foreground">Code</span>
-              <span className="font-mono font-semibold text-brand-700">{ledger.accountCode}</span>
+            <div className="rounded-lg border border-border/60 p-3 bg-muted/10">
+              <p className="text-[10px] uppercase text-muted-foreground">Total Debit</p>
+              <p className="font-semibold mt-1 tabular-nums text-emerald-800">{formatMoney(totals.totalDebit)}</p>
             </div>
-            <div className="flex justify-between py-2 border-b border-border/50">
-              <span className="text-muted-foreground">Current Balance</span>
-              <MoneyAmount amount={Math.abs(balance.amount)} />
+            <div className="rounded-lg border border-border/60 p-3 bg-muted/10">
+              <p className="text-[10px] uppercase text-muted-foreground">Total Credit</p>
+              <p className="font-semibold mt-1 tabular-nums text-red-700">{formatMoney(totals.totalCredit)}</p>
             </div>
-            <div className="flex justify-between py-2">
-              <span className="text-muted-foreground">Status</span>
-              <span className="font-medium capitalize">{ledger.status}</span>
+            <div className="rounded-lg border border-border/60 p-3 bg-brand-50/50">
+              <p className="text-[10px] uppercase text-muted-foreground">Closing Balance</p>
+              <p className="font-semibold mt-1 tabular-nums">
+                {formatMoney(Math.abs(balance.amount))} {balance.balanceType}
+              </p>
             </div>
           </div>
         </RecordSectionCard>
       ) : (
-        <RecordSectionCard title="Recent Transactions" icon={IndianRupee} accent="green">
-          {transactions.length === 0 ? (
+        <RecordSectionCard title="Ledger Transactions" icon={IndianRupee} accent="green">
+          {statement.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4">No transactions posted to this ledger.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-xs min-w-[520px]">
+              <table className="w-full text-xs min-w-[720px]">
                 <thead>
                   <tr className="border-b border-border bg-muted/20">
                     <th className="text-left px-3 py-2">Date</th>
-                    <th className="text-left px-3 py-2">Voucher</th>
+                    <th className="text-left px-3 py-2">Voucher No</th>
+                    <th className="text-left px-3 py-2">Voucher Type</th>
+                    <th className="text-left px-3 py-2">Narration</th>
                     <th className="text-right px-3 py-2">Debit</th>
                     <th className="text-right px-3 py-2">Credit</th>
+                    <th className="text-right px-3 py-2">Balance</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {transactions.map((t) => (
-                    <tr key={t.id} className="border-b border-border/40">
+                  {statement.map((t) => (
+                    <tr key={`${t.date}-${t.voucherNo}-${t.debit}-${t.credit}`} className="border-b border-border/40">
                       <td className="px-3 py-2">{t.date}</td>
-                      <td className="px-3 py-2 font-mono text-brand-700">{t.voucher}</td>
-                      <td className="px-3 py-2 text-right">
-                        <MoneyAmount amount={t.debit} />
+                      <td className="px-3 py-2 font-mono text-brand-700">{t.voucherNo}</td>
+                      <td className="px-3 py-2">{t.voucherType}</td>
+                      <td className="px-3 py-2 max-w-[220px] truncate" title={t.particulars}>
+                        {t.particulars}
                       </td>
-                      <td className="px-3 py-2 text-right">
-                        <MoneyAmount amount={t.credit} />
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {t.debit > 0 ? formatMoney(t.debit) : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {t.credit > 0 ? formatMoney(t.credit) : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums font-medium">
+                        {formatMoney(Math.abs(t.runningBalance))} {t.balanceType}
                       </td>
                     </tr>
                   ))}

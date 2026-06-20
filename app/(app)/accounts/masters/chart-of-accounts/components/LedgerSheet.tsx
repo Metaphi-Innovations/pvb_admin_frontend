@@ -29,6 +29,7 @@ import {
   parentGroupLabel,
   type LedgerFormValues,
 } from "../chart-of-accounts-data";
+import { inferAccountTypeFromPath } from "@/lib/accounts/coa-accounting-view";
 import { CoaParentGroupSelector } from "./CoaParentGroupSelector";
 
 type SheetMode = "add" | "edit" | "view";
@@ -67,6 +68,15 @@ export function LedgerSheet({
   const setForm = (patch: Partial<LedgerFormValues>) =>
     onFormChange({ ...form, ...patch });
 
+  const ledgerType =
+    form.parentGroupId != null
+      ? inferAccountTypeFromPath(records, form.parentGroupId)
+      : "Asset";
+
+  const showGst = ledgerType === "Income" || ledgerType === "Expense" || ledgerType === "Asset";
+  const showTds =
+    ledgerType === "Expense" || ledgerType === "Liability" || ledgerType === "Income";
+
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="w-full sm:max-w-[440px] flex flex-col p-0">
@@ -89,10 +99,8 @@ export function LedgerSheet({
               </SheetTitle>
               <SheetDescription className="text-xs mt-0.5">
                 {readOnly
-                  ? "View account configuration."
-                  : kind === "sub_ledger"
-                    ? "Sub-ledgers are leaf accounts under a ledger (Level 5)."
-                    : "Ledgers can only be created under sub-groups or leaf account groups."}
+                  ? "View ledger balances and configuration."
+                  : "Create a ledger under the selected group. Profile details for master-linked accounts are managed in source masters."}
               </SheetDescription>
             </div>
           </div>
@@ -105,15 +113,13 @@ export function LedgerSheet({
             </p>
           )}
 
-          <div className="space-y-1">
-            <Label className="text-[11px]">Ledger Code</Label>
-            <Input className="h-8 text-xs font-mono bg-muted/30" value={previewCode} disabled readOnly />
-          </div>
+          {mode === "add" && (
+            <p className="text-[10px] text-muted-foreground font-mono">Code: {previewCode} (auto)</p>
+          )}
 
           <div className="space-y-1">
             <Label className="text-[11px]">
-              {kind === "sub_ledger" ? "Sub-Ledger Name" : "Ledger Name"}{" "}
-              <span className="text-red-500">*</span>
+              Ledger Name <span className="text-red-500">*</span>
             </Label>
             <Input
               className="h-8 text-xs"
@@ -125,7 +131,7 @@ export function LedgerSheet({
           </div>
 
           <div className="space-y-1">
-            <Label className="text-[11px]">Alias</Label>
+            <Label className="text-[11px]">Alias / Short Name</Label>
             <Input
               className="h-8 text-xs"
               disabled={readOnly}
@@ -166,6 +172,11 @@ export function LedgerSheet({
             )}
           </div>
 
+          <div className="space-y-1">
+            <Label className="text-[11px]">Ledger Type</Label>
+            <Input className="h-8 text-xs bg-muted/30" disabled readOnly value={ledgerType} />
+          </div>
+
           {kind !== "sub_ledger" && (
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
@@ -202,7 +213,7 @@ export function LedgerSheet({
           </div>
           )}
 
-          {kind !== "sub_ledger" && (
+          {kind !== "sub_ledger" && showGst && (
           <div className="rounded-lg border border-border/60 p-3 bg-muted/10 space-y-2.5">
             <label className="flex items-center gap-2 text-xs cursor-pointer">
               <Checkbox
@@ -212,6 +223,7 @@ export function LedgerSheet({
               />
               GST Applicable
             </label>
+            {showTds && (
             <label className="flex items-center gap-2 text-xs cursor-pointer">
               <Checkbox
                 checked={form.tdsApplicable}
@@ -220,8 +232,20 @@ export function LedgerSheet({
               />
               TDS Applicable
             </label>
+            )}
           </div>
           )}
+
+          <div className="space-y-1">
+            <Label className="text-[11px]">Description</Label>
+            <Input
+              className="h-8 text-xs"
+              disabled={readOnly}
+              value={form.description}
+              onChange={(e) => setForm({ description: e.target.value })}
+              placeholder="Optional notes for accountants"
+            />
+          </div>
 
           <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5">
             <div>
