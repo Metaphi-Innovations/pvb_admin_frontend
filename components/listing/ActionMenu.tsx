@@ -34,19 +34,23 @@ export function ActionMenu({ actions, row }: ActionMenuProps) {
         </div>
         <DropdownMenuSeparator className="my-1" />
         {actions.map((act, idx) => {
+          if (act.hide?.(row)) return null;
           const Icon = act.icon;
           const isDestructive = act.variant === "destructive";
+          const isDisabled = act.disabled?.(row);
 
           return (
             <React.Fragment key={idx}>
               {idx > 0 && isDestructive && <DropdownMenuSeparator className="my-1" />}
               <DropdownMenuItem
-                onClick={() => act.onClick?.(row)}
+                disabled={isDisabled}
+                onClick={() => !isDisabled && act.onClick?.(row)}
                 className={cn(
                   "text-xs gap-2.5 cursor-pointer py-2 px-2.5 rounded-lg font-medium transition-colors",
                   isDestructive
                     ? "text-red-600 focus:text-red-700 focus:bg-red-50"
-                    : "text-foreground focus:bg-muted/50"
+                    : "text-foreground focus:bg-muted/50",
+                  isDisabled && "opacity-50 cursor-not-allowed pointer-events-none"
                 )}
               >
                 {Icon && <Icon className="w-4 h-4 text-muted-foreground/80" />}

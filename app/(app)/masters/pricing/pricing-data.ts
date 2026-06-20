@@ -23,6 +23,7 @@ export interface PricingRecord extends BaseMasterRecord {
   productName: string;
   segment: string;
   category: string;
+  baseUnit: string;
   uom: string;
   packSize: string;
   unitsPerCase: number;
@@ -39,6 +40,7 @@ export interface PricingForm {
   sku: string;
   segment: string;
   category: string;
+  baseUnit: string;
   uom: string;
   packSize: string;
   unitsPerCase: number;
@@ -56,6 +58,7 @@ export const DEFAULT_PRICING_FORM: PricingForm = {
   sku: "",
   segment: "",
   category: "",
+  baseUnit: "",
   uom: "",
   packSize: "",
   unitsPerCase: 1,
@@ -75,6 +78,7 @@ function migratePricingRecord(raw: Partial<PricingRecord>): PricingRecord {
     productName: raw.productName ?? "",
     segment: raw.segment ?? "",
     category: raw.category ?? "",
+    baseUnit: raw.baseUnit ?? raw.uom ?? "",
     uom: raw.uom ?? "",
     packSize: raw.packSize ?? "",
     unitsPerCase: raw.unitsPerCase ?? 1,
@@ -99,7 +103,8 @@ export const PRICING_SEED: PricingRecord[] = [
     productName: "Dharitri Hybrid Corn Gold",
     segment: "Rakshak",
     category: "Seeds",
-    uom: "KG",
+    baseUnit: "KG",
+    uom: "Bag",
     packSize: "25 KG",
     unitsPerCase: 20,
     gstPct: 0,
@@ -120,7 +125,8 @@ export const PRICING_SEED: PricingRecord[] = [
     productName: "NutriGrow WS 19:19:19",
     segment: "Poshak",
     category: "Fertilizers",
-    uom: "KG",
+    baseUnit: "KG",
+    uom: "Box",
     packSize: "10 KG",
     unitsPerCase: 10,
     gstPct: 5,
@@ -141,7 +147,8 @@ export const PRICING_SEED: PricingRecord[] = [
     productName: "Shield EC Crop Guard",
     segment: "Rakshak",
     category: "Pesticides",
-    uom: "L",
+    baseUnit: "L",
+    uom: "Drum",
     packSize: "1 L",
     unitsPerCase: 12,
     gstPct: 18,
@@ -162,7 +169,8 @@ export const PRICING_SEED: PricingRecord[] = [
     productName: "BioRoot Vital Suspension",
     segment: "Amritam",
     category: "Bio Products",
-    uom: "L",
+    baseUnit: "L",
+    uom: "Packet",
     packSize: "1 L",
     unitsPerCase: 24,
     gstPct: 12,
@@ -183,6 +191,7 @@ export const PRICING_SEED: PricingRecord[] = [
     productName: "Urea 50kg",
     segment: "Poshak",
     category: "Fertilizers",
+    baseUnit: "KG",
     uom: "BAG",
     packSize: "50 KG",
     unitsPerCase: 40,
@@ -204,6 +213,7 @@ export const PRICING_SEED: PricingRecord[] = [
     productName: "NPK 10:26:26",
     segment: "Poshak",
     category: "Fertilizers",
+    baseUnit: "KG",
     uom: "BAG",
     packSize: "50 KG",
     unitsPerCase: 40,
@@ -225,6 +235,7 @@ export const PRICING_SEED: PricingRecord[] = [
     productName: "DAP 50kg",
     segment: "Poshak",
     category: "Fertilizers",
+    baseUnit: "KG",
     uom: "BAG",
     packSize: "50 KG",
     unitsPerCase: 40,
@@ -246,6 +257,7 @@ export const PRICING_SEED: PricingRecord[] = [
     productName: "Zinc Sulphate 21%",
     segment: "Poshak",
     category: "Fertilizers",
+    baseUnit: "KG",
     uom: "BAG",
     packSize: "25 KG",
     unitsPerCase: 48,
@@ -267,6 +279,7 @@ export const PRICING_SEED: PricingRecord[] = [
     productName: "Hybrid Maize Seed",
     segment: "Rakshak",
     category: "Seeds",
+    baseUnit: "KG",
     uom: "BAG",
     packSize: "25 KG",
     unitsPerCase: 20,
@@ -348,6 +361,7 @@ export function pricingToForm(record: PricingRecord): PricingForm {
     sku: record.sku,
     segment: record.segment,
     category: record.category,
+    baseUnit: record.baseUnit,
     uom: record.uom,
     packSize: record.packSize,
     unitsPerCase: record.unitsPerCase,
@@ -373,6 +387,7 @@ export function formToPricing(
     productName: form.productName.trim(),
     segment: form.segment.trim(),
     category: form.category.trim(),
+    baseUnit: form.baseUnit.trim(),
     uom: form.uom.trim(),
     packSize: form.packSize.trim(),
     unitsPerCase: form.unitsPerCase || 1,
