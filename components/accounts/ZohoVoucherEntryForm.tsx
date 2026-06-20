@@ -19,7 +19,12 @@ import { JournalLedgerImpactPreview } from "@/components/accounts/JournalLedgerI
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { journalEntryImpact } from "@/lib/accounts/ledger-impact-previews";
 import { formatMoney, MONEY_INPUT_CLASS } from "@/lib/accounts/money-format";
-import { resolveLedgerContactType } from "@/lib/accounts/voucher-ledger-groups";
+import {
+  applyAutoPartyToLine,
+  applyAutoPartyToLines,
+  isAutoPartyLedger,
+  resolveLedgerContactType,
+} from "@/lib/accounts/voucher-ledger-groups";
 import { cn } from "@/lib/utils";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
@@ -118,7 +123,12 @@ export function ZohoVoucherEntryForm({
   );
 
   const updateLine = (idx: number, patch: Partial<VoucherLine>) => {
-    setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
+    setLines((prev) =>
+      prev.map((l, i) => {
+        if (i !== idx) return l;
+        return applyAutoPartyToLine({ ...l, ...patch }, coaRecords);
+      }),
+    );
   };
 
   const selectLedger = (idx: number, ledgerId: number) => {
@@ -140,15 +150,18 @@ export function ZohoVoucherEntryForm({
     setLines((prev) => (prev.length > 2 ? prev.filter((_, i) => i !== idx) : prev));
   };
 
-  const buildPayload = (postStatus: "draft" | "posted") => ({
-    date,
-    financialYearId: financialYearId ? Number(financialYearId) : null,
-    financialYearName: selectedFy?.name ?? "",
-    referenceNo,
-    narration,
-    lines,
-    status: postStatus,
-  });
+  const buildPayload = (postStatus: "draft" | "posted") => {
+    const enrichedLines = applyAutoPartyToLines(lines, coaRecords);
+    return {
+      date,
+      financialYearId: financialYearId ? Number(financialYearId) : null,
+      financialYearName: selectedFy?.name ?? "",
+      referenceNo,
+      narration,
+      lines: enrichedLines,
+      status: postStatus,
+    };
+  };
 
   const handleSaveDraft = () => {
     const err = validateVoucherDraft({ date });
@@ -165,7 +178,11 @@ export function ZohoVoucherEntryForm({
       setError("Financial year is required.");
       return;
     }
-    const err = validateVoucherForPost({ date, narration, lines });
+    const err = validateVoucherForPost({
+      date,
+      narration,
+      lines: applyAutoPartyToLines(lines, coaRecords),
+    });
     if (err) {
       setError(err);
       return;
@@ -201,8 +218,20 @@ export function ZohoVoucherEntryForm({
   const contactTypeForLine = (line: VoucherLine) => {
     if (!line.ledgerId) return null;
     const ledger = findLedgerById(line.ledgerId, coaRecords);
-    return ledger ? resolveLedgerContactType(ledger, coaRecords) : null;
+    if (!ledger || isAutoPartyLedger(ledger, coaRecords)) return null;
+    return resolveLedgerContactType(ledger, coaRecords);
   };
+
+  const showContactColumn = useMemo(
+    () =>
+      lines.some((line) => {
+        if (!line.ledgerId) return false;
+        const ledger = findLedgerById(line.ledgerId, coaRecords);
+        if (!ledger || isAutoPartyLedger(ledger, coaRecords)) return false;
+        return resolveLedgerContactType(ledger, coaRecords) != null;
+      }),
+    [lines, coaRecords],
+  );
 
   return (
     <AccountsPageShell
@@ -234,9 +263,9 @@ export function ZohoVoucherEntryForm({
         )
       }
       layout="standard"
-      className="h-full min-h-0 max-w-none"
+      className="max-w-none w-full"
     >
-      <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex flex-col w-full">
         {error && (
           <div className="mx-4 mt-4 text-xs text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2">
             {error}
@@ -309,7 +338,7 @@ export function ZohoVoucherEntryForm({
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 px-4 py-4">
+        <div className="px-4 py-4 pb-8">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Entry Lines</h2>
             {!readOnly && (
@@ -319,28 +348,30 @@ export function ZohoVoucherEntryForm({
             )}
           </div>
 
-          <div className="border border-border/60 rounded-lg overflow-hidden bg-white">
+          <div className="border border-border/60 rounded-lg bg-white shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full text-xs min-w-[960px]">
-                <thead className="bg-muted/20 border-b border-border/60">
+              <table className="w-full text-xs min-w-[960px] border-collapse">
+                <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm border-b border-border/60 shadow-[0_1px_0_0_rgba(0,0,0,0.05)]">
                   <tr>
-                    <th className="w-8 px-2 py-2.5" />
-                    <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground w-[28%]">
+                    <th className="w-8 px-2 py-2.5 bg-muted/95" />
+                    <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground w-[28%] bg-muted/95">
                       Account / Ledger
                     </th>
-                    <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground w-[22%]">
+                    <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground w-[22%] bg-muted/95">
                       Description
                     </th>
-                    <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground w-[18%]">
-                      Contact (INR)
-                    </th>
-                    <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase text-muted-foreground w-[12%]">
+                    {showContactColumn && (
+                      <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground w-[18%] bg-muted/95">
+                        Contact
+                      </th>
+                    )}
+                    <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase text-muted-foreground w-[12%] bg-muted/95">
                       Debit
                     </th>
-                    <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase text-muted-foreground w-[12%]">
+                    <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase text-muted-foreground w-[12%] bg-muted/95">
                       Credit
                     </th>
-                    <th className="w-10 px-2 py-2.5" />
+                    <th className="w-10 px-2 py-2.5 bg-muted/95" />
                   </tr>
                 </thead>
                 <tbody>
@@ -371,95 +402,47 @@ export function ZohoVoucherEntryForm({
                             disabled={readOnly}
                           />
                         </td>
-                        <td className="px-2 py-1.5">
-                          {contactType === "customer" ? (
-                            <Select
-                              value={line.contactId ? String(line.contactId) : ""}
-                              onValueChange={(v) => {
-                                const c = customers.find((x) => x.id === Number(v));
-                                updateLine(idx, {
-                                  contactId: Number(v),
-                                  contactName: c?.customerName ?? "",
-                                });
-                              }}
-                              disabled={readOnly}
-                            >
-                              <SelectTrigger className="h-9 text-xs">
-                                <SelectValue placeholder="Select customer *" />
-                              </SelectTrigger>
-                              <SelectContent className="max-h-[220px]">
-                                {[...customers]
-                                  .sort((a, b) => a.customerName.localeCompare(b.customerName))
-                                  .map((c) => (
-                                    <SelectItem key={c.id} value={String(c.id)} className="text-xs">
-                                      {c.customerName}
-                                    </SelectItem>
-                                  ))}
-                              </SelectContent>
-                            </Select>
-                          ) : contactType === "vendor" ? (
-                            <Select
-                              value={line.contactId ? String(line.contactId) : ""}
-                              onValueChange={(v) => {
-                                const vnd = vendors.find((x) => x.id === Number(v));
-                                updateLine(idx, {
-                                  contactId: Number(v),
-                                  contactName: vnd?.vendorName ?? "",
-                                });
-                              }}
-                              disabled={readOnly}
-                            >
-                              <SelectTrigger className="h-9 text-xs">
-                                <SelectValue placeholder="Select vendor *" />
-                              </SelectTrigger>
-                              <SelectContent className="max-h-[220px]">
-                                {[...vendors]
-                                  .sort((a, b) => a.vendorName.localeCompare(b.vendorName))
-                                  .map((v) => (
-                                    <SelectItem key={v.id} value={String(v.id)} className="text-xs">
-                                      {v.vendorName}
-                                    </SelectItem>
-                                  ))}
-                              </SelectContent>
-                            </Select>
-                          ) : contactType === "employee" ? (
-                            <Select
-                              value={line.contactId ? String(line.contactId) : ""}
-                              onValueChange={(v) => {
-                                const emp = employees.find((x) => x.id === Number(v));
-                                updateLine(idx, {
-                                  contactId: Number(v),
-                                  contactName: emp?.fullName ?? "",
-                                });
-                              }}
-                              disabled={readOnly}
-                            >
-                              <SelectTrigger className="h-9 text-xs">
-                                <SelectValue placeholder="Select employee *" />
-                              </SelectTrigger>
-                              <SelectContent className="max-h-[220px]">
-                                {[...employees]
-                                  .sort((a, b) => a.fullName.localeCompare(b.fullName))
-                                  .map((e) => (
-                                    <SelectItem key={e.id} value={String(e.id)} className="text-xs">
-                                      {e.fullName}
-                                    </SelectItem>
-                                  ))}
-                              </SelectContent>
-                            </Select>
-                          ) : readOnly && line.contactName ? (
-                            <span className="text-xs py-2 block">{line.contactName}</span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground/40 py-2 block select-none">—</span>
-                          )}
-                          <VoucherContactMasterHint
-                            contactType={contactType}
-                            contactId={line.contactId}
-                            customers={customers}
-                            vendors={vendors}
-                            employees={employees}
-                          />
-                        </td>
+                        {showContactColumn && (
+                          <td className="px-2 py-1.5">
+                            {contactType === "employee" ? (
+                              <Select
+                                value={line.contactId ? String(line.contactId) : ""}
+                                onValueChange={(v) => {
+                                  const emp = employees.find((x) => x.id === Number(v));
+                                  updateLine(idx, {
+                                    contactId: Number(v),
+                                    contactName: emp?.fullName ?? "",
+                                  });
+                                }}
+                                disabled={readOnly}
+                              >
+                                <SelectTrigger className="h-9 text-xs">
+                                  <SelectValue placeholder="Select employee *" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-[220px]">
+                                  {[...employees]
+                                    .sort((a, b) => a.fullName.localeCompare(b.fullName))
+                                    .map((e) => (
+                                      <SelectItem key={e.id} value={String(e.id)} className="text-xs">
+                                        {e.fullName}
+                                      </SelectItem>
+                                    ))}
+                                </SelectContent>
+                              </Select>
+                            ) : readOnly && line.contactName ? (
+                              <span className="text-xs py-2 block">{line.contactName}</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground/40 py-2 block select-none">—</span>
+                            )}
+                            <VoucherContactMasterHint
+                              contactType={contactType}
+                              contactId={line.contactId}
+                              customers={customers}
+                              vendors={vendors}
+                              employees={employees}
+                            />
+                          </td>
+                        )}
                         <td className="px-2 py-1.5">
                           <Input
                             className={cn("h-9 text-xs", MONEY_INPUT_CLASS)}
@@ -547,7 +530,7 @@ export function ZohoVoucherEntryForm({
 
           {impactLines.length > 0 &&
             (voucherType === "journal" ? (
-              <div className="mt-4">
+              <div className="mt-4 mb-2">
                 <JournalLedgerImpactPreview
                   lines={impactLines}
                   totalDebit={totalDebit}

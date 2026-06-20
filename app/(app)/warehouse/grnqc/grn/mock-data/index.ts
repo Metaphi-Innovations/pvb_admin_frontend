@@ -1,4 +1,4 @@
-import { PurchaseOrder, GrnRecord, ProductItem } from "../types";
+import { PurchaseOrder, GrnRecord, ProductItem, GrnItem, GrnBatch } from "../types";
 
 export const MOCK_PRODUCTS: ProductItem[] = [
   { id: "1", name: "Urea 50kg", code: "FER-UR-001", uom: "BAG" },
@@ -12,6 +12,7 @@ export const MOCK_POS: PurchaseOrder[] = [
   {
     poNumber: "PO-2024-001",
     vendorName: "Agro Chem Distributors",
+    status: "approved",
     items: [
       { productId: "1", productName: "Urea 50kg", productCode: "FER-UR-001", orderedQty: 500 },
       { productId: "2", productName: "NPK 10:26:26", productCode: "FER-NPK-002", orderedQty: 300 },
@@ -20,6 +21,7 @@ export const MOCK_POS: PurchaseOrder[] = [
   {
     poNumber: "PO-2024-002",
     vendorName: "Seed Corp India Pvt Ltd",
+    status: "approved",
     items: [
       { productId: "3", productName: "Hybrid Maize Seed", productCode: "SED-MZ-003", orderedQty: 200 },
     ],
@@ -27,6 +29,7 @@ export const MOCK_POS: PurchaseOrder[] = [
   {
     poNumber: "PO-2024-0001",
     vendorName: "Agro Chem Distributors",
+    status: "approved",
     items: [
       { productId: "4", productName: "Chlorpyrifos 20 EC", productCode: "PRD-004", orderedQty: 100 },
     ],
@@ -34,9 +37,18 @@ export const MOCK_POS: PurchaseOrder[] = [
   {
     poNumber: "PO-2024-003",
     vendorName: "Fertilizer World",
+    status: "approved",
     items: [
       { productId: "4", productName: "DAP 50kg", productCode: "FER-DAP-004", orderedQty: 400 },
       { productId: "5", productName: "Zinc Sulphate 21%", productCode: "CHEM-ZN-005", orderedQty: 150 },
+    ],
+  },
+  {
+    poNumber: "PO-2024-004",
+    vendorName: "Agro Chem Distributors",
+    status: "pending",
+    items: [
+      { productId: "1", productName: "Urea 50kg", productCode: "FER-UR-001", orderedQty: 100 },
     ],
   },
 ];
@@ -270,4 +282,87 @@ export function getGrnById(id: string): GrnRecord | undefined {
 
 export function getGrnByNo(grnNo: string): GrnRecord | undefined {
   return getGrnRecords().find(r => r.grnNo === grnNo);
+}
+
+/** Sum qty already received for a PO line from non-draft GRNs */
+export function getAlreadyReceivedQty(poNumber: string, productId: string): number {
+  const records = getGrnRecords();
+  let total = 0;
+  for (const grn of records) {
+    if (grn.status === "draft") continue;
+    const poNumbers = grn.poNumber.split(",").map((s) => s.trim());
+    if (!poNumbers.includes(poNumber)) continue;
+    for (const item of grn.items) {
+      if (item.productId === productId && (!item.poNumber || item.poNumber === poNumber)) {
+        total += item.receivedQty;
+      }
+    }
+  }
+  return total;
+}
+
+/** Approved POs for vendor with at least one line still pending receipt */
+export function getEligiblePosForVendor(vendorName: string): PurchaseOrder[] {
+  return MOCK_POS.filter((po) => {
+    if (po.vendorName !== vendorName || po.status !== "approved") return false;
+    return po.items.some((it) => {
+      const received = getAlreadyReceivedQty(po.poNumber, it.productId);
+      return it.orderedQty - received > 0;
+    });
+  });
+}
+
+/** Mock OCR extraction — one batch row set per uploaded invoice file */
+export function mockExtractInvoiceBatchesFromFiles(
+  files: { id: string; name: string }[],
+  items: GrnItem[],
+): GrnBatch[] {
+  const activeItems = items.filter((it) => it.receivedQty > 0);
+  if (files.length === 0 || activeItems.length === 0) return [];
+
+  const today = new Date();
+  const batches: GrnBatch[] = [];
+
+  files.forEach((file, fileIdx) => {
+    const baseName = file.name.replace(/\.[^.]+$/, "").trim();
+    const invoiceNumber = baseName || `INV-${String(fileIdx + 1).padStart(3, "0")}`;
+    const invDate = new Date(today);
+    invDate.setDate(invDate.getDate() - fileIdx * 3);
+    const invoiceDate = invDate.toISOString().slice(0, 10);
+
+    const mfg = new Date(today);
+    mfg.setMonth(mfg.getMonth() - 2 - fileIdx);
+    const exp = new Date(today);
+    exp.setFullYear(exp.getFullYear() + 2);
+    const mfgStr = mfg.toISOString().slice(0, 10);
+    const expStr = exp.toISOString().slice(0, 10);
+    const suffix = invoiceNumber.replace(/\W/g, "").slice(-4) || String(fileIdx + 1).padStart(4, "0");
+
+    const itemsForFile = activeItems.filter((_, itemIdx) =>
+      files.length === 1 ? true : itemIdx % files.length === fileIdx,
+    );
+
+    itemsForFile.forEach((it, idx) => {
+      const splitQty =
+        files.length === 1
+          ? it.receivedQty
+          : Math.max(1, Math.floor(it.receivedQty / files.length));
+
+      batches.push({
+        productId: it.productId,
+        productName: it.productName,
+        poNumber: it.poNumber,
+        invoiceNumber,
+        invoiceDate,
+        batchNumber: `B-${suffix}-${String(idx + 1).padStart(2, "0")}`,
+        mfgDate: mfgStr,
+        expDate: expStr,
+        quantity: splitQty,
+        gstRate: 12,
+        invoiceRate: 450 + idx * 25 + fileIdx * 10,
+      });
+    });
+  });
+
+  return batches;
 }

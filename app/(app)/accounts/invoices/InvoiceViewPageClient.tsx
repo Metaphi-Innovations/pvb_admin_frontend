@@ -20,7 +20,8 @@ import {
   type InvoiceRecord,
 } from "./invoices-data";
 import { downloadInvoicePdf } from "./invoice-pdf";
-import { formatINR, INVOICES_LIST_PATH } from "./invoice-utils";
+import { formatINR, INVOICES_LIST_PATH, INVOICE_AMOUNT_LABELS } from "./invoice-utils";
+import { getInvoiceAmountBreakup } from "./invoices-data";
 import { SalesInvoiceAccountingPanel } from "@/components/accounts/SalesInvoiceAccountingPanel";
 import { loadCreditNotes } from "@/app/(app)/accounts/credit-notes/credit-notes-data";
 
@@ -63,6 +64,7 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
 
   const actions = getInvoiceRowActions(record);
   const creditNotes = loadCreditNotes().filter((cn) => cn.sourceInvoiceId === record.id);
+  const { taxableValue, gstAmount, invoiceTotal } = getInvoiceAmountBreakup(record);
 
   return (
     <RecordDetailPage
@@ -116,12 +118,12 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
       }
       sidebar={{
         summary: [
-          { label: "Subtotal", value: formatINR(record.subtotal) },
+          { label: INVOICE_AMOUNT_LABELS.taxableValue, value: formatINR(taxableValue) },
           { label: "Discount", value: formatINR(record.discountTotal) },
-          { label: "Tax", value: formatINR(record.taxAmount) },
-          { label: "Grand Total", value: formatINR(record.grandTotal), highlight: true },
+          { label: INVOICE_AMOUNT_LABELS.gstAmount, value: formatINR(gstAmount) },
+          { label: INVOICE_AMOUNT_LABELS.invoiceTotal, value: formatINR(invoiceTotal), highlight: true },
           { label: "Received", value: formatINR(record.amountReceived) },
-          { label: "Balance", value: formatINR(record.balanceAmount) },
+          { label: "Balance Due", value: formatINR(record.balanceAmount) },
         ],
         activity: [...record.activity].reverse().slice(0, 5).map((a, i) => ({
           id: `${a.at}-${i}`,
@@ -174,7 +176,9 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
               <DetailRow label="GSTIN" value={record.customerGst} />
               <DetailRow label="Billing Address" value={record.billingAddress} />
               <DetailRow label="Due Date" value={record.dueDate} />
-              <DetailRow label="Grand Total" value={formatINR(record.grandTotal)} />
+              <DetailRow label={INVOICE_AMOUNT_LABELS.taxableValue} value={formatINR(taxableValue)} />
+              <DetailRow label={INVOICE_AMOUNT_LABELS.gstAmount} value={formatINR(gstAmount)} />
+              <DetailRow label={INVOICE_AMOUNT_LABELS.invoiceTotal} value={formatINR(invoiceTotal)} />
             </div>
           </div>
         </TabsContent>

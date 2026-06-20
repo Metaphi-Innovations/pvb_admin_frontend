@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { MiniKPICard } from "@/components/ui/KPICard";
 import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
@@ -35,7 +36,8 @@ import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/compone
 interface Brand {
   id: number;
   brandName: string;
-  remark: string;
+  brandGradeType: string;
+  description: string;
   status: "active" | "inactive";
   createdBy: string;
   createdDate: string;
@@ -49,7 +51,8 @@ const SEED: Brand[] = [
   {
     id: 1,
     brandName: "Mahyco",
-    remark: "Leading seed brand",
+    brandGradeType: "A",
+    description: "Leading seed brand",
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-06-19",
@@ -59,7 +62,8 @@ const SEED: Brand[] = [
   {
     id: 2,
     brandName: "Nuziveedu",
-    remark: "Popular cotton seeds provider",
+    brandGradeType: "B",
+    description: "Popular cotton seeds provider",
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-06-19",
@@ -77,11 +81,12 @@ function loadBrands(): Brand[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return SEED;
-    const parsed = JSON.parse(raw) as Partial<Brand>[];
+    const parsed = JSON.parse(raw) as any[];
     return parsed.map((item, idx) => ({
       id: item.id ?? idx + 1,
       brandName: item.brandName ?? "",
-      remark: item.remark ?? "",
+      brandGradeType: item.brandGradeType ?? "A",
+      description: item.description ?? item.remark ?? "",
       status: item.status === "inactive" ? "inactive" : "active",
       createdBy: item.createdBy ?? "Admin",
       createdDate: item.createdDate ?? todayStr(),
@@ -100,13 +105,15 @@ function saveBrands(items: Brand[]) {
 
 interface BrandFormValues {
   brandName: string;
-  remark: string;
+  brandGradeType: string;
+  description: string;
   status: "active" | "inactive";
 }
 
 const DEFAULT_BRAND_FORM: BrandFormValues = {
   brandName: "",
-  remark: "",
+  brandGradeType: "A",
+  description: "",
   status: "active",
 };
 
@@ -180,8 +187,22 @@ export default function BrandMasterPage() {
       ),
     },
     {
-      key: "remark",
-      header: "Remark",
+      key: "brandGradeType",
+      header: "Grade Type",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: [
+        { label: "A", value: "A" },
+        { label: "B", value: "B" },
+        { label: "C", value: "C" },
+        { label: "Others", value: "Others" },
+      ],
+      width: "120px",
+    },
+    {
+      key: "description",
+      header: "Description",
       sortable: true,
       filterable: true,
       filterType: "text",
@@ -253,7 +274,8 @@ export default function BrandMasterPage() {
       result = result.filter(
         (r) =>
           r.brandName.toLowerCase().includes(q) ||
-          r.remark.toLowerCase().includes(q)
+          (r.brandGradeType || "").toLowerCase().includes(q) ||
+          r.description.toLowerCase().includes(q)
       );
     }
 
@@ -292,7 +314,8 @@ export default function BrandMasterPage() {
   const openEdit = (row: Brand) => {
     setForm({
       brandName: row.brandName,
-      remark: row.remark,
+      brandGradeType: row.brandGradeType ?? "A",
+      description: row.description,
       status: row.status,
     });
     setErrors({});
@@ -314,6 +337,7 @@ export default function BrandMasterPage() {
   const validateForm = (val: BrandFormValues) => {
     const errs: Record<string, string> = {};
     if (!val.brandName.trim()) errs.brandName = "Brand name is required";
+    if (!val.brandGradeType) errs.brandGradeType = "Grade type is required";
     return errs;
   };
 
@@ -331,7 +355,8 @@ export default function BrandMasterPage() {
       const newRecord: Brand = {
         id,
         brandName: form.brandName.trim(),
-        remark: form.remark.trim(),
+        brandGradeType: form.brandGradeType,
+        description: form.description.trim(),
         status: form.status,
         createdBy: "Admin",
         createdDate: todayStr(),
@@ -346,7 +371,8 @@ export default function BrandMasterPage() {
           ? {
               ...r,
               brandName: form.brandName.trim(),
-              remark: form.remark.trim(),
+              brandGradeType: form.brandGradeType,
+              description: form.description.trim(),
               status: form.status,
               updatedBy: "Admin",
               updatedDate: todayStr(),
@@ -373,13 +399,14 @@ export default function BrandMasterPage() {
 
   const handleExport = () => {
     try {
-      const headers = ["ID", "Brand Name", "Remark", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
+      const headers = ["ID", "Brand Name", "Brand Grade Type", "Description", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
       const csvRows = [headers.join(",")];
       for (const r of records) {
         const row = [
           r.id,
           `"${r.brandName.replace(/"/g, '""')}"`,
-          `"${r.remark.replace(/"/g, '""')}"`,
+          `"${(r.brandGradeType || "A").replace(/"/g, '""')}"`,
+          `"${(r.description || "").replace(/"/g, '""')}"`,
           r.status,
           r.createdBy,
           r.createdDate,
@@ -439,7 +466,7 @@ export default function BrandMasterPage() {
           addLabel="Add Brand"
           onExport={handleExport}
           emptyMessage="brands"
-          searchPlaceholder="Search brand name, remark..."
+          searchPlaceholder="Search brand name, description..."
           currentFilters={filters}
           currentSort={sort}
         />
@@ -460,7 +487,8 @@ export default function BrandMasterPage() {
                 getRecordCode: () => "",
                 basicInfo: (r) => [
                   { label: "Brand Name", value: r.brandName },
-                  { label: "Remark", value: r.remark },
+                  { label: "Grade Type", value: r.brandGradeType },
+                  { label: "Description", value: r.description },
                 ],
                 description: () => "",
                 showDescription: false,
@@ -471,7 +499,7 @@ export default function BrandMasterPage() {
           <div className="space-y-4">
             <div className="space-y-1">
               <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Brand Details</p>
-              <p className="text-[11px] text-muted-foreground">Define brand name and remark.</p>
+              <p className="text-[11px] text-muted-foreground">Define brand name and description.</p>
             </div>
 
             <div className="grid grid-cols-1 gap-3">
@@ -499,11 +527,42 @@ export default function BrandMasterPage() {
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs font-medium">Remark</Label>
+                <Label className="text-xs font-medium">
+                  Brand Grade Type <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={form.brandGradeType}
+                  onValueChange={(value) => {
+                    setForm({ ...form, brandGradeType: value });
+                    if (errors.brandGradeType) {
+                      setErrors((prev) => {
+                        const copy = { ...prev };
+                        delete copy.brandGradeType;
+                        return copy;
+                      });
+                    }
+                  }}
+                  disabled={sheetMode === "view"}
+                >
+                  <SelectTrigger className={cn("h-8 text-xs bg-background", errors.brandGradeType && "border-red-400 focus-visible:ring-red-300")}>
+                    <SelectValue placeholder="Select Grade Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="A">A</SelectItem>
+                    <SelectItem value="B">B</SelectItem>
+                    <SelectItem value="C">C</SelectItem>
+                    <SelectItem value="Others">Others</SelectItem>
+                  </SelectContent>
+                </Select>
+                {errors.brandGradeType && <p className="text-[11px] text-red-500">{errors.brandGradeType}</p>}
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Description</Label>
                 <Textarea
-                  value={form.remark}
-                  onChange={(e) => setForm({ ...form, remark: e.target.value })}
-                  placeholder="Additional remarks..."
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  placeholder="Description..."
                   className="min-h-[96px] text-xs resize-none rounded-lg"
                   disabled={sheetMode === "view"}
                 />

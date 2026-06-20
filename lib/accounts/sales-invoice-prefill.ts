@@ -15,6 +15,7 @@ import { getOrderById, type SalesOrder } from "@/app/(app)/sales/orders/orders-d
 import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
 import {
   buildSalesInvoicePrefillFromDispatch,
+  findPendingDispatchForCustomer,
   type DispatchSalesInvoicePrefill,
 } from "@/lib/accounts/dispatch-invoice-bridge";
 
@@ -139,6 +140,20 @@ function prefillFromOrderOnly(order: SalesOrder): SalesInvoicePrefill {
     lineItems: lines,
     lineErrors: errors,
   };
+}
+
+/** Prefill from the latest pending warehouse dispatch for this customer (Create Invoice flow). */
+export function buildSalesInvoicePrefillForCustomer(
+  customerId: number,
+): SalesInvoicePrefill | null {
+  const pending = findPendingDispatchForCustomer(customerId);
+  if (!pending) return null;
+
+  return buildSalesInvoicePrefillFromDispatch(
+    pending.dispatchId,
+    pending.dispatchNo,
+    pending.salesOrderId ?? undefined,
+  );
 }
 
 export function buildSalesInvoicePrefill(

@@ -1,15 +1,9 @@
 /** UI-only mock data for Accounts screens (localStorage supplements where available). */
 
-export interface FundTransferRecord {
-  id: number;
-  date: string;
-  reference: string;
-  fromAccount: string;
-  toAccount: string;
-  amount: number;
-  status: "draft" | "posted" | "cancelled";
-  branch: string;
-}
+export {
+  loadFundTransfers,
+  type FundTransferRecord,
+} from "@/lib/accounts/fund-transfer-data";
 
 export interface ReceiptAllocationRecord {
   id: number;
@@ -79,7 +73,6 @@ export interface GstSummaryRow {
   netPayable: number;
 }
 
-const FT_KEY = "ds_accounts_mock_fund_transfers";
 const RA_KEY = "ds_accounts_mock_receipt_alloc";
 const PR_KEY = "ds_accounts_mock_payment_runs";
 const IA_KEY = "ds_accounts_mock_inv_adj";
@@ -99,10 +92,6 @@ function seed<T>(key: string, data: T[]): T[] {
   }
 }
 
-export const FUND_TRANSFER_SEED: FundTransferRecord[] = [
-  { id: 1, date: "2026-06-01", reference: "FT-0001", fromAccount: "HDFC Bank", toAccount: "ICICI Bank", amount: 250000, status: "posted", branch: "Head Office" },
-  { id: 2, date: "2026-06-05", reference: "FT-0002", fromAccount: "Cash-in-Hand", toAccount: "HDFC Bank", amount: 50000, status: "posted", branch: "Mumbai" },
-];
 
 export const RECEIPT_ALLOCATION_SEED: ReceiptAllocationRecord[] = [
   { id: 1, receiptNo: "REC-0012", date: "2026-06-03", customer: "Agro Solutions Pvt Ltd", receiptAmount: 150000, allocated: 120000, unallocated: 30000, status: "posted" },
@@ -145,9 +134,7 @@ export const BRANCH_REPORT_SEED: BranchReportRow[] = [
   { branch: "Pune", revenue: 640000, expenses: 510000, receivables: 98000, payables: 76000 },
 ];
 
-export function loadFundTransfers() {
-  return seed(FT_KEY, FUND_TRANSFER_SEED);
-}
+
 export function loadReceiptAllocations() {
   return seed(RA_KEY, RECEIPT_ALLOCATION_SEED);
 }

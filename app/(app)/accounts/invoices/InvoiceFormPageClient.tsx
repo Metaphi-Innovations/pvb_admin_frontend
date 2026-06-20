@@ -16,8 +16,15 @@ import {
 } from "@/lib/settings/gst-tax-config";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { buildSalesInvoicePrefill } from "@/lib/accounts/sales-invoice-prefill";
+import {
+  buildSalesInvoicePrefill,
+  type SalesInvoicePrefill,
+} from "@/lib/accounts/sales-invoice-prefill";
+import { buildSalesInvoicePrefillFromDispatch } from "@/lib/accounts/dispatch-invoice-bridge";
+import type { PendingDispatchInvoiceRow } from "@/lib/accounts/dispatch-invoice-bridge";
 import { InvoiceLinesEditor } from "./components/InvoiceLinesEditor";
+import { SalesInvoiceCustomerSection } from "./components/SalesInvoiceCustomerSection";
+import { SalesInvoiceDispatchSelect } from "./components/SalesInvoiceDispatchSelect";
 import {
   calculateInvoiceTotals,
   createEmptyLine,
@@ -34,12 +41,9 @@ import {
 import { formatINR, INVOICES_LIST_PATH } from "./invoice-utils";
 import { SalesInvoiceAccountingPanel } from "@/components/accounts/SalesInvoiceAccountingPanel";
 import { getOrderById } from "@/app/(app)/sales/orders/orders-data";
-import { CustomerMasterPanel } from "@/components/accounts/master-fetch/CustomerMasterPanel";
 import { cn } from "@/lib/utils";
 import {
   customerMasterToTransactionFields,
-  resolveBillToAddress,
-  resolveShipToAddress,
   type CustomerTransactionFields,
 } from "@/lib/accounts/transaction-master-fetch";
 
@@ -104,6 +108,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [roundOff, setRoundOff] = useState(0);
   const [salesOrderId, setSalesOrderId] = useState<number | null>(null);
   const [sourceDispatchId, setSourceDispatchId] = useState("");
+  const [selectedDispatchId, setSelectedDispatchId] = useState("");
   const [customerLedgerId, setCustomerLedgerId] = useState<number | null>(null);
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const [dueDate, setDueDate] = useState("");
@@ -172,52 +177,16 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     if (full) applyCustomerTransactionFields(full);
   };
 
-  const onCustomerMasterSelect = (id: string, fields: CustomerTransactionFields | null) => {
-    setCustomerId(id);
-    if (!fields) {
-      setCustomerFields(null);
-      return;
-    }
-    applyCustomerTransactionFields(fields);
-  };
-
-  useEffect(() => {
-    if (isEdit) return;
-    const dispatchId = searchParams.get("dispatchId");
-    const soId = searchParams.get("so");
-    const dispatchNo = searchParams.get("dispatch");
-    if (!dispatchId && !soId) return;
-
-    const prefill = buildSalesInvoicePrefill(
-      soId ? Number(soId) : null,
-      dispatchNo,
-      dispatchId,
-    );
-
-    if (!prefill) {
-      if (soId) {
-        const order = getOrderById(Number(soId));
-        if (!order) return;
-        setSalesOrderRef(order.soNumber);
-        setReferenceNo(order.soNumber);
-        setSalesOrderId(order.id);
-        if (order.customerId) {
-          setCustomerId(String(order.customerId));
-          const c = customers.find((x) => x.id === order.customerId);
-          if (c) applyCustomerFields(customerToInvoiceFields(c), customerMasterToTransactionFields(c));
-        } else {
-          setCustomerName(order.customerName);
-        }
-      }
-      return;
-    }
-
+  const applySalesInvoicePrefill = (prefill: SalesInvoicePrefill) => {
     if (prefill.lineErrors.length > 0) {
       setError(prefill.lineErrors.join(" "));
+    } else {
+      setError(null);
     }
 
     setSalesOrderId(prefill.salesOrderId);
     setSourceDispatchId(prefill.sourceDispatchId);
+    setSelectedDispatchId(prefill.sourceDispatchId);
     setCustomerLedgerId(prefill.customerLedgerId);
     setSalesOrderRef(prefill.salesOrderNo);
     setDispatchRef(prefill.dispatchNo);
@@ -253,6 +222,91 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     }
 
     if (prefill.lineItems.length) setLines(prefill.lineItems);
+  };
+
+  const clearDispatchLinkedFields = () => {
+    setSelectedDispatchId("");
+    setSourceDispatchId("");
+    setSalesOrderId(null);
+    setCustomerLedgerId(null);
+    setSalesOrderRef("");
+    setDispatchRef("");
+    setReferenceNo("");
+    setSalesperson("");
+    setWarehouse("Central Warehouse");
+    setBranch("Head Office");
+    setLines([createEmptyLine()]);
+    setError(null);
+  };
+
+  const onCustomerSelect = (id: string, fields: CustomerTransactionFields | null) => {
+    const customerChanged = customerId !== id;
+    setCustomerId(id);
+    if (!fields) {
+      setCustomerFields(null);
+      if (customerChanged) clearDispatchLinkedFields();
+      return;
+    }
+    applyCustomerTransactionFields(fields);
+    if (customerChanged) clearDispatchLinkedFields();
+  };
+
+  const onDispatchSelect = (dispatchId: string, row: PendingDispatchInvoiceRow | null) => {
+    setSelectedDispatchId(dispatchId);
+    if (!dispatchId || !row) {
+      setSourceDispatchId("");
+      setSalesOrderId(null);
+      setSalesOrderRef("");
+      setDispatchRef("");
+      setReferenceNo("");
+      setSalesperson("");
+      setWarehouse("Central Warehouse");
+      setBranch("Head Office");
+      setLines([createEmptyLine()]);
+      setError(null);
+      return;
+    }
+
+    const prefill = buildSalesInvoicePrefillFromDispatch(
+      dispatchId,
+      row.dispatchNo,
+      row.salesOrderId ?? undefined,
+    );
+    if (prefill) applySalesInvoicePrefill(prefill);
+  };
+
+  useEffect(() => {
+    if (isEdit) return;
+    const dispatchId = searchParams.get("dispatchId");
+    const soId = searchParams.get("so");
+    const dispatchNo = searchParams.get("dispatch");
+    if (!dispatchId && !soId) return;
+
+    const prefill = buildSalesInvoicePrefill(
+      soId ? Number(soId) : null,
+      dispatchNo,
+      dispatchId,
+    );
+
+    if (!prefill) {
+      if (soId) {
+        const order = getOrderById(Number(soId));
+        if (!order) return;
+        setSalesOrderRef(order.soNumber);
+        setReferenceNo(order.soNumber);
+        setSalesOrderId(order.id);
+        if (order.customerId) {
+          setCustomerId(String(order.customerId));
+          const c = customers.find((x) => x.id === order.customerId);
+          if (c) applyCustomerFields(customerToInvoiceFields(c), customerMasterToTransactionFields(c));
+        } else {
+          setCustomerName(order.customerName);
+        }
+      }
+      return;
+    }
+
+    applySalesInvoicePrefill(prefill);
   }, [isEdit, searchParams, customers]);
 
   useEffect(() => {
@@ -295,6 +349,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setWarehouse(rec.warehouse ?? "Central Warehouse");
     setSalesperson(rec.salesperson ?? "");
     setSalesOrderId(rec.salesOrderId ?? null);
+    setSourceDispatchId(rec.sourceDispatchId ?? "");
+    setSelectedDispatchId(rec.sourceDispatchId ?? "");
+    setCustomerLedgerId(rec.customerLedgerId ?? null);
     setCustomerNotes(rec.customerNotes ?? "");
     setTermsAndConditions(rec.termsAndConditions ?? "");
     setInternalRemarks(rec.internalRemarks ?? rec.remarks ?? "");
@@ -419,10 +476,12 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     invoiceStatus,
   });
 
+  const isManualInvoice = !sourceDispatchId;
+
   const submit = (asDraft: boolean) => {
     setError(null);
     if (!customerName.trim()) {
-      setError("Customer is required. Create invoice from Pending Tax Invoices or select a sales order with a customer.");
+      setError("Select a customer from Customer Master.");
       return;
     }
     const validLines = lines.filter((l) => l.productName || l.productId);
@@ -455,11 +514,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Sales", isEdit ? "Edit Invoice" : "Create Invoice", INVOICES_LIST_PATH)}
       title={isEdit ? "Edit Sales Invoice" : "Create Sales Invoice"}
-      description={
-        salesOrderRef
-          ? `Tax invoice for ${salesOrderRef}${dispatchRef ? ` / ${dispatchRef}` : ""} — customer details from master; review and post.`
-          : "Create a sales tax invoice from a dispatched sales order."
-      }
+      description="Select customer and dispatch to auto-fill invoice details, or create a manual invoice."
       actions={
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.push(INVOICES_LIST_PATH)}>
@@ -478,10 +533,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <Section title="Customer Information">
             <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
-              <CustomerMasterPanel
+              <SalesInvoiceCustomerSection
                 customers={customers}
                 customerId={customerId}
-                onCustomerIdChange={onCustomerMasterSelect}
+                onCustomerIdChange={onCustomerSelect}
                 fields={customerFields}
                 billToId={billToId}
                 shipToId={shipToId}
@@ -495,8 +550,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                 }}
                 billingAddress={billingAddress}
                 shippingAddress={shippingAddress}
-                allowSelect={!salesOrderRef}
-                disabled={!!salesOrderRef && !isEdit}
               />
             </div>
           </Section>
@@ -509,10 +562,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                   <Input className="h-9 text-sm bg-muted/30" disabled value={isEdit ? invoiceNo : "Auto-generated"} />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">Sales Order No.</Label>
-                  <Input className="h-9 text-sm bg-muted/30" disabled value={salesOrderRef || "—"} />
-                </div>
-                <div className="space-y-1">
                   <Label className="text-xs">Invoice Date</Label>
                   <Input type="date" className="h-9 text-sm" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
                 </div>
@@ -520,10 +569,17 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                   <Label className="text-xs">Due Date</Label>
                   <Input type="date" className="h-9 text-sm" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
                 </div>
-                <ReadOnlyField label="Dispatch No." value={dispatchRef} />
+                <ReadOnlyField label="Sales Order No." value={salesOrderRef} />
+                <div className="sm:col-span-2">
+                  <SalesInvoiceDispatchSelect
+                    customerId={customerId}
+                    value={selectedDispatchId}
+                    onChange={onDispatchSelect}
+                disabled={!customerId}
+              />
+                </div>
                 <ReadOnlyField label="Branch" value={branch} />
                 <ReadOnlyField label="Warehouse" value={warehouse} />
-                <ReadOnlyField label="Payment Terms" value={paymentTerms} />
                 <ReadOnlyField label="Place of Supply" value={placeOfSupply} />
                 <ReadOnlyField label="GST Treatment" value={gstTreatment} />
                 <div className="space-y-1 sm:col-span-2">
@@ -548,7 +604,14 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         </div>
 
         <Section title="Item Details">
-          <InvoiceLinesEditor lines={lines} products={products} onChange={setLines} interstate={interstateGst} />
+          <InvoiceLinesEditor
+            lines={lines}
+            products={products}
+            onChange={setLines}
+            interstate={interstateGst}
+            hideMasterHint
+            manualEntry={isManualInvoice}
+          />
         </Section>
 
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">

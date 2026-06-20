@@ -54,6 +54,8 @@ export interface EnterpriseTableProps<T extends object = Record<string, unknown>
   perPage?: number;
   showRowActions?: boolean;
   showBulkActions?: boolean;
+  showSelection?: boolean;
+  hideToolbar?: boolean;
   stickyHeader?: boolean;
   getRowKey?: (row: T, index: number) => string;
 }
@@ -138,6 +140,8 @@ export function EnterpriseTable<T extends object>({
   perPage = 10,
   showRowActions = true,
   showBulkActions = true,
+  showSelection = true,
+  hideToolbar = false,
   stickyHeader = true,
   getRowKey,
 }: EnterpriseTableProps<T>) {
@@ -204,7 +208,11 @@ export function EnterpriseTable<T extends object>({
       return n;
     });
 
-  const colSpan = columns.length + (expandable ? 3 : 2) + (showRowActions ? 0 : -1);
+  const colSpan =
+    columns.length +
+    (showSelection ? 1 : 0) +
+    (expandable ? 1 : 0) +
+    (showRowActions ? 1 : 0);
 
   const pageNumbers = useMemo(() => {
     const max = Math.min(totalPages, 5);
@@ -215,46 +223,48 @@ export function EnterpriseTable<T extends object>({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          {title && <h4 className="text-sm font-semibold text-foreground">{title}</h4>}
-          {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-[7px] text-muted-foreground" />
-            <input
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Search…"
-              className="pl-8 pr-3 py-1.5 text-xs border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-400 w-44 bg-white"
-            />
+      {!hideToolbar && (
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            {title && <h4 className="text-sm font-semibold text-foreground">{title}</h4>}
+            {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
           </div>
-          <button
-            type="button"
-            className="px-2.5 py-1.5 text-xs border border-border rounded-lg hover:bg-muted transition-colors inline-flex items-center gap-1.5"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" /> Filter
-          </button>
-          <button
-            type="button"
-            className="px-2.5 py-1.5 text-xs border border-border rounded-lg hover:bg-muted transition-colors inline-flex items-center gap-1.5"
-          >
-            <Columns className="w-3.5 h-3.5" /> Columns
-          </button>
-          <button
-            type="button"
-            className="px-2.5 py-1.5 text-xs border border-border rounded-lg hover:bg-muted transition-colors inline-flex items-center gap-1.5"
-          >
-            <ArrowDownToLine className="w-3.5 h-3.5" /> Export
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-[7px] text-muted-foreground" />
+              <input
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="Search…"
+                className="pl-8 pr-3 py-1.5 text-xs border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-400 w-44 bg-white"
+              />
+            </div>
+            <button
+              type="button"
+              className="px-2.5 py-1.5 text-xs border border-border rounded-lg hover:bg-muted transition-colors inline-flex items-center gap-1.5"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" /> Filter
+            </button>
+            <button
+              type="button"
+              className="px-2.5 py-1.5 text-xs border border-border rounded-lg hover:bg-muted transition-colors inline-flex items-center gap-1.5"
+            >
+              <Columns className="w-3.5 h-3.5" /> Columns
+            </button>
+            <button
+              type="button"
+              className="px-2.5 py-1.5 text-xs border border-border rounded-lg hover:bg-muted transition-colors inline-flex items-center gap-1.5"
+            >
+              <ArrowDownToLine className="w-3.5 h-3.5" /> Export
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {showBulkActions && selected.size > 0 && (
+      {showBulkActions && showSelection && selected.size > 0 && (
         <div className="bg-brand-50 border border-brand-200 rounded-lg px-4 py-2 flex items-center justify-between">
           <span className="text-xs font-medium text-brand-700">
             {selected.size} row{selected.size > 1 ? "s" : ""} selected
@@ -276,14 +286,16 @@ export function EnterpriseTable<T extends object>({
           <table className="w-full text-sm min-w-[900px]">
             <thead className={stickyHeader ? "sticky top-0 z-10" : undefined}>
               <tr className="bg-muted/40 border-b border-border">
-                <th className="w-10 px-4 py-2.5 bg-muted/40">
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 rounded accent-brand-600"
-                    checked={selected.size === paged.length && paged.length > 0}
-                    onChange={toggleAll}
-                  />
-                </th>
+                {showSelection && (
+                  <th className="w-10 px-4 py-2.5 bg-muted/40">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 rounded accent-brand-600"
+                      checked={selected.size === paged.length && paged.length > 0}
+                      onChange={toggleAll}
+                    />
+                  </th>
+                )}
                 {expandable && <th className="w-8 px-2 py-3 bg-muted/40" />}
                 {columns.map((col) => (
                   <th
@@ -371,16 +383,18 @@ export function EnterpriseTable<T extends object>({
                   return (
                     <React.Fragment key={rowKey}>
                       <tr
-                        className={`border-b border-border transition-colors ${selected.has(idx) ? "bg-brand-50/60" : "hover:bg-muted/20"}`}
+                        className={`border-b border-border transition-colors ${showSelection && selected.has(idx) ? "bg-brand-50/60" : "hover:bg-muted/20"}`}
                       >
-                        <td className="px-4 py-3">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 rounded accent-brand-600"
-                            checked={selected.has(idx)}
-                            onChange={() => toggleRow(idx)}
-                          />
-                        </td>
+                        {showSelection && (
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 rounded accent-brand-600"
+                              checked={selected.has(idx)}
+                              onChange={() => toggleRow(idx)}
+                            />
+                          </td>
+                        )}
                         {expandable && (
                           <td className="px-2 py-3">
                             <button

@@ -37,6 +37,8 @@ export interface ActionItemConfig<T = any> {
   icon?: React.ComponentType<any>;
   onClick?: (row: T) => void;
   variant?: "default" | "destructive";
+  disabled?: (row: T) => boolean;
+  hide?: (row: T) => boolean;
 }
 
 export interface MasterListingProps<T = any> {

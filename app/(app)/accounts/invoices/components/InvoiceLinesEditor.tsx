@@ -24,10 +24,12 @@ function ProductSelect({
   products,
   value,
   onSelect,
+  disabled,
 }: {
   products: InvoiceProductOption[];
   value: number | null;
   onSelect: (p: InvoiceProductOption) => void;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -39,11 +41,15 @@ function ProductSelect({
   );
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open && !disabled} onOpenChange={(v) => { if (!disabled) setOpen(v); }}>
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="w-full h-8 px-2.5 text-sm text-left border border-border rounded-md bg-background flex items-center justify-between"
+          disabled={disabled}
+          className={cn(
+            "w-full h-8 px-2.5 text-sm text-left border border-border rounded-md bg-background flex items-center justify-between",
+            disabled && "opacity-70 cursor-default bg-muted/20",
+          )}
         >
           <span className={cn("truncate", !selected && "text-muted-foreground")}>
             {selected ? `${selected.code} — ${selected.name}` : "Type or click to select an item…"}
@@ -94,11 +100,16 @@ export function InvoiceLinesEditor({
   products,
   onChange,
   interstate = false,
+  hideMasterHint = false,
+  manualEntry = true,
 }: {
   lines: InvoiceLineItem[];
   products: InvoiceProductOption[];
   onChange: (lines: InvoiceLineItem[]) => void;
   interstate?: boolean;
+  hideMasterHint?: boolean;
+  /** When false (dispatch-sourced invoice), lines are read-only. */
+  manualEntry?: boolean;
 }) {
   const update = (id: string, patch: Partial<InvoiceLineItem>) => {
     onChange(
@@ -126,13 +137,21 @@ export function InvoiceLinesEditor({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <MasterFetchedBadge />
-          <span className="text-xs text-muted-foreground">Products from Product Master</span>
-        </div>
-        <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={addRow}>
-          <Plus className="w-3.5 h-3.5" /> Add New Row
-        </Button>
+        {!hideMasterHint ? (
+          <div className="flex items-center gap-2 flex-wrap">
+            <MasterFetchedBadge />
+            <span className="text-xs text-muted-foreground">Products from Product Master</span>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">
+            {manualEntry ? "Add products for manual invoice." : "Line items from selected dispatch."}
+          </span>
+        )}
+        {manualEntry && (
+          <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={addRow}>
+            <Plus className="w-3.5 h-3.5" /> Add New Row
+          </Button>
+        )}
       </div>
 
       <div className="overflow-x-auto border border-border/60 rounded-lg bg-white">
@@ -169,8 +188,9 @@ export function InvoiceLinesEditor({
                         products={products}
                         value={line.productId}
                         onSelect={(p) => update(line.id, { productId: p.id })}
+                        disabled={!manualEntry}
                       />
-                      {!line.productId && (
+                      {!line.productId && manualEntry && (
                         <Input
                           className="h-8 text-sm mt-1.5"
                           placeholder="Or enter item name"
@@ -184,7 +204,7 @@ export function InvoiceLinesEditor({
                         className="h-8 text-sm font-mono bg-muted/20"
                         placeholder="HSN"
                         value={line.hsn ?? ""}
-                        readOnly={!!line.productId}
+                        readOnly={!manualEntry || !!line.productId}
                         onChange={(e) => update(line.id, { hsn: e.target.value })}
                       />
                     </td>
@@ -192,8 +212,9 @@ export function InvoiceLinesEditor({
                       <Input
                         type="number"
                         min={0}
-                        className={NUM_INPUT_CLASS}
+                        className={cn(NUM_INPUT_CLASS, !manualEntry && "bg-muted/20")}
                         value={line.qty || ""}
+                        readOnly={!manualEntry}
                         onChange={(e) => update(line.id, { qty: parseFloat(e.target.value) || 0 })}
                       />
                     </td>
@@ -201,7 +222,7 @@ export function InvoiceLinesEditor({
                       <Input
                         className="h-8 text-sm text-center bg-muted/20"
                         value={line.unit}
-                        readOnly={!!line.productId}
+                        readOnly={!manualEntry || !!line.productId}
                         onChange={(e) => update(line.id, { unit: e.target.value })}
                       />
                     </td>
@@ -209,8 +230,9 @@ export function InvoiceLinesEditor({
                       <Input
                         type="number"
                         min={0}
-                        className={NUM_INPUT_CLASS}
+                        className={cn(NUM_INPUT_CLASS, !manualEntry && "bg-muted/20")}
                         value={line.unitPrice || ""}
+                        readOnly={!manualEntry}
                         onChange={(e) => update(line.id, { unitPrice: parseFloat(e.target.value) || 0 })}
                       />
                     </td>
@@ -219,8 +241,9 @@ export function InvoiceLinesEditor({
                         type="number"
                         min={0}
                         max={100}
-                        className={NUM_INPUT_CLASS}
+                        className={cn(NUM_INPUT_CLASS, !manualEntry && "bg-muted/20")}
                         value={line.discountPct || ""}
+                        readOnly={!manualEntry}
                         onChange={(e) => update(line.id, { discountPct: parseFloat(e.target.value) || 0 })}
                       />
                     </td>
@@ -233,7 +256,7 @@ export function InvoiceLinesEditor({
                         min={0}
                         className={cn(NUM_INPUT_CLASS, "bg-muted/20")}
                         value={line.taxPct || ""}
-                        readOnly={!!line.productId}
+                        readOnly={!manualEntry || !!line.productId}
                         onChange={(e) => update(line.id, { taxPct: parseFloat(e.target.value) || 0 })}
                       />
                     </td>
@@ -253,14 +276,16 @@ export function InvoiceLinesEditor({
                       </td>
                     )}
                     <td className="p-2 w-10">
-                      <button
-                        type="button"
-                        className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-red-50 text-red-600"
-                        onClick={() => removeRow(line.id)}
-                        aria-label="Remove line"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {manualEntry && (
+                        <button
+                          type="button"
+                          className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-red-50 text-red-600"
+                          onClick={() => removeRow(line.id)}
+                          aria-label="Remove line"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );

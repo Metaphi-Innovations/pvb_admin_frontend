@@ -5,7 +5,8 @@ export interface UOMMaster {
   uomId: string;           // Auto Generated, e.g. "UOM-0001"
   unitName: string;        // e.g. "Kilogram"
   shortName: string;       // e.g. "KG"
-  measuringUnit?: string;   // e.g. "Gram" (or reference unit)
+  uom?: string;            // e.g. "Gram" (or reference unit)
+  conversionUnit?: number; // e.g. 1000
   status: "active" | "inactive";
   createdBy: string;
   createdDate: string;
@@ -86,9 +87,10 @@ export function loadUOMMasters(): UOMMaster[] {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: SEED_VERSION, data: SEED }));
       return SEED;
     }
-    return (parsed.data as UOMMaster[]).map(item => ({
+    return (parsed.data as any[]).map(item => ({
       ...item,
-      measuringUnit: item.measuringUnit ?? ""
+      uom: item.uom ?? item.measuringUnit ?? "",
+      conversionUnit: item.conversionUnit ?? 1
     }));
   } catch {
     return SEED;
