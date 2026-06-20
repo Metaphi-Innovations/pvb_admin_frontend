@@ -209,8 +209,8 @@ export default function GSTPage() {
       result.sort((a, b) => {
         let aVal = a[sort.key as keyof GSTMaster];
         let bVal = b[sort.key as keyof GSTMaster];
-        if (aVal === undefined) aVal = "";
-        if (bVal === undefined) bVal = "";
+        if (aVal == null) aVal = "";
+        if (bVal == null) bVal = "";
         if (typeof aVal === "string") {
           aVal = aVal.toLowerCase();
           bVal = (bVal as string).toLowerCase();

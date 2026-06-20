@@ -8,13 +8,17 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Plus, Search, Check, ChevronsUpDown, Trash2 } from "lucide-react";
 import {
   applyProductToInvoiceLine,
-  calcLineAmounts,
+  calcGstLineSplit,
   createEmptyLine,
   recalculateLineItem,
   type InvoiceLineItem,
   type InvoiceProductOption,
 } from "../invoices-data";
 import { formatINR } from "../invoice-utils";
+import { MasterFetchedBadge } from "@/components/accounts/master-fetch/MasterFetchedBadge";
+
+const NUM_INPUT_CLASS =
+  "h-8 text-sm tabular-nums text-right min-w-[5.5rem] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
 
 function ProductSelect({
   products,
@@ -39,27 +43,27 @@ function ProductSelect({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="w-full h-7 px-2 text-xs text-left border border-border rounded-md bg-background flex items-center justify-between"
+          className="w-full h-8 px-2.5 text-sm text-left border border-border rounded-md bg-background flex items-center justify-between"
         >
           <span className={cn("truncate", !selected && "text-muted-foreground")}>
-            {selected ? `${selected.code} — ${selected.name}` : "Select product…"}
+            {selected ? `${selected.code} — ${selected.name}` : "Type or click to select an item…"}
           </span>
-          <ChevronsUpDown className="w-3 h-3 text-muted-foreground shrink-0" />
+          <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
         <div className="p-2 border-b">
           <div className="relative">
-            <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search…"
+              placeholder="Search products…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-7 text-xs pl-7"
+              className="h-8 text-sm pl-8"
             />
           </div>
         </div>
-        <div className="max-h-[180px] overflow-y-auto py-1">
+        <div className="max-h-[220px] overflow-y-auto py-1">
           {filtered.map((p) => (
             <button
               key={p.id}
@@ -70,13 +74,13 @@ function ProductSelect({
                 setSearch("");
               }}
               className={cn(
-                "w-full flex items-center gap-2 px-2 py-1.5 text-xs text-left hover:bg-muted/60",
+                "w-full flex items-center gap-2 px-2.5 py-2 text-sm text-left hover:bg-muted/60",
                 value === p.id && "bg-brand-50",
               )}
             >
               <span className="font-mono text-brand-700 shrink-0">{p.code}</span>
               <span className="flex-1 truncate">{p.name}</span>
-              {value === p.id && <Check className="w-3 h-3 text-brand-600" />}
+              {value === p.id && <Check className="w-3.5 h-3.5 text-brand-600" />}
             </button>
           ))}
         </div>
@@ -89,10 +93,12 @@ export function InvoiceLinesEditor({
   lines,
   products,
   onChange,
+  interstate = false,
 }: {
   lines: InvoiceLineItem[];
   products: InvoiceProductOption[];
   onChange: (lines: InvoiceLineItem[]) => void;
+  interstate?: boolean;
 }) {
   const update = (id: string, patch: Partial<InvoiceLineItem>) => {
     onChange(
@@ -113,40 +119,52 @@ export function InvoiceLinesEditor({
   const addRow = () => onChange([...lines, createEmptyLine()]);
   const removeRow = (id: string) => onChange(lines.filter((l) => l.id !== id));
 
+  const headers = interstate
+    ? ["Item Details", "HSN/SAC", "Quantity", "Unit", "Rate", "Discount %", "Amount", "GST %", "IGST", ""]
+    : ["Item Details", "HSN/SAC", "Quantity", "Unit", "Rate", "Discount %", "Amount", "GST %", "CGST", "SGST", ""];
+
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-muted-foreground">Line items</p>
-        <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addRow}>
-          <Plus className="w-3 h-3" /> Add Row
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <MasterFetchedBadge />
+          <span className="text-xs text-muted-foreground">Products from Product Master</span>
+        </div>
+        <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={addRow}>
+          <Plus className="w-3.5 h-3.5" /> Add New Row
         </Button>
       </div>
-      <div className="overflow-x-auto border border-border/60 rounded-lg">
-        <table className="w-full text-xs min-w-[920px]">
-          <thead className="bg-muted/30 border-b">
+
+      <div className="overflow-x-auto border border-border/60 rounded-lg bg-white">
+        <table className="w-full text-sm min-w-[960px]">
+          <thead className="bg-muted/40 border-b border-border/60">
             <tr>
-              {["Product / Service", "Description", "Qty", "Unit", "Unit Price", "Disc %", "Tax %", "Amount", ""].map(
-                (h) => (
-                  <th key={h || "x"} className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">
-                    {h}
-                  </th>
-                ),
-              )}
+              {headers.map((h) => (
+                <th
+                  key={h || "actions"}
+                  className={cn(
+                    "px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
+                    h && ["Quantity", "Rate", "Discount %", "Amount", "GST %", "CGST", "SGST", "IGST"].includes(h) && "text-right",
+                  )}
+                >
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {lines.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-6 text-center text-muted-foreground">
+                <td colSpan={headers.length} className="py-10 text-center text-sm text-muted-foreground">
                   Add at least one product or service line.
                 </td>
               </tr>
             ) : (
               lines.map((line) => {
-                const { amount } = calcLineAmounts(line);
+                const split = calcGstLineSplit(line, interstate);
                 return (
-                  <tr key={line.id} className="border-b border-border/40">
-                    <td className="p-1.5 min-w-[160px]">
+                  <tr key={line.id} className="border-b border-border/40 last:border-b-0">
+                    <td className="p-2 min-w-[260px]">
                       <ProductSelect
                         products={products}
                         value={line.productId}
@@ -154,72 +172,94 @@ export function InvoiceLinesEditor({
                       />
                       {!line.productId && (
                         <Input
-                          className="h-7 text-xs mt-1"
-                          placeholder="Or enter name"
+                          className="h-8 text-sm mt-1.5"
+                          placeholder="Or enter item name"
                           value={line.productName}
                           onChange={(e) => update(line.id, { productName: e.target.value })}
                         />
                       )}
                     </td>
-                    <td className="p-1.5">
+                    <td className="p-2 w-[100px]">
                       <Input
-                        className="h-7 text-xs min-w-[120px]"
-                        value={line.description}
-                        onChange={(e) => update(line.id, { description: e.target.value })}
+                        className="h-8 text-sm font-mono bg-muted/20"
+                        placeholder="HSN"
+                        value={line.hsn ?? ""}
+                        readOnly={!!line.productId}
+                        onChange={(e) => update(line.id, { hsn: e.target.value })}
                       />
                     </td>
-                    <td className="p-1.5 w-16">
+                    <td className="p-2 w-[100px]">
                       <Input
                         type="number"
                         min={0}
-                        className="h-7 text-xs"
+                        className={NUM_INPUT_CLASS}
                         value={line.qty || ""}
                         onChange={(e) => update(line.id, { qty: parseFloat(e.target.value) || 0 })}
                       />
                     </td>
-                    <td className="p-1.5 w-16">
+                    <td className="p-2 w-[88px]">
                       <Input
-                        className="h-7 text-xs"
+                        className="h-8 text-sm text-center bg-muted/20"
                         value={line.unit}
+                        readOnly={!!line.productId}
                         onChange={(e) => update(line.id, { unit: e.target.value })}
                       />
                     </td>
-                    <td className="p-1.5 w-24">
+                    <td className="p-2 w-[108px]">
                       <Input
                         type="number"
                         min={0}
-                        className="h-7 text-xs"
+                        className={NUM_INPUT_CLASS}
                         value={line.unitPrice || ""}
                         onChange={(e) => update(line.id, { unitPrice: parseFloat(e.target.value) || 0 })}
                       />
                     </td>
-                    <td className="p-1.5 w-16">
+                    <td className="p-2 w-[96px]">
                       <Input
                         type="number"
                         min={0}
                         max={100}
-                        className="h-7 text-xs"
+                        className={NUM_INPUT_CLASS}
                         value={line.discountPct || ""}
                         onChange={(e) => update(line.id, { discountPct: parseFloat(e.target.value) || 0 })}
                       />
                     </td>
-                    <td className="p-1.5 w-16">
+                    <td className="p-2 w-[120px] tabular-nums text-right font-medium whitespace-nowrap">
+                      {formatINR(split.taxable)}
+                    </td>
+                    <td className="p-2 w-[80px]">
                       <Input
                         type="number"
                         min={0}
-                        className="h-7 text-xs"
+                        className={cn(NUM_INPUT_CLASS, "bg-muted/20")}
                         value={line.taxPct || ""}
+                        readOnly={!!line.productId}
                         onChange={(e) => update(line.id, { taxPct: parseFloat(e.target.value) || 0 })}
                       />
                     </td>
-                    <td className="p-1.5 w-24 tabular-nums font-medium whitespace-nowrap">{formatINR(amount)}</td>
-                    <td className="p-1.5 w-8">
+                    {!interstate && (
+                      <>
+                        <td className="p-2 w-[100px] tabular-nums text-right text-muted-foreground whitespace-nowrap">
+                          {split.cgst > 0 ? formatINR(split.cgst) : "—"}
+                        </td>
+                        <td className="p-2 w-[100px] tabular-nums text-right text-muted-foreground whitespace-nowrap">
+                          {split.sgst > 0 ? formatINR(split.sgst) : "—"}
+                        </td>
+                      </>
+                    )}
+                    {interstate && (
+                      <td className="p-2 w-[100px] tabular-nums text-right text-muted-foreground whitespace-nowrap">
+                        {split.igst > 0 ? formatINR(split.igst) : "—"}
+                      </td>
+                    )}
+                    <td className="p-2 w-10">
                       <button
                         type="button"
-                        className="w-7 h-7 flex items-center justify-center rounded hover:bg-red-50 text-red-600"
+                        className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-red-50 text-red-600"
                         onClick={() => removeRow(line.id)}
+                        aria-label="Remove line"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </td>
                   </tr>

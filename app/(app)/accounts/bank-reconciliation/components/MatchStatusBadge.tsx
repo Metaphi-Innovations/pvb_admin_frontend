@@ -5,13 +5,20 @@ import type { StatusKey } from "@/lib/tokens";
 import type { BankEntryMatchStatus } from "../bank-reconciliation-data";
 
 const MAP: Record<BankEntryMatchStatus, { status: StatusKey; label: string }> = {
-  unmatched: { status: "pending", label: "Unmatched" },
+  unmatched: { status: "pending", label: "Uncategorized" },
+  partial: { status: "partial", label: "Partially Allocated" },
   matched: { status: "partial", label: "Matched" },
   reconciled: { status: "approved", label: "Reconciled" },
   ignored: { status: "closed", label: "Ignored" },
 };
 
-export function MatchStatusBadge({ status }: { status: BankEntryMatchStatus }) {
+export function MatchStatusBadge({
+  status,
+  computedLabel,
+}: {
+  status: BankEntryMatchStatus;
+  computedLabel?: string;
+}) {
   const m = MAP[status] ?? MAP.unmatched;
-  return <StatusBadge status={m.status} label={m.label} size="sm" />;
+  return <StatusBadge status={m.status} label={computedLabel ?? m.label} size="sm" />;
 }

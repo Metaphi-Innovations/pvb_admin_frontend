@@ -19,6 +19,7 @@ import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { StatusBadge, SectionTabs } from "./AccountsUI";
 import { cn } from "@/lib/utils";
+import { LedgerImpactPreview, type LedgerImpactLine } from "@/components/accounts/LedgerImpactPreview";
 
 export interface TransactionRow {
   id: string | number;
@@ -30,6 +31,7 @@ export interface TransactionRow {
   branch?: string;
   viewHref?: string;
   viewFields?: { label: string; value: string }[];
+  impactLines?: LedgerImpactLine[];
 }
 
 export interface TransactionListConfig<T> {
@@ -42,6 +44,18 @@ export interface TransactionListConfig<T> {
   statusTabs?: { id: string; label: string }[];
   getStatus?: (item: T) => string;
   getRow: (item: T) => TransactionRow;
+  /** Show Post for draft rows when provided */
+  onPost?: (id: string | number) => void;
+  /** Show Delete for draft rows when provided */
+  onDelete?: (id: string | number) => void;
+  canPost?: (row: TransactionRow) => boolean;
+  canDelete?: (row: TransactionRow) => boolean;
+  canEdit?: (row: TransactionRow) => boolean;
+}
+
+function isDraftStatus(status: string): boolean {
+  const s = status.toLowerCase();
+  return s === "draft" || s === "pending_approval";
 }
 
 export function TransactionListPage<T>({ config }: { config: TransactionListConfig<T> }) {
@@ -52,14 +66,22 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
   const [branch, setBranch] = useState("");
   const [statusTab, setStatusTab] = useState("all");
   const [viewRow, setViewRow] = useState<TransactionRow | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const allRows = useMemo(() => config.loadData().map(config.getRow), [config]);
+  const allRows = useMemo(
+    () => config.loadData().map(config.getRow),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [config, refreshKey],
+  );
+
+  const bump = () => setRefreshKey((k) => k + 1);
 
   const statusTabs = config.statusTabs ?? [
     { id: "all", label: "All" },
     { id: "draft", label: "Draft" },
     { id: "approved", label: "Approved" },
     { id: "posted", label: "Posted" },
+    { id: "sent", label: "Sent" },
     { id: "paid", label: "Paid" },
     { id: "cancelled", label: "Cancelled" },
   ];
@@ -94,6 +116,15 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
     }
     return list;
   }, [allRows, statusTab, search, dateFrom, dateTo, branch]);
+
+  const rowCanPost = (r: TransactionRow) =>
+    config.onPost && (config.canPost ? config.canPost(r) : isDraftStatus(r.status));
+
+  const rowCanDelete = (r: TransactionRow) =>
+    config.onDelete && (config.canDelete ? config.canDelete(r) : isDraftStatus(r.status));
+
+  const rowCanEdit = (r: TransactionRow) =>
+    config.editHref && (config.canEdit ? config.canEdit(r) : isDraftStatus(r.status));
 
   return (
     <>
@@ -132,6 +163,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
           </div>
         }
         layout="split"
+        className="h-full min-h-0"
       >
         <div className="flex-1 overflow-auto min-h-0">
           <table className="w-full text-table">
@@ -142,7 +174,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                 <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Party</th>
                 <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Amount</th>
                 <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
-                <th className="w-20" />
+                <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground min-w-[200px]">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -170,14 +202,54 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                       <StatusBadge status={r.status} />
                     </td>
                     <td className="px-4 py-2.5">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-[11px]"
-                        onClick={() => setViewRow(r)}
-                      >
-                        View
-                      </Button>
+                      <div className="flex items-center justify-end gap-1 flex-wrap">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-[11px]"
+                          onClick={() => setViewRow(r)}
+                        >
+                          View
+                        </Button>
+                        {rowCanEdit(r) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-[11px]"
+                            onClick={() => router.push(config.editHref!(r.id))}
+                          >
+                            Edit
+                          </Button>
+                        )}
+                        {rowCanPost(r) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-[11px] text-brand-700"
+                            onClick={() => {
+                              config.onPost!(r.id);
+                              bump();
+                            }}
+                          >
+                            Post
+                          </Button>
+                        )}
+                        {rowCanDelete(r) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-[11px] text-destructive"
+                            onClick={() => {
+                              if (window.confirm(`Delete ${r.number}?`)) {
+                                config.onDelete!(r.id);
+                                bump();
+                              }
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -210,6 +282,9 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                     <p className={cn("text-sm font-medium", f.label === "Amount" && "tabular-nums")}>{f.value}</p>
                   </div>
                 ))}
+                {viewRow.impactLines && viewRow.impactLines.length > 0 && (
+                  <LedgerImpactPreview title="Ledger Impact Preview" lines={viewRow.impactLines} className="mt-2" />
+                )}
               </>
             )}
           </SheetBody>
@@ -229,7 +304,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                 Full Details
               </Button>
             )}
-            {viewRow && config.editHref && (
+            {viewRow && rowCanEdit(viewRow) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -237,6 +312,35 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                 onClick={() => router.push(config.editHref!(viewRow.id))}
               >
                 Edit
+              </Button>
+            )}
+            {viewRow && rowCanPost(viewRow) && (
+              <Button
+                size="sm"
+                className="h-8 text-xs bg-brand-600 text-white"
+                onClick={() => {
+                  config.onPost!(viewRow.id);
+                  setViewRow(null);
+                  bump();
+                }}
+              >
+                Post
+              </Button>
+            )}
+            {viewRow && rowCanDelete(viewRow) && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs text-destructive"
+                onClick={() => {
+                  if (window.confirm(`Delete ${viewRow.number}?`)) {
+                    config.onDelete!(viewRow.id);
+                    setViewRow(null);
+                    bump();
+                  }
+                }}
+              >
+                Delete
               </Button>
             )}
           </SheetFooter>

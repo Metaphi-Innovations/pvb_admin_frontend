@@ -324,6 +324,8 @@ export default function HSNPage() {
 			result.sort((a, b) => {
 				let aVal = a[sort.key as keyof HSNMaster];
 				let bVal = b[sort.key as keyof HSNMaster];
+				if (aVal == null) aVal = "";
+				if (bVal == null) bVal = "";
 				if (typeof aVal === "string") {
 					aVal = aVal.toLowerCase();
 					bVal = (bVal as string).toLowerCase();

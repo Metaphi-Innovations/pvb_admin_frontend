@@ -4,6 +4,8 @@ import {
   canUserEditNode,
   isStructuralNode as hierarchyIsStructural,
 } from "@/lib/accounts/coa-hierarchy";
+import { isAddLedgerBlocked } from "@/lib/accounts/coa-add-ledger-policy";
+import { isMasterLinkedLedger } from "@/lib/accounts/coa-master-link";
 import {
   type AccountType,
   type ChartOfAccount,
@@ -36,6 +38,7 @@ export const NODE_LEVEL_LABELS: Record<CoaNodeLevel, string> = {
 export interface LedgerFormValues {
   ledgerName: string;
   alias: string;
+  description: string;
   parentGroupId: number | null;
   openingBalance: string;
   balanceType: "Debit" | "Credit";
@@ -43,12 +46,14 @@ export interface LedgerFormValues {
   tdsApplicable: boolean;
   costCenterApplicable: boolean;
   bankAccountFlag: boolean;
+  bankGroupFlag?: boolean;
   status: "active" | "inactive";
 }
 
 export const DEFAULT_LEDGER_FORM: LedgerFormValues = {
   ledgerName: "",
   alias: "",
+  description: "",
   parentGroupId: null,
   openingBalance: "0",
   balanceType: "Debit",
@@ -134,6 +139,7 @@ export function hasChildSubGroups(records: ChartOfAccount[], nodeId: number): bo
 }
 
 export function canAddLedgerUnder(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
+  if (isAddLedgerBlocked(node, records)) return false;
   if (node.nodeLevel === "sub_group") return !hasChildSubGroups(records, node.id);
   if (node.nodeLevel === "account_group") return !hasSubGroups(records, node.id);
   return false;
@@ -289,6 +295,7 @@ export function ledgerToForm(record: ChartOfAccount): LedgerFormValues {
   return {
     ledgerName: record.accountName,
     alias: record.alias ?? "",
+    description: record.description ?? "",
     parentGroupId: record.parentAccountId,
     openingBalance: String(record.openingBalance),
     balanceType: record.balanceType,
@@ -319,7 +326,7 @@ export function formToLedger(
     nodeLevel: "ledger",
     parentAccountId: form.parentGroupId,
     parentAccount: parentName,
-    description: existing?.description ?? "",
+    description: form.description.trim() || existing?.description || "",
     status: form.status,
     usedIn: existing?.usedIn ?? [],
     isSystem: false,
@@ -368,6 +375,7 @@ export function canDeleteLedger(record: ChartOfAccount): boolean {
 }
 
 export function canEditLedger(record: ChartOfAccount): boolean {
+  if (isMasterLinkedLedger(record)) return false;
   return canUserEditNode(record);
 }
 

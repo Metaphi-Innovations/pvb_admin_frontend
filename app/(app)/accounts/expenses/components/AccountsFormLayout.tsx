@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 
@@ -12,21 +11,23 @@ export function AccountsFormLayout({
   code,
   children,
   footer,
+  fullWidth = false,
 }: {
   title: string;
   breadcrumb: { label: string; href: string }[];
   code?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /** When true, form uses full content width (Zoho Books-style documents). */
+  fullWidth?: boolean;
 }) {
   const router = useRouter();
   const backHref = breadcrumb[breadcrumb.length - 1]?.href ?? "/accounts";
 
   return (
-    <AppLayout noPadding>
-      <div className="min-h-[calc(100vh-104px)] bg-background flex flex-col">
+    <div className="min-h-full bg-background flex flex-col -m-3">
         <header className="bg-white/95 backdrop-blur-sm border-b border-border/60 px-6 py-3 flex-shrink-0 sticky top-0 z-20">
-          <div className="max-w-[1100px] mx-auto w-full flex items-center justify-between gap-4">
+          <div className={`${fullWidth ? "w-full max-w-none" : "max-w-[1100px]"} mx-auto w-full flex items-center justify-between gap-4`}>
             <div className="flex items-center gap-3 min-w-0">
               <button
                 type="button"
@@ -59,9 +60,8 @@ export function AccountsFormLayout({
           </div>
         </header>
         <main className="flex-1 overflow-y-auto px-6 py-4">
-          <div className="max-w-[1100px] mx-auto">{children}</div>
+          <div className={fullWidth ? "w-full max-w-none" : "max-w-[1100px] mx-auto"}>{children}</div>
         </main>
-      </div>
-    </AppLayout>
+    </div>
   );
 }

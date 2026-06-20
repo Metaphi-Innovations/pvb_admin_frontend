@@ -20,8 +20,12 @@ import { loadPurchaseInvoices } from "../purchase-invoices/purchase-invoices-dat
 import { loadInvoices } from "../invoices/invoices-data";
 import { loadCreditNotes } from "../credit-notes/credit-notes-data";
 import { loadDebitNotes } from "../debit-notes/debit-notes-data";
+import { formatReconciliationBankOption } from "@/lib/accounts/bank-account-display";
+import { loadBankAccountsForReconciliation } from "@/lib/accounts/bank-accounts-data";
+import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
+import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
 
-export type BankEntryMatchStatus = "unmatched" | "matched" | "reconciled" | "ignored";
+export type BankEntryMatchStatus = "unmatched" | "partial" | "matched" | "reconciled" | "ignored";
 export type BankEntryType = "debit" | "credit";
 export type MatchModule =
   | "payments"
@@ -31,6 +35,49 @@ export type MatchModule =
   | "credit_note"
   | "debit_note"
   | "other";
+
+/** Zoho-style bank categorization for unmatched statement lines */
+export type BankCategorization =
+  | "customer_receipt"
+  | "vendor_payment"
+  | "expense"
+  | "employee_claim_payment"
+  | "bank_charges"
+  | "interest_income"
+  | "transfer";
+
+export const BANK_CATEGORIZATION_OPTIONS: { value: BankCategorization; label: string; hint: string }[] = [
+  { value: "customer_receipt", label: "Customer Receipt", hint: "Match to sales invoice or customer receipt" },
+  { value: "vendor_payment", label: "Vendor Payment", hint: "Match to purchase bill or vendor payment" },
+  { value: "expense", label: "Expense", hint: "Allocate to expense ledger" },
+  { value: "employee_claim_payment", label: "Employee Claim Payment", hint: "Match to approved HR claim" },
+  { value: "bank_charges", label: "Bank Charges", hint: "Bank charges / fees ledger" },
+  { value: "interest_income", label: "Interest Income", hint: "Interest earned on deposit" },
+  { value: "transfer", label: "Transfer", hint: "Inter-account or contra transfer" },
+];
+
+export function categorizationToModule(cat: BankCategorization): MatchModule {
+  switch (cat) {
+    case "customer_receipt":
+      return "sales";
+    case "vendor_payment":
+      return "purchase";
+    case "employee_claim_payment":
+      return "payments";
+    case "transfer":
+      return "journal";
+    case "expense":
+    case "bank_charges":
+    case "interest_income":
+    default:
+      return "other";
+  }
+}
+
+export function categorizationLabel(cat: BankCategorization | "" | string): string {
+  if (!cat) return "—";
+  return BANK_CATEGORIZATION_OPTIONS.find((o) => o.value === cat)?.label ?? cat;
+}
 
 export const MATCH_MODULE_OPTIONS: { value: MatchModule; label: string }[] = [
   { value: "payments", label: "Payments" },
@@ -44,10 +91,24 @@ export const MATCH_MODULE_OPTIONS: { value: MatchModule; label: string }[] = [
 
 export const MATCH_STATUS_OPTIONS: BankEntryMatchStatus[] = [
   "unmatched",
+  "partial",
   "matched",
   "reconciled",
   "ignored",
 ];
+
+export interface BankReconStoredAdjustment {
+  id: string;
+  adjustmentTypeId: string;
+  ledgerId: number;
+  ledgerName: string;
+  amount: number;
+}
+
+export interface BankReconMatchingPayload {
+  allocations: Record<string, number>;
+  adjustments: BankReconStoredAdjustment[];
+}
 
 export interface BankAccount {
   id: number;
@@ -80,6 +141,7 @@ export interface BankStatementEntry {
   referenceNo: string;
   entryType: BankEntryType;
   matchedModule: MatchModule | "";
+  bankCategory: BankCategorization | "";
   matchedRecordId: number | null;
   matchedRecordLabel: string;
   ledgerId: number | null;
@@ -89,6 +151,8 @@ export interface BankStatementEntry {
   reconciliationStatus: BankEntryMatchStatus;
   reconciledBy: string;
   reconciledAt: string;
+  /** JSON snapshot of invoice allocations + adjustments for reload */
+  matchingPayload?: string;
 }
 
 const BANK_ACCOUNTS_KEY = "ds_bank_reconciliation_accounts_v1";
@@ -120,7 +184,22 @@ function saveList<T>(key: string, list: T[]) {
 }
 
 export function loadBankAccounts(): BankAccount[] {
-  return getOrSeed(BANK_ACCOUNTS_KEY, BANK_ACCOUNT_SEED).filter((a) => a.status === "active");
+  const unified = loadBankAccountsForReconciliation();
+  if (unified.length > 0) {
+    return unified.map((a) => ({
+      id: a.id,
+      name: a.displayLabel,
+      accountNumber: a.accountNumber,
+      bankName: a.bankName,
+      status: a.status,
+    }));
+  }
+  return getOrSeed(BANK_ACCOUNTS_KEY, BANK_ACCOUNT_SEED)
+    .filter((a) => a.status === "active")
+    .map((a) => ({
+      ...a,
+      name: formatReconciliationBankOption({ name: a.name, accountNumber: a.accountNumber }),
+    }));
 }
 
 export function loadBankStatements(): BankStatement[] {
@@ -367,6 +446,7 @@ function mapRowToEntry(
     referenceNo,
     entryType,
     matchedModule: "",
+    bankCategory: "",
     matchedRecordId: null,
     matchedRecordLabel: "",
     ledgerId: null,
@@ -485,6 +565,7 @@ export function getStatementStats(statementId: number) {
   const entries = loadBankEntries().filter((e) => e.statementId === statementId);
   const total = entries.length;
   const matched = entries.filter((e) => e.matchStatus === "matched").length;
+  const partial = entries.filter((e) => e.matchStatus === "partial").length;
   const reconciled = entries.filter((e) => e.reconciliationStatus === "reconciled").length;
   const ignored = entries.filter((e) => e.matchStatus === "ignored").length;
   const unmatched = entries.filter((e) => e.matchStatus === "unmatched").length;
@@ -634,6 +715,79 @@ export function searchModuleRecords(module: MatchModule, query: string): ModuleR
   }
 }
 
+export interface UnpaidInvoiceOption {
+  id: number;
+  label: string;
+  party: string;
+  partyId: number | null;
+  balance: number;
+  dueDate: string;
+  invoiceDate: string;
+  taxableAmount: number;
+  taxAmount: number;
+  grandTotal: number;
+}
+
+export function listUnpaidSalesInvoicesForReceipt(): UnpaidInvoiceOption[] {
+  return loadInvoices()
+    .filter((i) => i.invoiceStatus === "sent" && i.balanceAmount > 0.01)
+    .map((i) => ({
+      id: i.id,
+      label: i.invoiceNo,
+      party: i.customerName,
+      partyId: i.customerId,
+      balance: i.balanceAmount,
+      dueDate: i.dueDate,
+      invoiceDate: i.invoiceDate,
+      taxableAmount: Math.max(0, (i.grandTotal ?? 0) - (i.taxAmount ?? 0)),
+      taxAmount: i.taxAmount ?? 0,
+      grandTotal: i.grandTotal ?? 0,
+    }))
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+}
+
+export function listUnpaidSalesInvoicesForCustomer(customerId?: number, customerName?: string): UnpaidInvoiceOption[] {
+  const all = listUnpaidSalesInvoicesForReceipt();
+  if (!customerId && !customerName?.trim()) return all;
+  return all.filter((i) => {
+    if (customerId && i.partyId === customerId) return true;
+    if (customerName && i.party.toLowerCase() === customerName.trim().toLowerCase()) return true;
+    return false;
+  });
+}
+
+export function listUnpaidPurchaseInvoicesForPayment(): UnpaidInvoiceOption[] {
+  return loadPurchaseInvoices()
+    .filter((p) => p.grandTotal - (p.amountPaid ?? 0) > 0.01)
+    .map((p) => {
+      const balance = Math.max(0, p.grandTotal - (p.amountPaid ?? 0));
+      const taxable = Math.max(0, p.grandTotal - (p.taxAmount ?? 0));
+      return {
+        id: p.id,
+        label: p.invoiceNo,
+        party: p.vendorName,
+        partyId: p.vendorId,
+        balance,
+        dueDate: p.invoiceDate,
+        invoiceDate: p.invoiceDate,
+        taxableAmount: taxable,
+        taxAmount: p.taxAmount ?? 0,
+        grandTotal: p.grandTotal,
+      };
+    })
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+}
+
+export function listUnpaidPurchaseInvoicesForVendor(vendorId?: number, vendorName?: string): UnpaidInvoiceOption[] {
+  const all = listUnpaidPurchaseInvoicesForPayment();
+  if (!vendorId && !vendorName?.trim()) return all;
+  return all.filter((i) => {
+    if (vendorId && i.partyId === vendorId) return true;
+    if (vendorName && i.party.toLowerCase() === vendorName.trim().toLowerCase()) return true;
+    return false;
+  });
+}
+
 export function matchModuleLabel(module: MatchModule | "" | string): string {
   if (!module) return "—";
   if (module === "expenses") return "Journal";
@@ -643,11 +797,14 @@ export function matchModuleLabel(module: MatchModule | "" | string): string {
 export interface MatchEntryInput {
   entryId: number;
   matchedModule: MatchModule;
+  bankCategory?: BankCategorization | "";
   matchedRecordId?: number | null;
   matchedRecordLabel?: string;
   ledgerId?: number | null;
   ledgerName?: string;
   remarks?: string;
+  matchingPayload?: BankReconMatchingPayload;
+  matchStatus?: BankEntryMatchStatus;
 }
 
 export function saveEntryMatch(input: MatchEntryInput): BankStatementEntry | null {
@@ -656,16 +813,28 @@ export function saveEntryMatch(input: MatchEntryInput): BankStatementEntry | nul
   if (idx < 0) return null;
 
   const entry = entries[idx];
+  const nextStatus = input.matchStatus ?? "matched";
+  const payloadJson = input.matchingPayload
+    ? JSON.stringify(input.matchingPayload)
+    : entry.matchingPayload;
+
   entries[idx] = {
     ...entry,
     matchedModule: input.matchedModule,
+    bankCategory: input.bankCategory ?? entry.bankCategory ?? "",
     matchedRecordId: input.matchedRecordId ?? null,
     matchedRecordLabel: input.matchedRecordLabel ?? "",
     ledgerId: input.ledgerId ?? null,
     ledgerName: input.ledgerName ?? "",
     remarks: input.remarks ?? entry.remarks,
-    matchStatus: "matched",
-    reconciliationStatus: entry.reconciliationStatus === "reconciled" ? "reconciled" : "matched",
+    matchStatus: nextStatus,
+    reconciliationStatus:
+      entry.reconciliationStatus === "reconciled" && nextStatus === "matched"
+        ? "reconciled"
+        : nextStatus === "partial"
+          ? "partial"
+          : nextStatus,
+    matchingPayload: payloadJson,
   };
   saveBankEntries(entries);
   return entries[idx];
@@ -679,9 +848,12 @@ export function confirmEntryReconciliation(entryId: number): BankStatementEntry 
 
   const canReconcile =
     entry.matchStatus === "matched" &&
+    entry.reconciliationStatus !== "partial" &&
     (entry.matchedModule === "other"
       ? entry.ledgerId != null
-      : entry.matchedModule && entry.matchedRecordId != null);
+      : entry.matchedModule === "sales" || entry.matchedModule === "purchase"
+        ? entry.matchedRecordId != null || !!entry.matchingPayload
+        : entry.matchedModule && entry.matchedRecordId != null);
 
   if (!canReconcile) return null;
 
@@ -719,6 +891,7 @@ export function resetEntryMatch(entryId: number): BankStatementEntry | null {
   entries[idx] = {
     ...entries[idx],
     matchedModule: "",
+    bankCategory: "",
     matchedRecordId: null,
     matchedRecordLabel: "",
     ledgerId: null,
@@ -728,6 +901,7 @@ export function resetEntryMatch(entryId: number): BankStatementEntry | null {
     reconciliationStatus: "unmatched",
     reconciledBy: "",
     reconciledAt: "",
+    matchingPayload: undefined,
   };
   saveBankEntries(entries);
   return entries[idx];
@@ -764,6 +938,7 @@ export function createLedgerQuick(input: {
   const form: LedgerFormValues = {
     ledgerName: input.ledgerName.trim(),
     alias: "",
+    description: "",
     parentGroupId,
     openingBalance: "0",
     balanceType:
@@ -772,6 +947,7 @@ export function createLedgerQuick(input: {
     tdsApplicable: false,
     costCenterApplicable: false,
     bankAccountFlag: input.accountType === "Asset",
+    bankGroupFlag: false,
     status: "active",
   };
   const err = validateLedgerForm(form, records);
@@ -790,4 +966,60 @@ export function ledgerSearchOptions(query: string): { id: number; label: string 
     .filter((l) => l.status === "active" && (!q || l.accountName.toLowerCase().includes(q)))
     .slice(0, 50)
     .map((l) => ({ id: l.id, label: l.accountName }));
+}
+
+export function expenseLedgerSearchOptions(query: string): { id: number; label: string }[] {
+  const q = query.trim().toLowerCase();
+  return getCoaLedgers()
+    .filter(
+      (l) =>
+        l.status === "active" &&
+        l.accountType === "Expense" &&
+        (!q || l.accountName.toLowerCase().includes(q) || l.accountCode.toLowerCase().includes(q)),
+    )
+    .slice(0, 50)
+    .map((l) => ({ id: l.id, label: l.accountName }));
+}
+
+export function incomeLedgerSearchOptions(query: string): { id: number; label: string }[] {
+  const q = query.trim().toLowerCase();
+  return getCoaLedgers()
+    .filter(
+      (l) =>
+        l.status === "active" &&
+        l.accountType === "Income" &&
+        (!q || l.accountName.toLowerCase().includes(q) || l.accountCode.toLowerCase().includes(q)),
+    )
+    .slice(0, 50)
+    .map((l) => ({ id: l.id, label: l.accountName }));
+}
+
+export const WITHDRAWAL_CATEGORIES: { value: BankCategorization; label: string }[] = [
+  { value: "vendor_payment", label: "Vendor Payment" },
+  { value: "expense", label: "Expense" },
+  { value: "employee_claim_payment", label: "Employee Claim Payment" },
+  { value: "bank_charges", label: "Bank Charges" },
+  { value: "transfer", label: "Transfer" },
+];
+
+export const DEPOSIT_CATEGORIES: { value: BankCategorization; label: string }[] = [
+  { value: "customer_receipt", label: "Customer Payment" },
+  { value: "interest_income", label: "Interest Income" },
+  { value: "transfer", label: "Transfer" },
+];
+
+export function customerSearchOptions(query: string): { id: number; label: string }[] {
+  const q = query.trim().toLowerCase();
+  return loadCustomers()
+    .filter((c) => c.status === "active" && (!q || c.customerName.toLowerCase().includes(q)))
+    .slice(0, 50)
+    .map((c) => ({ id: c.id, label: c.customerName }));
+}
+
+export function vendorSearchOptions(query: string): { id: number; label: string }[] {
+  const q = query.trim().toLowerCase();
+  return loadVendors()
+    .filter((v) => v.status === "active" && (!q || v.vendorName.toLowerCase().includes(q)))
+    .slice(0, 50)
+    .map((v) => ({ id: v.id, label: v.vendorName }));
 }

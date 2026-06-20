@@ -15,6 +15,7 @@ import {
   formValuesToCustomer,
   type CustomerFormValues,
 } from "../../components/CustomerForm";
+import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
 import { hasCustomerPermission } from "../../customer-permissions";
 
 interface ToastState {
@@ -111,6 +112,9 @@ export default function EditCustomerPage() {
     });
 
     saveCustomers(list.map((c) => (c.id === updated.id ? updated : c)));
+    if (updated.status === "active") {
+      ensureCustomerLedgerFromMaster(updated);
+    }
     setToast({ msg: "Customer updated successfully.", type: "success" });
     setTimeout(() => router.push(`/masters/customers/${id}`), 900);
   };
