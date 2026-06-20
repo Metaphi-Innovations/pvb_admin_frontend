@@ -36,6 +36,12 @@ export interface ChartOfAccount {
   tdsApplicable: boolean;
   costCenterApplicable: boolean;
   bankAccountFlag: boolean;
+  /** Bank name container under Bank Accounts — grouping only, not postable */
+  bankGroupFlag?: boolean;
+  /** ERP auto-created ledger — edit via source master only */
+  isSystemGenerated?: boolean;
+  erpSourceModule?: string;
+  erpSourceId?: number;
   createdBy: string;
   updatedBy: string;
 }
@@ -103,6 +109,7 @@ const REMOVED_SEED_LEDGER_IDS = new Set([
 ]);
 
 const REMOVED_SEED_LEDGER_NAMES = new Set([
+  // legacy v1-v4 names
   "hdfc bank",
   "icici bank",
   "customer a",
@@ -111,6 +118,15 @@ const REMOVED_SEED_LEDGER_NAMES = new Set([
   "office rent",
   "salary expense",
   "office cash",
+  // v7 generic names replaced by v8 specific ledgers
+  "retail sales",
+  "distributor sales",
+  "service revenue",
+  "commission income",
+  "office expense",
+  "marketing expense",
+  "professional fees",
+  "bank charges",
 ]);
 
 function normalizeLedger(r: ChartOfAccount): ChartOfAccount {
@@ -119,6 +135,7 @@ function normalizeLedger(r: ChartOfAccount): ChartOfAccount {
     alias: r.alias ?? "",
     costCenterApplicable: r.costCenterApplicable ?? false,
     bankAccountFlag: r.bankAccountFlag ?? false,
+    bankGroupFlag: r.bankGroupFlag ?? false,
     openingBalance: r.openingBalance ?? 0,
     balanceType: r.balanceType ?? "Debit",
     gstApplicable: r.gstApplicable ?? false,

@@ -1,9 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Switch } from "@/components/ui/switch";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
-import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import {
+  ACCOUNTING_SETTINGS_HREF,
+  accountingSettingsSetupLinks,
+  accountsBreadcrumb,
+} from "@/lib/accounts/accounts-nav";
 import {
   loadAccountingSettings,
   saveAccountingSettings,
@@ -14,6 +19,7 @@ import { loadLedgerMappings } from "@/lib/accounts/ledger-mappings";
 export default function AccountingSettingsPageClient() {
   const [settings, setSettings] = useState(loadAccountingSettings());
   const [mappings] = useState(loadLedgerMappings());
+  const setupLinks = accountingSettingsSetupLinks();
 
   const update = (patch: Partial<AccountingSettings>) => {
     const next = { ...settings, ...patch };
@@ -23,15 +29,64 @@ export default function AccountingSettingsPageClient() {
 
   return (
     <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Masters", "Accounting Settings")}
+      breadcrumbs={accountsBreadcrumb("Masters", "Accounting Settings", ACCOUNTING_SETTINGS_HREF)}
       title="Accounting Settings"
-      description="Auto-posting rules, approval workflow and ERP ledger mapping configuration."
+      description="Setup and configuration for financial years, tax, voucher numbering and posting rules."
       layout="standard"
     >
       <div className="p-5 space-y-6 overflow-auto">
         <section className="space-y-3">
           <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground border-b border-border/60 pb-2">
-            Auto-Posting (ERP Integration)
+            Setup
+          </h2>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {setupLinks.map((link) => {
+              const Icon = link.icon;
+              const isOnPageAnchor = link.href.startsWith(`${ACCOUNTING_SETTINGS_HREF}#`);
+              const inner = (
+                <div className="flex items-start gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 text-brand-700 flex-shrink-0">
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-foreground">{link.label}</p>
+                    {link.description ? (
+                      <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground truncate">
+                        {link.description}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              );
+
+              if (isOnPageAnchor) {
+                return (
+                  <a
+                    key={link.label}
+                    href={link.href}
+                    className="rounded-lg border border-border bg-white p-3 transition-colors hover:border-brand-300 hover:bg-brand-50/30"
+                  >
+                    {inner}
+                  </a>
+                );
+              }
+
+              return (
+                <Link
+                  key={link.label}
+                  href={link.href}
+                  className="rounded-lg border border-border bg-white p-3 transition-colors hover:border-brand-300 hover:bg-brand-50/30"
+                >
+                  {inner}
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+
+        <section id="posting-defaults" className="space-y-3 scroll-mt-4">
+          <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground border-b border-border/60 pb-2">
+            Posting Defaults
           </h2>
           {(
             [
@@ -50,9 +105,9 @@ export default function AccountingSettingsPageClient() {
           ))}
         </section>
 
-        <section className="space-y-3">
+        <section id="accounting-preferences" className="space-y-3 scroll-mt-4">
           <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground border-b border-border/60 pb-2">
-            Voucher Workflow
+            Accounting Preferences
           </h2>
           <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 p-3">
             <div>
@@ -64,30 +119,30 @@ export default function AccountingSettingsPageClient() {
               onCheckedChange={(v) => update({ requireVoucherApproval: v })}
             />
           </div>
-        </section>
 
-        <section className="space-y-3">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground border-b border-border/60 pb-2">
-            Ledger Mappings
-          </h2>
-          <table className="w-full text-table border border-border/60 rounded-lg overflow-hidden">
-            <thead className="bg-muted/20">
-              <tr>
-                <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Key</th>
-                <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Target Sub-Group</th>
-                <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Module</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mappings.map((m) => (
-                <tr key={m.mappingKey} className="border-t border-border/40">
-                  <td className="px-3 py-2 text-xs font-mono">{m.mappingKey}</td>
-                  <td className="px-3 py-2 text-xs">{m.subGroupName}</td>
-                  <td className="px-3 py-2 text-xs capitalize">{m.module}</td>
+          <div className="space-y-2">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Ledger Mappings
+            </h3>
+            <table className="w-full text-table border border-border/60 rounded-lg overflow-hidden">
+              <thead className="bg-muted/20">
+                <tr>
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Key</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Target Sub-Group</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Module</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {mappings.map((m) => (
+                  <tr key={m.mappingKey} className="border-t border-border/40">
+                    <td className="px-3 py-2 text-xs font-mono">{m.mappingKey}</td>
+                    <td className="px-3 py-2 text-xs">{m.subGroupName}</td>
+                    <td className="px-3 py-2 text-xs capitalize">{m.module}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       </div>
     </AccountsPageShell>

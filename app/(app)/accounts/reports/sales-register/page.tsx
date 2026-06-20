@@ -6,7 +6,7 @@ import {
   AccountsReportShell,
   ReportFilterBar,
 } from "@/components/accounts/AccountsReportShell";
-import { SALES_REGISTER_SEED } from "@/lib/accounts/accounts-mock-data";
+import { buildSalesRegisterRows } from "@/lib/accounts/register-data";
 import { formatMoney } from "@/lib/accounts/money-format";
 
 export default function SalesRegisterPage() {
@@ -14,9 +14,14 @@ export default function SalesRegisterPage() {
   const [dateTo, setDateTo] = useState("2026-06-30");
   const [branch, setBranch] = useState("");
 
+  const source = useMemo(
+    () => buildSalesRegisterRows(dateFrom, dateTo),
+    [dateFrom, dateTo],
+  );
+
   const rows = useMemo(
     () =>
-      SALES_REGISTER_SEED.map((r) => ({
+      source.map((r) => ({
         docNo: r.docNo,
         date: r.date,
         party: r.party,
@@ -25,19 +30,20 @@ export default function SalesRegisterPage() {
         total: formatMoney(r.total),
         status: r.status,
       })),
-    [],
+    [source],
   );
 
-  const totalSales = SALES_REGISTER_SEED.reduce((s, r) => s + r.total, 0);
+  const totalSales = source.reduce((s, r) => s + r.total, 0);
 
   return (
     <AccountsReportShell
+      section="Sales"
       title="Sales Register"
       description="Register of sales invoices with taxable value and tax breakup."
       kpis={[
         { label: "Documents", value: String(rows.length), icon: FileText, accent: true },
         { label: "Total Sales", value: formatMoney(totalSales), icon: IndianRupee },
-        { label: "Total Tax", value: formatMoney(SALES_REGISTER_SEED.reduce((s, r) => s + r.tax, 0)), icon: Receipt },
+        { label: "Total Tax", value: formatMoney(source.reduce((s, r) => s + r.tax, 0)), icon: Receipt },
       ]}
       filters={
         <ReportFilterBar

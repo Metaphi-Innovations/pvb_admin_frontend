@@ -15,6 +15,7 @@ import {
   todayStr,
   validateVendorForm,
 } from "../../vendor-data";
+import { ensureVendorLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
 import { CURRENT_USER } from "@/lib/procurement/config";
 
 function Toast({ msg, type, onDismiss }: { msg: string; type: "success" | "error"; onDismiss: () => void }) {
@@ -69,6 +70,9 @@ export default function EditVendorPage() {
       updatedDate: todayStr(),
     });
     saveVendors(loadVendors().map((v) => (v.id === id ? updated : v)));
+    if (updated.status === "active") {
+      ensureVendorLedgerFromMaster(updated);
+    }
     setToast({ msg: "Vendor updated.", type: "success" });
     setTimeout(() => router.push(`/masters/vendors/${id}`), 700);
   };

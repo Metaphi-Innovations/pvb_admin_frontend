@@ -9,8 +9,12 @@ import {
   ACCOUNTS_NAV_GROUPS,
   CHART_OF_ACCOUNTS_HREF,
   isAccountsNavActive,
+  resolveAccountsNavGroupId,
   type AccountsNavGroup,
 } from "@/lib/accounts/accounts-nav";
+import { ACCOUNTS_SCROLL_PANEL_CLASS } from "@/lib/accounts/accounts-layout-constants";
+import { seedAccountsDemoData } from "@/lib/accounts/accounts-demo-seed";
+import { ensureGstAccountingLedgers } from "@/lib/accounts/gst-accounting";
 import { CoaSidebarNav } from "./CoaSidebarNav";
 
 interface AccountsModuleShellProps {
@@ -72,7 +76,7 @@ function NavGroup({
           open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
         )}
       >
-        <div className="overflow-hidden">
+        <div className="overflow-hidden min-h-0">
           <div className="mt-1 ml-1 space-y-0.5 border-l border-border/50 pl-2">
             {group.items.map((item) => {
               const active = isAccountsNavActive(pathname, item.href);
@@ -113,19 +117,24 @@ function NavGroup({
 export function AccountsModuleShell({ children }: AccountsModuleShellProps) {
   const pathname = usePathname();
 
-  const activeGroupId = useMemo(() => {
-    for (const group of ACCOUNTS_NAV_GROUPS) {
-      if (group.items.some((item) => isAccountsNavActive(pathname, item.href))) {
-        return group.id;
-      }
-    }
-    return "masters";
-  }, [pathname]);
+  const activeGroupId = useMemo(() => resolveAccountsNavGroupId(pathname), [pathname]);
+
+  useEffect(() => {
+    seedAccountsDemoData();
+    ensureGstAccountingLedgers();
+  }, []);
 
   return (
-    <div className="flex flex-1 min-h-0 w-full">
-      <aside className="w-[min(380px,32vw)] min-w-[340px] flex-shrink-0 flex flex-col bg-white border-r border-border/80">
-        <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2.5 py-4">
+    <div className="flex h-full min-h-0 w-full overflow-hidden">
+      {/* Left: accounting navigation + COA tree — independent scroll */}
+      <aside className="w-[min(380px,32vw)] min-w-[340px] flex-shrink-0 flex flex-col h-full min-h-0 overflow-hidden bg-white border-r border-border/80">
+        <div className="flex-shrink-0 px-3 py-3 border-b border-border/60">
+          <p className="text-xs font-semibold text-brand-800">Accounting</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            Masters · Transactions · Receivables · Payables · Banking · Reports
+          </p>
+        </div>
+        <nav className={cn(ACCOUNTS_SCROLL_PANEL_CLASS, "px-2.5 py-3")}>
           {ACCOUNTS_NAV_GROUPS.map((group) => (
             <NavGroup
               key={group.id}
@@ -136,8 +145,10 @@ export function AccountsModuleShell({ children }: AccountsModuleShellProps) {
           ))}
         </nav>
       </aside>
-      <main className="flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col bg-slate-50/40 px-4 py-3">
-        {children}
+
+      {/* Right: page content — independent scroll */}
+      <main className="flex-1 min-w-0 min-h-0 h-full overflow-hidden flex flex-col bg-slate-50/40">
+        <div className={cn(ACCOUNTS_SCROLL_PANEL_CLASS, "px-4 py-3")}>{children}</div>
       </main>
     </div>
   );

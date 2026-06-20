@@ -30,6 +30,8 @@ import {
   MoreVertical,
   Pencil,
   Plus,
+  Receipt,
+  Send,
   XCircle,
 } from "lucide-react";
 import { SectionTabs } from "../components/AccountsUI";
@@ -40,6 +42,7 @@ import {
   getInvoiceRowActions,
   listInvoiceCreators,
   loadInvoices,
+  markInvoiceSent,
   receiveInvoicePayment,
   type InvoiceRecord,
 } from "./invoices-data";
@@ -280,6 +283,30 @@ export default function InvoicesPageClient() {
                                     onClick={() => setCancelTarget(r)}
                                   >
                                     <XCircle className="w-3.5 h-3.5" /> Cancel
+                                  </DropdownMenuItem>
+                                );
+                              if (a === "post")
+                                return (
+                                  <DropdownMenuItem
+                                    key="post"
+                                    className="text-xs gap-2 text-brand-700"
+                                    onClick={() => {
+                                      markInvoiceSent(r.id);
+                                      refresh();
+                                    }}
+                                  >
+                                    <Send className="w-3.5 h-3.5" /> Post Invoice
+                                  </DropdownMenuItem>
+                                );
+                              if (a === "credit_note")
+                                return (
+                                  <DropdownMenuItem key="credit_note" asChild>
+                                    <Link
+                                      href={`/accounts/transactions/credit-notes/new?invoiceId=${r.id}`}
+                                      className="text-xs gap-2"
+                                    >
+                                      <Receipt className="w-3.5 h-3.5" /> Create Credit Note
+                                    </Link>
                                   </DropdownMenuItem>
                                 );
                               return null;

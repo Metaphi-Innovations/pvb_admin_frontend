@@ -15,7 +15,7 @@ export default function CustomerAgeingClient() {
 
   return (
     <AccountsWorkbenchPage
-      section="Receivables"
+      section="Sales"
       title="Customer Ageing"
       description="Age-wise analysis of customer outstanding balances."
       columns={[

@@ -7,13 +7,19 @@ import { RecordDetailLayout, type RecordDetailLayoutProps } from "./RecordDetail
 export type RecordDetailPageProps = RecordDetailLayoutProps & {
   /** Optional alert/banner above main content (e.g. blocked reason) */
   alert?: React.ReactNode;
+  /** When true, skip AppLayout wrapper (use inside Accounts module shell) */
+  embedded?: boolean;
 };
 
-export function RecordDetailPage({ alert, ...layoutProps }: RecordDetailPageProps) {
-  return (
-    <AppLayout>
+export function RecordDetailPage({ alert, embedded, ...layoutProps }: RecordDetailPageProps) {
+  const content = (
+    <>
       {alert}
       <RecordDetailLayout {...layoutProps} />
-    </AppLayout>
+    </>
   );
+
+  if (embedded) return content;
+
+  return <AppLayout>{content}</AppLayout>;
 }

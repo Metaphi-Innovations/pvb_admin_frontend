@@ -325,6 +325,7 @@ export default function LedgersPageClient() {
         filters={filterBar}
         footer={paginationFooter}
         layout="split"
+        className="h-full min-h-0"
       >
         <div className="flex-1 overflow-auto min-h-0">
           <table className="w-full text-table min-w-[880px]">

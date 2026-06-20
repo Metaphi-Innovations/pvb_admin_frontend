@@ -1,17 +1,22 @@
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
 import { nextId } from "../data";
+import { getBankAccountById } from "@/lib/accounts/bank-accounts-data";
+import { formatBankAccountMaster } from "@/lib/accounts/bank-account-display";
 import {
   loadBankEntries,
   loadBankStatements,
   saveBankEntries,
   saveBankStatements,
+  type BankCategorization,
   type BankStatement,
   type BankStatementEntry,
   type MatchModule,
 } from "./bank-reconciliation-data";
 
+export const DEMO_RECON_DATA_VERSION = 2;
+const DEMO_VERSION_KEY = "bank-recon-demo-version";
 const DEMO_FILE = "demo-sample-entries.csv";
-const DEMO_STATEMENT_NAME = "Demo — June 2026 (Sample Entries)";
+const DEMO_STATEMENT_NAME = "Demo — FY 2026-27 Bank Statement";
 
 type DemoRow = {
   transactionDate: string;
@@ -19,6 +24,7 @@ type DemoRow = {
   debit: number;
   credit: number;
   referenceNo: string;
+  bankCategory?: BankCategorization;
   matchedModule?: MatchModule;
   matchedRecordLabel?: string;
   matchStatus?: BankStatementEntry["matchStatus"];
@@ -26,22 +32,48 @@ type DemoRow = {
   remarks?: string;
 };
 
+/** Five demo bank statement lines — all uncategorized for manual categorization walkthrough. */
 const DEMO_ROWS: DemoRow[] = [
-  { transactionDate: "2026-06-01", narration: "NEFT CR — Customer payment INV batch", credit: 177000, debit: 0, referenceNo: "DEMO-UTR-001" },
-  { transactionDate: "2026-06-02", narration: "RTGS DR — Vendor purchase settlement", debit: 118000, credit: 0, referenceNo: "DEMO-PUR-002" },
-  { transactionDate: "2026-06-03", narration: "UPI DR — Employee expense reimbursement", debit: 4500, credit: 0, referenceNo: "DEMO-EXP-003" },
-  { transactionDate: "2026-06-05", narration: "CHQ PAID — Advance to supplier", debit: 25000, credit: 0, referenceNo: "DEMO-CHQ-004" },
-  { transactionDate: "2026-06-06", narration: "NEFT CR — Sales credit note adjustment", credit: 8500, debit: 0, referenceNo: "DEMO-CN-005" },
-  { transactionDate: "2026-06-08", narration: "BANK CHARGES — NEFT outward", debit: 25, credit: 0, referenceNo: "DEMO-BC-006" },
-  { transactionDate: "2026-06-10", narration: "SALARY TRANSFER — Payroll May", debit: 80000, credit: 0, referenceNo: "DEMO-JRN-007" },
-  { transactionDate: "2026-06-12", narration: "NEFT DR — TA/DA claim payout", debit: 3200, credit: 0, referenceNo: "DEMO-TADA-008" },
-  { transactionDate: "2026-06-15", narration: "RTGS CR — FPO cooperative receipt", credit: 95000, debit: 0, referenceNo: "DEMO-UTR-009" },
-  { transactionDate: "2026-06-18", narration: "DEBIT NOTE — Vendor adjustment", debit: 5400, credit: 0, referenceNo: "DEMO-DN-010" },
-  { transactionDate: "2026-06-20", narration: "INTEREST CREDIT — Quarter", credit: 1250, debit: 0, referenceNo: "DEMO-INT-011" },
-  { transactionDate: "2026-06-22", narration: "CASH DEPOSIT — Branch", credit: 50000, debit: 0, referenceNo: "DEMO-CD-012" },
-  { transactionDate: "2026-06-25", narration: "GST PAYMENT — Statutory", debit: 18500, credit: 0, referenceNo: "DEMO-GST-013" },
-  { transactionDate: "2026-06-28", narration: "NEFT DR — Manual vendor payment", debit: 7500, credit: 0, referenceNo: "DEMO-PAY-014" },
-  { transactionDate: "2026-06-30", narration: "AMB MAINT CHARGES — Month end", debit: 590, credit: 0, referenceNo: "DEMO-BC-015" },
+  {
+    transactionDate: "2026-04-20",
+    narration: "NEFT CR — ABC Agro Distributor",
+    credit: 118000,
+    debit: 0,
+    referenceNo: "NEFT-ABC-001",
+    matchStatus: "unmatched",
+  },
+  {
+    transactionDate: "2026-04-28",
+    narration: "NEFT CR — Krishna Retail Store (partial)",
+    credit: 30000,
+    debit: 0,
+    referenceNo: "RCPT-INV-002",
+    matchStatus: "unmatched",
+  },
+  {
+    transactionDate: "2026-05-10",
+    narration: "RTGS CR — Yavatmal Cotton FPO",
+    credit: 88500,
+    debit: 0,
+    referenceNo: "RCPT-INV-003",
+    matchStatus: "unmatched",
+  },
+  {
+    transactionDate: "2026-05-18",
+    narration: "NEFT CHARGES — outward transfer",
+    debit: 250,
+    credit: 0,
+    referenceNo: "NEFT-CHG-004",
+    matchStatus: "unmatched",
+  },
+  {
+    transactionDate: "2026-05-25",
+    narration: "INTEREST CREDIT — savings account quarterly interest payout",
+    credit: 1500,
+    debit: 0,
+    referenceNo: "INT-CR-005",
+    matchStatus: "unmatched",
+  },
 ];
 
 function findDemoStatement(statements: BankStatement[]): BankStatement | undefined {
@@ -58,6 +90,10 @@ function buildEntry(
   const credit = row.credit;
   const matchStatus = row.matchStatus ?? "unmatched";
   const reconciliationStatus = row.reconciliationStatus ?? matchStatus;
+  const reconciled =
+    reconciliationStatus === "reconciled" ||
+    reconciliationStatus === "matched" ||
+    reconciliationStatus === "ignored";
   return {
     id,
     statementId,
@@ -69,29 +105,35 @@ function buildEntry(
     referenceNo: row.referenceNo,
     entryType: debit > 0 ? "debit" : "credit",
     matchedModule: row.matchedModule ?? "",
+    bankCategory: row.bankCategory ?? "",
     matchedRecordId: null,
     matchedRecordLabel: row.matchedRecordLabel ?? "",
     ledgerId: null,
-    ledgerName: row.matchedModule === "other" ? "Bank Charges" : "",
+    ledgerName: row.matchedModule === "other" ? row.matchedRecordLabel ?? "Bank Charges" : "",
     remarks: row.remarks ?? "",
     matchStatus,
     reconciliationStatus,
-    reconciledBy:
-      reconciliationStatus === "reconciled" || reconciliationStatus === "ignored"
-        ? ACCOUNTS_CURRENT_USER
-        : "",
-    reconciledAt:
-      reconciliationStatus === "reconciled" || reconciliationStatus === "ignored"
-        ? new Date().toISOString()
-        : "",
+    reconciledBy: reconciled ? ACCOUNTS_CURRENT_USER : "",
+    reconciledAt: reconciled ? new Date().toISOString() : "",
   };
 }
 
-/** Load fictional demo statement (June 2026, HDFC). Safe for UI testing — not real bank data. */
+/** Load fictional demo statement for accounts walkthrough. Safe for UI testing — not real bank data. */
+export function seedAccountsDemoBankReconciliation(force = false): { statementId: number; created: boolean } {
+  return seedDummyBankReconciliation(force);
+}
+
+/** @deprecated use seedAccountsDemoBankReconciliation */
 export function seedDummyBankReconciliation(force = false): { statementId: number; created: boolean } {
   const statements = loadBankStatements();
   const existing = findDemoStatement(statements);
   if (existing && !force) {
+    if (typeof window !== "undefined") {
+      const storedVersion = window.localStorage.getItem(DEMO_VERSION_KEY);
+      if (storedVersion !== String(DEMO_RECON_DATA_VERSION)) {
+        return seedDummyBankReconciliation(true);
+      }
+    }
     return { statementId: existing.id, created: false };
   }
 
@@ -106,11 +148,14 @@ export function seedDummyBankReconciliation(force = false): { statementId: numbe
   const statementId = nextId(statements2);
   const now = new Date().toISOString();
 
+  const demoBank = getBankAccountById(1);
   const statement: BankStatement = {
     id: statementId,
     bankAccountId: 1,
-    bankAccountName: "HDFC Current Account",
-    month: 6,
+    bankAccountName: demoBank
+      ? formatBankAccountMaster(demoBank)
+      : "HDFC Current A/c (xxxx4499)",
+    month: 5,
     year: 2026,
     statementName: DEMO_STATEMENT_NAME,
     fileName: DEMO_FILE,
@@ -118,7 +163,7 @@ export function seedDummyBankReconciliation(force = false): { statementId: numbe
     uploadedAt: now,
   };
 
-  let balance = 1200000;
+  let balance = 1500000;
   let entryId = nextId(entries);
   const newEntries: BankStatementEntry[] = DEMO_ROWS.map((row) => {
     balance = balance - row.debit + row.credit;
@@ -127,45 +172,11 @@ export function seedDummyBankReconciliation(force = false): { statementId: numbe
     return entry;
   });
 
-  // Show variety of statuses on last rows
-  const matchedIdx = newEntries.length - 4;
-  const reconciledIdx = newEntries.length - 3;
-  const ignoredIdx = newEntries.length - 2;
-  if (newEntries[matchedIdx]) {
-    newEntries[matchedIdx] = {
-      ...newEntries[matchedIdx],
-      matchedModule: "journal",
-      matchedRecordLabel: "JRN-0001 / Sample journal entry",
-      matchStatus: "matched",
-      reconciliationStatus: "matched",
-    };
-  }
-  if (newEntries[reconciledIdx]) {
-    newEntries[reconciledIdx] = {
-      ...newEntries[reconciledIdx],
-      matchedModule: "other",
-      ledgerName: "Bank Charges",
-      matchedRecordLabel: "",
-      matchStatus: "reconciled",
-      reconciliationStatus: "reconciled",
-      reconciledBy: ACCOUNTS_CURRENT_USER,
-      reconciledAt: now,
-      remarks: "Reconciled to ledger",
-    };
-  }
-  if (newEntries[ignoredIdx]) {
-    newEntries[ignoredIdx] = {
-      ...newEntries[ignoredIdx],
-      matchStatus: "ignored",
-      reconciliationStatus: "ignored",
-      reconciledBy: ACCOUNTS_CURRENT_USER,
-      reconciledAt: now,
-      remarks: "Duplicate / not applicable",
-    };
-  }
-
   saveBankStatements([...statements2, statement]);
   saveBankEntries([...loadBankEntries(), ...newEntries]);
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(DEMO_VERSION_KEY, String(DEMO_RECON_DATA_VERSION));
+  }
   return { statementId, created: true };
 }
 

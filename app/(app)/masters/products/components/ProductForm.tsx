@@ -41,6 +41,7 @@ import {
 	resolveProductTaxFromHsn,
 	todayStr,
 } from "../product-data";
+import { resolveProductAccountingDefaults } from "@/lib/accounts/erp-accounting-mapping";
 
 export interface ProductFormValues {
 	productName: string;
@@ -58,6 +59,10 @@ export interface ProductFormValues {
 	baseUnit: string;
 	packagingUnit: string;
 	conversionQuantity: string;
+	inventoryAccount: string;
+	salesAccount: string;
+	purchaseAccount: string;
+	cogsAccount: string;
 }
 
 export const DEFAULT_PRODUCT_FORM: ProductFormValues = {
@@ -76,6 +81,10 @@ export const DEFAULT_PRODUCT_FORM: ProductFormValues = {
 	baseUnit: "",
 	packagingUnit: "",
 	conversionQuantity: "",
+	inventoryAccount: "",
+	salesAccount: "",
+	purchaseAccount: "",
+	cogsAccount: "",
 };
 
 export function productToFormValues(product: Product): ProductFormValues {
@@ -83,6 +92,7 @@ export function productToFormValues(product: Product): ProductFormValues {
 		typeof window !== "undefined" && product.hsnCode
 			? resolveProductTaxFromHsn(product.hsnCode)
 			: null;
+	const acctDefaults = resolveProductAccountingDefaults();
 
 	return {
 		productName: product.productName,
@@ -107,6 +117,10 @@ export function productToFormValues(product: Product): ProductFormValues {
 			product.conversionQuantity !== undefined
 				? String(product.conversionQuantity)
 				: "",
+		inventoryAccount: product.inventoryAccount ?? acctDefaults.inventoryAccount,
+		salesAccount: product.salesAccount ?? acctDefaults.salesAccount,
+		purchaseAccount: product.purchaseAccount ?? acctDefaults.purchaseAccount,
+		cogsAccount: product.cogsAccount ?? acctDefaults.cogsAccount,
 	};
 }
 
@@ -454,6 +468,34 @@ export function ProductForm({
 							</p>
 							<FieldError msg={errors.gstRate} />
 						</div>
+					</div>
+				</div>
+
+				{/* Accounting Information */}
+				<div className='pt-3 border-t border-border/60'>
+					<SectionHead
+						label='Accounting Information'
+						sub='Default COA mapping for sales, purchase, and inventory posting.'
+					/>
+					<div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
+						{(
+							[
+								["inventoryAccount", "Inventory Account"],
+								["salesAccount", "Sales Account"],
+								["purchaseAccount", "Purchase Account"],
+								["cogsAccount", "Cost of Goods Sold Account"],
+							] as const
+						).map(([key, label]) => (
+							<div key={key} className='space-y-1'>
+								<Label className='text-xs font-medium'>{label}</Label>
+								<Input
+									value={form[key]}
+									onChange={(e) => set(key, e.target.value)}
+									className='h-8 text-xs'
+									disabled={readOnly}
+								/>
+							</div>
+						))}
 					</div>
 				</div>
 
@@ -871,5 +913,9 @@ export function formValuesToProduct(
 		conversionQuantity: form.conversionQuantity
 			? Number(form.conversionQuantity)
 			: undefined,
+		inventoryAccount: form.inventoryAccount.trim() || resolveProductAccountingDefaults().inventoryAccount,
+		salesAccount: form.salesAccount.trim() || resolveProductAccountingDefaults().salesAccount,
+		purchaseAccount: form.purchaseAccount.trim() || resolveProductAccountingDefaults().purchaseAccount,
+		cogsAccount: form.cogsAccount.trim() || resolveProductAccountingDefaults().cogsAccount,
 	};
 }
