@@ -72,10 +72,13 @@ export const NAV_ITEMS: NavItem[] = [
     icon: BookOpen,
     children: [
       { label: "Category", href: "/masters/categories" },
+      { label: "Crop", href: "/masters/crops" },
+      { label: "Brand", href: "/masters/brands" },
       { label: "CFU", href: "/masters/cfu" },
       { label: "Customer Type", href: "/masters/customer-types" },
       { label: "Customers", href: "/masters/customers" },
       { label: "Document Type", href: "/masters/document-types" },
+      { label: "Event Type", href: "/masters/event-types" },
       { label: "Form", href: "/masters/formulation" },
       { label: "GST", href: "/masters/gst" },
       { label: "HSN", href: "/masters/hsn" },

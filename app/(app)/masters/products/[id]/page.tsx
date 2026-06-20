@@ -321,6 +321,14 @@ export default function ProductDetailPage() {
 							<RecordKvRow label='CFU' value={product.cfu} />
 							<RecordKvRow label='Base Unit' value={product.baseUnit} />
 							<RecordKvRow
+								label='Unit Size'
+								value={
+									product.unitSize !== undefined
+										? String(product.unitSize)
+										: undefined
+								}
+							/>
+							<RecordKvRow
 								label='Packaging Unit'
 								value={product.packagingUnit}
 							/>
@@ -329,6 +337,22 @@ export default function ProductDetailPage() {
 								value={
 									product.conversionQuantity !== undefined
 										? String(product.conversionQuantity)
+										: undefined
+								}
+							/>
+							<RecordKvRow
+								label='Net Weight per Packaging Unit (KG)'
+								value={
+									product.netWeight !== undefined
+										? `${product.netWeight} KG`
+										: undefined
+								}
+							/>
+							<RecordKvRow
+								label='Gross Weight per Packaging Unit (KG)'
+								value={
+									product.grossWeight !== undefined
+										? `${product.grossWeight} KG`
 										: undefined
 								}
 								isLast
