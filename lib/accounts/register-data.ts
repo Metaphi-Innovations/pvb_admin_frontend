@@ -1,4 +1,4 @@
-import { loadInvoices, type InvoiceRecord } from "@/app/(app)/accounts/invoices/invoices-data";
+import { loadInvoices, getInvoiceAmountBreakup } from "@/app/(app)/accounts/invoices/invoices-data";
 import {
   loadPurchaseInvoices,
 } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
@@ -23,17 +23,6 @@ export interface PurchaseRegisterRow {
   status: string;
 }
 
-function invoiceTaxable(inv: InvoiceRecord): number {
-  return inv.lineItems.reduce((s, l) => s + (l.amount || 0), 0);
-}
-
-function invoiceTax(inv: InvoiceRecord): number {
-  return inv.lineItems.reduce((s, l) => {
-    const base = l.amount || 0;
-    return s + (base * (l.taxPct || 0)) / 100;
-  }, 0);
-}
-
 export function buildSalesRegisterRows(
   dateFrom?: string,
   dateTo?: string,
@@ -46,15 +35,14 @@ export function buildSalesRegisterRows(
       return true;
     })
     .map((inv) => {
-      const taxable = invoiceTaxable(inv);
-      const tax = invoiceTax(inv);
+      const { taxableValue, gstAmount, invoiceTotal } = getInvoiceAmountBreakup(inv);
       return {
         docNo: inv.invoiceNo,
         date: inv.invoiceDate,
         party: inv.customerName,
-        taxable,
-        tax,
-        total: taxable + tax,
+        taxable: taxableValue,
+        tax: gstAmount,
+        total: invoiceTotal,
         status: inv.paymentStatus === "paid" ? "Paid" : inv.paymentStatus === "partially_paid" ? "Part Paid" : "Posted",
       };
     })

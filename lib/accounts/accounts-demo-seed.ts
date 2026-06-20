@@ -24,6 +24,7 @@ import {
 } from "@/app/(app)/user-management/employee/employee-data";
 import {
   recalculateLineItem,
+  loadInvoices,
   saveInvoices,
   type InvoiceRecord,
 } from "@/app/(app)/accounts/invoices/invoices-data";
@@ -34,7 +35,7 @@ import {
 import { saveCreditNotes } from "@/app/(app)/accounts/credit-notes/credit-notes-data";
 import { saveDebitNotes } from "@/app/(app)/accounts/debit-notes/debit-notes-data";
 import { saveExpenses } from "@/app/(app)/accounts/expenses/expense-data";
-import { saveVouchers, createVoucher } from "@/app/(app)/accounts/vouchers/voucher-data";
+import { saveVouchers, createVoucher, loadVouchers } from "@/app/(app)/accounts/vouchers/voucher-data";
 import {
   loadChartOfAccounts,
   saveChartOfAccounts,
@@ -44,6 +45,7 @@ import {
 import {
   maybePostSalesInvoice,
   maybePostPurchaseInvoice,
+  maybePostCreditNote,
 } from "@/lib/accounts/document-posting-bridge";
 import {
   loadAccountingSettings,
@@ -54,11 +56,22 @@ import {
   syncCustomerLedger,
   syncVendorLedger,
 } from "@/lib/accounts/erp-accounting-mapping";
-import { createBankAccountWithLedger } from "@/lib/accounts/bank-accounts-data";
+import { ensureBankAccountWithLedger } from "@/lib/accounts/bank-accounts-data";
+import { DEMO_BANK_SPECS } from "@/lib/accounts/banking-demo-spec";
+import { seedBankingDemoData } from "@/lib/accounts/banking-demo-seed";
 import { createLedgerQuick } from "@/app/(app)/accounts/bank-reconciliation/bank-reconciliation-data";
 import { seedAccountsDemoBankReconciliation } from "@/app/(app)/accounts/bank-reconciliation/bank-reconciliation-demo";
+import {
+  assignDemoOpeningBalances,
+  seedDemoAccountingVouchers,
+  seedInventoryLedgersFromBatchRegister,
+} from "@/lib/accounts/ledger-balance-seed";
+import { seedReceivablesDemoData } from "@/lib/accounts/receivables-demo-seed";
+import { seedPayablesDemoData } from "@/lib/accounts/payables-demo-seed";
+import type { CreditNoteRecord } from "@/app/(app)/accounts/credit-notes/credit-notes-data";
+import { findErpPartyLink } from "@/lib/accounts/erp-party-links";
 
-export const ACCOUNTS_DEMO_SEED_VERSION = "2026-jun-demo-v9";
+export const ACCOUNTS_DEMO_SEED_VERSION = "2026-jun-demo-v14";
 const VERSION_KEY = "ds_accounts_demo_seed_version";
 
 // ── Demo master specs (5 each) ───────────────────────────────────────────────
@@ -84,7 +97,7 @@ const DEMO_CUSTOMERS: Array<{
     gstin: "27AABCU9603R1ZM",
     address: "Plot 12, MIDC, Pune, Maharashtra 411057",
     creditLimit: 500000,
-    openingBalance: 0,
+    openingBalance: 50000,
     customerType: "distributor",
   },
   {
@@ -96,7 +109,7 @@ const DEMO_CUSTOMERS: Array<{
     gstin: "27AABCK1234R1Z5",
     address: "Shop 4, Market Yard, Nagpur, Maharashtra 440001",
     creditLimit: 200000,
-    openingBalance: 0,
+    openingBalance: 18500,
     customerType: "retailer",
   },
   {
@@ -108,7 +121,7 @@ const DEMO_CUSTOMERS: Array<{
     gstin: "27AABCY5678C1Z3",
     address: "FPO Bhawan, Cotton Market, Yavatmal, Maharashtra 445001",
     creditLimit: 350000,
-    openingBalance: 0,
+    openingBalance: 32000,
     customerType: "fpo",
   },
   {
@@ -120,7 +133,7 @@ const DEMO_CUSTOMERS: Array<{
     gstin: "27AABCG9012H1Z7",
     address: "Warehouse 7, Hinjewadi, Pune, Maharashtra 411057",
     creditLimit: 750000,
-    openingBalance: 0,
+    openingBalance: 56000,
     customerType: "distributor",
   },
   {
@@ -132,7 +145,43 @@ const DEMO_CUSTOMERS: Array<{
     gstin: "27AABCS3456G1Z9",
     address: "Seed Godown, Jalna Road, Aurangabad, Maharashtra 431001",
     creditLimit: 300000,
+    openingBalance: 12800,
+    customerType: "retailer",
+  },
+  {
+    id: 6,
+    customerCode: "CUST-0006",
+    customerName: "Konkan Fertilizer Depot",
+    mobile: "9856789012",
+    email: "billing@konkanfert.in",
+    gstin: "27AABCK6789D1Z2",
+    address: "Shop 2, Ratnagiri Market, Ratnagiri, Maharashtra 415612",
+    creditLimit: 50000,
     openingBalance: 0,
+    customerType: "dealer",
+  },
+  {
+    id: 7,
+    customerCode: "CUST-0007",
+    customerName: "Vidarbha Agro Mart",
+    mobile: "9867890123",
+    email: "accounts@vidarbhaagro.in",
+    gstin: "27AABCV2345E1Z4",
+    address: "Agro Complex, Wardha Road, Nagpur, Maharashtra 440015",
+    creditLimit: 250000,
+    openingBalance: 15000,
+    customerType: "distributor",
+  },
+  {
+    id: 8,
+    customerCode: "CUST-0008",
+    customerName: "Bharat Krishi Kendra",
+    mobile: "9878901234",
+    email: "office@bharatkrishi.in",
+    gstin: "27AABCB5678F1Z6",
+    address: "Krishi Kendra, Amravati Road, Nagpur, Maharashtra 440023",
+    creditLimit: 180000,
+    openingBalance: 8500,
     customerType: "retailer",
   },
 ];
@@ -155,7 +204,7 @@ const DEMO_VENDORS: Array<{
     email: "accounts@agrochem.in",
     gstin: "27AABCA1234F1Z2",
     address: "12 MIDC Road, Bhosari, Pune, Maharashtra 411026",
-    openingBalance: 0,
+    openingBalance: 75000,
   },
   {
     id: 2,
@@ -165,7 +214,7 @@ const DEMO_VENDORS: Array<{
     email: "billing@greenfield.in",
     gstin: "29AABCG5678F1Z4",
     address: "45 Industrial Area, Whitefield, Bengaluru, Karnataka 560066",
-    openingBalance: 0,
+    openingBalance: 42000,
   },
   {
     id: 3,
@@ -175,7 +224,7 @@ const DEMO_VENDORS: Array<{
     email: "sales@bharatfert.in",
     gstin: "24AABCB9012D1Z6",
     address: "NH-6, MIDC, Nagpur, Maharashtra 440016",
-    openingBalance: 0,
+    openingBalance: 95000,
   },
   {
     id: 4,
@@ -185,7 +234,7 @@ const DEMO_VENDORS: Array<{
     email: "ap@kisaninputs.com",
     gstin: "27AABCK4567E1Z8",
     address: "Sector 5, Aurangabad Industrial, Maharashtra 431136",
-    openingBalance: 0,
+    openingBalance: 31500,
   },
   {
     id: 5,
@@ -195,7 +244,7 @@ const DEMO_VENDORS: Array<{
     email: "finance@cropcare.in",
     gstin: "27AABCC7890F1Z1",
     address: "Plot 22, Kurkumbh MIDC, Pune, Maharashtra 413802",
-    openingBalance: 0,
+    openingBalance: 54000,
   },
 ];
 
@@ -207,58 +256,17 @@ const DEMO_EMPLOYEES = [
   { id: 5, firstName: "Suresh", lastName: "Kumar", fullName: "Suresh Kumar" },
 ] as const;
 
-const DEMO_BANKS = [
-  {
-    bankName: "HDFC Bank",
-    nickname: "HDFC Bank",
-    accountNumber: "50100234567890",
-    ifsc: "HDFC0001234",
-    branch: "FC Road, Pune",
-    openingBalance: 1500000,
-    defaultReceipts: true,
-    defaultPayments: false,
-  },
-  {
-    bankName: "ICICI Bank",
-    nickname: "ICICI Bank",
-    accountNumber: "601234567890",
-    ifsc: "ICIC0001234",
-    branch: "Camp, Pune",
-    openingBalance: 800000,
-    defaultReceipts: false,
-    defaultPayments: false,
-  },
-  {
-    bankName: "SBI",
-    nickname: "SBI Current Account",
-    accountNumber: "30012345678",
-    ifsc: "SBIN0001234",
-    branch: "Shivaji Nagar",
-    openingBalance: 500000,
-    defaultReceipts: false,
-    defaultPayments: false,
-  },
-  {
-    bankName: "Axis Bank",
-    nickname: "Axis Bank",
-    accountNumber: "912345678901",
-    ifsc: "UTIB0000123",
-    branch: "Koregaon Park",
-    openingBalance: 350000,
-    defaultReceipts: false,
-    defaultPayments: true,
-  },
-  {
-    bankName: "IDFC First Bank",
-    nickname: "IDFC First Bank",
-    accountNumber: "100234567890",
-    ifsc: "IDFB0080123",
-    branch: "Baner",
-    openingBalance: 200000,
-    defaultReceipts: false,
-    defaultPayments: false,
-  },
-] as const;
+const DEMO_BANKS = DEMO_BANK_SPECS.map((spec) => ({
+  bankName: spec.bankName,
+  nickname: spec.accountNickname,
+  accountNumber: spec.accountNumber,
+  ifsc: spec.ifsc,
+  branch: spec.branchName,
+  openingBalance: spec.openingBalance,
+  openingBalanceDate: spec.openingBalanceDate,
+  defaultReceipts: spec.defaultForReceipts,
+  defaultPayments: spec.defaultForPayments,
+}));
 
 /**
  * Comprehensive COA ledger seeds — every leaf sub-group gets 3-5 realistic
@@ -683,56 +691,151 @@ const COA_LEDGER_SEEDS: Array<{ subGroup: string; name: string; accountType: Acc
   { subGroup: "Miscellaneous Expenses", name: "Donation & CSR Contribution", accountType: "Expense" },
 ];
 
+/** 12 posted sales invoices — mixed payment status for receivables demo */
 const DEMO_SALES_INVOICES = [
   {
     id: 1,
     invoiceNo: "INV-2026-001",
     customerId: 1,
-    invoiceDate: "2026-04-15",
-    subtotal: 100000,
-    taxAmount: 18000,
-    grandTotal: 118000,
-    amountReceived: 0,
+    invoiceDate: "2026-03-05",
+    dueDate: "2026-04-04",
+    subtotal: 127119,
+    taxAmount: 22881,
+    grandTotal: 150000,
+    amountReceived: 80000,
+    amountCredited: 20000,
   },
   {
     id: 2,
     invoiceNo: "INV-2026-002",
-    customerId: 2,
-    invoiceDate: "2026-04-22",
-    subtotal: 50000,
-    taxAmount: 9000,
-    grandTotal: 59000,
-    amountReceived: 30000,
+    customerId: 1,
+    invoiceDate: "2026-05-10",
+    dueDate: "2026-07-09",
+    subtotal: 76271,
+    taxAmount: 13729,
+    grandTotal: 90000,
+    amountReceived: 45000,
+    amountCredited: 0,
   },
   {
     id: 3,
     invoiceNo: "INV-2026-003",
-    customerId: 3,
-    invoiceDate: "2026-05-05",
-    subtotal: 75000,
-    taxAmount: 13500,
-    grandTotal: 88500,
-    amountReceived: 88500,
+    customerId: 1,
+    invoiceDate: "2026-05-28",
+    dueDate: "2026-07-27",
+    subtotal: 67797,
+    taxAmount: 12203,
+    grandTotal: 80000,
+    amountReceived: 0,
+    amountCredited: 0,
   },
   {
     id: 4,
     invoiceNo: "INV-2026-004",
     customerId: 4,
-    invoiceDate: "2026-05-12",
-    subtotal: 120000,
-    taxAmount: 21600,
-    grandTotal: 141600,
-    amountReceived: 0,
+    invoiceDate: "2026-03-15",
+    dueDate: "2026-04-14",
+    subtotal: 84746,
+    taxAmount: 15254,
+    grandTotal: 100000,
+    amountReceived: 80000,
+    amountCredited: 0,
   },
   {
     id: 5,
     invoiceNo: "INV-2026-005",
+    customerId: 4,
+    invoiceDate: "2026-05-08",
+    dueDate: "2026-07-07",
+    subtotal: 67797,
+    taxAmount: 12203,
+    grandTotal: 80000,
+    amountReceived: 10000,
+    amountCredited: 0,
+  },
+  {
+    id: 6,
+    invoiceNo: "INV-2026-006",
+    customerId: 2,
+    invoiceDate: "2026-04-22",
+    dueDate: "2026-05-22",
+    subtotal: 100000,
+    taxAmount: 18000,
+    grandTotal: 118000,
+    amountReceived: 118000,
+    amountCredited: 0,
+  },
+  {
+    id: 7,
+    invoiceNo: "INV-2026-007",
+    customerId: 3,
+    invoiceDate: "2026-04-18",
+    dueDate: "2026-06-02",
+    subtotal: 122881,
+    taxAmount: 22119,
+    grandTotal: 145000,
+    amountReceived: 0,
+    amountCredited: 0,
+  },
+  {
+    id: 8,
+    invoiceNo: "INV-2026-008",
+    customerId: 3,
+    invoiceDate: "2026-05-12",
+    dueDate: "2026-06-26",
+    subtotal: 80508,
+    taxAmount: 14492,
+    grandTotal: 95000,
+    amountReceived: 50000,
+    amountCredited: 0,
+  },
+  {
+    id: 9,
+    invoiceNo: "INV-2026-009",
+    customerId: 6,
+    invoiceDate: "2026-05-25",
+    dueDate: "2026-06-09",
+    subtotal: 4271,
+    taxAmount: 769,
+    grandTotal: 5040,
+    amountReceived: 0,
+    amountCredited: 0,
+  },
+  {
+    id: 10,
+    invoiceNo: "INV-2026-010",
     customerId: 5,
     invoiceDate: "2026-05-20",
+    dueDate: "2026-06-19",
     subtotal: 60000,
     taxAmount: 10800,
     grandTotal: 70800,
     amountReceived: 70800,
+    amountCredited: 0,
+  },
+  {
+    id: 11,
+    invoiceNo: "INV-2026-011",
+    customerId: 7,
+    invoiceDate: "2026-05-15",
+    dueDate: "2026-06-14",
+    subtotal: 72034,
+    taxAmount: 12966,
+    grandTotal: 85000,
+    amountReceived: 42500,
+    amountCredited: 0,
+  },
+  {
+    id: 12,
+    invoiceNo: "INV-2026-012",
+    customerId: 8,
+    invoiceDate: "2026-05-28",
+    dueDate: "2026-07-27",
+    subtotal: 52542,
+    taxAmount: 9458,
+    grandTotal: 62000,
+    amountReceived: 0,
+    amountCredited: 0,
   },
 ] as const;
 
@@ -863,15 +966,7 @@ function setLedgerOpeningBalance(
 }
 
 function ensureBankAccount(spec: (typeof DEMO_BANKS)[number]): void {
-  const records = loadChartOfAccounts();
-  const exists = records.some(
-    (r) =>
-      r.bankAccountFlag &&
-      (r.accountName.toLowerCase().includes(spec.nickname.toLowerCase()) ||
-        r.accountName.includes(spec.accountNumber.slice(-4))),
-  );
-  if (exists) return;
-  createBankAccountWithLedger({
+  ensureBankAccountWithLedger({
     bankName: spec.bankName,
     accountNickname: spec.nickname,
     accountNumber: spec.accountNumber,
@@ -879,6 +974,7 @@ function ensureBankAccount(spec: (typeof DEMO_BANKS)[number]): void {
     branchName: spec.branch,
     accountType: "Current",
     openingBalance: spec.openingBalance,
+    openingBalanceDate: spec.openingBalanceDate,
     balanceType: "Debit",
     reconciliationEnabled: true,
     defaultForReceipts: spec.defaultReceipts,
@@ -909,6 +1005,10 @@ function patchCustomer(base: Customer, spec: (typeof DEMO_CUSTOMERS)[number]): C
     pincode: statePin?.trim().split(" ").pop() || "411057",
     creditLimit: spec.creditLimit,
     paymentTerms: "net-30",
+    salesManId: spec.id <= 5 ? spec.id : 1,
+    salesManName: DEMO_EMPLOYEES.find((e) => e.id === (spec.id <= 5 ? spec.id : 1))?.fullName ?? "Rajesh Sharma",
+    territoryName: spec.id <= 4 ? "Pune Zone" : spec.id <= 6 ? "Konkan Region" : "Vidarbha Region",
+    districtName: city?.trim() || "Pune",
     branches: [
       {
         branchName: "Main",
@@ -1025,23 +1125,6 @@ function seedDemoMasters(): void {
   const otherCustomers = existingCustomers.filter((c) => !demoCustomerIds.has(c.id));
   saveCustomers([...patchedCustomers, ...otherCustomers]);
 
-  const existingVendors = loadVendors();
-  const vTemplate = existingVendors[0] ?? vendorTemplate();
-  const demoVendorIds = new Set(DEMO_VENDORS.map((v) => v.id));
-  const patchedVendors = DEMO_VENDORS.map((spec) => {
-    const base = existingVendors.find((v) => v.id === spec.id) ?? {
-      ...vTemplate,
-      id: spec.id,
-      vendorCode: spec.vendorCode,
-      billingAddress: emptyAddress(),
-      contacts: [],
-      documents: [],
-    };
-    return patchVendor(base, spec);
-  });
-  const otherVendors = existingVendors.filter((v) => !demoVendorIds.has(v.id));
-  saveVendors([...patchedVendors, ...otherVendors]);
-
   const employees = loadEmployees();
   const patchedEmployees = employees.map((emp) => {
     const spec = DEMO_EMPLOYEES.find((e) => e.id === emp.id);
@@ -1074,14 +1157,7 @@ function seedDemoMasters(): void {
       setLedgerOpeningBalance(ledger.id, spec.openingBalance, "Debit");
     }
   }
-  for (const spec of DEMO_VENDORS) {
-    const vendor = loadVendors().find((v) => v.id === spec.id);
-    if (!vendor) continue;
-    const ledger = syncVendorLedger(vendor);
-    if (ledger && spec.openingBalance > 0) {
-      setLedgerOpeningBalance(ledger.id, spec.openingBalance, "Credit");
-    }
-  }
+  // Vendor masters and ledgers seeded via seedPayablesDemoData()
 }
 
 // ── Transaction builders ───────────────────────────────────────────────────────
@@ -1095,6 +1171,7 @@ function addDays(dateStr: string, days: number): string {
 function buildSalesInvoice(
   spec: (typeof DEMO_SALES_INVOICES)[number],
   customerName: string,
+  customerLedgerId: number | null = null,
 ): InvoiceRecord {
   const unitPrice = spec.subtotal / 100;
   const line = recalculateLineItem({
@@ -1128,16 +1205,23 @@ function buildSalesInvoice(
         ]
       : [];
 
+  const amountCredited = "amountCredited" in spec ? spec.amountCredited : 0;
+  const dueDate =
+    "dueDate" in spec && spec.dueDate
+      ? spec.dueDate
+      : addDays((spec as { invoiceDate: string }).invoiceDate, 30);
+
   return {
     id: spec.id,
     invoiceNo: spec.invoiceNo,
     invoiceDate: spec.invoiceDate,
-    dueDate: addDays(spec.invoiceDate, 30),
+    dueDate,
     referenceNo: spec.invoiceNo,
     salesOrderNo: "",
     remarks: `Posted sales invoice ${spec.invoiceNo}`,
     customerId: spec.customerId,
     customerName,
+    customerLedgerId,
     customerMobile: DEMO_CUSTOMERS.find((c) => c.id === spec.customerId)?.mobile ?? "",
     customerEmail: DEMO_CUSTOMERS.find((c) => c.id === spec.customerId)?.email ?? "",
     customerGst: DEMO_CUSTOMERS.find((c) => c.id === spec.customerId)?.gstin ?? "",
@@ -1151,10 +1235,10 @@ function buildSalesInvoice(
     taxAmount: spec.taxAmount,
     grandTotal: spec.grandTotal,
     amountReceived: spec.amountReceived,
-    balanceAmount: spec.grandTotal - spec.amountReceived,
-    amountCredited: 0,
-    balanceCreditAllowed: spec.grandTotal,
-    creditStatus: "no_credit",
+    balanceAmount: spec.grandTotal - spec.amountReceived - amountCredited,
+    amountCredited,
+    balanceCreditAllowed: spec.grandTotal - amountCredited,
+    creditStatus: amountCredited > 0 ? ("partially_credited" as const) : ("no_credit" as const),
     soAdjustmentStatus: "open",
     invoiceStatus: "sent",
     paymentStatus:
@@ -1250,7 +1334,8 @@ function buildPurchaseInvoice(
 
 function resolveBankLedger(): ChartOfAccount | null {
   return (
-    findLedgerByName("HDFC Bank - 7890") ??
+    findLedgerByName("HDFC Current Account (xxxx7890)") ??
+    findLedgerByName("HDFC Current Account") ??
     findLedgerByName("HDFC Bank") ??
     resolveMappingLedger("bank_ledger", "HDFC Bank", { createIfMissing: true })
   );
@@ -1262,12 +1347,13 @@ function seedCustomerReceipt(
   date: string,
   referenceNo: string,
   invoiceNo: string,
+  voucherNumber?: string,
 ): void {
   if (amount <= 0) return;
   const customer = resolveMappingLedger("sales_receivable", customerName, { createIfMissing: true });
   const bank = resolveBankLedger();
   if (!customer?.id || !bank?.id) return;
-  createVoucher("receipt", {
+  const voucher = createVoucher("receipt", {
     date,
     referenceNo,
     narration: `Customer receipt — ${customerName} (${invoiceNo})`,
@@ -1291,20 +1377,151 @@ function seedCustomerReceipt(
       },
     ],
   });
+  if (voucherNumber) {
+    const list = loadVouchers();
+    const idx = list.findIndex((v) => v.id === voucher.id);
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], voucherNumber };
+      saveVouchers(list);
+    }
+  }
 }
 
-function postAllTransactions(invoices: InvoiceRecord[], purchases: PurchaseInvoiceRecord[]): void {
+function seedVendorPayment(
+  vendorName: string,
+  amount: number,
+  date: string,
+  referenceNo: string,
+  billNo: string,
+  voucherNumber?: string,
+): void {
+  if (amount <= 0) return;
+  const vendor = resolveMappingLedger("purchase_payable", vendorName, { createIfMissing: true });
+  const bank = resolveBankLedger();
+  if (!vendor?.id || !bank?.id) return;
+  const voucher = createVoucher("payment", {
+    date,
+    referenceNo,
+    narration: `Vendor payment — ${vendorName} (${billNo})`,
+    status: "posted",
+    lines: [
+      {
+        id: 1,
+        ledgerId: vendor.id,
+        ledgerName: vendor.accountName,
+        debit: amount,
+        credit: 0,
+        remarks: billNo,
+      },
+      {
+        id: 2,
+        ledgerId: bank.id,
+        ledgerName: bank.accountName,
+        debit: 0,
+        credit: amount,
+        remarks: vendorName,
+      },
+    ],
+  });
+  if (voucherNumber) {
+    const list = loadVouchers();
+    const idx = list.findIndex((v) => v.id === voucher.id);
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], voucherNumber };
+      saveVouchers(list);
+    }
+  }
+}
+
+function postAllTransactions(invoices: InvoiceRecord[]): void {
   saveVouchers([]);
   for (const inv of invoices) {
     maybePostSalesInvoice(inv);
   }
-  for (const pur of purchases) {
-    maybePostPurchaseInvoice(pur);
-  }
 
-  seedCustomerReceipt("Krishna Retail Store", 30000, "2026-04-28", "RCPT-INV-002", "INV-2026-002");
-  seedCustomerReceipt("Yavatmal Cotton FPO", 88500, "2026-05-10", "RCPT-INV-003", "INV-2026-003");
-  seedCustomerReceipt("Shree Ganesh Seeds", 70800, "2026-05-25", "RCPT-INV-005", "INV-2026-005");
+  seedCustomerReceipt("ABC Agro Distributor", 80000, "2026-04-20", "NEFT-ABC-001", "INV-2026-001", "RV-2026-001");
+  seedCustomerReceipt("ABC Agro Distributor", 45000, "2026-05-15", "NEFT-ABC-002", "INV-2026-002", "RV-2026-002");
+  seedCustomerReceipt("Krishna Retail Store", 118000, "2026-05-05", "NEFT-KRS-001", "INV-2026-006", "RV-2026-003");
+  seedCustomerReceipt("Green Harvest Agro", 90000, "2026-05-18", "NEFT-GHA-001", "INV-2026-004", "RV-2026-004");
+  seedCustomerReceipt("Yavatmal Cotton FPO", 50000, "2026-06-08", "NEFT-YCF-001", "INV-2026-008", "RV-2026-005");
+  seedCustomerReceipt("Vidarbha Agro Mart", 60000, "2026-06-12", "NEFT-VAM-001", "INV-2026-011", "RV-2026-006");
+}
+
+function buildDemoCreditNotes(): CreditNoteRecord[] {
+  return [
+    {
+      id: 1,
+      creditNoteNo: "CN-2026-001",
+      creditNoteDate: "2026-04-25",
+      againstType: "sales_invoice",
+      sourceInvoiceId: 1,
+      sourceInvoiceNo: "INV-2026-001",
+      sourceOrderId: null,
+      sourceOrderNo: "",
+      customerId: 1,
+      customerName: "ABC Agro Distributor",
+      receivableLedger: "ABC Agro Distributor",
+      originalAmount: 150000,
+      alreadyAdjustedAmount: 0,
+      currentCreditAmount: 20000,
+      balanceAfterAdjustment: 130000,
+      taxCreditAmount: 3051,
+      lineItems: [],
+      reason: "Sales return",
+      remarks: "Return of damaged bags — credit against INV-2026-001",
+      status: "approved",
+      activity: [
+        {
+          at: "2026-04-25T10:00:00.000Z",
+          action: "approved",
+          by: ACCOUNTS_CURRENT_USER,
+          detail: "Credit note posted against INV-2026-001",
+        },
+      ],
+      createdBy: ACCOUNTS_CURRENT_USER,
+      updatedBy: ACCOUNTS_CURRENT_USER,
+      approvedBy: ACCOUNTS_CURRENT_USER,
+      approvedAt: "2026-04-25T10:00:00.000Z",
+      createdAt: "2026-04-25T09:00:00.000Z",
+      updatedAt: "2026-04-25T10:00:00.000Z",
+    },
+    {
+      id: 2,
+      creditNoteNo: "CN-2026-002",
+      creditNoteDate: "2026-06-01",
+      againstType: "sales_invoice",
+      sourceInvoiceId: 7,
+      sourceInvoiceNo: "INV-2026-007",
+      sourceOrderId: null,
+      sourceOrderNo: "",
+      customerId: 3,
+      customerName: "Yavatmal Cotton FPO",
+      receivableLedger: "Yavatmal Cotton FPO",
+      originalAmount: 145000,
+      alreadyAdjustedAmount: 0,
+      currentCreditAmount: 15000,
+      balanceAfterAdjustment: 130000,
+      taxCreditAmount: 2288,
+      lineItems: [],
+      reason: "Rate difference",
+      remarks: "Rate difference adjustment on bulk urea supply",
+      status: "approved",
+      activity: [
+        {
+          at: "2026-06-01T10:00:00.000Z",
+          action: "approved",
+          by: ACCOUNTS_CURRENT_USER,
+          detail: "Credit note approved — pending invoice adjustment in receivables view",
+        },
+      ],
+      createdBy: ACCOUNTS_CURRENT_USER,
+      updatedBy: ACCOUNTS_CURRENT_USER,
+      approvedBy: ACCOUNTS_CURRENT_USER,
+      approvedAt: "2026-06-01T10:00:00.000Z",
+      createdAt: "2026-06-01T09:00:00.000Z",
+      updatedAt: "2026-06-01T10:00:00.000Z",
+    },
+  ];
 }
 
 function ensureAutoPostingEnabled(): void {
@@ -1330,36 +1547,54 @@ export function seedAccountsDemoData(force = false): void {
   if (typeof window === "undefined") return;
   if (!force && localStorage.getItem(VERSION_KEY) === ACCOUNTS_DEMO_SEED_VERSION) return;
 
-  ensureAutoPostingEnabled();
-  seedDemoMasters();
+  try {
+    ensureAutoPostingEnabled();
+    seedDemoMasters();
 
-  const customers = loadCustomers();
-  const vendors = loadVendors();
+    const customers = loadCustomers();
+    const demoInvoiceIds = new Set<number>(DEMO_SALES_INVOICES.map((spec) => spec.id));
+    const preservedInvoices = loadInvoices().filter((inv) => !demoInvoiceIds.has(inv.id));
 
-  const invoices = DEMO_SALES_INVOICES.map((spec) => {
-    const customer = customers.find((c) => c.id === spec.customerId);
-    return buildSalesInvoice(spec, customer?.customerName ?? "Customer");
-  });
+    const invoices = DEMO_SALES_INVOICES.map((spec) => {
+      const customer = customers.find((c) => c.id === spec.customerId);
+      const link = customer ? findErpPartyLink("customer_master", customer.id) : undefined;
+      return buildSalesInvoice(
+        spec,
+        customer?.customerName ?? "Customer",
+        link?.ledgerId ?? null,
+      );
+    });
 
-  const purchases = DEMO_PURCHASE_INVOICES.map((spec) => {
-    const vendor = vendors.find((v) => v.id === spec.vendorId);
-    return buildPurchaseInvoice(
-      spec,
-      vendor?.vendorName ?? "Vendor",
-      vendor?.gstNumber ?? "",
+    saveInvoices([...invoices, ...preservedInvoices]);
+    const creditNotes = buildDemoCreditNotes();
+    saveCreditNotes(creditNotes);
+    saveDebitNotes([]);
+    saveExpenses([]);
+
+    postAllTransactions(invoices);
+
+    for (const cn of creditNotes) {
+      maybePostCreditNote(cn);
+    }
+
+    seedPayablesDemoData(
+      (voucherNumber) => loadVouchers().find((v) => v.voucherNumber === voucherNumber)?.id,
     );
-  });
 
-  saveInvoices(invoices);
-  savePurchaseInvoices(purchases);
-  saveCreditNotes([]);
-  saveDebitNotes([]);
-  saveExpenses([]);
+    seedReceivablesDemoData(
+      (voucherNumber) => loadVouchers().find((v) => v.voucherNumber === voucherNumber)?.id,
+      (invoiceNo) => invoices.find((i) => i.invoiceNo === invoiceNo)?.id,
+    );
+    assignDemoOpeningBalances();
+    seedInventoryLedgersFromBatchRegister();
+    seedDemoAccountingVouchers();
+    seedBankingDemoData(true);
+    seedAccountsDemoBankReconciliation(true);
 
-  postAllTransactions(invoices, purchases);
-  seedAccountsDemoBankReconciliation(true);
-
-  localStorage.setItem(VERSION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
+    localStorage.setItem(VERSION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
+  } catch (err) {
+    console.error("[accounts] demo seed failed:", err);
+  }
 }
 
 export function resetAccountsDemoData(): void {

@@ -23,6 +23,7 @@ import {
   type ChartOfAccount,
 } from "@/app/(app)/accounts/data";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import { computeLedgerCurrentBalance } from "@/app/(app)/accounts/masters/ledgers/ledgers-utils";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -194,6 +195,21 @@ export function getStockStatus(expiryDate: string, asOn = new Date().toISOString
   return "Available";
 }
 
+/** Active usable inventory: qty > 0 and not expired as on the given date. */
+export function isActiveUsableInventory(
+  availableQty: number,
+  expiryDate: string,
+  asOn = new Date().toISOString().slice(0, 10),
+): boolean {
+  if (availableQty <= 0) return false;
+  if (!expiryDate) return true;
+  return daysBetween(asOn, expiryDate) >= 0;
+}
+
+function isViewingExpiredInventory(filters: StockValuationFilters): boolean {
+  return filters.status === "Expired" || filters.expiryBucket === "Expired";
+}
+
 export function getExpiryBucket(expiryDate: string, asOn = new Date().toISOString().slice(0, 10)): ExpiryBucket {
   if (!expiryDate) return "Healthy Stock";
   const days = daysBetween(asOn, expiryDate);
@@ -294,9 +310,16 @@ export function enrichStockRecord(
 
 export function computeStockValuationRows(filters: StockValuationFilters = {}): StockValuationRow[] {
   const asOn = filters.asOnDate ?? new Date().toISOString().slice(0, 10);
+  const viewingExpired = isViewingExpiredInventory(filters);
   return getQcPassedStockRecords()
     .map((r) => enrichStockRecord(r, asOn))
     .filter((row) => {
+      if (row.availableQty <= 0) return false;
+      if (viewingExpired) {
+        if (row.status !== "Expired") return false;
+      } else if (!isActiveUsableInventory(row.availableQty, row.expiryDate, asOn)) {
+        return false;
+      }
       if (filters.warehouse && filters.warehouse !== "all" && row.warehouse !== filters.warehouse) return false;
       if (filters.product && filters.product !== "all" && row.product !== filters.product) return false;
       if (filters.sku && filters.sku !== "all" && row.sku !== filters.sku) return false;
@@ -616,11 +639,16 @@ export function computeBatchRegister(filters?: {
   warehouse?: string;
   product?: string;
   sku?: string;
+  batch?: string;
+  asOnDate?: string;
 }): BatchRegisterRow[] {
+  const asOn = filters?.asOnDate ?? new Date().toISOString().slice(0, 10);
   const stockRows = computeStockValuationRows({
     warehouse: filters?.warehouse,
     product: filters?.product,
     sku: filters?.sku,
+    batch: filters?.batch,
+    asOnDate: asOn,
   });
 
   const mfgMap = new Map<string, string>();
@@ -635,34 +663,103 @@ export function computeBatchRegister(filters?: {
     }
   }
 
-  return stockRows.map((row) => {
-    const k = key(row.sku, row.batchNo, row.warehouse);
-    const stock = getQcPassedStockRecords().find((s) => s.id === row.stockId);
-    const stockStatus = getStockStatus(row.expiryDate);
-    return {
+  return stockRows
+    .filter((row) => isActiveUsableInventory(row.availableQty, row.expiryDate, asOn))
+    .map((row) => {
+      const k = key(row.sku, row.batchNo, row.warehouse);
+      const stock = getQcPassedStockRecords().find((s) => s.id === row.stockId);
+      const stockStatus = getStockStatus(row.expiryDate, asOn);
+      return {
+        product: row.product,
+        sku: row.sku,
+        uom: row.uom,
+        packSize: row.packSize,
+        unitsPerPack: row.unitsPerCase,
+        batchNo: row.batchNo,
+        warehouse: row.warehouse,
+        availableQty: row.availableQty,
+        costPrice: row.costPrice,
+        cpMissing: row.cpMissing,
+        mfgDate: stock?.manufacturingDate ?? mfgMap.get(k) ?? "",
+        expiryDate: row.expiryDate,
+        stockStatus,
+        stockValue: computeStockValue(row.availableQty, row.costPrice, row.cpMissing),
+      };
+    });
+}
+
+export function computeBatchRegisterSummary(rows: BatchRegisterRow[]) {
+  const totalAvailableQty = rows.reduce((s, r) => s + r.availableQty, 0);
+  const totalStockValue = rows.reduce(
+    (s, r) => s + (r.cpMissing && r.availableQty > 0 ? 0 : r.stockValue),
+    0,
+  );
+  const cpMissingCount = rows.filter((r) => r.cpMissing && r.availableQty > 0).length;
+  return {
+    batchLines: rows.length,
+    totalStockValue,
+    totalAvailableQty,
+    warehouseCount: new Set(rows.map((r) => r.warehouse)).size,
+    cpMissingCount,
+  };
+}
+
+function valuedBatchRows(rows: BatchRegisterRow[]): BatchRegisterRow[] {
+  return rows.filter((r) => !(r.cpMissing && r.availableQty > 0));
+}
+
+export function computeBatchRegisterWarehouseSummary(rows: BatchRegisterRow[]): WarehouseValuationSummary[] {
+  const byWh = new Map<string, WarehouseValuationSummary>();
+  for (const row of valuedBatchRows(rows)) {
+    const existing = byWh.get(row.warehouse) ?? {
+      warehouse: row.warehouse,
+      totalSkus: 0,
+      availableQty: 0,
+      reservedQty: 0,
+      inventoryValue: 0,
+    };
+    existing.totalSkus += 1;
+    existing.availableQty += row.availableQty;
+    existing.inventoryValue += row.stockValue;
+    byWh.set(row.warehouse, existing);
+  }
+  return Array.from(byWh.values()).sort((a, b) => a.warehouse.localeCompare(b.warehouse));
+}
+
+export function computeBatchRegisterProductSummary(rows: BatchRegisterRow[]): ProductValuationSummary[] {
+  const byProduct = new Map<string, ProductValuationSummary>();
+  for (const row of rows) {
+    if (row.cpMissing && row.availableQty > 0) continue;
+    const key = row.sku;
+    const existing = byProduct.get(key) ?? {
       product: row.product,
       sku: row.sku,
       uom: row.uom,
-      packSize: row.packSize,
-      unitsPerPack: row.unitsPerCase,
-      batchNo: row.batchNo,
-      warehouse: row.warehouse,
-      availableQty: row.availableQty,
+      availableQty: 0,
+      reservedQty: 0,
       costPrice: row.costPrice,
       cpMissing: row.cpMissing,
-      mfgDate: stock?.manufacturingDate ?? mfgMap.get(k) ?? "",
-      expiryDate: row.expiryDate,
-      stockStatus,
-      stockValue: computeStockValue(row.availableQty, row.costPrice, row.cpMissing),
+      inventoryValue: 0,
     };
-  });
+    existing.availableQty += row.availableQty;
+    existing.inventoryValue += row.stockValue;
+    if (!existing.cpMissing && row.cpMissing) existing.cpMissing = true;
+    byProduct.set(key, existing);
+  }
+  return Array.from(byProduct.values()).sort((a, b) => a.product.localeCompare(b.product));
+}
+
+export function computeBatchRegisterNearExpiryValue(rows: BatchRegisterRow[]): number {
+  return valuedBatchRows(rows)
+    .filter((r) => r.stockStatus === "Near Expiry")
+    .reduce((s, r) => s + r.stockValue, 0);
 }
 
 // ── COA inventory asset reconciliation ────────────────────────────────────────
 
 export function getInventoryAssetBookValue(): number {
   const ledgers = getLedgersUnderSubGroupName("Inventory / Stock-in-Hand");
-  return ledgers.reduce((s, l) => s + Math.max(0, l.openingBalance), 0);
+  return ledgers.reduce((s, l) => s + computeLedgerCurrentBalance(l).amount, 0);
 }
 
 export function getInventoryAssetReconciliation(stockValuationTotal: number) {

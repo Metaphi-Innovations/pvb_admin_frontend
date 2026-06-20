@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -10,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Download, Plus, Search } from "lucide-react";
+import { Download, Pencil, Plus, Search } from "lucide-react";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
@@ -32,6 +33,7 @@ import {
 } from "../chart-of-accounts/chart-of-accounts-data";
 import {
   accountTypeMatchesPrimaryHead,
+  computeLedgerBalanceBreakdown,
   computeLedgerCurrentBalance,
   formatLedgerBalance,
   formatOpeningBalance,
@@ -46,6 +48,7 @@ const INITIAL_COA: ChartOfAccount[] = [...SYSTEM_COA_NODES];
 type SheetMode = "add" | "edit" | null;
 
 export default function LedgersPageClient() {
+  const router = useRouter();
   const [coaRecords, setCoaRecords] = useState<ChartOfAccount[]>(INITIAL_COA);
   const [search, setSearch] = useState("");
   const [primaryHeadFilter, setPrimaryHeadFilter] = useState("all");
@@ -341,12 +344,17 @@ export default function LedgersPageClient() {
                 <th className="px-4 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                   Status
                 </th>
+                {canEdit && (
+                  <th className="px-4 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground w-16">
+                    Edit
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
               {paged.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-16 text-center">
+                  <td colSpan={canEdit ? 7 : 6} className="px-4 py-16 text-center">
                     <p className="text-sm font-medium text-foreground">No ledgers found</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       Adjust filters or add a ledger under a valid group.
@@ -365,7 +373,7 @@ export default function LedgersPageClient() {
                     <tr
                       key={r.id}
                       className="border-b border-border/40 hover:bg-brand-50/40 cursor-pointer transition-colors"
-                      onClick={() => canEdit && openEdit(r)}
+                      onClick={() => router.push(`/accounts/masters/ledgers/${r.id}`)}
                     >
                       <td className="px-4 py-3">
                         <p className="text-sm font-medium text-foreground">{r.accountName}</p>
@@ -391,6 +399,21 @@ export default function LedgersPageClient() {
                       <td className="px-4 py-3.5 text-center">
                         <StatusBadge status={r.status} />
                       </td>
+                      {canEdit && (
+                        <td className="px-4 py-3.5 text-center">
+                          <button
+                            type="button"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 hover:bg-muted/40 text-muted-foreground"
+                            title="Edit ledger"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openEdit(r);
+                            }}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })

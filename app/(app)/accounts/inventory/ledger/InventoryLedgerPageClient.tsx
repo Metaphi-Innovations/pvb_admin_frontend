@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
@@ -13,6 +14,7 @@ import { computeLedgerCurrentBalance } from "@/app/(app)/accounts/masters/ledger
 import { resolveLedgerType } from "@/lib/accounts/ledger-detail-utils";
 
 export default function InventoryLedgerPageClient() {
+  const router = useRouter();
   const records = useMemo(() => loadChartOfAccounts(), []);
   const ledgers = useMemo(
     () => getLedgersUnderSubGroupName("Inventory / Stock-in-Hand", records),
@@ -58,7 +60,11 @@ export default function InventoryLedgerPageClient() {
               ledgers.map((l) => {
                 const bal = computeLedgerCurrentBalance(l);
                 return (
-                  <tr key={l.id} className="border-b border-border/40 hover:bg-brand-50/30">
+                  <tr
+                    key={l.id}
+                    className="border-b border-border/40 hover:bg-brand-50/30 cursor-pointer"
+                    onClick={() => router.push(`/accounts/masters/ledgers/${l.id}`)}
+                  >
                     <td className="px-4 py-3 text-xs font-mono">{l.accountCode}</td>
                     <td className="px-4 py-3 text-sm font-medium">{l.accountName}</td>
                     <td className="px-4 py-3 text-xs">{resolveLedgerType(l, records)}</td>

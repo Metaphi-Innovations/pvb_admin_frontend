@@ -69,7 +69,7 @@ export function getGroupFilterOptions(records: ChartOfAccount[], primaryHeadFilt
     }));
 }
 
-function voucherMovement(ledgerId: number): { debit: number; credit: number } {
+export function getLedgerVoucherMovement(ledgerId: number): { debit: number; credit: number } {
   let debit = 0;
   let credit = 0;
   loadVouchers()
@@ -85,12 +85,31 @@ function voucherMovement(ledgerId: number): { debit: number; credit: number } {
   return { debit, credit };
 }
 
+export interface LedgerBalanceBreakdown {
+  openingBalance: number;
+  openingBalanceType: "Debit" | "Credit";
+  totalDebit: number;
+  totalCredit: number;
+  currentBalance: LedgerBalance;
+}
+
+export function computeLedgerBalanceBreakdown(ledger: ChartOfAccount): LedgerBalanceBreakdown {
+  const { debit, credit } = getLedgerVoucherMovement(ledger.id);
+  return {
+    openingBalance: ledger.openingBalance,
+    openingBalanceType: ledger.balanceType,
+    totalDebit: debit,
+    totalCredit: credit,
+    currentBalance: computeLedgerCurrentBalance(ledger),
+  };
+}
+
 function signedBalance(amount: number, balanceType: "Debit" | "Credit"): number {
   return balanceType === "Debit" ? amount : -amount;
 }
 
 export function computeLedgerCurrentBalance(ledger: ChartOfAccount): LedgerBalance {
-  const { debit, credit } = voucherMovement(ledger.id);
+  const { debit, credit } = getLedgerVoucherMovement(ledger.id);
   const signed =
     signedBalance(ledger.openingBalance, ledger.balanceType) + debit - credit;
   if (signed >= 0) {

@@ -258,8 +258,6 @@ export const INVENTORY_NAV_ITEMS: AccountsNavLink[] = [
 
   { label: "Inventory Register", href: "/accounts/reports/inventory-register", icon: BookOpen },
 
-  { label: "Inventory Ledger", href: "/accounts/reports/inventory-register/product-ledger", icon: BookOpen },
-
 ];
 
 
@@ -305,8 +303,6 @@ export const REPORTS_NAV_ITEMS: AccountsNavLink[] = [
   { label: "Balance Sheet", href: "/accounts/reports/balance-sheet", icon: FileSpreadsheet },
 
   { label: "Customer Outstanding", href: "/accounts/receivables/outstanding", icon: Users },
-
-  { label: "Vendor Outstanding", href: "/accounts/payables/outstanding", icon: Truck },
 
   { label: "GST Summary", href: "/accounts/reports/gst", icon: Layers },
 
@@ -690,7 +686,7 @@ const MEGA_MENU_COLUMN_ORDER: Partial<Record<AccountsNavGroupId, { left: string[
   },
   reports: {
     left: ["Trial Balance", "Profit & Loss", "Balance Sheet", "Cash Flow", "General Ledger", "Day Book"],
-    right: ["GST Summary", "Sales Register", "Purchase Register", "Stock Valuation", "Customer Outstanding", "Vendor Outstanding"],
+    right: ["GST Summary", "Sales Register", "Purchase Register", "Stock Valuation", "Customer Outstanding"],
   },
 };
 
