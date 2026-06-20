@@ -109,10 +109,38 @@ export function nextCropId(items: Crop[]) {
 }
 
 export function getCategoryOptions() {
-  return loadCategories()
-    .filter((c) => c.status === "active")
-    .map((c) => ({
-      label: c.categoryName,
-      value: c.categoryName,
-    }));
+  const categories = [
+    "Tropical",
+    "Temperate",
+    "Citrus",
+    "Vine / Berry",
+    "Fruit VegetableRoot & Tuber",
+    "Leafy Green",
+    "Brassica",
+    "Other Vegetable",
+    "Exotic Vegetable",
+    "Oil Seed",
+    "Kharif Cereal",
+    "Rabi Cereal",
+    "Fibre",
+    "Sugar",
+    "Tobacco & Dye",
+    "Rubber & Resin",
+    "Starch & Feed",
+    "Seed Spice",
+    "Fruit / Pod Spice",
+    "Bark / Root Spice",
+    "Flower / Stigma Spice",
+    "Beverage",
+    "Palm",
+    "Timber & Industrial",
+    "Fruit Plantation",
+    "Cut Flower",
+    "Loose Flower",
+    "Potted Plant"
+  ];
+  return categories.map((c) => ({
+    label: c,
+    value: c,
+  }));
 }

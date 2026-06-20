@@ -17,6 +17,7 @@ export default function DispatchManagementPage() {
   const router = useRouter();
 
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>("All");
+  const [activeTab, setActiveTab] = useState<string>("dispatch");
   const [rawDispatches, setRawDispatches] = useState<DispatchRecord[]>([]);
 
   const reload = useCallback(() => {
@@ -44,6 +45,12 @@ export default function DispatchManagementPage() {
     <ListingContainer
       title="Dispatch Management"
       titleIcon={Truck}
+      tabs={[
+        { value: "dispatch", label: "Dispatch" },
+        { value: "sales_return", label: "Sales Return" },
+      ]}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
       metrics={
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <MiniKPICard label="Total Dispatches" value={stats.total} icon={Truck} accent={true} />
@@ -73,6 +80,7 @@ export default function DispatchManagementPage() {
     >
       <DispatchListing 
         rawDispatches={rawDispatches} 
+        activeTab={activeTab}
         reload={reload} 
       />
     </ListingContainer>

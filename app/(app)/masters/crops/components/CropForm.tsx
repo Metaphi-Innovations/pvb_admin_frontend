@@ -44,7 +44,13 @@ export function CropForm({
 
   const inputCls = (key: string) => cn("h-8 text-xs", errors[key] && "border-red-400 focus-visible:ring-red-300");
 
-  const categoryOptions = getCategoryOptions();
+  const categoryOptions = React.useMemo(() => {
+    const base = getCategoryOptions();
+    if (form.categoryName && !base.some((o) => o.value === form.categoryName)) {
+      return [{ label: form.categoryName, value: form.categoryName }, ...base];
+    }
+    return base;
+  }, [form.categoryName]);
   const fieldTypeOptions = FIELD_TYPES.map((ft) => ({ label: ft, value: ft }));
   const seasonOptions = SEASONS.map((s) => ({ label: s, value: s }));
 
