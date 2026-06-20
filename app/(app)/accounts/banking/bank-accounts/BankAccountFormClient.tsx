@@ -14,12 +14,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AccountsFormLayout } from "@/app/(app)/accounts/expenses/components/AccountsFormLayout";
-import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
   createBankAccountWithLedger,
+  isDuplicateAccountNumber,
   loadBankAccounts,
   type BankAccountType,
 } from "@/lib/accounts/bank-accounts-data";
+import { formatBankAccountLabel } from "@/lib/accounts/bank-account-display";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { getBankGroups } from "@/lib/accounts/bank-coa-utils";
 
@@ -39,6 +40,7 @@ export default function BankAccountFormClient() {
     branchName: "",
     accountType: "Current" as BankAccountType,
     openingBalance: "0",
+    openingBalanceDate: new Date().toISOString().slice(0, 10),
     reconciliationEnabled: true,
     defaultForReceipts: false,
     defaultForPayments: false,
@@ -55,10 +57,27 @@ export default function BankAccountFormClient() {
     }
   }, [presetGroupId, bankGroups]);
 
+  const coaLedgerPreview = useMemo(() => {
+    if (!form.accountNickname.trim()) return "—";
+    return formatBankAccountLabel(form.accountNickname.trim(), form.accountNumber.trim());
+  }, [form.accountNickname, form.accountNumber]);
+
   const save = () => {
     setError(null);
-    if (!form.accountNickname.trim() || !form.accountNumber.trim()) {
-      setError("Account nickname and account number are required.");
+    if (!form.accountNickname.trim()) {
+      setError("Account name is required.");
+      return;
+    }
+    if (!form.accountNumber.trim()) {
+      setError("Account number is required.");
+      return;
+    }
+    if (!form.ifsc.trim()) {
+      setError("IFSC code is required.");
+      return;
+    }
+    if (isDuplicateAccountNumber(form.accountNumber.trim())) {
+      setError("An account with this account number already exists.");
       return;
     }
     if (!form.bankName.trim() && !form.bankGroupCoaId) {
@@ -76,6 +95,7 @@ export default function BankAccountFormClient() {
         branchName: form.branchName.trim(),
         accountType: form.accountType,
         openingBalance: Number(form.openingBalance) || 0,
+        openingBalanceDate: form.openingBalanceDate,
         reconciliationEnabled: form.reconciliationEnabled,
         defaultForReceipts: form.defaultForReceipts,
         defaultForPayments: form.defaultForPayments,
@@ -151,28 +171,30 @@ export default function BankAccountFormClient() {
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-[11px]">Account Nickname</Label>
+            <Label className="text-[11px]">Account Name</Label>
             <Input
               className="h-8 text-xs"
               value={form.accountNickname}
               onChange={(e) => setForm({ ...form, accountNickname: e.target.value })}
-              placeholder="e.g. HDFC Current A/c"
+              placeholder="e.g. HDFC Current Account"
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-[11px]">Account Number</Label>
+            <Label className="text-[11px]">Account Number *</Label>
             <Input
               className="h-8 text-xs font-mono"
               value={form.accountNumber}
               onChange={(e) => setForm({ ...form, accountNumber: e.target.value })}
+              placeholder="e.g. XXXX7890"
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-[11px]">IFSC</Label>
+            <Label className="text-[11px]">IFSC Code *</Label>
             <Input
               className="h-8 text-xs font-mono"
               value={form.ifsc}
               onChange={(e) => setForm({ ...form, ifsc: e.target.value.toUpperCase() })}
+              placeholder="e.g. HDFC0001234"
             />
           </div>
           <div className="space-y-1">
@@ -211,13 +233,20 @@ export default function BankAccountFormClient() {
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-[11px]">Current Balance</Label>
+            <Label className="text-[11px]">Opening Balance Date</Label>
             <Input
-              className="h-8 text-xs bg-muted/30"
-              type="number"
-              readOnly
-              value={Number(form.openingBalance) || 0}
+              className="h-8 text-xs"
+              type="date"
+              value={form.openingBalanceDate}
+              onChange={(e) => setForm({ ...form, openingBalanceDate: e.target.value })}
             />
+          </div>
+          <div className="space-y-1 sm:col-span-2">
+            <Label className="text-[11px]">COA Ledger Mapping (Bank Account Ledger)</Label>
+            <Input className="h-8 text-xs bg-muted/30" readOnly value={coaLedgerPreview} />
+            <p className="text-[10px] text-muted-foreground">
+              A ledger will be auto-created under the selected bank group on save.
+            </p>
           </div>
           <div className="space-y-1">
             <Label className="text-[11px]">Status</Label>
@@ -258,9 +287,6 @@ export default function BankAccountFormClient() {
             Default for Payments
           </label>
         </div>
-        <p className="text-[11px] text-muted-foreground">
-          A separate COA ledger will be created under the selected bank group. Voucher entries post to the account ledger only — not the bank name container.
-        </p>
       </div>
     </AccountsFormLayout>
   );

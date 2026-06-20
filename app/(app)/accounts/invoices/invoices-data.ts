@@ -14,6 +14,7 @@ import { maybePostSalesInvoice } from "@/lib/accounts/document-posting-bridge";
 import { findPostedSalesInvoiceVoucher } from "@/lib/accounts/sales-invoice-accounting";
 import { customerMasterToTransactionFields } from "@/lib/accounts/transaction-master-fetch";
 import { validateProductForSalesInvoice } from "@/lib/accounts/erp-accounting-mapping";
+import { backfillInvoiceCustomerLedgerLinks } from "@/lib/accounts/invoice-ledger-match";
 
 export type InvoiceStatus = "draft" | "sent" | "cancelled";
 export type InvoicePaymentStatus = "unpaid" | "partially_paid" | "paid";
@@ -485,8 +486,11 @@ export function loadInvoices(): InvoiceRecord[] {
 		const raw = localStorage.getItem(STORAGE_KEY);
 		const list: InvoiceRecord[] = raw ? JSON.parse(raw) : SEED;
 		const normalized = list.map(normalizeInvoice);
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
-		return normalized;
+		const { invoices: linked, changed } = backfillInvoiceCustomerLedgerLinks(normalized);
+		if (changed || !raw) {
+			localStorage.setItem(STORAGE_KEY, JSON.stringify(linked));
+		}
+		return linked;
 	} catch {
 		return SEED.map(normalizeInvoice);
 	}

@@ -1,23 +1,33 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FileText, IndianRupee, Receipt } from "lucide-react";
-import {
-  AccountsReportShell,
-  ReportFilterBar,
-} from "@/components/accounts/AccountsReportShell";
+import { AccountsReportShell } from "@/components/accounts/AccountsReportShell";
 import { buildSalesRegisterRows } from "@/lib/accounts/register-data";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
+import {
+  ReportFilterRow,
+  ReportDateRangeFilter,
+  ReportBranchFilter,
+  ReportCustomerFilter,
+  useReportDateRange,
+} from "@/components/accounts/ReportFilters";
 
 export default function SalesRegisterPage() {
-  const [dateFrom, setDateFrom] = useState("2026-04-01");
-  const [dateTo, setDateTo] = useState("2026-06-30");
-  const [branch, setBranch] = useState("");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange();
+  const [branch, setBranch] = useState("all");
+  const [customerId, setCustomerId] = useState("all");
 
-  const source = useMemo(
-    () => buildSalesRegisterRows(dateFrom, dateTo),
-    [dateFrom, dateTo],
-  );
+  const customers = useMemo(() => loadCustomers(), []);
+
+  const source = useMemo(() => {
+    let rows = buildSalesRegisterRows(dateFrom, dateTo);
+    if (customerId !== "all") {
+      const customer = customers.find((c) => String(c.id) === customerId);
+      if (customer) rows = rows.filter((r) => r.party === customer.customerName);
+    }
+    return rows;
+  }, [dateFrom, dateTo, customerId, customers, branch]);
 
   const rows = useMemo(
     () =>
@@ -33,27 +43,24 @@ export default function SalesRegisterPage() {
     [source],
   );
 
-  const totalSales = source.reduce((s, r) => s + r.total, 0);
-
   return (
     <AccountsReportShell
       section="Sales"
       title="Sales Register"
       description="Register of sales invoices with taxable value and tax breakup."
-      kpis={[
-        { label: "Documents", value: String(rows.length), icon: FileText, accent: true },
-        { label: "Total Sales", value: formatMoney(totalSales), icon: IndianRupee },
-        { label: "Total Tax", value: formatMoney(source.reduce((s, r) => s + r.tax, 0)), icon: Receipt },
-      ]}
       filters={
-        <ReportFilterBar
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          branch={branch}
-          onDateFrom={setDateFrom}
-          onDateTo={setDateTo}
-          onBranch={setBranch}
-        />
+        <ReportFilterRow>
+          <ReportDateRangeFilter
+            preset={preset}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onPresetChange={setPreset}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
+          <ReportCustomerFilter value={customerId} onChange={setCustomerId} customers={customers} />
+          <ReportBranchFilter value={branch} onChange={setBranch} />
+        </ReportFilterRow>
       }
       columns={[
         { key: "docNo", label: "Invoice No.", mono: true },

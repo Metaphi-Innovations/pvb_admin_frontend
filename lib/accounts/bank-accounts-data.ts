@@ -22,6 +22,7 @@ import {
   formatBankAccountLabel,
   formatBankAccountMaster,
 } from "@/lib/accounts/bank-account-display";
+import { DEMO_BANK_SPECS } from "@/lib/accounts/banking-demo-spec";
 
 export type BankAccountType = "Current" | "Savings" | "OD" | "CC";
 export type ReconciliationStatus = "unreconciled" | "partial" | "reconciled";
@@ -37,6 +38,7 @@ export interface BankAccountMaster {
   branchName: string;
   accountType: BankAccountType;
   openingBalance: number;
+  openingBalanceDate: string;
   balanceType: "Debit" | "Credit";
   reconciliationEnabled: boolean;
   defaultForReceipts: boolean;
@@ -64,6 +66,7 @@ export interface CreateBankAccountInput {
   branchName: string;
   accountType: BankAccountType;
   openingBalance: number;
+  openingBalanceDate?: string;
   balanceType?: "Debit" | "Credit";
   reconciliationEnabled: boolean;
   defaultForReceipts: boolean;
@@ -72,7 +75,18 @@ export interface CreateBankAccountInput {
 }
 
 const STORAGE_KEY = "ds_accounts_bank_accounts_v2";
-const SEED_FLAG_KEY = "ds_accounts_bank_coa_seeded_v1";
+
+function normalizeAccountNumber(value: string): string {
+  return value.replace(/\s/g, "").toUpperCase();
+}
+
+export function isDuplicateAccountNumber(accountNumber: string, excludeId?: number): boolean {
+  const normalized = normalizeAccountNumber(accountNumber);
+  if (!normalized) return false;
+  return loadBankAccountMasters().some(
+    (m) => m.id !== excludeId && normalizeAccountNumber(m.accountNumber) === normalized,
+  );
+}
 
 function defaultLedgerForm(
   parentId: number,
@@ -207,6 +221,16 @@ export function findOrCreateBankGroup(bankName: string): ChartOfAccount {
 }
 
 export function createBankAccountWithLedger(input: CreateBankAccountInput): BankAccountMaster {
+  if (!input.accountNumber.trim()) {
+    throw new Error("Account number is required.");
+  }
+  if (!input.ifsc.trim()) {
+    throw new Error("IFSC code is required.");
+  }
+  if (isDuplicateAccountNumber(input.accountNumber)) {
+    throw new Error("An account with this account number already exists.");
+  }
+
   let records = loadChartOfAccounts();
   let bankGroup =
     input.bankGroupCoaId != null
@@ -265,6 +289,7 @@ export function createBankAccountWithLedger(input: CreateBankAccountInput): Bank
     branchName: input.branchName.trim(),
     accountType: input.accountType,
     openingBalance: input.openingBalance,
+    openingBalanceDate: input.openingBalanceDate ?? new Date().toISOString().slice(0, 10),
     balanceType: input.balanceType ?? "Debit",
     reconciliationEnabled: input.reconciliationEnabled,
     defaultForReceipts: input.defaultForReceipts,
@@ -346,72 +371,26 @@ export function loadBankAccountsForReconciliation(): {
 
 export function ensureDemoBankCoaStructure(): void {
   if (typeof window === "undefined") return;
-  if (localStorage.getItem(SEED_FLAG_KEY)) return;
-
-  const records = loadChartOfAccounts();
-  const bankSub = getBankAccountsSubGroup(records);
-  if (!bankSub) return;
-
-  const hasGroups = records.some((r) => r.parentAccountId === bankSub.id && r.bankGroupFlag);
-  if (!hasGroups) {
-    const hdfc = createBankGroup("HDFC Bank");
-    const icici = createBankGroup("ICICI Bank");
-
+  if (loadBankAccountMasters().length > 0) {
+    syncBankLedgerDisplayNames();
+    return;
+  }
+  for (const spec of DEMO_BANK_SPECS) {
     createBankAccountWithLedger({
-      bankName: "HDFC Bank",
-      bankGroupCoaId: hdfc.id,
-      accountNickname: "HDFC Current A/c",
-      accountNumber: "5020000004499",
-      ifsc: "HDFC0001234",
-      branchName: "Mumbai Main",
-      accountType: "Current",
-      openingBalance: 250000,
+      bankName: spec.bankName,
+      accountNickname: spec.accountNickname,
+      accountNumber: spec.accountNumber,
+      ifsc: spec.ifsc,
+      branchName: spec.branchName,
+      accountType: spec.accountType,
+      openingBalance: spec.openingBalance,
+      openingBalanceDate: spec.openingBalanceDate,
       reconciliationEnabled: true,
-      defaultForReceipts: true,
-      defaultForPayments: false,
-    });
-    createBankAccountWithLedger({
-      bankName: "HDFC Bank",
-      bankGroupCoaId: hdfc.id,
-      accountNickname: "HDFC Collection A/c",
-      accountNumber: "5020000007821",
-      ifsc: "HDFC0001234",
-      branchName: "Mumbai Main",
-      accountType: "Current",
-      openingBalance: 180000,
-      reconciliationEnabled: true,
-      defaultForReceipts: false,
-      defaultForPayments: true,
-    });
-    createBankAccountWithLedger({
-      bankName: "HDFC Bank",
-      bankGroupCoaId: hdfc.id,
-      accountNickname: "HDFC Salary A/c",
-      accountNumber: "5020000001134",
-      ifsc: "HDFC0001234",
-      branchName: "Mumbai Main",
-      accountType: "Current",
-      openingBalance: 95000,
-      reconciliationEnabled: true,
-      defaultForReceipts: false,
-      defaultForPayments: false,
-    });
-    createBankAccountWithLedger({
-      bankName: "ICICI Bank",
-      bankGroupCoaId: icici.id,
-      accountNickname: "ICICI Current A/c",
-      accountNumber: "006501234567",
-      ifsc: "ICIC0001234",
-      branchName: "Pune Branch",
-      accountType: "Current",
-      openingBalance: 120000,
-      reconciliationEnabled: true,
-      defaultForReceipts: false,
-      defaultForPayments: false,
+      defaultForReceipts: spec.defaultForReceipts,
+      defaultForPayments: spec.defaultForPayments,
+      status: "active",
     });
   }
-
-  localStorage.setItem(SEED_FLAG_KEY, "1");
   syncBankLedgerDisplayNames();
 }
 
@@ -435,6 +414,7 @@ export function syncMastersFromCoaLedgers(): void {
       branchName: "",
       accountType: "Current",
       openingBalance: ledger.openingBalance,
+      openingBalanceDate: "2026-04-01",
       balanceType: ledger.balanceType,
       reconciliationEnabled: true,
       defaultForReceipts: false,

@@ -1,15 +1,35 @@
 "use client";
 
-import { useMemo } from "react";
-import { Users, FileText, IndianRupee } from "lucide-react";
-import {
-  AccountsReportShell,
-} from "@/components/accounts/AccountsReportShell";
+import { useMemo, useState } from "react";
+import { AccountsReportShell } from "@/components/accounts/AccountsReportShell";
 import { computeCustomerOutstanding } from "@/lib/accounts/receivables-data";
+import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
+import {
+  ReportFilterRow,
+  ReportAsOnDateFilter,
+  ReportCustomerFilter,
+  ReportBranchFilter,
+} from "@/components/accounts/ReportFilters";
 
 export default function CustomerOutstandingReportClient() {
-  const data = useMemo(() => computeCustomerOutstanding(), []);
+  const [asOnDate, setAsOnDate] = useState(defaultAsOnDate());
+  const [customerId, setCustomerId] = useState("all");
+  const [branch, setBranch] = useState("all");
+
+  const customers = useMemo(() => loadCustomers(), []);
+
+  const data = useMemo(() => {
+    let rows = computeCustomerOutstanding(asOnDate);
+    if (customerId !== "all") {
+      rows = rows.filter((r) => String(r.customerId) === customerId);
+    }
+    if (branch !== "all") {
+      rows = rows.filter((r) => r.branch === branch);
+    }
+    return rows;
+  }, [asOnDate, customerId, branch]);
 
   const rows = useMemo(
     () =>
@@ -24,19 +44,17 @@ export default function CustomerOutstandingReportClient() {
     [data],
   );
 
-  const totalOutstanding = data.reduce((s, r) => s + r.outstanding, 0);
-  const totalCustomers = data.length;
-  const totalInvoices = data.reduce((s, r) => s + r.invoiceCount, 0);
-
   return (
     <AccountsReportShell
       title="Customer Outstanding"
       description="Report view of open receivables from Trade Receivables ledgers."
-      kpis={[
-        { label: "Customers", value: String(totalCustomers), icon: Users },
-        { label: "Open Invoices", value: String(totalInvoices), icon: FileText },
-        { label: "Total Outstanding", value: formatMoney(totalOutstanding), icon: IndianRupee, accent: true },
-      ]}
+      filters={
+        <ReportFilterRow>
+          <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
+          <ReportCustomerFilter value={customerId} onChange={setCustomerId} customers={customers} />
+          <ReportBranchFilter value={branch} onChange={setBranch} />
+        </ReportFilterRow>
+      }
       columns={[
         { key: "customer", label: "Customer" },
         { key: "invoices", label: "Invoices", align: "center" },

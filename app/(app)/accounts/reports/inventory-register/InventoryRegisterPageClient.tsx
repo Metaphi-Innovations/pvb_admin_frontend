@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { FileText, ArrowDownLeft, ArrowUpRight, Package } from "lucide-react";
 import { AccountsReportShell, ReportFilterBar } from "@/components/accounts/AccountsReportShell";
 import {
@@ -33,18 +32,11 @@ export default function InventoryRegisterPageClient() {
   const totalIn = source.reduce((s, r) => s + r.inQty, 0);
   const totalOut = source.reduce((s, r) => s + r.outQty, 0);
 
-  const ledgerHref = (rowSku: string, rowProduct: string) =>
-    `/accounts/reports/inventory-register/product-ledger?sku=${encodeURIComponent(rowSku)}&product=${encodeURIComponent(rowProduct)}`;
-
   const rows = source.map((r) => ({
     date: r.date,
     voucherType: r.voucherType,
     voucherNo: r.voucherNo,
-    product: (
-      <Link href={ledgerHref(r.sku, r.product)} className="text-primary hover:underline">
-        {r.product}
-      </Link>
-    ),
+    product: r.product,
     sku: r.sku,
     warehouse: r.warehouse,
     batchNo: r.batchNo,
@@ -106,7 +98,7 @@ export default function InventoryRegisterPageClient() {
         { key: "stockValue", label: "Stock Value", align: "right", money: true },
         { key: "source", label: "Source" },
       ]}
-      rows={rows as unknown as Record<string, string | number>[]}
+      rows={rows}
       emptyMessage="No inventory movements for selected period."
     />
   );

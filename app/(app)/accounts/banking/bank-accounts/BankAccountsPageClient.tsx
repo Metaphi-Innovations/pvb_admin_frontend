@@ -19,6 +19,7 @@ import {
 } from "@/lib/accounts/bank-accounts-data";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { computeLedgerCurrentBalance } from "@/app/(app)/accounts/masters/ledgers/ledgers-utils";
+import { ensureBankingDemoOnPageLoad } from "@/lib/accounts/banking-demo-seed";
 
 export default function BankAccountsPageClient() {
   const router = useRouter();
@@ -26,6 +27,7 @@ export default function BankAccountsPageClient() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
+    ensureBankingDemoOnPageLoad();
     loadBankAccounts();
     setRefreshKey((k) => k + 1);
   }, []);

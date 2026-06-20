@@ -95,6 +95,10 @@ export function getAccountItemById(id: number): AccountItem | undefined {
   return loadAccountItems().find((i) => i.id === id);
 }
 
+export function findAccountItemBySku(sku: string): AccountItem | undefined {
+  return loadAccountItems().find((i) => i.sku === sku);
+}
+
 export function nextAccountItemId(list: AccountItem[]): number {
   return list.length ? Math.max(...list.map((i) => i.id)) + 1 : 1;
 }

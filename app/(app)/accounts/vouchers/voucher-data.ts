@@ -44,27 +44,7 @@ export interface AccountingVoucher {
 
 const VOUCHER_KEY = "ds_accounts_vouchers_v1";
 
-const VOUCHER_SEED: AccountingVoucher[] = [
-  {
-    id: 1,
-    voucherType: "journal",
-    voucherNumber: "JRN-0001",
-    date: "2026-06-02",
-    financialYearId: 1,
-    financialYearName: "FY 2025-26",
-    referenceNo: "PAY-2026-05",
-    narration: "Month-end payroll accrual",
-    lines: [
-      { id: 1, ledgerId: 40002, ledgerName: "Salary Expense", debit: 80000, credit: 0, remarks: "" },
-      { id: 2, ledgerId: 20001, ledgerName: "Vendor A", debit: 0, credit: 80000, remarks: "" },
-    ],
-    totalDebit: 80000,
-    totalCredit: 80000,
-    status: "posted",
-    createdBy: "Admin",
-    updatedBy: "Admin",
-  },
-];
+const VOUCHER_SEED: AccountingVoucher[] = [];
 
 function getOrSeed(): AccountingVoucher[] {
   if (typeof window === "undefined") return VOUCHER_SEED;
