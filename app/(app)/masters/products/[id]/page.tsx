@@ -321,6 +321,14 @@ export default function ProductDetailPage() {
 							<RecordKvRow label='CFU' value={product.cfu} />
 							<RecordKvRow label='Base Unit' value={product.baseUnit} />
 							<RecordKvRow
+								label='Unit Size'
+								value={
+									product.unitSize !== undefined
+										? String(product.unitSize)
+										: undefined
+								}
+							/>
+							<RecordKvRow
 								label='Packaging Unit'
 								value={product.packagingUnit}
 							/>
@@ -331,6 +339,48 @@ export default function ProductDetailPage() {
 										? String(product.conversionQuantity)
 										: undefined
 								}
+							/>
+							<RecordKvRow
+								label='Net Weight per Packaging Unit (KG)'
+								value={
+									product.netWeight !== undefined
+										? `${product.netWeight} KG`
+										: undefined
+								}
+							/>
+							<RecordKvRow
+								label='Gross Weight per Packaging Unit (KG)'
+								value={
+									product.grossWeight !== undefined
+										? `${product.grossWeight} KG`
+										: undefined
+								}
+								isLast
+							/>
+						</RecordSectionCard>
+
+						<RecordSectionCard
+							title='Accounting Mapping'
+							icon={FileText}
+							accent='green'
+						>
+							<RecordKvRow label='HSN Code' value={product.hsnCode} mono copy />
+							<RecordKvRow label='GST Rate' value={product.gstRate || "—"} />
+							<RecordKvRow
+								label='Inventory Account'
+								value={product.inventoryAccount ?? "Inventory / Stock in Hand"}
+							/>
+							<RecordKvRow
+								label='Sales Account'
+								value={product.salesAccount ?? "Sales"}
+							/>
+							<RecordKvRow
+								label='Purchase Account'
+								value={product.purchaseAccount ?? "Purchases"}
+							/>
+							<RecordKvRow
+								label='COGS Account'
+								value={product.cogsAccount ?? "Cost of Goods Sold"}
 								isLast
 							/>
 						</RecordSectionCard>

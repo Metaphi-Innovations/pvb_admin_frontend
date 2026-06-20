@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import PurchaseInvoiceFormClient from "../PurchaseInvoiceFormClient";
 
-export default function LegacyRedirect() {
-  redirect("/accounts/vouchers?tab=purchase&mode=new");
+export default function NewPurchaseInvoicePage() {
+  return <PurchaseInvoiceFormClient />;
 }

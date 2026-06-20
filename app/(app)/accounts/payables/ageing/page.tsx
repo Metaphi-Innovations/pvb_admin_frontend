@@ -19,7 +19,7 @@ export default function VendorAgeingClient() {
 
   return (
     <AccountsWorkbenchPage
-      section="Payables"
+      section="Purchases"
       title="Vendor Ageing"
       description="Age-wise analysis of vendor outstanding balances."
       columns={[

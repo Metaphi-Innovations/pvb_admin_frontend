@@ -10,6 +10,7 @@ import {
 import { todayStr } from "@/lib/procurement/utils";
 import type { ProcurementAdditionalCharge } from "@/lib/procurement/procurement-line-utils";
 import { sumAdditionalCharges } from "@/lib/procurement/procurement-line-utils";
+import { maybePostPurchaseInvoice } from "@/lib/accounts/document-posting-bridge";
 
 export type PurchaseDebitStatus = "no_debit" | "partially_debited" | "fully_debited";
 export type POCreditDebitStatus = "open" | "partially_returned" | "closed";
@@ -315,6 +316,7 @@ export function createPurchaseFromPOUpload(
 
   savePurchaseInvoices([...all, rec]);
   appendPOVendorInvoiceActivity(po, rec.vendorInvoiceNo, rec.invoiceNo, false);
+  maybePostPurchaseInvoice(rec);
   return rec;
 }
 
@@ -414,6 +416,7 @@ export function createManualPurchaseEntry(input: ManualPurchaseInput): PurchaseI
   });
 
   savePurchaseInvoices([...all, rec]);
+  maybePostPurchaseInvoice(rec);
   return rec;
 }
 
@@ -550,6 +553,95 @@ export function lookupPurchaseInvoiceForDebit(invoiceId: number): PurchaseInvoic
       taxPct: l.taxPct,
     })),
   };
+}
+
+// ── GRN-based creation ──────────────────────────────────────────────────────
+
+export type GrnPurchaseInput = {
+  grnId: string;
+  grnNo: string;
+  vendorId: number;
+  vendorInvoiceNo: string;
+  invoiceDate: string;
+  remarks: string;
+  /** Override line rates from GRN — if omitted, uses receivedQty as qty with rate=0 */
+  lineItems: PurchaseInvoiceLine[];
+};
+
+/**
+ * Returns GRNs with status qc_completed that do NOT yet have a purchase invoice.
+ * Reads from warehouse GRN storage.
+ */
+export function getGrnsPendingInvoice(): import("@/app/(app)/warehouse/grnqc/grn/types").GrnRecord[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const { getGrnRecords } = require("@/app/(app)/warehouse/grnqc/grn/mock-data");
+    const all = loadPurchaseInvoices();
+    const invoicedGrnIds = new Set(all.map((p) => p.grnId).filter(Boolean));
+    return (getGrnRecords() as import("@/app/(app)/warehouse/grnqc/grn/types").GrnRecord[]).filter(
+      (g) => g.status === "qc_completed" && !invoicedGrnIds.has(g.id),
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** Create a purchase invoice from a received GRN */
+export function createPurchaseFromGrn(input: GrnPurchaseInput): PurchaseInvoiceRecord {
+  if (!input.vendorId) throw new Error("Vendor is required.");
+  if (!input.vendorInvoiceNo.trim()) throw new Error("Vendor invoice number is required.");
+  if (!input.lineItems.length) throw new Error("At least one line item is required.");
+
+  const all = loadPurchaseInvoices();
+  const existing = all.find((p) => p.grnId === input.grnId);
+  if (existing) throw new Error(`Invoice already created for ${input.grnNo} (${existing.invoiceNo}).`);
+
+  const { getActiveVendors } = require("@/app/(app)/masters/vendors/vendor-data");
+  const vendor = (getActiveVendors() as import("@/app/(app)/masters/vendors/vendor-data").Vendor[]).find(
+    (v) => v.id === input.vendorId,
+  );
+
+  const productAmount = input.lineItems.reduce((s, l) => s + l.lineAmount, 0);
+  const taxAmount = input.lineItems.reduce((s, l) => s + l.taxAmount, 0);
+  const grandTotal = productAmount + taxAmount;
+
+  const rec = normalizePI({
+    id: all.length ? Math.max(...all.map((r) => r.id)) + 1 : 1,
+    invoiceNo: nextPurchaseNo(all),
+    invoiceDate: input.invoiceDate,
+    vendorInvoiceNo: input.vendorInvoiceNo.trim(),
+    vendorId: input.vendorId,
+    vendorName: vendor?.vendorName ?? input.grnNo,
+    vendorGst: vendor?.gstNumber ?? "",
+    poId: null,
+    poNumber: "",
+    poDate: "",
+    grnId: input.grnId,
+    grnNo: input.grnNo,
+    source: "po_invoice",
+    lineItems: input.lineItems,
+    additionalCharges: [],
+    productAmount,
+    subtotal: productAmount,
+    taxAmount,
+    grandTotal,
+    amountPaid: 0,
+    amountDebited: 0,
+    balanceDebitAllowed: grandTotal,
+    debitStatus: "no_debit",
+    poAdjustmentStatus: "open",
+    remarks: input.remarks.trim(),
+    attachment: null,
+    createdBy: ACCOUNTS_CURRENT_USER,
+    updatedBy: ACCOUNTS_CURRENT_USER,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    activity: [{ date: new Date().toISOString().slice(0, 10), action: "Invoice Created from GRN", by: ACCOUNTS_CURRENT_USER }],
+  });
+
+  savePurchaseInvoices([...all, rec]);
+  maybePostPurchaseInvoice(rec);
+  return rec;
 }
 
 export function recordPurchaseInvoicePayment(invoiceId: number, paidDelta: number): void {

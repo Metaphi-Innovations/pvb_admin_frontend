@@ -35,6 +35,7 @@ import {
   validatePricingForm,
   loadActiveProductOptions,
   findActivePricingForProduct,
+  parseGstPct,
   type PricingForm,
   type PricingRecord,
 } from "./pricing-data";
@@ -204,8 +205,22 @@ export default function PricingMasterPage() {
       ),
     },
     {
+      key: "uom",
+      header: "UOM",
+      sortable: true,
+      width: "72px",
+      render: (_val, row) => <span className="text-xs">{row.uom || "—"}</span>,
+    },
+    {
+      key: "packSize",
+      header: "Pack Size",
+      sortable: true,
+      width: "90px",
+      render: (_val, row) => <span className="text-xs">{row.packSize || "—"}</span>,
+    },
+    {
       key: "costPrice",
-      header: "Cost Price (CP)",
+      header: "CP",
       sortable: true,
       width: "120px",
       align: "right",
@@ -385,6 +400,12 @@ export default function PricingMasterPage() {
       sku: product.sku,
       segment: product.segment,
       category: product.category,
+      uom: product.baseUnit || prev.uom,
+      packSize: product.conversionQuantity
+        ? `${product.conversionQuantity} ${product.baseUnit || ""}`.trim()
+        : product.packagingUnit || prev.packSize,
+      unitsPerCase: product.conversionQuantity || prev.unitsPerCase,
+      gstPct: parseGstPct(product.gstRate) || prev.gstPct,
     }));
     setErrors((prev) => {
       const next = { ...prev };
@@ -448,6 +469,10 @@ export default function PricingMasterPage() {
       const headers = [
         "SKU",
         "Product Name",
+        "UOM",
+        "Pack Size",
+        "Units Per Case",
+        "GST %",
         "Cost Price (CP)",
         "Distributor Price (DP)",
         "Retail Price (RP)",
@@ -464,6 +489,10 @@ export default function PricingMasterPage() {
           [
             r.sku,
             `"${r.productName.replace(/"/g, '""')}"`,
+            r.uom,
+            `"${(r.packSize || "").replace(/"/g, '""')}"`,
+            r.unitsPerCase,
+            r.gstPct,
             r.costPrice,
             r.distributorPrice,
             r.retailPrice,
@@ -504,6 +533,10 @@ export default function PricingMasterPage() {
         basicInfo: [
           { label: "SKU", value: active.sku },
           { label: "Product Name", value: active.productName },
+          { label: "UOM", value: active.uom || "—" },
+          { label: "Pack Size", value: active.packSize || "—" },
+          { label: "Units Per Case", value: String(active.unitsPerCase ?? "—") },
+          { label: "GST %", value: active.gstPct != null ? `${active.gstPct}%` : "—" },
           { label: "Segment", value: active.segment || "—" },
           { label: "Category", value: active.category || "—" },
           { label: "Cost Price (CP)", value: formatIndianRupeeDisplay(active.costPrice) },
@@ -627,6 +660,51 @@ export default function PricingMasterPage() {
                         readOnly
                         className={cn(compactInput(), "bg-muted/20")}
                         value={form.category || "—"}
+                      />
+                    </MasterField>
+                    <MasterField label="SKU">
+                      <Input
+                        readOnly
+                        className={cn(compactInput(), "bg-muted/20 font-mono")}
+                        value={form.sku || "—"}
+                      />
+                    </MasterField>
+                    <MasterField label="UOM" required error={errors.uom}>
+                      <Input
+                        className={compactInput()}
+                        value={form.uom}
+                        onChange={(e) => setForm((prev) => ({ ...prev, uom: e.target.value }))}
+                        placeholder="e.g. BAG, KG"
+                      />
+                    </MasterField>
+                    <MasterField label="Pack Size">
+                      <Input
+                        className={compactInput()}
+                        value={form.packSize}
+                        onChange={(e) => setForm((prev) => ({ ...prev, packSize: e.target.value }))}
+                        placeholder="e.g. 50 KG"
+                      />
+                    </MasterField>
+                    <MasterField label="Units Per Case">
+                      <Input
+                        type="number"
+                        min={1}
+                        className={compactInput()}
+                        value={form.unitsPerCase || ""}
+                        onChange={(e) =>
+                          setForm((prev) => ({ ...prev, unitsPerCase: parseInt(e.target.value, 10) || 1 }))
+                        }
+                      />
+                    </MasterField>
+                    <MasterField label="GST %">
+                      <Input
+                        type="number"
+                        min={0}
+                        className={compactInput()}
+                        value={form.gstPct || ""}
+                        onChange={(e) =>
+                          setForm((prev) => ({ ...prev, gstPct: parseFloat(e.target.value) || 0 }))
+                        }
                       />
                     </MasterField>
                   </>

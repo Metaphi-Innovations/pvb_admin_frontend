@@ -1,5 +1,7 @@
-import { redirect } from "next/navigation";
+import DebitNoteFormPageClient from "../../../../debit-notes/DebitNoteFormPageClient";
 
-export default function LegacyRedirect() {
-  redirect("/accounts/vouchers?tab=debit-note");
+type PageProps = { params: { id: string } };
+
+export default function EditDebitNotePage({ params }: PageProps) {
+  return <DebitNoteFormPageClient debitNoteId={Number(params.id)} />;
 }

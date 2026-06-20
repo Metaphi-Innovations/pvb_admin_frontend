@@ -19,6 +19,8 @@ import {
   PURCHASE_LIST_PATH,
   PURCHASE_PAYMENT_STATUS_LABELS,
 } from "./purchase-utils";
+import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
+import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
@@ -54,6 +56,7 @@ export default function PurchaseViewPageClient({ purchaseId }: { purchaseId: num
 
   return (
     <RecordDetailPage
+      embedded
       listHref={PURCHASE_LIST_PATH}
       listLabel="Purchases"
       recordName={record.vendorName}
@@ -107,6 +110,15 @@ export default function PurchaseViewPageClient({ purchaseId }: { purchaseId: num
       }}
     >
       <div className="space-y-4">
+        <LedgerImpactPreview
+          title="Accounting Entry"
+          lines={purchaseInvoiceImpactResolved({
+            vendorName: record.vendorName,
+            taxable: record.subtotal,
+            taxAmount: record.taxAmount,
+            grandTotal: record.grandTotal,
+          })}
+        />
         {isPO ? (
           <div className="rounded-lg border bg-white p-4 space-y-3">
             <h2 className="text-sm font-semibold">PO Invoice Integration</h2>

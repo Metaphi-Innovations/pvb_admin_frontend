@@ -1,5 +1,7 @@
-import { redirect } from "next/navigation";
+import CreditNoteFormPageClient from "../../../../credit-notes/CreditNoteFormPageClient";
 
-export default function LegacyRedirect() {
-  redirect("/accounts/vouchers?tab=credit-note");
+type PageProps = { params: { id: string } };
+
+export default function EditCreditNotePage({ params }: PageProps) {
+  return <CreditNoteFormPageClient creditNoteId={Number(params.id)} />;
 }

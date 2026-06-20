@@ -20,6 +20,7 @@ import {
   formValuesToCustomer,
   type CustomerFormValues,
 } from "../components/CustomerForm";
+import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
 import { hasCustomerPermission } from "../customer-permissions";
 
 interface ToastState {
@@ -129,6 +130,9 @@ export default function NewCustomerPage() {
     );
 
     saveCustomers([...list, record]);
+    if (!asDraft && status !== "draft") {
+      ensureCustomerLedgerFromMaster(record);
+    }
     setToast({
       msg: asDraft ? "Draft saved successfully." : "Customer created successfully.",
       type: "success",
