@@ -14,6 +14,7 @@ import { maybePostSalesInvoice } from "@/lib/accounts/document-posting-bridge";
 import { findPostedSalesInvoiceVoucher } from "@/lib/accounts/sales-invoice-accounting";
 import { customerMasterToTransactionFields } from "@/lib/accounts/transaction-master-fetch";
 import { validateProductForSalesInvoice } from "@/lib/accounts/erp-accounting-mapping";
+import { backfillInvoiceCustomerLedgerLinks } from "@/lib/accounts/invoice-ledger-match";
 
 export type InvoiceStatus = "draft" | "sent" | "cancelled";
 export type InvoicePaymentStatus = "unpaid" | "partially_paid" | "paid";
@@ -132,6 +133,24 @@ export interface InvoiceRecord {
 }
 
 const STORAGE_KEY = "ds_accounts_invoices_v1";
+
+/** Column labels — GST-inclusive totals must be explicit across Accounts UI. */
+export const INVOICE_AMOUNT_LABELS = {
+	taxableValue: "Taxable Value",
+	gstAmount: "GST Amount",
+	invoiceTotal: "Invoice Total (Incl. GST)",
+} as const;
+
+/** Pre-GST taxable value, GST, and final payable total for a sales invoice. */
+export function getInvoiceAmountBreakup(
+	inv: Pick<InvoiceRecord, "subtotal" | "discountTotal" | "taxAmount" | "grandTotal">,
+) {
+	const taxableValue =
+		Math.round((inv.subtotal - inv.discountTotal) * 100) / 100;
+	const gstAmount = Math.round(inv.taxAmount * 100) / 100;
+	const invoiceTotal = Math.round(inv.grandTotal * 100) / 100;
+	return { taxableValue, gstAmount, invoiceTotal };
+}
 
 export function parseTaxPct(value: string | number): number {
 	if (typeof value === "number") return value;
@@ -485,8 +504,11 @@ export function loadInvoices(): InvoiceRecord[] {
 		const raw = localStorage.getItem(STORAGE_KEY);
 		const list: InvoiceRecord[] = raw ? JSON.parse(raw) : SEED;
 		const normalized = list.map(normalizeInvoice);
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
-		return normalized;
+		const { invoices: linked, changed } = backfillInvoiceCustomerLedgerLinks(normalized);
+		if (changed || !raw) {
+			localStorage.setItem(STORAGE_KEY, JSON.stringify(linked));
+		}
+		return linked;
 	} catch {
 		return SEED.map(normalizeInvoice);
 	}

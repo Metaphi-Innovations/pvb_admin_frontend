@@ -12,9 +12,12 @@ export interface PurchaseOrderItem {
   orderedQty: number;
 }
 
+export type PoStatus = "approved" | "pending" | "cancelled";
+
 export interface PurchaseOrder {
   poNumber: string;
   vendorName: string;
+  status: PoStatus;
   items: PurchaseOrderItem[];
 }
 
@@ -23,6 +26,11 @@ export interface GrnItem {
   productName: string;
   productCode: string;
   orderedQty: number;
+  /** Quantity already received in prior GRNs */
+  alreadyReceivedQty?: number;
+  /** Remaining quantity eligible for this GRN */
+  pendingQty?: number;
+  /** Current received quantity entered on this GRN */
   receivedQty: number;
   balanceQty?: number;
   unit?: string;
@@ -43,6 +51,10 @@ export interface GrnBatch {
   expDate: string;
   quantity: number;
   poNumber?: string;
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  gstRate?: number;
+  invoiceRate?: number;
 }
 
 export type GrnStatus = "draft" | "submitted" | "qc_pending" | "qc_completed";
@@ -62,6 +74,10 @@ export interface GrnRecord {
   status: GrnStatus;
   items: GrnItem[];
   batches: GrnBatch[];
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  invoiceFileName?: string;
+  invoiceFileNames?: string[];
   activity?: Array<{ date: string; time?: string; action: string; by: string; remarks?: string }>;
   createdBy?: string;
   updatedBy?: string;

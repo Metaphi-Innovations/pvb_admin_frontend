@@ -1,5 +1,11 @@
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
+import type { VoucherLine } from "@/app/(app)/accounts/vouchers/voucher-data";
+import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
+import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import {
+  findErpPartyLinkByLedgerId,
+} from "@/lib/accounts/erp-party-links";
 import {
   findLedgerById,
   getActivePostingLedgers,
@@ -7,7 +13,6 @@ import {
   isPostableNode,
   resolveHierarchyPath,
 } from "@/lib/accounts/coa-hierarchy";
-import type { VoucherLine } from "@/app/(app)/accounts/vouchers/voucher-data";
 
 export interface LedgerGroupOption {
   groupLabel: string;
@@ -172,6 +177,95 @@ function matchesSubGroup(path: ChartOfAccount[], ...terms: string[]): boolean {
     });
 }
 
+function isCustomerReceivableLedger(ledger: ChartOfAccount, path: ChartOfAccount[]): boolean {
+  if (ledger.erpSourceModule === "customer_master") return true;
+  return matchesSubGroup(path, "receivable") || matchesSubGroup(path, "debtor");
+}
+
+function isVendorPayableLedger(ledger: ChartOfAccount, path: ChartOfAccount[]): boolean {
+  if (ledger.erpSourceModule === "vendor_master") return true;
+  return matchesSubGroup(path, "trade payable") || matchesSubGroup(path, "sundry creditor");
+}
+
+/** Customer / vendor party ledgers — party is implied by the ledger itself. */
+export function isAutoPartyLedger(
+  ledger: ChartOfAccount,
+  records?: ChartOfAccount[],
+): boolean {
+  const list = records ?? loadChartOfAccounts();
+  const { path } = resolveHierarchyPath(list, ledger.id);
+  return isCustomerReceivableLedger(ledger, path) || isVendorPayableLedger(ledger, path);
+}
+
+export interface AutoPartyReference {
+  contactId: number | null;
+  contactName: string;
+}
+
+/** Derive party contact from a customer/vendor ledger row (no manual picker). */
+export function resolveAutoPartyFromLedger(
+  ledger: ChartOfAccount,
+  records?: ChartOfAccount[],
+): AutoPartyReference {
+  const list = records ?? loadChartOfAccounts();
+  const { path } = resolveHierarchyPath(list, ledger.id);
+  const partyName = ledger.accountName.trim();
+
+  const link = findErpPartyLinkByLedgerId(ledger.id);
+  if (link?.erpSourceModule === "customer_master") {
+    return { contactId: link.erpSourceId, contactName: link.partyName || partyName };
+  }
+  if (link?.erpSourceModule === "vendor_master") {
+    return { contactId: link.erpSourceId, contactName: link.partyName || partyName };
+  }
+
+  if (ledger.erpSourceModule === "customer_master" && ledger.erpSourceId) {
+    return { contactId: ledger.erpSourceId, contactName: partyName };
+  }
+  if (ledger.erpSourceModule === "vendor_master" && ledger.erpSourceId) {
+    return { contactId: ledger.erpSourceId, contactName: partyName };
+  }
+
+  if (isCustomerReceivableLedger(ledger, path)) {
+    const customer = loadCustomers().find(
+      (c) => c.customerName.trim().toLowerCase() === partyName.toLowerCase(),
+    );
+    return { contactId: customer?.id ?? null, contactName: partyName };
+  }
+
+  if (isVendorPayableLedger(ledger, path)) {
+    const vendor = loadVendors().find(
+      (v) => v.vendorName.trim().toLowerCase() === partyName.toLowerCase(),
+    );
+    return { contactId: vendor?.id ?? null, contactName: partyName };
+  }
+
+  return { contactId: null, contactName: partyName };
+}
+
+export function applyAutoPartyToLine(
+  line: VoucherLine,
+  records?: ChartOfAccount[],
+): VoucherLine {
+  const list = records ?? loadChartOfAccounts();
+  if (!line.ledgerId) return line;
+  const ledger = findLedgerById(line.ledgerId, list);
+  if (!ledger || !isAutoPartyLedger(ledger, list)) return line;
+  const auto = resolveAutoPartyFromLedger(ledger, list);
+  return {
+    ...line,
+    contactId: auto.contactId ?? line.contactId ?? null,
+    contactName: auto.contactName || line.contactName || ledger.accountName,
+  };
+}
+
+export function applyAutoPartyToLines(
+  lines: VoucherLine[],
+  records?: ChartOfAccount[],
+): VoucherLine[] {
+  return lines.map((line) => applyAutoPartyToLine(line, records));
+}
+
 /**
  * Resolve whether a ledger row should show customer, vendor, or employee contact picker.
  * Returns null when contact column should be hidden.
@@ -181,15 +275,13 @@ export function resolveLedgerContactType(
   records?: ChartOfAccount[],
 ): LedgerContactType {
   const list = records ?? loadChartOfAccounts();
+  if (isAutoPartyLedger(ledger, list)) return null;
+
   const { path } = resolveHierarchyPath(list, ledger.id);
 
   if (matchesSubGroup(path, "employee advance")) return "employee";
   if (matchesSubGroup(path, "salary payable")) return "employee";
   if (matchesSubGroup(path, "loans", "advances")) return "employee";
-  if (matchesSubGroup(path, "receivable") || matchesSubGroup(path, "debtor")) return "customer";
-  if (matchesSubGroup(path, "trade payable") || matchesSubGroup(path, "sundry creditor")) {
-    return "vendor";
-  }
 
   return null;
 }
@@ -198,7 +290,7 @@ export function contactRequiredForLedger(ledger: ChartOfAccount, records?: Chart
   return resolveLedgerContactType(ledger, records) != null;
 }
 
-/** Validate mandatory contact on receivable / payable / employee lines before post. */
+/** Validate mandatory contact on employee lines before post. Customer/vendor party ledgers auto-resolve. */
 export function validateVoucherContactLines(
   lines: VoucherLine[],
   records = loadChartOfAccounts(),
@@ -209,15 +301,19 @@ export function validateVoucherContactLines(
   for (const line of active) {
     const ledger = findLedgerById(line.ledgerId!, records);
     if (!ledger) continue;
+
+    if (isAutoPartyLedger(ledger, records)) {
+      const enriched = applyAutoPartyToLine(line, records);
+      if (!enriched.contactName?.trim()) {
+        return `Party could not be resolved for ledger "${ledger.accountName}".`;
+      }
+      continue;
+    }
+
     const contactType = resolveLedgerContactType(ledger, records);
     if (contactType && !line.contactId) {
-      const label =
-        contactType === "customer"
-          ? "Customer"
-          : contactType === "vendor"
-            ? "Vendor"
-            : "Employee";
-      return `${label} contact is required for line "${ledger.accountName}".`;
+      const label = contactType === "employee" ? "Employee" : "Contact";
+      return `${label} is required for line "${ledger.accountName}".`;
     }
   }
   return null;

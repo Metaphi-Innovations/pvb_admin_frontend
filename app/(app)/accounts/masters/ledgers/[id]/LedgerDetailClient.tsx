@@ -5,62 +5,72 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { MoneyAmount, MoneyCell } from "@/components/accounts/MoneyAmount";
-import { StatusBadge, SectionTabs } from "@/app/(app)/accounts/components/AccountsUI";
-import { MiniKPICard } from "@/components/ui/KPICard";
-import { IndianRupee, BookOpen, FileText, Scale } from "lucide-react";
+import { MoneyAmount } from "@/components/accounts/MoneyAmount";
+import { SectionTabs } from "@/app/(app)/accounts/components/AccountsUI";
+import { LedgerTransactionsTable } from "@/components/accounts/LedgerTransactionsTable";
 import { loadChartOfAccounts } from "../../../data";
-import { computeLedgerCurrentBalance } from "../ledgers-utils";
+import { computeLedgerBalanceBreakdown } from "../ledgers-utils";
 import {
   buildLedgerStatement,
   collectLedgerTransactions,
   getLedgerById,
+  ledgerMovementTotals,
   ledgerOutstanding,
   parentGroupLabel,
+  primaryHeadForLedger,
   resolveLedgerType,
+  type LedgerTypeLabel,
 } from "@/lib/accounts/ledger-detail-utils";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { loadLedgerMeta } from "@/lib/accounts/ledger-metadata";
-import { resolveCoaMasterLink, isMasterLinkedLedger } from "@/lib/accounts/coa-master-link";
+import { resolveCoaMasterLink } from "@/lib/accounts/coa-master-link";
+import { loadInvoices } from "@/app/(app)/accounts/invoices/invoices-data";
+import { loadPurchaseInvoices } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
+import { loadVouchers } from "@/app/(app)/accounts/vouchers/voucher-data";
 import {
-  CoaMasterLinkActions,
-  CoaMasterLinkPanel,
-} from "@/components/accounts/CoaMasterLinkPanel";
+  computeBatchRegister,
+  ensureInventoryAccountingLedgers,
+} from "@/lib/accounts/inventory-accounting-data";
+import { invoiceMatchesCustomerLedger } from "@/lib/accounts/invoice-ledger-match";
 
-const TABS = [
-  { id: "overview", label: "Overview" },
+const BASE_TABS = [
   { id: "transactions", label: "Transactions" },
-  { id: "outstanding", label: "Outstanding" },
-  { id: "statement", label: "Statement" },
+  { id: "type-detail", label: "Ledger Activity" },
 ];
 
-export default function LedgerDetailClient({ ledgerId }: { ledgerId: number }) {
+export default function LedgerDetailClient({
+  ledgerId,
+  initialTab = "transactions",
+}: {
+  ledgerId: number;
+  initialTab?: string;
+}) {
   const router = useRouter();
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState(initialTab === "statement" ? "transactions" : initialTab);
   const [records, setRecords] = useState(() => loadChartOfAccounts());
 
   useEffect(() => {
     setRecords(loadChartOfAccounts());
   }, [ledgerId]);
 
+  useEffect(() => {
+    setTab(initialTab === "statement" ? "transactions" : initialTab);
+  }, [initialTab, ledgerId]);
+
   const ledger = useMemo(() => getLedgerById(ledgerId), [ledgerId, records]);
   const balance = useMemo(
-    () => (ledger ? computeLedgerCurrentBalance(ledger) : { amount: 0, balanceType: "Debit" as const }),
+    () => (ledger ? computeLedgerBalanceBreakdown(ledger) : null),
     [ledger],
   );
   const ledgerType = useMemo(
     () => (ledger ? resolveLedgerType(ledger, records) : "General"),
     [ledger, records],
   );
-  const meta = useMemo(
-    () => (ledger ? loadLedgerMeta(ledger.id) : null),
-    [ledger],
-  );
+  const meta = useMemo(() => (ledger ? loadLedgerMeta(ledger.id) : null), [ledger]);
   const masterLink = useMemo(
     () => (ledger ? resolveCoaMasterLink(ledger, records) : null),
     [ledger, records],
   );
-  const isMasterOwned = ledger ? isMasterLinkedLedger(ledger, records) : false;
   const outstanding = useMemo(() => (ledger ? ledgerOutstanding(ledger) : 0), [ledger]);
   const transactions = useMemo(
     () => (ledger ? collectLedgerTransactions(ledger.id) : []),
@@ -70,6 +80,15 @@ export default function LedgerDetailClient({ ledgerId }: { ledgerId: number }) {
     () => (ledger ? buildLedgerStatement(ledger, transactions) : []),
     [ledger, transactions],
   );
+  const { totalDebit, totalCredit } = useMemo(
+    () => ledgerMovementTotals(transactions),
+    [transactions],
+  );
+
+  const tabs = useMemo(() => {
+    if (ledgerType === "General") return [BASE_TABS[0]];
+    return BASE_TABS;
+  }, [ledgerType]);
 
   if (!ledger) {
     return (
@@ -91,15 +110,16 @@ export default function LedgerDetailClient({ ledgerId }: { ledgerId: number }) {
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Masters", "Ledgers", "/accounts/masters/ledgers")}
       title={ledger.accountName}
-      description={`${ledger.accountCode} · ${ledgerType} Ledger`}
+      description={`${ledger.accountCode} · ${parentGroupLabel(records, ledger)} · ${primaryHeadForLedger(records, ledger)}`}
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          {masterLink && (
-            <CoaMasterLinkActions
-              ledgerId={ledger.id}
-              link={masterLink}
-              onViewTransactions={() => setTab("transactions")}
-            />
+          {masterLink?.masterHref && (
+            <Link
+              href={masterLink.masterHref}
+              className="h-8 px-3 text-xs border border-border rounded-lg hover:bg-muted/40 inline-flex items-center"
+            >
+              View {masterLink.categoryLabel}
+            </Link>
           )}
           <button
             type="button"
@@ -113,172 +133,81 @@ export default function LedgerDetailClient({ ledgerId }: { ledgerId: number }) {
       layout="split"
     >
       <div className="flex flex-col flex-1 min-h-0">
-        <div className="flex-shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 border-b border-border/60 bg-muted/10">
-          <MiniKPICard
-            label="Current Balance"
-            value={formatMoney(balance.amount)}
-            icon={IndianRupee}
-            accent
-          />
-          <MiniKPICard label="Outstanding" value={formatMoney(outstanding)} icon={Scale} />
-          <MiniKPICard label="Transactions" value={String(transactions.length)} icon={FileText} />
-          <MiniKPICard label="Ledger Type" value={ledgerType} icon={BookOpen} />
+        <div className="flex-shrink-0 border-b border-border/60 bg-white">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-px bg-border/40">
+            {[
+              { label: "Ledger Code", value: ledger.accountCode },
+              { label: "Parent Group", value: parentGroupLabel(records, ledger) },
+              { label: "Primary Head", value: primaryHeadForLedger(records, ledger) },
+              {
+                label: "Opening Balance",
+                value: <MoneyAmount amount={ledger.openingBalance} side={ledger.balanceType} />,
+              },
+              { label: "Total Debit", value: formatMoney(totalDebit), accent: "debit" },
+              { label: "Total Credit", value: formatMoney(totalCredit), accent: "credit" },
+              {
+                label: "Closing Balance",
+                value: balance ? (
+                  <MoneyAmount amount={balance.currentBalance.amount} side={balance.currentBalance.balanceType} />
+                ) : (
+                  "—"
+                ),
+                highlight: true,
+              },
+              {
+                label: ledgerType === "Customer" ? "Outstanding" : ledgerType === "Vendor" ? "Payable" : "Type",
+                value:
+                  ledgerType === "Customer" || ledgerType === "Vendor"
+                    ? formatMoney(outstanding)
+                    : ledgerType,
+              },
+            ].map((item) => (
+              <div key={item.label} className="bg-white px-3 py-2.5">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {item.label}
+                </p>
+                <div
+                  className={`text-sm font-semibold mt-0.5 tabular-nums ${
+                    item.highlight ? "text-brand-700" : item.accent === "debit" ? "text-emerald-800" : item.accent === "credit" ? "text-red-700" : "text-foreground"
+                  }`}
+                >
+                  {item.value}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div className="flex-shrink-0 px-4 pt-3 border-b border-border/60">
-          <SectionTabs tabs={TABS} active={tab} onChange={setTab} counts={{ transactions: transactions.length }} />
-        </div>
+        {tabs.length > 1 && (
+          <div className="flex-shrink-0 px-4 pt-3 border-b border-border/60">
+            <SectionTabs
+              tabs={tabs}
+              active={tab}
+              onChange={setTab}
+              counts={{ transactions: Math.max(0, statement.length - 1) }}
+            />
+          </div>
+        )}
 
         <div className="flex-1 overflow-auto p-4">
-          {tab === "overview" && (
-            <div className="space-y-4 max-w-5xl">
-              {masterLink && <CoaMasterLinkPanel ledgerId={ledger.id} link={masterLink} />}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {[
-                { label: "Ledger Name", value: ledger.accountName },
-                { label: "Ledger Type", value: ledgerType },
-                { label: "Parent Group", value: parentGroupLabel(records, ledger) },
-                {
-                  label: "Opening Balance",
-                  value: <MoneyAmount amount={ledger.openingBalance} side={ledger.balanceType} />,
-                },
-                {
-                  label: "Current Balance",
-                  value: <MoneyAmount amount={balance.amount} side={balance.balanceType} />,
-                },
-                { label: "Outstanding Amount", value: formatMoney(outstanding) },
-                ...(!isMasterOwned && ledgerType === "Customer"
-                  ? [
-                      { label: "Customer Code", value: meta?.customerCode || "—" },
-                      { label: "Credit Limit", value: meta?.creditLimit ? formatMoney(Number(meta.creditLimit)) : "—" },
-                      { label: "Credit Days", value: meta?.creditDays || "—" },
-                    ]
-                  : []),
-                ...(!isMasterOwned && ledgerType === "Vendor"
-                  ? [
-                      { label: "Vendor Code", value: meta?.vendorCode || "—" },
-                      { label: "Payment Terms", value: meta?.paymentTerms || "—" },
-                      { label: "TDS Applicable", value: meta?.tdsApplicableMeta ? "Yes" : "No" },
-                    ]
-                  : []),
-                ...(!isMasterOwned && ledgerType === "Bank"
-                  ? [
-                      { label: "Bank Name", value: meta?.bankName || "—" },
-                      { label: "Account Number", value: meta?.accountNumber || "—" },
-                      { label: "IFSC", value: meta?.ifsc || "—" },
-                      { label: "Reconciliation", value: meta?.reconciliationEnabled ? "Enabled" : "Disabled" },
-                    ]
-                  : []),
-                ...(!isMasterOwned && ledgerType === "Expense"
-                  ? [
-                      { label: "Expense Category", value: meta?.expenseCategory || "—" },
-                    ]
-                  : []),
-                ...(!isMasterOwned
-                  ? [
-                      { label: "GSTIN", value: meta?.gstin || (ledger.gstApplicable ? "On file" : "—") },
-                      { label: "PAN", value: meta?.pan || "—" },
-                      {
-                        label: "Contact",
-                        value: meta?.contactPerson
-                          ? `${meta.contactPerson}${meta.mobile ? ` · ${meta.mobile}` : ""}`
-                          : "—",
-                      },
-                      { label: "Email", value: meta?.email || "—" },
-                    ]
-                  : []),
-                { label: "Branch", value: meta?.branch || "Head Office" },
-                { label: "Status", value: <StatusBadge status={ledger.status} /> },
-              ].map((item) => (
-                <div
-                  key={item.label}
-                  className="rounded-lg border border-border/40 bg-slate-50/40 px-3 py-2.5"
-                >
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-1">
-                    {item.label}
-                  </p>
-                  <div className="text-sm text-foreground">{item.value}</div>
-                </div>
-              ))}
-              </div>
-            </div>
-          )}
-
           {tab === "transactions" && (
-            <LedgerTable
-              columns={["Date", "Voucher Type", "Voucher No", "Particulars", "Debit", "Credit"]}
-              rows={transactions.map((t) => ({
-                cells: [
-                  t.date,
-                  t.voucherType,
-                  t.voucherNo,
-                  t.particulars,
-                  t.debit,
-                  t.credit,
-                ],
-                href: t.href,
-              }))}
-              empty="No vouchers or invoices linked to this ledger yet."
+            <LedgerTransactionsTable
+              rows={statement}
+              emptyLabel="No vouchers or source documents linked to this ledger yet. Post sales invoices, purchase bills, or vouchers to see the audit trail here."
             />
           )}
 
-          {tab === "outstanding" && (
-            <div className="max-w-lg space-y-3">
-              <div className="rounded-lg border border-border/60 bg-white p-4">
-                <p className="text-xs text-muted-foreground">Outstanding Amount</p>
-                <p className="text-2xl font-semibold text-foreground mt-1 tabular-nums">
-                  {formatMoney(outstanding)}
-                </p>
-                <p className="text-[11px] text-muted-foreground mt-2">
-                  {ledgerType === "Customer"
-                    ? "Open sales invoices and unreceived payments."
-                    : ledgerType === "Vendor"
-                      ? "Open purchase bills and unpaid amounts."
-                      : "Outstanding applies mainly to customer and vendor ledgers."}
-                </p>
-              </div>
-              {ledgerType === "Customer" && (
-                <Link
-                  href="/accounts/receivables/outstanding"
-                  className="text-xs text-brand-600 hover:underline"
-                >
-                  View Customer Outstanding →
-                </Link>
-              )}
-              {ledgerType === "Vendor" && (
-                <Link
-                  href="/accounts/payables/outstanding"
-                  className="text-xs text-brand-600 hover:underline"
-                >
-                  View Vendor Outstanding →
-                </Link>
-              )}
-            </div>
-          )}
-
-          {tab === "statement" && (
-            <LedgerTable
-              columns={[
-                "Date",
-                "Voucher Type",
-                "Voucher No",
-                "Particulars",
-                "Debit",
-                "Credit",
-                "Running Balance",
-              ]}
-              rows={statement.map((r) => ({
-                cells: [
-                  r.date,
-                  r.voucherType,
-                  r.voucherNo,
-                  r.particulars,
-                  r.debit,
-                  r.credit,
-                  `${formatMoney(r.runningBalance)} ${r.balanceType === "Debit" ? "Dr" : "Cr"}`,
-                ],
-              }))}
-              empty="No statement entries for this ledger."
+          {tab === "type-detail" && (
+            <LedgerTypeDetail
+              ledgerType={ledgerType}
+              ledgerName={ledger.accountName}
+              ledgerId={ledger.id}
+              meta={meta}
+              outstanding={outstanding}
+              openingBalance={ledger.openingBalance}
+              openingSide={ledger.balanceType}
+              closingBalance={balance?.currentBalance.amount ?? 0}
+              closingSide={balance?.currentBalance.balanceType ?? "Debit"}
             />
           )}
         </div>
@@ -287,30 +216,111 @@ export default function LedgerDetailClient({ ledgerId }: { ledgerId: number }) {
   );
 }
 
-function LedgerTable({
+function LedgerTypeDetail({
+  ledgerType,
+  ledgerName,
+  ledgerId,
+  meta,
+  outstanding,
+  openingBalance,
+  openingSide,
+  closingBalance,
+  closingSide,
+}: {
+  ledgerType: LedgerTypeLabel;
+  ledgerName: string;
+  ledgerId: number;
+  meta: ReturnType<typeof loadLedgerMeta> | null;
+  outstanding: number;
+  openingBalance: number;
+  openingSide: "Debit" | "Credit";
+  closingBalance: number;
+  closingSide: "Debit" | "Credit";
+}) {
+  switch (ledgerType) {
+    case "Customer":
+      return (
+        <CustomerLedgerDetail
+          ledgerName={ledgerName}
+          ledgerId={ledgerId}
+          outstanding={outstanding}
+          openingBalance={openingBalance}
+          openingSide={openingSide}
+          closingBalance={closingBalance}
+          closingSide={closingSide}
+        />
+      );
+    case "Vendor":
+      return (
+        <VendorLedgerDetail
+          ledgerName={ledgerName}
+          ledgerId={ledgerId}
+          outstanding={outstanding}
+          openingBalance={openingBalance}
+          openingSide={openingSide}
+          closingBalance={closingBalance}
+          closingSide={closingSide}
+        />
+      );
+    case "Bank":
+      return (
+        <BankLedgerDetail
+          ledgerName={ledgerName}
+          ledgerId={ledgerId}
+          accountNumber={meta?.accountNumber}
+          reconciliationEnabled={meta?.reconciliationEnabled}
+          openingBalance={openingBalance}
+          openingSide={openingSide}
+          closingBalance={closingBalance}
+          closingSide={closingSide}
+        />
+      );
+    case "Inventory":
+      return <InventoryLedgerDetail ledgerName={ledgerName} />;
+    case "Sales":
+      return <SalesLedgerDetail ledgerName={ledgerName} />;
+    case "Purchase":
+      return <PurchaseLedgerDetail ledgerName={ledgerName} />;
+    case "GST":
+      return <GstLedgerDetail ledgerId={ledgerId} />;
+    case "Expense":
+      return <ExpenseLedgerDetail ledgerId={ledgerId} ledgerName={ledgerName} />;
+    case "Income":
+      return <IncomeLedgerDetail ledgerId={ledgerId} ledgerName={ledgerName} />;
+    default:
+      return null;
+  }
+}
+
+function DetailTable({
+  title,
   columns,
   rows,
   empty,
 }: {
+  title: string;
   columns: string[];
-  rows: { cells: (string | number)[]; href?: string }[];
+  rows: (string | number)[][];
   empty: string;
 }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground py-6 text-center">{empty}</p>;
+    return (
+      <div className="rounded-lg border border-border/60 p-4">
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        <p className="text-xs text-muted-foreground mt-2">{empty}</p>
+      </div>
+    );
   }
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs min-w-[720px]">
-        <thead className="bg-muted/20 border-b border-border/60 sticky top-0">
-          <tr>
+    <div className="rounded-lg border border-border/60 overflow-hidden">
+      <p className="text-sm font-medium text-foreground px-4 py-2.5 border-b border-border/40 bg-muted/10">
+        {title}
+      </p>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-border/40 bg-muted/5">
             {columns.map((c) => (
-              <th
-                key={c}
-                className={`px-3 py-2.5 font-semibold uppercase tracking-wide text-muted-foreground ${
-                  c === "Debit" || c === "Credit" || c === "Running Balance" ? "text-right" : "text-left"
-                }`}
-              >
+              <th key={c} className="px-3 py-2 text-left font-semibold uppercase text-muted-foreground">
                 {c}
               </th>
             ))}
@@ -318,34 +328,430 @@ function LedgerTable({
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={i} className="border-b border-border/30 hover:bg-muted/10">
-              {row.cells.map((cell, j) => {
-                const isMoney = j >= row.cells.length - 3 && typeof cell === "number";
-                const content =
-                  typeof cell === "number" ? (
-                    <MoneyCell amount={cell} dashIfZero className="px-0 py-0 justify-end" />
-                  ) : (
-                    cell
-                  );
-                return (
-                  <td
-                    key={j}
-                    className={`px-3 py-2.5 ${isMoney || (typeof cell === "string" && cell.includes("Dr")) ? "text-right" : ""}`}
-                  >
-                    {row.href && j === 2 ? (
-                      <Link href={row.href} className="font-mono text-brand-700 hover:underline">
-                        {cell}
-                      </Link>
-                    ) : (
-                      content
-                    )}
-                  </td>
-                );
-              })}
+            <tr key={i} className="border-b border-border/30">
+              {row.map((cell, j) => (
+                <td key={j} className="px-3 py-2 tabular-nums">
+                  {cell}
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+function CustomerLedgerDetail({
+  ledgerName,
+  ledgerId,
+  outstanding,
+  openingBalance,
+  openingSide,
+  closingBalance,
+  closingSide,
+}: {
+  ledgerName: string;
+  ledgerId: number;
+  outstanding: number;
+  openingBalance: number;
+  openingSide: "Debit" | "Credit";
+  closingBalance: number;
+  closingSide: "Debit" | "Credit";
+}) {
+  const invoices = loadInvoices()
+    .filter((inv) => invoiceMatchesCustomerLedger(inv, ledgerId, ledgerName))
+    .sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate));
+
+  const receipts = loadVouchers()
+    .filter(
+      (v) =>
+        (v.status === "posted" || v.status === "approved") &&
+        v.voucherType === "receipt" &&
+        v.lines.some((l) => l.ledgerId === ledgerId),
+    )
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const creditNotes = loadVouchers()
+    .filter(
+      (v) =>
+        (v.status === "posted" || v.status === "approved") &&
+        v.voucherType === "credit_note" &&
+        v.lines.some((l) => l.ledgerId === ledgerId),
+    )
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  return (
+    <div className="space-y-4 max-w-5xl">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Opening Balance", value: `${formatMoney(openingBalance)} ${openingSide}` },
+          { label: "Current Outstanding", value: formatMoney(outstanding) },
+          { label: "Closing Balance", value: `${formatMoney(closingBalance)} ${closingSide}` },
+          { label: "Open Invoices", value: String(invoices.filter((i) => i.balanceAmount > 0).length) },
+        ].map((item) => (
+          <div key={item.label} className="rounded-lg border border-border/60 p-3 bg-muted/5">
+            <p className="text-[10px] uppercase text-muted-foreground">{item.label}</p>
+            <p className="text-sm font-semibold mt-1">{item.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <DetailTable
+        title="Invoice-wise Outstanding"
+        columns={["Date", "Invoice No", "Amount", "Received", "Balance"]}
+        rows={invoices.map((inv) => [
+          inv.invoiceDate,
+          inv.invoiceNo,
+          formatMoney(inv.grandTotal),
+          formatMoney(inv.amountReceived),
+          formatMoney(inv.balanceAmount),
+        ])}
+        empty="No sales invoices for this customer."
+      />
+
+      <DetailTable
+        title="Receipts"
+        columns={["Date", "Receipt No", "Amount", "Reference"]}
+        rows={receipts.map((v) => {
+          const line = v.lines.find((l) => l.ledgerId === ledgerId);
+          return [
+            v.date,
+            v.voucherNumber,
+            formatMoney(Number(line?.credit) || 0),
+            v.referenceNo || v.narration,
+          ];
+        })}
+        empty="No receipt vouchers recorded."
+      />
+
+      <DetailTable
+        title="Credit Notes"
+        columns={["Date", "Voucher No", "Amount", "Narration"]}
+        rows={creditNotes.map((v) => {
+          const line = v.lines.find((l) => l.ledgerId === ledgerId);
+          return [v.date, v.referenceNo || v.voucherNumber, formatMoney(Number(line?.credit) || 0), v.narration];
+        })}
+        empty="No credit notes applied."
+      />
+    </div>
+  );
+}
+
+function VendorLedgerDetail({
+  ledgerName,
+  ledgerId,
+  outstanding,
+  openingBalance,
+  openingSide,
+  closingBalance,
+  closingSide,
+}: {
+  ledgerName: string;
+  ledgerId: number;
+  outstanding: number;
+  openingBalance: number;
+  openingSide: "Debit" | "Credit";
+  closingBalance: number;
+  closingSide: "Debit" | "Credit";
+}) {
+  const bills = loadPurchaseInvoices()
+    .filter((b) => b.vendorName === ledgerName)
+    .sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate));
+
+  const payments = loadVouchers()
+    .filter(
+      (v) =>
+        (v.status === "posted" || v.status === "approved") &&
+        v.voucherType === "payment" &&
+        v.lines.some((l) => l.ledgerId === ledgerId),
+    )
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const debitNotes = loadVouchers()
+    .filter(
+      (v) =>
+        (v.status === "posted" || v.status === "approved") &&
+        v.voucherType === "debit_note" &&
+        v.lines.some((l) => l.ledgerId === ledgerId),
+    )
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  return (
+    <div className="space-y-4 max-w-5xl">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Opening Balance", value: `${formatMoney(openingBalance)} ${openingSide}` },
+          { label: "Current Payable", value: formatMoney(outstanding) },
+          { label: "Closing Balance", value: `${formatMoney(closingBalance)} ${closingSide}` },
+          { label: "Open Bills", value: String(bills.filter((b) => b.grandTotal - b.amountPaid > 0).length) },
+        ].map((item) => (
+          <div key={item.label} className="rounded-lg border border-border/60 p-3 bg-muted/5">
+            <p className="text-[10px] uppercase text-muted-foreground">{item.label}</p>
+            <p className="text-sm font-semibold mt-1">{item.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <DetailTable
+        title="Bill-wise Outstanding"
+        columns={["Date", "Bill No", "GRN", "Amount", "Paid", "Balance"]}
+        rows={bills.map((b) => [
+          b.invoiceDate,
+          b.invoiceNo,
+          b.grnNo || "—",
+          formatMoney(b.grandTotal),
+          formatMoney(b.amountPaid),
+          formatMoney(b.grandTotal - b.amountPaid),
+        ])}
+        empty="No purchase bills for this vendor."
+      />
+
+      <DetailTable
+        title="Payments"
+        columns={["Date", "Payment No", "Amount", "Reference"]}
+        rows={payments.map((v) => {
+          const line = v.lines.find((l) => l.ledgerId === ledgerId);
+          return [
+            v.date,
+            v.voucherNumber,
+            formatMoney(Number(line?.debit) || 0),
+            v.referenceNo || v.narration,
+          ];
+        })}
+        empty="No payment vouchers recorded."
+      />
+
+      <DetailTable
+        title="Debit Notes"
+        columns={["Date", "Voucher No", "Amount", "Narration"]}
+        rows={debitNotes.map((v) => {
+          const line = v.lines.find((l) => l.ledgerId === ledgerId);
+          return [v.date, v.referenceNo || v.voucherNumber, formatMoney(Number(line?.debit) || 0), v.narration];
+        })}
+        empty="No debit notes applied."
+      />
+    </div>
+  );
+}
+
+function BankLedgerDetail({
+  ledgerName,
+  ledgerId,
+  accountNumber,
+  reconciliationEnabled,
+  openingBalance,
+  openingSide,
+  closingBalance,
+  closingSide,
+}: {
+  ledgerName: string;
+  ledgerId: number;
+  accountNumber?: string;
+  reconciliationEnabled?: boolean;
+  openingBalance: number;
+  openingSide: "Debit" | "Credit";
+  closingBalance: number;
+  closingSide: "Debit" | "Credit";
+}) {
+  const vouchers = loadVouchers()
+    .filter(
+      (v) =>
+        (v.status === "posted" || v.status === "approved") &&
+        v.lines.some((l) => l.ledgerId === ledgerId),
+    )
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const receipts = vouchers.filter((v) => v.voucherType === "receipt");
+  const payments = vouchers.filter((v) => v.voucherType === "payment");
+  const contra = vouchers.filter((v) => v.voucherType === "contra");
+
+  return (
+    <div className="space-y-4 max-w-5xl">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Account Number", value: accountNumber || "—" },
+          { label: "Opening Balance", value: `${formatMoney(openingBalance)} ${openingSide}` },
+          { label: "Closing Balance", value: `${formatMoney(closingBalance)} ${closingSide}` },
+          {
+            label: "Reconciliation",
+            value: reconciliationEnabled ? "Enabled" : "Not configured",
+          },
+        ].map((item) => (
+          <div key={item.label} className="rounded-lg border border-border/60 p-3 bg-muted/5">
+            <p className="text-[10px] uppercase text-muted-foreground">{item.label}</p>
+            <p className="text-sm font-semibold mt-1">{item.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <DetailTable
+        title="Receipts"
+        columns={["Date", "Receipt No", "Amount", "Narration"]}
+        rows={receipts.map((v) => {
+          const line = v.lines.find((l) => l.ledgerId === ledgerId);
+          return [v.date, v.voucherNumber, formatMoney(Number(line?.debit) || 0), v.narration];
+        })}
+        empty="No receipts on this bank account."
+      />
+
+      <DetailTable
+        title="Payments"
+        columns={["Date", "Payment No", "Amount", "Narration"]}
+        rows={payments.map((v) => {
+          const line = v.lines.find((l) => l.ledgerId === ledgerId);
+          return [v.date, v.voucherNumber, formatMoney(Number(line?.credit) || 0), v.narration];
+        })}
+        empty="No payments from this bank account."
+      />
+
+      <DetailTable
+        title="Contra Transfers"
+        columns={["Date", "Voucher No", "Debit", "Credit", "Narration"]}
+        rows={contra.map((v) => {
+          const line = v.lines.find((l) => l.ledgerId === ledgerId);
+          return [
+            v.date,
+            v.voucherNumber,
+            formatMoney(Number(line?.debit) || 0),
+            formatMoney(Number(line?.credit) || 0),
+            v.narration,
+          ];
+        })}
+        empty="No contra transfers."
+      />
+
+      <Link href="/accounts/banking/reconciliation" className="text-xs text-brand-600 hover:underline">
+        View Bank Reconciliation →
+      </Link>
+    </div>
+  );
+}
+
+function InventoryLedgerDetail({ ledgerName }: { ledgerName: string }) {
+  ensureInventoryAccountingLedgers();
+  const batches = computeBatchRegister().filter(
+    (b) =>
+      ledgerName.toLowerCase().includes(b.product.toLowerCase()) ||
+      b.product.toLowerCase().includes(ledgerName.toLowerCase().replace(" stock", "")),
+  );
+
+  return (
+    <div className="space-y-4 max-w-5xl">
+      <DetailTable
+        title="Product-wise Stock Valuation"
+        columns={["Product", "SKU", "Warehouse", "Batch", "Qty", "CP", "Stock Value", "Expiry"]}
+        rows={batches.map((b) => [
+          b.product,
+          b.sku,
+          b.warehouse,
+          b.batchNo,
+          String(b.availableQty),
+          formatMoney(b.costPrice),
+          formatMoney(b.stockValue),
+          b.expiryDate || "—",
+        ])}
+        empty="No batch register entries match this inventory ledger. View stock valuation report for full register."
+      />
+      <Link href="/accounts/reports/stock-valuation" className="text-xs text-brand-600 hover:underline">
+        Open Stock Valuation Report →
+      </Link>
+    </div>
+  );
+}
+
+function SalesLedgerDetail({ ledgerName }: { ledgerName: string }) {
+  const invoices = loadInvoices()
+    .filter((inv) => inv.invoiceStatus !== "cancelled")
+    .sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate));
+
+  return (
+    <DetailTable
+      title="Invoice-wise Sales"
+      columns={["Date", "Invoice No", "Customer", "Taxable", "GST", "Net Sales"]}
+      rows={invoices.map((inv) => [
+        inv.invoiceDate,
+        inv.invoiceNo,
+        inv.customerName,
+        formatMoney(inv.grandTotal - inv.taxAmount),
+        formatMoney(inv.taxAmount),
+        formatMoney(inv.grandTotal),
+      ])}
+      empty="No sales invoices posted."
+    />
+  );
+}
+
+function PurchaseLedgerDetail({ ledgerName }: { ledgerName: string }) {
+  const bills = loadPurchaseInvoices().sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate));
+
+  return (
+    <DetailTable
+      title="Bill-wise Purchases"
+      columns={["Date", "Bill No", "Vendor", "GRN/PO", "Taxable", "GST", "Total"]}
+      rows={bills.map((b) => [
+        b.invoiceDate,
+        b.invoiceNo,
+        b.vendorName,
+        b.grnNo || b.poNumber || "—",
+        formatMoney(b.grandTotal - b.taxAmount),
+        formatMoney(b.taxAmount),
+        formatMoney(b.grandTotal),
+      ])}
+      empty="No purchase bills posted."
+    />
+  );
+}
+
+function GstLedgerDetail({ ledgerId }: { ledgerId: number }) {
+  const rows = collectLedgerTransactions(ledgerId);
+  return (
+    <DetailTable
+      title="GST Transactions"
+      columns={["Date", "Document", "Source", "Debit", "Credit"]}
+      rows={rows.map((r) => [
+        r.date,
+        r.voucherNo,
+        r.sourceModule,
+        formatMoney(r.debit),
+        formatMoney(r.credit),
+      ])}
+      empty="No GST postings on this ledger."
+    />
+  );
+}
+
+function ExpenseLedgerDetail({ ledgerId, ledgerName }: { ledgerId: number; ledgerName: string }) {
+  const rows = collectLedgerTransactions(ledgerId);
+  const payments = rows.filter((r) => r.voucherType.includes("Payment"));
+  const purchases = rows.filter((r) => r.sourceModule.includes("Purchase"));
+
+  return (
+    <div className="space-y-4">
+      <DetailTable
+        title="Payment Vouchers"
+        columns={["Date", "Voucher", "Amount", "Particulars"]}
+        rows={payments.map((r) => [r.date, r.voucherNo, formatMoney(r.debit), r.particulars])}
+        empty="No payment vouchers."
+      />
+      <DetailTable
+        title="Purchase Bills"
+        columns={["Date", "Bill", "Amount", "Particulars"]}
+        rows={purchases.map((r) => [r.date, r.voucherNo, formatMoney(r.debit), r.particulars])}
+        empty="No purchase bill entries."
+      />
+    </div>
+  );
+}
+
+function IncomeLedgerDetail({ ledgerId, ledgerName }: { ledgerId: number; ledgerName: string }) {
+  const rows = collectLedgerTransactions(ledgerId);
+  return (
+    <DetailTable
+      title="Income Entries"
+      columns={["Date", "Document", "Source", "Credit", "Particulars"]}
+      rows={rows.map((r) => [r.date, r.voucherNo, r.sourceModule, formatMoney(r.credit), r.particulars])}
+      empty="No income entries on this ledger."
+    />
   );
 }

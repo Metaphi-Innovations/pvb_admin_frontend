@@ -1,4 +1,4 @@
-import { DispatchRecord } from "../types";
+import { DispatchRecord, SalesReturnRecord } from "../types";
 
 export const SEED_DISPATCHES: DispatchRecord[] = [
   {
@@ -160,4 +160,18 @@ export function getDispatchRecords(): DispatchRecord[] {
 export function saveDispatchRecords(records: DispatchRecord[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(KEY_DISPATCHES, JSON.stringify(records));
+}
+
+export const KEY_SALES_RETURNS = "ds_sales_returns";
+
+export function getSalesReturnRecords(): SalesReturnRecord[] {
+  if (typeof window === "undefined") return [];
+  const stored = localStorage.getItem(KEY_SALES_RETURNS);
+  if (!stored) return [];
+  return JSON.parse(stored);
+}
+
+export function saveSalesReturnRecords(records: SalesReturnRecord[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(KEY_SALES_RETURNS, JSON.stringify(records));
 }

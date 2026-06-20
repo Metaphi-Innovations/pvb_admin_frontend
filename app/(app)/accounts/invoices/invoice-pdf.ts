@@ -1,8 +1,9 @@
-import { normalizeInvoice, type InvoiceRecord } from "./invoices-data";
-import { formatINR } from "./invoice-utils";
+import { normalizeInvoice, type InvoiceRecord, getInvoiceAmountBreakup } from "./invoices-data";
+import { formatINR, INVOICE_AMOUNT_LABELS } from "./invoice-utils";
 
 export function downloadInvoicePdf(invoice: InvoiceRecord): void {
   const rec = normalizeInvoice(invoice);
+  const { taxableValue, gstAmount, invoiceTotal } = getInvoiceAmountBreakup(rec);
   const rows = rec.lineItems
     .map(
       (l) => `
@@ -50,12 +51,12 @@ export function downloadInvoicePdf(invoice: InvoiceRecord): void {
     <tbody>${rows}</tbody>
   </table>
   <table class="totals">
-    <tr><td class="label">Subtotal</td><td align="right">${formatINR(rec.subtotal)}</td></tr>
+    <tr><td class="label">${INVOICE_AMOUNT_LABELS.taxableValue}</td><td align="right">${formatINR(taxableValue)}</td></tr>
     <tr><td class="label">Discount</td><td align="right">${formatINR(rec.discountTotal)}</td></tr>
-    <tr><td class="label">Tax</td><td align="right">${formatINR(rec.taxAmount)}</td></tr>
-    <tr><td class="grand">Grand Total</td><td align="right" class="grand">${formatINR(rec.grandTotal)}</td></tr>
+    <tr><td class="label">${INVOICE_AMOUNT_LABELS.gstAmount}</td><td align="right">${formatINR(gstAmount)}</td></tr>
+    <tr><td class="grand">${INVOICE_AMOUNT_LABELS.invoiceTotal}</td><td align="right" class="grand">${formatINR(invoiceTotal)}</td></tr>
     <tr><td class="label">Received</td><td align="right">${formatINR(rec.amountReceived)}</td></tr>
-    <tr><td class="label">Balance</td><td align="right">${formatINR(rec.balanceAmount)}</td></tr>
+    <tr><td class="label">Balance Due</td><td align="right">${formatINR(rec.balanceAmount)}</td></tr>
   </table>
   ${rec.remarks ? `<p style="margin-top:16px"><strong>Remarks:</strong> ${escapeHtml(rec.remarks)}</p>` : ""}
 </body></html>`;
