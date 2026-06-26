@@ -10,9 +10,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertCircle, ChevronsUpDown, Check, ArrowLeft, Save, MapPin,
-  Shield, Info, ChevronDown, ChevronUp, Plus, Trash2, GripVertical,
+  Info, ChevronDown, ChevronUp, Plus, Trash2, GripVertical,
   Monitor, Smartphone,
-  Eye, EyeOff, Lock, User, Briefcase, FileText,
+  User, Briefcase, FileText,
 } from "lucide-react";
 import { loadGeoNodes, type GeoNode, type GeoLevel } from "@/app/(app)/masters/geography/geo-data";
 import {
@@ -44,8 +44,12 @@ import {
   EMPTY_STRUCTURED_ADDRESS,
   formatStructuredAddress,
   structuredAddressesEqual,
+  structuredAddressFromLegacyIds,
+  structuredAddressFromLegacyLocality,
   type StructuredAddress,
 } from "@/lib/address";
+import { isValidPincodeFormat, lookupPostalPincode } from "@/lib/address/postal-lookup";
+import { hydratePostalMaster } from "@/lib/geography/postal-master-store";
 
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -64,37 +68,76 @@ type EmployeeFormState = Partial<Employee> & {
   confirmPassword?: string;
 };
 
-function employeeToCurrentAddress(emp?: Employee): StructuredAddress {
+function employeeToCurrentAddress(emp?: Employee, nodes: GeoNode[] = []): StructuredAddress {
   if (!emp) return { ...EMPTY_STRUCTURED_ADDRESS };
-  return {
-    line1: emp.currentAddressLine1 || "",
-    line2: emp.currentAddressLine2 || "",
-    stateId: emp.currentStateId ?? null,
-    cityId: emp.currentCityId ?? null,
-    pincodeId: emp.currentPincodeId ?? null,
-  };
+  if (emp.currentPincode || emp.currentState || emp.currentCity || emp.currentTown || emp.currentCityTownLocality) {
+    return structuredAddressFromLegacyLocality({
+      line1: emp.currentAddressLine1 || "",
+      line2: emp.currentAddressLine2 || "",
+      pincode: emp.currentPincode || "",
+      city: emp.currentCity,
+      town: emp.currentTown,
+      cityTownLocality: emp.currentCityTownLocality,
+      district: emp.currentDistrict || "",
+      state: emp.currentState || "",
+    });
+  }
+  return structuredAddressFromLegacyIds(
+    emp.currentAddressLine1 || "",
+    emp.currentAddressLine2 || "",
+    emp.currentStateId,
+    emp.currentCityId,
+    emp.currentPincodeId,
+    nodes,
+  );
 }
 
-function employeeToPermanentAddress(emp?: Employee): StructuredAddress {
+function employeeToPermanentAddress(emp?: Employee, nodes: GeoNode[] = []): StructuredAddress {
   if (!emp) return { ...EMPTY_STRUCTURED_ADDRESS };
-  return {
-    line1: emp.permanentAddressLine1 || "",
-    line2: emp.permanentAddressLine2 || "",
-    stateId: emp.permanentStateId ?? null,
-    cityId: emp.permanentCityId ?? null,
-    pincodeId: emp.permanentPincodeId ?? null,
-  };
+  if (emp.permanentPincode || emp.permanentState || emp.permanentCity || emp.permanentTown || emp.permanentCityTownLocality) {
+    return structuredAddressFromLegacyLocality({
+      line1: emp.permanentAddressLine1 || "",
+      line2: emp.permanentAddressLine2 || "",
+      pincode: emp.permanentPincode || "",
+      city: emp.permanentCity,
+      town: emp.permanentTown,
+      cityTownLocality: emp.permanentCityTownLocality,
+      district: emp.permanentDistrict || "",
+      state: emp.permanentState || "",
+    });
+  }
+  return structuredAddressFromLegacyIds(
+    emp.permanentAddressLine1 || "",
+    emp.permanentAddressLine2 || "",
+    emp.permanentStateId,
+    emp.permanentCityId,
+    emp.permanentPincodeId,
+    nodes,
+  );
 }
 
-function employeeToEmergencyAddress(emp?: Employee): StructuredAddress {
+function employeeToEmergencyAddress(emp?: Employee, nodes: GeoNode[] = []): StructuredAddress {
   if (!emp) return { ...EMPTY_STRUCTURED_ADDRESS };
-  return {
-    line1: emp.emergencyAddressLine1 || "",
-    line2: emp.emergencyAddressLine2 || "",
-    stateId: emp.emergencyStateId ?? null,
-    cityId: emp.emergencyCityId ?? null,
-    pincodeId: emp.emergencyPincodeId ?? null,
-  };
+  if (emp.emergencyPincode || emp.emergencyState || emp.emergencyCity || emp.emergencyTown || emp.emergencyCityTownLocality) {
+    return structuredAddressFromLegacyLocality({
+      line1: emp.emergencyAddressLine1 || "",
+      line2: emp.emergencyAddressLine2 || "",
+      pincode: emp.emergencyPincode || "",
+      city: emp.emergencyCity,
+      town: emp.emergencyTown,
+      cityTownLocality: emp.emergencyCityTownLocality,
+      district: emp.emergencyDistrict || "",
+      state: emp.emergencyState || "",
+    });
+  }
+  return structuredAddressFromLegacyIds(
+    emp.emergencyAddressLine1 || "",
+    emp.emergencyAddressLine2 || "",
+    emp.emergencyStateId,
+    emp.emergencyCityId,
+    emp.emergencyPincodeId,
+    nodes,
+  );
 }
 
 function validateStructuredAddress(
@@ -103,9 +146,15 @@ function validateStructuredAddress(
   errors: Record<string, string>,
 ) {
   if (!addr.line1.trim()) errors[`${prefix}_line1`] = "Required";
-  if (!addr.stateId) errors[`${prefix}_stateId`] = "Required";
-  if (!addr.cityId) errors[`${prefix}_cityId`] = "Required";
-  if (!addr.pincodeId) errors[`${prefix}_pincodeId`] = "Required";
+  if (!addr.pincode.trim()) errors[`${prefix}_pincode`] = "Required";
+  else if (!isValidPincodeFormat(addr.pincode)) errors[`${prefix}_pincode`] = "Enter a valid 6-digit pincode";
+  else if (!lookupPostalPincode(addr.pincode, addr.town)) {
+    errors[`${prefix}_pincode`] = "Pincode not found in Postal Master.";
+  }
+  if (!addr.city.trim()) errors[`${prefix}_city`] = "Required";
+  if (!addr.town.trim()) errors[`${prefix}_town`] = "Required";
+  if (!addr.district.trim()) errors[`${prefix}_district`] = "Required";
+  if (!addr.state.trim()) errors[`${prefix}_state`] = "Required";
 }
 
 function mapAddressErrors(
@@ -115,9 +164,11 @@ function mapAddressErrors(
   return {
     line1: errors[`${prefix}_line1`],
     line2: errors[`${prefix}_line2`],
-    stateId: errors[`${prefix}_stateId`],
-    cityId: errors[`${prefix}_cityId`],
-    pincodeId: errors[`${prefix}_pincodeId`],
+    pincode: errors[`${prefix}_pincode`],
+    city: errors[`${prefix}_city`],
+    town: errors[`${prefix}_town`],
+    district: errors[`${prefix}_district`],
+    state: errors[`${prefix}_state`],
   };
 }
 
@@ -180,59 +231,26 @@ function SectionHead({ label, sub, required }: { label: string; sub?: string; re
   );
 }
 
-type FormTabId = "personal" | "employment" | "documents" | "permissions";
+type FormTabId = "personal" | "employment" | "documents";
 
 const FORM_SECTIONS: Record<
   FormTabId,
   {
     label: string;
     icon: React.ElementType;
-    description: string;
-    bullets: string[];
   }
 > = {
   personal: {
     label: "Personal Details",
     icon: User,
-    description: "Complete employee personal information including:",
-    bullets: [
-      "Basic Information",
-      "Address Information",
-      "Account Credentials",
-      "Emergency Contact",
-    ],
   },
   employment: {
     label: "Employment Details",
     icon: Briefcase,
-    description: "Configure employment, role, and organizational mapping including:",
-    bullets: [
-      "Employment Information",
-      "Role & Access Level",
-      "Geography Mapping",
-      "Approval Chain",
-    ],
   },
   documents: {
     label: "Documents",
     icon: FileText,
-    description: "Upload and manage employee documents including:",
-    bullets: [
-      "Identity Documents",
-      "Employment Documents",
-      "Education & Banking Documents",
-      "Profile Completion Tracking",
-    ],
-  },
-  permissions: {
-    label: "Permissions",
-    icon: Shield,
-    description: "Manage system access and permission templates including:",
-    bullets: [
-      "Web Portal Access",
-      "Mobile App Access",
-      "Permission Templates",
-    ],
   },
 };
 
@@ -245,30 +263,23 @@ const TAB_TRIGGER_CLASS = cn(
 function FormSectionHeader({ tab }: { tab: FormTabId }) {
   const section = FORM_SECTIONS[tab];
   const Icon = section.icon;
+  const compact = tab === "documents";
   return (
-    <div className="mb-6 pt-1">
-      <div className="flex items-start gap-3.5">
-        <div className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center flex-shrink-0">
-          <Icon className="w-5 h-5 text-brand-600" />
+    <div className={cn(compact ? "mb-4 pt-0.5" : "mb-6 pt-1")}>
+      <div className="flex items-start gap-3">
+        <div className={cn(
+          "rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center flex-shrink-0",
+          compact ? "w-8 h-8" : "w-10 h-10",
+        )}>
+          <Icon className={cn("text-brand-600", compact ? "w-4 h-4" : "w-5 h-5")} />
         </div>
         <div className="min-w-0">
-          <h2 className="text-xl sm:text-2xl font-semibold text-foreground leading-tight tracking-tight">
+          <h2 className={cn(
+            "font-semibold text-foreground leading-tight tracking-tight",
+            compact ? "text-lg" : "text-xl sm:text-2xl",
+          )}>
             {section.label}
           </h2>
-          <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
-            {section.description}
-          </p>
-          <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1">
-            {section.bullets.map((item) => (
-              <li
-                key={item}
-                className="text-xs text-muted-foreground flex items-center gap-1.5"
-              >
-                <span className="w-1 h-1 rounded-full bg-brand-400 flex-shrink-0" />
-                {item}
-              </li>
-            ))}
-          </ul>
         </div>
       </div>
     </div>
@@ -754,13 +765,18 @@ function PermissionsTab({
   }, [role]);
 
   const visibleTabs = useMemo(() => {
-    const allTabs = [ ["web", "Web Portal"], ["mobile", "Mobile App"] ] as const;
-    if (roleType === "Field User") {
-      const access = templateAccessType === "none" ? "web" : templateAccessType;
-      return allTabs.filter(([key]) => key === access);
-    }
-    return allTabs;
-  }, [roleType, templateAccessType]);
+    if (roleType === "Field User") return [["mobile", "Mobile App"]] as const;
+    if (roleType === "Admin User") return [["web", "Web Portal"]] as const;
+    return [
+      ["web", "Web Portal"],
+      ["mobile", "Mobile App"],
+    ] as const;
+  }, [roleType]);
+
+  useEffect(() => {
+    if (roleType === "Field User") setSection("mobile");
+    else if (roleType === "Admin User") setSection("web");
+  }, [roleType]);
 
   useEffect(() => {
     if (visibleTabs.length === 1 && section !== visibleTabs[0][0]) {
@@ -993,18 +1009,20 @@ function PermissionsTab({
       )}
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-3 border-b border-border">
-        <div className="flex gap-1.5">
-          {visibleTabs.map(([key, label]) => (
-            <button key={key} type="button" onClick={() => handleSectionChange(key as "web" | "mobile")}
-              className={cn(
-                "flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-medium transition-colors border",
-                section === key ? "bg-brand-600 text-white border-brand-600" : "border-border text-muted-foreground hover:bg-muted/40",
-              )}>
-              {key === "web" ? <Monitor className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
-              {label} Permissions
-            </button>
-          ))}
-        </div>
+        {visibleTabs.length > 1 && (
+          <div className="flex gap-1.5">
+            {visibleTabs.map(([key, label]) => (
+              <button key={key} type="button" onClick={() => handleSectionChange(key as "web" | "mobile")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-medium transition-colors border",
+                  section === key ? "bg-brand-600 text-white border-brand-600" : "border-border text-muted-foreground hover:bg-muted/40",
+                )}>
+                {key === "web" ? <Monitor className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
+                {label} Permissions
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-3">
           <Label className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
             Permission Template
@@ -1257,6 +1275,10 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
   // Geography master data (loaded once)
   const geoNodes = useMemo(() => loadGeoNodes().filter(n => n.status === "active"), []);
 
+  useEffect(() => {
+    hydratePostalMaster().catch(() => undefined);
+  }, []);
+
   const [form, setFormState] = useState<EmployeeFormState>(employee || {
     firstName: "", lastName: "", fullName: "",
     email: "", mobile: "", countryCode: "+91", alternativeMobile: "",
@@ -1281,25 +1303,23 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
   const [showRoleChangeWarning, setShowRoleChangeWarning] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [currentAddr, setCurrentAddr] = useState<StructuredAddress>(() =>
-    employeeToCurrentAddress(employee),
+    employeeToCurrentAddress(employee, geoNodes),
   );
   const [permanentAddr, setPermanentAddr] = useState<StructuredAddress>(() =>
-    employeeToPermanentAddress(employee),
+    employeeToPermanentAddress(employee, geoNodes),
   );
   const [emergencyAddr, setEmergencyAddr] = useState<StructuredAddress>(() =>
-    employeeToEmergencyAddress(employee),
+    employeeToEmergencyAddress(employee, geoNodes),
   );
   const [sameAddress, setSameAddress] = useState(() => {
     if (employee?.sameAsCurrentAddress) return true;
     if (!employee) return false;
     return structuredAddressesEqual(
-      employeeToCurrentAddress(employee),
-      employeeToPermanentAddress(employee),
+      employeeToCurrentAddress(employee, geoNodes),
+      employeeToPermanentAddress(employee, geoNodes),
     );
   });
   const [geoMappings, setGeoMappings] = useState<GeoMappingRow[]>(initialGeoMappings);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [activeTab, setActiveTab] = useState("personal");
   const [documents, setDocuments] = useState<EmployeeDocument[]>(() => employee?.documents || []);
   const [statusConfirm, setStatusConfirm] = useState<"active" | "inactive" | null>(null);
@@ -1765,12 +1785,6 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
     if (emErr) e.emergencyContactMobile = emErr;
     validateStructuredAddress(currentAddr, "current", e);
     if (!sameAddress) validateStructuredAddress(permanentAddr, "permanent", e);
-    if (mode === "add") {
-      if (!form.password?.trim()) e.password = "Password is required";
-      else if ((form.password || "").length < 8) e.password = "Password must be at least 8 characters";
-      if (!form.confirmPassword?.trim()) e.confirmPassword = "Please confirm password";
-      else if (form.password !== form.confirmPassword) e.confirmPassword = "Passwords do not match";
-    }
     if (form.roleType === "Field User") {
       geoMappings.forEach((mapping, index) => {
         geoFields.forEach((field) => {
@@ -1833,28 +1847,35 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
       dob: form.dob || "",
       currentAddressLine1: currentAddr.line1,
       currentAddressLine2: currentAddr.line2,
-      currentStateId: currentAddr.stateId,
-      currentCityId: currentAddr.cityId,
-      currentPincodeId: currentAddr.pincodeId,
+      currentPincode: currentAddr.pincode,
+      currentCity: currentAddr.city,
+      currentTown: currentAddr.town,
+      currentDistrict: currentAddr.district,
+      currentState: currentAddr.state,
       permanentAddressLine1: resolvedPermanent.line1,
       permanentAddressLine2: resolvedPermanent.line2,
-      permanentStateId: resolvedPermanent.stateId,
-      permanentCityId: resolvedPermanent.cityId,
-      permanentPincodeId: resolvedPermanent.pincodeId,
+      permanentPincode: resolvedPermanent.pincode,
+      permanentCity: resolvedPermanent.city,
+      permanentTown: resolvedPermanent.town,
+      permanentDistrict: resolvedPermanent.district,
+      permanentState: resolvedPermanent.state,
       emergencyAddressLine1: emergencyAddr.line1,
       emergencyAddressLine2: emergencyAddr.line2,
-      emergencyStateId: emergencyAddr.stateId,
-      emergencyCityId: emergencyAddr.cityId,
-      emergencyPincodeId: emergencyAddr.pincodeId,
+      emergencyPincode: emergencyAddr.pincode,
+      emergencyCity: emergencyAddr.city,
+      emergencyTown: emergencyAddr.town,
+      emergencyDistrict: emergencyAddr.district,
+      emergencyState: emergencyAddr.state,
       sameAsCurrentAddress: sameAddress,
-      currentAddress: formatStructuredAddress(currentAddr, geoNodes),
-      permanentAddress: formatStructuredAddress(resolvedPermanent, geoNodes),
+      currentAddress: formatStructuredAddress(currentAddr),
+      permanentAddress: formatStructuredAddress(resolvedPermanent),
       emergencyContactName: form.emergencyContactName || "",
       emergencyContactMobile: form.emergencyContactMobile || "",
       emergencyContactRelation: (form.emergencyContactRelation as any) || "Spouse",
-      emergencyContactAddress: formatStructuredAddress(emergencyAddr, geoNodes),
+      emergencyContactAddress: formatStructuredAddress(emergencyAddr),
       departmentId: form.departmentId || null,
       department: dept?.name || "",
+      branch: form.branch || "",
       employeeType: (form.employeeType as any) || undefined,
       roleType: form.roleType,
       salesType: form.salesType,
@@ -1862,7 +1883,7 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
       role: roleObj?.name || "",
       reportingManagerId: form.reportingManagerId || null,
       reportingManager: rm?.fullName || "",
-      status: (form.status as any) || "draft",
+      status: (form.status as any) || (mode === "add" ? "inactive" : "draft"),
       joiningDate: form.joiningDate || now,
       geoZone: geoMappings[0]?.geoZone || "",
       geoRegion: geoMappings[0]?.geoRegion || "",
@@ -1940,10 +1961,6 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
             <FileText className="w-4 h-4 shrink-0" />
             Documents
           </TabsTrigger>
-          <TabsTrigger value="permissions" className={TAB_TRIGGER_CLASS}>
-            <Shield className="w-4 h-4 shrink-0" />
-            Permissions
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="personal" className="mt-6 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
@@ -1980,7 +1997,7 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
                       placeholder="10-digit mobile" maxLength={10}
                       className={cn("h-8 text-xs flex-1", errors.mobile && "border-red-400")} />
                   </div>
-                  {errors.mobile && <p className="text-[11px] text-red-500 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.mobile}</p>}
+                  {errors.mobile && <p className="text-[10px] text-red-500 flex items-center gap-1"><AlertCircle className="w-2.5 h-2.5" />{errors.mobile}</p>}
                 </div>
 
                 {/* Email */}
@@ -2019,61 +2036,9 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
                 onPermanentChange={setPermanentAddr}
                 sameAsCurrent={sameAddress}
                 onSameAsCurrentChange={setSameAddress}
-                geoNodes={geoNodes}
                 currentErrors={mapAddressErrors("current", errors)}
                 permanentErrors={mapAddressErrors("permanent", errors)}
               />
-            </div>
-
-            <div className="pt-4 border-t border-border/60">
-              <SectionHead label="Account Credentials" sub="Set the login password for this employee user." />
-              <div className="grid w-full max-w-3xl grid-cols-1 gap-3 md:grid-cols-2">
-                <Field label="Password" required={mode === "add"} error={errors.password}>
-                  <div className="relative">
-                    <Input
-                      type={showPassword ? "text" : "password"}
-                      value={(form as any).password || ""}
-                      onChange={(e) => set("password", e.target.value)}
-                      placeholder="Min. 8 characters"
-                      className={cn("h-7 text-xs pr-8", errors.password && "border-red-400")}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((v) => !v)}
-                      className="absolute -translate-y-1/2 right-2 top-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </Field>
-
-                <Field label="Confirm Password" required={mode === "add"} error={errors.confirmPassword}>
-                  <div className="relative">
-                    <Input
-                      type={showConfirmPassword ? "text" : "password"}
-                      value={(form as any).confirmPassword || ""}
-                      onChange={(e) => set("confirmPassword", e.target.value)}
-                      placeholder="Re-enter password"
-                      className={cn("h-7 text-xs pr-8", errors.confirmPassword && "border-red-400")}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword((v) => !v)}
-                      className="absolute -translate-y-1/2 right-2 top-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </Field>
-                <div className="flex items-start gap-2 px-3 py-2 mt-1 border border-brand-200 rounded-lg bg-brand-50 md:col-span-2">
-                  <Lock className="mt-0.5 h-3.5 w-3.5 text-brand-600" />
-                  <p className="text-[10px] leading-tight text-brand-700">
-                    {mode === "add"
-                      ? "Set the initial login password for this employee."
-                      : "Password can be updated later if needed."}
-                  </p>
-                </div>
-              </div>
             </div>
 
             {/* Emergency Contact */}
@@ -2102,7 +2067,6 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
                   <AddressBlock
                     value={emergencyAddr}
                     onChange={setEmergencyAddr}
-                    geoNodes={geoNodes}
                     errors={mapAddressErrors("emergency", errors)}
                   />
                 </div>
@@ -2158,6 +2122,15 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
                   onChange={v => set("employeeType", v)}
                   options={EMPLOYEE_TYPES.map(t => ({ label: t, value: t }))}
                   placeholder="Select type" error={errors.employeeType} />
+
+                <Field label="Branch">
+                  <Input
+                    value={form.branch || ""}
+                    onChange={(e) => set("branch", e.target.value)}
+                    placeholder="e.g. Mumbai HO, Pune Branch"
+                    className="h-8 text-xs"
+                  />
+                </Field>
 
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Date of Joining <span className="text-red-500">*</span></Label>
@@ -2476,32 +2449,37 @@ export default function EmployeeForm({ mode, employee, onSave, onStatusSave, onC
                 )}
               </div>
             )}
+
+            {/* Permissions — visible based on role type */}
+            {form.roleType && form.role && (
+              <div className="pt-4 border-t border-border/60">
+                <SectionHead
+                  label={form.roleType === "Field User" ? "Mobile App Permissions" : "Web Permissions"}
+                  sub={
+                    form.roleType === "Field User"
+                      ? "Configure mobile app access for this field user."
+                      : "Configure web portal access for this admin user."
+                  }
+                />
+                <PermissionsTab
+                  activeWebPerms={activeWebPerms}
+                  setActiveWebPerms={setActiveWebPerms}
+                  activeMobilePerms={activeMobilePerms}
+                  setActiveMobilePerms={setActiveMobilePerms}
+                  role={form.role}
+                  roleType={form.roleType}
+                />
+              </div>
+            )}
             </div>
           )}
         </TabsContent>
 
-        <TabsContent value="documents" className="mt-6 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
+        <TabsContent value="documents" className="mt-4 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
           {activeTab === "documents" && (
             <EmployeeDocumentsSection
               documents={documents}
               onChange={setDocuments}
-              employee={{ ...form, documents }}
-            />
-          )}
-        </TabsContent>
-
-        <TabsContent value="permissions" className="mt-6 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
-          {/* ══════════════════════════════════════════════════════════════════════
-              TAB 4 — PERMISSIONS
-              ══════════════════════════════════════════════════════════════════════ */}
-          {activeTab === "permissions" && (
-            <PermissionsTab
-              activeWebPerms={activeWebPerms}
-              setActiveWebPerms={setActiveWebPerms}
-              activeMobilePerms={activeMobilePerms}
-              setActiveMobilePerms={setActiveMobilePerms}
-              role={form.role}
-              roleType={form.roleType}
             />
           )}
         </TabsContent>

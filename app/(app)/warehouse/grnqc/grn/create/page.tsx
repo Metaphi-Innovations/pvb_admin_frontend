@@ -438,10 +438,10 @@ export default function GenerateGrnPage() {
         </div>
       )}
 
-      {/* 1. Vendor & PO Selection */}
+      {/* 1. Supplier & PO Selection */}
       <SectionCard
-        title="Vendor & PO Selection"
-        description="Select vendor first, then choose one or more approved purchase orders with pending quantities."
+        title="Supplier & PO Selection"
+        description="Select supplier first, then choose one or more approved purchase orders with pending quantities."
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <TextField
@@ -451,12 +451,12 @@ export default function GenerateGrnPage() {
             className="h-9 text-xs font-mono font-bold bg-muted/30"
           />
 
-          <Field label="Vendor" required>
+          <Field label="Supplier" required>
             <AutocompleteSelect
               options={vendors.map((v) => ({ value: v, label: v }))}
               value={vendor}
               onChange={handleVendorChange}
-              placeholder="Select vendor…"
+              placeholder="Select supplier…"
               searchPlaceholder="Search vendor…"
               className="h-9 text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none"
             />
@@ -465,7 +465,7 @@ export default function GenerateGrnPage() {
           <Field
             label="Select Purchase Orders"
             required
-            hint={vendor && availablePos.length === 0 ? "No approved POs with pending qty for this vendor." : undefined}
+            hint={vendor && availablePos.length === 0 ? "No approved POs with pending qty for this supplier." : undefined}
           >
             <AutocompleteSelect
               options={availablePos.map((po) => ({
@@ -516,7 +516,7 @@ export default function GenerateGrnPage() {
       >
         {items.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-4">
-            Select a vendor and at least one purchase order to view order items.
+            Select a supplier and at least one purchase order to view order items.
           </p>
         ) : (
           <div className="border border-border rounded-lg overflow-hidden">

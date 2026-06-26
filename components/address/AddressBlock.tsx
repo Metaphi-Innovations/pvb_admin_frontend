@@ -1,32 +1,27 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { AlertCircle } from "lucide-react";
-import type { GeoNode } from "@/app/(app)/masters/geography/geo-data";
-import {
-  type StructuredAddress,
-  geoNodeLabel,
-} from "@/lib/address/types";
-import {
-  getAddressStates,
-  getAddressCitiesForState,
-  getAddressPincodesForCity,
-} from "@/lib/address/geo-address";
+import { hydratePostalMaster } from "@/lib/geography/postal-master-store";
+import { type StructuredAddress } from "@/lib/address/types";
+import { getTownsForPincode, lookupPostalPincode } from "@/lib/address/postal-lookup";
 
 function Field({
   label,
   required,
   error,
+  warning,
   children,
   className,
 }: {
   label: string;
   required?: boolean;
   error?: string;
+  warning?: string;
   children: React.ReactNode;
   className?: string;
 }) {
@@ -43,6 +38,12 @@ function Field({
           {error}
         </p>
       )}
+      {warning && !error && (
+        <p className="text-[10px] leading-tight text-amber-600 flex items-center gap-1">
+          <AlertCircle className="flex-shrink-0 w-2.5 h-2.5" />
+          {warning}
+        </p>
+      )}
     </div>
   );
 }
@@ -51,10 +52,9 @@ export interface AddressBlockProps {
   title?: string;
   value: StructuredAddress;
   onChange: (value: StructuredAddress) => void;
-  geoNodes: GeoNode[];
   disabled?: boolean;
   errors?: Partial<Record<keyof StructuredAddress, string>>;
-  /** When true, line1/state/city/pincode are required */
+  warnings?: Partial<Record<keyof StructuredAddress, string>>;
   required?: boolean;
 }
 
@@ -62,40 +62,104 @@ export function AddressBlock({
   title,
   value,
   onChange,
-  geoNodes,
   disabled = false,
   errors = {},
+  warnings = {},
   required = false,
 }: AddressBlockProps) {
-  const states = useMemo(() => getAddressStates(geoNodes), [geoNodes]);
-  const cities = useMemo(
-    () => getAddressCitiesForState(value.stateId, geoNodes),
-    [value.stateId, geoNodes],
-  );
-  const pincodes = useMemo(
-    () => getAddressPincodesForCity(value.cityId, geoNodes),
-    [value.cityId, geoNodes],
-  );
+  const [postalReady, setPostalReady] = useState(false);
+  const [townOptions, setTownOptions] = useState<string[]>([]);
 
-  const stateOptions = useMemo(
-    () => states.map((n) => ({ value: String(n.id), label: n.name })),
-    [states],
-  );
-  const cityOptions = useMemo(
-    () => cities.map((n) => ({ value: String(n.id), label: n.name })),
-    [cities],
-  );
-  const pincodeOptions = useMemo(
-    () => pincodes.map((n) => ({ value: String(n.id), label: geoNodeLabel(n) })),
-    [pincodes],
-  );
+  useEffect(() => {
+    let active = true;
+    hydratePostalMaster().then(() => {
+      if (active) setPostalReady(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const pincodeResolved = useMemo(() => {
+    if (!postalReady || value.pincode.length !== 6) return null;
+    return lookupPostalPincode(value.pincode, value.town);
+  }, [postalReady, value.pincode, value.town]);
+
+  useEffect(() => {
+    if (!postalReady || value.pincode.length !== 6) {
+      setTownOptions([]);
+      return;
+    }
+    setTownOptions(getTownsForPincode(value.pincode));
+  }, [postalReady, value.pincode]);
+
+  const pincodeWarning =
+    warnings.pincode ||
+    (value.pincode.length === 6 && postalReady && !pincodeResolved
+      ? "Pincode not found in Postal Master."
+      : undefined);
+
+  const geographyLocked = Boolean(pincodeResolved);
 
   const patch = (partial: Partial<StructuredAddress>) => {
     onChange({ ...value, ...partial });
   };
 
+  const applyPostalLocation = (digits: string, preferredTown?: string) => {
+    const loc = lookupPostalPincode(digits, preferredTown);
+    if (loc) {
+      return {
+        ...value,
+        pincode: digits,
+        city: loc.city,
+        town: loc.town,
+        district: loc.district,
+        state: loc.state,
+      };
+    }
+    return {
+      ...value,
+      pincode: digits,
+      city: "",
+      town: "",
+      district: "",
+      state: "",
+    };
+  };
+
+  const handlePincodeChange = (raw: string) => {
+    const digits = raw.replace(/\D/g, "").slice(0, 6);
+    if (digits.length === 6 && postalReady) {
+      onChange(applyPostalLocation(digits));
+    } else if (digits.length < 6) {
+      onChange({
+        ...value,
+        pincode: digits,
+        city: "",
+        town: "",
+        district: "",
+        state: "",
+      });
+    } else {
+      patch({ pincode: digits });
+    }
+  };
+
+  const handleTownChange = (town: string) => {
+    if (!value.pincode || value.pincode.length !== 6) {
+      patch({ town });
+      return;
+    }
+    onChange(applyPostalLocation(value.pincode, town));
+  };
+
   const inp = (key: keyof StructuredAddress) =>
     cn("h-8 text-xs", errors[key] && "border-red-400");
+
+  const townSelectOptions = useMemo(
+    () => townOptions.map((t) => ({ value: t, label: t })),
+    [townOptions],
+  );
 
   return (
     <div className="space-y-3">
@@ -130,51 +194,77 @@ export function AddressBlock({
             className={inp("line2")}
           />
         </Field>
-        <Field label="State" required={required} error={errors.stateId}>
-          <AutocompleteSelect
-            options={stateOptions}
-            value={value.stateId ? String(value.stateId) : ""}
-            onChange={(v) =>
-              patch({
-                stateId: v ? Number(v) : null,
-                cityId: null,
-                pincodeId: null,
-              })
-            }
-            placeholder="Select state"
-            searchPlaceholder="Search state…"
+        <Field
+          label="Pincode"
+          required={required}
+          error={errors.pincode}
+          warning={pincodeWarning}
+        >
+          <Input
+            value={value.pincode}
+            onChange={(e) => handlePincodeChange(e.target.value)}
+            placeholder="6-digit pincode"
             disabled={disabled}
-            error={!!errors.stateId}
-            className="h-8 text-xs"
+            inputMode="numeric"
+            maxLength={6}
+            className={cn(inp("pincode"), "font-mono")}
           />
         </Field>
-        <Field label="City" required={required} error={errors.cityId}>
-          <AutocompleteSelect
-            options={cityOptions}
-            value={value.cityId ? String(value.cityId) : ""}
-            onChange={(v) =>
-              patch({
-                cityId: v ? Number(v) : null,
-                pincodeId: null,
-              })
+        <Field label="City" required={required} error={errors.city}>
+          <Input
+            value={value.city}
+            onChange={(e) => patch({ city: e.target.value })}
+            placeholder={
+              value.pincode.length === 6
+                ? "Auto-filled from pincode"
+                : "Enter pincode first"
             }
-            placeholder={value.stateId ? "Select city" : "Select state first"}
-            searchPlaceholder="Search city…"
-            disabled={disabled || !value.stateId}
-            error={!!errors.cityId}
-            className="h-8 text-xs"
+            disabled={disabled || geographyLocked || value.pincode.length !== 6}
+            className={inp("city")}
           />
         </Field>
-        <Field label="Pincode" required={required} error={errors.pincodeId}>
-          <AutocompleteSelect
-            options={pincodeOptions}
-            value={value.pincodeId ? String(value.pincodeId) : ""}
-            onChange={(v) => patch({ pincodeId: v ? Number(v) : null })}
-            placeholder={value.cityId ? "Select pincode" : "Select city first"}
-            searchPlaceholder="Search pincode…"
-            disabled={disabled || !value.cityId}
-            error={!!errors.pincodeId}
-            className="h-8 text-xs"
+        <Field label="Town" required={required} error={errors.town}>
+          {townSelectOptions.length > 1 ? (
+            <AutocompleteSelect
+              options={townSelectOptions}
+              value={value.town}
+              onChange={(v) => handleTownChange(String(v))}
+              placeholder="Select town"
+              searchPlaceholder="Search town…"
+              disabled={disabled || !value.pincode || value.pincode.length !== 6}
+              error={!!errors.town}
+              className="h-8 text-xs"
+            />
+          ) : (
+            <Input
+              value={value.town}
+              onChange={(e) => handleTownChange(e.target.value)}
+              placeholder={
+                value.pincode.length === 6
+                  ? "Auto-filled from pincode"
+                  : "Enter pincode first"
+              }
+              disabled={disabled || geographyLocked || value.pincode.length !== 6}
+              className={inp("town")}
+            />
+          )}
+        </Field>
+        <Field label="District" required={required} error={errors.district}>
+          <Input
+            value={value.district}
+            onChange={(e) => patch({ district: e.target.value })}
+            placeholder="Auto-filled from pincode"
+            disabled={disabled || geographyLocked}
+            className={inp("district")}
+          />
+        </Field>
+        <Field label="State" required={required} error={errors.state}>
+          <Input
+            value={value.state}
+            onChange={(e) => patch({ state: e.target.value })}
+            placeholder="Auto-filled from pincode"
+            disabled={disabled || geographyLocked}
+            className={inp("state")}
           />
         </Field>
       </div>

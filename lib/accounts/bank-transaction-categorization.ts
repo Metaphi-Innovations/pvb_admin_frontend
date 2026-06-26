@@ -43,7 +43,7 @@ export type TransactionStatus = "uncategorized" | "categorized" | "reconciled";
 
 export const TRANSACTION_CATEGORIES: { value: TransactionCategory; label: string; type: "receipt" | "payment" }[] = [
   { value: "customer_receipt", label: "Customer Receipt", type: "receipt" },
-  { value: "vendor_payment", label: "Vendor Payment", type: "payment" },
+  { value: "vendor_payment", label: "Supplier Payment", type: "payment" },
   { value: "expense", label: "Expense", type: "payment" },
   { value: "salary", label: "Salary", type: "payment" },
   { value: "employee_advance", label: "Employee Advance", type: "payment" },

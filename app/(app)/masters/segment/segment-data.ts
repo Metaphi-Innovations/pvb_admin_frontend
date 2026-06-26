@@ -111,10 +111,5 @@ export function validateSegmentForm(
   if (!form.segmentName.trim()) {
     errors.segmentName = "Segment name is required.";
   }
-  if (!form.segmentCode.trim()) {
-    errors.segmentCode = "Segment code is required.";
-  } else if (findSegmentDuplicate(form.segmentCode, records, excludeId)) {
-    errors.segmentCode = "Segment code must be unique.";
-  }
   return errors;
 }

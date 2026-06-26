@@ -75,7 +75,7 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 export default function FormulationMasterPage() {
   const [records, setRecords] = useState<FormulationRecord[]>([]);
   const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "formulationCode", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "formulationName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -113,17 +113,6 @@ export default function FormulationMasterPage() {
   };
 
   const columns: ColumnConfig<FormulationRecord>[] = [
-    {
-      key: "formulationCode",
-      header: "Form Code",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "130px",
-      render: (val, row) => (
-        <span className="font-mono text-xs text-brand-700">{row.formulationCode}</span>
-      ),
-    },
     {
       key: "formulationName",
       header: "Form Name",
@@ -208,7 +197,6 @@ export default function FormulationMasterPage() {
       const q = String(filters.search).trim().toLowerCase();
       result = result.filter(
         (r) =>
-          r.formulationCode.toLowerCase().includes(q) ||
           r.formulationName.toLowerCase().includes(q) ||
           (r.description || "").toLowerCase().includes(q)
       );
@@ -306,12 +294,11 @@ export default function FormulationMasterPage() {
 
   const handleExport = () => {
     try {
-      const headers = ["ID", "Form Code", "Form Name", "Description", "Status", "Created By", "Updated By", "Created At", "Updated At"];
+      const headers = ["ID", "Form Name", "Description", "Status", "Created By", "Updated By", "Created At", "Updated At"];
       const csvRows = [headers.join(",")];
       for (const r of records) {
         const row = [
           r.id,
-          `"${r.formulationCode.replace(/"/g, '""')}"`,
           `"${r.formulationName.replace(/"/g, '""')}"`,
           `"${(r.description || "").replace(/"/g, '""')}"`,
           r.status,
@@ -383,7 +370,7 @@ export default function FormulationMasterPage() {
           addLabel="Add Form"
           onExport={handleExport}
           emptyMessage="forms"
-          searchPlaceholder="Search form code, name, description..."
+          searchPlaceholder="Search form name, description..."
           currentFilters={filters}
           currentSort={sort}
         />
@@ -401,10 +388,9 @@ export default function FormulationMasterPage() {
           active
             ? buildSimpleMasterViewDrawer<FormulationRecord>({
                 drawerTitle: "Form",
-                getRecordCode: (r) => r.formulationCode,
+                getRecordCode: (r) => r.formulationName,
                 basicInfo: (r) => [
                   { label: "Form Name", value: r.formulationName },
-                  { label: "Form Code", value: r.formulationCode, mono: true },
                 ],
                 description: (r) => r.description,
                 showDescription: true,
@@ -425,8 +411,7 @@ export default function FormulationMasterPage() {
                 }
                 errors={{}}
                 labels={{ name: "Form Name", code: "Form Code" }}
-                codeDisabled
-                codeFirst
+                hideCode
               />
             </MasterFormGrid>
           </div>

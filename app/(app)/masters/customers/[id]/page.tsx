@@ -46,7 +46,7 @@ import {
 	saveCustomers,
 	todayStr,
 	CUSTOMER_TYPE_LABELS,
-	PAYMENT_TERMS_OPTIONS,
+	formatPaymentTerms,
 	formatMobile,
 	formatCreditLimit,
 	getActiveGSTMasters,
@@ -239,9 +239,7 @@ export default function CustomerDetailPage() {
 
   const gst = getActiveGSTMasters().find((g) => g.id === customer.gstMasterId);
   const tds = getActiveTDSMasters().find((t) => t.id === customer.tdsMasterId);
-  const payLabel =
-    PAYMENT_TERMS_OPTIONS.find((p) => p.value === customer.paymentTerms)?.label ??
-    customer.paymentTerms;
+  const payLabel = formatPaymentTerms(customer.paymentTerms);
   const typeLabel =
     CUSTOMER_TYPE_LABELS[customer.customerType.toLowerCase()] ?? customer.customerType;
   const canToggle =

@@ -89,7 +89,7 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 export default function SegmentMasterPage() {
   const [records, setRecords] = useState<SegmentRecord[]>([]);
   const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "segmentCode", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "segmentName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -150,23 +150,6 @@ export default function SegmentMasterPage() {
 
   const columns: ColumnConfig<SegmentRecord>[] = [
     {
-      key: "segmentCode",
-      header: "Segment Code",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "130px",
-      render: (_val, row) => (
-        <button
-          type="button"
-          onClick={() => openView(row)}
-          className="font-mono text-xs font-semibold text-brand-700 hover:underline"
-        >
-          {row.segmentCode}
-        </button>
-      ),
-    },
-    {
       key: "segmentName",
       header: "Segment Name",
       sortable: true,
@@ -174,7 +157,13 @@ export default function SegmentMasterPage() {
       filterType: "text",
       width: "200px",
       render: (_val, row) => (
-        <span className="text-xs font-semibold text-foreground">{row.segmentName}</span>
+        <button
+          type="button"
+          onClick={() => openView(row)}
+          className="text-xs font-semibold text-brand-700 hover:underline text-left"
+        >
+          {row.segmentName}
+        </button>
       ),
     },
     {
@@ -259,8 +248,8 @@ export default function SegmentMasterPage() {
       const q = String(filters.search).trim().toLowerCase();
       result = result.filter(
         (r) =>
-          r.segmentCode.toLowerCase().includes(q) ||
-          r.segmentName.toLowerCase().includes(q),
+          r.segmentName.toLowerCase().includes(q) ||
+          (r.description || "").toLowerCase().includes(q),
       );
     }
 
@@ -368,7 +357,6 @@ export default function SegmentMasterPage() {
     try {
       const headers = [
         "ID",
-        "Segment Code",
         "Segment Name",
         "Description",
         "Status",
@@ -382,7 +370,6 @@ export default function SegmentMasterPage() {
         csvRows.push(
           [
             r.id,
-            `"${r.segmentCode.replace(/"/g, '""')}"`,
             `"${r.segmentName.replace(/"/g, '""')}"`,
             `"${(r.description || "").replace(/"/g, '""')}"`,
             r.status,
@@ -417,10 +404,8 @@ export default function SegmentMasterPage() {
     ? {
         title: active.segmentName,
         subtitle: "Read-only segment details",
-        recordCode: active.segmentCode,
         status: active.status,
         basicInfo: [
-          { label: "Segment Code", value: active.segmentCode, mono: true },
           { label: "Segment Name", value: active.segmentName },
           {
             label: "Description",
@@ -477,7 +462,7 @@ export default function SegmentMasterPage() {
         addLabel="Add Segment"
         onExport={handleExport}
         emptyMessage="segments"
-        searchPlaceholder="Search segment code or segment name..."
+        searchPlaceholder="Search segment name or description..."
         currentFilters={filters}
         currentSort={sort}
       />
@@ -530,11 +515,9 @@ export default function SegmentMasterPage() {
                 }
                 errors={{
                   name: errors.segmentName,
-                  code: errors.segmentCode,
                 }}
                 labels={{ name: "Segment Name", code: "Segment Code" }}
-                codeDisabled={false}
-                codeFirst
+                hideCode
               />
             </MasterFormGrid>
           ) : null
@@ -554,7 +537,7 @@ export default function SegmentMasterPage() {
               {deleteTarget && (
                 <>
                   <strong className="text-foreground">{deleteTarget.segmentName}</strong>{" "}
-                  ({deleteTarget.segmentCode}) will be marked as inactive. It will remain
+                  will be marked as inactive. It will remain
                   visible in the All and Inactive tabs.
                 </>
               )}

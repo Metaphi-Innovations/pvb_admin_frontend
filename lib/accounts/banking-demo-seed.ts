@@ -220,16 +220,16 @@ function seedBankBookTransactions(): void {
     no: string;
     narration: string;
   }> = [
-    { bank: hdfc, party: agrochem, amount: 245000, date: "2026-04-10", ref: "PAY-001", no: "PV-0001", narration: "Vendor payment — AgroChem Traders" },
-    { bank: icici, party: greenField, amount: 118000, date: "2026-04-18", ref: "PAY-002", no: "PV-0002", narration: "Vendor payment — GreenField Suppliers" },
-    { bank: sbi, party: agrochem, amount: 86000, date: "2026-04-28", ref: "PAY-003", no: "PV-0003", narration: "Vendor payment — fertilizer purchase" },
-    { bank: hdfc, party: greenField, amount: 195000, date: "2026-05-05", ref: "PAY-004", no: "PV-0004", narration: "Vendor payment — seed procurement" },
+    { bank: hdfc, party: agrochem, amount: 245000, date: "2026-04-10", ref: "PAY-001", no: "PV-0001", narration: "Supplier payment — AgroChem Traders" },
+    { bank: icici, party: greenField, amount: 118000, date: "2026-04-18", ref: "PAY-002", no: "PV-0002", narration: "Supplier payment — GreenField Suppliers" },
+    { bank: sbi, party: agrochem, amount: 86000, date: "2026-04-28", ref: "PAY-003", no: "PV-0003", narration: "Supplier payment — fertilizer purchase" },
+    { bank: hdfc, party: greenField, amount: 195000, date: "2026-05-05", ref: "PAY-004", no: "PV-0004", narration: "Supplier payment — seed procurement" },
     { bank: axis, party: agrochem, amount: 320000, date: "2026-05-12", ref: "PAY-005", no: "PV-0005", narration: "Salary disbursement via Axis account" },
-    { bank: icici, party: greenField, amount: 142000, date: "2026-05-20", ref: "PAY-006", no: "PV-0006", narration: "Vendor payment — pesticide stock" },
-    { bank: hdfc, party: agrochem, amount: 98000, date: "2026-05-28", ref: "PAY-007", no: "PV-0007", narration: "Vendor payment — partial settlement" },
-    { bank: sbi, party: greenField, amount: 76000, date: "2026-06-03", ref: "PAY-008", no: "PV-0008", narration: "Vendor payment — operations account" },
-    { bank: icici, party: agrochem, amount: 210000, date: "2026-06-10", ref: "PAY-009", no: "PV-0009", narration: "Vendor payment — bulk DAP order" },
-    { bank: hdfc, party: greenField, amount: 134000, date: "2026-06-18", ref: "PAY-010", no: "PV-0010", narration: "Vendor payment — June settlement" },
+    { bank: icici, party: greenField, amount: 142000, date: "2026-05-20", ref: "PAY-006", no: "PV-0006", narration: "Supplier payment — pesticide stock" },
+    { bank: hdfc, party: agrochem, amount: 98000, date: "2026-05-28", ref: "PAY-007", no: "PV-0007", narration: "Supplier payment — partial settlement" },
+    { bank: sbi, party: greenField, amount: 76000, date: "2026-06-03", ref: "PAY-008", no: "PV-0008", narration: "Supplier payment — operations account" },
+    { bank: icici, party: agrochem, amount: 210000, date: "2026-06-10", ref: "PAY-009", no: "PV-0009", narration: "Supplier payment — bulk DAP order" },
+    { bank: hdfc, party: greenField, amount: 134000, date: "2026-06-18", ref: "PAY-010", no: "PV-0010", narration: "Supplier payment — June settlement" },
   ];
 
   for (const p of payments) {

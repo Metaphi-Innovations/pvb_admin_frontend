@@ -114,7 +114,7 @@ export function buildInvoiceLineFromDispatchProduct(
   }
 
   const pricing = findActivePricingForStock(master.sku, master.productName);
-  const taxPct = pricing?.gstPct ?? parseTaxPct(master.gstRate);
+  const taxPct = pricing?.gstPct ? parseTaxPct(pricing.gstPct) : parseTaxPct(master.gstRate);
   const unitPrice = resolveUnitRate(dp, master.id, customerId, order);
   const unit = pricing?.uom ?? master.packagingUnit ?? master.baseUnit ?? "PCS";
 

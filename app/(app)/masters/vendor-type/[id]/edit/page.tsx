@@ -53,7 +53,7 @@ export default function EditVendorTypePage() {
     const initialErr = validateVendorTypeInitialCode(form.initialCode, list, Number(id));
     if (initialErr) validation.initialCode = initialErr;
     if (findVendorTypeDuplicate(form.vendorTypeName, list, Number(id))) {
-      validation.vendorTypeName = "Vendor type name must be unique.";
+      validation.vendorTypeName = "Supplier type name must be unique.";
     }
     const existing = list.find((item) => item.id === Number(id));
     const vendorTypeCode = resolveVendorTypeCode(form.initialCode, list, {
@@ -87,14 +87,14 @@ export default function EditVendorTypePage() {
     );
 
     saveVendorTypes(updated);
-    setToast({ msg: "Vendor type updated successfully.", type: "success" });
+    setToast({ msg: "Supplier type updated successfully.", type: "success" });
     setTimeout(() => router.push(`/masters/vendor-type/${id}`), 900);
   };
 
   if (!form) {
     return (
       <div className="py-16 text-center">
-        <p className="text-sm text-muted-foreground">Vendor type not found.</p>
+        <p className="text-sm text-muted-foreground">Supplier type not found.</p>
         <Link href="/masters/vendor-type" className="text-xs text-brand-600 hover:underline mt-2 inline-block">
           Back to listing
         </Link>
@@ -104,8 +104,8 @@ export default function EditVendorTypePage() {
 
   return (
     <FormContainer
-      title="Edit Vendor Type"
-      description="Masters → Vendor Type Master → Edit"
+      title="Edit Supplier Type"
+      description="Masters → Supplier Type Master → Edit"
       onBack={() => router.back()}
       actions={
         <div className="flex items-center gap-2">
@@ -116,7 +116,7 @@ export default function EditVendorTypePage() {
             className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
           >
-            <Save className="w-4 h-4" /> Update Vendor Type
+            <Save className="w-4 h-4" /> Update Supplier Type
           </Button>
         </div>
       }

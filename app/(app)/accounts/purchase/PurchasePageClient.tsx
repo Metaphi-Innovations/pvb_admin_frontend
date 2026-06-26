@@ -65,7 +65,7 @@ export default function PurchasePageClient() {
       <div className="max-w-[1600px] mx-auto space-y-3">
         <PageHeader
           title="Purchase"
-          description="Vendor invoices from PO uploads and manual entries for accounts payable."
+          description="Supplier invoices from PO uploads and manual entries for accounts payable."
           breadcrumbs={PURCHASE_BREADCRUMB}
           actions={
             <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5" asChild>
@@ -78,13 +78,13 @@ export default function PurchasePageClient() {
         />
 
         <p className="text-[11px] text-muted-foreground px-1">
-          Most purchases are created when you upload a vendor invoice on a Purchase Order in Procurement.
+          Most purchases are created when you upload a supplier invoice on a Purchase Order in Procurement.
         </p>
 
         <ModuleFiltersBar
           searchValue={search}
           onSearchChange={setSearch}
-          searchPlaceholder="Purchase no., vendor invoice no., vendor, PO…"
+          searchPlaceholder="Purchase no., supplier invoice no., supplier, PO…"
         >
           <Select value={source} onValueChange={setSource}>
             <SelectTrigger className="h-8 w-[130px] text-xs bg-white">
@@ -98,10 +98,10 @@ export default function PurchasePageClient() {
           </Select>
           <Select value={vendor} onValueChange={setVendor}>
             <SelectTrigger className="h-8 w-[140px] text-xs bg-white">
-              <SelectValue placeholder="Vendor" />
+              <SelectValue placeholder="Supplier" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all" className="text-xs">All vendors</SelectItem>
+              <SelectItem value="all" className="text-xs">All suppliers</SelectItem>
               {vendorNames.map((v) => (
                 <SelectItem key={v} value={v} className="text-xs">
                   {v}
@@ -120,9 +120,9 @@ export default function PurchasePageClient() {
                 <tr>
                   {[
                     "Purchase No.",
-                    "Vendor Inv. No.",
+                    "Supplier Inv. No.",
                     "Date",
-                    "Vendor",
+                    "Supplier",
                     "PO No.",
                     "Source",
                     "3-Way Match",
@@ -143,7 +143,7 @@ export default function PurchasePageClient() {
                 {visible.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="py-12 text-center text-xs text-muted-foreground">
-                      No purchase records. Upload a vendor invoice on a Purchase Order in Procurement, or add a manual entry.
+                      No purchase records. Upload a supplier invoice on a Purchase Order in Procurement, or add a manual entry.
                     </td>
                   </tr>
                 ) : (

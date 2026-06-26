@@ -50,8 +50,8 @@ export const SEED_REJECTED_STOCK: RejectedStockRecord[] = [
     qcNumber: "QC-2026-012",
     inspectionDate: "2026-05-28",
     inspector: "Rita M.",
-    remarks: "Returned to Vendor (M/s GreenFert Corp) under challan RV-2605.",
-    status: "Returned To Vendor",
+    remarks: "Returned to Supplier (M/s GreenFert Corp) under challan RV-2605.",
+    status: "Returned To Supplier",
   },
   {
     id: "rj-5",

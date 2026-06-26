@@ -49,7 +49,7 @@ export default function AddVendorTypePage() {
     const initialErr = validateVendorTypeInitialCode(form.initialCode, list);
     if (initialErr) validation.initialCode = initialErr;
     if (findVendorTypeDuplicate(form.vendorTypeName, list)) {
-      validation.vendorTypeName = "Vendor type name must be unique.";
+      validation.vendorTypeName = "Supplier type name must be unique.";
     }
     const vendorTypeCode =
       form.vendorTypeCode.trim() ||
@@ -78,7 +78,7 @@ export default function AddVendorTypePage() {
     };
 
     saveVendorTypes([...list, newRecord]);
-    setToast({ msg: "Vendor type added successfully.", type: "success" });
+    setToast({ msg: "Supplier type added successfully.", type: "success" });
     setTimeout(() => router.push("/masters/vendor-type"), 900);
   };
 
@@ -92,8 +92,8 @@ export default function AddVendorTypePage() {
 
   return (
     <FormContainer
-      title="Add Vendor Type"
-      description="Masters → Vendor Type Master → Add"
+      title="Add Supplier Type"
+      description="Masters → Supplier Type Master → Add"
       onBack={() => router.back()}
       actions={
         <div className="flex items-center gap-2">
@@ -104,7 +104,7 @@ export default function AddVendorTypePage() {
             className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
           >
-            <Save className="w-4 h-4" /> Save Vendor Type
+            <Save className="w-4 h-4" /> Save Supplier Type
           </Button>
         </div>
       }

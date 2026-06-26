@@ -40,7 +40,6 @@ import {
   saveWarehouses,
   todayStr,
   formatStatus,
-  WAREHOUSE_TYPES,
   OPERATED_BY_OPTIONS,
 } from "./warehouse-data";
 
@@ -68,7 +67,7 @@ export default function WarehouseListPage() {
   const router = useRouter();
   const [records, setRecords] = useState<WarehouseMaster[]>([]);
   const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "warehouseCode", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "warehouseName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -116,17 +115,6 @@ export default function WarehouseListPage() {
 
   const columns: ColumnConfig<WarehouseMaster>[] = [
     {
-      key: "warehouseCode",
-      header: "WH Code",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val, row) => (
-        <span className="font-mono text-xs text-brand-700">{row.warehouseCode}</span>
-      ),
-    },
-    {
       key: "warehouseName",
       header: "Warehouse Name",
       sortable: true,
@@ -137,20 +125,6 @@ export default function WarehouseListPage() {
         <Link href={`/masters/warehouse/${row.id}`} className="block group/name">
           <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">{row.warehouseName}</p>
         </Link>
-      ),
-    },
-    {
-      key: "warehouseType",
-      header: "Type",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: WAREHOUSE_TYPES.map(v => ({ label: v, value: v })),
-      width: "170px",
-      render: (val, row) => (
-        <span className="px-1.5 py-0.5 bg-muted rounded text-muted-foreground text-[11px] font-medium">
-          {row.warehouseType}
-        </span>
       ),
     },
     {
@@ -231,13 +205,16 @@ export default function WarehouseListPage() {
 
     {
       key: "manager",
-      header: "Manager",
+      header: "Designation",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: Array.from(new Set(records.map((r) => r.manager))).sort().map((v) => ({ label: v, value: v })),
-      width: "130px",
-      render: (val, row) => row.manager || "—",
+      filterOptions: Array.from(new Set(records.map((r) => r.manager).filter(Boolean))).sort().map((v) => ({ label: v, value: v })),
+      width: "140px",
+      render: (val, row) => {
+        const primary = row.contacts?.find((c) => c.isPrimary) ?? row.contacts?.[0];
+        return primary?.designation?.trim() || row.manager || "—";
+      },
     },
     {
       key: "operatedBy",
@@ -408,7 +385,6 @@ export default function WarehouseListPage() {
       result = result.filter(
         (r) =>
           r.warehouseName.toLowerCase().includes(q) ||
-          r.warehouseCode.toLowerCase().includes(q) ||
           r.gstNumber.toLowerCase().includes(q) ||
           r.contactPerson.toLowerCase().includes(q) ||
           r.mobileNumber.includes(q) ||
@@ -443,17 +419,22 @@ export default function WarehouseListPage() {
 
   const handleExport = () => {
     const headers = [
-      "Warehouse Code", "Warehouse Name", "Warehouse Type", "GST Number",
-      "Contact Person", "Mobile Number", "Email Address", "Address",
-      "State", "District", "City", "Pincode",
-      "Manager", "Operated By", "Status",
+      "Warehouse Name", "GST Number",
+      "Contact Person", "Designation", "Mobile Number", "Email Address",
+      "Address Line 1", "Address Line 2", "Pincode", "District", "City", "Town", "State",
+      "Operated By", "Status",
     ];
-    const rows = filtered.map(r => [
-      r.warehouseCode, r.warehouseName, r.warehouseType, r.gstNumber,
-      r.contactPerson, r.mobileNumber, r.emailAddress, `"${r.address}"`,
-      r.state, r.district, r.city, r.pincode,
-      r.manager, r.operatedBy, formatStatus(r.status),
-    ]);
+    const rows = filtered.map(r => {
+      const primary = r.contacts?.find((c) => c.isPrimary) ?? r.contacts?.[0];
+      const designation = primary?.designation?.trim() || r.manager || "";
+      return [
+      r.warehouseName, r.gstNumber,
+      r.contactPerson, designation, r.mobileNumber, r.emailAddress,
+      r.address, r.addressLine2 || "",
+      r.pincode, r.district, r.city, r.town || "", r.state,
+      r.operatedBy, formatStatus(r.status),
+    ];
+    });
     const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -538,7 +519,7 @@ export default function WarehouseListPage() {
           addLabel="Add Warehouse"
           onExport={handleExport}
           emptyMessage="warehouses"
-          searchPlaceholder="Search name, code, GST, contact, mobile, city..."
+          searchPlaceholder="Search name, GST, contact, mobile, city..."
           currentFilters={filters}
           currentSort={sort}
         />

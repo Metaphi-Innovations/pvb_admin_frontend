@@ -73,7 +73,7 @@ export default function EditVendorPage() {
     if (updated.status === "active") {
       ensureVendorLedgerFromMaster(updated);
     }
-    setToast({ msg: "Vendor updated.", type: "success" });
+    setToast({ msg: "Supplier updated.", type: "success" });
     setTimeout(() => router.push(`/masters/vendors/${id}`), 700);
   };
 
@@ -83,8 +83,8 @@ export default function EditVendorPage() {
 
   return (
     <FormContainer
-      title="Edit Vendor"
-      description={`Masters → Vendor Master → ${vendor?.vendorName ?? "Edit"}`}
+      title="Edit Supplier"
+      description={`Masters → Supplier Master → ${vendor?.vendorName ?? "Edit"}`}
       onBack={() => router.push(`/masters/vendors/${id}`)}
       actions={
         <div className="flex items-center gap-2">

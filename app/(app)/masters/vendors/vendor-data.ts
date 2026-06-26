@@ -1,4 +1,10 @@
-import { PAYMENT_TERMS_OPTIONS } from "../customers/customer-data";
+import {
+  PAYMENT_TERMS_OPTIONS,
+  formatPaymentTerms,
+} from "../customers/customer-data";
+
+export { formatPaymentTerms };
+
 import {
   VENDOR_TYPE_EXPENSES,
   VENDOR_TYPE_GOODS,
@@ -32,18 +38,13 @@ export type CreditPeriodUnit = "days" | "months";
 export { VENDOR_TYPE_GOODS, VENDOR_TYPE_EXPENSES, isGoodsVendorType, isExpenseVendorType };
 
 export const EXPENSE_CATEGORY_OPTIONS = [
-  { value: "transport-vendor", label: "Transport Vendor" },
+  { value: "transport-vendor", label: "Transport Supplier" },
   { value: "consultant", label: "Consultant" },
   { value: "legal-advisor", label: "Legal Advisor" },
   { value: "marketing-agency", label: "Marketing Agency" },
   { value: "contractor", label: "Contractor" },
   { value: "auditor", label: "Auditor" },
 ];
-
-export function formatPaymentTerms(value: string): string {
-  if (!value) return "—";
-  return PAYMENT_TERMS_OPTIONS.find((p) => p.value === value)?.label ?? value;
-}
 
 export function formatExpenseCategory(value: string): string {
   if (!value) return "—";
@@ -54,6 +55,8 @@ export interface VendorAddress {
   line1: string;
   line2: string;
   city: string;
+  town?: string;
+  district?: string;
   state: string;
   country: string;
   pincode: string;
@@ -85,7 +88,7 @@ export interface VendorProductMapping {
   productId: string;
   productName: string;
   sku?: string;
-  /** Vendor-specific purchase price — overrides Pricing Master CP */
+  /** Supplier-specific purchase price — overrides Pricing Master CP */
   price?: number;
   status: "Active" | "Inactive";
 }
@@ -121,6 +124,7 @@ export interface Vendor {
   branch: string;
   accountNumber: string;
   ifscCode: string;
+  swiftCode?: string;
   documents: VendorDocument[];
   remarks: string;
   status: VendorStatus;
@@ -167,7 +171,16 @@ const GST_STATE_MAP: Record<string, string> = {
 };
 
 export function emptyAddress(): VendorAddress {
-  return { line1: "", line2: "", city: "", state: "", country: "India", pincode: "" };
+  return {
+    line1: "",
+    line2: "",
+    city: "",
+    town: "",
+    district: "",
+    state: "",
+    country: "India",
+    pincode: "",
+  };
 }
 
 export function emptyContact(uid?: string): VendorContact {
@@ -524,6 +537,7 @@ function migrateLegacy(raw: Record<string, unknown>): Vendor {
     branch: String(raw.branch ?? ""),
     accountNumber: String(raw.accountNumber ?? ""),
     ifscCode: String(raw.ifscCode ?? ""),
+    swiftCode: String(raw.swiftCode ?? ""),
     documents: Array.isArray(raw.documents)
       ? (raw.documents as VendorDocument[])
       : Array.isArray(raw.attachments)
@@ -654,6 +668,7 @@ export interface VendorFormValues {
   accountNumber: string;
   confirmAccountNumber: string;
   ifscCode: string;
+  swiftCode: string;
   documents: VendorDocument[];
   remarks: string;
   vendorProducts: VendorProductMapping[];
@@ -691,6 +706,7 @@ export const DEFAULT_VENDOR_FORM: VendorFormValues = {
   accountNumber: "",
   confirmAccountNumber: "",
   ifscCode: "",
+  swiftCode: "",
   documents: [],
   remarks: "",
   vendorProducts: [],
@@ -731,6 +747,7 @@ export function vendorToForm(v: Vendor): VendorFormValues {
     accountNumber: v.accountNumber,
     confirmAccountNumber: v.accountNumber,
     ifscCode: v.ifscCode,
+    swiftCode: v.swiftCode ?? "",
     documents: v.documents.length
       ? v.documents.map((d) => ({ ...d }))
       : [],
@@ -788,6 +805,7 @@ export function formToVendor(
     branch: form.branch.trim(),
     accountNumber: form.accountNumber.trim(),
     ifscCode: form.ifscCode.trim().toUpperCase(),
+    swiftCode: form.swiftCode.trim().toUpperCase(),
     documents: form.documents,
     remarks: form.remarks.trim(),
     vendorProducts: form.vendorProducts || [],
@@ -795,8 +813,8 @@ export function formToVendor(
 }
 
 export function validateVendorForm(form: VendorFormValues): string | null {
-  if (!form.vendorName.trim()) return "Vendor name is required.";
-  if (!form.vendorType.trim()) return "Vendor type is required.";
+  if (!form.vendorName.trim()) return "Supplier name is required.";
+  if (!form.vendorType.trim()) return "Supplier type is required.";
 
   if (form.gstRegistered) {
     if (!form.gstNumber.trim()) return "GSTIN is required when GST registered.";

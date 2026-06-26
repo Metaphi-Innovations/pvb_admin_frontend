@@ -25,16 +25,19 @@ export function GstRegisteredToggleControl({
 	active,
 	onChange,
 	readOnly,
+	label,
 }: {
 	active: boolean;
 	onChange: (active: boolean) => void;
 	readOnly?: boolean;
+	label?: string;
 }) {
-	return (
-		<div className="flex items-center gap-2">
-			<span className="text-[11px] font-medium text-foreground whitespace-nowrap">
-				GST Registered
-			</span>
+	const toggleLabel = label ?? "GST Registered";
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[11px] font-medium text-foreground whitespace-nowrap">
+        {toggleLabel}
+      </span>
 			<ListingStatusToggle
 				active={active}
 				onChange={onChange}
