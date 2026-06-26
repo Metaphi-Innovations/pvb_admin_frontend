@@ -133,13 +133,13 @@ export function validateVendorTypeCodeUnique(
   excludeId?: number,
 ): string | null {
   const normalized = code.trim().toUpperCase();
-  if (!normalized) return "Vendor type code is required.";
+  if (!normalized) return "Supplier type code is required.";
   const duplicate = records.find(
     (r) =>
       r.id !== excludeId &&
       r.vendorTypeCode.trim().toUpperCase() === normalized,
   );
-  if (duplicate) return "Vendor type code already exists.";
+  if (duplicate) return "Supplier type code already exists.";
   return null;
 }
 
@@ -175,7 +175,7 @@ export function validateVendorTypeForm(
 ): Record<string, string> {
   const errors: Record<string, string> = {};
   if (!form.vendorTypeName.trim()) {
-    errors.vendorTypeName = "Vendor type name is required";
+    errors.vendorTypeName = "Supplier type name is required";
   }
   const code = normalizeInitialCode(form.initialCode);
   if (!code) {
@@ -184,7 +184,7 @@ export function validateVendorTypeForm(
     errors.initialCode = "Use uppercase letters only (2–5 characters)";
   }
   if (code && !form.vendorTypeCode.trim()) {
-    errors.vendorTypeCode = "Vendor type code could not be generated";
+    errors.vendorTypeCode = "Supplier type code could not be generated";
   }
   return errors;
 }

@@ -1,5 +1,5 @@
 /**
- * Shared ERP integration: PO ↔ GRN ↔ QC ↔ Vendor Invoice (Accounts Purchase).
+ * Shared ERP integration: PO ↔ GRN ↔ QC ↔ Supplier Invoice (Accounts Purchase).
  * Used by Procurement, Warehouse (reference), and Accounts modules.
  */
 import { listPurchaseInvoicesByPO, type PurchaseInvoiceRecord } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";

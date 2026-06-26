@@ -23,7 +23,7 @@ export function VendorFormLayout({
 }) {
   const router = useRouter();
   const title =
-    mode === "create" ? "Create Vendor" : mode === "edit" ? "Edit Vendor" : "View Vendor";
+    mode === "create" ? "Create Supplier" : mode === "edit" ? "Edit Supplier" : "View Supplier";
 
   return (
     <AppLayout noPadding>
@@ -46,7 +46,7 @@ export function VendorFormLayout({
                   </Link>
                   <span className="mx-1">/</span>
                   <Link href="/masters/vendors" className="hover:text-brand-600">
-                    Vendor Master
+                    Supplier Master
                   </Link>
                   <span className="mx-1">/</span>
                   <span className="text-foreground/80">{vendor?.vendorName || "New"}</span>

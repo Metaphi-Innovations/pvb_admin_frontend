@@ -124,8 +124,8 @@ export default function PurchaseViewPageClient({ purchaseId }: { purchaseId: num
             <h2 className="text-sm font-semibold">PO Invoice Integration</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <DetailRow label="PO No." value={record.poNumber} />
-              <DetailRow label="Vendor Invoice No." value={record.vendorInvoiceNo} />
-              <DetailRow label="Vendor" value={record.vendorName} />
+              <DetailRow label="Supplier Invoice No." value={record.vendorInvoiceNo} />
+              <DetailRow label="Supplier" value={record.vendorName} />
               <DetailRow label="Invoice Amount" value={formatINR(record.subtotal)} />
               <DetailRow label="Purchase No." value={record.invoiceNo} />
               <DetailRow label="Purchase Status" value={PURCHASE_PAYMENT_STATUS_LABELS[payStatus]} />
@@ -147,9 +147,9 @@ export default function PurchaseViewPageClient({ purchaseId }: { purchaseId: num
           </div>
         ) : (
           <div className="rounded-lg border bg-white p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <DetailRow label="Vendor" value={record.vendorName} />
-            <DetailRow label="Vendor Invoice No." value={record.vendorInvoiceNo} />
-            <DetailRow label="Vendor Invoice Date" value={record.invoiceDate} />
+            <DetailRow label="Supplier" value={record.vendorName} />
+            <DetailRow label="Supplier Invoice No." value={record.vendorInvoiceNo} />
+            <DetailRow label="Supplier Invoice Date" value={record.invoiceDate} />
             <DetailRow label="Purchase No." value={record.invoiceNo} />
             <DetailRow label="Invoice Amount" value={formatINR(record.subtotal)} />
             <DetailRow label="GST Amount" value={formatINR(record.taxAmount)} />

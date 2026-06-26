@@ -59,6 +59,7 @@ export interface MasterListingProps<T = any> {
   addLabel?: string;
   onExport?: () => void;
   searchPlaceholder?: string;
+  hideSearch?: boolean;
   // State from parent to keep track of current filters/sorting if controlled
   currentFilters?: FilterState;
   currentSort?: SortState;

@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import {
   loadProducts,
   nextProductId,
+  resolveProductCodeForSave,
   saveProducts,
   todayStr,
   type ProductImage,
@@ -38,27 +39,45 @@ export default function NewProductPage() {
     });
 
   const handleSave = () => {
-    const validation = validateProductForm(form);
+    const list = loadProducts();
+    const resolvedForm = {
+      ...form,
+      productCode: resolveProductCodeForSave(form.category, form.productCode, list),
+    };
+    setForm(resolvedForm);
+
+    const validation = validateProductForm(resolvedForm);
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
-      setToast({ msg: "Please fix the errors before saving.", type: "error" });
+      const firstError = Object.values(validation)[0];
+      setToast({
+        msg: firstError ?? "Please fix the errors before saving.",
+        type: "error",
+      });
       setTimeout(() => setToast(null), 3200);
       return;
     }
 
-    const list = loadProducts();
-    const today = todayStr();
-    const record = formValuesToProduct(form, {
-      id: nextProductId(list),
-      productImages,
-      productUrls,
-      createdBy: "Admin",
-      createdDate: today,
-    });
+    try {
+      const today = todayStr();
+      const record = formValuesToProduct(resolvedForm, {
+        id: nextProductId(list),
+        productImages,
+        productUrls,
+        createdBy: "Admin",
+        createdDate: today,
+      });
 
-    saveProducts([...list, record]);
-    setToast({ msg: "Product created successfully.", type: "success" });
-    setTimeout(() => router.push("/masters/products"), 900);
+      saveProducts([...list, record]);
+      setToast({ msg: "Product created successfully.", type: "success" });
+      setTimeout(() => router.push("/masters/products"), 900);
+    } catch {
+      setToast({
+        msg: "Failed to save product. Storage may be full — try fewer/larger uploads.",
+        type: "error",
+      });
+      setTimeout(() => setToast(null), 4000);
+    }
   };
 
   return (
@@ -72,6 +91,7 @@ export default function NewProductPage() {
             Discard
           </Button>
           <Button
+            type="button"
             className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
           >
@@ -91,6 +111,7 @@ export default function NewProductPage() {
         onImageRemove={(id) => setProductImages((prev) => prev.filter((item) => item.id !== id))}
         onUrlAdd={(item) => setProductUrls((prev) => [...prev, item])}
         onUrlRemove={(id) => setProductUrls((prev) => prev.filter((item) => item.id !== id))}
+        isNew
       />
 
       {toast && (

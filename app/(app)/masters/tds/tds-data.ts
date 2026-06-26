@@ -38,7 +38,7 @@ export interface TDSForm {
 }
 
 export const TDS_APPLICABLE_TO_OPTIONS = [
-  { value: "vendor", label: "Vendor" },
+  { value: "vendor", label: "Supplier" },
   { value: "customer", label: "Customer" },
   { value: "contractor", label: "Contractor" },
   { value: "professional", label: "Professional" },

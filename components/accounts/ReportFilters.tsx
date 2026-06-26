@@ -313,13 +313,13 @@ export function ReportVendorFilter({
 }) {
   return (
     <div className="space-y-1 min-w-[160px]">
-      <Label className={filterLabelClass}>Vendor</Label>
+      <Label className={filterLabelClass}>Supplier</Label>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className={cn(filterControlClass, "mt-0 w-[160px]")}>
-          <SelectValue placeholder="All vendors" />
+          <SelectValue placeholder="All suppliers" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All vendors</SelectItem>
+          <SelectItem value="all">All suppliers</SelectItem>
           {vendors.map((v) => (
             <SelectItem key={v.id} value={String(v.id)}>
               {v.vendorName}

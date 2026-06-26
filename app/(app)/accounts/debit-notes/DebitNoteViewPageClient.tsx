@@ -145,7 +145,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
     >
       <div className="space-y-4">
         <LedgerImpactPreview
-          title="Accounting Entry — reduces vendor outstanding"
+          title="Accounting Entry — reduces supplier outstanding"
           lines={debitNoteImpactResolved({
             vendorName: record.vendorName,
             taxable: record.taxableAmount,
@@ -156,7 +156,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
         <NoteWorkflowBadge status={record.status} />
 
         <div className="rounded-lg border border-border/60 bg-white p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <DetailRow label="Vendor" value={record.vendorName} />
+          <DetailRow label="Supplier" value={record.vendorName} />
           <DetailRow label="Debit Note Date" value={record.debitNoteDate} />
           <DetailRow label="Reference Type" value={REFERENCE_TYPE_LABELS[record.againstType]} />
           <DetailRow label="Purchase Invoice No." value={record.sourceInvoiceNo} />

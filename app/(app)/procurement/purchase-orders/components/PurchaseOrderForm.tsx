@@ -391,7 +391,7 @@ export function PurchaseOrderForm({
 	const supplierOptions = suppliers.map((s) => ({
 		value: String(s.id),
 		label: `${s.supplierCode} | ${s.supplierName}`,
-		sublabel: `Vendor Type: ${s.supplierType || "—"}`,
+		sublabel: `Supplier Type: ${s.supplierType || "—"}`,
 	}));
 
 	return (
@@ -490,7 +490,7 @@ export function PurchaseOrderForm({
 							/>
 						</div>
 						<div className="space-y-1">
-							<Label className="text-xs font-medium">Vendor Type</Label>
+							<Label className="text-xs font-medium">Supplier Type</Label>
 							<Input
 								value={form.supplierType || "—"}
 								readOnly

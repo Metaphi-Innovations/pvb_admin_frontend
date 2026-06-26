@@ -502,7 +502,7 @@ export function CategorizeEntryPanel({
           {needsVendor && category === "vendor_payment" && (
             <>
               <SearchableSelect
-                label="Vendor"
+                label="Supplier"
                 value={vendorId}
                 onChange={(v) => {
                   setVendorId(v);
@@ -510,7 +510,7 @@ export function CategorizeEntryPanel({
                   setAdjustments([]);
                 }}
                 options={vendors}
-                placeholder="Select vendor"
+                placeholder="Select supplier"
                 required
               />
               {vendorId && (
@@ -545,11 +545,11 @@ export function CategorizeEntryPanel({
 
           {needsVendor && category === "expense" && (
             <SearchableSelect
-              label="Vendor (optional)"
+              label="Supplier (optional)"
               value={vendorId}
               onChange={setVendorId}
               options={vendors}
-              placeholder="Select vendor"
+              placeholder="Select supplier"
             />
           )}
 

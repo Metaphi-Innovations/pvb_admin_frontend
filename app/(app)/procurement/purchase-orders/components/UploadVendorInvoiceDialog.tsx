@@ -91,7 +91,7 @@ export function UploadVendorInvoiceDialog({
     reader.onload = () => {
       setAttachment({
         id: newPurchaseAttachmentId(),
-        documentName: "Vendor Invoice",
+        documentName: "Supplier Invoice",
         fileName: file.name,
         dataUrl: reader.result as string,
         uploadedAt: new Date().toISOString(),
@@ -129,18 +129,18 @@ export function UploadVendorInvoiceDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md z-[400]">
         <DialogHeader>
-          <DialogTitle className="text-sm">{isReplace ? "Replace Vendor Invoice" : "Upload Vendor Invoice"}</DialogTitle>
+          <DialogTitle className="text-sm">{isReplace ? "Replace Supplier Invoice" : "Upload Supplier Invoice"}</DialogTitle>
           <DialogDescription className="text-xs">
             PO {po.poNumber} · {po.supplierName}. {isReplace ? "Updates" : "Creates"} Accounts → Purchase record.
           </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3 py-2">
           <div className="space-y-1 col-span-2">
-            <Label className="text-xs">Vendor Invoice No. *</Label>
+            <Label className="text-xs">Supplier Invoice No. *</Label>
             <Input className="h-8 text-xs" value={vendorInvoiceNo} onChange={(e) => setVendorInvoiceNo(e.target.value)} />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">Vendor Invoice Date *</Label>
+            <Label className="text-xs">Supplier Invoice Date *</Label>
             <Input type="date" className="h-8 text-xs" value={vendorInvoiceDate} onChange={(e) => setVendorInvoiceDate(e.target.value)} />
           </div>
           <div className="space-y-1">

@@ -127,7 +127,7 @@ export function GrnListing() {
     },
     {
       key: "vendorName",
-      header: "Vendor",
+      header: "Supplier",
       sortable: true,
       filterable: true,
       filterType: "text",

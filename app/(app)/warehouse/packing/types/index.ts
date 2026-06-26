@@ -19,6 +19,12 @@ export interface SalesOrderRecord {
   status: "Ready For Packing" | "Partially Packed" | "Packing In Progress";
   warehouse: string;
   products: SalesOrderProduct[];
+  sourceDocumentType?: "Sales Order" | "Stock Transfer" | "Sample Order";
+  sourceDocumentNo?: string;
+  sourceWarehouse?: string;
+  targetWarehouse?: string;
+  createdDate?: string;
+  packingListNo?: string;
 }
 
 export interface PackedProduct {
@@ -40,6 +46,12 @@ export interface PackingRecord {
   status: "Packed" | "Dispatched" | "Cancelled";
   warehouse: string;
   products: PackedProduct[];
+  sourceDocumentType?: "Sales Order" | "Stock Transfer" | "Sample Order";
+  sourceDocumentNo?: string;
+  sourceWarehouse?: string;
+  targetWarehouse?: string;
+  createdDate?: string;
+  packingListNo?: string;
 }
 
 export type PackingRecordUnion =

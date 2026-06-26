@@ -378,7 +378,7 @@ export default function FormDemoPage() {
                 </DialogHeader>
                 <div className="py-2 space-y-2">
                   {[
-                    ["Vendor",   "Nashik Agro Supplies"],
+                    ["Supplier",   "Nashik Agro Supplies"],
                     ["Items",    "Urea 50kg × 200 bags"],
                     ["Value",    "₹4,24,000"],
                     ["Due Date", "2025-06-10"],

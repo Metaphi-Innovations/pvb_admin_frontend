@@ -58,6 +58,80 @@ export interface ProductUrl {
   createdAt?: string;
 }
 
+export type ProductDocumentKind =
+  | "technical_datasheet"
+  | "product_brochure"
+  | "msds"
+  | "label_artwork";
+
+export const PRODUCT_DOCUMENT_KINDS: {
+  kind: ProductDocumentKind;
+  label: string;
+}[] = [
+  { kind: "technical_datasheet", label: "Technical Datasheet" },
+  { kind: "product_brochure", label: "Product Brochure" },
+  { kind: "msds", label: "MSDS" },
+  { kind: "label_artwork", label: "Label Artwork" },
+];
+
+export interface ProductDocument {
+  id: string;
+  kind: ProductDocumentKind;
+  name: string;
+  url: string;
+  mimeType?: string;
+  size?: string;
+  sizeBytes?: number;
+  uploaded?: boolean;
+  createdAt?: string;
+}
+
+export interface ProductVendorMapping {
+  id: string;
+  preferredVendor: string;
+  vendorProductCode: string;
+  leadTimeDays: string;
+  moq: string;
+}
+
+export const AUTHORITY_OPTIONS = [
+  { value: "CIB&RC", label: "CIB&RC" },
+  { value: "FCO", label: "FCO" },
+  { value: "CDSCO", label: "CDSCO" },
+  { value: "APEDA", label: "APEDA" },
+  { value: "State Agriculture Department", label: "State Agriculture Department" },
+  { value: "Not Applicable", label: "Not Applicable" },
+] as const;
+
+export const PACKING_CONTAINER_OPTIONS = [
+  "Bottle",
+  "Bag",
+  "Box",
+  "Drum",
+  "Can",
+  "Jar",
+  "Pouch",
+  "Sachet",
+  "Packet",
+  "Case",
+] as const;
+
+export const CONTAINER_TYPE_OPTIONS = [
+  "Primary",
+  "Secondary",
+  "Tertiary",
+] as const;
+
+export const BOTTLE_SEAL_CATEGORY_OPTIONS = [
+  "Screw Cap",
+  "Flip Top",
+  "Induction Seal",
+  "Shrink Wrap",
+  "Child Resistant Cap",
+  "Pump Dispenser",
+  "Not Applicable",
+] as const;
+
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
 
 export function formatFileSize(bytes: number): string {
@@ -118,6 +192,64 @@ export function createProductUrl(url: string): ProductUrl {
   };
 }
 
+const DOCUMENT_EXTENSIONS = new Set([
+  "pdf",
+  "doc",
+  "docx",
+  "jpg",
+  "jpeg",
+  "png",
+  "webp",
+  "ai",
+  "eps",
+]);
+
+export function isAllowedProductDocumentFile(file: File): boolean {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const mime = file.type.toLowerCase();
+  return (
+    DOCUMENT_EXTENSIONS.has(ext) ||
+    mime.includes("pdf") ||
+    mime.includes("document") ||
+    mime.startsWith("image/")
+  );
+}
+
+export async function createProductDocumentFromFile(
+  file: File,
+  kind: ProductDocumentKind,
+): Promise<ProductDocument> {
+  const dataUrl = await readFileAsDataUrl(file);
+  return {
+    id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    kind,
+    name: file.name,
+    url: dataUrl,
+    mimeType: file.type,
+    size: formatFileSize(file.size),
+    sizeBytes: file.size,
+    uploaded: true,
+    createdAt: todayStr(),
+  };
+}
+
+export function createEmptyVendorMapping(): ProductVendorMapping {
+  return {
+    id: `vm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    preferredVendor: "",
+    vendorProductCode: "",
+    leadTimeDays: "",
+    moq: "",
+  };
+}
+
+export function getProductDocuments(
+  product: Pick<Product, "productDocuments" | "productUrls" | "assets" | "mediaItems">,
+): ProductDocument[] {
+  if (product.productDocuments?.length) return product.productDocuments;
+  return [];
+}
+
 function legacyAssetToImage(item: ProductAsset): ProductImage | null {
   const isImage =
     item.type === "media" &&
@@ -172,24 +304,36 @@ export function getImagePreviewUrl(image: ProductImage): string {
 
 export interface Product {
   id: number;
-  /** @deprecated Legacy product code — not shown in UI. Use `sku` instead. */
-  productId?: string;
+  /** Auto-generated product code (e.g. FERT-000001). */
+  productCode: string;
+  supplier?: string;
+  supplierCode?: string;
   productName: string;
   scientificName?: string;
+  segment: string;
   category: string;
   subCategory: string;
-  segment: string;
-  /** Product form (e.g. Wettable Powder, Liquid) — was `formulation` */
   form: string;
-  /** CFU count from CFU Master (e.g. 1×10⁸ cells/ml) */
   cfu?: string;
-  /** @deprecated use `form` */
-  formulation?: string;
+  authority?: string;
+  /** User-entered SKU (separate from product code). */
+  sku: string;
   hsnCode: string;
   hsnId?: number;
   gstRate: string;
   gstId?: number;
-  sku: string;
+  packSize?: number;
+  baseUnit?: string;
+  /** Measure of Unit (MoU) */
+  mou?: string;
+  unitPerCase?: number;
+  packagingUnit?: string;
+  unitPerPackagingUnit?: number;
+  /** Auto-calculated: packSize × unitPerCase */
+  netWeightPerPackagingUnit?: number;
+  grossWeight?: number;
+  /** Product-level MRP (not linked to Pricing Master). */
+  mrp?: number;
   status: ProductStatus;
   createdBy: string;
   createdDate: string;
@@ -197,17 +341,32 @@ export interface Product {
   updatedDate: string;
   productImages?: ProductImage[];
   productUrls?: ProductUrl[];
-  /** @deprecated Merged media store — use productImages + productUrls */
+  /** @deprecated Legacy fields kept for migration / downstream compatibility */
+  productId?: string;
+  formulation?: string;
+  manufacturerProductCode?: string;
+  vendorProductCode?: string;
+  barcode?: string;
+  productDocuments?: ProductDocument[];
+  vendorMappings?: ProductVendorMapping[];
   assets?: ProductAsset[];
-  /** @deprecated Use productImages + productUrls */
   mediaItems?: ProductAsset[];
-  baseUnit?: string;
-  packagingUnit?: string;
   conversionQuantity?: number;
   unitSize?: number;
+  qtyInKgL?: number;
+  unitsPerCase?: number;
+  packingContainer?: string;
+  containerType?: string;
+  bottleSealCategory?: string;
   netWeight?: number;
-  grossWeight?: number;
-  /** Accounting auto-mapping (ERP → COA) */
+  grossWeightPerCase?: number;
+  netWeightSingleUnit?: number;
+  grossWeightSingleUnit?: number;
+  netWeightPerCase?: number;
+  boxLength?: number;
+  boxWidth?: number;
+  boxHeight?: number;
+  cft?: number;
   inventoryAccount?: string;
   salesAccount?: string;
   purchaseAccount?: string;
@@ -399,6 +558,8 @@ const SEED_PRODUCTS: Product[] = [
   {
     id: 1,
     productId: "PRD-0001",
+    supplier: "Agro Chem Distributors",
+    supplierCode: "CG-001",
     productName: "Dharitri Hybrid Corn Gold",
     scientificName: "Zea mays",
     category: "Seeds",
@@ -408,6 +569,13 @@ const SEED_PRODUCTS: Product[] = [
     hsnCode: "1209",
     gstRate: "0%",
     sku: "SEED-CORN-001",
+    productCode: "SEED-000001",
+    packSize: 1,
+    mou: "KG",
+    unitPerCase: 25,
+    unitPerPackagingUnit: 25,
+    netWeightPerPackagingUnit: 25,
+    mrp: 1250,
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-01-10",
@@ -458,7 +626,8 @@ const SEED_PRODUCTS: Product[] = [
     form: "Wettable Powder",
     hsnCode: "3105",
     gstRate: "5%",
-    sku: "FERT-WSF-019",
+    sku: "FERT-000001",
+    productCode: "FERT-000001",
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-01-18",
@@ -494,7 +663,8 @@ const SEED_PRODUCTS: Product[] = [
     form: "Liquid",
     hsnCode: "3808",
     gstRate: "18%",
-    sku: "PEST-EC-221",
+    sku: "PEST-000001",
+    productCode: "PEST-000001",
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-02-03",
@@ -521,7 +691,8 @@ const SEED_PRODUCTS: Product[] = [
     cfu: "1×10⁸ cells/ml",
     hsnCode: "3002",
     gstRate: "12%",
-    sku: "BIO-SUS-104",
+    sku: "BIO-000001",
+    productCode: "BIO-000001",
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-02-16",
@@ -544,7 +715,8 @@ const SEED_PRODUCTS: Product[] = [
     form: "Granules",
     hsnCode: "3102",
     gstRate: "5%",
-    sku: "FERT-UREA-50",
+    sku: "FERT-000002",
+    productCode: "FERT-000002",
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-03-01",
@@ -567,7 +739,8 @@ const SEED_PRODUCTS: Product[] = [
     form: "Granules",
     hsnCode: "3105",
     gstRate: "5%",
-    sku: "FERT-NPK-1026",
+    sku: "FERT-000003",
+    productCode: "FERT-000003",
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-03-01",
@@ -590,7 +763,8 @@ const SEED_PRODUCTS: Product[] = [
     form: "Granules",
     hsnCode: "3105",
     gstRate: "5%",
-    sku: "FERT-DAP-50",
+    sku: "FERT-000004",
+    productCode: "FERT-000004",
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-03-01",
@@ -613,7 +787,8 @@ const SEED_PRODUCTS: Product[] = [
     form: "Powder",
     hsnCode: "2833",
     gstRate: "5%",
-    sku: "FERT-ZNS-21",
+    sku: "FERT-000005",
+    productCode: "FERT-000005",
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-03-01",
@@ -636,7 +811,8 @@ const SEED_PRODUCTS: Product[] = [
     form: "Seeds",
     hsnCode: "1209",
     gstRate: "0%",
-    sku: "SEED-MAIZE-001",
+    sku: "SEED-000002",
+    productCode: "SEED-000002",
     status: "active",
     createdBy: "Admin",
     createdDate: "2026-03-01",
@@ -673,8 +849,46 @@ function migrateProduct(raw: Record<string, unknown>): Product {
       : legacyAssets
         .map(legacyAssetToUrl)
         .filter((item): item is ProductUrl => item !== null);
+  const productCode = (p.productCode || "").trim().toUpperCase();
+  const sku = (p.sku || productCode).trim().toUpperCase();
+  const packSize =
+    p.packSize !== undefined
+      ? Number(p.packSize)
+      : p.unitSize !== undefined
+        ? Number(p.unitSize)
+        : undefined;
+  const unitPerCase =
+    p.unitPerCase !== undefined
+      ? Number(p.unitPerCase)
+      : p.unitsPerCase !== undefined
+        ? Number(p.unitsPerCase)
+        : undefined;
+  const unitPerPackagingUnit =
+    p.unitPerPackagingUnit !== undefined
+      ? Number(p.unitPerPackagingUnit)
+      : p.conversionQuantity !== undefined
+        ? Number(p.conversionQuantity)
+        : undefined;
+  const netWeightPerPackagingUnit =
+    p.netWeightPerPackagingUnit !== undefined
+      ? Number(p.netWeightPerPackagingUnit)
+      : calculateNetWeightPerPackagingUnit(packSize, unitPerCase) ??
+        (p.netWeightPerCase !== undefined
+          ? Number(p.netWeightPerCase)
+          : p.netWeight !== undefined
+            ? Number(p.netWeight)
+            : undefined);
+  const grossWeight =
+    p.grossWeight !== undefined
+      ? Number(p.grossWeight)
+      : p.grossWeightPerCase !== undefined
+        ? Number(p.grossWeightPerCase)
+        : undefined;
   return {
     id: p.id ?? 0,
+    productCode,
+    supplier: p.supplier ?? "",
+    supplierCode: p.supplierCode ?? p.vendorProductCode ?? "",
     productId: p.productId ?? "",
     productName: p.productName ?? "",
     scientificName: p.scientificName ?? "",
@@ -683,11 +897,24 @@ function migrateProduct(raw: Record<string, unknown>): Product {
     segment: p.segment ?? "",
     form: p.form ?? p.formulation ?? "",
     cfu: p.cfu ?? "",
+    authority: p.authority ?? "",
     hsnCode: p.hsnCode ?? "",
     hsnId: p.hsnId !== undefined ? Number(p.hsnId) : undefined,
     gstRate: p.gstRate ?? "",
     gstId: p.gstId !== undefined ? Number(p.gstId) : undefined,
-    sku: p.sku ?? "",
+    sku,
+    packSize,
+    baseUnit: p.baseUnit ?? "",
+    mou: p.mou ?? "",
+    unitPerCase,
+    packagingUnit: p.packagingUnit ?? "",
+    unitPerPackagingUnit,
+    netWeightPerPackagingUnit,
+    grossWeight,
+    mrp: p.mrp !== undefined ? Number(p.mrp) : undefined,
+    manufacturerProductCode: p.manufacturerProductCode ?? "",
+    vendorProductCode: p.vendorProductCode ?? "",
+    barcode: p.barcode ?? "",
     status: (p.status as ProductStatus) ?? "active",
     createdBy: p.createdBy ?? "Admin",
     createdDate: p.createdDate ?? todayStr(),
@@ -695,14 +922,30 @@ function migrateProduct(raw: Record<string, unknown>): Product {
     updatedDate: p.updatedDate ?? todayStr(),
     productImages,
     productUrls,
+    productDocuments: Array.isArray(p.productDocuments) ? p.productDocuments : [],
+    vendorMappings: Array.isArray(p.vendorMappings) ? p.vendorMappings : [],
     assets: legacyAssets,
     mediaItems: legacyAssets,
-    baseUnit: p.baseUnit ?? "",
-    packagingUnit: p.packagingUnit ?? "",
-    conversionQuantity: p.conversionQuantity !== undefined ? Number(p.conversionQuantity) : undefined,
-    unitSize: p.unitSize !== undefined ? Number(p.unitSize) : undefined,
-    netWeight: p.netWeight !== undefined ? Number(p.netWeight) : undefined,
-    grossWeight: p.grossWeight !== undefined ? Number(p.grossWeight) : undefined,
+    conversionQuantity: unitPerPackagingUnit,
+    unitSize: packSize,
+    qtyInKgL: p.qtyInKgL !== undefined ? Number(p.qtyInKgL) : undefined,
+    unitsPerCase: unitPerCase,
+    packingContainer: p.packingContainer ?? "",
+    containerType: p.containerType ?? "",
+    bottleSealCategory: p.bottleSealCategory ?? "",
+    netWeight: netWeightPerPackagingUnit,
+    grossWeightPerCase: grossWeight,
+    netWeightSingleUnit: p.netWeightSingleUnit !== undefined ? Number(p.netWeightSingleUnit) : undefined,
+    grossWeightSingleUnit: p.grossWeightSingleUnit !== undefined ? Number(p.grossWeightSingleUnit) : undefined,
+    netWeightPerCase: netWeightPerPackagingUnit,
+    boxLength: p.boxLength !== undefined ? Number(p.boxLength) : undefined,
+    boxWidth: p.boxWidth !== undefined ? Number(p.boxWidth) : undefined,
+    boxHeight: p.boxHeight !== undefined ? Number(p.boxHeight) : undefined,
+    cft: p.cft !== undefined ? Number(p.cft) : undefined,
+    inventoryAccount: p.inventoryAccount,
+    salesAccount: p.salesAccount,
+    purchaseAccount: p.purchaseAccount,
+    cogsAccount: p.cogsAccount,
   };
 }
 
@@ -723,7 +966,7 @@ function loadProductsRaw(): Product[] {
   }
 }
 
-const PRODUCT_DEMO_SEED_VERSION = "2026-jun-warehouse-v1";
+const PRODUCT_DEMO_SEED_VERSION = "2026-jun-product-master-v3";
 const PRODUCT_SEED_VERSION_KEY = "ds_product_seed_version";
 
 function ensureProductDemoSeed(): void {
@@ -747,9 +990,118 @@ export function nextProductId(list: Product[]): number {
   return Math.max(0, ...list.map((item) => item.id)) + 1;
 }
 
-/** @deprecated Product code is no longer generated. Use SKU as the product identifier. */
-export function generateProductCode(_list: Product[]): string {
-  return "";
+export function getCategoryCodePrefix(category: string): string {
+  const c = category.trim().toLowerCase();
+  if (c.includes("fertil")) return "FERT";
+  if (c.includes("seed")) return "SEED";
+  if (c.includes("pestic")) return "PEST";
+  if (c.includes("bio")) return "BIO";
+  return "PROD";
+}
+
+/** Generate next product code for a category (e.g. FERT-000001). */
+export function generateProductCode(category: string, list: Product[]): string {
+  const prefix = getCategoryCodePrefix(category);
+  let max = 0;
+  for (const product of list) {
+    const code = (product.productCode || product.sku || "").trim().toUpperCase();
+    const match = code.match(new RegExp(`^${prefix}-(\\d+)$`));
+    if (match) max = Math.max(max, parseInt(match[1], 10));
+  }
+  return `${prefix}-${String(max + 1).padStart(6, "0")}`;
+}
+
+/** Ensure a product code exists when category is selected (add flow). */
+export function resolveProductCodeForSave(
+  category: string,
+  productCode: string,
+  list?: Product[],
+): string {
+  const trimmed = productCode.trim().toUpperCase();
+  if (trimmed) return trimmed;
+  const cat = category.trim();
+  if (!cat) return "";
+  return generateProductCode(cat, list ?? loadProducts());
+}
+
+/** Resolve display product code (backward compatible). */
+export function getProductCode(product: Pick<Product, "productCode" | "sku">): string {
+  return product.productCode?.trim() || product.sku?.trim() || "";
+}
+
+export function formatPackSize(product: Pick<Product, "packSize" | "unitSize" | "baseUnit">): string {
+  const size = product.packSize ?? product.unitSize;
+  if (size === undefined || size === null) return "—";
+  const unit = product.baseUnit?.trim();
+  return unit ? `${size} ${unit}` : String(size);
+}
+
+export function formatGrossWeight(
+  product: Pick<Product, "grossWeight" | "mou">,
+): string | undefined {
+  if (product.grossWeight === undefined || product.grossWeight === null) return undefined;
+  const unit = product.mou?.trim();
+  return unit ? `${product.grossWeight} ${unit}` : String(product.grossWeight);
+}
+
+/** User-friendly packaging label e.g. Bottle (12/Case), Bag (50). */
+export function formatPackagingDisplay(
+  product: Pick<Product, "packagingUnit" | "conversionQuantity" | "unitsPerCase">,
+): string {
+  const unit = product.packagingUnit?.trim();
+  if (!unit) return "—";
+  const perCase = product.unitsPerCase;
+  if (perCase !== undefined && perCase > 0) {
+    return `${unit} (${perCase}/Case)`;
+  }
+  const qty = product.conversionQuantity;
+  if (qty !== undefined && qty > 0) {
+    return `${unit} (${qty})`;
+  }
+  return unit;
+}
+
+export function loadActiveVendorOptions(): MasterSelectOption[] {
+  if (typeof window === "undefined") return [];
+  // Lazy require avoids pulling vendor master into every product/pricing chunk at init
+  const { loadVendors } = require("../vendors/vendor-data") as typeof import("../vendors/vendor-data");
+  return loadVendors()
+    .filter((v) => v.status === "active")
+    .map((v) => ({ value: v.vendorName, label: v.vendorName }));
+}
+
+export function loadActiveSupplierOptions(): MasterSelectOption[] {
+  return loadActiveVendorOptions();
+}
+
+export function resolveSupplierCode(supplierName: string): string {
+  const name = supplierName.trim();
+  if (!name || typeof window === "undefined") return "";
+  const { loadVendors } = require("../vendors/vendor-data") as typeof import("../vendors/vendor-data");
+  const vendor = loadVendors().find(
+    (v) =>
+      v.status === "active" &&
+      (v.vendorName === name || v.companyName === name),
+  );
+  return vendor?.vendorCode?.trim() ?? "";
+}
+
+/** Net weight per packaging unit = pack size × unit per case */
+export function calculateNetWeightPerPackagingUnit(
+  packSize: number | undefined,
+  unitPerCase: number | undefined,
+): number | undefined {
+  if (
+    packSize === undefined ||
+    unitPerCase === undefined ||
+    isNaN(packSize) ||
+    isNaN(unitPerCase) ||
+    packSize <= 0 ||
+    unitPerCase <= 0
+  ) {
+    return undefined;
+  }
+  return packSize * unitPerCase;
 }
 
 export function formatMoney(value: number): string {

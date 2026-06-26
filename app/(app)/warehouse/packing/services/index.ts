@@ -5,28 +5,160 @@ import {
   getPackingRecords,
   savePackingRecords
 } from "../mock-data";
+import { loadTransfers, saveTransfers, type StockTransfer } from "@/app/(app)/sales/stock-transfer/stock-transfer-data";
+
+function mapStockTransferToSalesOrder(st: StockTransfer): SalesOrderRecord {
+  return {
+    id: `st-${st.id}`,
+    salesOrderNo: st.transferNumber,
+    customer: `Transfer to ${st.targetWarehouseName}`,
+    totalItems: st.totalItems,
+    totalQuantity: st.totalQuantity,
+    orderAmount: st.totalAmount,
+    orderDate: st.transferDate,
+    deliveryDate: st.deliveryDate,
+    priority: "Medium",
+    status: st.packingStatus === "In Progress" ? "Packing In Progress" : "Ready For Packing",
+    warehouse: st.sourceWarehouseName,
+    products: st.lineItems.map(item => ({
+      product: item.productName,
+      sku: item.productCode,
+      orderedQty: item.quantity,
+      packedQty: (item as any).packedQty ?? 0,
+      pendingQty: (item as any).pendingQty ?? item.quantity,
+    })),
+    sourceDocumentType: "Stock Transfer",
+    sourceDocumentNo: st.transferNumber,
+    sourceWarehouse: st.sourceWarehouseName,
+    targetWarehouse: st.targetWarehouseName,
+    createdDate: st.createdDate,
+    packingListNo: st.packingListNumber,
+  };
+}
+
+function mapStockTransferToPacking(st: StockTransfer): PackingRecord {
+  const totalItems = st.lineItems.length;
+  const packedQuantity = st.lineItems.reduce((sum, item) => sum + ((item as any).packedQty ?? 0), 0);
+  return {
+    id: `st-pkg-${st.id}`,
+    packingNo: st.packingListNumber || `PL-ST-${st.id}`,
+    salesOrderNo: st.transferNumber,
+    customer: `Transfer to ${st.targetWarehouseName}`,
+    totalItems,
+    packedQuantity,
+    packingDate: st.updatedDate || st.transferDate,
+    packedBy: st.updatedBy || "Admin",
+    status: "Packed",
+    warehouse: st.sourceWarehouseName,
+    products: st.lineItems.map(item => ({
+      product: item.productName,
+      sku: item.productCode,
+      orderedQty: item.quantity,
+      packedQty: (item as any).packedQty ?? item.quantity,
+    })),
+    sourceDocumentType: "Stock Transfer",
+    sourceDocumentNo: st.transferNumber,
+    sourceWarehouse: st.sourceWarehouseName,
+    targetWarehouse: st.targetWarehouseName,
+    createdDate: st.createdDate,
+    packingListNo: st.packingListNumber,
+  };
+}
 
 export function getSalesOrders(warehouse: string = "All"): SalesOrderRecord[] {
-  const orders = getSalesOrderRecords();
-  if (warehouse === "All") return orders;
-  return orders.filter(o => o.warehouse === warehouse);
+  const orders = getSalesOrderRecords().map(o => ({
+    ...o,
+    sourceDocumentType: "Sales Order" as const,
+    sourceDocumentNo: o.salesOrderNo,
+    sourceWarehouse: o.warehouse,
+    targetWarehouse: "—",
+    createdDate: o.orderDate,
+    packingListNo: `PL-${o.salesOrderNo}`,
+  }));
+
+  const transfers = loadTransfers()
+    .filter(t => t.packingListId && t.packingStatus !== "Completed" && t.status !== "cancelled")
+    .map(mapStockTransferToSalesOrder);
+
+  const all = [...orders, ...transfers];
+  if (warehouse === "All") return all;
+  return all.filter(o => o.warehouse === warehouse || o.sourceWarehouse === warehouse);
 }
 
 export function getPackingRecordsList(warehouse: string = "All"): PackingRecord[] {
-  const packings = getPackingRecords();
-  if (warehouse === "All") return packings;
-  return packings.filter(p => p.warehouse === warehouse);
+  const packings = getPackingRecords().map(p => ({
+    ...p,
+    sourceDocumentType: "Sales Order" as const,
+    sourceDocumentNo: p.salesOrderNo,
+    sourceWarehouse: p.warehouse,
+    targetWarehouse: "—",
+    createdDate: p.packingDate,
+    packingListNo: p.packingNo,
+  }));
+
+  const transfers = loadTransfers()
+    .filter(t => t.packingListId && t.packingStatus === "Completed" && t.status !== "cancelled")
+    .map(mapStockTransferToPacking);
+
+  const all = [...packings, ...transfers];
+  if (warehouse === "All") return all;
+  return all.filter(p => p.warehouse === warehouse || p.sourceWarehouse === warehouse);
 }
 
 export function getSalesOrderById(id: string): SalesOrderRecord | undefined {
-  return getSalesOrderRecords().find(o => o.id === id);
+  if (id.startsWith("st-")) {
+    const stId = Number(id.replace("st-", ""));
+    const transfer = loadTransfers().find(t => t.id === stId);
+    return transfer ? mapStockTransferToSalesOrder(transfer) : undefined;
+  }
+  const order = getSalesOrderRecords().find(o => o.id === id);
+  if (order) {
+    return {
+      ...order,
+      sourceDocumentType: "Sales Order",
+      sourceDocumentNo: order.salesOrderNo,
+      sourceWarehouse: order.warehouse,
+      targetWarehouse: "—",
+      createdDate: order.orderDate,
+      packingListNo: `PL-${order.salesOrderNo}`,
+    };
+  }
+  return undefined;
 }
 
 export function getPackingRecordById(id: string): PackingRecord | undefined {
-  return getPackingRecords().find(p => p.id === id);
+  if (id.startsWith("st-pkg-") || id.startsWith("st-")) {
+    const stId = Number(id.replace("st-pkg-", "").replace("st-", ""));
+    const transfer = loadTransfers().find(t => t.id === stId);
+    return transfer ? mapStockTransferToPacking(transfer) : undefined;
+  }
+  const packing = getPackingRecords().find(p => p.id === id);
+  if (packing) {
+    return {
+      ...packing,
+      sourceDocumentType: "Sales Order",
+      sourceDocumentNo: packing.salesOrderNo,
+      sourceWarehouse: packing.warehouse,
+      targetWarehouse: "—",
+      createdDate: packing.packingDate,
+      packingListNo: packing.packingNo,
+    };
+  }
+  return undefined;
 }
 
 export function getPackingUnionById(id: string): PackingRecordUnion | undefined {
+  if (id.startsWith("st-")) {
+    const stId = Number(id.replace("st-pkg-", "").replace("st-", ""));
+    const transfer = loadTransfers().find(t => t.id === stId);
+    if (transfer) {
+      if (transfer.packingStatus === "Completed") {
+        return { type: "packing", data: mapStockTransferToPacking(transfer) };
+      }
+      return { type: "order", data: mapStockTransferToSalesOrder(transfer) };
+    }
+    return undefined;
+  }
   const order = getSalesOrderById(id);
   if (order) {
     return { type: "order", data: order };
@@ -40,17 +172,79 @@ export function getPackingUnionById(id: string): PackingRecordUnion | undefined 
 
 export function createPackingRecord(
   salesOrderId: string,
-  packingQtyMap: Record<string, number>, // SKU -> Qty packed in this session
+  packingQtyMap: Record<string, number>,
   packedBy: string = "Rahul S.",
   isDraft: boolean = false
 ): PackingRecord | null {
+  if (salesOrderId.startsWith("st-")) {
+    const stId = Number(salesOrderId.replace("st-", ""));
+    const transfers = loadTransfers();
+    const stIndex = transfers.findIndex(t => t.id === stId);
+    if (stIndex === -1) return null;
+    const transfer = transfers[stIndex];
+
+    const packingProducts = transfer.lineItems.map(item => {
+      const sessionQty = packingQtyMap[item.productCode] || 0;
+      return {
+        product: item.productName,
+        sku: item.productCode,
+        orderedQty: item.quantity,
+        packedQty: sessionQty
+      };
+    }).filter(p => p.packedQty > 0);
+
+    if (!isDraft) {
+      let allCompleted = true;
+      transfer.lineItems = transfer.lineItems.map(item => {
+        const sessionQty = packingQtyMap[item.productCode] || 0;
+        const newPacked = ((item as any).packedQty ?? 0) + sessionQty;
+        const newPending = Math.max(0, item.quantity - newPacked);
+        if (newPending > 0) {
+          allCompleted = false;
+        }
+        return {
+          ...item,
+          packedQty: newPacked,
+          pendingQty: newPending,
+        };
+      });
+
+      transfer.packingStatus = allCompleted ? "Completed" : "In Progress";
+      transfers[stIndex] = transfer;
+      saveTransfers(transfers);
+    }
+
+    const nextNo = transfer.packingListNumber || `PL-ST-${transfer.id}`;
+    const totalItems = packingProducts.length;
+    const packedQuantity = packingProducts.reduce((sum, p) => sum + p.packedQty, 0);
+
+    const newPacking: PackingRecord = {
+      id: `st-pkg-${transfer.id}`,
+      packingNo: nextNo,
+      salesOrderNo: transfer.transferNumber,
+      customer: `Transfer to ${transfer.targetWarehouseName}`,
+      totalItems,
+      packedQuantity,
+      packingDate: new Date().toISOString().split("T")[0],
+      packedBy,
+      status: isDraft ? "Cancelled" : "Packed",
+      warehouse: transfer.sourceWarehouseName,
+      products: packingProducts,
+      sourceDocumentType: "Stock Transfer",
+      sourceDocumentNo: transfer.transferNumber,
+      sourceWarehouse: transfer.sourceWarehouseName,
+      targetWarehouse: transfer.targetWarehouseName,
+    };
+
+    return newPacking;
+  }
+
   const orders = getSalesOrderRecords();
   const orderIndex = orders.findIndex(o => o.id === salesOrderId);
   if (orderIndex === -1) return null;
 
   const order = orders[orderIndex];
 
-  // Create packing product list
   const packingProducts = order.products.map(p => {
     const sessionQty = packingQtyMap[p.sku] || 0;
     return {
@@ -61,8 +255,6 @@ export function createPackingRecord(
     };
   }).filter(p => p.packedQty > 0);
 
-  // If draft, we don't commit quantities updates on the Sales Order.
-  // If not draft, update the Sales Order packed/pending quantities.
   if (!isDraft) {
     let allCompleted = true;
     order.products = order.products.map(p => {
@@ -80,10 +272,7 @@ export function createPackingRecord(
     });
 
     if (allCompleted) {
-      // It is fully packed! For this mock, we can set its status to a finished state
-      // or update it. Let's set status or keep it as Partially Packed if some items are left.
-      // But since we want to move it, we can update status.
-      order.status = "Partially Packed"; // or remove if fully packed, but let's keep it in system.
+      order.status = "Partially Packed";
     } else {
       order.status = "Packing In Progress";
     }
@@ -92,7 +281,6 @@ export function createPackingRecord(
     saveSalesOrderRecords(orders);
   }
 
-  // Create the packing record
   const packings = getPackingRecords();
   const nextNo = `PKG-2026-${String(packings.length + 1).padStart(3, "0")}`;
   const totalItems = packingProducts.length;
@@ -107,7 +295,7 @@ export function createPackingRecord(
     packedQuantity,
     packingDate: new Date().toISOString().split("T")[0],
     packedBy,
-    status: isDraft ? "Cancelled" : "Packed", // Or "Packed" status
+    status: isDraft ? "Cancelled" : "Packed",
     warehouse: order.warehouse,
     products: packingProducts
   };

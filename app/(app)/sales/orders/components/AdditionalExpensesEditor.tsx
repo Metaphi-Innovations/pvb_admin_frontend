@@ -43,21 +43,41 @@ export default function AdditionalExpensesEditor({
     );
   };
 
+  const [showWarning, setShowWarning] = React.useState(false);
+
+  const hasUnfilled = expenses.some((e) => !e.expenseName.trim() || e.amount <= 0);
+
+  const handleAddExpense = () => {
+    if (hasUnfilled) {
+      setShowWarning(true);
+    } else {
+      setShowWarning(false);
+      onChange([...expenses, createEmptyExpense()]);
+    }
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
           Additional Expenses
         </p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs gap-1"
-          onClick={() => onChange([...expenses, createEmptyExpense()])}
-        >
-          <Plus className="w-3 h-3" /> Add Expense
-        </Button>
+        <div className="flex items-center gap-2">
+          {showWarning && hasUnfilled && (
+            <span className="text-[10px] text-red-500 font-medium animate-pulse">
+              Fill existing expenses first
+            </span>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            onClick={handleAddExpense}
+          >
+            <Plus className="w-3 h-3" /> Add Expense
+          </Button>
+        </div>
       </div>
 
       {expenses.length === 0 ? (
@@ -156,3 +176,4 @@ export default function AdditionalExpensesEditor({
     </div>
   );
 }
+
