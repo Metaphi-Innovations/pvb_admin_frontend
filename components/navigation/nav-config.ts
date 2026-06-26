@@ -109,6 +109,8 @@ export const NAV_ITEMS: NavItem[] = [
     icon: BarChart3,
     children: [
       { label: "Sales Orders", href: "/sales/orders" },
+      { label: "Sample Orders", href: "/sales/sample-order" },
+      { label: "Stock Transfer", href: "/sales/stock-transfer" },
       // { label: "Invoices", href: "/sales/invoices" },
       // { label: "Dispatch", href: "/sales/dispatch" },
       // { label: "Collections", href: "/sales/collections" },
@@ -225,4 +227,7 @@ export function collectNavHrefs(items: NavItem[] = NAV_ITEMS): string[] {
   }
   return Array.from(hrefs);
 }
+
+
+
 

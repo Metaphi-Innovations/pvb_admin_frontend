@@ -67,12 +67,20 @@ export default function EditDispatchPage() {
               <Input value={record.dispatchNumber} disabled className="h-8 text-xs bg-slate-50 font-mono font-bold mt-1.5" />
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Sales Order No</p>
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                {record.sourceDocumentType === "Stock Transfer" ? "Stock Transfer No" : "Sales Order No"}
+              </p>
               <Input value={record.salesOrderNumber} disabled className="h-8 text-xs bg-slate-50 font-mono mt-1.5" />
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Customer</p>
-              <Input value={record.customer} disabled className="h-8 text-xs bg-slate-50 mt-1.5" />
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                {record.sourceDocumentType === "Stock Transfer" ? "Target Warehouse" : "Customer"}
+              </p>
+              <Input 
+                value={record.sourceDocumentType === "Stock Transfer" ? (record.targetWarehouse || record.customer) : record.customer} 
+                disabled 
+                className="h-8 text-xs bg-slate-50 mt-1.5" 
+              />
             </div>
             <div>
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Dispatch Date *</p>
