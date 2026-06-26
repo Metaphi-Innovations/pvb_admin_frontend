@@ -123,7 +123,7 @@ export default function VendorTypeMasterPage() {
     saveVendorTypes(updated);
     setRecords(updated);
     setToast({
-      msg: `Vendor type status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`,
+      msg: `Supplier type status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`,
       type: "success",
     });
   };
@@ -131,7 +131,7 @@ export default function VendorTypeMasterPage() {
   const columns: ColumnConfig<VendorTypeRecord>[] = [
     {
       key: "vendorTypeName",
-      header: "Vendor Type Name",
+      header: "Supplier Type Name",
       sortable: true,
       filterable: true,
       filterType: "text",
@@ -268,14 +268,14 @@ export default function VendorTypeMasterPage() {
     saveVendorTypes(list);
     setRecords(list);
     setDeleteTarget(null);
-    setToast({ msg: "Vendor type deleted successfully", type: "success" });
+    setToast({ msg: "Supplier type deleted successfully", type: "success" });
   };
 
   const handleExport = () => {
     try {
       const headers = [
         "ID",
-        "Vendor Type Name",
+        "Supplier Type Name",
         "Initial Code",
         "Description",
         "Status",
@@ -299,9 +299,9 @@ export default function VendorTypeMasterPage() {
       link.download = "vendor_types_export.csv";
       link.click();
       URL.revokeObjectURL(url);
-      setToast({ msg: "Vendor types exported successfully", type: "success" });
+      setToast({ msg: "Supplier types exported successfully", type: "success" });
     } catch {
-      setToast({ msg: "Failed to export vendor types", type: "error" });
+      setToast({ msg: "Failed to export supplier types", type: "error" });
     }
   };
 
@@ -309,9 +309,9 @@ export default function VendorTypeMasterPage() {
     <AppLayout>
       <div className="space-y-5">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Vendor Type Master</h1>
+          <h1 className="text-xl font-bold text-foreground">Supplier Type Master</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Manage vendor type classifications used across procurement and accounts
+            Manage supplier type classifications used across procurement and accounts
           </p>
         </div>
 
@@ -341,10 +341,10 @@ export default function VendorTypeMasterPage() {
           onFilterChange={setFilters}
           actions={actions}
           onAdd={() => router.push("/masters/vendor-type/add")}
-          addLabel="Add Vendor Type"
+          addLabel="Add Supplier Type"
           onExport={handleExport}
-          emptyMessage="vendor types"
-          searchPlaceholder="Search vendor type name, initial code, description..."
+          emptyMessage="supplier types"
+          searchPlaceholder="Search supplier type name, initial code, description..."
           currentFilters={filters}
           currentSort={sort}
         />

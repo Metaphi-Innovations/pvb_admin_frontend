@@ -62,6 +62,7 @@ export function PincodeViewDialog({
             <DetailItem label="District" value={record.district} />
             <DetailItem label="City" value={record.city} />
             <DetailItem label="Town" value={record.town} />
+            <DetailItem label="Delivery Status" value={record.deliveryStatus} />
             <div>
               <p className="text-[11px] text-muted-foreground">Status</p>
               <div className="mt-1">

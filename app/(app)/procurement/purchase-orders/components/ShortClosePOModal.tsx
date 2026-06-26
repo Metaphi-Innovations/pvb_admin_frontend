@@ -102,7 +102,7 @@ export function ShortClosePOModal({
               <span className="font-mono font-semibold">{po.poNumber}</span>
             </div>
             <div className="flex justify-between gap-2">
-              <span className="text-muted-foreground">Vendor Name</span>
+              <span className="text-muted-foreground">Supplier Name</span>
               <span className="font-medium text-right">{po.supplierName}</span>
             </div>
             <div className="flex justify-between gap-2">

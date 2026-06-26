@@ -60,7 +60,7 @@ const SEED: POFollowUpEntry[] = [
     poId: 1,
     followUpAt: "2026-06-12T11:30:00.000Z",
     spokeWith: "Rajesh Patel",
-    remarks: "Vendor confirmed dispatch by Friday.",
+    remarks: "Supplier confirmed dispatch by Friday.",
     createdBy: "Krishma",
     createdAt: "2026-06-12T11:30:00.000Z",
   },
@@ -190,7 +190,7 @@ export function addPOFollowUp(
 
   const activityEntry: ActivityEntry = {
     date: followUpAt.slice(0, 10),
-    action: "Vendor Follow-up Added",
+    action: "Supplier Follow-up Added",
     by,
     note: `Spoke with ${entry.spokeWith}. ${entry.remarks}`,
   };

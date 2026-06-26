@@ -25,8 +25,8 @@ export function POVendorInvoiceSection({
     if (!canUploadPOInvoice(po)) return null;
     return (
       <div id="vendor-invoice">
-        <ProcCardSection accent="green" title="Vendor Invoice" icon={<FileText className="w-3.5 h-3.5 text-[#1E9E61]" />}>
-          <p className="text-[12px] text-[#6B80A0] mb-3">No vendor invoice uploaded yet.</p>
+        <ProcCardSection accent="green" title="Supplier Invoice" icon={<FileText className="w-3.5 h-3.5 text-[#1E9E61]" />}>
+          <p className="text-[12px] text-[#6B80A0] mb-3">No supplier invoice uploaded yet.</p>
           <ProcButton variant="primary" size="sm" onClick={onUpload}>
             Upload Invoice
           </ProcButton>
@@ -37,8 +37,8 @@ export function POVendorInvoiceSection({
 
   const uploadedDate = invoice.updatedAt.slice(0, 10);
   const fields = [
-    { label: "Vendor Invoice No.", value: invoice.vendorInvoiceNo },
-    { label: "Vendor Invoice Date", value: formatListingDate(invoice.invoiceDate) },
+    { label: "Supplier Invoice No.", value: invoice.vendorInvoiceNo },
+    { label: "Supplier Invoice Date", value: formatListingDate(invoice.invoiceDate) },
     { label: "Invoice Amount", value: formatCurrency(invoice.subtotal) },
     { label: "GST Amount", value: formatCurrency(invoice.taxAmount) },
     { label: "Total Amount", value: formatCurrency(invoice.grandTotal) },
@@ -49,7 +49,7 @@ export function POVendorInvoiceSection({
 
   return (
     <div id="vendor-invoice">
-      <ProcCardSection accent="green" title="Vendor Invoice" icon={<FileText className="w-3.5 h-3.5 text-[#1E9E61]" />}>
+      <ProcCardSection accent="green" title="Supplier Invoice" icon={<FileText className="w-3.5 h-3.5 text-[#1E9E61]" />}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-[13px]">
           {fields.map((f) => (
             <div key={f.label}>

@@ -31,6 +31,7 @@ import { ListingStatusToggle, isActiveStatus } from "@/components/listing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import {
   downloadPincodeSampleTemplate,
+  downloadDemoPostalJson,
   getDistinctDistricts,
   getDistinctStates,
   getPincodeSummary,
@@ -92,7 +93,11 @@ function KpiCard({
   );
 }
 
-export function PincodeMasterTab() {
+export function PincodeMasterTab(props: {
+  onWorkflowChange?: () => void;
+  onNext?: () => void;
+} = {}) {
+  const { onWorkflowChange, onNext } = props;
   const [records, setRecords] = useState<PincodeRecord[]>([]);
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortState>({ key: "pincode", direction: "asc" });
@@ -312,10 +317,10 @@ export function PincodeMasterTab() {
         <div>
           <h2 className="text-base font-semibold text-foreground">Pincode Master</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Manage India Post pincode records for future geography and territory mapping.
+            Step 1 — Import India Post postal data (CSV, XLSX, or JSON). This feeds Coverage Mapping downstream.
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
           <Button
             variant="outline"
             size="sm"
@@ -332,7 +337,16 @@ export function PincodeMasterTab() {
             onClick={downloadPincodeSampleTemplate}
           >
             <Download className="w-3.5 h-3.5" />
-            Download Sample Template
+            Download CSV Sample
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5"
+            onClick={downloadDemoPostalJson}
+          >
+            <Download className="w-3.5 h-3.5" />
+            Download Demo JSON
           </Button>
         </div>
       </div>
@@ -497,9 +511,22 @@ export function PincodeMasterTab() {
         onClose={() => setUploadOpen(false)}
         onImported={(count) => {
           refresh();
+          onWorkflowChange?.();
           showToast(`${count} pincode record(s) imported successfully.`);
         }}
       />
+
+      {onNext && (
+        <div className="flex justify-end pt-2">
+          <Button
+            size="sm"
+            className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+            onClick={onNext}
+          >
+            Continue to Geography Setup →
+          </Button>
+        </div>
+      )}
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
 

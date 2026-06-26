@@ -65,7 +65,7 @@ export default function PurchaseRegisterPage() {
       columns={[
         { key: "docNo", label: "Bill No.", mono: true },
         { key: "date", label: "Date" },
-        { key: "party", label: "Vendor" },
+        { key: "party", label: "Supplier" },
         { key: "taxable", label: "Taxable", align: "right", money: true },
         { key: "tax", label: "Tax", align: "right", money: true },
         { key: "total", label: "Total", align: "right", money: true },

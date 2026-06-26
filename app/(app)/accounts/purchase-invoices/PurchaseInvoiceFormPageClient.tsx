@@ -187,7 +187,7 @@ function ModeSelector({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => v
               <p className="text-xs text-muted-foreground mt-0.5">
                 {m === "grn"
                   ? "Auto-populate from received GRN. Preferred method."
-                  : "Enter vendor invoice details manually without a GRN."}
+                  : "Enter supplier invoice details manually without a GRN."}
               </p>
             </div>
             {m === "grn" && (
@@ -424,7 +424,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
   const doSave = (post: boolean) => {
     setError("");
     if (!vendorId) return setError("Select a vendor.");
-    if (!vendorInvoiceNo.trim()) return setError("Enter vendor invoice number.");
+    if (!vendorInvoiceNo.trim()) return setError("Enter supplier invoice number.");
     if (lines.some((l) => !l.productName.trim())) return setError("All line items need a product from master.");
     if (grandTotal <= 0) return setError("Total must be greater than zero.");
 
@@ -569,8 +569,8 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
           </Section>
         )}
 
-        {/* Vendor Info */}
-        <Section title="Vendor Info">
+        {/* Supplier Info */}
+        <Section title="Supplier Info">
           <VendorMasterPanel
             vendors={vendors}
             vendorId={vendorId}
@@ -605,7 +605,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
               />
             </div>
             <div>
-              <Label className="text-xs">Vendor Invoice No *</Label>
+              <Label className="text-xs">Supplier Invoice No *</Label>
               <Input
                 className="h-8 text-xs mt-1"
                 value={vendorInvoiceNo}
@@ -681,7 +681,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                           )
                         }
                         disabled={!vendorId}
-                        placeholder={vendorId ? "Select product…" : "Select vendor first"}
+                        placeholder={vendorId ? "Select product…" : "Select supplier first"}
                       />
                     </td>
                     <td className="py-1.5 pr-2">
@@ -800,7 +800,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
         <LedgerImpactPreview
           title="Accounting Impact Preview"
           lines={purchaseInvoiceImpactResolved({
-            vendorName: vendorFields?.vendorName ?? "Vendor",
+            vendorName: vendorFields?.vendorName ?? "Supplier",
             taxable: subtotal,
             taxAmount: totalGst,
             grandTotal: finalTotal,

@@ -9,7 +9,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import {
   Popover, PopoverContent, PopoverTrigger,
@@ -26,7 +25,6 @@ interface RoleSheetProps {
   onSave: (data: {
     roleName: string;
     departmentId: number | null;
-    description: string;
     status: string;
   }) => void;
   role?: Role | null;
@@ -109,7 +107,6 @@ export default function RoleSheet({
   const [form, setForm] = useState({
     roleName:     role?.roleName     ?? "",
     departmentId: role?.departmentId ?? null as number | null,
-    description:  role?.description  ?? "",
     status:       role?.status       ?? "active",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -131,13 +128,13 @@ export default function RoleSheet({
   };
 
   const reset = () => {
-    setForm({ roleName: "", departmentId: null, description: "", status: "active" });
+    setForm({ roleName: "", departmentId: null, status: "active" });
     setErrors({});
   };
 
   const handleSave = () => {
     if (!validate()) return;
-    onSave({ roleName: form.roleName, departmentId: form.departmentId, description: form.description, status: form.status });
+    onSave({ roleName: form.roleName, departmentId: form.departmentId, status: form.status });
     reset();
   };
 
@@ -178,19 +175,6 @@ export default function RoleSheet({
             onChange={id => setForm(f => ({ ...f, departmentId: id }))}
             error={errors.departmentId}
           />
-
-          {/* Description */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Description</Label>
-            <Textarea
-              value={form.description}
-              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-              placeholder="Optional role description…"
-              rows={3}
-              className="text-sm rounded-lg resize-none"
-            />
-            <p className="text-[11px] text-muted-foreground">Optional field</p>
-          </div>
 
           {/* Status */}
           <div className="flex items-center justify-between p-3.5 rounded-xl border border-border bg-muted/20">

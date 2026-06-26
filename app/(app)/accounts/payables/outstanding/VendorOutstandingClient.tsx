@@ -45,9 +45,9 @@ export default function VendorOutstandingClient() {
 
   return (
     <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Payables", "Vendor Outstanding")}
-      title="Vendor Outstanding"
-      description="Vendor-wise open payables from posted purchase bills, debit notes, credit notes and payments."
+      breadcrumbs={accountsBreadcrumb("Payables", "Supplier Outstanding")}
+      title="Supplier Outstanding"
+      description="Supplier-wise open payables from posted purchase bills, debit notes, credit notes and payments."
       filters={
         <ReportFilterRow>
           <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
@@ -63,8 +63,8 @@ export default function VendorOutstandingClient() {
           <thead className="bg-muted/20 border-b sticky top-0 z-10">
             <tr>
               {[
-                "Vendor Name",
-                "Vendor Code",
+                "Supplier Name",
+                "Supplier Code",
                 "GSTIN",
                 "Territory",
                 "Total Purchase",
@@ -132,12 +132,12 @@ export default function VendorOutstandingClient() {
                     <DropdownMenuContent align="end" className="w-48">
                       <DropdownMenuItem asChild>
                         <Link href={`/accounts/payables/outstanding/${r.vendorId}`}>
-                          View Vendor
+                          View Supplier
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
                         <Link href={`/accounts/masters/ledgers/${r.ledgerId}`}>
-                          View Vendor Ledger
+                          View Supplier Ledger
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>

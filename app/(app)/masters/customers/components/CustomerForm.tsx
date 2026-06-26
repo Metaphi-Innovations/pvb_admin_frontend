@@ -59,6 +59,7 @@ import { GstRegistrationFields, GstRegisteredToggleControl } from "@/components/
 import { ErpFormSection } from "@/components/masters/erp/ErpFormSection";
 import { ComplianceCertificationsGrid } from "@/components/masters/erp/ComplianceCertificationsGrid";
 import { BranchAddressFields } from "@/components/masters/erp/BranchAddressFields";
+import { PaymentTermsSelect } from "@/components/masters/erp/PaymentTermsSelect";
 import { ERP } from "@/components/masters/erp/erp-form-styles";
 import {
 	complianceRegistrationToStored,
@@ -75,7 +76,6 @@ import {
 	type CustomerProductMapping,
 	COUNTRY_CODES,
 	CUSTOMER_TYPE_OPTIONS,
-	PAYMENT_TERMS_OPTIONS,
 	getActiveGSTMasters,
 	getActiveTDSMasters,
 	getActiveGeoStates,
@@ -91,7 +91,7 @@ import {
 	validatePincode,
 	validateIFSC,
 } from "../customer-data";
-import { loadGeoNodes, resolvePincodeLocation, getStateSelectOptions } from "../../geography/geo-data";
+import { loadGeoNodes, getStateSelectOptions } from "../../geography/geo-data";
 import { loadCustomerTypes } from "../../customer-types/customer-type-data";
 import { loadProducts } from "../../products/product-data";
 import {
@@ -106,6 +106,7 @@ export interface BranchAddress {
 	addressLine2?: string;
 	country?: string;
 	district?: string;
+	town?: string;
 	city: string;
 	state: string;
 	pincode: string;
@@ -283,6 +284,7 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
 				addressLine2: "",
 				country: "India",
 				district: "",
+				town: "",
 				city: "",
 				state: "",
 				pincode: "",
@@ -292,6 +294,7 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
 				addressLine2: "",
 				country: "India",
 				district: "",
+				town: "",
 				city: "",
 				state: "",
 				pincode: "",
@@ -1017,51 +1020,15 @@ export function CustomerForm({
 		onChange({ ...form, branches: updated });
 	};
 
-	const updateBranchBillingAddress = (
-		bIdx: number,
-		addr: BranchAddress,
-		pincodeRaw?: string,
-	) => {
-		let next = { ...addr };
-		if (pincodeRaw !== undefined) {
-			const digits = pincodeRaw.replace(/\D/g, "").slice(0, 6);
-			next = { ...next, pincode: digits };
-			if (digits.length === 6 && (next.country ?? "India") === "India") {
-				const loc = resolvePincodeLocation(digits, geoNodes);
-				if (loc) {
-					if (loc.state) next.state = loc.state;
-					if (loc.district) next.district = loc.district;
-					if (loc.city) next.city = loc.city;
-					else if (loc.district) next.city = loc.district;
-				}
-			}
-		}
+	const updateBranchBillingAddress = (bIdx: number, addr: BranchAddress) => {
 		const updated = [...form.branches];
-		updated[bIdx] = { ...updated[bIdx], billingAddress: next };
+		updated[bIdx] = { ...updated[bIdx], billingAddress: addr };
 		onChange({ ...form, branches: updated });
 	};
 
-	const updateBranchShippingAddress = (
-		bIdx: number,
-		addr: BranchAddress,
-		pincodeRaw?: string,
-	) => {
-		let next = { ...addr };
-		if (pincodeRaw !== undefined) {
-			const digits = pincodeRaw.replace(/\D/g, "").slice(0, 6);
-			next = { ...next, pincode: digits };
-			if (digits.length === 6 && (next.country ?? "India") === "India") {
-				const loc = resolvePincodeLocation(digits, geoNodes);
-				if (loc) {
-					if (loc.state) next.state = loc.state;
-					if (loc.district) next.district = loc.district;
-					if (loc.city) next.city = loc.city;
-					else if (loc.district) next.city = loc.district;
-				}
-			}
-		}
+	const updateBranchShippingAddress = (bIdx: number, addr: BranchAddress) => {
 		const updated = [...form.branches];
-		updated[bIdx] = { ...updated[bIdx], shippingAddress: next };
+		updated[bIdx] = { ...updated[bIdx], shippingAddress: addr };
 		onChange({ ...form, branches: updated });
 	};
 
@@ -1104,7 +1071,7 @@ export function CustomerForm({
 	const panTdsFooter = (
 		<div
 			className={cn(
-				ERP.grid3,
+				"space-y-2",
 				form.gstRegistered ? "pt-1.5 border-t border-border/50" : "",
 			)}
 		>
@@ -1120,26 +1087,26 @@ export function CustomerForm({
 				/>
 				<FieldError msg={errors.pan} />
 			</div>
-			<div className={ERP.field}>
-				<Label className={ERP.label}>TDS Applicable</Label>
-				<div className="flex h-8 items-center">
-					<ListingStatusToggle
-						active={form.tdsApplicable}
-						onChange={(yes) =>
-							!readOnly &&
-							onChange({
-								...form,
-								tdsApplicable: yes,
-								tdsMasterId: yes ? form.tdsMasterId : "",
-							})
-						}
-						disabled={readOnly}
-					/>
+			<div className="flex flex-wrap items-end gap-3">
+				<div className={ERP.field}>
+					<Label className={ERP.label}>TDS Applicable</Label>
+					<div className="flex h-8 items-center">
+						<ListingStatusToggle
+							active={form.tdsApplicable}
+							onChange={(yes) =>
+								!readOnly &&
+								onChange({
+									...form,
+									tdsApplicable: yes,
+									tdsMasterId: yes ? form.tdsMasterId : "",
+								})
+							}
+							disabled={readOnly}
+						/>
+					</div>
 				</div>
-			</div>
-			<div className={ERP.field}>
 				{form.tdsApplicable ? (
-					<>
+					<div className={cn(ERP.field, "min-w-[200px] flex-1")}>
 						<Label className={ERP.label}>
 							TDS Section <span className="text-red-500">*</span>
 						</Label>
@@ -1152,11 +1119,11 @@ export function CustomerForm({
 							error={!!errors.tdsMasterId}
 						/>
 						<FieldError msg={errors.tdsMasterId} />
-					</>
+					</div>
 				) : null}
 			</div>
 			{gstRegistered && !isAdd && (
-				<div className={cn(ERP.field, "lg:col-span-3")}>
+				<div className={ERP.field}>
 					<Label className={ERP.label}>GST % / GST Code</Label>
 					<SearchableSelect
 						value={form.gstMasterId}
@@ -1189,9 +1156,6 @@ export function CustomerForm({
 					</TabsTrigger>
 					<TabsTrigger value='commercial' className='text-xs'>
 						Bank & Commercial
-					</TabsTrigger>
-					<TabsTrigger value='product' className='text-xs'>
-						Product
 					</TabsTrigger>
 				</TabsList>
 
@@ -1476,15 +1440,10 @@ export function CustomerForm({
 								</div>
 								<div className={ERP.field}>
 									<Label className={ERP.label}>Payment Terms</Label>
-									<SearchableSelect
+									<PaymentTermsSelect
 										value={form.paymentTerms}
-										onChange={(value) => set('paymentTerms', value)}
-										options={PAYMENT_TERMS_OPTIONS.map((option) => ({
-											value: option.value,
-											label: option.label,
-										}))}
-										placeholder='Select terms...'
-										disabled={readOnly}
+										onChange={(value) => set("paymentTerms", value)}
+										readOnly={readOnly}
 									/>
 								</div>
 							</div>
@@ -1603,248 +1562,7 @@ export function CustomerForm({
 					</div>
 				</TabsContent>
 
-				<TabsContent value='product' className='mt-0 space-y-3'>
-					<div>
-						<div className='mb-2'>
-							<p className='text-xs font-bold uppercase tracking-wider text-foreground'>
-								Product Mappings
-							</p>
-						</div>
-
-						{!readOnly && (
-							<div className='mb-3 rounded-lg border border-border bg-muted/20 p-2.5'>
-								<div className='grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end'>
-									<div className='space-y-1'>
-										<label className='text-xs font-medium text-foreground'>
-											Products
-										</label>
-										<AutocompleteSelect
-											options={productOptions}
-											value={bulkProductIds}
-											onChange={(val) =>
-												setBulkProductIds(
-													Array.isArray(val) ? val.map(String) : [],
-												)
-											}
-											multiple
-											placeholder='Search or select products...'
-											searchPlaceholder='Search product...'
-											className='h-8 text-xs font-normal'
-											renderTriggerLabel={(selected) => {
-												if (!Array.isArray(selected) || selected.length === 0) {
-													return "Search or select products...";
-												}
-												if (selected.length === 1) {
-													return selected[0].label;
-												}
-												return `${selected.length} products selected`;
-											}}
-										/>
-									</div>
-									<div className='flex items-end'>
-										<Button
-											type='button'
-											variant='outline'
-											size='sm'
-											className='h-8 gap-1.5 text-xs'
-											disabled={bulkProductIds.length === 0}
-											onClick={addSelectedProducts}
-										>
-											<Plus className='w-3 h-3' /> Add Selected
-										</Button>
-									</div>
-								</div>
-							</div>
-						)}
-
-						{!form.customerProducts || form.customerProducts.length === 0 ? (
-							<div className='py-4 text-center border border-dashed rounded-lg border-border'>
-								<p className='text-xs text-muted-foreground'>
-									No products mapped — select and add products above
-								</p>
-							</div>
-						) : (
-							<div className='overflow-hidden bg-white border border-border rounded-lg'>
-								<div className='overflow-x-auto'>
-									<table className='w-full min-w-[900px] text-xs'>
-										<thead>
-											<tr className='border-b bg-muted/40 border-border'>
-												{[
-													"Product",
-													"SKU",
-													"Category",
-													"HSN",
-													"GST",
-													"MRP",
-													"Price",
-													...(!readOnly ? [""] : []),
-												].map((h) => (
-													<th
-														key={h || "actions"}
-														className={cn(
-															"px-2 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap",
-															h === "Price" || h === "MRP" ? "w-28" : "",
-															h === "" ? "w-10" : "",
-														)}
-													>
-														{h}
-													</th>
-												))}
-											</tr>
-										</thead>
-										<tbody>
-											{form.customerProducts.map((p, idx) => {
-												const hasProductError = !!errors[`product_${idx}_id`];
-												const hasPriceError = !!errors[`product_${idx}_price`];
-												const prodMeta = activeProducts.find(
-													(item) => item.productId === p.productId,
-												);
-
-												return (
-													<tr
-														key={p.id}
-														className='border-b border-border/60 hover:bg-muted/10'
-													>
-														{/* Product */}
-														<td className='px-2 py-1.5 min-w-[180px]'>
-															{readOnly ? (
-																<span className='text-xs font-medium text-foreground'>
-																	{p.productName
-																		? `${p.sku || "—"} — ${p.productName}`
-																		: "—"}
-																</span>
-															) : (
-																<>
-																	<ProductSelect
-																		products={activeProducts}
-																		value={p.productId}
-																		onSelect={(prod) => {
-																			// Avoid duplicate product mapping
-																			const isDuplicate =
-																				form.customerProducts.some(
-																					(item) =>
-																						item.productId === prod.productId &&
-																						item.id !== p.id,
-																				);
-																			if (isDuplicate) {
-																				showToast(
-																					`${prod.productName} is already mapped.`,
-																					"error",
-																				);
-																				return;
-																			}
-																			updateProductRow(p.id, {
-																				productId: prod.productId,
-																				productName: prod.productName,
-																				sku: prod.sku,
-																			});
-																			clearProductFieldError(idx);
-																		}}
-																	/>
-																	{hasProductError && (
-																		<p className='text-[10px] text-red-500 mt-0.5'>
-																			{errors[`product_${idx}_id`]}
-																		</p>
-																	)}
-																</>
-															)}
-														</td>
-
-														<td className='px-2 py-1.5 font-mono text-muted-foreground'>
-															{prodMeta?.sku || p.sku || "—"}
-														</td>
-														<td className='px-2 py-1.5 text-muted-foreground'>
-															{prodMeta?.category || "—"}
-														</td>
-														<td className='px-2 py-1.5 font-mono text-muted-foreground'>
-															{prodMeta?.hsnCode || "—"}
-														</td>
-														<td className='px-2 py-1.5 text-muted-foreground'>
-															{prodMeta?.gstRate ? `${prodMeta.gstRate}%` : "—"}
-														</td>
-
-														{/* MRP (Pricing Master) */}
-														<td className='px-2 py-1.5 w-28'>
-															<span className='text-muted-foreground whitespace-nowrap font-mono'>
-																{(() => {
-																	if (!prodMeta) return "—";
-																	const mrp = getStandardMrp(prodMeta.numericId);
-																	return mrp > 0
-																		? formatIndianRupeeDisplay(mrp)
-																		: "—";
-																})()}
-															</span>
-														</td>
-
-														{/* Customer Price (overrides DP/RP) */}
-														<td className='px-2 py-1.5 w-28'>
-															{readOnly ? (
-																<span className='text-xs font-semibold text-foreground whitespace-nowrap'>
-																	{p.price !== undefined && p.price !== null
-																		? `₹${p.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-																		: "—"}
-																</span>
-															) : (
-																<div className='space-y-1'>
-																	<Input
-																		type='number'
-																		min={0}
-																		step='0.01'
-																		placeholder='0.00'
-																		value={p.price === undefined ? "" : p.price}
-																		onChange={(e) => {
-																			const val =
-																				e.target.value === ""
-																					? undefined
-																					: parseFloat(e.target.value);
-																			updateProductRow(p.id, {
-																				price: isNaN(val as any)
-																					? undefined
-																					: val,
-																			});
-																		}}
-																		className={cn(
-																			"h-7 text-xs",
-																			hasPriceError &&
-																				"border-red-400 focus-visible:ring-red-300",
-																		)}
-																	/>
-																	{hasPriceError && (
-																		<p className='text-[10px] text-red-500 mt-0.5'>
-																			{errors[`product_${idx}_price`]}
-																		</p>
-																	)}
-																</div>
-															)}
-														</td>
-
-														{/* Actions */}
-														{!readOnly && (
-															<td className='px-2 py-1.5 w-12'>
-																<div className='flex items-center gap-0.5 justify-end'>
-																	<button
-																		type='button'
-																		onClick={() => removeProductRow(p.id)}
-																		className='p-1.5 hover:bg-red-50 rounded-md transition-colors'
-																		title='Remove row'
-																	>
-																		<Trash2 className='w-3.5 h-3.5 text-red-500' />
-																	</button>
-																</div>
-															</td>
-														)}
-													</tr>
-												);
-											})}
-										</tbody>
-									</table>
-								</div>
-							</div>
-						)}
-					</div>
-				</TabsContent>
-
-				{/* ── TAB 5: BRANCH MAPPING & DOCUMENTS ── */}
+				{/* ── TAB: BRANCH MAPPING & DOCUMENTS ── */}
 				<TabsContent value='branch' className='mt-0 space-y-3'>
 					<div>
 						<div className='flex items-center justify-between mb-3'>
@@ -1868,6 +1586,7 @@ export function CustomerForm({
 														addressLine2: "",
 														country: "India",
 														district: "",
+														town: "",
 														city: "",
 														state: "",
 														pincode: "",
@@ -1877,6 +1596,7 @@ export function CustomerForm({
 														addressLine2: "",
 														country: "India",
 														district: "",
+														town: "",
 														city: "",
 														state: "",
 														pincode: "",
@@ -2049,13 +1769,6 @@ export function CustomerForm({
 														onChange={(addr) =>
 															updateBranchBillingAddress(bIdx, addr)
 														}
-														onPincodeChange={(pin) =>
-															updateBranchBillingAddress(
-																bIdx,
-																branch.billingAddress,
-																pin,
-															)
-														}
 														readOnly={readOnly}
 														stateOptions={stateOptions}
 														errors={
@@ -2102,13 +1815,6 @@ export function CustomerForm({
 														address={branch.shippingAddress}
 														onChange={(addr) =>
 															updateBranchShippingAddress(bIdx, addr)
-														}
-														onPincodeChange={(pin) =>
-															updateBranchShippingAddress(
-																bIdx,
-																branch.shippingAddress,
-																pin,
-															)
 														}
 														readOnly={readOnly}
 														stateOptions={stateOptions}
@@ -2496,27 +2202,6 @@ export function validateCustomerForm(
 			e.mainBranchBillingPincode = "Enter a valid 6-digit pincode";
 		}
 	}
-
-	// Validate product mappings
-	const selectedProductIds = new Set<string>();
-	form.customerProducts.forEach((p, idx) => {
-		if (!p.productId || !p.productName.trim()) {
-			e[`product_${idx}_id`] = "Product is required.";
-		} else {
-			if (selectedProductIds.has(p.productId)) {
-				e[`product_${idx}_id`] = "Duplicate product mapping";
-			}
-			selectedProductIds.add(p.productId);
-		}
-		if (
-			p.price === undefined ||
-			p.price === null ||
-			isNaN(p.price) ||
-			p.price <= 0
-		) {
-			e[`product_${idx}_price`] = "Price must be greater than 0";
-		}
-	});
 
 	// Validate branch-wise document uploads
 	form.branches.forEach((branch, bIdx) => {

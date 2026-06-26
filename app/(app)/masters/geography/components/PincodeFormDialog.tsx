@@ -13,6 +13,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   type PincodeFormInput,
   type PincodeRecord,
   createPincodeRecord,
@@ -80,18 +87,21 @@ export function PincodeFormDialog({ open, onClose, record, onSaved }: PincodeFor
     [form.stateName, form.district, form.city, open],
   );
   const townOptions = useMemo(
-    () =>
-      withCurrent(getDistinctTowns(form.stateName, form.district, form.city), form.town),
+    () => withCurrent(getDistinctTowns(form.stateName, form.district, form.city), form.town),
     [form.stateName, form.district, form.city, form.town, open],
   );
 
-  const setField = <K extends keyof PincodeFormInput>(key: K, value: PincodeFormInput[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+  const clearErrors = (...keys: string[]) => {
     setErrors((prev) => {
       const next = { ...prev };
-      delete next[key as string];
+      for (const key of keys) delete next[key];
       return next;
     });
+  };
+
+  const setField = <K extends keyof PincodeFormInput>(key: K, value: PincodeFormInput[K]) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    clearErrors(key as string);
   };
 
   const handleSave = () => {
@@ -113,10 +123,10 @@ export function PincodeFormDialog({ open, onClose, record, onSaved }: PincodeFor
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-base">
-            {isEdit ? "Edit Pincode Record" : "Add Pincode Record"}
+            {isEdit ? "Edit Postal Record" : "Add Postal Record"}
           </DialogTitle>
           <DialogDescription>
-            Select State → District → City → Town, then enter the pincode.
+            Select location from Postal Master. New State/District/City/Town must be added via Bulk Upload.
           </DialogDescription>
         </DialogHeader>
 
@@ -125,27 +135,31 @@ export function PincodeFormDialog({ open, onClose, record, onSaved }: PincodeFor
             <Label className="text-xs">
               State <span className="text-red-500">*</span>
             </Label>
-            <Input
-              className={cn("h-9 text-sm", errors.stateName && "border-red-500")}
-              value={form.stateName}
-              onChange={(e) => {
+            <Select
+              value={form.stateName || undefined}
+              onValueChange={(value) => {
                 setForm((prev) => ({
                   ...prev,
-                  stateName: e.target.value,
+                  stateName: value,
                   district: "",
                   city: "",
                   town: "",
+                  pincode: "",
                 }));
-                setErrors({});
+                clearErrors("stateName", "district", "city", "town", "pincode");
               }}
-              list="pincode-form-states"
-              placeholder="Select or enter state"
-            />
-            <datalist id="pincode-form-states">
-              {stateOptions.map((s) => (
-                <option key={s} value={s} />
-              ))}
-            </datalist>
+            >
+              <SelectTrigger className={cn("h-9 text-sm", errors.stateName && "border-red-500")}>
+                <SelectValue placeholder="Select state" />
+              </SelectTrigger>
+              <SelectContent>
+                {stateOptions.map((s) => (
+                  <SelectItem key={s} value={s} className="text-xs">
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {errors.stateName && <p className="text-[11px] text-red-600">{errors.stateName}</p>}
           </div>
 
@@ -153,27 +167,31 @@ export function PincodeFormDialog({ open, onClose, record, onSaved }: PincodeFor
             <Label className="text-xs">
               District <span className="text-red-500">*</span>
             </Label>
-            <Input
-              className={cn("h-9 text-sm", errors.district && "border-red-500")}
-              value={form.district}
-              onChange={(e) => {
+            <Select
+              value={form.district || undefined}
+              onValueChange={(value) => {
                 setForm((prev) => ({
                   ...prev,
-                  district: e.target.value,
+                  district: value,
                   city: "",
                   town: "",
+                  pincode: "",
                 }));
-                setErrors({});
+                clearErrors("district", "city", "town", "pincode");
               }}
-              list="pincode-form-districts"
-              placeholder="Select or enter district"
               disabled={!form.stateName}
-            />
-            <datalist id="pincode-form-districts">
-              {districtOptions.map((d) => (
-                <option key={d} value={d} />
-              ))}
-            </datalist>
+            >
+              <SelectTrigger className={cn("h-9 text-sm", errors.district && "border-red-500")}>
+                <SelectValue placeholder="Select district" />
+              </SelectTrigger>
+              <SelectContent>
+                {districtOptions.map((d) => (
+                  <SelectItem key={d} value={d} className="text-xs">
+                    {d}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {errors.district && <p className="text-[11px] text-red-600">{errors.district}</p>}
           </div>
 
@@ -181,26 +199,30 @@ export function PincodeFormDialog({ open, onClose, record, onSaved }: PincodeFor
             <Label className="text-xs">
               City <span className="text-red-500">*</span>
             </Label>
-            <Input
-              className={cn("h-9 text-sm", errors.city && "border-red-500")}
-              value={form.city}
-              onChange={(e) => {
+            <Select
+              value={form.city || undefined}
+              onValueChange={(value) => {
                 setForm((prev) => ({
                   ...prev,
-                  city: e.target.value,
+                  city: value,
                   town: "",
+                  pincode: "",
                 }));
-                setErrors({});
+                clearErrors("city", "town", "pincode");
               }}
-              list="pincode-form-cities"
-              placeholder="Select or enter city"
               disabled={!form.district}
-            />
-            <datalist id="pincode-form-cities">
-              {cityOptions.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
+            >
+              <SelectTrigger className={cn("h-9 text-sm", errors.city && "border-red-500")}>
+                <SelectValue placeholder="Select city" />
+              </SelectTrigger>
+              <SelectContent>
+                {cityOptions.map((c) => (
+                  <SelectItem key={c} value={c} className="text-xs">
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {errors.city && <p className="text-[11px] text-red-600">{errors.city}</p>}
           </div>
 
@@ -208,19 +230,29 @@ export function PincodeFormDialog({ open, onClose, record, onSaved }: PincodeFor
             <Label className="text-xs">
               Town <span className="text-red-500">*</span>
             </Label>
-            <Input
-              className={cn("h-9 text-sm", errors.town && "border-red-500")}
-              value={form.town}
-              onChange={(e) => setField("town", e.target.value)}
-              list="pincode-form-towns"
-              placeholder="Select or enter town"
+            <Select
+              value={form.town || undefined}
+              onValueChange={(value) => {
+                setForm((prev) => ({
+                  ...prev,
+                  town: value,
+                  pincode: "",
+                }));
+                clearErrors("town", "pincode");
+              }}
               disabled={!form.city}
-            />
-            <datalist id="pincode-form-towns">
-              {townOptions.map((t) => (
-                <option key={t} value={t} />
-              ))}
-            </datalist>
+            >
+              <SelectTrigger className={cn("h-9 text-sm", errors.town && "border-red-500")}>
+                <SelectValue placeholder="Select town" />
+              </SelectTrigger>
+              <SelectContent>
+                {townOptions.map((t) => (
+                  <SelectItem key={t} value={t} className="text-xs">
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {errors.town && <p className="text-[11px] text-red-600">{errors.town}</p>}
           </div>
 
@@ -234,7 +266,7 @@ export function PincodeFormDialog({ open, onClose, record, onSaved }: PincodeFor
               maxLength={6}
               inputMode="numeric"
               onChange={(e) => setField("pincode", e.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="6-digit pincode"
+              placeholder="Enter 6-digit pincode"
               disabled={!form.town}
             />
             {errors.pincode && <p className="text-[11px] text-red-600">{errors.pincode}</p>}

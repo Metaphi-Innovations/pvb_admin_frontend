@@ -8,7 +8,9 @@ export type EmployeeDocumentStatus = "pending" | "uploaded" | "verified" | "reje
 
 export interface EmployeeDocument {
   id: string;
-  documentType: string;
+  documentName: string;
+  /** @deprecated use documentName */
+  documentType?: string;
   documentNumber?: string;
   issueDate?: string;
   expiryDate?: string;
@@ -16,9 +18,10 @@ export interface EmployeeDocument {
   fileUrl?: string;
   fileSize?: number;
   mimeType?: string;
-  status: EmployeeDocumentStatus;
-  uploadedBy: string;
-  uploadedOn: string;
+  /** @deprecated simplified upload flow no longer uses status workflow */
+  status?: EmployeeDocumentStatus;
+  uploadedBy?: string;
+  uploadedOn?: string;
   verifiedBy?: string;
   verifiedDate?: string;
   remarks?: string;
@@ -133,9 +136,6 @@ export function canActivateEmployee(employee: Partial<Employee>): {
   const gaps: string[] = [];
   if (!profile.personalComplete) gaps.push("Complete personal information (name, email, mobile)");
   if (!profile.employmentComplete) gaps.push("Complete employment information (department, role, joining date)");
-  if (!employee.password?.trim() && !employee.id) {
-    gaps.push("Set account password");
-  }
   return { ok: gaps.length === 0, gaps };
 }
 
@@ -156,15 +156,8 @@ export function computeProfileCompletion(employee: Partial<Employee>): {
     employee.departmentId && employee.roleId && employee.joiningDate,
   );
   const docs = employee.documents || [];
-  const uploadedTypes = new Set(
-    docs
-      .filter((d) => d.fileName && d.status !== "pending")
-      .map((d) => d.documentType),
-  );
-  const documentsUploaded = PROFILE_DOCUMENT_TYPES.filter((t) =>
-    uploadedTypes.has(t),
-  ).length;
-  const documentsTotal = PROFILE_DOCUMENT_TYPES.length;
+  const documentsUploaded = docs.filter((d) => d.fileName).length;
+  const documentsTotal = Math.max(docs.length, documentsUploaded);
 
   const sections = [personalComplete, employmentComplete, documentsUploaded > 0];
   const sectionScore = sections.filter(Boolean).length;

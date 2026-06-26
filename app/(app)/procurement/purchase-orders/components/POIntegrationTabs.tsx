@@ -29,7 +29,7 @@ export function POIntegrationTabs({
   }, [refreshKey]);
 
   const tabs: { id: TabId; label: string; icon: ReactNode }[] = [
-    { id: "invoice", label: "Vendor Invoice", icon: <FileText className="w-3.5 h-3.5" /> },
+    { id: "invoice", label: "Supplier Invoice", icon: <FileText className="w-3.5 h-3.5" /> },
     { id: "match", label: "3-Way Match", icon: <Scale className="w-3.5 h-3.5" /> },
   ];
 

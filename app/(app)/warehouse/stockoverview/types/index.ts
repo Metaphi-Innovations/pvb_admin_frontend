@@ -24,7 +24,7 @@ export interface RejectedStockRecord {
   inspectionDate: string;
   inspector: string;
   remarks?: string;
-  status: string; // Rejected, Under Review, Disposed, Returned To Vendor
+  status: string; // Rejected, Under Review, Disposed, Returned To Supplier
 }
 
 export interface GrnPendingStockRecord {

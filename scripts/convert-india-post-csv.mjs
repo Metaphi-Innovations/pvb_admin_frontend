@@ -72,6 +72,8 @@ function cleanTown(officename) {
   return officename
     .replace(/\s+S\.O\.?$/i, "")
     .replace(/\s+B\.O\.?$/i, "")
+    .replace(/\s+G\.P\.O\.?$/i, "")
+    .replace(/\s+GPO$/i, "")
     .replace(/\s+H\.O\.?$/i, "")
     .trim() || officename.trim();
 }
@@ -98,7 +100,9 @@ function convertRows(rawRows) {
       pincode,
       state,
       district,
+      city: district,
       town,
+      status: "active",
     });
   }
 

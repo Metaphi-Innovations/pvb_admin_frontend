@@ -1,5 +1,5 @@
 /**
- * Procurement PO supplier dropdown — backed by Vendor Master.
+ * Procurement PO supplier dropdown — backed by Supplier Master.
  * @see app/(app)/masters/vendors/vendor-data.ts
  */
 import {
@@ -81,7 +81,7 @@ export function loadSuppliers(): Supplier[] {
 }
 
 export function saveSuppliers(_list: Supplier[]): void {
-  // Vendors are persisted via Vendor Master only
+  // Vendors are persisted via Supplier Master only
 }
 
 export function getSupplierById(id: number): Supplier | undefined {

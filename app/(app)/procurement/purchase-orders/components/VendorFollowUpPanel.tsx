@@ -47,7 +47,7 @@ export function VendorFollowUpPanel({
   return (
     <>
       <div className="space-y-4 xl:sticky xl:top-4">
-        <ProcCardSection accent="amber" title="Vendor Follow-up" icon={<MessageSquare className="w-3.5 h-3.5 text-amber-600" />}>
+        <ProcCardSection accent="amber" title="Supplier Follow-up" icon={<MessageSquare className="w-3.5 h-3.5 text-amber-600" />}>
           <div className="space-y-2.5 text-[12px]">
             <div className="flex justify-between gap-2">
               <span className="text-[#6B80A0]">Last Follow-up Date</span>

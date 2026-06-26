@@ -12,6 +12,7 @@ export const GST_REGISTRATION_TYPE_OPTIONS = [
 	{ value: "regular", label: "Regular" },
 	{ value: "composition", label: "Composition" },
 	{ value: GST_CATEGORY_SEZ, label: "SEZ Unit" },
+	{ value: "rcm", label: "RCM (Reverse Charge Mechanism)" },
 ] as const;
 
 export type GstRegistrationType =
@@ -20,7 +21,6 @@ export type GstRegistrationType =
 /** All stored categories including legacy values. */
 export const GST_CATEGORY_OPTIONS = [
 	...GST_REGISTRATION_TYPE_OPTIONS,
-	{ value: "rcm", label: "RCM (Reverse Charge Mechanism)" },
 	{ value: GST_CATEGORY_UNREGISTERED, label: "Unregistered" },
 ] as const;
 
@@ -48,7 +48,7 @@ export function deriveGstRegistrationType(category?: string): GstRegistrationTyp
 	if (!category || category === GST_CATEGORY_UNREGISTERED) {
 		return GST_REGISTRATION_TYPE_DEFAULT;
 	}
-	if (category === "rcm") return GST_REGISTRATION_TYPE_DEFAULT;
+	if (category === "rcm") return "rcm";
 	if (
 		GST_REGISTRATION_TYPE_OPTIONS.some(
 			(o) => o.value === category,

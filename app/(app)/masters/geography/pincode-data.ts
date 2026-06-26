@@ -1,23 +1,43 @@
 /**
  * Pincode Master — location hierarchy: State → District → City → Town → Pincode
- * Frontend mock / localStorage only.
+ * Loads from normalized India Post JSON file and/or bulk upload (localStorage).
  */
+
+import { cleanTownName as cleanTownNameShared } from "@/lib/geography/india-post-normalize";
+import {
+  appendPostalMasterRecord,
+  getPostalMasterIndexes,
+  getPostalMasterRecords,
+  hydratePostalMaster,
+  importNormalizedRows,
+  isPostalMasterLoaded,
+  patchPostalMasterRecord,
+  getNextPostalMasterId,
+  appendNormalizedRows,
+  POSTAL_MASTER_EMPTY_MESSAGE,
+  queryPostalMasterRecords,
+  setPostalMasterRecords,
+  type PostalMasterQuery,
+  type PostalMasterRecord,
+} from "@/lib/geography/postal-master-store";
+import {
+  getIndexedCities,
+  getIndexedDistricts,
+  getIndexedStates,
+  getIndexedTowns,
+} from "@/lib/geography/postal-master-index";
+import {
+  getActivePostalRecords,
+  getPostalRecordCount,
+  getPostalRecords,
+  isPostalDataAvailable,
+  type PostalRecord,
+} from "@/lib/geography/postal-records";
+import { GEOGRAPHY_WORKFLOW_SCHEMA } from "./geography-demo-seed";
 
 export type PincodeStatus = "active" | "inactive";
 
-export interface PincodeRecord {
-  id: number;
-  pincode: string;
-  stateName: string;
-  district: string;
-  city: string;
-  town: string;
-  status: PincodeStatus;
-  createdBy: string;
-  createdDate: string;
-  updatedBy: string;
-  updatedDate: string;
-}
+export type PincodeRecord = PostalMasterRecord;
 
 export interface PincodeFormInput {
   pincode: string;
@@ -61,11 +81,33 @@ export interface PincodeJsonRow {
   pincode: string;
   state: string;
   district: string;
-  town: string;
   city?: string;
+  town: string;
+  deliveryStatus?: string;
+  status?: PincodeStatus | "Active" | "Inactive";
 }
 
-const STORAGE_KEY = "ds_pincode_master_v2";
+export {
+  getPostalRecords,
+  getActivePostalRecords,
+  getPostalRecordCount,
+  isPostalDataAvailable,
+  type PostalRecord,
+};
+export {
+  isPostalMasterLoaded,
+  hydratePostalMaster,
+  POSTAL_MASTER_EMPTY_MESSAGE,
+  queryPostalMasterRecords,
+  type PostalMasterQuery,
+};
+
+export function cleanTownName(officename: string): string {
+  return cleanTownNameShared(officename);
+}
+
+const PINCODE_SCHEMA_KEY = "ds_pincode_master_schema";
+export const PINCODE_WORKFLOW_SCHEMA = GEOGRAPHY_WORKFLOW_SCHEMA;
 const UPLOAD_ERRORS_KEY = "ds_pincode_upload_errors";
 export const DEFAULT_PINCODE_USER = "Admin";
 
@@ -78,177 +120,18 @@ export const PINCODE_UPLOAD_REQUIRED_COLUMNS = [
 
 export const PINCODE_SAMPLE_TEMPLATE_ROWS: Record<string, string>[] = [
   {
-    pincode: "400001",
-    statename: "Maharashtra",
-    district: "Mumbai",
-    officename: "Mumbai GPO",
-    cityname: "Mumbai",
-  },
-  {
-    pincode: "411001",
-    statename: "Maharashtra",
-    district: "Pune",
-    officename: "Pune City S.O",
-    cityname: "Pune",
-  },
-];
-
-const SEED_PINCODES: PincodeRecord[] = [
-  {
-    id: 1,
-    pincode: "411057",
-    stateName: "Maharashtra",
-    district: "Pune",
-    city: "Pune",
-    town: "Hinjewadi",
-    status: "active",
-    createdBy: DEFAULT_PINCODE_USER,
-    createdDate: "2024-01-10",
-    updatedBy: DEFAULT_PINCODE_USER,
-    updatedDate: "2024-03-15",
-  },
-  {
-    id: 2,
-    pincode: "411004",
-    stateName: "Maharashtra",
-    district: "Pune",
-    city: "Pune",
-    town: "Shivaji Nagar",
-    status: "active",
-    createdBy: DEFAULT_PINCODE_USER,
-    createdDate: "2024-01-10",
-    updatedBy: DEFAULT_PINCODE_USER,
-    updatedDate: "2024-02-20",
-  },
-  {
-    id: 3,
-    pincode: "400001",
-    stateName: "Maharashtra",
-    district: "Mumbai",
-    city: "Mumbai",
-    town: "Mumbai GPO",
-    status: "active",
-    createdBy: DEFAULT_PINCODE_USER,
-    createdDate: "2024-01-12",
-    updatedBy: DEFAULT_PINCODE_USER,
-    updatedDate: "2024-01-12",
-  },
-  {
-    id: 4,
-    pincode: "440001",
-    stateName: "Maharashtra",
-    district: "Nagpur",
-    city: "Nagpur",
-    town: "Nagpur GPO",
-    status: "active",
-    createdBy: DEFAULT_PINCODE_USER,
-    createdDate: "2024-01-15",
-    updatedBy: DEFAULT_PINCODE_USER,
-    updatedDate: "2024-04-01",
-  },
-  {
-    id: 5,
-    pincode: "560001",
-    stateName: "Karnataka",
-    district: "Bengaluru Urban",
-    city: "Bengaluru",
-    town: "Bangalore GPO",
-    status: "active",
-    createdBy: DEFAULT_PINCODE_USER,
-    createdDate: "2024-02-01",
-    updatedBy: DEFAULT_PINCODE_USER,
-    updatedDate: "2024-02-01",
-  },
-  {
-    id: 6,
-    pincode: "560100",
-    stateName: "Karnataka",
-    district: "Bengaluru Urban",
-    city: "Bengaluru",
-    town: "Electronic City",
-    status: "active",
-    createdBy: DEFAULT_PINCODE_USER,
-    createdDate: "2024-02-05",
-    updatedBy: DEFAULT_PINCODE_USER,
-    updatedDate: "2024-02-05",
-  },
-  {
-    id: 7,
     pincode: "110001",
-    stateName: "Delhi",
-    district: "New Delhi",
-    city: "New Delhi",
-    town: "New Delhi GPO",
-    status: "active",
-    createdBy: DEFAULT_PINCODE_USER,
-    createdDate: "2024-02-10",
-    updatedBy: DEFAULT_PINCODE_USER,
-    updatedDate: "2024-02-10",
+    statename: "Delhi",
+    district: "Central Delhi",
+    officename: "Connaught Place S.O",
+    cityname: "New Delhi",
   },
   {
-    id: 8,
-    pincode: "380001",
-    stateName: "Gujarat",
-    district: "Ahmedabad",
-    city: "Ahmedabad",
-    town: "Ahmedabad GPO",
-    status: "inactive",
-    createdBy: DEFAULT_PINCODE_USER,
-    createdDate: "2024-02-12",
-    updatedBy: DEFAULT_PINCODE_USER,
-    updatedDate: "2024-05-20",
-  },
-  {
-    id: 9,
-    pincode: "600001",
-    stateName: "Tamil Nadu",
-    district: "Chennai",
-    city: "Chennai",
-    town: "Chennai GPO",
-    status: "active",
-    createdBy: DEFAULT_PINCODE_USER,
-    createdDate: "2024-02-15",
-    updatedBy: DEFAULT_PINCODE_USER,
-    updatedDate: "2024-02-15",
-  },
-  {
-    id: 10,
-    pincode: "500001",
-    stateName: "Telangana",
-    district: "Hyderabad",
-    city: "Hyderabad",
-    town: "Hyderabad GPO",
-    status: "active",
-    createdBy: DEFAULT_PINCODE_USER,
-    createdDate: "2024-02-18",
-    updatedBy: DEFAULT_PINCODE_USER,
-    updatedDate: "2024-03-01",
-  },
-  {
-    id: 11,
-    pincode: "411045",
-    stateName: "Maharashtra",
-    district: "Pune",
-    city: "Pune",
-    town: "Wakad",
-    status: "active",
-    createdBy: DEFAULT_PINCODE_USER,
-    createdDate: "2024-03-01",
-    updatedBy: DEFAULT_PINCODE_USER,
-    updatedDate: "2024-03-01",
-  },
-  {
-    id: 12,
-    pincode: "415612",
-    stateName: "Maharashtra",
-    district: "Ratnagiri",
-    city: "Ratnagiri",
-    town: "Ratnagiri S.O",
-    status: "active",
-    createdBy: DEFAULT_PINCODE_USER,
-    createdDate: "2024-03-05",
-    updatedBy: DEFAULT_PINCODE_USER,
-    updatedDate: "2024-03-05",
+    pincode: "560001",
+    statename: "Karnataka",
+    district: "Bengaluru Urban",
+    officename: "Bangalore GPO",
+    cityname: "Bengaluru",
   },
 ];
 
@@ -268,7 +151,8 @@ function migrateLegacyRecord(raw: Record<string, unknown>): PincodeRecord {
     stateName: String(raw.stateName ?? ""),
     district,
     city: String(raw.city ?? district),
-    town: officeName.replace(/\s+S\.O$/i, "").replace(/\s+GPO$/i, " GPO").trim() || officeName,
+    town: cleanTownName(officeName) || officeName,
+    deliveryStatus: String(raw.deliveryStatus ?? "Non-Delivery"),
     status: (raw.status as PincodeStatus) ?? "active",
     createdBy: String(raw.createdBy ?? DEFAULT_PINCODE_USER),
     createdDate: String(raw.createdDate ?? todayStr()),
@@ -278,32 +162,16 @@ function migrateLegacyRecord(raw: Record<string, unknown>): PincodeRecord {
 }
 
 export function loadPincodeRecords(): PincodeRecord[] {
-  if (typeof window === "undefined") return SEED_PINCODES;
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (!stored) {
-    const legacy = localStorage.getItem("ds_pincode_master_v1");
-    if (legacy) {
-      try {
-        const migrated = (JSON.parse(legacy) as Record<string, unknown>[]).map(migrateLegacyRecord);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-        return migrated;
-      } catch {
-        /* fall through */
-      }
-    }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_PINCODES));
-    return SEED_PINCODES;
+  if (typeof window === "undefined") return [];
+  const schema = localStorage.getItem(PINCODE_SCHEMA_KEY);
+  if (schema !== PINCODE_WORKFLOW_SCHEMA) {
+    localStorage.setItem(PINCODE_SCHEMA_KEY, PINCODE_WORKFLOW_SCHEMA);
   }
-  try {
-    return (JSON.parse(stored) as Record<string, unknown>[]).map(migrateLegacyRecord);
-  } catch {
-    return SEED_PINCODES;
-  }
+  return getPostalMasterRecords();
 }
 
 export function savePincodeRecords(records: PincodeRecord[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  setPostalMasterRecords(records, { persist: true, source: "upload" });
 }
 
 export function getUploadErrorCount(): number {
@@ -366,25 +234,62 @@ export function validatePincodeForm(
     input.town.trim() &&
     isDuplicatePincodeTown(input, excludeId)
   ) {
-    errors.town = "This pincode and town combination already exists.";
+    errors.pincode = "This pincode already exists.";
   }
 
   return errors;
 }
 
+function activePostalList(records?: PincodeRecord[]): PostalRecord[] {
+  if (records) {
+    return records
+      .filter((r) => r.status === "active")
+      .map((r) => ({
+        state: r.stateName,
+        district: r.district,
+        city: r.city,
+        town: r.town,
+        pincode: r.pincode,
+        deliveryStatus: r.deliveryStatus ?? "Non-Delivery",
+        status: r.status,
+      }));
+  }
+  return getActivePostalRecords();
+}
+
+
 export function getDistinctStates(records?: PincodeRecord[]): string[] {
-  const list = records ?? loadPincodeRecords();
-  return [...new Set(list.map((r) => r.stateName).filter(Boolean))].sort((a, b) =>
+  const indexes = getPostalMasterIndexes();
+  if (!records && indexes) return indexes.states;
+  const list = activePostalList(records);
+  return [...new Set(list.map((r) => r.state).filter(Boolean))].sort((a, b) =>
     a.localeCompare(b),
   );
 }
 
 export function getDistinctDistricts(stateName: string, records?: PincodeRecord[]): string[] {
-  const list = records ?? loadPincodeRecords();
+  const indexes = getPostalMasterIndexes();
+  if (!records && indexes) {
+    if (!stateName) return [];
+    return getIndexedDistricts(indexes, stateName);
+  }
+  const list = activePostalList(records);
   return [
     ...new Set(
       list
-        .filter((r) => !stateName || r.stateName === stateName)
+        .filter((r) => !stateName || r.state === stateName)
+        .map((r) => r.district)
+        .filter(Boolean),
+    ),
+  ].sort((a, b) => a.localeCompare(b));
+}
+
+export function getDistinctDistrictsForStates(states: string[], records?: PincodeRecord[]): string[] {
+  const list = activePostalList(records);
+  return [
+    ...new Set(
+      list
+        .filter((r) => states.length === 0 || states.includes(r.state))
         .map((r) => r.district)
         .filter(Boolean),
     ),
@@ -396,13 +301,17 @@ export function getDistinctCities(
   district: string,
   records?: PincodeRecord[],
 ): string[] {
-  const list = records ?? loadPincodeRecords();
+  const indexes = getPostalMasterIndexes();
+  if (!records && indexes && stateName && district) {
+    return getIndexedCities(indexes, stateName, district);
+  }
+  const list = activePostalList(records);
   return [
     ...new Set(
       list
         .filter(
           (r) =>
-            (!stateName || r.stateName === stateName) &&
+            (!stateName || r.state === stateName) &&
             (!district || r.district === district),
         )
         .map((r) => r.city)
@@ -417,15 +326,61 @@ export function getDistinctTowns(
   city: string,
   records?: PincodeRecord[],
 ): string[] {
-  const list = records ?? loadPincodeRecords();
+  const indexes = getPostalMasterIndexes();
+  if (!records && indexes && stateName && district && city) {
+    return getIndexedTowns(indexes, stateName, district, city);
+  }
+  const list = activePostalList(records);
   return [
     ...new Set(
       list
         .filter(
           (r) =>
-            (!stateName || r.stateName === stateName) &&
+            (!stateName || r.state === stateName) &&
             (!district || r.district === district) &&
             (!city || r.city === city),
+        )
+        .map((r) => r.town)
+        .filter(Boolean),
+    ),
+  ].sort((a, b) => a.localeCompare(b));
+}
+
+export function getDistinctCitiesForDistricts(
+  stateName: string,
+  districts: string[],
+  records?: PincodeRecord[],
+): string[] {
+  const list = activePostalList(records);
+  return [
+    ...new Set(
+      list
+        .filter(
+          (r) =>
+            (!stateName || r.state === stateName) &&
+            (districts.length === 0 || districts.includes(r.district)),
+        )
+        .map((r) => r.city)
+        .filter(Boolean),
+    ),
+  ].sort((a, b) => a.localeCompare(b));
+}
+
+export function getDistinctTownsForFilters(
+  stateName: string,
+  districts: string[],
+  cities: string[],
+  records?: PincodeRecord[],
+): string[] {
+  const list = activePostalList(records);
+  return [
+    ...new Set(
+      list
+        .filter(
+          (r) =>
+            (!stateName || r.state === stateName) &&
+            (districts.length === 0 || districts.includes(r.district)) &&
+            (cities.length === 0 || cities.includes(r.city)),
         )
         .map((r) => r.town)
         .filter(Boolean),
@@ -446,8 +401,7 @@ export function getPincodeSummary(records?: PincodeRecord[]) {
 }
 
 export function createPincodeRecord(input: PincodeFormInput): PincodeRecord {
-  const all = loadPincodeRecords();
-  const id = Math.max(0, ...all.map((r) => r.id)) + 1;
+  const id = getNextPostalMasterId();
   const now = todayStr();
   const record: PincodeRecord = {
     id,
@@ -456,51 +410,62 @@ export function createPincodeRecord(input: PincodeFormInput): PincodeRecord {
     district: input.district.trim(),
     city: input.city.trim(),
     town: input.town.trim(),
+    deliveryStatus: "Delivery",
     status: input.status,
     createdBy: DEFAULT_PINCODE_USER,
     createdDate: now,
     updatedBy: DEFAULT_PINCODE_USER,
     updatedDate: now,
   };
-  savePincodeRecords([...all, record]);
+  appendPostalMasterRecord(record);
   return record;
 }
 
 export function updatePincodeRecord(id: number, input: PincodeFormInput): PincodeRecord | null {
-  const all = loadPincodeRecords();
-  const idx = all.findIndex((r) => r.id === id);
-  if (idx < 0) return null;
+  const existing = getPostalMasterRecords().find((r) => r.id === id);
+  if (!existing) return null;
   const now = todayStr();
   const updated: PincodeRecord = {
-    ...all[idx],
+    ...existing,
     pincode: input.pincode.trim(),
     stateName: input.stateName.trim(),
     district: input.district.trim(),
     city: input.city.trim(),
     town: input.town.trim(),
+    deliveryStatus: existing.deliveryStatus ?? "Delivery",
     status: input.status,
     updatedBy: DEFAULT_PINCODE_USER,
     updatedDate: now,
   };
-  const next = [...all];
-  next[idx] = updated;
-  savePincodeRecords(next);
+  patchPostalMasterRecord(id, {
+    pincode: updated.pincode,
+    stateName: updated.stateName,
+    district: updated.district,
+    city: updated.city,
+    town: updated.town,
+    deliveryStatus: updated.deliveryStatus,
+    status: updated.status,
+    updatedBy: updated.updatedBy,
+    updatedDate: updated.updatedDate,
+  });
   return updated;
 }
 
 export function setPincodeStatus(id: number, status: PincodeStatus): PincodeRecord | null {
-  const all = loadPincodeRecords();
-  const idx = all.findIndex((r) => r.id === id);
-  if (idx < 0) return null;
-  const next = [...all];
-  next[idx] = {
-    ...next[idx],
+  const existing = getPostalMasterRecords().find((r) => r.id === id);
+  if (!existing) return null;
+  const updated = {
+    ...existing,
     status,
     updatedBy: DEFAULT_PINCODE_USER,
     updatedDate: todayStr(),
   };
-  savePincodeRecords(next);
-  return next[idx];
+  patchPostalMasterRecord(id, {
+    status,
+    updatedBy: updated.updatedBy,
+    updatedDate: updated.updatedDate,
+  });
+  return updated;
 }
 
 function normalizeHeader(h: string): string {
@@ -521,9 +486,9 @@ export function mapRawUploadRow(
   row: Record<string, unknown>,
   rowNumber: number,
 ): PincodeUploadRow {
-  const district = pickField(row, "district");
+  const district = pickField(row, "district", "districtname");
   const city = pickField(row, "cityname", "city") || district;
-  const town = pickField(row, "officename", "office name", "town", "post office");
+  const town = cleanTownName(pickField(row, "officename", "office name", "town", "post office"));
   return {
     rowNumber,
     pincode: pickField(row, "pincode"),
@@ -536,13 +501,41 @@ export function mapRawUploadRow(
 
 export function mapJsonImportRow(row: PincodeJsonRow): Omit<PincodeUploadRow, "rowNumber"> {
   const district = row.district.trim();
+  const town = cleanTownName(row.town);
   return {
     pincode: row.pincode.trim(),
     stateName: row.state.trim(),
     district,
     city: (row.city?.trim() || district),
-    town: row.town.trim(),
+    town,
   };
+}
+
+export interface PincodeJsonImportPayload {
+  records?: PincodeJsonRow[];
+}
+
+export function parsePincodeJsonFile(json: unknown): PincodeUploadRow[] {
+  let rows: PincodeJsonRow[] = [];
+  if (Array.isArray(json)) {
+    rows = json as PincodeJsonRow[];
+  } else if (json && typeof json === "object" && Array.isArray((json as PincodeJsonImportPayload).records)) {
+    rows = (json as PincodeJsonImportPayload).records!;
+  }
+  return rows.map((row, i) => ({
+    rowNumber: i + 1,
+    ...mapJsonImportRow(row),
+  }));
+}
+
+export function importJsonPincodeRows(rows: PincodeJsonRow[]): number {
+  const uploadRows = rows.map((row, i) => ({
+    rowNumber: i + 1,
+    ...mapJsonImportRow(row),
+  }));
+  const validation = validateUploadRows(uploadRows);
+  setUploadErrorCount(validation.errorRows.length);
+  return importValidUploadRows(validation.validRows);
 }
 
 export function validateUploadRows(
@@ -592,24 +585,32 @@ export function validateUploadRows(
 }
 
 export function importValidUploadRows(rows: PincodeUploadRow[]): number {
-  const all = loadPincodeRecords();
-  let nextId = Math.max(0, ...all.map((r) => r.id)) + 1;
-  const now = todayStr();
-  const imported: PincodeRecord[] = rows.map((row) => ({
-    id: nextId++,
+  const normalized = rows.map((row) => ({
     pincode: row.pincode.trim(),
-    stateName: row.stateName.trim(),
+    state: row.stateName.trim(),
     district: row.district.trim(),
     city: row.city.trim(),
     town: row.town.trim(),
+    deliveryStatus: "Delivery",
     status: "active" as const,
-    createdBy: DEFAULT_PINCODE_USER,
-    createdDate: now,
-    updatedBy: DEFAULT_PINCODE_USER,
-    updatedDate: now,
   }));
-  savePincodeRecords([...all, ...imported]);
-  return imported.length;
+  if (loadPincodeRecords().length === 0) {
+    return importNormalizedRows(normalized);
+  }
+  return appendNormalizedRows(normalized);
+}
+
+export function replaceAllPincodeRecords(rows: PincodeUploadRow[]): number {
+  const normalized = rows.map((row) => ({
+    pincode: row.pincode.trim(),
+    state: row.stateName.trim(),
+    district: row.district.trim(),
+    city: row.city.trim(),
+    town: row.town.trim(),
+    deliveryStatus: "Delivery",
+    status: "active" as const,
+  }));
+  return importNormalizedRows(normalized);
 }
 
 export function downloadPincodeSampleTemplate(): void {
@@ -626,6 +627,43 @@ export function downloadPincodeSampleTemplate(): void {
   const a = document.createElement("a");
   a.href = url;
   a.download = "india-post-pincode-sample.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function downloadDemoPostalJson(): void {
+  if (typeof window === "undefined") return;
+  const records: PincodeJsonRow[] = PINCODE_SAMPLE_TEMPLATE_ROWS.map((r) => ({
+    pincode: r.pincode,
+    state: r.statename,
+    district: r.district,
+    city: r.cityname,
+    town: cleanTownName(r.officename),
+    deliveryStatus: "Delivery",
+    status: "Active",
+  }));
+  const blob = new Blob([JSON.stringify(records, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "postal-master-template.json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function exportPostalData(records?: PincodeRecord[]): void {
+  if (typeof window === "undefined") return;
+  const list = records ?? loadPincodeRecords();
+  const header = ["pincode", "state", "district", "city", "town", "deliveryStatus", "status", "createdDate", "updatedDate"];
+  const rows = list.map((r) =>
+    header.map((col) => `"${String(r[col as keyof PincodeRecord] ?? "").replace(/"/g, '""')}"`).join(","),
+  );
+  const csv = [header.join(","), ...rows].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "postal-location-master-export.csv";
   a.click();
   URL.revokeObjectURL(url);
 }

@@ -137,7 +137,7 @@ export function GrnPendingListing({ grnPendingForWarehouse }: GrnPendingListingP
     },
     {
       key: "vendor",
-      header: "Vendor",
+      header: "Supplier",
       sortable: true,
       filterable: true,
       filterType: "dropdown",

@@ -27,7 +27,7 @@ export function ThreeWayMatchSection({ po, refreshKey = 0 }: { po: PurchaseOrder
 
   const readiness = [
     { label: "PO Approved", ok: match.poApproved },
-    { label: "Vendor Invoice Uploaded", ok: match.invoiceUploaded },
+    { label: "Supplier Invoice Uploaded", ok: match.invoiceUploaded },
     { label: "GRN Created", ok: match.grnCreated },
     { label: "QC Completed", ok: match.qcCompleted },
   ];
@@ -56,7 +56,7 @@ export function ThreeWayMatchSection({ po, refreshKey = 0 }: { po: PurchaseOrder
 
       {!match.matchReady && (
         <p className="text-[11px] text-[#6B80A0] mb-3">
-          3-Way Match becomes ready when PO is approved, vendor invoice is uploaded, GRN is created, and QC is completed in Warehouse.
+          3-Way Match becomes ready when PO is approved, supplier invoice is uploaded, GRN is created, and QC is completed in Warehouse.
         </p>
       )}
 
@@ -107,7 +107,7 @@ export function ThreeWayMatchSection({ po, refreshKey = 0 }: { po: PurchaseOrder
       <div className="flex flex-wrap gap-3 mt-3 text-[11px] text-[#6B80A0]">
         {match.grnNos.length > 0 && <span>GRN: {match.grnNos.join(", ")}</span>}
         {match.qcNos.length > 0 && <span>QC: {match.qcNos.join(", ")}</span>}
-        {match.vendorInvoiceNo && <span>Vendor Invoice: {match.vendorInvoiceNo}</span>}
+        {match.vendorInvoiceNo && <span>Supplier Invoice: {match.vendorInvoiceNo}</span>}
         <Link href="/warehouse/grnqc" className="text-brand-600 hover:underline inline-flex items-center gap-0.5 ml-auto">
           Warehouse GRN & QC <ExternalLink className="w-3 h-3" />
         </Link>

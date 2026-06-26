@@ -1,69 +1,74 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
+  Copy,
   Edit2,
   Eye,
   Gift,
-  XCircle,
+  Send,
+  Settings,
+  ShieldCheck,
+  ShieldX,
+  Power,
   X,
-  Trash2,
 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { MiniKPICard } from "@/components/ui/KPICard";
-import { MasterFormGrid } from "@/components/masters/MasterModule";
+import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  DEFAULT_SCHEME_FORM,
-  formToScheme,
-  SCHEME_SEED,
-  SCHEME_STORAGE_KEY,
-  schemeToForm,
-  type SchemeForm,
-  type SchemeRecord,
-  validateSchemeForm,
-  type DiscountType,
-} from "./scheme-data";
+import { MasterListing } from "@/components/listing/MasterListing";
+import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
+import { applyFilters } from "@/components/listing/filter-utils";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   loadMasterRecords,
   saveMasterRecords,
   nextMasterCode,
   masterToday,
-  MASTER_CURRENT_USER,
-  type MasterStatus,
 } from "@/lib/masters/common";
-
-import { MasterListing } from "@/components/listing/MasterListing";
-import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { applyFilters } from "@/components/listing/filter-utils";
-import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
+import {
+  APPROVAL_STATUS_LABELS,
+  SCHEME_SEED,
+  SCHEME_STORAGE_KEY,
+  SCHEME_TYPES,
+  DEFAULT_SCHEME_SETTINGS,
+  copyRecord,
+  formatBenefit,
+  formatValidity,
+  loadSchemeSettings,
+  matchesListingTab,
+  saveSchemeSettings,
+  canApproveRecord,
+  canDeactivateRecord,
+  canEditRecord,
+  canRejectRecord,
+  canSubmitRecord,
+  approveRecord,
+  rejectRecord,
+  submitRecord,
+  deactivateRecord,
+  type SchemeRecord,
+  type SchemeSettings,
+} from "./scheme-data";
+import { SchemeSettingsDialog } from "./components/SchemeSettingsDialog";
+import { SchemeApprovalBadge, SchemeStatusBadge } from "./components/SchemeBadges";
 
 interface ToastState {
   msg: string;
   type: "success" | "error";
 }
+
+const LISTING_TABS = [
+  { value: "all", label: "All" },
+  { value: "draft", label: "Draft" },
+  { value: "pending", label: "Pending Approval" },
+  { value: "approved", label: "Approved" },
+  { value: "active", label: "Active" },
+  { value: "expired", label: "Expired" },
+  { value: "rejected", label: "Rejected" },
+] as const;
 
 function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
   return (
@@ -83,29 +88,31 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 }
 
 export default function SchemeMasterPage() {
+  const router = useRouter();
   const [records, setRecords] = useState<SchemeRecord[]>([]);
+  const [settings, setSettings] = useState<SchemeSettings>(DEFAULT_SCHEME_SETTINGS);
+  const [activeTab, setActiveTab] = useState<string>("all");
   const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "schemeCode", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "schemeName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
 
-  // Sheet & Dialog states
-  const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
+  const [sheetMode, setSheetMode] = useState<"view" | null>(null);
   const [active, setActive] = useState<SchemeRecord | null>(null);
-  const [form, setForm] = useState<SchemeForm>(DEFAULT_SCHEME_FORM);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [deleteTarget, setDeleteTarget] = useState<SchemeRecord | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [draftSettings, setDraftSettings] = useState<SchemeSettings>(DEFAULT_SCHEME_SETTINGS);
 
   useEffect(() => {
     const loaded = loadMasterRecords<SchemeRecord>(SCHEME_STORAGE_KEY, SCHEME_SEED);
-    const needsMigration = loaded.some((r) => !r.discountType);
+    const needsMigration = loaded.some((r) => !r.schemeType);
     if (needsMigration) {
       localStorage.removeItem(SCHEME_STORAGE_KEY);
       setRecords(loadMasterRecords<SchemeRecord>(SCHEME_STORAGE_KEY, SCHEME_SEED));
     } else {
       setRecords(loaded);
     }
+    setSettings(loadSchemeSettings());
   }, []);
 
   useEffect(() => {
@@ -114,79 +121,94 @@ export default function SchemeMasterPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const toggleStatus = (record: SchemeRecord) => {
-    const nextStatus: MasterStatus = record.status === "active" ? "inactive" : "active";
-    const updated = records.map((item) =>
-      item.id === record.id
-        ? { ...item, status: nextStatus, updatedBy: MASTER_CURRENT_USER, updatedAt: masterToday() }
-        : item,
-    );
-    setRecords(updated);
-    saveMasterRecords(SCHEME_STORAGE_KEY, updated);
-    setToast({
-      msg: `Scheme status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`,
-      type: "success",
-    });
+  const persistRecords = (list: SchemeRecord[]) => {
+    saveMasterRecords(SCHEME_STORAGE_KEY, list);
+    setRecords(list);
   };
 
+  const tabCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const tab of LISTING_TABS) {
+      counts[tab.value] = records.filter((r) => matchesListingTab(r, tab.value)).length;
+    }
+    return counts;
+  }, [records]);
+
   const columns: ColumnConfig<SchemeRecord>[] = [
-    {
-      key: "schemeCode",
-      header: "Scheme Code",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val, row) => (
-        <span className="font-mono text-xs text-brand-700">{row.schemeCode}</span>
-      ),
-    },
     {
       key: "schemeName",
       header: "Scheme Name",
       sortable: true,
       filterable: true,
       filterType: "text",
-      width: "220px",
-      render: (val, row) => (
-        <span className="text-xs font-semibold text-foreground">{row.schemeName}</span>
+      width: "180px",
+      render: (_v, row) => (
+        <span className="text-xs font-semibold text-foreground line-clamp-2">{row.schemeName}</span>
       ),
     },
     {
-      key: "discountType",
-      header: "Discount Type",
+      key: "schemeType",
+      header: "Scheme Type",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: [
-        { label: "Percentage", value: "Percentage" },
-        { label: "Flat", value: "Flat" },
-      ],
-      width: "120px",
+      filterOptions: SCHEME_TYPES.map((t) => ({ label: t, value: t })),
+      width: "140px",
+      render: (_v, row) => <span className="text-[11px]">{row.schemeType}</span>,
     },
     {
-      key: "discountValue",
-      header: "Discount Value",
-      width: "120px",
-      render: (val, row) => (
-        row.discountType === "Percentage" ? `${row.percentage}%` : `₹${row.flatDiscountAmount}`
+      key: "productName",
+      header: "Product",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "100px",
+      render: (_v, row) => (
+        <span className="text-[11px]">{row.productName ?? "—"}</span>
       ),
     },
     {
-      key: "startDate",
-      header: "Start Date",
+      key: "stateName",
+      header: "State",
       sortable: true,
       filterable: true,
       filterType: "text",
-      width: "110px",
+      width: "100px",
+      render: (_v, row) => <span className="text-[11px]">{row.stateName}</span>,
     },
     {
-      key: "endDate",
-      header: "End Date",
+      key: "customerType",
+      header: "Customer Type",
       sortable: true,
       filterable: true,
       filterType: "text",
-      width: "110px",
+      width: "100px",
+      render: (_v, row) => <span className="text-[11px]">{row.customerType}</span>,
+    },
+    {
+      key: "benefit",
+      header: "Benefit",
+      width: "100px",
+      render: (_v, row) => (
+        <span className="text-[11px] font-medium">{formatBenefit(row)}</span>
+      ),
+    },
+    {
+      key: "validity",
+      header: "Validity",
+      width: "150px",
+      render: (_v, row) => (
+        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+          {formatValidity(row)}
+        </span>
+      ),
+    },
+    {
+      key: "priority",
+      header: "Priority",
+      sortable: true,
+      width: "60px",
+      render: (_v, row) => <span className="text-[11px]">{row.priority}</span>,
     },
     {
       key: "status",
@@ -198,30 +220,28 @@ export default function SchemeMasterPage() {
         { label: "Active", value: "active" },
         { label: "Inactive", value: "inactive" },
       ],
-      width: "100px",
-      render: (val, row) => (
-        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
-      ),
+      width: "80px",
+      render: (_v, row) => <SchemeStatusBadge active={row.status === "active"} />,
     },
     {
-      key: "createdBy",
-      header: "Created",
+      key: "approvalStatus",
+      header: "Approval",
       sortable: true,
       filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdAt} variant="created" />,
-    },
-    {
-      key: "updatedBy",
-      header: "Updated",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedAt} variant="updated" />,
+      filterType: "dropdown",
+      filterOptions: Object.entries(APPROVAL_STATUS_LABELS).map(([value, label]) => ({
+        label,
+        value,
+      })),
+      width: "110px",
+      render: (_v, row) => <SchemeApprovalBadge record={row} />,
     },
   ];
+
+  const updateRecord = (id: number, updater: (r: SchemeRecord) => SchemeRecord) => {
+    const list = records.map((r) => (r.id === id ? updater(r) : r));
+    persistRecords(list);
+  };
 
   const actions: ActionItemConfig<SchemeRecord>[] = [
     {
@@ -231,38 +251,77 @@ export default function SchemeMasterPage() {
       onClick: (row) => openView(row),
     },
     {
-      label: "Edit",
+      label: "Edit Draft",
       action: "edit",
       icon: Edit2,
       onClick: (row) => openEdit(row),
+      hide: (row) => !canEditRecord(row),
     },
     {
-      label: "Delete",
-      action: "delete",
-      icon: Trash2,
+      label: "Copy",
+      action: "copy",
+      icon: Copy,
+      onClick: (row) => handleCopy(row),
+    },
+    {
+      label: "Submit for Approval",
+      action: "submit",
+      icon: Send,
+      onClick: (row) => {
+        updateRecord(row.id, submitRecord);
+        setToast({ msg: "Scheme submitted for approval", type: "success" });
+      },
+      hide: (row) => !canSubmitRecord(row),
+    },
+    {
+      label: "Approve",
+      action: "approve",
+      icon: ShieldCheck,
+      onClick: (row) => {
+        updateRecord(row.id, approveRecord);
+        setToast({ msg: "Scheme approved to next stage", type: "success" });
+      },
+      hide: (row) => !canApproveRecord(row),
+    },
+    {
+      label: "Reject",
+      action: "reject",
+      icon: ShieldX,
       variant: "destructive",
-      onClick: (row) => setDeleteTarget(row),
+      onClick: (row) => {
+        updateRecord(row.id, rejectRecord);
+        setToast({ msg: "Scheme rejected", type: "success" });
+      },
+      hide: (row) => !canRejectRecord(row),
+    },
+    {
+      label: "Deactivate",
+      action: "deactivate",
+      icon: Power,
+      onClick: (row) => {
+        updateRecord(row.id, deactivateRecord);
+        setToast({ msg: "Scheme deactivated", type: "success" });
+      },
+      hide: (row) => !canDeactivateRecord(row),
     },
   ];
 
   const filtered = useMemo(() => {
-    let result = [...records];
+    let result = records.filter((r) => matchesListingTab(r, activeTab));
 
-    // Search filter
     if (filters.search) {
       const q = String(filters.search).trim().toLowerCase();
       result = result.filter(
         (r) =>
-          r.schemeCode.toLowerCase().includes(q) ||
           r.schemeName.toLowerCase().includes(q) ||
-          (r.description || "").toLowerCase().includes(q)
+          (r.productName ?? "").toLowerCase().includes(q) ||
+          r.stateName.toLowerCase().includes(q) ||
+          r.schemeType.toLowerCase().includes(q),
       );
     }
 
-    // Apply column filters
     result = applyFilters(result, filters);
 
-    // Sorting
     if (sort.key && sort.direction !== "none") {
       result.sort((a, b) => {
         const aVal = String(a[sort.key as keyof SchemeRecord] ?? "").toLowerCase();
@@ -273,34 +332,25 @@ export default function SchemeMasterPage() {
     }
 
     return result;
-  }, [records, filters, sort]);
+  }, [records, activeTab, filters, sort]);
 
   const paginated = useMemo(() => {
-    const startOffset = (page - 1) * pageSize;
-    return filtered.slice(startOffset, startOffset + pageSize);
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
   }, [filtered, page, pageSize]);
 
   useEffect(() => {
     setPage(1);
-  }, [filters, sort, pageSize]);
+  }, [filters, sort, pageSize, activeTab]);
 
-  const openAdd = () => {
-    const codes = records.map((r) => r.schemeCode);
-    const code = nextMasterCode("SCH-", codes);
-    setForm({
-      ...DEFAULT_SCHEME_FORM,
-      schemeCode: code,
-    });
-    setErrors({});
-    setActive(null);
-    setSheetMode("add");
-  };
+  const openAdd = () => router.push("/masters/scheme/add");
 
   const openEdit = (row: SchemeRecord) => {
-    setForm(schemeToForm(row));
-    setErrors({});
-    setActive(row);
-    setSheetMode("edit");
+    if (!canEditRecord(row)) {
+      setToast({ msg: "Only draft schemes can be edited", type: "error" });
+      return;
+    }
+    router.push(`/masters/scheme/${row.id}/edit`);
   };
 
   const openView = (row: SchemeRecord) => {
@@ -311,317 +361,172 @@ export default function SchemeMasterPage() {
   const closeSheet = () => {
     setSheetMode(null);
     setActive(null);
-    setErrors({});
   };
 
-  const persist = () => {
-    const mode = sheetMode === "add" ? "add" : "edit";
-    const err = validateSchemeForm(form);
-    if (err) {
-      setErrors({ _form: err });
-      return;
-    }
+  const handleCopy = (row: SchemeRecord) => {
     const list = loadMasterRecords<SchemeRecord>(SCHEME_STORAGE_KEY, SCHEME_SEED);
-    let updatedList: SchemeRecord[];
-    if (mode === "add") {
-      const id = list.length ? Math.max(...list.map((r) => r.id)) + 1 : 1;
-      updatedList = [...list, formToScheme(form, id)];
-      setToast({ msg: "Scheme added successfully", type: "success" });
-    } else if (active) {
-      updatedList = list.map((r) => (r.id === active.id ? formToScheme(form, active.id, active) : r));
-      setToast({ msg: "Scheme updated successfully", type: "success" });
-    } else {
-      return;
-    }
-    saveMasterRecords(SCHEME_STORAGE_KEY, updatedList);
-    setRecords(updatedList);
-    closeSheet();
-  };
-
-  const confirmDelete = () => {
-    if (!deleteTarget) return;
-    const list = loadMasterRecords<SchemeRecord>(SCHEME_STORAGE_KEY, SCHEME_SEED).filter(
-      (r) => r.id !== deleteTarget.id,
+    const newId = list.length ? Math.max(...list.map((r) => r.id)) + 1 : 1;
+    const newCode = nextMasterCode(
+      "SCH-",
+      list.map((r) => r.schemeCode),
     );
-    saveMasterRecords(SCHEME_STORAGE_KEY, list);
-    setRecords(list);
-    setDeleteTarget(null);
-    setToast({ msg: "Scheme deleted successfully", type: "success" });
+    const copy = copyRecord(row, newId, newCode);
+    persistRecords([...list, copy]);
+    setToast({ msg: "Scheme copied as draft", type: "success" });
   };
 
   const handleExport = () => {
     try {
-      const headers = ["ID", "Scheme Code", "Scheme Name", "Discount Type", "Discount Value", "Start Date", "End Date", "Description", "Status", "Created By", "Updated By", "Created At", "Updated At"];
-      const csvRows = [headers.join(",")];
-      for (const r of records) {
-        const discValue = r.discountType === "Percentage" ? `${r.percentage}%` : `₹${r.flatDiscountAmount}`;
-        const row = [
-          r.id,
-          `"${r.schemeCode.replace(/"/g, '""')}"`,
+      const headers = [
+        "Scheme Name",
+        "Scheme Type",
+        "Product",
+        "State",
+        "Customer Type",
+        "Benefit",
+        "Validity",
+        "Priority",
+        "Status",
+        "Approval Status",
+      ];
+      const rows = filtered.map((r) =>
+        [
           `"${r.schemeName.replace(/"/g, '""')}"`,
-          r.discountType,
-          `"${discValue}"`,
-          `"${r.startDate || ""}"`,
-          `"${r.endDate || ""}"`,
-          `"${(r.description || "").replace(/"/g, '""')}"`,
+          r.schemeType,
+          r.productName ?? "",
+          r.stateName,
+          r.customerType,
+          `"${formatBenefit(r)}"`,
+          `"${formatValidity(r)}"`,
+          r.priority,
           r.status,
-          r.createdBy,
-          r.updatedBy,
-          r.createdAt,
-          r.updatedAt,
-        ];
-        csvRows.push(row.join(","));
-      }
-      const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+          APPROVAL_STATUS_LABELS[r.approvalStatus],
+        ].join(","),
+      );
+      const blob = new Blob([[headers.join(","), ...rows].join("\n")], {
+        type: "text/csv;charset=utf-8;",
+      });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.setAttribute("href", url);
-      link.setAttribute("download", `schemes_export_${masterToday()}.csv`);
-      link.style.visibility = "hidden";
-      document.body.appendChild(link);
+      link.href = url;
+      link.download = `schemes_export_${masterToday()}.csv`;
       link.click();
-      document.body.removeChild(link);
-      setToast({ msg: "Schemes exported successfully", type: "success" });
+      URL.revokeObjectURL(url);
+      setToast({ msg: "Schemes exported", type: "success" });
     } catch {
-      setToast({ msg: "Failed to export schemes", type: "error" });
+      setToast({ msg: "Export failed", type: "error" });
     }
   };
 
-  const sheetTitle =
-    sheetMode === "add"
-      ? "Add Scheme"
-      : sheetMode === "edit"
-      ? "Edit Scheme"
-      : "View Scheme";
+  const openSettings = () => {
+    setDraftSettings(settings);
+    setSettingsOpen(true);
+  };
 
-  const nextAutoCode = nextMasterCode("SCH-", records.map((r) => r.schemeCode));
+  const saveSettings = () => {
+    saveSchemeSettings(draftSettings);
+    setSettings(draftSettings);
+    setSettingsOpen(false);
+    setToast({ msg: "Scheme settings saved", type: "success" });
+  };
+
+  const viewDrawer = active
+    ? buildSimpleMasterViewDrawer<SchemeRecord>({
+        drawerTitle: "Scheme",
+        getRecordCode: (r) => r.schemeName,
+        basicInfo: (r) => [
+          { label: "Scheme Name", value: r.schemeName },
+          { label: "Scheme Type", value: r.schemeType },
+          { label: "Product", value: r.productName ?? "—" },
+          { label: "State", value: r.stateName },
+          { label: "Customer Type", value: r.customerType },
+          { label: "Benefit", value: formatBenefit(r) },
+          { label: "Validity", value: formatValidity(r) },
+          { label: "Priority", value: String(r.priority) },
+          { label: "Status", value: r.status === "active" ? "Active" : "Inactive" },
+          {
+            label: "Approval",
+            value: APPROVAL_STATUS_LABELS[r.approvalStatus],
+          },
+          ...(r.expiryWithinDays
+            ? [{ label: "Expiry Within Days", value: String(r.expiryWithinDays) }]
+            : []),
+          ...(r.minimumOrderValue
+            ? [{ label: "Min Order Value", value: `₹${r.minimumOrderValue}` }]
+            : []),
+          ...(r.festivalName ? [{ label: "Festival", value: r.festivalName }] : []),
+          ...(r.paymentMode ? [{ label: "Payment Mode", value: r.paymentMode }] : []),
+          ...(r.isPaymentLevel
+            ? [{ label: "Benefit Level", value: "Payment-level (not product discount)" }]
+            : []),
+        ],
+        showDescription: false,
+      })(active)
+    : { title: "Scheme", basicInfo: [] };
 
   return (
-    <AppLayout>
-      <div className="space-y-5">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Scheme Master</h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">Promotional and pricing schemes</p>
-        </div>
-
-        {/* <div className="grid grid-cols-3 gap-3">
-          <MiniKPICard label="Total Schemes" value={records.length} icon={Gift} accent={true} />
-          <MiniKPICard
-            label="Active"
-            value={records.filter((r) => r.status === "active").length}
-            icon={CheckCircle2}
-            accent={false}
-          />
-          <MiniKPICard
-            label="Inactive"
-            value={records.filter((r) => r.status === "inactive").length}
-            icon={XCircle}
-            accent={false}
-          />
-        </div> */}
-
-        <MasterListing<SchemeRecord>
-          columns={columns}
-          data={paginated}
-          totalRecords={filtered.length}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-          onSortChange={setSort}
-          onFilterChange={setFilters}
-          actions={actions}
-          onAdd={openAdd}
-          addLabel="Add Scheme"
-          onExport={handleExport}
-          emptyMessage="schemes"
-          searchPlaceholder="Search scheme code, name, description..."
-          currentFilters={filters}
-          currentSort={sort}
-        />
-      </div>
+    <ListingContainer
+      title="Scheme Management"
+      titleIcon={Gift}
+      tabs={LISTING_TABS.map((t) => ({
+        value: t.value,
+        label: `${t.label} (${tabCounts[t.value] ?? 0})`,
+      }))}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      actions={
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs gap-1.5"
+          onClick={openSettings}
+        >
+          <Settings className="h-3.5 w-3.5" />
+          Conflict Settings
+        </Button>
+      }
+    >
+      <MasterListing<SchemeRecord>
+        columns={columns}
+        data={paginated}
+        totalRecords={filtered.length}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+        onSortChange={setSort}
+        onFilterChange={setFilters}
+        actions={actions}
+        onAdd={openAdd}
+        addLabel="Create Scheme"
+        onExport={handleExport}
+        emptyMessage="schemes"
+        searchPlaceholder="Search name, product, state..."
+        currentFilters={filters}
+        currentSort={sort}
+      />
 
       <MasterListingSheets
         sheetMode={sheetMode}
         active={active}
         onClose={closeSheet}
         onEdit={() => active && openEdit(active)}
-        onSave={persist}
-        sheetTitle={sheetTitle}
+        onSave={closeSheet}
+        sheetTitle="View Scheme"
         icon={Gift}
-        viewDrawer={
-          active
-            ? buildSimpleMasterViewDrawer<SchemeRecord>({
-                drawerTitle: "Scheme",
-                getRecordCode: (r) => r.schemeCode,
-                basicInfo: (r) => [
-                  { label: "Scheme Name", value: r.schemeName },
-                  { label: "Scheme Code", value: r.schemeCode, mono: true },
-                  { label: "Discount Type", value: r.discountType },
-                  {
-                    label: r.discountType === "Percentage" ? "Percentage" : "Flat Discount Amount",
-                    value: r.discountType === "Percentage" ? `${r.percentage}%` : `₹${r.flatDiscountAmount}`,
-                  },
-                  { label: "Start Date", value: r.startDate || "—" },
-                  { label: "End Date", value: r.endDate || "—" },
-                ],
-                description: (r) => r.description,
-                showDescription: true,
-              })(active)
-            : { title: "Scheme", basicInfo: [] }
-        }
-        formContent={
-          <div className="space-y-4">
-            {errors._form && <p className="text-xs font-semibold text-red-600">{errors._form}</p>}
-            <MasterFormGrid>
-              <div className="col-span-2 space-y-1">
-                <Label className="text-xs font-medium">
-                  Scheme Name <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  value={form.schemeName}
-                  onChange={(e) => {
-                    setForm((prev) => ({ ...prev, schemeName: e.target.value }));
-                    setErrors((prev) => ({ ...prev, schemeName: "", _form: "" }));
-                  }}
-                  placeholder="e.g., Monsoon Discount"
-                  className="h-8 text-xs"
-                />
-              </div>
-              <div className="col-span-2 space-y-1">
-                <Label className="text-xs font-medium">
-                  Scheme Code <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  value={sheetMode === "add" ? nextAutoCode : form.schemeCode}
-                  disabled
-                  readOnly
-                  onChange={(e) => {
-                    setForm((prev) => ({ ...prev, schemeCode: e.target.value }));
-                    setErrors((prev) => ({ ...prev, schemeCode: "", _form: "" }));
-                  }}
-                  placeholder="e.g., SCH-001"
-                  className="h-8 font-mono text-xs cursor-not-allowed disabled:opacity-100 bg-muted/30"
-                />
-              </div>
-              <div className="col-span-2 space-y-1">
-                <Label className="text-xs font-medium">
-                  Discount Type <span className="text-red-500">*</span>
-                </Label>
-                <Select
-                  value={form.discountType}
-                  onValueChange={(v: DiscountType) => {
-                    setForm((prev) => ({
-                      ...prev,
-                      discountType: v,
-                      percentage: v === "Percentage" ? prev.percentage : "",
-                      flatDiscountAmount: v === "Flat" ? prev.flatDiscountAmount : "",
-                    }));
-                    setErrors((prev) => ({ ...prev, _form: "" }));
-                  }}
-                >
-                  <SelectTrigger className="h-8 text-xs bg-white">
-                    <SelectValue placeholder="Select discount type" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border shadow-lg border-border">
-                    <SelectItem value="Percentage" className="text-xs">Percentage</SelectItem>
-                    <SelectItem value="Flat" className="text-xs">Flat</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {form.discountType === "Percentage" ? (
-                <div className="col-span-2 space-y-1">
-                  <Label className="text-xs font-medium">
-                    Percentage (%) <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    type="number"
-                    step="any"
-                    value={form.percentage}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, percentage: e.target.value }));
-                      setErrors((prev) => ({ ...prev, percentage: "", _form: "" }));
-                    }}
-                    placeholder="e.g., 10"
-                    className="h-8 text-xs"
-                  />
-                </div>
-              ) : (
-                <div className="col-span-2 space-y-1">
-                  <Label className="text-xs font-medium">
-                    Flat Discount Amount (₹) <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    type="number"
-                    step="any"
-                    value={form.flatDiscountAmount}
-                    onChange={(e) => {
-                      setForm((prev) => ({ ...prev, flatDiscountAmount: e.target.value }));
-                      setErrors((prev) => ({ ...prev, flatDiscountAmount: "", _form: "" }));
-                    }}
-                    placeholder="e.g., 500"
-                    className="h-8 text-xs"
-                  />
-                </div>
-              )}
-              <div className="col-span-2 space-y-1 sm:col-span-1">
-                <Label className="text-xs font-medium">Start Date</Label>
-                <Input
-                  type="date"
-                  value={form.startDate}
-                  onChange={(e) => {
-                    setForm((prev) => ({ ...prev, startDate: e.target.value }));
-                    setErrors((prev) => ({ ...prev, _form: "" }));
-                  }}
-                  className="h-8 text-xs"
-                />
-              </div>
-              <div className="col-span-2 space-y-1 sm:col-span-1">
-                <Label className="text-xs font-medium">End Date</Label>
-                <Input
-                  type="date"
-                  value={form.endDate}
-                  onChange={(e) => {
-                    setForm((prev) => ({ ...prev, endDate: e.target.value }));
-                    setErrors((prev) => ({ ...prev, _form: "" }));
-                  }}
-                  className="h-8 text-xs"
-                />
-              </div>
-              <div className="col-span-2 space-y-1">
-                <Label className="text-xs font-medium">Description</Label>
-                <Textarea
-                  value={form.description}
-                  onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-                  placeholder="e.g., monsoon scheme rules"
-                  className="text-xs min-h-[72px] resize-none"
-                />
-              </div>
-            </MasterFormGrid>
-          </div>
-        }
+        viewDrawer={viewDrawer}
+        formContent={null}
       />
 
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-sm">Delete record?</DialogTitle>
-            <DialogDescription className="text-xs">
-              This action cannot be undone. The record will be permanently removed.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button size="sm" className="h-8 text-xs text-white bg-red-600 hover:bg-red-700" onClick={confirmDelete}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SchemeSettingsDialog
+        open={settingsOpen}
+        settings={draftSettings}
+        onChange={setDraftSettings}
+        onClose={() => setSettingsOpen(false)}
+        onSave={saveSettings}
+      />
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-    </AppLayout>
+    </ListingContainer>
   );
 }

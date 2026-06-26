@@ -15,7 +15,7 @@ export const BANK_BOOK_VOUCHER_TYPES = [
   "Contra Voucher",
   "Journal Voucher",
   "Sales Collection",
-  "Vendor Payment",
+  "Supplier Payment",
   "Fund Transfer",
   "Bank Charges",
   "Interest Credit",
@@ -74,7 +74,7 @@ export function resolveBankBookVoucherTypeLabel(v: AccountingVoucher): BankBookV
   }
   if (v.voucherType === "payment") {
     if (narration.includes("vendor") || narration.includes("supplier") || narration.includes("payable")) {
-      return "Vendor Payment";
+      return "Supplier Payment";
     }
     return "Payment Voucher";
   }

@@ -25,12 +25,12 @@ export function ErpFormSection({
 				className,
 			)}
 		>
-			<div className="flex items-center justify-between gap-3 border-b border-border/70 bg-muted/25 px-2.5 py-1">
+			<div className="flex items-center flex-wrap gap-2 border-b border-border/70 bg-muted/25 px-2.5 py-1">
 				<p className="text-[10px] font-bold uppercase tracking-wide text-foreground shrink-0">
 					{title}
 				</p>
 				{headerRight ? (
-					<div className="flex items-center justify-end min-w-0">{headerRight}</div>
+					<div className="flex items-center min-w-0">{headerRight}</div>
 				) : null}
 			</div>
 			<div className={cn("p-2", bodyClassName)}>{children}</div>

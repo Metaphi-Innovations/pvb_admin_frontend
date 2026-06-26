@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   importValidUploadRows,
   mapRawUploadRow,
+  parsePincodeJsonFile,
   PINCODE_UPLOAD_REQUIRED_COLUMNS,
   setUploadErrorCount,
   type PincodeUploadValidation,
@@ -55,6 +56,18 @@ export function PincodeUploadDialog({
 
   const parseFile = async (selected: File): Promise<Record<string, unknown>[]> => {
     const name = selected.name.toLowerCase();
+    if (name.endsWith(".json")) {
+      const text = await selected.text();
+      const json = JSON.parse(text) as unknown;
+      const rows = parsePincodeJsonFile(json);
+      return rows.map((r) => ({
+        pincode: r.pincode,
+        statename: r.stateName,
+        district: r.district,
+        cityname: r.city,
+        officename: r.town,
+      }));
+    }
     if (name.endsWith(".csv")) {
       const text = await selected.text();
       const wb = XLSX.read(text, { type: "string" });
@@ -67,7 +80,7 @@ export function PincodeUploadDialog({
       const sheet = wb.Sheets[wb.SheetNames[0]];
       return XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
     }
-    throw new Error("Unsupported file format. Please upload .xlsx or .csv.");
+    throw new Error("Unsupported file format. Please upload .xlsx, .csv, or .json.");
   };
 
   const handleValidate = async () => {
@@ -108,7 +121,8 @@ export function PincodeUploadDialog({
         <DialogHeader>
           <DialogTitle className="text-base">Upload India Post Master</DialogTitle>
           <DialogDescription>
-            Upload India Post location master file (.xlsx or .csv). Town is mapped from officename.
+            Upload India Post location master (.xlsx, .csv, or ERP JSON). Town is mapped from officename with
+            B.O / S.O / GPO / H.O suffixes removed.
           </DialogDescription>
         </DialogHeader>
 
@@ -120,15 +134,16 @@ export function PincodeUploadDialog({
                 {PINCODE_UPLOAD_REQUIRED_COLUMNS.join(", ")}
               </p>
               <p className="text-[11px] text-muted-foreground pt-1">
-                Optional: cityname (defaults to district if omitted). India Post technical columns are ignored.
+                JSON format: array or {"{ records: [...] }"} with pincode, state, district, city, town, status.
+                CSV optional: cityname (defaults to district). India Post technical columns are ignored.
               </p>
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs">Select File (.xlsx or .csv)</Label>
+              <Label className="text-xs">Select File (.xlsx, .csv, or .json)</Label>
               <Input
                 type="file"
-                accept=".xlsx,.xls,.csv"
+                accept=".xlsx,.xls,.csv,.json"
                 className="h-9 text-sm"
                 onChange={(e) => {
                   setFile(e.target.files?.[0] ?? null);

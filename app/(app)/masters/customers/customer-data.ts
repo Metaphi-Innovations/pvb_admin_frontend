@@ -182,7 +182,35 @@ export const PAYMENT_TERMS_OPTIONS = [
 	{ value: "net-45", label: "Net 45 Days" },
 	{ value: "net-60", label: "Net 60 Days" },
 	{ value: "net-90", label: "Net 90 Days" },
+	{ value: "net-120", label: "Net 120 Days" },
+	{ value: "net-150", label: "Net 150 Days" },
+	{ value: "net-180", label: "Net 180 Days" },
 ];
+
+/** Select sentinel — stored value uses `net-{days}` instead. */
+export const CUSTOM_PAYMENT_TERMS_KEY = "__custom__";
+
+export function isPresetPaymentTerms(value: string): boolean {
+	return PAYMENT_TERMS_OPTIONS.some((p) => p.value === value);
+}
+
+export function parsePaymentTermDays(value: string): number | null {
+	const match = value.match(/^net-(\d+)$/);
+	return match ? parseInt(match[1], 10) : null;
+}
+
+export function buildNetPaymentTerms(days: number): string {
+	return `net-${days}`;
+}
+
+export function formatPaymentTerms(value: string): string {
+	if (!value) return "—";
+	const preset = PAYMENT_TERMS_OPTIONS.find((p) => p.value === value);
+	if (preset) return preset.label;
+	const days = parsePaymentTermDays(value);
+	if (days != null) return `Net ${days} Days`;
+	return value;
+}
 
 const STORAGE_KEY = "ds_customers_v4";
 
