@@ -30,22 +30,22 @@ export function POWorkflowPanel({
 
   return (
     <div className="space-y-3">
-      {/* Vendor Invoice */}
+      {/* Supplier Invoice */}
       <section className="rounded-lg border border-border/80 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-brand-600" />
-            <h3 className="text-xs font-semibold">Vendor Invoice</h3>
+            <h3 className="text-xs font-semibold">Supplier Invoice</h3>
           </div>
           <StatusPill status={wf.invoiceStatus} config={INVOICE_STATUS_CFG} />
         </div>
         {canUploadInvoice && (
           <Button variant="outline" size="sm" className="h-8 text-xs w-full mb-3" onClick={onUploadInvoice}>
-            <Upload className="w-3.5 h-3.5 mr-1" /> Upload Vendor Invoice
+            <Upload className="w-3.5 h-3.5 mr-1" /> Upload Supplier Invoice
           </Button>
         )}
         {vendorInvoices.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground">No vendor invoice uploaded. Upload against this PO to create Accounts → Purchase entry.</p>
+          <p className="text-[11px] text-muted-foreground">No supplier invoice uploaded. Upload against this PO to create Accounts → Purchase entry.</p>
         ) : (
           <div className="space-y-2">
             {vendorInvoices.map((inv) => (

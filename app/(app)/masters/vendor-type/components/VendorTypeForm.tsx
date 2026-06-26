@@ -111,20 +111,20 @@ export function VendorTypeForm({
 					<Tags className='w-3.5 h-3.5 text-brand-600' />
 				</div>
 				<div>
-					<p className='text-xs font-semibold text-foreground'>Vendor Type Master</p>
+					<p className='text-xs font-semibold text-foreground'>Supplier Type Master</p>
 					<p className='text-[11px] text-muted-foreground'>
-						Vendor type classification and code prefix configuration
+						Supplier type classification and code prefix configuration
 					</p>
 				</div>
 			</div>
 
 			<div className='pt-1 space-y-5'>
 				<div>
-					<SectionHead label='Vendor Type Details' required />
+					<SectionHead label='Supplier Type Details' required />
 					<div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
 						<div className='space-y-1'>
 							<Label className='text-xs font-medium'>
-								Vendor Type Name <span className='text-red-500'>*</span>
+								Supplier Type Name <span className='text-red-500'>*</span>
 							</Label>
 							<Input
 								value={form.vendorTypeName}

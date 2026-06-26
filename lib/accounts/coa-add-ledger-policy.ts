@@ -58,10 +58,10 @@ export function resolveCoaAddLedgerPolicy(
   if (names.includes("Trade Payables / Sundry Creditors")) {
     return {
       blocked: true,
-      reason: "Vendor ledgers are created from Vendor Master.",
+      reason: "Supplier ledgers are created from Supplier Master.",
       alternatives: [
-        { label: "Add Vendor", href: "/masters/vendors/new", variant: "primary" },
-        { label: "View Vendors", href: "/masters/vendors" },
+        { label: "Add Supplier", href: "/masters/vendors/new", variant: "primary" },
+        { label: "View Suppliers", href: "/masters/vendors" },
       ],
     };
   }

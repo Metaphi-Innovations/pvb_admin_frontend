@@ -174,9 +174,9 @@ export const SALES_SIDEBAR_ITEMS: AccountsNavLink[] = [
 
 /** Trimmed purchases sidebar */
 export const PURCHASES_SIDEBAR_ITEMS: AccountsNavLink[] = [
-  { label: "Pending Vendor Bills", href: "/accounts/purchases/pending-vendor-bills", icon: ClipboardList },
+  { label: "Pending Supplier Bills", href: "/accounts/purchases/pending-vendor-bills", icon: ClipboardList },
   { label: "Purchase Invoices", href: "/accounts/purchase-invoices", icon: Truck },
-  { label: "Vendor Outstanding", href: "/accounts/payables/outstanding", icon: Truck },
+  { label: "Supplier Outstanding", href: "/accounts/payables/outstanding", icon: Truck },
   { label: "Debit Notes", href: "/accounts/transactions/debit-notes", icon: FileText },
 ];
 
@@ -236,13 +236,13 @@ export function isChartOfAccountsRoute(pathname: string): boolean {
 
 export const PURCHASES_NAV_ITEMS: AccountsNavLink[] = [
 
-  { label: "Pending Vendor Bills", href: "/accounts/purchases/pending-vendor-bills", icon: ClipboardList },
+  { label: "Pending Supplier Bills", href: "/accounts/purchases/pending-vendor-bills", icon: ClipboardList },
 
   { label: "Purchase Invoices", href: "/accounts/purchase-invoices", icon: Truck },
 
   { label: "Purchase Register", href: "/accounts/reports/purchase-register", icon: Receipt },
 
-  { label: "Vendor Outstanding", href: "/accounts/payables/outstanding", icon: Truck },
+  { label: "Supplier Outstanding", href: "/accounts/payables/outstanding", icon: Truck },
 
 ];
 
@@ -347,8 +347,8 @@ export const ACCOUNTS_RECEIVABLES_NAV: AccountsNavLink[] = [
 
 /** Demo accounting menu — Payables */
 export const ACCOUNTS_PAYABLES_NAV: AccountsNavLink[] = [
-  { label: "Vendor Outstanding", href: "/accounts/payables/outstanding", icon: Truck },
-  { label: "Vendor Ageing", href: "/accounts/payables/ageing", icon: CalendarRange },
+  { label: "Supplier Outstanding", href: "/accounts/payables/outstanding", icon: Truck },
+  { label: "Supplier Ageing", href: "/accounts/payables/ageing", icon: CalendarRange },
 ];
 
 /** Demo accounting menu — Banking */
@@ -374,7 +374,7 @@ export const ACCOUNTS_REPORTS_NAV: AccountsNavLink[] = [
   { label: "Stock Valuation", href: "/accounts/reports/stock-valuation", icon: BarChart3 },
   { label: "Inventory Register", href: "/accounts/reports/inventory-register", icon: Package },
   { label: "Customer Outstanding", href: "/accounts/receivables/outstanding", icon: Users },
-  { label: "Vendor Outstanding", href: "/accounts/payables/outstanding", icon: Truck },
+  { label: "Supplier Outstanding", href: "/accounts/payables/outstanding", icon: Truck },
 ];
 
 export const ACCOUNTS_NAV_GROUPS: AccountsNavGroup[] = [
@@ -591,7 +591,7 @@ const GROUP_DESCRIPTIONS: Record<AccountsNavGroupId, string> = {
   masters: "Chart of accounts and ledgers — accounting structure and balances.",
   transactions: "Sales, purchase, credit/debit notes, vouchers, and journal entries.",
   receivables: "Customer outstanding, ageing, collections and receipt allocation.",
-  payables: "Vendor outstanding and ageing reports.",
+  payables: "Supplier outstanding and ageing reports.",
   banking: "Bank accounts, books, fund transfers and reconciliation.",
   reports: "Trial balance, P&L, balance sheet and financial reports.",
 };
@@ -616,15 +616,15 @@ const NAV_ITEM_SHORT_DESCRIPTIONS: Record<string, string> = {
 
   "Customer Outstanding": "Open customer balances",
 
-  "Pending Vendor Bills": "GRN-completed bills to enter",
+  "Pending Supplier Bills": "GRN-completed bills to enter",
 
-  "Purchase Invoices": "Vendor bills and GST input",
+  "Purchase Invoices": "Supplier bills and GST input",
 
   "Purchase Register": "All purchase voucher summary",
 
-  "Vendor Outstanding": "Open vendor balances",
+  "Supplier Outstanding": "Open supplier balances",
 
-  "All Ledgers": "Filter by customer, vendor, bank and more",
+  "All Ledgers": "Filter by customer, supplier, bank and more",
 
   "Inventory Ledger": "Stock ledger under COA",
 
@@ -677,8 +677,8 @@ const MEGA_MENU_COLUMN_ORDER: Partial<Record<AccountsNavGroupId, { left: string[
     right: ["Collection Tracking", "Receipt Allocation"],
   },
   payables: {
-    left: ["Vendor Outstanding"],
-    right: ["Vendor Ageing"],
+    left: ["Supplier Outstanding"],
+    right: ["Supplier Ageing"],
   },
   banking: {
     left: ["Bank Accounts", "Bank Book", "Cash Book"],

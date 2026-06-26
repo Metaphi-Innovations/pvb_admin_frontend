@@ -20,16 +20,18 @@ import {
 import {
   Plus, Download, MoreVertical, Eye, Edit2, Trash2,
   Users, CheckCircle2, XCircle, X, AlertTriangle, Key,
-  Calendar, Clock, MoreHorizontal, ChevronDown, FileText,
+  MoreHorizontal,
 } from "lucide-react";
 import {
   type Employee,
   loadEmployees, saveEmployees, todayStr,
-  downloadEmployeeCSV, validateCircularReporting,
-  EMPLOYEE_TYPES,
+  downloadEmployeeCSV,
   applyEmployeeStatusChange,
+  formatEmployeeRoleLabel,
+  formatEmployeeMobile,
 } from "./employee-data";
 import { EmployeeListingStatusCell } from "./components/EmployeeListingStatusCell";
+import { ListingUserCell } from "@/components/listing/ListingUserCell";
 
 // Listing Container and Master Listing Imports
 import { ListingContainer } from "@/components/layout/ListingContainer";
@@ -54,12 +56,6 @@ const ROLES = [
   { id: 7, name: "Procurement Lead" },
   { id: 8, name: "Field Agent" },
   { id: 9, name: "TM" },
-];
-
-const TERRITORIES = [
-  "Mumbai Region", "Dadar-Parel Territory", "Matunga Territory",
-  "Borivali-Kandivali Territory", "Bangalore Region", "Indiranagar Territory",
-  "Whitefield Territory", "Chennai Region", "T. Nagar Territory",
 ];
 
 // ── Status Configuration ──────────────────────────────────────────────────────
@@ -255,13 +251,13 @@ function PasswordResetModal({
   );
 }
 
-type StatusTab = "all" | "active" | "inactive" | "draft";
+type StatusTab = "all" | "active" | "inactive";
 const USER_TAB_KEY = "user-list-status-tab";
 
 function readStoredStatusTab(): StatusTab {
   if (typeof window === "undefined") return "all";
   const v = sessionStorage.getItem(USER_TAB_KEY);
-  return v === "active" || v === "inactive" || v === "draft" ? v : "all";
+  return v === "active" || v === "inactive" ? v : "all";
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
@@ -383,7 +379,6 @@ export default function EmployeeListingPage() {
       total: all.length,
       active: all.filter(e => e.status === "active").length,
       inactive: all.filter(e => e.status === "inactive").length,
-      draft: all.filter(e => e.status === "draft").length,
     };
   }, [employees]);
 
@@ -486,71 +481,47 @@ export default function EmployeeListingPage() {
   const columns: ColumnConfig<Employee>[] = [
     {
       key: "employeeId",
-      header: "User ID",
+      header: "Employee ID",
       sortable: true,
-      render: (val, row) => (
-        <span className="font-mono font-semibold text-brand-700">{row.employeeId}</span>
+      render: (_val, row) => (
+        <span className="font-mono text-xs font-semibold text-brand-700">{row.employeeId}</span>
       ),
     },
     {
       key: "fullName",
-      header: "Name",
+      header: "Employee Name",
       sortable: true,
-      render: (val, row) => (
-        <div>
-          <p className="font-semibold truncate text-foreground">{row.fullName}</p>
-          <p className="text-[11px] text-muted-foreground truncate">{row.email}</p>
-        </div>
+      render: (_val, row) => (
+        <p className="text-xs font-semibold truncate text-foreground">{row.fullName}</p>
+      ),
+    },
+    {
+      key: "email",
+      header: "Email ID",
+      sortable: true,
+      render: (_val, row) => (
+        <span className="text-xs text-foreground truncate">{row.email}</span>
       ),
     },
     {
       key: "mobile",
-      header: "Mobile",
-      render: (val, row) => (
-        <span className="text-xs text-foreground">{row.mobile}</span>
-      ),
-    },
-    {
-      key: "departmentId",
-      header: "Department",
+      header: "Mobile Number",
       sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: DEPARTMENTS.map(d => ({ label: d.name, value: String(d.id) })),
-      render: (val, row) => (
-        <span className="text-xs text-foreground">{row.department}</span>
+      render: (_val, row) => (
+        <span className="text-xs font-mono text-foreground">
+          {formatEmployeeMobile(row.mobile, row.countryCode)}
+        </span>
       ),
     },
     {
-      key: "roleId",
+      key: "role",
       header: "Role",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: ROLES.map(r => ({ label: r.name, value: String(r.id) })),
-      render: (val, row) => (
-        <span className="text-xs text-foreground">{row.role}</span>
-      ),
-    },
-    {
-      key: "territory",
-      header: "Territory",
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: TERRITORIES.map(t => ({ label: t, value: t })),
-      render: (val, row) => (
-        <span className="text-xs text-foreground">{row.territory}</span>
-      ),
-    },
-    {
-      key: "employeeType",
-      header: "Employee Type",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: EMPLOYEE_TYPES.map(t => ({ label: t, value: t })),
-      render: (val, row) => (
-        <span className="text-xs text-foreground">{row.employeeType || "—"}</span>
+      filterOptions: ROLES.map(r => ({ label: r.name, value: r.name })),
+      render: (_val, row) => (
+        <span className="text-xs text-foreground">{formatEmployeeRoleLabel(row)}</span>
       ),
     },
     {
@@ -562,7 +533,6 @@ export default function EmployeeListingPage() {
       filterOptions: [
         { label: "Active", value: "active" },
         { label: "Inactive", value: "inactive" },
-        { label: "Draft", value: "draft" },
       ],
       render: (_val, row) => (
         <EmployeeListingStatusCell
@@ -575,6 +545,22 @@ export default function EmployeeListingPage() {
           }
           onActivateBlocked={handleActivateBlocked}
         />
+      ),
+    },
+    {
+      key: "createdBy",
+      header: "Created By",
+      sortable: true,
+      render: (_val, row) => (
+        <ListingUserCell name={row.createdBy} date={row.createdDate} />
+      ),
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      render: (_val, row) => (
+        <ListingUserCell name={row.updatedBy} date={row.updatedDate} />
       ),
     },
     {
@@ -622,12 +608,11 @@ export default function EmployeeListingPage() {
         { value: "all", label: `All (${stats.total})` },
         { value: "active", label: `Active (${stats.active})` },
         { value: "inactive", label: `Inactive (${stats.inactive})` },
-        { value: "draft", label: `Draft (${stats.draft})` },
       ]}
       activeTab={statusTab}
       onTabChange={handleStatusTabChange}
       metrics={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
             <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-brand-600">
               <Users className="w-4 h-4 text-white" />
@@ -655,15 +640,6 @@ export default function EmployeeListingPage() {
               <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Inactive</p>
             </div>
           </div>
-          <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
-            <div className="flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-lg bg-amber-500">
-              <FileText className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <p className="text-base font-bold leading-none text-foreground">{stats.draft}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">Draft</p>
-            </div>
-          </div>
         </div>
       }
     >
@@ -679,7 +655,7 @@ export default function EmployeeListingPage() {
           onSortChange={setSort}
           onFilterChange={setFilters}
           emptyMessage="users"
-          searchPlaceholder="Search by User ID, Name, Mobile, or Email…"
+          searchPlaceholder="Search by Employee ID, Name, Mobile, or Email…"
           onAdd={() => router.push("/user-management/employee/add")}
           addLabel="Add User"
           onExport={handleExport}

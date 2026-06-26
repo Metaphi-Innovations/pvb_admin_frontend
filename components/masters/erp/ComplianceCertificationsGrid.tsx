@@ -79,12 +79,15 @@ export function ComplianceCertificationsGrid({
 	errors = {},
 	readOnly,
 	onFieldBlur,
+	rows,
 }: {
 	values: ComplianceGridValues;
 	onChange: (next: ComplianceGridValues) => void;
 	errors?: Record<string, string>;
 	readOnly?: boolean;
 	onFieldBlur?: (fieldKey: string) => void;
+	/** Subset of rows to render; defaults to all registrations. */
+	rows?: RowId[];
 }) {
 	const setToggle = (
 		toggleKey: keyof ComplianceGridValues,
@@ -106,6 +109,10 @@ export function ComplianceCertificationsGrid({
 		onChange({ ...values, [numberKey]: formatRegistrationInput(id, value) });
 	};
 
+	const visibleRows = rows
+		? ROWS.filter((row) => rows.includes(row.id))
+		: ROWS;
+
 	return (
 		<div className="overflow-hidden rounded border border-border/80 text-xs">
 			<div className="grid grid-cols-[72px_64px_minmax(0,1fr)] items-center gap-x-2 border-b border-border/70 bg-muted/30 px-2 py-1">
@@ -117,7 +124,7 @@ export function ComplianceCertificationsGrid({
 					Registration Number
 				</span>
 			</div>
-			{ROWS.map((row, idx) => {
+			{visibleRows.map((row, idx) => {
 				const enabled = values[row.toggleKey] as boolean;
 				const numberVal = values[row.numberKey] as string;
 				const err = errors[row.errorKey];
@@ -126,7 +133,7 @@ export function ComplianceCertificationsGrid({
 						key={row.label}
 						className={cn(
 							"grid grid-cols-[72px_64px_minmax(0,1fr)] items-start gap-x-2 px-2 py-1",
-							idx < ROWS.length - 1 && "border-b border-border/50",
+							idx < visibleRows.length - 1 && "border-b border-border/50",
 						)}
 					>
 						<span className="pt-1.5 text-[11px] font-semibold text-foreground">

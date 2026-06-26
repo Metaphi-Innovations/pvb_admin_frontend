@@ -59,8 +59,8 @@ export default function VendorBillsPage() {
       <div className="max-w-[1200px] mx-auto space-y-4">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-bold text-foreground">Vendor Bills</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Track vendor invoices and payment status</p>
+            <h1 className="text-xl font-bold text-foreground">Supplier Bills</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">Track supplier invoices and payment status</p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5"><Download className="w-3.5 h-3.5" /> Export</Button>
@@ -90,7 +90,7 @@ export default function VendorBillsPage() {
         <div className="flex items-center gap-2">
           <div className="relative flex-1 min-w-[200px] max-w-xs">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-[9px] text-muted-foreground pointer-events-none" />
-            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search bill number, vendor…" className="pl-8 h-8 text-xs" />
+            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search bill number, supplier…" className="pl-8 h-8 text-xs" />
           </div>
           <Popover>
             <PopoverTrigger asChild>
@@ -120,7 +120,7 @@ export default function VendorBillsPage() {
             <table className="w-full">
               <thead>
                 <tr className="bg-muted/40 border-b border-border">
-                  {["Bill Number","Vendor","Bill Date","Due Date","Base Amount","GST","Total","Status",""].map((h, i) => (
+                  {["Bill Number","Supplier","Bill Date","Due Date","Base Amount","GST","Total","Status",""].map((h, i) => (
                     <th key={i} className={cn("px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap", i === 8 && "w-10")}>{h}</th>
                   ))}
                 </tr>

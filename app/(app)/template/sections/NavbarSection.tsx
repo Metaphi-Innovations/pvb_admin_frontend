@@ -345,7 +345,7 @@ export default function NavbarSection() {
           {[
             { label: "User Management", icon: Users, items: ["All Users", "Roles & Permissions", "User Groups", "States", "Districts", "Territory Map"] },
             { label: "Masters",         icon: BookOpen, items: ["Products", "Categories", "HSN / Tax", "Distributors", "Retailers", "Warehouse", "Units of Measure"] },
-            { label: "Procurement",     icon: ShoppingCart, items: ["Purchase Orders", "GRN", "Vendor Bills", "Vendor Returns", "Stock Ledger"] },
+            { label: "Procurement",     icon: ShoppingCart, items: ["Purchase Orders", "GRN", "Supplier Bills", "Supplier Returns", "Stock Ledger"] },
             { label: "Sales",           icon: BarChart3, items: ["Sales Orders", "Invoices", "Dispatch", "Collections", "Targets", "Beat Plan"] },
             { label: "HR",              icon: UserCheck, items: ["Employees", "Attendance", "Leave Management", "Payroll", "Expense Claims"] },
             { label: "Accounts",        icon: Wallet, items: ["Ledger", "Vouchers", "Outstanding", "Reports"] },

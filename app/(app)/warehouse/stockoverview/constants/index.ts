@@ -33,7 +33,7 @@ export const REJECTED_STATUS_OPTIONS = [
   { label: "Rejected", value: "Rejected" },
   { label: "Under Review", value: "Under Review" },
   { label: "Disposed", value: "Disposed" },
-  { label: "Returned To Vendor", value: "Returned To Vendor" },
+  { label: "Returned To Supplier", value: "Returned To Supplier" },
 ];
 
 // GRN Pending Stock Statuses
@@ -53,7 +53,7 @@ export const STATUS_BADGE_CONFIG: Record<string, { bg: string; label: string }> 
   "Rejected": { bg: "bg-rose-50 text-rose-700 border-rose-200", label: "Rejected" },
   "Under Review": { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Under Review" },
   "Disposed": { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Disposed" },
-  "Returned To Vendor": { bg: "bg-indigo-50 text-indigo-700 border-indigo-200", label: "Returned To Vendor" },
+  "Returned To Supplier": { bg: "bg-indigo-50 text-indigo-700 border-indigo-200", label: "Returned To Supplier" },
 
   // GRN Pending Stock badges
   "Pending QC": { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Pending QC" },

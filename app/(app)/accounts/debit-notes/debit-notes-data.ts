@@ -611,7 +611,7 @@ export function lookupPurchaseOrderForDebit(poId: number) {
 }
 
 function validateBasic(input: DebitNoteFormInput): void {
-  if (!input.vendorName.trim()) throw new Error("Vendor is required.");
+  if (!input.vendorName.trim()) throw new Error("Supplier is required.");
   if (!input.reason.trim()) throw new Error("Reason is required.");
   if (!input.remarks.trim()) throw new Error("Remarks are required.");
   if (input.againstType === "standalone_adjustment") {

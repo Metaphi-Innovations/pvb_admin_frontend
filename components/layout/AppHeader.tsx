@@ -4,11 +4,9 @@ import React, { memo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { AuthService } from "@/services/auth.service";
 import {
-  Search, Bell, HelpCircle, ChevronDown, MapPin, Globe,
-  LogOut, User, Settings, Shield, CheckSquare, Calendar,
-  AlertTriangle, Check, type LucideIcon,
+  Bell, ChevronDown, Calendar,
+  AlertTriangle, Check, LogOut, User, Settings, Shield,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -25,15 +23,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Badge } from "@/components/ui/badge";
-import { CountBadge } from "@/components/ui/StatusBadge";
 import { Separator } from "@/components/ui/separator";
 import { useFY, FINANCIAL_YEARS, FY_STATUS_CONFIG, type FinancialYear } from "@/lib/fy-store";
-
-// ── Sample data ───────────────────────────────────────────────────────────────
-const STATES = ["All States", "Maharashtra", "Karnataka", "Madhya Pradesh", "Rajasthan", "Gujarat"];
-const TERRITORIES = ["All Territories", "Pune North", "Pune South", "Nashik", "Aurangabad", "Kolhapur"];
 
 const NOTIFICATIONS = [
   { id: 1, type: "approval", title: "PO #2340 awaiting approval",     time: "2 min ago",  read: false },
@@ -43,18 +34,8 @@ const NOTIFICATIONS = [
   { id: 5, type: "info",     title: "New distributor onboarded",      time: "Yesterday",  read: true  },
 ];
 
-const PENDING_APPROVALS = [
-  { label: "Purchase Orders",           count: 4, href: "/procurement/purchase-orders" },
-  { label: "TA/DA Claims",              count: 5, href: "/dashboard" },
-  { label: "Attendance Regularization", count: 3, href: "/dashboard" },
-  { label: "Expense Claims",            count: 7, href: "/hr/expenses?status=pending" },
-  { label: "Leave Requests",            count: 2, href: "/hr/leaves?status=pending" },
-];
-
-const totalPending = PENDING_APPROVALS.reduce((s, a) => s + a.count, 0);
 const unreadCount  = NOTIFICATIONS.filter((n) => !n.read).length;
 
-// ── FY Status Badge ───────────────────────────────────────────────────────────
 function FYStatusBadge({ status, compact = false }: { status: string; compact?: boolean }) {
   const c = FY_STATUS_CONFIG[status as keyof typeof FY_STATUS_CONFIG] ?? FY_STATUS_CONFIG.closed;
   if (compact) {
@@ -79,7 +60,6 @@ function FYStatusBadge({ status, compact = false }: { status: string; compact?: 
   );
 }
 
-// ── FY Switch Dialog ──────────────────────────────────────────────────────────
 function FYSwitchDialog({
   open,
   onClose,
@@ -111,7 +91,6 @@ function FYSwitchDialog({
             will reload the dashboard data for that period.
           </p>
 
-          {/* FY preview card */}
           <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 border border-border">
             <div className="w-9 h-9 rounded-lg bg-brand-100 flex items-center justify-center flex-shrink-0">
               <Calendar className="w-4 h-4 text-brand-600" />
@@ -147,7 +126,6 @@ function FYSwitchDialog({
   );
 }
 
-// ── FY Selector (trigger + dropdown) ─────────────────────────────────────────
 function FYSelector() {
   const { selectedFY, setSelectedFY } = useFY();
   const [pendingFY, setPendingFY] = useState<FinancialYear | null>(null);
@@ -229,10 +207,7 @@ function FYSelector() {
   );
 }
 
-// ── Header ────────────────────────────────────────────────────────────────────
 function AppHeaderInner() {
-  const [selectedState,     setSelectedState]     = useState("All States");
-  const [selectedTerritory, setSelectedTerritory] = useState("All Territories");
   const [userData, setUserData] = useState<any>(null);
 
   React.useEffect(() => {
@@ -241,233 +216,110 @@ function AppHeaderInner() {
 
   const username = userData?.username || "Admin";
   const email = userData?.email || "admin@gmail.com";
-  
-  // Map or default the role label
   const userRole = userData?.username === "Admin" ? "Administrator" : "User";
   const shortName = username.split(" ")[0];
   const initials = username.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
 
   return (
-    <TooltipProvider delayDuration={300}>
-      <header className="h-12 bg-white border-b border-border/50 flex items-center px-4 gap-3 z-[90] sticky top-[56px]">
+    <header className="h-12 bg-white border-b border-border/50 flex items-center px-4 gap-3 z-[90] sticky top-[56px]">
+      <FYSelector />
 
-        {/* Global search */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-          <Input
-            className="pl-8 h-8 text-xs rounded-input bg-muted/40 border-transparent focus:bg-white focus:border-border"
-            placeholder="Search farmer, order, distributor, product…"
-          />
-          <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 hidden sm:flex items-center gap-0.5 text-[10px] text-muted-foreground bg-muted/60 border border-border rounded px-1 py-0.5">
-            ⌘K
-          </kbd>
-        </div>
+      <div className="flex-1" />
 
-        <Separator orientation="vertical" className="h-5" />
-
-        {/* Financial Year selector */}
-        <FYSelector />
-
-        <Separator orientation="vertical" className="h-5" />
-
-        {/* State selector */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-1.5 text-[12px] font-medium text-foreground hover:text-brand-600 transition-colors whitespace-nowrap">
-              <Globe className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="hidden sm:inline">{selectedState}</span>
-              <ChevronDown className="w-3 h-3 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-44 p-2">
-            <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-muted-foreground px-2 pb-1">
-              State
-            </DropdownMenuLabel>
-            {STATES.map((s) => (
+      <Popover>
+        <PopoverTrigger asChild>
+          <button className="relative w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors">
+            <Bell className="w-4 h-4 text-muted-foreground" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 border border-white" />
+            )}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="end" sideOffset={8} className="w-80 p-0 rounded-modal overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+            <p className="text-sm font-semibold text-foreground">Notifications</p>
+            <button className="text-[11px] text-brand-600 hover:underline font-medium">Mark all read</button>
+          </div>
+          <div className="max-h-72 overflow-y-auto">
+            {NOTIFICATIONS.map((n) => (
               <button
-                key={s}
-                onClick={() => setSelectedState(s)}
+                key={n.id}
+                onClick={() => {}}
                 className={cn(
-                  "w-full flex items-center px-2.5 py-2 rounded-lg text-xs text-left transition-colors border-l-2 cursor-pointer",
-                  selectedState === s
-                    ? "bg-brand-50 text-brand-700 border-brand-600 font-semibold"
-                    : "text-foreground border-transparent hover:bg-muted/50",
+                  "w-full flex items-start gap-3 px-4 py-3 border-b border-border/50 border-l-2 transition-all text-left cursor-pointer",
+                  !n.read
+                    ? "bg-brand-50/40 border-brand-300 hover:bg-brand-50/60"
+                    : "border-transparent hover:bg-muted/30",
                 )}
               >
-                {s}
+                <div className={cn(
+                  "w-2 h-2 rounded-full mt-1.5 flex-shrink-0",
+                  n.read ? "bg-muted-foreground/30" : "bg-brand-500",
+                )} />
+                <div className="flex-1 min-w-0">
+                  <p className={cn("text-xs leading-relaxed", !n.read && "font-medium text-foreground")}>
+                    {n.title}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{n.time}</p>
+                </div>
               </button>
             ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {/* Territory selector */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-1.5 text-[12px] font-medium text-foreground hover:text-brand-600 transition-colors whitespace-nowrap">
-              <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="hidden md:inline">{selectedTerritory}</span>
-              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+          </div>
+          <div className="px-4 py-2.5 border-t border-border">
+            <button className="w-full text-center text-xs text-brand-600 font-medium hover:underline">
+              View all notifications
             </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-52 p-2">
-            <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-muted-foreground px-2 pb-1">
-              Territory
-            </DropdownMenuLabel>
-            {TERRITORIES.map((t) => (
-              <button
-                key={t}
-                onClick={() => setSelectedTerritory(t)}
-                className={cn(
-                  "w-full flex items-center px-2.5 py-2 rounded-lg text-xs text-left transition-colors border-l-2 cursor-pointer",
-                  selectedTerritory === t
-                    ? "bg-brand-50 text-brand-700 border-brand-600 font-semibold"
-                    : "text-foreground border-transparent hover:bg-muted/50",
-                )}
-              >
-                {t}
-              </button>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+          </div>
+        </PopoverContent>
+      </Popover>
 
-        {/* Spacer */}
-        <div className="flex-1" />
+      <Separator orientation="vertical" className="h-5" />
 
-        {/* Pending approvals */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <button className="relative flex items-center gap-1.5 text-[12px] font-medium text-foreground hover:text-brand-600 transition-colors whitespace-nowrap">
-              <CheckSquare className="w-4 h-4 text-muted-foreground" />
-              <span className="hidden sm:inline">Approvals</span>
-              {totalPending > 0 && <CountBadge count={totalPending} variant="amber" />}
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="end" sideOffset={8} className="w-64 p-3 rounded-modal">
-            <p className="text-xs font-semibold text-foreground mb-2.5">Pending Approvals</p>
-            <div className="space-y-0.5">
-              {PENDING_APPROVALS.map((a) => (
-                <a
-                  key={a.label}
-                  href={a.href}
-                  className="flex items-center justify-between px-2.5 py-2.5 rounded-lg border-l-2 border-transparent hover:bg-muted/50 hover:border-brand-400 transition-all cursor-pointer group"
-                >
-                  <span className="text-xs text-foreground group-hover:font-medium">{a.label}</span>
-                  <span className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-2 py-0.5 flex-shrink-0">
-                    {a.count}
-                  </span>
-                </a>
-              ))}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button className="flex items-center gap-2 hover:bg-muted/50 rounded-xl px-2 py-1 transition-colors">
+            <Avatar className="w-7 h-7">
+              <AvatarImage src="" />
+              <AvatarFallback className="bg-brand-500 text-white text-xs font-bold">{initials}</AvatarFallback>
+            </Avatar>
+            <div className="hidden md:block text-left">
+              <p className="text-[12px] font-semibold text-foreground leading-tight">{shortName}</p>
+              <p className="text-[10px] text-muted-foreground leading-tight">{userRole}</p>
             </div>
-          </PopoverContent>
-        </Popover>
-
-        {/* Notification bell */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <button className="relative w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors">
-              <Bell className="w-4 h-4 text-muted-foreground" />
-              {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 border border-white" />
-              )}
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="end" sideOffset={8} className="w-80 p-0 rounded-modal overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <p className="text-sm font-semibold text-foreground">Notifications</p>
-              <button className="text-[11px] text-brand-600 hover:underline font-medium">Mark all read</button>
-            </div>
-            <div className="max-h-72 overflow-y-auto">
-              {NOTIFICATIONS.map((n) => (
-                <button
-                  key={n.id}
-                  onClick={() => {}}
-                  className={cn(
-                    "w-full flex items-start gap-3 px-4 py-3 border-b border-border/50 border-l-2 transition-all text-left cursor-pointer",
-                    !n.read
-                      ? "bg-brand-50/40 border-brand-300 hover:bg-brand-50/60"
-                      : "border-transparent hover:bg-muted/30",
-                  )}
-                >
-                  <div className={cn(
-                    "w-2 h-2 rounded-full mt-1.5 flex-shrink-0",
-                    n.read ? "bg-muted-foreground/30" : "bg-brand-500",
-                  )} />
-                  <div className="flex-1 min-w-0">
-                    <p className={cn("text-xs leading-relaxed", !n.read && "font-medium text-foreground")}>
-                      {n.title}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{n.time}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-            <div className="px-4 py-2.5 border-t border-border">
-              <button className="w-full text-center text-xs text-brand-600 font-medium hover:underline">
-                View all notifications
-              </button>
-            </div>
-          </PopoverContent>
-        </Popover>
-
-        {/* Help */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors">
-              <HelpCircle className="w-4 h-4 text-muted-foreground" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">Help & Support</TooltipContent>
-        </Tooltip>
-
-        <Separator orientation="vertical" className="h-5" />
-
-        {/* Profile */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-2 hover:bg-muted/50 rounded-xl px-2 py-1 transition-colors">
-              <Avatar className="w-7 h-7">
-                <AvatarImage src="" />
-                <AvatarFallback className="bg-brand-500 text-white text-xs font-bold">{initials}</AvatarFallback>
-              </Avatar>
-              <div className="hidden md:block text-left">
-                <p className="text-[12px] font-semibold text-foreground leading-tight">{shortName}</p>
-                <p className="text-[10px] text-muted-foreground leading-tight">{userRole}</p>
-              </div>
-              <span className="hidden lg:inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold bg-brand-100 text-brand-700 border border-brand-200">
-                {initials}
-              </span>
-              <ChevronDown className="w-3 h-3 text-muted-foreground hidden md:block" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" sideOffset={8} className="w-56 rounded-modal">
-            <div className="px-3 py-2.5">
-              <p className="text-sm font-semibold text-foreground">{username}</p>
-              <p className="text-xs text-muted-foreground">{email}</p>
-              <span className="inline-flex items-center mt-1.5 rounded-md px-2 py-0.5 text-[10px] font-semibold bg-brand-100 text-brand-700 border border-brand-200">
-                {userRole}
-              </span>
-            </div>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-xs gap-2 cursor-pointer">
-              <User className="w-3.5 h-3.5" /> My Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem className="text-xs gap-2 cursor-pointer">
-              <Settings className="w-3.5 h-3.5" /> Account Settings
-            </DropdownMenuItem>
-            <DropdownMenuItem className="text-xs gap-2 cursor-pointer">
-              <Shield className="w-3.5 h-3.5" /> Change Password
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => AuthService.logout()}
-              className="text-xs gap-2 cursor-pointer text-red-500 focus:text-red-500 focus:bg-red-50"
-            >
-              <LogOut className="w-3.5 h-3.5" /> Sign Out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </header>
-    </TooltipProvider>
+            <span className="hidden lg:inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold bg-brand-100 text-brand-700 border border-brand-200">
+              {initials}
+            </span>
+            <ChevronDown className="w-3 h-3 text-muted-foreground hidden md:block" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" sideOffset={8} className="w-56 rounded-modal">
+          <div className="px-3 py-2.5">
+            <p className="text-sm font-semibold text-foreground">{username}</p>
+            <p className="text-xs text-muted-foreground">{email}</p>
+            <span className="inline-flex items-center mt-1.5 rounded-md px-2 py-0.5 text-[10px] font-semibold bg-brand-100 text-brand-700 border border-brand-200">
+              {userRole}
+            </span>
+          </div>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem className="text-xs gap-2 cursor-pointer">
+            <User className="w-3.5 h-3.5" /> My Profile
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-xs gap-2 cursor-pointer">
+            <Settings className="w-3.5 h-3.5" /> Account Settings
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-xs gap-2 cursor-pointer">
+            <Shield className="w-3.5 h-3.5" /> Change Password
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => AuthService.logout()}
+            className="text-xs gap-2 cursor-pointer text-red-500 focus:text-red-500 focus:bg-red-50"
+          >
+            <LogOut className="w-3.5 h-3.5" /> Sign Out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </header>
   );
 }
 

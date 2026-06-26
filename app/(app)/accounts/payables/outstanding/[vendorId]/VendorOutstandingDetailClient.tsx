@@ -31,9 +31,9 @@ export default function VendorOutstandingDetailClient() {
   if (!detail) {
     return (
       <AccountsPageShell
-        breadcrumbs={accountsBreadcrumb("Payables", "Vendor Outstanding", "/accounts/payables/outstanding")}
-        title="Vendor Not Found"
-        description="No vendor outstanding record for this ID."
+        breadcrumbs={accountsBreadcrumb("Payables", "Supplier Outstanding", "/accounts/payables/outstanding")}
+        title="Supplier Not Found"
+        description="No supplier outstanding record for this ID."
         layout="standard"
       >
         <div className="p-8 text-center">
@@ -41,7 +41,7 @@ export default function VendorOutstandingDetailClient() {
             href="/accounts/payables/outstanding"
             className="text-sm text-brand-600 hover:underline inline-flex items-center gap-1"
           >
-            <ArrowLeft className="w-4 h-4" /> Back to Vendor Outstanding
+            <ArrowLeft className="w-4 h-4" /> Back to Supplier Outstanding
           </Link>
         </div>
       </AccountsPageShell>
@@ -54,7 +54,7 @@ export default function VendorOutstandingDetailClient() {
   return (
     <AccountsPageShell
       breadcrumbs={[
-        ...accountsBreadcrumb("Payables", "Vendor Outstanding", "/accounts/payables/outstanding"),
+        ...accountsBreadcrumb("Payables", "Supplier Outstanding", "/accounts/payables/outstanding"),
         { label: vendor.vendorName },
       ]}
       title={vendor.vendorName}

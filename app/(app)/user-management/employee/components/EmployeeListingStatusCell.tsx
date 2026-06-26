@@ -1,8 +1,6 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/record-detail/StatusBadge";
 import type { Employee } from "../employee-data";
 import { canActivateEmployee } from "../employee-documents";
 
@@ -55,56 +53,35 @@ export function EmployeeListingStatusCell({
   onActivateBlocked?: (gaps: string[]) => void;
   disabled?: boolean;
 }) {
-  if (status === "draft") {
-    const activation = employee ? canActivateEmployee(employee) : { ok: false, gaps: [] as string[] };
-    return (
-      <div
-        className="inline-flex items-center gap-2"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-      >
-        <StatusBadge status="draft" />
-        {onToggleRequest && (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={!activation.ok || disabled}
-            title={activation.ok ? "Activate user" : activation.gaps.join("; ")}
-            className={cn(
-              "h-6 px-2 text-[10px] border-emerald-200 text-emerald-700 hover:bg-emerald-50",
-              !activation.ok && "opacity-60 cursor-not-allowed",
-            )}
-            onClick={() => {
-              if (activation.ok) onToggleRequest("active");
-              else onActivateBlocked?.(activation.gaps);
-            }}
-          >
-            Activate
-          </Button>
-        )}
-      </div>
-    );
-  }
-
-  if (status === "archived") {
-    return <StatusBadge status="inactive" />;
+  if (status === "archived" || !onToggleRequest) {
+    return <span className="text-xs text-muted-foreground">—</span>;
   }
 
   const isActive = status === "active";
+  const isDraft = status === "draft";
+  const activation = employee ? canActivateEmployee(employee) : { ok: true, gaps: [] as string[] };
 
   return (
     <div
-      className="inline-flex items-center gap-2"
+      className="inline-flex items-center"
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => e.stopPropagation()}
     >
       <StatusToggle
         active={isActive}
         disabled={disabled}
-        onChange={() => onToggleRequest?.(isActive ? "inactive" : "active")}
+        onChange={() => {
+          if (isActive) {
+            onToggleRequest("inactive");
+            return;
+          }
+          if (isDraft && !activation.ok) {
+            onActivateBlocked?.(activation.gaps);
+            return;
+          }
+          onToggleRequest("active");
+        }}
       />
-      <StatusBadge status={isActive ? "active" : "inactive"} />
     </div>
   );
 }

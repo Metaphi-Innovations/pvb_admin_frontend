@@ -135,7 +135,7 @@ export default function PaymentViewPageClient({ paymentId }: { paymentId: number
             <h2 className="text-sm font-semibold">Procurement Match (before payment)</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <DetailRow label="PO No." value={matchCtx.poNumber} />
-              <DetailRow label="Vendor Invoice No." value={matchCtx.vendorInvoiceNo} />
+              <DetailRow label="Supplier Invoice No." value={matchCtx.vendorInvoiceNo} />
               <DetailRow label="Purchase No." value={matchCtx.purchaseNo} />
               <DetailRow label="3-Way Match" value={<ThreeWayMatchStatusBadge status={matchCtx.matchStatus} />} />
             </div>

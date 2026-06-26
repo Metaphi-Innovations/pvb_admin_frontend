@@ -13,8 +13,10 @@ export type OperatedBy = "C&F Agent" | "Self";
 export interface WarehouseContact {
   id: string;
   contactPerson: string;
+  designation?: string;
   mobileNumber: string;
   emailAddress: string;
+  alternateContact?: string;
   isPrimary?: boolean;
   mobileCountryCode?: string;
 }
@@ -38,10 +40,21 @@ export interface WarehouseMaster {
   warehouseType: WarehouseType;
   gstApplicable: boolean;
   gstNumber: string;
+  gstRegistrationType?: string;
+  registeredLegalName?: string;
+  registeredAddress?: string;
+  accountHolderName?: string;
+  bankName?: string;
+  branch?: string;
+  accountNumber?: string;
+  ifscCode?: string;
+  swiftCode?: string;
   contactPerson: string;
   mobileNumber: string;
   emailAddress: string;
-  address: string; // Textarea
+  address: string; // Address Line 1
+  addressLine2?: string;
+  town?: string;
   state: string;
   district: string;
   city: string;

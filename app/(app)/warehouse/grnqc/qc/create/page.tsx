@@ -200,7 +200,7 @@ function CreateQcForm() {
           />
 
           <TextField
-            label="Vendor Name"
+            label="Supplier Name"
             value={vendor}
             readOnly
             className="h-8 text-xs bg-muted/30 font-medium"

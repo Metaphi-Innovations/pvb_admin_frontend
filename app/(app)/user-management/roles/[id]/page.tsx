@@ -116,8 +116,7 @@ export default function RoleViewPage() {
           <RecordSectionCard title="Role Information" icon={Shield} accent="blue">
             <RecordKvRow label="Role Name" value={role.roleName} highlight />
             <RecordKvRow label="Department" value={role.department} />
-            <RecordKvRow label="Geo Level" value={role.geoLevel} />
-            <RecordKvRow label="Description" value={role.description || "—"} isLast />
+            <RecordKvRow label="Geo Level" value={role.geoLevel} isLast />
           </RecordSectionCard>
           <RecordSectionCard title="Audit" icon={Clock} accent="slate">
             <RecordKvRow label="Created By" value={role.createdBy} muted />

@@ -48,7 +48,7 @@ export type BankCategorization =
 
 export const BANK_CATEGORIZATION_OPTIONS: { value: BankCategorization; label: string; hint: string }[] = [
   { value: "customer_receipt", label: "Customer Receipt", hint: "Match to sales invoice or customer receipt" },
-  { value: "vendor_payment", label: "Vendor Payment", hint: "Match to purchase bill or vendor payment" },
+  { value: "vendor_payment", label: "Supplier Payment", hint: "Match to purchase bill or vendor payment" },
   { value: "expense", label: "Expense", hint: "Allocate to expense ledger" },
   { value: "employee_claim_payment", label: "Employee Claim Payment", hint: "Match to approved HR claim" },
   { value: "bank_charges", label: "Bank Charges", hint: "Bank charges / fees ledger" },
@@ -995,7 +995,7 @@ export function incomeLedgerSearchOptions(query: string): { id: number; label: s
 }
 
 export const WITHDRAWAL_CATEGORIES: { value: BankCategorization; label: string }[] = [
-  { value: "vendor_payment", label: "Vendor Payment" },
+  { value: "vendor_payment", label: "Supplier Payment" },
   { value: "expense", label: "Expense" },
   { value: "employee_claim_payment", label: "Employee Claim Payment" },
   { value: "bank_charges", label: "Bank Charges" },

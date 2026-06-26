@@ -75,7 +75,7 @@ export default function ViewGrnPage({ params }: { params: { id: string } }) {
       sidebar={{
         summary: [
           { label: "PO Number", value: grn.poNumber, highlight: true },
-          { label: "Vendor", value: grn.vendorName },
+          { label: "Supplier", value: grn.vendorName },
           { label: "Items", value: grn.items.length },
           { label: "Total Ordered", value: totalOrdered },
           { label: "Total Received", value: totalReceived },
@@ -99,7 +99,7 @@ export default function ViewGrnPage({ params }: { params: { id: string } }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { label: "PO Number", val: grn.poNumber, icon: Receipt },
-            { label: "Vendor", val: grn.vendorName, icon: Landmark },
+            { label: "Supplier", val: grn.vendorName, icon: Landmark },
             { label: "Warehouse", val: grn.warehouse, icon: Building },
             { label: "GRN Date", val: grn.grnDate, icon: Calendar },
           ].map((card, idx) => {

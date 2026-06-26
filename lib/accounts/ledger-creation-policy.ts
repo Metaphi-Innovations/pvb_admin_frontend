@@ -44,7 +44,7 @@ export function canAddLedgerFromLedgersPage(_node: ChartOfAccount, _records: Cha
 export const LEDGER_TYPE_FILTERS = [
   { id: "all", label: "All" },
   { id: "customer", label: "Customer" },
-  { id: "vendor", label: "Vendor" },
+  { id: "vendor", label: "Supplier" },
   { id: "bank", label: "Bank" },
   { id: "cash", label: "Cash" },
   { id: "expense", label: "Expense" },

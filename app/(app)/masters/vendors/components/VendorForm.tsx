@@ -32,10 +32,10 @@ import {
 	isGoodsVendorType,
 } from "../vendor-data";
 import { loadActiveVendorTypeOptions } from "../../vendor-type/vendor-type-data";
-import { PAYMENT_TERMS_OPTIONS } from "../../customers/customer-data";
+import { PaymentTermsSelect } from "@/components/masters/erp/PaymentTermsSelect";
 import { getActiveTDSMasters, toTdsSelectOptions } from "../../tds/tds-data";
 import { SearchableSelect } from "../../customers/components/SearchableSelect";
-import { loadGeoNodes, resolvePincodeLocation, getStateSelectOptions } from "../../geography/geo-data";
+import { loadGeoNodes, getStateSelectOptions } from "../../geography/geo-data";
 import { loadDocumentTypes } from "../../document-types/document-type-data";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { cn } from "@/lib/utils";
@@ -50,7 +50,7 @@ import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
 import { getStandardMrp } from "@/lib/pricing/resolve-pricing";
 import { GstRegistrationFields, GstRegisteredToggleControl } from "@/components/masters/GstRegistrationFields";
-import { RegisteredNumberRow } from "@/components/masters/RegisteredNumberRow";
+import { ComplianceCertificationsGrid } from "@/components/masters/erp/ComplianceCertificationsGrid";
 import { ErpFormSection } from "@/components/masters/erp/ErpFormSection";
 import { BranchAddressFields } from "@/components/masters/erp/BranchAddressFields";
 import { ERP } from "@/components/masters/erp/erp-form-styles";
@@ -63,7 +63,6 @@ import {
 	gstApplicableFromCategory,
 	gstDetailsToAddressSnapshot,
 	GST_REGISTRATION_TYPE_DEFAULT,
-	formatUdyamInput,
 	validateGSTIN,
 	type GstAddressSnapshot,
 } from "@/lib/masters/gst-compliance";
@@ -71,7 +70,7 @@ import {
 const ALL_TABS = [
 	{ id: "basic", label: "Basic Details" },
 	{ id: "contact", label: "Contact Information" },
-	{ id: "banking", label: "Bank Details" },
+	{ id: "banking", label: "Bank & Commercial" },
 	{ id: "product", label: "Product Mapping" },
 	{ id: "documents", label: "Documents & Remarks" },
 ] as const;
@@ -577,6 +576,7 @@ export function VendorForm({
 		ERP.input,
 		"border-border/70 rounded-md bg-white shadow-none focus-visible:ring-1 focus-visible:ring-brand-500/30",
 	);
+	const bankFieldClass = inputCls;
 
 	const billingAsBranch = useMemo(
 		() => ({
@@ -584,9 +584,10 @@ export function VendorForm({
 			addressLine2: form.billingAddress.line2,
 			country: form.billingAddress.country || "India",
 			city: form.billingAddress.city,
+			town: form.billingAddress.town ?? "",
+			district: form.billingAddress.district ?? "",
 			state: form.billingAddress.state,
 			pincode: form.billingAddress.pincode,
-			district: "",
 		}),
 		[form.billingAddress],
 	);
@@ -596,6 +597,8 @@ export function VendorForm({
 		addressLine2?: string;
 		country?: string;
 		city: string;
+		town?: string;
+		district?: string;
 		state: string;
 		pincode: string;
 	}) => {
@@ -605,24 +608,11 @@ export function VendorForm({
 			line2: addr.addressLine2 ?? "",
 			country: addr.country ?? "India",
 			city: addr.city,
+			town: addr.town ?? "",
+			district: addr.district ?? "",
 			state: addr.state,
 			pincode: addr.pincode,
 		});
-	};
-
-	const handlePincodeChange = (pincode: string) => {
-		const digits = pincode.replace(/\D/g, "").slice(0, 6);
-		const next = { ...form.billingAddress, pincode: digits };
-		const country = form.billingAddress.country || "India";
-		if (digits.length === 6 && country === "India") {
-			const loc = resolvePincodeLocation(digits, geoNodes);
-			if (loc) {
-				if (loc.city) next.city = loc.city;
-				else if (loc.district) next.city = loc.district;
-				if (loc.state) next.state = loc.state;
-			}
-		}
-		set("billingAddress", next);
 	};
 
 	const handleFetchGst = async () => {
@@ -830,19 +820,19 @@ export function VendorForm({
 								<div className={ERP.grid3}>
 									<div className={ERP.field}>
 										<Label className={ERP.label}>
-											Vendor Type <span className='text-red-500'>*</span>
+											Supplier Type <span className='text-red-500'>*</span>
 										</Label>
 										<AutocompleteSelect
 											disabled={readOnly}
 											value={form.vendorType}
 											onChange={(value) => set("vendorType", String(value))}
 											options={vendorTypeOptions}
-											placeholder='Select vendor type...'
+											placeholder='Select supplier type...'
 											className={inputCls}
 										/>
 									</div>
 									<div className={ERP.field}>
-										<Label className={ERP.label}>Vendor Code</Label>
+										<Label className={ERP.label}>Supplier Code</Label>
 										<Input
 											value={
 												vendorCode ||
@@ -855,7 +845,7 @@ export function VendorForm({
 									</div>
 									<div className={ERP.field}>
 										<Label className={ERP.label}>
-											Vendor Name <span className='text-red-500'>*</span>
+											Supplier Name <span className='text-red-500'>*</span>
 										</Label>
 										<Input
 											disabled={readOnly}
@@ -868,22 +858,6 @@ export function VendorForm({
 								</div>
 
 								<div className={ERP.grid3}>
-									<div className={ERP.field}>
-										<Label className={ERP.label}>
-											Payment Terms <span className='text-red-500'>*</span>
-										</Label>
-										<AutocompleteSelect
-											disabled={readOnly}
-											value={form.paymentTerms}
-											onChange={(value) => set("paymentTerms", String(value))}
-											options={PAYMENT_TERMS_OPTIONS.map((o) => ({
-												value: o.value,
-												label: o.label,
-											}))}
-											placeholder='Select payment terms...'
-											className={inputCls}
-										/>
-									</div>
 									<div className={ERP.field}>
 										<Label className={ERP.label}>Contact Person</Label>
 										<Input
@@ -904,9 +878,6 @@ export function VendorForm({
 											disabled={readOnly}
 										/>
 									</div>
-								</div>
-
-								<div className={ERP.grid3}>
 									<div className={ERP.field}>
 										<Label className={ERP.label}>Email Address</Label>
 										<Input
@@ -974,58 +945,60 @@ export function VendorForm({
 								footer={
 									<div
 										className={cn(
-											ERP.grid3,
+											"space-y-2",
 											form.gstRegistered ? "pt-1.5 border-t border-border/50" : "",
 										)}
 									>
-										<div className={ERP.field}>
-											<Label className={ERP.label}>
-												PAN Number <span className='text-red-500'>*</span>
-											</Label>
-											<Input
-												disabled={readOnly}
-												value={form.panNumber}
-												onChange={(e) =>
-													set("panNumber", e.target.value.toUpperCase())
-												}
-												className={cn(inputCls, "font-mono uppercase")}
-												maxLength={10}
-												placeholder='ABCDE1234F'
-											/>
-										</div>
-										<div className={ERP.field}>
-											<Label className={ERP.label}>TAN Number</Label>
-											<Input
-												disabled={readOnly}
-												value={form.tanNumber}
-												onChange={(e) =>
-													set("tanNumber", e.target.value.toUpperCase())
-												}
-												className={cn(inputCls, "font-mono uppercase")}
-												maxLength={10}
-												placeholder='AAAA99999A'
-											/>
-										</div>
-										<div className={ERP.field}>
-											<Label className={ERP.label}>TDS Applicable</Label>
-											<div className='flex h-8 items-center'>
-												<ListingStatusToggle
-													active={form.tdsApplicable}
-													onChange={(yes) =>
-														!readOnly &&
-														onChange({
-															...form,
-															tdsApplicable: yes,
-															tdsMasterId: yes ? form.tdsMasterId : "",
-														})
-													}
+										<div className={ERP.grid2}>
+											<div className={ERP.field}>
+												<Label className={ERP.label}>
+													PAN Number <span className='text-red-500'>*</span>
+												</Label>
+												<Input
 													disabled={readOnly}
+													value={form.panNumber}
+													onChange={(e) =>
+														set("panNumber", e.target.value.toUpperCase())
+													}
+													className={cn(inputCls, "font-mono uppercase")}
+													maxLength={10}
+													placeholder='ABCDE1234F'
+												/>
+											</div>
+											<div className={ERP.field}>
+												<Label className={ERP.label}>TAN Number</Label>
+												<Input
+													disabled={readOnly}
+													value={form.tanNumber}
+													onChange={(e) =>
+														set("tanNumber", e.target.value.toUpperCase())
+													}
+													className={cn(inputCls, "font-mono uppercase")}
+													maxLength={10}
+													placeholder='AAAA99999A'
 												/>
 											</div>
 										</div>
-										<div className={ERP.field}>
+										<div className="flex flex-wrap items-end gap-3">
+											<div className={ERP.field}>
+												<Label className={ERP.label}>TDS Applicable</Label>
+												<div className='flex h-8 items-center'>
+													<ListingStatusToggle
+														active={form.tdsApplicable}
+														onChange={(yes) =>
+															!readOnly &&
+															onChange({
+																...form,
+																tdsApplicable: yes,
+																tdsMasterId: yes ? form.tdsMasterId : "",
+															})
+														}
+														disabled={readOnly}
+													/>
+												</div>
+											</div>
 											{form.tdsApplicable ? (
-												<>
+												<div className={cn(ERP.field, "min-w-[200px] flex-1")}>
 													<Label className={ERP.label}>
 														TDS Section <span className='text-red-500'>*</span>
 													</Label>
@@ -1036,7 +1009,7 @@ export function VendorForm({
 														placeholder='Select TDS...'
 														disabled={readOnly}
 													/>
-												</>
+												</div>
 											) : null}
 										</div>
 									</div>
@@ -1044,26 +1017,27 @@ export function VendorForm({
 							/>
 						</ErpFormSection>
 
-						<ErpFormSection title='Compliance & Certifications'>
-							<RegisteredNumberRow
-								label='MSME Registered?'
-								registered={form.msmeRegistered}
-								onRegisteredChange={(yes) =>
+						<ErpFormSection title='Compliance & Certifications' bodyClassName='p-2'>
+							<ComplianceCertificationsGrid
+								rows={["msme"]}
+								values={{
+									msmeRegistered: form.msmeRegistered,
+									msmeNumber: form.msmeNumber,
+									fssaiRegistered: false,
+									fssai: "",
+									cibRegistered: false,
+									cibRegn: "",
+									fcoRegistered: false,
+									fcoRegn: "",
+								}}
+								onChange={(compliance) =>
 									onChange({
 										...form,
-										msmeRegistered: yes,
-										msmeNumber: yes ? form.msmeNumber : "",
+										msmeRegistered: compliance.msmeRegistered,
+										msmeNumber: compliance.msmeNumber,
 									})
 								}
-								numberLabel='MSME Number'
-								numberValue={form.msmeNumber}
-								onNumberChange={(value) =>
-									set("msmeNumber", formatUdyamInput(value))
-								}
-								numberPlaceholder='UDYAM-MH-27-0123456'
-								namePrefix='vendor-msme'
 								readOnly={readOnly}
-								inputClassName={inputCls}
 							/>
 						</ErpFormSection>
 
@@ -1071,7 +1045,6 @@ export function VendorForm({
 							<BranchAddressFields
 								address={billingAsBranch}
 								onChange={setBillingFromBranch}
-								onPincodeChange={handlePincodeChange}
 								readOnly={readOnly}
 								stateOptions={stateOptions}
 							/>
@@ -1184,68 +1157,91 @@ export function VendorForm({
 				)}
 
 				{tab === "banking" && (
-					<div className=''>
-						<SectionDivider title='Bank Account' required />
-						<div className='grid grid-cols-5 gap-3'>
-							<Field label='Account Holder Name'>
-								<Input
-									disabled={readOnly}
-									value={form.accountHolderName}
-									onChange={(e) => set("accountHolderName", e.target.value)}
-									className={fieldClass}
-									placeholder='e.g. Rajesh Kumar'
+					<div className={ERP.sectionGap}>
+						<ErpFormSection title='Payment Terms'>
+							<div className={ERP.field}>
+								<Label className={ERP.label}>
+									Payment Terms <span className='text-red-500'>*</span>
+								</Label>
+								<PaymentTermsSelect
+									value={form.paymentTerms}
+									onChange={(value) => set("paymentTerms", value)}
+									readOnly={readOnly}
+									required
 								/>
-							</Field>
-							<Field label='Bank Name'>
-								<Input
-									disabled={readOnly}
-									value={form.bankName}
-									onChange={(e) => set("bankName", e.target.value)}
-									className={fieldClass}
-									placeholder='e.g. HDFC Bank'
-								/>
-							</Field>
-							<Field label='Branch Name'>
-								<Input
-									disabled={readOnly}
-									value={form.branch}
-									onChange={(e) => set("branch", e.target.value)}
-									className={fieldClass}
-									placeholder='e.g. Dadar West'
-								/>
-							</Field>
-							<Field label='Account Number'>
-								<Input
-									disabled={readOnly}
-									value={form.accountNumber}
-									onChange={(e) => set("accountNumber", e.target.value)}
-									className={cn(fieldClass, "font-mono")}
-									placeholder='e.g. 50100234567890'
-								/>
-							</Field>
-							<Field label='Confirm Account Number'>
-								<Input
-									disabled={readOnly}
-									value={form.confirmAccountNumber}
-									onChange={(e) => set("confirmAccountNumber", e.target.value)}
-									className={cn(fieldClass, "font-mono")}
-									placeholder='Re-enter account number'
-								/>
-							</Field>
-						</div>
-						<div className='grid grid-cols-1 gap-3 md:grid-cols-5'>
-							<Field label='IFSC Code'>
-								<Input
-									disabled={readOnly}
-									value={form.ifscCode}
-									onChange={(e) =>
-										set("ifscCode", e.target.value.toUpperCase())
-									}
-									className={cn(fieldClass, "font-mono uppercase")}
-									placeholder='e.g. HDFC0000012'
-								/>
-							</Field>
-						</div>
+							</div>
+						</ErpFormSection>
+
+						<ErpFormSection title='Bank Details'>
+							<div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2'>
+								<div className={ERP.field}>
+									<Label className={ERP.label}>Account Holder Name</Label>
+									<Input
+										disabled={readOnly}
+										value={form.accountHolderName}
+										onChange={(e) => set("accountHolderName", e.target.value)}
+										className={bankFieldClass}
+									/>
+								</div>
+								<div className={ERP.field}>
+									<Label className={ERP.label}>Bank Name</Label>
+									<Input
+										disabled={readOnly}
+										value={form.bankName}
+										onChange={(e) => set("bankName", e.target.value)}
+										className={bankFieldClass}
+									/>
+								</div>
+								<div className={ERP.field}>
+									<Label className={ERP.label}>Branch Name</Label>
+									<Input
+										disabled={readOnly}
+										value={form.branch}
+										onChange={(e) => set("branch", e.target.value)}
+										className={bankFieldClass}
+									/>
+								</div>
+								<div className={ERP.field}>
+									<Label className={ERP.label}>Account Number</Label>
+									<Input
+										disabled={readOnly}
+										value={form.accountNumber}
+										onChange={(e) => set("accountNumber", e.target.value)}
+										className={cn(bankFieldClass, "font-mono")}
+									/>
+								</div>
+								<div className={ERP.field}>
+									<Label className={ERP.label}>Confirm Account Number</Label>
+									<Input
+										disabled={readOnly}
+										value={form.confirmAccountNumber}
+										onChange={(e) => set("confirmAccountNumber", e.target.value)}
+										className={cn(bankFieldClass, "font-mono")}
+									/>
+								</div>
+								<div className={ERP.field}>
+									<Label className={ERP.label}>IFSC Code</Label>
+									<Input
+										disabled={readOnly}
+										value={form.ifscCode}
+										onChange={(e) =>
+											set("ifscCode", e.target.value.toUpperCase())
+										}
+										className={cn(bankFieldClass, "font-mono uppercase")}
+									/>
+								</div>
+								<div className={ERP.field}>
+									<Label className={ERP.label}>SWIFT Code</Label>
+									<Input
+										disabled={readOnly}
+										value={form.swiftCode}
+										onChange={(e) => set("swiftCode", e.target.value.toUpperCase())}
+										className={cn(bankFieldClass, "font-mono uppercase")}
+										placeholder='Optional'
+									/>
+								</div>
+							</div>
+						</ErpFormSection>
 					</div>
 				)}
 
@@ -1254,7 +1250,7 @@ export function VendorForm({
 						<div className='flex items-center justify-between pb-1 border-b border-border/60'>
 							<SectionDivider
 								title='Product Mappings'
-								subtitle='Vendor-specific purchase prices'
+								subtitle='Supplier-specific purchase prices'
 							/>
 						</div>
 
@@ -1424,7 +1420,7 @@ export function VendorForm({
 																	type='number'
 																	min={0}
 																	step='0.01'
-																	placeholder='Enter vendor price'
+																	placeholder='Enter supplier price'
 																	value={p.price === undefined ? "" : p.price}
 																	onChange={(e) => {
 																		const val =
@@ -1611,7 +1607,7 @@ export function VendorForm({
 								disabled={readOnly}
 								value={form.remarks}
 								onChange={(e) => set("remarks", e.target.value)}
-								placeholder='Internal notes about this vendor…'
+								placeholder='Internal notes about this supplier…'
 								className='min-h-[80px] text-sm resize-none rounded-lg border-border/70'
 							/>
 						</section>

@@ -48,9 +48,9 @@ export default function VendorAgeingClient() {
 
   return (
     <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Payables", "Vendor Ageing")}
-      title="Vendor Ageing"
-      description="Age-wise analysis of vendor payables by purchase bill due date."
+      breadcrumbs={accountsBreadcrumb("Payables", "Supplier Ageing")}
+      title="Supplier Ageing"
+      description="Age-wise analysis of supplier payables by purchase bill due date."
       filters={
         <ReportFilterRow>
           <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
@@ -66,7 +66,7 @@ export default function VendorAgeingClient() {
           <thead className="bg-muted/20 border-b sticky top-0 z-10">
             <tr>
               {[
-                "Vendor Name",
+                "Supplier Name",
                 "Current",
                 "0–30 Days",
                 "31–60 Days",
