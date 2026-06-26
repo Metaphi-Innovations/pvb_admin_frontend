@@ -1,40 +1,26 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef } from "react";
 import {
-	X,
-	Plus,
-	Search,
+	Info,
 	Upload,
 	Trash2,
-	Download,
-	Eye,
-	Package,
-	Info,
 } from "lucide-react";
 import { COMPANY_BILLING, PAYMENT_TERMS_OPTIONS } from "@/lib/procurement/config";
 import {
-	calcTotalQtyBase,
+	calcPackingToBaseQty,
 	enrichProductForProcurement,
-	PACKAGING_UOM_OPTIONS,
-	type PackagingUom,
 } from "@/lib/procurement/procurement-line-utils";
 import { stateSelectOptions, warehouseSelectOptions } from "@/lib/procurement/warehouse-filter";
 import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
 import { resolvePurchaseCostPrice } from "@/lib/pricing/resolve-pricing";
-import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import { AdditionalChargesEditor } from "@/components/procurement/AdditionalChargesEditor";
-import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
-import {
-	addProcurementProduct,
-	loadProcurementProducts,
-	type ProcurementProduct,
-} from "@/lib/procurement/products-data";
 import { formatCurrency } from "@/lib/procurement/utils";
 import { getActiveSuppliers } from "../../masters/suppliers/supplier-data";
 import { getPRById, loadPurchaseRequests } from "../../purchase-requests/pr-data";
 import type { POLineItem, POAttachment, PurchaseOrder } from "../po-data";
-import { recalcPO } from "../po-data";
+import { enrichPOLineItem, recalcPO } from "../po-data";
+import { POLineItemsSection } from "./POLineItemsSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,6 +51,8 @@ export function emptyPOLine(): POLineItem {
 		productName: "",
 		description: "",
 		sku: "",
+		category: "",
+		hsnCode: "",
 		baseUnit: "Unit",
 		packagingUnit: "Box",
 		conversionQty: 1,
@@ -73,7 +61,10 @@ export function emptyPOLine(): POLineItem {
 		uom: "Unit",
 		orderedQty: 1,
 		unitPrice: 0,
+		discountType: "percentage",
 		discountPct: 0,
+		discountFlatAmount: 0,
+		discountAmount: 0,
 		cgstPct: 9,
 		sgstPct: 9,
 		igstPct: 0,
@@ -81,6 +72,7 @@ export function emptyPOLine(): POLineItem {
 		taxAmount: 0,
 		netAmount: 0,
 		deliverySchedule: "",
+		remarks: "",
 		cpSource: "pricing_master",
 	};
 }
@@ -100,7 +92,7 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 			const cp = resolvePurchaseCostPrice(l.productId, supplier?.id);
 			const orderUom = l.requestUom ?? "Unit";
 			const orderedQtyPack = l.requestedQty;
-			const orderedQty = l.totalQtyBase ?? calcTotalQtyBase(orderUom, orderedQtyPack, info?.conversionQty ?? 1);
+			const orderedQty = l.totalQtyBase ?? calcPackingToBaseQty(orderedQtyPack, info?.conversionQty ?? 1);
 			return {
 				...emptyPOLine(),
 				uid: `pl-${l.uid}`,
@@ -108,7 +100,9 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 				productCode: info?.productCode ?? l.productCode,
 				productName: info?.productName ?? l.productName,
 				description: l.description,
-				sku: info?.sku ?? "",
+				sku: info?.sku ?? l.sku,
+				category: info?.category ?? l.category,
+				hsnCode: info?.hsnCode ?? l.hsnCode,
 				baseUnit: info?.baseUnit ?? "Unit",
 				packagingUnit: info?.packagingUnit ?? "Box",
 				conversionQty: info?.conversionQty ?? 1,
@@ -118,6 +112,7 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 				orderedQty,
 				unitPrice: cp.amount,
 				cpSource: cp.source,
+				remarks: l.remarks ?? "",
 				prLineUid: l.uid,
 			};
 		}) ?? [];
@@ -181,6 +176,7 @@ export function poToFormValues(po: PurchaseOrder): POFormValues {
 	} = po;
 	return {
 		...rest,
+		lines: po.lines.map((l) => enrichPOLineItem({ ...l })),
 		supplierContactPerson: po.supplierContactPerson ?? "",
 		supplierMobile: po.supplierMobile ?? "",
 		supplierMobileCountry: po.supplierMobileCountry ?? "+91",
@@ -219,20 +215,7 @@ export function PurchaseOrderForm({
 	submittedDate?: string;
 }) {
 	const fileRef = useRef<HTMLInputElement>(null);
-	const [showProductModal, setShowProductModal] = useState(false);
-	const [showQuickProduct, setShowQuickProduct] = useState(false);
-	const [prodSearch, setProdSearch] = useState("");
-	const [prodCategory, setProdCategory] = useState("");
-	const [selectedProdIds, setSelectedProdIds] = useState<number[]>([]);
-	const [quickProduct, setQuickProduct] = useState({
-		name: "",
-		code: "",
-		categoryName: "",
-		uom: "",
-		description: "",
-	});
 
-	const products = loadProcurementProducts();
 	const suppliers = getActiveSuppliers();
 	const prList = loadPurchaseRequests().filter((p) =>
 		["approved", "partially_converted"].includes(p.status),
@@ -292,7 +275,7 @@ export function PurchaseOrderForm({
 			const cp = resolvePurchaseCostPrice(l.productId, form.supplierId || undefined);
 			const orderUom = l.requestUom ?? "Unit";
 			const orderedQtyPack = l.requestedQty;
-			const orderedQty = l.totalQtyBase;
+			const orderedQty = l.totalQtyBase ?? calcPackingToBaseQty(orderedQtyPack, info?.conversionQty ?? 1);
 			return {
 				...emptyPOLine(),
 				uid: `pl-${l.uid}`,
@@ -300,7 +283,9 @@ export function PurchaseOrderForm({
 				productCode: info?.productCode ?? l.productCode,
 				productName: info?.productName ?? l.productName,
 				description: l.description,
-				sku: info?.sku ?? "",
+				sku: info?.sku ?? l.sku,
+				category: info?.category ?? l.category,
+				hsnCode: info?.hsnCode ?? l.hsnCode,
 				baseUnit: info?.baseUnit ?? "Unit",
 				packagingUnit: info?.packagingUnit ?? "Box",
 				conversionQty: info?.conversionQty ?? 1,
@@ -310,6 +295,7 @@ export function PurchaseOrderForm({
 				orderedQty,
 				unitPrice: cp.amount,
 				cpSource: cp.source,
+				remarks: l.remarks ?? "",
 				prLineUid: l.uid,
 			};
 		});
@@ -326,75 +312,15 @@ export function PurchaseOrderForm({
 		});
 	};
 
-	const updateLine = (uid: string, p: Partial<POLineItem>) =>
-		patch({
-			lines: form.lines.map((l) => {
-				if (l.uid !== uid) return l;
-				const next = { ...l, ...p };
-				if ("orderedQtyPack" in p || "orderUom" in p || "conversionQty" in p) {
-					next.orderedQty = calcTotalQtyBase(
-						next.orderUom,
-						next.orderedQtyPack,
-						next.conversionQty,
-					);
-				}
-				return next;
-			}),
-		});
-
-	const addSelectedProducts = () => {
-		if (!selectedProdIds.length) return;
-		const masterProducts = loadProducts();
-		const lines = selectedProdIds
-			.map((id) => masterProducts.find((p) => p.id === id))
-			.filter((p) => !!p)
-			.map((p) => {
-				const info = enrichProductForProcurement(p!.id)!;
-				const cp = resolvePurchaseCostPrice(p!.id, form.supplierId || undefined);
-				return {
-					...emptyPOLine(),
-					uid: `pl-${p!.id}-${Date.now()}`,
-					productId: p!.id,
-					productCode: info.productCode,
-					productName: info.productName,
-					description: info.description,
-					sku: info.sku,
-					baseUnit: info.baseUnit,
-					packagingUnit: info.packagingUnit,
-					conversionQty: info.conversionQty,
-					unitPrice: cp.amount,
-					cpSource: cp.source,
-				};
-			});
-		patch({ lines: [...form.lines, ...lines] });
-		setSelectedProdIds([]);
-		setShowProductModal(false);
-	};
-
-	const filteredProducts = products.filter((p) => {
-		const q = prodSearch.toLowerCase();
-		const mSearch =
-			!q || p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q);
-		const mCategory = !prodCategory || p.categoryName === prodCategory;
-		return mSearch && mCategory;
-	});
-
-	const categories = Array.from(new Set(products.map((p) => p.categoryName)));
 	const previewLines = preview.lines;
 
-	const linkedPr = form.sourcePrId ? getPRById(form.sourcePrId) : null;
+	const linkedPr = form.sourcePrId ? getPRById(form.sourcePrId) ?? null : null;
 	const displayPoNo = poNumber || "Auto-generated";
 	const totalQty = form.lines.reduce((s, l) => s + l.orderedQty, 0);
 	const totalGst =
 		preview.summary.totalCgst +
 		preview.summary.totalSgst +
 		preview.summary.totalIgst;
-
-	const getRequestedQty = (line: POLineItem) => {
-		if (!line.prLineUid || !linkedPr) return null;
-		const prLine = linkedPr.lines.find((l) => l.uid === line.prLineUid);
-		return prLine?.totalQtyBase ?? prLine?.requestedQty ?? line.orderedQty;
-	};
 
 	const stateOptions = useMemo(() => stateSelectOptions(), []);
 	const warehouseOptions = useMemo(
@@ -621,193 +547,14 @@ export function PurchaseOrderForm({
 					</div>
 				</div>
 
-				<div className="border-t border-border/60 pt-4">
-					<div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-						<SectionHead
-							label={poType === "pr" ? "Products from PR" : "Products"}
-							sub="Verify line items, order quantities, tax settings and prices."
-						/>
-						<span className="inline-flex h-6 items-center rounded-full bg-brand-50 px-2.5 text-[11px] font-semibold text-brand-700">
-							{form.lines.length} item{form.lines.length === 1 ? "" : "s"}
-						</span>
-					</div>
-
-					{poType === "direct" && form.lines.length === 0 && !readOnly ? (
-						<div className="py-10 px-4 text-center rounded-lg border border-dashed border-border bg-muted/10">
-							<Package className="w-10 h-10 mx-auto text-muted-foreground/70 mb-2" />
-							<p className="text-sm font-semibold text-foreground">
-								No products added yet
-							</p>
-							<Button
-								type="button"
-								variant="outline"
-								className="mt-3 h-8 rounded-lg border-dashed text-xs font-semibold"
-								onClick={() => setShowProductModal(true)}
-							>
-								<Plus className="w-3.5 h-3.5" /> Add first product
-							</Button>
-						</div>
-					) : (
-						<>
-							{poType === "direct" && !readOnly && (
-								<div className="mb-3">
-									<Button
-										type="button"
-										onClick={() => setShowProductModal(true)}
-										className="h-8 gap-1.5 rounded-lg bg-brand-600 px-3 text-xs font-semibold text-white hover:bg-brand-700"
-									>
-										<Plus className="w-3.5 h-3.5" /> Add Product
-									</Button>
-								</div>
-							)}
-							<div className="overflow-x-auto rounded-lg border border-border bg-white">
-								<table className="min-w-full table-fixed">
-									<thead className="bg-muted/30">
-										<tr className="border-b border-border">
-											<th className="w-12 px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">
-												Sr.
-											</th>
-											<th className="min-w-[180px] px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">
-												Product
-											</th>
-											{poType === "pr" && (
-												<th className="w-32 px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">
-													Requested Qty
-												</th>
-											)}
-											<th className="w-28 px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">
-												Order UOM
-											</th>
-											<th className="w-32 px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">
-												Ordered Qty
-											</th>
-											<th className="w-28 px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">
-												Base Qty
-											</th>
-											<th className="w-28 px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">
-												CP (₹)
-											</th>
-											<th className="w-24 px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">
-												GST %
-											</th>
-											<th className="w-32 px-3 py-2 text-right text-[11px] font-semibold text-muted-foreground font-mono">
-												Total
-											</th>
-											{!readOnly && (
-												<th className="w-14 px-3 py-2 text-right text-[11px] font-semibold text-muted-foreground">
-													Action
-												</th>
-											)}
-										</tr>
-									</thead>
-									<tbody className="divide-y divide-border/60">
-										{form.lines.map((line, idx) => {
-											const reqQty = getRequestedQty(line);
-											const gstPct = line.cgstPct + line.sgstPct + line.igstPct;
-											const calcLine = previewLines.find((l) => l.uid === line.uid);
-											return (
-												<tr
-													key={line.uid}
-													className="align-top transition-colors hover:bg-muted/10"
-												>
-													<td className="px-3 py-2.5 text-xs text-muted-foreground">
-														{idx + 1}
-													</td>
-													<td className="px-3 py-2.5 text-xs font-medium text-foreground">
-														{line.productName}
-													</td>
-													{poType === "pr" && (
-														<td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">
-															{reqQty ?? "—"}
-														</td>
-													)}
-													<td className="px-3 py-2.5">
-														<AutocompleteSelect
-															options={PACKAGING_UOM_OPTIONS}
-															value={line.orderUom}
-															onChange={(v) =>
-																updateLine(line.uid, { orderUom: v as PackagingUom })
-															}
-															disabled={readOnly}
-															className={inputCls}
-														/>
-													</td>
-													<td className="px-3 py-2.5">
-														<Input
-															type="number"
-															min={0}
-															disabled={readOnly}
-															value={line.orderedQtyPack}
-															onChange={(e) =>
-																updateLine(line.uid, {
-																	orderedQtyPack: Number(e.target.value) || 0,
-																})
-															}
-															className={cn(inputCls, "w-20")}
-														/>
-													</td>
-													<td className="px-3 py-2.5 text-xs tabular-nums text-muted-foreground">
-														{line.orderedQty} {line.baseUnit}
-													</td>
-													<td className="px-3 py-2.5">
-														<IndianRupeeInput
-															value={line.unitPrice}
-															onChange={(n) =>
-																updateLine(line.uid, {
-																	unitPrice: n,
-																	cpSource: "manual",
-																})
-															}
-															disabled={readOnly}
-															className={inputCls}
-														/>
-													</td>
-													<td className="px-3 py-2.5">
-														<Input
-															type="number"
-															min={0}
-															disabled={readOnly}
-															value={gstPct}
-															onChange={(e) => {
-																const gst = Number(e.target.value) || 0;
-																updateLine(line.uid, {
-																	cgstPct: gst / 2,
-																	sgstPct: gst / 2,
-																	igstPct: 0,
-																});
-															}}
-															className={cn(inputCls, "w-16")}
-														/>
-													</td>
-													<td className="px-3 py-2.5 text-right font-semibold text-xs tabular-nums font-mono">
-														{formatCurrency(calcLine?.netAmount ?? line.netAmount)}
-													</td>
-													{!readOnly && (
-														<td className="px-3 py-2.5 text-right">
-															<Button
-																type="button"
-																variant="ghost"
-																size="sm"
-																onClick={() =>
-																	patch({
-																		lines: form.lines.filter((x) => x.uid !== line.uid),
-																	})
-																}
-																className="h-8 w-8 rounded-lg p-0 text-muted-foreground hover:bg-red-50 hover:text-red-600"
-															>
-																<Trash2 className="h-4 w-4" />
-															</Button>
-														</td>
-													)}
-												</tr>
-											);
-										})}
-									</tbody>
-								</table>
-							</div>
-						</>
-					)}
-				</div>
+				<POLineItemsSection
+					form={form}
+					onChange={onChange}
+					readOnly={readOnly}
+					poType={poType}
+					previewLines={previewLines}
+					linkedPr={linkedPr}
+				/>
 
 				<div className="border-t border-border/60 pt-4">
 					<AdditionalChargesEditor
@@ -903,258 +650,6 @@ export function PurchaseOrderForm({
 					</div>
 				</div>
 			</div>
-
-			{showProductModal && (
-				<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-					<div className="bg-white rounded-[13px] border border-border w-full max-w-4xl max-h-[85vh] overflow-hidden shadow-xl">
-						<div
-							className="px-4 py-3 border-b border-border flex items-center justify-between bg-muted/30"
-						>
-							<h3 className="text-[13px] font-bold text-foreground">
-								Select Products
-							</h3>
-							<button
-								type="button"
-								className="p-1.5 hover:bg-muted rounded-[9px] transition-colors"
-								onClick={() => setShowProductModal(false)}
-							>
-								<X className="w-4 h-4" />
-							</button>
-						</div>
-						<div className="p-4 space-y-3">
-							<div className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto_auto] gap-2">
-								<div className="relative">
-									<Search className="w-4 h-4 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
-									<Input
-										className="pl-8 h-[38px] rounded-lg text-xs"
-										placeholder="Search product..."
-										value={prodSearch}
-										onChange={(e) => setProdSearch(e.target.value)}
-									/>
-								</div>
-								<AutocompleteSelect
-									options={[
-										{ value: "", label: "All categories" },
-										...categories.map((c) => ({ value: c, label: c })),
-									]}
-									value={prodCategory}
-									onChange={setProdCategory}
-									placeholder="All categories"
-									searchPlaceholder="Search category…"
-									className="h-[38px] text-[13px] min-w-[140px]"
-								/>
-								<Button
-									variant="outline"
-									className="h-[38px] text-xs font-semibold rounded-lg"
-									onClick={() => setShowQuickProduct(true)}
-								>
-									Create Product
-								</Button>
-								<Button
-									className="h-[38px] text-xs font-semibold rounded-lg bg-brand-600 hover:bg-brand-700 text-white"
-									onClick={addSelectedProducts}
-								>
-									Add Selected
-								</Button>
-							</div>
-							<div className="border border-border rounded-lg overflow-auto max-h-[48vh] bg-white">
-								<table className="w-full text-xs">
-									<thead>
-										<tr className="border-b border-border bg-muted/20">
-											<th className="px-3 py-2.5 w-8 text-center">
-												<input
-													type="checkbox"
-													checked={
-														filteredProducts.length > 0 &&
-														filteredProducts.every((p) => selectedProdIds.includes(p.id))
-													}
-													onChange={(e) => {
-														if (e.target.checked) {
-															const toAdd = filteredProducts.map((p) => p.id);
-															setSelectedProdIds((prev) => Array.from(new Set([...prev, ...toAdd])));
-														} else {
-															const toRemove = new Set(filteredProducts.map((p) => p.id));
-															setSelectedProdIds((prev) => prev.filter((id) => !toRemove.has(id)));
-														}
-													}}
-													className="rounded border-border text-brand-600 focus:ring-brand-500 cursor-pointer"
-												/>
-											</th>
-											<th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">
-												Product
-											</th>
-											<th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">
-												Category
-											</th>
-											<th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground font-mono">
-												UOM
-											</th>
-											<th className="px-3 py-2.5 text-right text-[11px] font-semibold text-muted-foreground font-mono">
-												Est. Price
-											</th>
-										</tr>
-									</thead>
-									<tbody>
-										{filteredProducts.map((p) => (
-											<tr
-												key={p.id}
-												className="border-b border-border/50 hover:bg-muted/10 last:border-0"
-											>
-												<td className="px-3 py-2 text-center">
-													<input
-														type="checkbox"
-														checked={selectedProdIds.includes(p.id)}
-														onChange={(e) =>
-															setSelectedProdIds((prev) =>
-																e.target.checked
-																	? [...prev, p.id]
-																	: prev.filter((x) => x !== p.id),
-															)
-														}
-														className="rounded border-border text-brand-600 focus:ring-brand-500"
-													/>
-												</td>
-												<td className="px-3 py-2 font-medium text-foreground">
-													{p.name}
-												</td>
-												<td className="px-3 py-2 text-muted-foreground">
-													{p.categoryName}
-												</td>
-												<td className="px-3 py-2 font-mono text-muted-foreground">
-													{p.uom}
-												</td>
-												<td className="px-3 py-2 text-right font-mono text-foreground">
-													{formatCurrency(p.estimatedUnitPrice)}
-												</td>
-											</tr>
-										))}
-									</tbody>
-								</table>
-							</div>
-						</div>
-					</div>
-				</div>
-			)}
-
-			{showQuickProduct && (
-				<div className="fixed inset-0 z-[60] bg-black/35 flex justify-end">
-					<div className="w-full max-w-sm bg-white h-full border-l border-border p-5 space-y-4 shadow-2xl flex flex-col justify-between">
-						<div className="space-y-4">
-							<div className="flex items-center justify-between">
-								<h3 className="text-sm font-semibold text-foreground">
-									Create Product
-								</h3>
-								<button
-									type="button"
-									className="p-1.5 hover:bg-muted rounded-[9px] transition-colors"
-									onClick={() => setShowQuickProduct(false)}
-								>
-									<X className="w-4 h-4" />
-								</button>
-							</div>
-							<div className="space-y-3">
-								<div className="space-y-1">
-									<Label className="text-xs font-medium">Product Name</Label>
-									<Input
-										placeholder="e.g., Nitrogen Fertilizer"
-										value={quickProduct.name}
-										onChange={(e) =>
-											setQuickProduct((p) => ({ ...p, name: e.target.value }))
-										}
-										className="h-9 rounded-lg text-xs"
-									/>
-								</div>
-								<div className="space-y-1">
-									<Label className="text-xs font-medium">SKU</Label>
-									<Input
-										placeholder="e.g., FERT-WSF-019"
-										value={quickProduct.code}
-										onChange={(e) =>
-											setQuickProduct((p) => ({ ...p, code: e.target.value }))
-										}
-										className="h-9 rounded-lg text-xs"
-									/>
-								</div>
-								<div className="space-y-1">
-									<Label className="text-xs font-medium">Category</Label>
-									<Input
-										placeholder="e.g., Fertilizers"
-										value={quickProduct.categoryName}
-										onChange={(e) =>
-											setQuickProduct((p) => ({
-												...p,
-												categoryName: e.target.value,
-											}))
-										}
-										className="h-9 rounded-lg text-xs"
-									/>
-								</div>
-								<div className="space-y-1">
-									<Label className="text-xs font-medium">UOM</Label>
-									<Input
-										placeholder="e.g., KG"
-										value={quickProduct.uom}
-										onChange={(e) =>
-											setQuickProduct((p) => ({ ...p, uom: e.target.value }))
-										}
-										className="h-9 rounded-lg text-xs"
-									/>
-								</div>
-								<div className="space-y-1">
-									<Label className="text-xs font-medium">Description</Label>
-									<Textarea
-										rows={3}
-										placeholder="Optional description..."
-										value={quickProduct.description}
-										onChange={(e) =>
-											setQuickProduct((p) => ({
-												...p,
-												description: e.target.value,
-											}))
-										}
-										className="rounded-lg text-xs resize-none"
-									/>
-								</div>
-							</div>
-						</div>
-						<div className="flex justify-end gap-2 border-t border-border pt-4 mt-4">
-							<Button
-								variant="outline"
-								className="h-9 text-xs font-semibold rounded-lg"
-								onClick={() => setShowQuickProduct(false)}
-							>
-								Cancel
-							</Button>
-							<Button
-								className="h-9 text-xs font-semibold rounded-lg bg-brand-600 hover:bg-brand-700 text-white"
-								onClick={() => {
-									if (!quickProduct.name.trim() || !quickProduct.code.trim())
-										return;
-									const created = addProcurementProduct({
-										code: quickProduct.code.trim(),
-										name: quickProduct.name.trim(),
-										categoryName: quickProduct.categoryName.trim() || "General",
-										uom: quickProduct.uom.trim() || "PCS",
-										description: quickProduct.description.trim(),
-										estimatedUnitPrice: 0,
-									});
-									setSelectedProdIds((p) => [...p, created.id]);
-									setQuickProduct({
-										name: "",
-										code: "",
-										categoryName: "",
-										uom: "",
-										description: "",
-									});
-									setShowQuickProduct(false);
-								}}
-							>
-								Save Product
-							</Button>
-						</div>
-					</div>
-				</div>
-			)}
 		</div>
 	);
 }

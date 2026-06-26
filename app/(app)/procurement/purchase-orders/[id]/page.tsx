@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Edit2, Send, CheckCircle2, FileText, Upload, Scissors } from "lucide-react";
+import { Edit2, Send, CheckCircle2, FileText, Upload, Scissors, XCircle } from "lucide-react";
 import {
   RecordDetailPage,
   type RecordDetailSidebarProps,
@@ -35,6 +35,8 @@ import {
 } from "../po-data";
 import { canShortClosePO, getPOQtySummary } from "../po-qty";
 import { canUploadPOInvoice } from "../po-invoice-utils";
+import { getPOTotalSkuQty } from "../po-listing-utils";
+import { formatCurrency } from "@/lib/procurement/utils";
 
 const PO_TABS: RecordDetailTab[] = [
   { value: "overview", label: "Overview" },
@@ -116,6 +118,54 @@ export default function PODetailPage() {
 		setPo(updated);
 	};
 
+  const quickActions: RecordDetailSidebarProps["quickActions"] = [];
+  if (["draft", "rejected"].includes(po.status)) {
+    quickActions.push({
+      label: "Edit",
+      icon: Edit2,
+      onClick: () => router.push(`/procurement/purchase-orders/${po.id}/edit`),
+      variant: "primary",
+    });
+  }
+  if (po.status === "draft") {
+    quickActions.push({
+      label: "Submit",
+      icon: Send,
+      onClick: () => update(submitPO(po), "po-submitted"),
+    });
+  }
+  if (po.status === "pending_approval") {
+    quickActions.push(
+      {
+        label: "Approve",
+        icon: CheckCircle2,
+        onClick: () => {
+          setApprovalAction("approve");
+          setApprovalOpen(true);
+        },
+        variant: "primary",
+      },
+      {
+        label: "Reject",
+        icon: XCircle,
+        onClick: () => {
+          setApprovalAction("reject");
+          setApprovalOpen(true);
+        },
+      },
+    );
+  }
+  if (canUploadInvoice) {
+    quickActions.push({
+      label: "Upload Invoice",
+      icon: Upload,
+      onClick: () => {
+        setUploadReplace(po.status === "invoice_uploaded");
+        setUploadOpen(true);
+      },
+    });
+  }
+
   const headerActions = (
     <>
       {["draft", "rejected"].includes(po.status) && (
@@ -159,10 +209,15 @@ export default function PODetailPage() {
   );
 
   const sidebar: RecordDetailSidebarProps = {
+    quickActions,
     summary: [
       { label: "Supplier", value: po.supplierName },
       { label: "PO Date", value: po.poDate },
-      { label: "Reference", value: po.referenceNumber || "—" },
+      { label: "PR Reference", value: po.sourcePrNumber || "—" },
+      { label: "Warehouse", value: po.warehouseName || "—" },
+      { label: "Line Items", value: String(po.lines.filter((l) => l.productId > 0).length) },
+      { label: "Total SKU Qty", value: String(getPOTotalSkuQty(po)) },
+      { label: "Product Total", value: formatCurrency(po.summary.productTotal ?? po.summary.taxableValue) },
       { label: "Grand Total", value: formatRupee(po.summary.grandTotal), highlight: true },
       { label: "Ordered Qty", value: String(qtySummary.orderedQty) },
       { label: "Pending Qty", value: String(qtySummary.pendingQty) },

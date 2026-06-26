@@ -269,9 +269,15 @@ export default function PurchaseOrdersPageClient() {
       sortable: true,
       render: (val, row) => (
         <div>
-          <p className="font-semibold text-brand-700 text-xs">
-            <HighlightText text={row.poNumber} query={(filters.search as string) || ""} />
-          </p>
+          <button
+            type="button"
+            onClick={() => router.push(`/procurement/purchase-orders/${row.id}`)}
+            className="text-left"
+          >
+            <p className="font-semibold text-brand-700 text-xs hover:underline">
+              <HighlightText text={row.poNumber} query={(filters.search as string) || ""} />
+            </p>
+          </button>
           <p className="text-[11px] text-muted-foreground">{formatListingDate(row.poDate)}</p>
         </div>
       ),

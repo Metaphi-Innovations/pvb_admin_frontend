@@ -2,7 +2,7 @@ import { PROCUREMENT_APPROVAL, CURRENT_USER } from "@/lib/procurement/config";
 import { nextId, todayStr } from "@/lib/procurement/utils";
 import type { ActivityEntry } from "@/lib/procurement/types";
 import type { PackagingUom, PRPriority } from "@/lib/procurement/procurement-line-utils";
-import { calcTotalQtyBase } from "@/lib/procurement/procurement-line-utils";
+import { calcPackingToBaseQty } from "@/lib/procurement/procurement-line-utils";
 import { enrichProductForProcurement } from "@/lib/procurement/procurement-line-utils";
 
 /** Visible in listing tabs */
@@ -38,7 +38,9 @@ export interface PRLineItem {
   totalQtyBase: number;
   segment: string;
   category: string;
+  hsnCode: string;
   mrp: number;
+  ratePerSku: number;
   /** @deprecated use requestUom */
   uom: string;
   remarks: string;
@@ -77,9 +79,7 @@ function migrateLine(line: Partial<PRLineItem>): PRLineItem {
   const requestUom = (line.requestUom ?? (line.uom as PackagingUom) ?? "Unit") as PackagingUom;
   const requestedQty = line.requestedQty ?? 1;
   const conversionQty = line.conversionQty ?? enriched?.conversionQty ?? 1;
-  const totalQtyBase =
-    line.totalQtyBase ??
-    calcTotalQtyBase(requestUom, requestedQty, conversionQty);
+  const totalQtyBase = calcPackingToBaseQty(requestedQty, conversionQty);
   return {
     uid: line.uid ?? `l-${Date.now()}`,
     productId: line.productId ?? 0,
@@ -95,10 +95,17 @@ function migrateLine(line: Partial<PRLineItem>): PRLineItem {
     totalQtyBase,
     segment: line.segment ?? enriched?.segment ?? "",
     category: line.category ?? enriched?.category ?? "",
-    mrp: line.mrp ?? enriched?.mrp ?? 0,
+    hsnCode: enriched?.hsnCode ?? line.hsnCode ?? "",
+    mrp: enriched?.mrp ?? line.mrp ?? 0,
+    ratePerSku: enriched?.ratePerSku ?? line.ratePerSku ?? 0,
     uom: line.uom ?? requestUom,
     remarks: line.remarks ?? "",
   };
+}
+
+/** Enrich a line with current product master data (HSN, rate, conversion, totals). */
+export function enrichPRLineItem(line: PRLineItem): PRLineItem {
+  return migrateLine(line);
 }
 
 function migratePR(pr: PurchaseRequest): PurchaseRequest {
@@ -315,10 +322,7 @@ export function recalcPR(pr: PurchaseRequest): PurchaseRequest {
     ...pr,
     lines: pr.lines
       .filter((l) => l.productId > 0 || l.productName)
-      .map((l) => {
-        const totalQtyBase = calcTotalQtyBase(l.requestUom, l.requestedQty, l.conversionQty);
-        return { ...l, totalQtyBase, uom: l.requestUom };
-      }),
+      .map((l) => migrateLine(l)),
   };
 }
 

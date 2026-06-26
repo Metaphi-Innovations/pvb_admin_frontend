@@ -227,7 +227,7 @@ export default function PurchaseRequestsPage() {
     },
     {
       key: "totalQty",
-      header: "Total Qty",
+      header: "Total Base Qty",
       sortable: true,
       render: (val, row) => (
         <span className="text-xs tabular-nums text-foreground py-1">

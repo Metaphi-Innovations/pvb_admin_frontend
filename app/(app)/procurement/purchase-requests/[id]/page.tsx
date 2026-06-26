@@ -1,9 +1,8 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
 import { CheckCircle2, Edit2, ShoppingCart, XCircle } from "lucide-react";
 import {
   RecordDetailPage,
@@ -21,6 +20,13 @@ import {
   PR_STATUS_CFG,
   type PRStatus,
 } from "../pr-data";
+import {
+  getPRTotalAmount,
+  getPRTotalItems,
+  getPRTotalQuantity,
+} from "../pr-listing-utils";
+import { formatCurrency } from "@/lib/procurement/utils";
+import { DEPARTMENT_OPTIONS, PR_PRIORITY_OPTIONS } from "@/lib/procurement/config";
 import { Toast } from "../../components/ProcurementUI";
 
 function prStatusVariant(status: PRStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
@@ -38,62 +44,6 @@ function prApprovalTone(status: PRStatus): "pending" | "approved" | "rejected" |
   return "neutral";
 }
 
-// ── Status Badge ─────────────────────────────────────────────────────────────
-function StatusBadge({ status }: { status: PRStatus }) {
-	const cfg = PR_STATUS_CFG[status] || {
-		bg: "bg-slate-100 border-slate-200",
-		text: "text-slate-600",
-		dot: "bg-slate-400",
-		label: status,
-	};
-	return (
-		<span
-			className={cn(
-				"inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold border",
-				cfg.bg.includes("border") ? cfg.bg : `${cfg.bg} border-current/10`,
-				cfg.text,
-			)}
-		>
-			<span className={cn("h-1.5 w-1.5 rounded-full", cfg.dot)} />
-			{cfg.label}
-		</span>
-	);
-}
-
-// ── Detail Field Row ─────────────────────────────────────────────────────────
-function DetailField({
-	label,
-	value,
-	mono,
-}: {
-	label: string;
-	value?: React.ReactNode;
-	mono?: boolean;
-}) {
-	const displayVal =
-		value !== undefined && value !== null && value !== "" ? value : "—";
-	return (
-		<div className='py-2 space-y-1 border-b border-border/50 last:border-0'>
-			<span className='text-[10px] font-semibold text-muted-foreground uppercase tracking-wider'>
-				{label}
-			</span>
-			<div
-				className={cn(
-					"text-xs font-semibold text-foreground break-all",
-					mono && "font-mono",
-				)}
-			>
-				{displayVal}
-			</div>
-		</div>
-	);
-}
-
-// ── Normalization for unit matching ──────────────────────────────────────────
-const normalizeProductKey = (value?: string) =>
-	(value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
-
-// ── Main View Page ────────────────────────────────────────────────────────────
 export default function PRViewPage() {
   const params = useParams();
   const router = useRouter();
@@ -106,7 +56,14 @@ export default function PRViewPage() {
 
   useEffect(() => setPr(getPRById(id)), [id]);
 
-	if (!pr) {
+  const formValues = useMemo(() => (pr ? prToFormValues(pr) : null), [pr]);
+
+  const departmentLabel =
+    DEPARTMENT_OPTIONS.find((d) => d.value === pr?.department)?.label ?? pr?.department;
+  const priorityLabel =
+    PR_PRIORITY_OPTIONS.find((p) => p.value === pr?.priority)?.label ?? pr?.priority;
+
+	if (!pr || !formValues) {
 		return (
 			<>
 				<div className='p-8 text-sm font-semibold text-muted-foreground'>
@@ -164,9 +121,14 @@ export default function PRViewPage() {
     summary: [
       { label: "PR Date", value: pr.prDate },
       { label: "Requested By", value: pr.requestedBy },
-      { label: "Required By", value: pr.requiredByDate },
+      { label: "Department", value: departmentLabel || "—" },
+      { label: "Priority", value: priorityLabel || "—" },
+      { label: "Required By", value: pr.requiredByDate || "—" },
+      { label: "State / Warehouse", value: pr.state ? `${pr.state}${pr.warehouseName ? ` · ${pr.warehouseName}` : ""}` : "—" },
+      { label: "Line Items", value: String(getPRTotalItems(pr)) },
+      { label: "Total SKU Qty", value: String(getPRTotalQuantity(pr)) },
+      { label: "Total Amount", value: formatCurrency(getPRTotalAmount(pr)) },
       { label: "Created By", value: pr.createdBy },
-      { label: "Line Items", value: String(pr.lines.length) },
     ],
     activity: [...pr.activity].reverse().map((a, i) => ({
       id: `${a.date}-${i}`,
@@ -199,7 +161,7 @@ export default function PRViewPage() {
       >
         {activeTab === "overview" && (
           <PurchaseRequestForm
-            form={prToFormValues(pr)}
+            form={formValues}
             onChange={() => {}}
             readOnly
             prNumber={pr.prNumber}
