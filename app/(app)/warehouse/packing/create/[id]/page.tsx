@@ -158,18 +158,24 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
               <Input value={packingNo} disabled className="h-8 text-xs bg-slate-50 font-mono font-bold mt-1.5" />
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Sales Order No</p>
-              <Input value={order.salesOrderNo} disabled className="h-8 text-xs bg-slate-50 font-mono font-bold mt-1.5" />
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                {order.sourceDocumentType === "Stock Transfer" ? "Source Document No." : "Sales Order No"}
+              </p>
+              <Input value={order.sourceDocumentType === "Stock Transfer" ? order.sourceDocumentNo : order.salesOrderNo} disabled className="h-8 text-xs bg-slate-50 font-mono font-bold mt-1.5" />
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Customer</p>
-              <Input value={order.customer} disabled className="h-8 text-xs bg-slate-50 font-medium mt-1.5" />
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                {order.sourceDocumentType === "Stock Transfer" ? "Target Warehouse" : "Customer"}
+              </p>
+              <Input value={order.sourceDocumentType === "Stock Transfer" ? order.targetWarehouse : order.customer} disabled className="h-8 text-xs bg-slate-50 font-medium mt-1.5" />
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Warehouse</p>
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                {order.sourceDocumentType === "Stock Transfer" ? "Source Warehouse" : "Warehouse"}
+              </p>
               <div className="flex items-center gap-1.5 h-8 border border-input px-3 rounded-md bg-slate-50 text-xs text-muted-foreground font-medium mt-1.5">
                 <Building className="w-3.5 h-3.5 text-muted-foreground/60" />
-                {order.warehouse}
+                {order.sourceDocumentType === "Stock Transfer" ? order.sourceWarehouse : order.warehouse}
               </div>
             </div>
             <div>
@@ -198,7 +204,9 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
                 <tr className="border-b border-border bg-slate-50/50">
                   <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Product</th>
                   <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">SKU</th>
-                  <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Ordered Qty</th>
+                  <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">
+                    {order.sourceDocumentType === "Stock Transfer" ? "Transfer Qty" : "Ordered Qty"}
+                  </th>
                   <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Pending Qty</th>
                   <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Available Stock</th>
                   <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider w-[180px]">Packing Qty *</th>
@@ -224,7 +232,7 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
                             value={currentQty === 0 && isNaN(currentQty) ? "" : currentQty}
                             onChange={(e) => handleQtyChange(p.sku, e.target.value, p.pendingQty, maxAvailable)}
                             className={`h-8 text-xs font-bold text-right px-3 focus:ring-1 focus:ring-brand-500 ${
-                              error ? "border-red-400 focus:ring-red-500 focus:border-red-500" : ""
+                              error ? "border-red-400" : ""
                             }`}
                           />
                           {error && (

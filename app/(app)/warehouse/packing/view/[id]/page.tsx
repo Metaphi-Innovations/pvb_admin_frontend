@@ -5,7 +5,7 @@ import { RecordDetailPage } from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
 import {
   Calendar, Building, AlertCircle,
-  Package, FileText, ClipboardCheck, User
+  Package, FileText, ClipboardCheck, User, Truck
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getPackingUnionById } from "../../services";
@@ -54,7 +54,7 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
 
   const { type, data } = unionRecord;
   const statusCfg = STATUS_BADGE_CONFIG[data.status] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: data.status };
-  const rowData = data as unknown as Record<string, unknown>;
+  const rowData = data as any;
 
   return (
     <RecordDetailPage
@@ -62,14 +62,18 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
       listLabel="Packing"
       recordName={
         type === "order"
-          ? String(rowData.customer ?? "Sales Order")
+          ? (rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.targetWarehouse ?? "Stock Transfer") : String(rowData.customer ?? "Sales Order"))
           : String(rowData.packingNo ?? "Packing")
       }
-      recordCode={type === "order" ? String(rowData.salesOrderNo ?? "") : String(rowData.packingNo ?? "")}
+      recordCode={
+        type === "order"
+          ? (rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.sourceDocumentNo ?? "") : String(rowData.salesOrderNo ?? ""))
+          : String(rowData.packingNo ?? "")
+      }
       statusLabel={statusCfg.label}
       statusVariant={packingStatusVariant(data.status)}
       metaItems={[
-        { icon: Building, label: data.warehouse },
+        { icon: Building, label: rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.sourceWarehouse ?? data.warehouse) : data.warehouse },
         ...(type === "order"
           ? [{ icon: Calendar, label: String(rowData.orderDate ?? "") }]
           : [{ icon: User, label: String(rowData.packedBy ?? "") }]),
@@ -78,62 +82,83 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
         summary: [
           ...(type === "order"
             ? [
-                { label: "Customer", value: String(rowData.customer ?? "—") },
-                { label: "Order Amount", value: `₹${Number(rowData.orderAmount ?? 0).toLocaleString("en-IN")}`, highlight: true },
+                { label: rowData.sourceDocumentType === "Stock Transfer" ? "Target Warehouse" : "Customer", value: rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.targetWarehouse ?? "—") : String(rowData.customer ?? "—") },
+                { label: "Amount / Value", value: `₹${Number(rowData.orderAmount ?? 0).toLocaleString("en-IN")}`, highlight: true },
                 { label: "Delivery Date", value: String(rowData.deliveryDate ?? "—") },
               ]
             : [
-                { label: "Sales Order", value: String(rowData.salesOrderNo ?? "—") },
-                { label: "Customer", value: String(rowData.customer ?? "—") },
+                { label: rowData.sourceDocumentType === "Stock Transfer" ? "Stock Transfer No." : "Sales Order", value: String(rowData.salesOrderNo ?? "—") },
+                { label: rowData.sourceDocumentType === "Stock Transfer" ? "Target Warehouse" : "Customer", value: rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.targetWarehouse ?? "—") : String(rowData.customer ?? "—") },
                 { label: "Packing Date", value: String(rowData.packingDate ?? "—"), highlight: true },
               ]),
         ],
+        quickActions:
+          type === "packing" && data.status === "Packed"
+            ? [
+                {
+                  label: "Create Dispatch",
+                  icon: Truck,
+                  variant: "primary" as const,
+                  onClick: () => router.push(`/warehouse/dispatch/create?packingId=${data.id}`),
+                },
+              ]
+            : [],
       }}
     >
       <div className="space-y-6">
 
-        {/* Sales Order View (Ready For Packing) */}
+        {/* Sales Order / Stock Transfer View (Ready For Packing) */}
         {type === "order" && (
           <div className="space-y-6">
             {/* Header Information */}
             <div className="bg-white rounded-xl border border-border p-5 shadow-sm space-y-4">
               <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
                 <FileText className="w-4 h-4 text-brand-600" />
-                Sales Order Information
+                {rowData.sourceDocumentType === "Stock Transfer" ? "Stock Transfer Information" : "Sales Order Information"}
               </h2>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 pt-1">
                 <div>
-                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Sales Order No</p>
-                  <p className="text-xs font-mono font-bold text-brand-700 mt-1">{(data as any).salesOrderNo}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Customer</p>
-                  <p className="text-xs font-bold text-foreground mt-1">{(data as any).customer}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Warehouse</p>
-                  <p className="text-xs font-bold text-foreground mt-1 flex items-center gap-1">
-                    <Building className="w-3.5 h-3.5 text-muted-foreground/60" />
-                    {data.warehouse}
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                    {rowData.sourceDocumentType === "Stock Transfer" ? "Source Document No." : "Sales Order No"}
+                  </p>
+                  <p className="text-xs font-mono font-bold text-brand-700 mt-1">
+                    {rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.sourceDocumentNo) : String(rowData.salesOrderNo)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Order Date</p>
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                    {rowData.sourceDocumentType === "Stock Transfer" ? "Target Warehouse" : "Customer"}
+                  </p>
+                  <p className="text-xs font-bold text-foreground mt-1">
+                    {rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.targetWarehouse) : String(rowData.customer)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                    {rowData.sourceDocumentType === "Stock Transfer" ? "Source Warehouse" : "Warehouse"}
+                  </p>
+                  <p className="text-xs font-bold text-foreground mt-1 flex items-center gap-1">
+                    <Building className="w-3.5 h-3.5 text-muted-foreground/60" />
+                    {rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.sourceWarehouse) : data.warehouse}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Document Date</p>
                   <p className="text-xs font-bold text-foreground mt-1 flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5 text-muted-foreground/60" />
-                    {(data as any).orderDate}
+                    {rowData.orderDate}
                   </p>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Delivery Date</p>
                   <p className="text-xs font-bold text-foreground mt-1 flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5 text-muted-foreground/60" />
-                    {(data as any).deliveryDate}
+                    {rowData.deliveryDate}
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Order Amount</p>
-                  <p className="text-xs font-bold text-foreground mt-1">₹{Number((data as any).orderAmount).toLocaleString("en-IN")}</p>
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Value Amount</p>
+                  <p className="text-xs font-bold text-foreground mt-1">₹{Number(rowData.orderAmount).toLocaleString("en-IN")}</p>
                 </div>
               </div>
             </div>
@@ -150,13 +175,15 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
                     <tr className="border-b border-border bg-slate-50/50">
                       <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Product</th>
                       <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">SKU</th>
-                      <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Ordered Qty</th>
+                      <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">
+                        {rowData.sourceDocumentType === "Stock Transfer" ? "Transfer Qty" : "Ordered Qty"}
+                      </th>
                       <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Packed Qty</th>
                       <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Pending Qty</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(data as any).products.map((p: any) => (
+                    {rowData.products && (rowData.products as any).map((p: any) => (
                       <tr key={p.sku} className="border-b border-border/60 hover:bg-slate-50/40">
                         <td className="py-3 px-3 text-xs font-bold text-foreground">{p.product}</td>
                         <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{p.sku}</td>
@@ -184,35 +211,41 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-4 pt-1">
                 <div>
                   <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Packing No</p>
-                  <p className="text-xs font-mono font-bold text-brand-700 mt-1">{(data as any).packingNo}</p>
+                  <p className="text-xs font-mono font-bold text-brand-700 mt-1">{rowData.packingNo}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Sales Order No</p>
-                  <p className="text-xs font-mono font-bold text-slate-700 mt-1">{(data as any).salesOrderNo}</p>
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                    {rowData.sourceDocumentType === "Stock Transfer" ? "Source Document No." : "Sales Order No"}
+                  </p>
+                  <p className="text-xs font-mono font-bold text-slate-700 mt-1">{rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.sourceDocumentNo) : String(rowData.salesOrderNo)}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Customer</p>
-                  <p className="text-xs font-bold text-foreground mt-1">{(data as any).customer}</p>
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                    {rowData.sourceDocumentType === "Stock Transfer" ? "Target Warehouse" : "Customer"}
+                  </p>
+                  <p className="text-xs font-bold text-foreground mt-1">{rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.targetWarehouse) : String(rowData.customer)}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Warehouse</p>
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                    {rowData.sourceDocumentType === "Stock Transfer" ? "Source Warehouse" : "Warehouse"}
+                  </p>
                   <p className="text-xs font-bold text-foreground mt-1 flex items-center gap-1">
                     <Building className="w-3.5 h-3.5 text-muted-foreground/60" />
-                    {data.warehouse}
+                    {rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.sourceWarehouse) : data.warehouse}
                   </p>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Packing Date</p>
                   <p className="text-xs font-bold text-foreground mt-1 flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5 text-muted-foreground/60" />
-                    {(data as any).packingDate}
+                    {rowData.packingDate}
                   </p>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Packed By</p>
                   <p className="text-xs font-bold text-foreground mt-1 flex items-center gap-1">
                     <User className="w-3.5 h-3.5 text-muted-foreground/60" />
-                    {(data as any).packedBy}
+                    {rowData.packedBy}
                   </p>
                 </div>
                 <div>
@@ -238,12 +271,14 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
                     <tr className="border-b border-border bg-slate-50/50">
                       <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Product</th>
                       <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">SKU</th>
-                      <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Ordered Qty</th>
+                      <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">
+                        {rowData.sourceDocumentType === "Stock Transfer" ? "Transfer Qty" : "Ordered Qty"}
+                      </th>
                       <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Packed Qty</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(data as any).products.map((p: any) => (
+                    {rowData.products && (rowData.products as any).map((p: any) => (
                       <tr key={p.sku} className="border-b border-border/60 hover:bg-slate-50/40">
                         <td className="py-3 px-3 text-xs font-bold text-foreground">{p.product}</td>
                         <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{p.sku}</td>
