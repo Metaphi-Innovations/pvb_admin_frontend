@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { DispatchRecord, DeliveryDetails, SalesReturnRecord, SalesReturnProduct } from "./types";
 import { markAsDelivered, revertDispatch } from "./services";
@@ -51,6 +52,7 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [subTab, setSubTab] = useState<"sales_order" | "sample_order" | "stock_transfer">("sales_order");
 
   // Table state for Sales Returns
   const [returnFilters, setReturnFilters] = useState<FilterState>({});
@@ -78,31 +80,59 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
     }
   }, [activeTab]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [subTab]);
+
+  const filteredDispatches = useMemo(() => {
+    return rawDispatches.filter(d => {
+      const type = d.source_type || (d.sourceDocumentType === "Stock Transfer" ? "stock_transfer" : d.sourceDocumentType === "Sample Order" ? "sample_order" : "sales_order");
+      return type === subTab;
+    });
+  }, [rawDispatches, subTab]);
+
   // Filtered & Sorted records
   const processed = useMemo(() => {
-    let result = [...rawDispatches];
+    let result = [...filteredDispatches];
     Object.keys(filters).forEach(key => {
       const val = filters[key];
       if (!val) return;
       if (key === "search") {
         const q = (val as string).toLowerCase();
-        result = result.filter(d =>
-          d.dispatchNumber.toLowerCase().includes(q) ||
-          d.salesOrderNumber.toLowerCase().includes(q) ||
-          d.customer.toLowerCase().includes(q) ||
-          d.vehicleNumber.toLowerCase().includes(q) ||
-          d.driverName.toLowerCase().includes(q)
-        );
-      } else if (key === "dispatchNumber" || key === "salesOrderNumber" || key === "vehicleNumber" || key === "driverName") {
+        result = result.filter(d => {
+          const dispNo = d.dispatch_no || d.dispatchNumber || "";
+          const docNo = d.source_document_no || d.salesOrderNumber || "";
+          const cust = d.customer_name || d.customer || "";
+          const veh = d.vehicleNumber || "";
+          const drv = d.driverName || "";
+          return (
+            dispNo.toLowerCase().includes(q) ||
+            docNo.toLowerCase().includes(q) ||
+            cust.toLowerCase().includes(q) ||
+            veh.toLowerCase().includes(q) ||
+            drv.toLowerCase().includes(q)
+          );
+        });
+      } else if (key === "dispatch_no" || key === "dispatchNumber" || key === "source_document_no" || key === "salesOrderNumber" || key === "vehicleNumber" || key === "driverName") {
         const q = (val as string).toLowerCase();
-        result = result.filter(d => String(d[key as keyof DispatchRecord]).toLowerCase().includes(q));
-      } else if (key === "customer" || key === "deliveryStatus") {
+        result = result.filter(d => {
+          const rawVal = d[key as keyof DispatchRecord] || (key === "dispatch_no" ? d.dispatchNumber : d.salesOrderNumber);
+          return String(rawVal || "").toLowerCase().includes(q);
+        });
+      } else if (key === "customer_name" || key === "customer" || key === "dispatch_status" || key === "deliveryStatus") {
         const selected = val as string[];
-        result = result.filter(d => selected.includes(String(d[key as keyof DispatchRecord])));
-      } else if (key === "dispatchDate") {
+        result = result.filter(d => {
+          const rawVal = d[key as keyof DispatchRecord] || (key === "customer_name" ? d.customer : d.deliveryStatus);
+          return selected.includes(String(rawVal || ""));
+        });
+      } else if (key === "dispatch_date" || key === "dispatchDate") {
         const range = val as { fromDate: string; toDate: string };
-        if (range.fromDate) result = result.filter(d => d.dispatchDate >= range.fromDate);
-        if (range.toDate) result = result.filter(d => d.dispatchDate <= range.toDate);
+        result = result.filter(d => {
+          const dateVal = d.dispatch_date || d.dispatchDate;
+          if (range.fromDate && dateVal < range.fromDate) return false;
+          if (range.toDate && dateVal > range.toDate) return false;
+          return true;
+        });
       }
     });
     if (sort.key && sort.direction !== "none") {
@@ -113,7 +143,7 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
       });
     }
     return result;
-  }, [rawDispatches, filters, sort]);
+  }, [filteredDispatches, filters, sort]);
 
   const paginated = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -152,63 +182,252 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
   }, [returnProcessed, returnPage, returnPageSize]);
 
   // Columns
-  const columns: ColumnConfig<DispatchRecord>[] = [
-    {
-      key: "dispatchNumber",
-      header: "Dispatch No",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "135px",
-      render: (val, row) => (
-        <Link
-          href={`/warehouse/dispatch/view/${row.id}`}
-          className="font-mono text-xs font-semibold text-brand-700 hover:underline"
-        >
-          {val}
-        </Link>
-      )
-    },
-    {
-      key: "salesOrderNumber",
-      header: "Sales Order No",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "140px",
-      render: (val) => <span className="font-mono text-xs font-semibold">{val}</span>
-    },
-    { key: "customer", header: "Customer", sortable: true, filterable: true, filterType: "dropdown", filterOptions: CUSTOMER_OPTIONS, width: "160px" },
-    {
-      key: "vehicleNumber",
-      header: "Vehicle No",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (val) => <span className="font-mono text-xs">{val}</span>
-    },
-    { key: "driverName", header: "Driver Name", sortable: true, filterable: true, filterType: "text" },
-    { key: "transporterName", header: "Transporter", sortable: true },
-    { key: "dispatchDate", header: "Dispatch Date", sortable: true, filterable: true, filterType: "date", width: "135px" },
-    {
-      key: "deliveryStatus",
-      header: "Delivery Status",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: DELIVERY_STATUS_OPTIONS,
-      width: "155px",
-      render: (val: any) => {
-        const cfg = DELIVERY_STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-600 border-slate-200", label: val };
-        return (
-          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
-            {cfg.label}
-          </span>
-        );
+  const salesOrderColumns = useMemo(() => {
+    return [
+      {
+        key: "dispatch_no",
+        header: "Dispatch No",
+        sortable: true,
+        filterable: true,
+        filterType: "text",
+        width: "135px",
+        render: (val: any, row: DispatchRecord) => (
+          <Link
+            href={`/warehouse/dispatch/view/${row.id}`}
+            className="font-mono text-xs font-semibold text-brand-700 hover:underline"
+          >
+            {row.dispatch_no || row.dispatchNumber}
+          </Link>
+        )
       },
-    },
-  ];
+      {
+        key: "source_document_no",
+        header: "Sales Order No",
+        sortable: true,
+        filterable: true,
+        filterType: "text",
+        width: "140px",
+        render: (val: any, row: DispatchRecord) => <span className="font-mono text-xs font-semibold">{row.source_document_no || row.salesOrderNumber}</span>
+      },
+      {
+        key: "customer_name",
+        header: "Customer",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: CUSTOMER_OPTIONS,
+        width: "160px",
+        render: (val: any, row: DispatchRecord) => <span className="text-xs font-bold text-foreground">{row.customer_name || row.customer}</span>
+      },
+      {
+        key: "vehicleNumber",
+        header: "Vehicle No",
+        sortable: true,
+        filterable: true,
+        filterType: "text",
+        width: "120px",
+        render: (val: any) => <span className="font-mono text-xs">{val}</span>
+      },
+      { key: "driverName", header: "Driver Name", sortable: true, filterable: true, filterType: "text" },
+      { key: "transporterName", header: "Transporter", sortable: true },
+      {
+        key: "dispatch_date",
+        header: "Dispatch Date",
+        sortable: true,
+        filterable: true,
+        filterType: "date",
+        width: "135px",
+        render: (val: any, row: DispatchRecord) => <span className="text-xs">{row.dispatch_date || row.dispatchDate}</span>
+      },
+      {
+        key: "dispatch_status",
+        header: "Dispatch Status",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: DELIVERY_STATUS_OPTIONS,
+        width: "155px",
+        render: (val: any, row: DispatchRecord) => {
+          const status = row.dispatch_status || row.deliveryStatus;
+          const cfg = DELIVERY_STATUS_BADGE_CONFIG[status] || { bg: "bg-slate-100 text-slate-600 border-slate-200", label: status };
+          return (
+            <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+              {cfg.label}
+            </span>
+          );
+        },
+      },
+    ] as ColumnConfig<DispatchRecord>[];
+  }, []);
+
+  const sampleOrderColumns = useMemo(() => {
+    return [
+      {
+        key: "dispatch_no",
+        header: "Dispatch No",
+        sortable: true,
+        filterable: true,
+        filterType: "text",
+        width: "135px",
+        render: (val: any, row: DispatchRecord) => (
+          <Link
+            href={`/warehouse/dispatch/view/${row.id}`}
+            className="font-mono text-xs font-semibold text-brand-700 hover:underline"
+          >
+            {row.dispatch_no || row.dispatchNumber}
+          </Link>
+        )
+      },
+      {
+        key: "source_document_no",
+        header: "Sample Order No",
+        sortable: true,
+        filterable: true,
+        filterType: "text",
+        width: "140px",
+        render: (val: any, row: DispatchRecord) => <span className="font-mono text-xs font-semibold">{row.source_document_no || row.salesOrderNumber}</span>
+      },
+      {
+        key: "customer_name",
+        header: "Customer",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: CUSTOMER_OPTIONS,
+        width: "160px",
+        render: (val: any, row: DispatchRecord) => <span className="text-xs font-bold text-foreground">{row.customer_name || row.customer}</span>
+      },
+      {
+        key: "vehicleNumber",
+        header: "Vehicle No",
+        sortable: true,
+        filterable: true,
+        filterType: "text",
+        width: "120px",
+        render: (val: any) => <span className="font-mono text-xs">{val}</span>
+      },
+      { key: "driverName", header: "Driver Name", sortable: true, filterable: true, filterType: "text" },
+      { key: "transporterName", header: "Transporter", sortable: true },
+      {
+        key: "dispatch_date",
+        header: "Dispatch Date",
+        sortable: true,
+        filterable: true,
+        filterType: "date",
+        width: "135px",
+        render: (val: any, row: DispatchRecord) => <span className="text-xs">{row.dispatch_date || row.dispatchDate}</span>
+      },
+      {
+        key: "dispatch_status",
+        header: "Dispatch Status",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: DELIVERY_STATUS_OPTIONS,
+        width: "155px",
+        render: (val: any, row: DispatchRecord) => {
+          const status = row.dispatch_status || row.deliveryStatus;
+          const cfg = DELIVERY_STATUS_BADGE_CONFIG[status] || { bg: "bg-slate-100 text-slate-600 border-slate-200", label: status };
+          return (
+            <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+              {cfg.label}
+            </span>
+          );
+        },
+      },
+    ] as ColumnConfig<DispatchRecord>[];
+  }, []);
+
+  const stockTransferColumns = useMemo(() => {
+    return [
+      {
+        key: "dispatch_no",
+        header: "Dispatch No.",
+        sortable: true,
+        filterable: true,
+        filterType: "text",
+        width: "135px",
+        render: (val: any, row: DispatchRecord) => (
+          <Link
+            href={`/warehouse/dispatch/view/${row.id}`}
+            className="font-mono text-xs font-semibold text-brand-700 hover:underline"
+          >
+            {row.dispatch_no || row.dispatchNumber}
+          </Link>
+        )
+      },
+      {
+        key: "source_document_no",
+        header: "Stock Transfer No",
+        sortable: true,
+        filterable: true,
+        filterType: "text",
+        width: "140px",
+        render: (val: any, row: DispatchRecord) => <span className="font-mono text-xs font-semibold">{row.source_document_no || row.salesOrderNumber}</span>
+      },
+      {
+        key: "dispatch_date",
+        header: "Dispatch Date",
+        sortable: true,
+        filterable: true,
+        filterType: "date",
+        width: "135px",
+        render: (val: any, row: DispatchRecord) => <span className="text-xs">{row.dispatch_date || row.dispatchDate}</span>
+      },
+      {
+        key: "source_warehouse_name",
+        header: "Source Warehouse",
+        sortable: true,
+        width: "160px",
+        render: (val: any, row: DispatchRecord) => <span className="text-xs text-foreground font-medium">{row.source_warehouse_name || row.sourceWarehouse || row.warehouse}</span>
+      },
+      {
+        key: "target_warehouse_name",
+        header: "Target Warehouse",
+        sortable: true,
+        width: "160px",
+        render: (val: any, row: DispatchRecord) => <span className="text-xs text-foreground font-bold text-brand-700">{row.target_warehouse_name || row.targetWarehouse || row.customer}</span>
+      },
+      {
+        key: "total_items",
+        header: "Total Items",
+        sortable: true,
+        width: "100px",
+        render: (val: any, row: DispatchRecord) => <span className="text-xs">{row.total_items ?? row.products.length}</span>
+      },
+      {
+        key: "total_quantity",
+        header: "Dispatch Quantity",
+        sortable: true,
+        width: "120px",
+        render: (val: any, row: DispatchRecord) => <span className="text-xs font-bold">{row.total_quantity ?? row.products.reduce((acc, p) => acc + p.dispatchQty, 0)}</span>
+      },
+      {
+        key: "dispatch_status",
+        header: "Dispatch Status",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: DELIVERY_STATUS_OPTIONS,
+        width: "155px",
+        render: (val: any, row: DispatchRecord) => {
+          const status = row.dispatch_status || row.deliveryStatus;
+          const cfg = DELIVERY_STATUS_BADGE_CONFIG[status] || { bg: "bg-slate-100 text-slate-600 border-slate-200", label: status };
+          return (
+            <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+              {cfg.label}
+            </span>
+          );
+        },
+      },
+    ] as ColumnConfig<DispatchRecord>[];
+  }, []);
+
+  const columns = useMemo(() => {
+    if (subTab === "sales_order") return salesOrderColumns;
+    if (subTab === "sample_order") return sampleOrderColumns;
+    return stockTransferColumns;
+  }, [subTab, salesOrderColumns, sampleOrderColumns, stockTransferColumns]);
 
   const returnColumns: ColumnConfig<SalesReturnRecord>[] = [
     {
@@ -396,6 +615,16 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
 
   return (
     <div className="space-y-4">
+
+      {activeTab === "dispatch" && (
+        <Tabs value={subTab} onValueChange={(val: any) => setSubTab(val)} className="w-full">
+          <TabsList>
+            <TabsTrigger value="sales_order" className="text-xs">Sales Order</TabsTrigger>
+            <TabsTrigger value="sample_order" className="text-xs">Sample Order</TabsTrigger>
+            <TabsTrigger value="stock_transfer" className="text-xs">Stock Transfer</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
 
       {activeTab === "dispatch" ? (
         <MasterListing<DispatchRecord>

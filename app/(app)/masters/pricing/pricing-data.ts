@@ -344,7 +344,7 @@ export function buildPricingPriceFields(
 }
 
 export function getSellingPriceFieldKey(
-  customerType: PricingCustomerType | "",
+  customerType: PricingScopeCustomerType | "",
 ): keyof Pick<
   PricingForm,
   "distributorPrice" | "dealerPrice" | "retailPrice" | "farmerPrice" | "specialPrice"
@@ -502,7 +502,7 @@ function migratePricingRecord(raw: Partial<PricingRecord>): PricingRecord {
 function resolvePackSizeNumber(product?: Product): string {
   if (!product) return "";
   const qty = product.conversionQuantity ?? product.packSize;
-  if (qty == null || qty === "") return "";
+  if (qty == null) return "";
   return String(qty);
 }
 

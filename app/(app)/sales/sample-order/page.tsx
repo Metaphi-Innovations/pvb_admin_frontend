@@ -83,9 +83,9 @@ interface SalesReturnRecord {
 }
 
 const SALES_RETURNS_SEED: SalesReturnRecord[] = [
-  { id: 1, returnNumber: "SR-2024-001", soNumber: "SO-2024-001", customerName: "Green Valley Agro", returnDate: "2024-01-22", reason: "Wrong product delivered", items: 2, amount: 42500, status: "processed" },
-  { id: 2, returnNumber: "SR-2024-002", soNumber: "SO-2024-003", customerName: "Kisan Fertilizers Ltd", returnDate: "2024-02-10", reason: "Damaged during transit", items: 1, amount: 28000, status: "approved" },
-  { id: 3, returnNumber: "SR-2024-003", soNumber: "SO-2024-002", customerName: "Farmtech Solutions", returnDate: "2024-02-18", reason: "Short expiry", items: 3, amount: 15600, status: "pending" },
+  { id: 1, returnNumber: "SR-2024-001", soNumber: "SM-2024-001", customerName: "Green Valley Agro", returnDate: "2024-01-22", reason: "Wrong product delivered", items: 2, amount: 42500, status: "processed" },
+  { id: 2, returnNumber: "SR-2024-002", soNumber: "SM-2024-003", customerName: "Kisan Fertilizers Ltd", returnDate: "2024-02-10", reason: "Damaged during transit", items: 1, amount: 28000, status: "approved" },
+  { id: 3, returnNumber: "SR-2024-003", soNumber: "SM-2024-002", customerName: "Farmtech Solutions", returnDate: "2024-02-18", reason: "Short expiry", items: 3, amount: 15600, status: "pending" },
 ];
 
 const RETURN_STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
@@ -226,8 +226,8 @@ export default function SalesOrdersPage() {
       setActiveTab(tab as OrderListTab);
     }
     const toastType = searchParams.get("toast");
-    if (toastType === "approved") setToast({ msg: "Sales order approved successfully.", type: "success" });
-    if (toastType === "rejected") setToast({ msg: "Sales order rejected successfully.", type: "success" });
+    if (toastType === "approved") setToast({ msg: "Sample Order approved successfully.", type: "success" });
+    if (toastType === "rejected") setToast({ msg: "Sample Order rejected successfully.", type: "success" });
   }, [searchParams]);
 
   useEffect(() => {
@@ -319,7 +319,7 @@ export default function SalesOrdersPage() {
   const handleTabChange = (tab: string) => {
     setActiveTab(tab as OrderListTab);
     setPage(1);
-    router.replace(`/sales/orders?tab=${tab}`, { scroll: false });
+    router.replace(`/sales/sample-order?tab=${tab}`, { scroll: false });
   };
 
   const isApprovalTab = activeTab === "pending_approval";
@@ -433,7 +433,7 @@ export default function SalesOrdersPage() {
           <button
             type="button"
             title="View"
-            onClick={() => router.push(`/sales/orders/${row.id}?from=approval`)}
+            onClick={() => router.push(`/sales/sample-order/${row.id}?from=approval`)}
             className="p-1.5 hover:bg-muted rounded-md transition-colors"
           >
             <Eye className="w-4 h-4 text-muted-foreground" />
@@ -452,7 +452,7 @@ export default function SalesOrdersPage() {
               <DropdownMenuSeparator />
               <button
                 type="button"
-                onClick={() => router.push(`/sales/orders/${row.id}`)}
+                onClick={() => router.push(`/sales/sample-order/${row.id}`)}
                 className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
               >
                 <Eye className="w-3.5 h-3.5 mr-2" /> View
@@ -460,7 +460,7 @@ export default function SalesOrdersPage() {
               <button
                 type="button"
                 disabled={!editable}
-                onClick={() => router.push(`/sales/orders/${row.id}/edit`)}
+                onClick={() => router.push(`/sales/sample-order/${row.id}/edit`)}
                 className={cn(
                   "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
                   !editable ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
@@ -471,7 +471,7 @@ export default function SalesOrdersPage() {
               <button
                 type="button"
                 disabled={!splittable}
-                onClick={() => router.push(`/sales/orders/${row.id}/split`)}
+                onClick={() => router.push(`/sales/sample-order/${row.id}/split`)}
                 className={cn(
                   "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
                   !splittable ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
@@ -522,7 +522,7 @@ export default function SalesOrdersPage() {
 
   return (
     <ListingContainer
-      title="Sales Orders"
+      title="Sample Orders"
       titleIcon={ShoppingBag}
       metrics={
         <div className="grid grid-cols-4 gap-3">
@@ -639,9 +639,9 @@ export default function SalesOrdersPage() {
             searchPlaceholder="Search orders, customers…"
             currentFilters={filters}
             currentSort={sort}
-            onAdd={() => router.push("/sales/orders/add")}
+            onAdd={() => router.push("/sales/sample-order/add")}
             addLabel="New Order"
-            onExport={() => console.log("Exporting sales orders...")}
+            onExport={() => console.log("Exporting sample orders...")}
           />
         </div>
       )}
@@ -652,7 +652,7 @@ export default function SalesOrdersPage() {
         onClose={() => setCancelOrder(null)}
         onSuccess={() => {
           refreshOrders();
-          showToast("Sales order cancelled successfully.");
+          showToast("Sample Order cancelled successfully.");
         }}
       />
 
@@ -680,4 +680,6 @@ export default function SalesOrdersPage() {
     </ListingContainer>
   );
 }
+
+
 

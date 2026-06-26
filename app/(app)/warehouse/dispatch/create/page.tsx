@@ -6,14 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { ArrowLeft, Truck, Building, Package, CheckSquare, Check } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getPackedOrdersByWarehouse, saveDispatch, generateDispatchNumber } from "../services";
+import { getPackingRecordById } from "../../packing/services";
 import { PackingRecord } from "../../packing/types";
 import { DispatchProduct, DispatchRecord } from "../types";
 import { WAREHOUSE_OPTIONS, DELIVERY_STATUS_OPTIONS } from "../constants";
 
 export default function CreateDispatchPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const packingId = searchParams ? searchParams.get("packingId") : null;
 
   const [packingNo, setPackingNo] = useState("");
   const [dispatchDate, setDispatchDate] = useState(new Date().toISOString().split("T")[0]);
@@ -33,10 +36,33 @@ export default function CreateDispatchPage() {
   }, []);
 
   useEffect(() => {
-    setPackedOrders(getPackedOrdersByWarehouse(selectedWarehouse));
-    setSelectedOrderIds(new Set());
-    setDispatchQtyMap({});
-  }, [selectedWarehouse]);
+    if (packingId) {
+      const record = getPackingRecordById(packingId);
+      if (record) {
+        setSelectedWarehouse(record.warehouse || record.sourceWarehouse || "All");
+      }
+    }
+  }, [packingId]);
+
+  useEffect(() => {
+    const orders = getPackedOrdersByWarehouse(selectedWarehouse);
+    setPackedOrders(orders);
+    
+    if (packingId) {
+      const target = orders.find(o => o.id === packingId);
+      if (target) {
+        setSelectedOrderIds(new Set([target.id]));
+        const newQtyMap: Record<string, number> = {};
+        target.products.forEach(p => {
+          newQtyMap[`${target.id}::${p.sku}`] = p.packedQty;
+        });
+        setDispatchQtyMap(newQtyMap);
+      }
+    } else {
+      setSelectedOrderIds(new Set());
+      setDispatchQtyMap({});
+    }
+  }, [selectedWarehouse, packingId]);
 
   const toggleOrderSelection = (order: PackingRecord) => {
     setSelectedOrderIds(prev => {
@@ -85,6 +111,10 @@ export default function CreateDispatchPage() {
     setValidationErrors(prev => ({ ...prev, [key]: err }));
   };
 
+  const isStockTransfer = useMemo(() => {
+    return selectedOrders.some(o => o.sourceDocumentType === "Stock Transfer" || o.id.startsWith("st-"));
+  }, [selectedOrders]);
+
   const hasErrors = Object.values(validationErrors).some(e => e !== "");
   const totalDispatchQty = Object.values(dispatchQtyMap).reduce((a, b) => a + b, 0);
 
@@ -98,14 +128,20 @@ export default function CreateDispatchPage() {
       product: r.product,
       sku: r.sku,
       packedQty: r.packedQty,
-      dispatchQty: dispatchQtyMap[`${r.orderId}::${r.sku}`] || 0,
+      dispatchQty: dispatchQtyMap[`${r.orderId}::${r.sku}`] ?? r.packedQty,
     })).filter(p => p.dispatchQty > 0);
+
+    const isSampleOrder = selectedOrders.some(o => o.sourceDocumentType === "Sample Order" || o.salesOrderNo.startsWith("SM-") || o.salesOrderNo.startsWith("SMP-"));
+    const docType = isStockTransfer ? "Stock Transfer" : (isSampleOrder ? "Sample Order" : "Sales Order");
+    const sourceType = isStockTransfer ? "stock_transfer" : (isSampleOrder ? "sample_order" : "sales_order");
 
     const record: DispatchRecord = {
       id: `dp-${Date.now()}`,
       dispatchNumber: packingNo,
       salesOrderNumber: selectedOrders.map(o => o.salesOrderNo).join(", "),
-      customer: selectedOrders.map(o => o.customer).join(", "),
+      customer: isStockTransfer 
+        ? selectedOrders.map(o => o.targetWarehouse || o.customer.replace("Transfer to ", "")).join(", ")
+        : selectedOrders.map(o => o.customer).join(", "),
       vehicleNumber,
       driverName,
       transporterName,
@@ -114,6 +150,22 @@ export default function CreateDispatchPage() {
       warehouse: selectedWarehouse === "All" ? "Central Warehouse" : selectedWarehouse,
       products: dispatchProducts,
       packingNumbers: selectedOrders.map(o => o.packingNo),
+      sourceDocumentType: docType,
+      sourceWarehouse: selectedOrders.map(o => o.sourceWarehouse || o.warehouse).join(", "),
+      targetWarehouse: isStockTransfer ? selectedOrders.map(o => o.targetWarehouse || o.customer.replace("Transfer to ", "")).join(", ") : undefined,
+
+      // Backend ready fields
+      dispatch_id: `dp-${Date.now()}`,
+      dispatch_no: packingNo,
+      source_type: sourceType,
+      source_document_no: selectedOrders.map(o => o.salesOrderNo).join(", "),
+      dispatch_date: dispatchDate,
+      customer_name: isStockTransfer ? "" : selectedOrders.map(o => o.customer).join(", "),
+      source_warehouse_name: selectedOrders.map(o => o.sourceWarehouse || o.warehouse).join(", "),
+      target_warehouse_name: isStockTransfer ? selectedOrders.map(o => o.targetWarehouse || o.customer.replace("Transfer to ", "")).join(", ") : "",
+      total_items: dispatchProducts.length,
+      total_quantity: dispatchProducts.reduce((acc, p) => acc + p.dispatchQty, 0),
+      dispatch_status: isDraft ? "Pending Dispatch" : deliveryStatus,
     };
 
     saveDispatch(record);
@@ -155,6 +207,29 @@ export default function CreateDispatchPage() {
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Dispatch Number</p>
               <Input value={packingNo} disabled className="h-8 text-xs bg-slate-50 font-mono font-bold mt-1.5" />
             </div>
+            {selectedOrders.length > 0 && (
+              <>
+                <div>
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                    {isStockTransfer ? "Stock Transfer No" : "Sales Order No"}
+                  </p>
+                  <Input value={selectedOrders.map(o => o.salesOrderNo).join(", ")} disabled className="h-8 text-xs bg-slate-50 font-mono mt-1.5" />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                    {isStockTransfer ? "Target Warehouse" : "Customer"}
+                  </p>
+                  <Input 
+                    value={isStockTransfer 
+                      ? selectedOrders.map(o => o.targetWarehouse || o.customer.replace("Transfer to ", "")).join(", ")
+                      : selectedOrders.map(o => o.customer).join(", ")
+                    } 
+                    disabled 
+                    className="h-8 text-xs bg-slate-50 mt-1.5" 
+                  />
+                </div>
+              </>
+            )}
             <div>
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Warehouse</p>
                <AutocompleteSelect
@@ -213,8 +288,8 @@ export default function CreateDispatchPage() {
                   <tr className="border-b border-border bg-slate-50/60">
                     <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider w-10">Select</th>
                     <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Packing No</th>
-                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Sales Order No</th>
-                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Customer</th>
+                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Sales Order / ST No</th>
+                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Customer / Target Warehouse</th>
                     <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Total Qty</th>
                   </tr>
                 </thead>
@@ -228,7 +303,9 @@ export default function CreateDispatchPage() {
                       </td>
                       <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{order.packingNo}</td>
                       <td className="py-3 px-3 text-xs font-mono font-bold text-slate-600">{order.salesOrderNo}</td>
-                      <td className="py-3 px-3 text-xs font-bold">{order.customer}</td>
+                      <td className="py-3 px-3 text-xs font-bold">
+                        {order.sourceDocumentType === "Stock Transfer" ? (order.targetWarehouse || order.customer.replace("Transfer to ", "")) : order.customer}
+                      </td>
                       <td className="py-3 px-3 text-xs font-bold text-center">{order.packedQuantity}</td>
                     </tr>
                   ))}

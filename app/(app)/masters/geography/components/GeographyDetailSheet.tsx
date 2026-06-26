@@ -20,7 +20,12 @@ import {
   getParentName,
   loadGeographies,
 } from "../geography-master-data";
-import { formatAssignedUsersForGeography, getUsersForGeography } from "../geography-workflow-data";
+import {
+  formatAssignedUsersForGeography,
+  getUsersForGeography,
+  getCoverageModeLabel,
+  formatGeographyCoverageCount,
+} from "../geography-workflow-data";
 
 export type GeographyDetailTab = "overview" | "children" | "coverage" | "users" | "history";
 
