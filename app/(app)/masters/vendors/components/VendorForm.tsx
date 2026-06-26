@@ -29,7 +29,6 @@ import {
 	type VendorProductMapping,
 	emptyContact,
 	todayStr,
-	isGoodsVendorType,
 } from "../vendor-data";
 import { loadActiveVendorTypeOptions } from "../../vendor-type/vendor-type-data";
 import { PaymentTermsSelect } from "@/components/masters/erp/PaymentTermsSelect";
@@ -433,23 +432,6 @@ export function VendorForm({
 		[geoNodes],
 	);
 
-	const visibleTabs = useMemo(() => {
-		const tabs = ALL_TABS.filter((t) => {
-			if (t.id === "product") return isGoodsVendorType(form.vendorType);
-			if (t.id === "banking") return Boolean(form.vendorType);
-			return true;
-		});
-		return tabs;
-	}, [form.vendorType]);
-
-	useEffect(() => {
-		if (!visibleTabs.some((t) => t.id === tab)) {
-			setTab("basic");
-		}
-	}, [visibleTabs, tab]);
-
-	const isGoods = isGoodsVendorType(form.vendorType);
-
 	const showToast = (msg: string, type: "success" | "error" = "error") => {
 		setToast({ msg, type });
 	};
@@ -807,7 +789,7 @@ export function VendorForm({
 	return (
 		<div className='shadow-sm'>
 			<VendorTabBar
-				tabs={visibleTabs}
+				tabs={ALL_TABS}
 				active={tab}
 				onChange={(id) => setTab(id as TabId)}
 			/>
