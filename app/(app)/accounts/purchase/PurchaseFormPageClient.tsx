@@ -99,7 +99,7 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
     reader.onload = () => {
       setAttachment({
         id: newPurchaseAttachmentId(),
-        documentName: "Vendor Invoice",
+        documentName: "Supplier Invoice",
         fileName: file.name,
         dataUrl: reader.result as string,
         uploadedAt: new Date().toISOString(),
@@ -152,7 +152,7 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pb-8 items-start">
         <div className="lg:col-span-2 max-w-[720px] space-y-4">
         <p className="text-[11px] text-muted-foreground">
-          Use for exceptional cases only. Normal flow: upload vendor invoice on a PO in Procurement.
+          Use for exceptional cases only. Normal flow: upload supplier invoice on a PO in Procurement.
         </p>
 
         <Section title="Purchase Details">
@@ -167,20 +167,20 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
             </div>
           </div>
           <SearchableSelect
-            label="Vendor"
+            label="Supplier"
             value={vendorId}
             onChange={setVendorId}
             options={vendorOptions}
-            placeholder="Select vendor…"
+            placeholder="Select supplier…"
             required
           />
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs">Vendor Invoice No. *</Label>
+              <Label className="text-xs">Supplier Invoice No. *</Label>
               <Input className="h-8 text-xs" value={vendorInvoiceNo} onChange={(e) => setVendorInvoiceNo(e.target.value)} />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Vendor Invoice Date *</Label>
+              <Label className="text-xs">Supplier Invoice Date *</Label>
               <Input type="date" className="h-8 text-xs" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
             </div>
             <div className="space-y-1">
@@ -246,7 +246,7 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
         <div className="lg:sticky lg:top-20 space-y-4">
           <LedgerImpactPreview
             lines={purchaseInvoiceImpactResolved({
-              vendorName: vendorOptions.find((v) => v.value === vendorId)?.label ?? "Vendor",
+              vendorName: vendorOptions.find((v) => v.value === vendorId)?.label ?? "Supplier",
               taxable: parseFloat(invoiceAmount) || 0,
               taxAmount: parseFloat(taxAmount) || 0,
               grandTotal: parseFloat(totalAmount) || 0,

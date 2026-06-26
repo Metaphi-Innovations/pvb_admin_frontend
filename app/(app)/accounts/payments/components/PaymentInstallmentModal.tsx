@@ -88,7 +88,7 @@ export function PaymentInstallmentModal({
           {matchCtx && (
             <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 space-y-1.5 text-[11px]">
               <p><span className="text-muted-foreground">PO No.:</span> <span className="font-mono font-medium">{matchCtx.poNumber}</span></p>
-              <p><span className="text-muted-foreground">Vendor Invoice No.:</span> <span className="font-mono font-medium">{matchCtx.vendorInvoiceNo}</span></p>
+              <p><span className="text-muted-foreground">Supplier Invoice No.:</span> <span className="font-mono font-medium">{matchCtx.vendorInvoiceNo}</span></p>
               <p><span className="text-muted-foreground">Purchase No.:</span> <span className="font-mono font-medium">{matchCtx.purchaseNo}</span></p>
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">3-Way Match:</span>

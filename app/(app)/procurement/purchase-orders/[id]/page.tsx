@@ -240,7 +240,7 @@ export default function PODetailPage() {
 				onSaved={() => {
 					refreshInvoices();
 					setPo(getPOById(id));
-					setToast({ msg: "Vendor invoice saved.", type: "success" });
+					setToast({ msg: "Supplier invoice saved.", type: "success" });
 				}}
 			/>
 

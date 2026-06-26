@@ -90,7 +90,7 @@ export function AddFollowUpModal({
               className="text-xs min-h-[88px] mt-1"
               value={remarks}
               onChange={(e) => { setRemarks(e.target.value); setError(""); }}
-              placeholder="What was discussed with the vendor?"
+              placeholder="What was discussed with the supplier?"
             />
           </div>
 

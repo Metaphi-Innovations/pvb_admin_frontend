@@ -7,7 +7,6 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AlertCircle, Check, ChevronsUpDown, Globe, Search, Shield } from "lucide-react";
 import {
@@ -195,7 +194,6 @@ export default function AddRolePage() {
   const [form, setForm] = useState({
     roleName: "",
     departmentId: null as number | null,
-    description: "",
     geoLevel: "None" as GeoLevel,
     status: "active" as "active" | "inactive",
   });
@@ -226,7 +224,7 @@ export default function AddRolePage() {
       roleName: form.roleName.trim(),
       departmentId: form.departmentId,
       department: dept?.name ?? "",
-      description: form.description.trim(),
+      description: "",
       geoLevel: form.geoLevel,
       approvalChain: [],
       status: form.status,
@@ -239,16 +237,6 @@ export default function AddRolePage() {
     saveRoles(updated);
     router.push("/user-management/roles");
   };
-
-  const selectedDept = DEPARTMENTS.find((d) => d.id === form.departmentId);
-
-  const filled = [
-    form.roleName.trim() !== "",
-    form.departmentId !== null,
-    form.description.trim() !== "",
-    form.geoLevel !== "None",
-  ];
-  const progress = Math.round((filled.filter(Boolean).length / filled.length) * 100);
 
   return (
     <FormContainer
@@ -266,7 +254,7 @@ export default function AddRolePage() {
     >
       <div className="px-6 py-6">
         <div className="space-y-6">
-          <SectionCard icon={Shield} title="Basic Information" subtitle="Role name, department, and description">
+          <SectionCard icon={Shield} title="Basic Information" subtitle="Role name and department">
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <div className="space-y-1.5">
@@ -298,18 +286,6 @@ export default function AddRolePage() {
                   onChange={(id) => set("departmentId", id)}
                   error={errors.departmentId}
                 />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Description</Label>
-                <Textarea
-                  value={form.description}
-                  onChange={(e) => set("description", e.target.value)}
-                  placeholder="Describe the responsibilities and scope of this role…"
-                  rows={3}
-                  className="text-sm rounded-lg resize-none"
-                />
-                <p className="text-[11px] text-muted-foreground">Optional</p>
               </div>
             </div>
           </SectionCard>

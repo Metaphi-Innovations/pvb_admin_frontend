@@ -108,7 +108,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Purchase Invoices", invoice.invoiceNo)}
       title={invoice.invoiceNo}
-      description={`Vendor Invoice: ${invoice.vendorInvoiceNo || "—"} · ${invoice.vendorName}`}
+      description={`Supplier Invoice: ${invoice.vendorInvoiceNo || "—"} · ${invoice.vendorName}`}
       actions={
         <div className="flex items-center gap-2">
           <Button
@@ -177,9 +177,9 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
 
         {/* Vendor & Invoice Info */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Section title="Vendor Details">
+          <Section title="Supplier Details">
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Vendor Name" value={invoice.vendorName} />
+              <Field label="Supplier Name" value={invoice.vendorName} />
               <Field label="GSTIN" value={invoice.vendorGst} />
               <Field label="PO Number" value={invoice.poNumber} />
               <Field label="GRN Number" value={invoice.grnNo} />
@@ -188,7 +188,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
           <Section title="Invoice Details">
             <div className="grid grid-cols-2 gap-3">
               <Field label="Invoice No (Internal)" value={invoice.invoiceNo} />
-              <Field label="Vendor Invoice No" value={invoice.vendorInvoiceNo} />
+              <Field label="Supplier Invoice No" value={invoice.vendorInvoiceNo} />
               <Field label="Invoice Date" value={invoice.invoiceDate} />
               <Field label="Source" value={invoice.source === "po_invoice" ? "GRN-Based" : "Manual Entry"} />
             </div>
@@ -265,8 +265,8 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
           </Section>
         </div>
 
-        {/* Vendor Ledger Impact */}
-        <Section title="Vendor Ledger Entry">
+        {/* Supplier Ledger Impact */}
+        <Section title="Supplier Ledger Entry">
           <div className="rounded-lg bg-muted/30 border border-border/40 overflow-hidden">
             <table className="w-full text-xs">
               <thead>

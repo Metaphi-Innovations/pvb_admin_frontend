@@ -259,7 +259,7 @@ export default function PurchaseOrdersPageClient() {
     refresh();
     setInvoiceRev((r) => r + 1);
     setUploadTarget(null);
-    setToast({ msg: "Vendor invoice saved.", type: "success" });
+    setToast({ msg: "Supplier invoice saved.", type: "success" });
   };
 
   const columns: ColumnConfig<PurchaseOrder>[] = [
@@ -278,7 +278,7 @@ export default function PurchaseOrdersPageClient() {
     },
     {
       key: "supplierName",
-      header: "Vendor",
+      header: "Supplier",
       sortable: true,
       filterable: true,
       filterType: "dropdown",

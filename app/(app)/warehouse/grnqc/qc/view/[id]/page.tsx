@@ -77,7 +77,7 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
       sidebar={{
         summary: [
           { label: "GRN No.", value: qc.grnNo, highlight: true },
-          { label: "Vendor", value: qc.vendorName },
+          { label: "Supplier", value: qc.vendorName },
           { label: "Total Received", value: totalReceived },
           { label: "Accepted Qty", value: totalAccepted },
           { label: "Rejected Qty", value: totalRejected },
@@ -91,7 +91,7 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
           {[
             { label: "GRN No.", val: qc.grnNo, icon: FileText },
             { label: "PO No.", val: qc.poNumber ?? "—", icon: FileText },
-            { label: "Vendor", val: qc.vendorName, icon: CheckCircle2 },
+            { label: "Supplier", val: qc.vendorName, icon: CheckCircle2 },
             { label: "Inspection Date", val: qc.inspectionDate, icon: Calendar },
           ].map((card, idx) => {
             const Icon = card.icon;

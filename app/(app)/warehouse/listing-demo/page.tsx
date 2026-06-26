@@ -56,7 +56,7 @@ export default function ListingDemoPage() {
     },
     {
       key: "vendorName",
-      header: "Vendor Name",
+      header: "Supplier Name",
       sortable: true,
       filterable: true,
       filterType: "text",

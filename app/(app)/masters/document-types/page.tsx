@@ -65,15 +65,6 @@ export default function DocumentTypesPage() {
 
   const columns: ColumnConfig<DocumentTypeMaster>[] = [
     {
-      key: "documentTypeCode",
-      header: "Document Type Code",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "180px",
-      render: (val, row) => <span className="font-mono text-xs text-brand-700">{row.documentTypeCode}</span>,
-    },
-    {
       key: "title",
       header: "Title",
       sortable: true,
@@ -152,7 +143,6 @@ export default function DocumentTypesPage() {
     if (filters.search) {
       const q = String(filters.search).trim().toLowerCase();
       result = result.filter(r =>
-        r.documentTypeCode.toLowerCase().includes(q) ||
         r.title.toLowerCase().includes(q) ||
         (r.description || "").toLowerCase().includes(q)
       );
@@ -187,7 +177,6 @@ export default function DocumentTypesPage() {
 
   const handleExport = () => {
     const rows = filtered.map((row) => ({
-      "Document Type Code": row.documentTypeCode,
       Title: row.title,
       Description: row.description || "",
       Status: row.status,
@@ -276,7 +265,6 @@ export default function DocumentTypesPage() {
           }}
           title="Document Type"
           icon={FileText}
-          recordCode={viewTarget.documentTypeCode}
           status={viewTarget.status}
           basicInfo={[{ label: "Title", value: viewTarget.title }]}
           description={viewTarget.description}

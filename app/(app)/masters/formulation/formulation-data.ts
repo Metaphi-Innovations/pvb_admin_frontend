@@ -55,6 +55,5 @@ export function formToFormulation(form: FormulationForm, id: number, existing?: 
 
 export function validateFormulationForm(form: FormulationForm): string | null {
   if (!form.formulationName.trim()) return "Formulation name is required.";
-  if (!form.formulationCode.trim()) return "Formulation code is required.";
   return null;
 }

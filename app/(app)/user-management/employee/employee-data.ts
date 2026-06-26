@@ -77,16 +77,38 @@ export interface Employee {
   // Address (structured — preferred)
   currentAddressLine1?: string;
   currentAddressLine2?: string;
+  currentPincode?: string;
+  currentCity?: string;
+  currentTown?: string;
+  currentDistrict?: string;
+  currentState?: string;
+  /** @deprecated use currentCity / currentTown */
+  currentCityTownLocality?: string;
+  permanentAddressLine1?: string;
+  permanentAddressLine2?: string;
+  permanentPincode?: string;
+  permanentCity?: string;
+  permanentTown?: string;
+  permanentDistrict?: string;
+  permanentState?: string;
+  /** @deprecated use permanentCity / permanentTown */
+  permanentCityTownLocality?: string;
+  emergencyAddressLine1?: string;
+  emergencyAddressLine2?: string;
+  emergencyPincode?: string;
+  emergencyCity?: string;
+  emergencyTown?: string;
+  emergencyDistrict?: string;
+  emergencyState?: string;
+  /** @deprecated use emergencyCity / emergencyTown */
+  emergencyCityTownLocality?: string;
+  /** @deprecated legacy geo-node IDs */
   currentStateId?: number | null;
   currentCityId?: number | null;
   currentPincodeId?: number | null;
-  permanentAddressLine1?: string;
-  permanentAddressLine2?: string;
   permanentStateId?: number | null;
   permanentCityId?: number | null;
   permanentPincodeId?: number | null;
-  emergencyAddressLine1?: string;
-  emergencyAddressLine2?: string;
   emergencyStateId?: number | null;
   emergencyCityId?: number | null;
   emergencyPincodeId?: number | null;
@@ -135,6 +157,7 @@ export interface Employee {
   approvalLevel3Role?: string;
   // Legacy fields (kept for backward compat)
   designation?: string;
+  branch?: string;
   workLocation?: string;
   city?: string;
   pincode?: string;
@@ -249,7 +272,7 @@ export const PERMISSION_REGISTRY: PermModule[] = [
       { id: "hsnTax",           label: "HSN / Tax",         actions: ["view","create","edit","delete","export"] },
       { id: "customerCategory", label: "Customer Category", actions: ["view","create","edit","delete"] },
       { id: "customerMaster",   label: "Customer Master",   actions: ["view","create","edit","delete"] },
-      { id: "vendorCategory",   label: "Vendor Category",   actions: ["view","create","edit","delete"] },
+      { id: "vendorCategory",   label: "Supplier Category",   actions: ["view","create","edit","delete"] },
       { id: "warehouseMaster",  label: "Warehouse",         actions: ["view","create","edit","delete"] },
       { id: "uomMaster",        label: "Units of Measure",  actions: ["view","create","edit","delete"] },
       { id: "distributors",     label: "Distributors",      actions: ["view","create","edit","delete","export"] },
@@ -263,9 +286,9 @@ export const PERMISSION_REGISTRY: PermModule[] = [
       { id: "rfq",                 label: "RFQ",                  actions: ["view","create","edit","delete","approve","export"] },
       { id: "purchaseOrder",       label: "Purchase Order",       actions: ["view","create","edit","delete","approve","export"] },
       { id: "grn",                 label: "Goods Receipt (GRN)",  actions: ["view","create","edit","delete","approve","export"] },
-      { id: "vendorBill",          label: "Vendor Bills",         actions: ["view","create","edit","delete","approve","export"] },
-      { id: "vendorReturn",        label: "Vendor Returns",       actions: ["view","create","edit","delete","approve","export"] },
-      { id: "vendorManagement",    label: "Vendor Management",    actions: ["view","create","edit","delete","export"] },
+      { id: "vendorBill",          label: "Supplier Bills",         actions: ["view","create","edit","delete","approve","export"] },
+      { id: "vendorReturn",        label: "Supplier Returns",       actions: ["view","create","edit","delete","approve","export"] },
+      { id: "vendorManagement",    label: "Supplier Management",    actions: ["view","create","edit","delete","export"] },
       { id: "stockLedger",         label: "Stock Ledger",         actions: ["view","export"] },
     ],
   },
@@ -548,6 +571,23 @@ export function validateEmailUnique(email: string, employees: Employee[], exclud
   return exists ? "Email already in use" : null;
 }
 
+export function formatEmployeeRoleLabel(employee: Pick<Employee, "roleType" | "role">): string {
+  const role = employee.role?.trim();
+  const roleType = employee.roleType?.trim();
+  if (roleType && role) return `${roleType} - ${role}`;
+  return role || roleType || "—";
+}
+
+export function formatEmployeeMobile(
+  mobile?: string,
+  countryCode = "+91",
+): string {
+  const digits = (mobile || "").replace(/\D/g, "");
+  if (!digits) return "—";
+  const code = countryCode || "+91";
+  return `${code} ${digits}`;
+}
+
 export function validateMobile(mobile: string): string | null {
   if (!mobile.trim()) return "Mobile is required";
   if (!/^\d{10}$/.test(mobile)) return "Must be exactly 10 digits";
@@ -600,6 +640,7 @@ export const SEED_EMPLOYEES: Employee[] = [
     employeeType: "Full-time",
     departmentId: 1,
     department: "Sales",
+    branch: "Mumbai HO",
     roleType: "Field User",
     salesType: "Retail Sales",
     roleId: 106,
@@ -641,6 +682,7 @@ export const SEED_EMPLOYEES: Employee[] = [
     documents: [
       {
         id: "doc-seed-1",
+        documentName: "Aadhaar Card",
         documentType: "Aadhaar Card",
         documentNumber: "XXXX-XXXX-1234",
         status: "verified",
@@ -654,6 +696,7 @@ export const SEED_EMPLOYEES: Employee[] = [
       },
       {
         id: "doc-seed-2",
+        documentName: "PAN Card",
         documentType: "PAN Card",
         documentNumber: "ABCDE1234F",
         status: "uploaded",
@@ -665,6 +708,7 @@ export const SEED_EMPLOYEES: Employee[] = [
       },
       {
         id: "doc-seed-3",
+        documentName: "Photograph",
         documentType: "Photograph",
         status: "uploaded",
         fileName: "rajesh-photo.png",
@@ -779,7 +823,7 @@ export const SEED_EMPLOYEES: Employee[] = [
     emergencyContactName: "Suresh Desai", emergencyContactMobile: "8765432116",
     emergencyContactRelation: "Parent",
     currentAddress: "567 Garden View, Bangalore 560038",
-    reportingManagerId: 7, reportingManager: "Vikram Rao", status: "draft",
+    reportingManagerId: 7, reportingManager: "Vikram Rao", status: "inactive",
     joiningDate: "2024-01-01", createdBy: "Admin", createdDate: "2024-02-15",
     updatedBy: "Admin", updatedDate: "2024-02-15", lastStatusChange: "2024-02-15",
   },

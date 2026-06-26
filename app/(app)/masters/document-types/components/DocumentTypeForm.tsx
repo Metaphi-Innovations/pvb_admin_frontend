@@ -24,9 +24,6 @@ export function validateDocumentTypeForm(form: DocumentTypeFormValues): Record<s
   if (!form.title.trim()) {
     errors.title = "Title is required";
   }
-  if (!form.documentTypeCode.trim()) {
-    errors.documentTypeCode = "Document type code is required";
-  }
   return errors;
 }
 
@@ -65,27 +62,6 @@ export function DocumentTypeForm({
       </div>
 
       <div className="pt-1 space-y-2">
-        {/* Code */}
-        <div className="space-y-1 max-w-[200px]">
-          <Label className="text-xs font-medium">
-            Document Type Code <span className="text-red-500">*</span>
-          </Label>
-          <Input
-            value={form.documentTypeCode}
-            onChange={(e) => set("documentTypeCode", e.target.value.toUpperCase())}
-            placeholder="Auto-generated code"
-            className={cn(inputCls("documentTypeCode"), "font-mono")}
-            disabled={readOnly}
-            readOnly
-          />
-          {errors.documentTypeCode && (
-            <p className="flex items-center gap-1 mt-1 text-[11px] text-red-500">
-              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-              {errors.documentTypeCode}
-            </p>
-          )}
-        </div>
-
         {/* Title */}
         <div className="space-y-1 max-w-[400px]">
           <Label className="text-xs font-medium">

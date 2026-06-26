@@ -95,11 +95,11 @@ export const BANK_RECON_ADJUSTMENT_TYPES: BankReconAdjustmentTypeDef[] = [
   },
   {
     id: "vendor_advance",
-    label: "Vendor Advance / On-account",
+    label: "Supplier Advance / On-account",
     scope: "payment",
     resolvesDocumentShortfall: false,
     absorbsBankSurplus: true,
-    ledgerNameHints: ["Advance Paid", "Vendor Advance"],
+    ledgerNameHints: ["Advance Paid", "Supplier Advance"],
     subGroupHints: ["Advance Paid to Vendors"],
   },
   {
