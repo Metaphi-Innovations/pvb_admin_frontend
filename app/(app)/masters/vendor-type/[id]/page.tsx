@@ -26,13 +26,13 @@ export default function VendorTypeDetailPage() {
     return (
       <RecordDetailPage
         listHref="/masters/vendor-type"
-        listLabel="Vendor Types"
+        listLabel="Supplier Types"
         recordName="Not found"
         statusLabel="—"
         statusVariant="neutral"
       >
         <div className="py-16 text-center">
-          <p className="text-sm text-muted-foreground">Vendor type not found.</p>
+          <p className="text-sm text-muted-foreground">Supplier type not found.</p>
           <Link href="/masters/vendor-type" className="mt-2 inline-block text-xs text-brand-600 hover:underline">
             Back to listing
           </Link>
@@ -48,9 +48,9 @@ export default function VendorTypeDetailPage() {
 
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <RecordSectionCard title="Vendor Type Info" icon={Tags} accent="blue">
-          <RecordKvRow label="Vendor Type ID" value={String(vendorType.id)} mono />
-          <RecordKvRow label="Vendor Type Name" value={vendorType.vendorTypeName} />
+        <RecordSectionCard title="Supplier Type Info" icon={Tags} accent="blue">
+          <RecordKvRow label="Supplier Type ID" value={String(vendorType.id)} mono />
+          <RecordKvRow label="Supplier Type Name" value={vendorType.vendorTypeName} />
           <RecordKvRow label="Initial Code" value={vendorType.initialCode} mono copy highlight />
           <RecordKvRow label="Description" value={vendorType.description} isLast />
         </RecordSectionCard>
@@ -61,7 +61,7 @@ export default function VendorTypeDetailPage() {
   return (
     <RecordDetailPage
       listHref="/masters/vendor-type"
-      listLabel="Vendor Types"
+      listLabel="Supplier Types"
       recordName={vendorType.vendorTypeName}
       recordCode={vendorType.initialCode}
       statusLabel={vendorType.status === "active" ? "Active" : "Inactive"}
@@ -73,7 +73,7 @@ export default function VendorTypeDetailPage() {
       sidebar={{
         quickActions: [
           {
-            label: "Edit Vendor Type",
+            label: "Edit Supplier Type",
             icon: Pencil,
             onClick: () => router.push(`/masters/vendor-type/${vendorType.id}/edit`),
             variant: "primary",

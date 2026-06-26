@@ -24,7 +24,7 @@ export function purchaseInvoiceImpact({
   taxable,
   gst,
   total,
-  partyLedger = "Vendor Ledger",
+  partyLedger = "Supplier Ledger",
 }: ImpactAmounts) {
   return [
     { ledger: "Purchase Ledger", debit: taxable, note: "Purchase expense" },
@@ -50,10 +50,10 @@ export function debitNoteImpact({
   taxable,
   gst,
   total,
-  partyLedger = "Vendor Ledger",
+  partyLedger = "Supplier Ledger",
 }: ImpactAmounts) {
   return [
-    { ledger: partyLedger, debit: total, note: "Reduce vendor payable" },
+    { ledger: partyLedger, debit: total, note: "Reduce supplier payable" },
     { ledger: "Purchase Return / Purchase Ledger", credit: taxable },
     { ledger: "Input GST Ledger", credit: gst },
   ];

@@ -76,7 +76,9 @@ function SearchableDropdown<T extends { id: number }>({
 }) {
 	const [open, setOpen] = useState(false);
 	const [search, setSearch] = useState("");
-	const selected = options.find((o) => o.id === value);
+	const selected = value !== null && value !== undefined
+		? options.find((o) => String(o.id) === String(value))
+		: undefined;
 	const filtered = options.filter((o) =>
 		matchOption
 			? matchOption(o, search)
@@ -135,7 +137,7 @@ function SearchableDropdown<T extends { id: number }>({
 								}}
 								className={cn(
 									"w-full flex items-center gap-2.5 px-3 py-2.5 text-xs text-left transition-colors hover:bg-muted/60",
-									value === opt.id && "bg-brand-50",
+									selected && selected.id === opt.id && "bg-brand-50",
 								)}
 							>
 								{renderOption ? (
@@ -150,7 +152,7 @@ function SearchableDropdown<T extends { id: number }>({
 										)}
 									</span>
 								)}
-								{value === opt.id && (
+								{selected && selected.id === opt.id && (
 									<Check className='w-3.5 h-3.5 text-brand-600 flex-shrink-0 ml-auto' />
 								)}
 							</button>
@@ -485,9 +487,12 @@ export default function SalesOrderForm({
 							required
 							value={form.customerId}
 							onChange={(id) => {
-								set("customerId", id);
 								const c = customers.find((x) => x.id === id);
-								if (c?.salesManId) set("salesManId", c.salesManId);
+								const updatedForm = { ...form, customerId: id };
+								if (c?.salesManId) {
+									updatedForm.salesManId = c.salesManId;
+								}
+								onChange(updatedForm);
 							}}
 							options={customers}
 							placeholder='Select customer…'

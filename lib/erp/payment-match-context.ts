@@ -33,7 +33,7 @@ export function getPurchasePaymentMatchContext(
 
 export function purchaseMatchWarning(status: ThreeWayMatchStatus): string | null {
   if (status === "mismatch") {
-    return "3-Way Match status is Mismatch. Review PO, GRN, QC, and vendor invoice before processing payment.";
+    return "3-Way Match status is Mismatch. Review PO, GRN, QC, and supplier invoice before processing payment.";
   }
   return null;
 }

@@ -322,7 +322,7 @@ const COA_LEDGER_SEEDS: Array<{ subGroup: string; name: string; accountType: Acc
   { subGroup: "Inventory / Stock-in-Hand", name: "Seed Inventory", accountType: "Asset" },
 
   { subGroup: "Loans & Advances Given", name: "Staff Advance - Sales Team", accountType: "Asset" },
-  { subGroup: "Loans & Advances Given", name: "Vendor Advance - AgroChem Traders", accountType: "Asset" },
+  { subGroup: "Loans & Advances Given", name: "Supplier Advance - AgroChem Traders", accountType: "Asset" },
   { subGroup: "Loans & Advances Given", name: "Advance to Contractors", accountType: "Asset" },
   { subGroup: "Loans & Advances Given", name: "Security Deposit - Warehouse Landlord", accountType: "Asset" },
 
@@ -429,7 +429,7 @@ const COA_LEDGER_SEEDS: Array<{ subGroup: string; name: string; accountType: Acc
   { subGroup: "Expenses Payable", name: "Audit Fees Payable", accountType: "Liability" },
   { subGroup: "Expenses Payable", name: "Electricity Charges Payable", accountType: "Liability" },
   { subGroup: "Expenses Payable", name: "Rent Payable - Branch", accountType: "Liability" },
-  { subGroup: "Expenses Payable", name: "Vendor Expenses Payable", accountType: "Liability" },
+  { subGroup: "Expenses Payable", name: "Supplier Expenses Payable", accountType: "Liability" },
 
   { subGroup: "Advance Received from Customers", name: "Advance from ABC Agro Distributor", accountType: "Liability" },
   { subGroup: "Advance Received from Customers", name: "Advance from Green Harvest Agro", accountType: "Liability" },
@@ -1402,7 +1402,7 @@ function seedVendorPayment(
   const voucher = createVoucher("payment", {
     date,
     referenceNo,
-    narration: `Vendor payment — ${vendorName} (${billNo})`,
+    narration: `Supplier payment — ${vendorName} (${billNo})`,
     status: "posted",
     lines: [
       {

@@ -13,9 +13,9 @@ export default function PendingVendorBillsClient() {
 
   return (
     <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Purchases", "Pending Vendor Bills")}
-      title="Pending Vendor Bills"
-      description="GRN-completed receipts → create purchase invoice → posts to vendor ledger."
+      breadcrumbs={accountsBreadcrumb("Purchases", "Pending Supplier Bills")}
+      title="Pending Supplier Bills"
+      description="GRN-completed receipts → create purchase invoice → posts to supplier ledger."
       actions={
         <Button asChild size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1">
           <Link href="/accounts/transactions/purchase/new">
@@ -27,12 +27,12 @@ export default function PendingVendorBillsClient() {
     >
       <div className="flex-1 overflow-auto min-h-0">
         {pending.length === 0 ? (
-          <div className="py-16 text-center text-sm text-muted-foreground">No GRN-completed receipts pending vendor bill.</div>
+          <div className="py-16 text-center text-sm text-muted-foreground">No GRN-completed receipts pending supplier bill.</div>
         ) : (
           <table className="w-full text-table min-w-[800px]">
             <thead className="bg-muted/20 border-b sticky top-0">
               <tr>
-                {["GRN No.", "PO Number", "Vendor", "GRN Date", "Items", "Status", ""].map((h) => (
+                {["GRN No.", "PO Number", "Supplier", "GRN Date", "Items", "Status", ""].map((h) => (
                   <th key={h || "act"} className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">
                     {h}
                   </th>

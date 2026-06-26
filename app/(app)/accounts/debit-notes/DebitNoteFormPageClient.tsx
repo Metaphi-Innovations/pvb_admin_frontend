@@ -427,7 +427,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
                 rows={
                   referencePreview.referenceType === "purchase_invoice"
                     ? [
-                        { label: "Vendor", value: referencePreview.vendorName },
+                        { label: "Supplier", value: referencePreview.vendorName },
                         { label: "Invoice Date", value: referencePreview.documentDate },
                         { label: "PI No.", value: referencePreview.sourceInvoiceNo },
                         { label: "PO No.", value: referencePreview.sourcePoNo },
@@ -438,7 +438,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
                         { label: "Already Debited", value: formatINR(referencePreview.alreadyAdjustedAmount) },
                       ]
                     : [
-                        { label: "Vendor", value: referencePreview.vendorName },
+                        { label: "Supplier", value: referencePreview.vendorName },
                         { label: "PO Date", value: referencePreview.documentDate },
                         { label: "PO No.", value: referencePreview.sourcePoNo },
                         { label: "PI No.", value: referencePreview.sourceInvoiceNo },
@@ -576,7 +576,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
           </div>
           <LedgerImpactPreview
             lines={debitNoteImpactResolved({
-              vendorName: vendors.find((v) => String(v.id) === vendorId)?.vendorName ?? "Vendor",
+              vendorName: vendors.find((v) => String(v.id) === vendorId)?.vendorName ?? "Supplier",
               taxable:
                 referenceType === "standalone_adjustment"
                   ? totalDebit - lineTotals.gstAmount

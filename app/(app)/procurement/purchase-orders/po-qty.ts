@@ -10,9 +10,9 @@ export type ShortCloseReason =
   | "other";
 
 export const SHORT_CLOSE_REASONS: { value: ShortCloseReason; label: string }[] = [
-  { value: "vendor_unable_to_supply", label: "Vendor Unable to Supply" },
+  { value: "vendor_unable_to_supply", label: "Supplier Unable to Supply" },
   { value: "requirement_reduced", label: "Requirement Reduced" },
-  { value: "alternate_vendor_used", label: "Alternate Vendor Used" },
+  { value: "alternate_vendor_used", label: "Alternate Supplier Used" },
   { value: "product_discontinued", label: "Product Discontinued" },
   { value: "management_decision", label: "Management Decision" },
   { value: "other", label: "Other" },

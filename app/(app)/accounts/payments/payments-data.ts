@@ -86,7 +86,7 @@ const LEGACY_EXPENSE_KEY = "ds_accounts_finance_payments_v1";
 export const SOURCE_TYPE_OPTIONS: { value: PaymentSourceType; label: string }[] = [
   { value: "purchase", label: "Purchase Invoice" },
   { value: "tada_claim", label: "TA/DA Claim" },
-  { value: "vendor_adjustment", label: "Vendor Adjustment" },
+  { value: "vendor_adjustment", label: "Supplier Adjustment" },
   { value: "manual", label: "Manual Payment" },
 ];
 

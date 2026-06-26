@@ -15,6 +15,8 @@ import {
 import {
   WarehouseForm,
   validateWarehouseForm,
+  warehouseRecordToForm,
+  warehouseFormToRecordFields,
   type WarehouseFormValues,
 } from "../../components/WarehouseForm";
 
@@ -38,37 +40,8 @@ export default function EditWarehousePage() {
       router.push("/masters/warehouse");
       return;
     }
-    let contacts = found.contacts;
-    if (!contacts || contacts.length === 0) {
-      contacts = [
-        {
-          id: "CON-1",
-          contactPerson: found.contactPerson || "",
-          mobileNumber: found.mobileNumber || "",
-          emailAddress: found.emailAddress || "",
-          isPrimary: true
-        }
-      ];
-    }
-
     setRecord(found);
-    setForm({
-      warehouseName: found.warehouseName,
-      warehouseType: found.warehouseType,
-      gstApplicable: found.gstApplicable ?? (found.gstNumber ? true : false),
-      gstNumber: found.gstNumber,
-      address: found.address,
-      state: found.state,
-      district: found.district,
-      city: found.city,
-      pincode: found.pincode,
-      manager: found.manager,
-      status: found.status,
-      operatedBy: found.operatedBy,
-      customerType: found.customerType || "",
-      contacts: contacts,
-      documents: found.documents || [],
-    });
+    setForm(warehouseRecordToForm(found));
   }, [id, router]);
 
   useEffect(() => {
@@ -94,29 +67,11 @@ export default function EditWarehousePage() {
       return;
     }
     const records = loadWarehouses();
-    const primaryContact = form.contacts.find((c) => c.isPrimary) || form.contacts[0];
     const updated = records.map(r =>
       r.id === id
         ? {
             ...r,
-            warehouseName: form.warehouseName,
-            warehouseType: form.warehouseType,
-            gstApplicable: form.gstApplicable,
-            gstNumber: form.gstNumber,
-            contactPerson: primaryContact ? primaryContact.contactPerson : "",
-            mobileNumber: primaryContact ? primaryContact.mobileNumber : "",
-            emailAddress: primaryContact ? primaryContact.emailAddress : "",
-            address: form.address,
-            state: form.state,
-            district: form.district,
-            city: form.city,
-            pincode: form.pincode,
-            manager: form.manager,
-            status: form.status,
-            operatedBy: form.operatedBy,
-            customerType: form.operatedBy === "C&F Agent" ? form.customerType : undefined,
-            contacts: form.contacts,
-            documents: form.documents || [],
+            ...warehouseFormToRecordFields(form),
             updatedBy: "Admin",
             updatedDate: todayStr(),
           }
@@ -138,13 +93,10 @@ export default function EditWarehousePage() {
   return (
     <FormContainer
       title="Edit Warehouse"
-      description={`Masters → Warehouse Master → ${record.warehouseCode}`}
+      description={`Masters → Warehouse Master → ${record.warehouseName}`}
       onBack={() => router.back()}
       actions={
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
-            {record.warehouseCode}
-          </span>
           <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
             Discard
           </Button>
@@ -162,7 +114,6 @@ export default function EditWarehousePage() {
         onChange={setForm}
         errors={errors}
         onClearError={clearErr}
-        warehouseCode={record.warehouseCode}
       />
 
       {/* Toast */}

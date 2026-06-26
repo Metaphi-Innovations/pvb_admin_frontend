@@ -15,6 +15,7 @@ import { NAV_ITEMS, type NavGroup, type NavItem } from "@/components/navigation/
 import { arrangeAccountsMegaMenuColumns } from "@/lib/accounts/accounts-nav";
 import type { AccountsNavGroupId } from "@/lib/accounts/accounts-nav";
 import { PrefetchLink } from "@/components/navigation/PrefetchLink";
+import { ApprovalsButton } from "./ApprovalsButton";
 import { prefetchNavChildren } from "@/components/navigation/NavRoutePrefetch";
 
 function navPath(href: string): string {
@@ -376,6 +377,11 @@ export const TopNavbar = memo(function TopNavbar() {
               </button>
             </div>
           )}
+        </div>
+
+        {/* Approvals — top nav */}
+        <div className="flex items-center h-full flex-shrink-0 pl-2 pr-3 border-l border-border/60">
+          <ApprovalsButton />
         </div>
       </nav>
     </TooltipProvider>

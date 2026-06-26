@@ -186,7 +186,7 @@ export function syncCustomerLedger(customer: Customer): ChartOfAccount | null {
   return ledger;
 }
 
-/** Create or update vendor ledger from Vendor Master. */
+/** Create or update vendor ledger from Supplier Master. */
 export function syncVendorLedger(vendor: Vendor): ChartOfAccount | null {
   const name = vendor.vendorName.trim();
   if (!name || vendor.status !== "active") return null;

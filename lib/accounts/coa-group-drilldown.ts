@@ -448,7 +448,7 @@ function classifyDepositType(name: string): "Security" | "Rental" | "Other" {
 function classifyAdvanceType(name: string): string {
   const n = name.toLowerCase();
   if (n.includes("staff") || n.includes("employee")) return "Employee Advance";
-  if (n.includes("vendor")) return "Vendor Advance";
+  if (n.includes("vendor")) return "Supplier Advance";
   return "Other Advance";
 }
 
@@ -472,7 +472,7 @@ function matchCustomerMasterHref(ledgerId: number, ledgerName: string): string |
 const ENTRY_NOTES: Record<string, string> = {
   "Capital Account": "Journal Voucher · Profit transfer · Drawings entry · Year-end closing",
   "Loans / Borrowings": "Loan receipt voucher · Payment voucher · Journal voucher · Interest accrual",
-  "Trade Payables / Sundry Creditors": "Purchase Bill · Payment Voucher · Debit Note · Vendor Credit Note",
+  "Trade Payables / Sundry Creditors": "Purchase Bill · Payment Voucher · Debit Note · Supplier Credit Note",
   "Duties & Taxes Payable": "Sales Invoice · Purchase Bill · Payment Voucher · Journal Voucher",
   "GST Payable": "Sales Invoice · Purchase Bill · Credit Note · Debit Note · GST Payment Voucher",
   "Salary Payable": "Payroll · Payment Voucher · Journal Voucher",
@@ -628,7 +628,7 @@ function buildGroupHighlights(
       return [
         { label: "Current Month Purchases", value: monthPurchases },
         { label: "YTD Purchases", value: bills.reduce((s, b) => s + (b.grandTotal ?? 0), 0) },
-        { label: "Vendor-wise Bills", value: bills.length },
+        { label: "Supplier-wise Bills", value: bills.length },
         { label: "Ledger Balance", value: total },
       ];
     }
@@ -1027,7 +1027,7 @@ export function resolveCoaGroupContext(
     const outstandingRows = rows.map((r) => {
       const type = classifyAdvanceType(r.name);
       if (type === "Employee Advance") employeeAdvances += r.balance;
-      else if (type === "Vendor Advance") vendorAdvances += r.balance;
+      else if (type === "Supplier Advance") vendorAdvances += r.balance;
       else otherAdvances += r.balance;
       return { id: r.id, party: r.name, type, outstanding: r.balance };
     });

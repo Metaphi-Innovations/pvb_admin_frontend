@@ -91,10 +91,7 @@ export default function NewCustomerPage() {
     }
     setErrors(e);
     if (Object.keys(e).length > 0) {
-      const hasProductErrors = Object.keys(e).some((key) => key.startsWith("product_"));
-      const msg = hasProductErrors
-        ? "Please complete product details before saving."
-        : e.requiredDocuments || "Please fix the errors before saving.";
+      const msg = e.requiredDocuments || "Please fix the errors before saving.";
       setToast({ msg, type: "error" });
       setTimeout(() => setToast(null), 3200);
       return;

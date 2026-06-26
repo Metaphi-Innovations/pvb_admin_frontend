@@ -44,7 +44,7 @@ export default function VendorReturnsPage() {
       <div className="max-w-[1200px] mx-auto space-y-4">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-bold text-foreground">Vendor Returns</h1>
+            <h1 className="text-xl font-bold text-foreground">Supplier Returns</h1>
             <p className="text-xs text-muted-foreground mt-0.5">Manage purchase return notes and debit notes</p>
           </div>
           <div className="flex items-center gap-2">
@@ -83,7 +83,7 @@ export default function VendorReturnsPage() {
           <table className="w-full">
             <thead>
               <tr className="bg-muted/40 border-b border-border">
-                {["Return No.","PO Reference","Vendor","Return Date","Reason","Items","Amount","Status",""].map((h, i) => (
+                {["Return No.","PO Reference","Supplier","Return Date","Reason","Items","Amount","Status",""].map((h, i) => (
                   <th key={i} className={cn("px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap", i === 8 && "w-10")}>{h}</th>
                 ))}
               </tr>

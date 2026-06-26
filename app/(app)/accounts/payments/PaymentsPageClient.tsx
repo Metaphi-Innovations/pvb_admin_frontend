@@ -162,7 +162,7 @@ export default function PaymentsPageClient() {
                     "Payee",
                     "Source Type",
                     "PO No.",
-                    "Vendor Inv. No.",
+                    "Supplier Inv. No.",
                     "Purchase No.",
                     "3-Way Match",
                     "Source Reference",

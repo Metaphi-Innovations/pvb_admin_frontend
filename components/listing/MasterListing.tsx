@@ -31,6 +31,7 @@ export function MasterListing<T = any>({
   addLabel = "Add New",
   onExport,
   searchPlaceholder = "Search...",
+  hideSearch = false,
   currentFilters,
   currentSort,
 }: MasterListingProps<T>) {
@@ -99,16 +100,17 @@ export function MasterListing<T = any>({
     <div className="space-y-4">
       {/* Top Action Bar / Tool Bar */}
       <div className="flex items-center gap-2 flex-wrap">
-        {/* Global Search Input */}
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-[9px] text-muted-foreground pointer-events-none" />
-          <Input
-            value={(filters.search as string) || ""}
-            onChange={(e) => handleFilterItemChange("search", e.target.value)}
-            placeholder={searchPlaceholder}
-            className="pl-8 h-8 text-xs rounded-lg"
-          />
-        </div>
+        {!hideSearch && (
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-[9px] text-muted-foreground pointer-events-none" />
+            <Input
+              value={(filters.search as string) || ""}
+              onChange={(e) => handleFilterItemChange("search", e.target.value)}
+              placeholder={searchPlaceholder}
+              className="pl-8 h-8 text-xs rounded-lg"
+            />
+          </div>
+        )}
 
         {/* Clear Filters Button */}
         {isFiltered && (

@@ -49,7 +49,10 @@ export default function ViewDispatchPage() {
       statusLabel={statusConfig.label}
       statusVariant={statusVariant}
       metaItems={[
-        { icon: User, label: record.customer },
+        { 
+          icon: record.sourceDocumentType === "Stock Transfer" ? Building : User, 
+          label: record.sourceDocumentType === "Stock Transfer" ? (record.targetWarehouse || record.customer) : record.customer 
+        },
         { icon: Building, label: record.warehouse },
         { icon: Calendar, label: record.dispatchDate },
       ]}
@@ -79,9 +82,21 @@ export default function ViewDispatchPage() {
         {/* Summary Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Sales Order No", value: record.salesOrderNumber, icon: Package },
-            { label: "Customer", value: record.customer, icon: User },
-            { label: "Warehouse", value: record.warehouse, icon: Building },
+            { 
+              label: record.sourceDocumentType === "Stock Transfer" ? "Stock Transfer No" : "Sales Order No", 
+              value: record.salesOrderNumber, 
+              icon: Package 
+            },
+            { 
+              label: record.sourceDocumentType === "Stock Transfer" ? "Target Warehouse" : "Customer", 
+              value: record.sourceDocumentType === "Stock Transfer" ? (record.targetWarehouse || record.customer) : record.customer, 
+              icon: record.sourceDocumentType === "Stock Transfer" ? Building : User 
+            },
+            { 
+              label: record.sourceDocumentType === "Stock Transfer" ? "Source Warehouse" : "Warehouse", 
+              value: record.warehouse, 
+              icon: Building 
+            },
             { label: "Dispatch Date", value: record.dispatchDate, icon: Calendar },
           ].map(card => (
             <div key={card.label} className="bg-white border border-border rounded-xl p-4 shadow-sm">
