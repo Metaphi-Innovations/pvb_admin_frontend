@@ -75,7 +75,7 @@ function CompactChipRow({
         />
       ))}
       {overflow > 0 ? (
-        <span className="inline-flex items-center rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">
+        <span className="inline-flex items-center rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
           +{overflow}
         </span>
       ) : null}
@@ -125,8 +125,8 @@ export function PricingScopeMultiSelect({
       <div
         className={cn(
           "rounded-lg border bg-white p-2 shadow-sm",
-          error ? "border-red-300 ring-1 ring-red-100" : "border-slate-300",
-          isDisabled && "bg-slate-50/80",
+          error ? "border-red-300 ring-1 ring-red-100" : "border-border",
+          isDisabled && "bg-muted/25",
         )}
       >
         <Popover>
@@ -139,16 +139,16 @@ export function PricingScopeMultiSelect({
                 triggerBaseClass,
                 error
                   ? "border-red-400 hover:border-red-400"
-                  : "border-slate-300 hover:border-brand-400 hover:bg-brand-50/40",
+                  : "border-border hover:border-brand-400 hover:bg-brand-50/40",
                 "focus-visible:border-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-200",
-                isDisabled && "cursor-not-allowed opacity-60 hover:border-slate-300 hover:bg-white",
-                applyToAll && "border-dashed bg-slate-50",
+                isDisabled && "cursor-not-allowed opacity-60 hover:border-border hover:bg-white",
+                applyToAll && "border-dashed bg-muted/25",
               )}
             >
               {applyToAll ? (
                 <span className="truncate font-medium text-brand-700">{applyToAllLabel}</span>
               ) : selected.length === 0 ? (
-                <span className="truncate text-slate-500">{placeholder}</span>
+                <span className="truncate text-muted-foreground">{placeholder}</span>
               ) : (
                 <CompactChipRow
                   values={selected}
@@ -156,14 +156,14 @@ export function PricingScopeMultiSelect({
                   disabled={isDisabled}
                 />
               )}
-              <ChevronDown className="h-4 w-4 shrink-0 text-slate-500" />
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
             </button>
           </PopoverTrigger>
           <PopoverContent
             align="start"
-            className="w-[var(--radix-popover-trigger-width)] border border-slate-200 p-0 shadow-lg"
+            className="w-[var(--radix-popover-trigger-width)] border border-border p-0 shadow-lg"
           >
-            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
+            <div className="flex items-center justify-between border-b border-border bg-muted/25 px-2.5 py-1.5">
               <button
                 type="button"
                 onClick={selectAll}
@@ -175,7 +175,7 @@ export function PricingScopeMultiSelect({
                 <button
                   type="button"
                   onClick={clearAll}
-                  className="text-[11px] font-medium text-slate-500 hover:text-slate-800"
+                  className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
                 >
                   Clear
                 </button>
@@ -196,7 +196,7 @@ export function PricingScopeMultiSelect({
                         "mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border",
                         checked
                           ? "border-brand-600 bg-brand-600 text-white"
-                          : "border-slate-300 bg-white",
+                          : "border-border bg-white",
                       )}
                     >
                       {checked && <Check className="h-2.5 w-2.5" />}
@@ -214,7 +214,7 @@ export function PricingScopeMultiSelect({
             "mt-2 flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-2 py-1.5 text-xs",
             applyToAll
               ? "border-brand-200 bg-brand-50/60 text-brand-800"
-              : "border-slate-200 bg-slate-50/50 text-slate-600",
+              : "border-border bg-muted/20 text-muted-foreground",
           )}
         >
           <Checkbox

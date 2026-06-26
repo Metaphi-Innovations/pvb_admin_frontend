@@ -23,6 +23,7 @@ import {
 import {
 	formatPackSize,
 	formatGrossWeight,
+	formatNetWeight,
 	getImagePreviewUrl,
 	getProductCode,
 	getProductImages,
@@ -266,9 +267,9 @@ export default function ProductDetailPage() {
 						<RecordSectionCard title='Packaging & Weight' icon={Package} accent='green'>
 							<RecordKvRow label='Pack Size' value={formatPackSize(product)} />
 							<RecordKvRow label='Unit' value={product.baseUnit} />
-							<RecordKvRow label='Packaging Type' value={product.packagingUnit} />
+							<RecordKvRow label='Packaging Unit' value={product.packagingUnit} />
 							<RecordKvRow
-								label='Qty per Packaging Type'
+								label='Unit Per Packaging Unit'
 								value={
 									product.unitPerCase !== undefined
 										? String(product.unitPerCase)
@@ -277,11 +278,7 @@ export default function ProductDetailPage() {
 							/>
 							<RecordKvRow
 								label='Net Weight'
-								value={
-									product.netWeightPerPackagingUnit !== undefined
-										? `${product.netWeightPerPackagingUnit}`
-										: undefined
-								}
+								value={formatNetWeight(product)}
 							/>
 							<RecordKvRow label='MoU' value={product.mou} />
 							<RecordKvRow

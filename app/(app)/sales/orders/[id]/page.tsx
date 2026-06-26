@@ -49,7 +49,12 @@ import {
   formatApprovalStatus,
   resolveApprovalStatus,
   getProductById,
+  isProductDiscountSchemeApplied,
 } from "../orders-data";
+import {
+  formatSchemeRupee,
+} from "@/app/(app)/masters/scheme/product-discount-scheme";
+import { Badge } from "@/components/ui/badge";
 
 function orderStatusVariant(status: OrderStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
   if (["approved", "confirmed", "delivered", "dispatched"].includes(status)) return "active";
@@ -369,14 +374,16 @@ export default function ViewSalesOrderPage() {
               <p className="text-xs font-semibold text-foreground">Product Lines</p>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[800px]">
+              <table className="w-full min-w-[1100px]">
                 <thead>
                   <tr className="border-b bg-muted/40 border-border">
                     <th className="px-4 py-2.5 text-left text-xs font-semibold">Product</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Stock</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Qty</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold">Unit Price</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold w-20">Discount (%)</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold">DP</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold">Offer</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold">Disc. Amt</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold">Final Rate</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">GST % / Amt</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold">Line Total</th>
                   </tr>
@@ -384,10 +391,11 @@ export default function ViewSalesOrderPage() {
                 <tbody>
                   {order.lineItems.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-xs text-center text-muted-foreground">No product lines</td>
+                      <td colSpan={9} className="px-4 py-8 text-xs text-center text-muted-foreground">No product lines</td>
                     </tr>
                   ) : order.lineItems.map(line => {
                     const product = line.productId ? getProductById(line.productId) : undefined;
+                    const hasScheme = isProductDiscountSchemeApplied(line);
                     return (
                       <tr key={line.id} className="border-b border-border/60">
                         <td className="px-4 py-2">
@@ -396,8 +404,28 @@ export default function ViewSalesOrderPage() {
                         </td>
                         <td className="px-4 py-2 text-xs text-right tabular-nums">{line.productId ? line.availableStock : "—"}</td>
                         <td className="px-4 py-2 text-xs text-right tabular-nums">{line.quantity}</td>
-                        <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(line.unitPrice)}</td>
-                        <td className="px-4 py-2 text-xs text-right tabular-nums">{line.discount}%</td>
+                        <td className="px-4 py-2 text-xs text-right tabular-nums">{formatSchemeRupee(line.dealerPrice)}</td>
+                        <td className="px-4 py-2">
+                          {hasScheme ? (
+                            <div className="flex flex-col gap-0.5">
+                              <Badge className="w-fit px-1.5 py-0 text-[10px] font-semibold bg-emerald-600 hover:bg-emerald-600">
+                                Applied
+                              </Badge>
+                              <span className="text-[10px] font-mono text-brand-700">
+                                {line.appliedSchemeCode ?? line.schemeCode}
+                              </span>
+                              <span className="text-[10px] text-emerald-700 tabular-nums">
+                                {formatSchemeRupee(line.schemeDiscountAmount)} off
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">No Scheme</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-xs text-right tabular-nums">
+                          {hasScheme ? formatSchemeRupee(line.schemeDiscountAmount) : "—"}
+                        </td>
+                        <td className="px-4 py-2 text-xs text-right tabular-nums font-medium">{formatSchemeRupee(line.finalRate)}</td>
                         <td className="px-4 py-2 text-xs text-right tabular-nums">
                           <div className="flex flex-col items-end">
                             <span className="text-[10px] text-muted-foreground font-semibold">{product?.gstRate || "0%"}</span>

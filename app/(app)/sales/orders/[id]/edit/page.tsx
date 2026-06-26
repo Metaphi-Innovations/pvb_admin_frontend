@@ -22,6 +22,7 @@ import {
 	loadProductCatalog,
 	saveOrders,
 } from "../../orders-data";
+import { syncSchemeUtilizationFromOrder } from "@/app/(app)/masters/scheme/scheme-utilization-data";
 import type { Customer } from "@/app/(app)/masters/customers/customer-data";
 import type { Employee } from "@/app/(app)/user-management/employee/employee-data";
 
@@ -121,6 +122,10 @@ export default function EditSalesOrderPage() {
 
 		const orders = loadOrders();
 		saveOrders(orders.map((o) => (o.id === updated.id ? updated : o)));
+		const customer = customers.find((c) => c.id === updated.customerId);
+		if (customer) {
+			syncSchemeUtilizationFromOrder(updated, customer, { isDraft: asDraft });
+		}
 
 		setToast({
 			msg: asDraft

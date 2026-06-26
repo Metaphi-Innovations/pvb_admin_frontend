@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/dialog";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { cn } from "@/lib/utils";
-import { loadUOMMasters } from "../../uom/uom-data";
 import { loadHSNMasters } from "../../hsn/hsn-data";
 import {
 	type Product,
@@ -29,10 +28,14 @@ import {
 	type ProductUrl,
 	type ProductStatus,
 	AUTHORITY_OPTIONS,
+	PRODUCT_PACKAGING_UNIT_OPTIONS,
+	PRODUCT_UNIT_OPTIONS,
 	calculateNetWeightPerPackagingUnit,
 	createProductImageFromFile,
 	createProductUrl,
+	formatNetWeightDisplay,
 	getImagePreviewUrl,
+	getMouFromUnit,
 	isAllowedProductImageFile,
 	isValidProductUrl,
 	loadActiveCategoryOptions,
@@ -42,6 +45,7 @@ import {
 	loadActiveSupplierOptions,
 	loadProducts,
 	generateProductCode,
+	normalizeProductUnit,
 	resolveProductCodeForSave,
 	resolveProductTaxFromHsn,
 	resolveSupplierCode,
@@ -120,10 +124,12 @@ export function productToFormValues(product: Product): ProductFormValues {
 	const acctDefaults = resolveProductAccountingDefaults();
 	const packSize = product.packSize ?? product.unitSize;
 	const unitPerCase = product.unitPerCase ?? product.unitsPerCase;
+	const baseUnit = normalizeProductUnit(product.baseUnit ?? "");
+	const mou = getMouFromUnit(baseUnit) ?? normalizeProductUnit(product.mou ?? "");
 	const netWeight =
+		calculateNetWeightPerPackagingUnit(packSize, unitPerCase, baseUnit) ??
 		product.netWeightPerPackagingUnit ??
-		product.netWeight ??
-		calculateNetWeightPerPackagingUnit(packSize, unitPerCase);
+		product.netWeight;
 
 	return {
 		productCode: product.productCode || "",
@@ -146,8 +152,8 @@ export function productToFormValues(product: Product): ProductFormValues {
 				? String(product.gstId)
 				: "",
 		packSize: packSize !== undefined ? String(packSize) : "",
-		baseUnit: product.baseUnit ?? "",
-		mou: product.mou ?? "",
+		baseUnit,
+		mou,
 		unitPerCase: unitPerCase !== undefined ? String(unitPerCase) : "",
 		packagingUnit: product.packagingUnit ?? "",
 		netWeightPerPackagingUnit:
@@ -223,32 +229,25 @@ function SelectField({
 	);
 }
 
-function applyPackagingCalculations(
-	values: ProductFormValues,
-	changedKey?: keyof ProductFormValues,
-): ProductFormValues {
+function applyPackagingCalculations(values: ProductFormValues): ProductFormValues {
 	const next = { ...values };
 	const packSize = parseFloat(next.packSize);
 	const unitPerCase = parseFloat(next.unitPerCase);
+	const baseUnit = normalizeProductUnit(next.baseUnit);
+
+	if (baseUnit) {
+		next.baseUnit = baseUnit;
+		next.mou = getMouFromUnit(baseUnit) ?? "";
+	}
+
 	const calculated = calculateNetWeightPerPackagingUnit(
 		isNaN(packSize) ? undefined : packSize,
 		isNaN(unitPerCase) ? undefined : unitPerCase,
+		baseUnit || undefined,
 	);
-	if (calculated !== undefined) {
-		next.netWeightPerPackagingUnit = String(calculated);
-	}
-	if (
-		changedKey === "grossWeight" ||
-		(!next.grossWeight && next.netWeightPerPackagingUnit)
-	) {
-		if (
-			changedKey !== "grossWeight" &&
-			(!next.grossWeight ||
-				next.grossWeight === values.netWeightPerPackagingUnit)
-		) {
-			// keep gross manual unless user hasn't set it
-		}
-	}
+	next.netWeightPerPackagingUnit =
+		calculated !== undefined ? String(calculated) : "";
+
 	return next;
 }
 
@@ -284,8 +283,8 @@ export function ProductForm({
 		value: ProductFormValues[K],
 	) => {
 		let next = { ...form, [key]: value } as ProductFormValues;
-		if (key === "packSize" || key === "unitPerCase") {
-			next = applyPackagingCalculations(next, key);
+		if (key === "packSize" || key === "unitPerCase" || key === "baseUnit") {
+			next = applyPackagingCalculations(next);
 		}
 		onChange(next);
 		onClearError(key);
@@ -323,30 +322,10 @@ export function ProductForm({
 		.filter((h) => h.status === "active")
 		.map((h) => ({ value: h.hsnCode, label: h.hsnCode }));
 
-	const uomData = typeof window !== "undefined" ? loadUOMMasters() : [];
-	const uomOptions =
-		uomData.length > 0
-			? uomData
-					.filter((u) => u.status === "active")
-					.map((u) => ({ value: u.shortName, label: u.shortName }))
-			: [
-					{ value: "ML", label: "ML" },
-					{ value: "Liter", label: "Liter" },
-					{ value: "Gram", label: "Gram" },
-					{ value: "Kg", label: "Kg" },
-					{ value: "Pack", label: "Pack" },
-					{ value: "Bottle", label: "Bottle" },
-				];
+	const unitOptions = useMemo(() => [...PRODUCT_UNIT_OPTIONS], []);
 
 	const packagingUnitOptions = useMemo(() => {
-		const base = [
-			{ value: "Bottle", label: "Bottle" },
-			{ value: "Pouch", label: "Pouch" },
-			{ value: "Bag", label: "Bag" },
-			{ value: "Box", label: "Box" },
-			{ value: "Case", label: "Case" },
-			{ value: "Drum", label: "Drum" },
-		];
+		const base = [...PRODUCT_PACKAGING_UNIT_OPTIONS];
 		if (
 			form.packagingUnit &&
 			!base.some((o) => o.value === form.packagingUnit)
@@ -358,6 +337,16 @@ export function ProductForm({
 		}
 		return base;
 	}, [form.packagingUnit]);
+
+	const netWeightDisplay = formatNetWeightDisplay(
+		form.packSize && !isNaN(Number(form.packSize))
+			? Number(form.packSize)
+			: undefined,
+		form.unitPerCase && !isNaN(Number(form.unitPerCase))
+			? Number(form.unitPerCase)
+			: undefined,
+		form.baseUnit,
+	);
 
 	const handleHSNChange = (hsnCode: string) => {
 		if (!hsnCode) {
@@ -625,25 +614,28 @@ export function ProductForm({
 						required
 						value={form.baseUnit}
 						onChange={(v) => set("baseUnit", v)}
-						options={uomOptions}
+						options={unitOptions}
 						placeholder='Select unit…'
 						disabled={readOnly}
 						error={errors.baseUnit}
 					/>
 
 					<SelectField
-						label='Packaging Type'
+						label='Packaging Unit'
 						required
 						value={form.packagingUnit}
 						onChange={(v) => set("packagingUnit", v)}
 						options={packagingUnitOptions}
-						placeholder='Select packaging type…'
+						placeholder='Select packaging unit…'
 						disabled={readOnly}
 						error={errors.packagingUnit}
 					/>
 
 					<div className='space-y-1'>
-						<Label className='text-xs font-medium'>Qty per Packaging Type</Label>
+						<Label className='text-xs font-medium'>
+							Unit Per Packaging Unit{" "}
+							<span className='text-red-500'>*</span>
+						</Label>
 						<Input
 							value={form.unitPerCase}
 							onChange={(e) => decimalInput("unitPerCase", e.target.value)}
@@ -652,31 +644,36 @@ export function ProductForm({
 							inputMode='decimal'
 							disabled={readOnly}
 						/>
+						<FieldError msg={errors.unitPerCase} />
 					</div>
 
 					<div className='space-y-1'>
 						<Label className='text-xs font-medium'>Net Weight</Label>
 						<Input
-							value={form.netWeightPerPackagingUnit}
+							value={netWeightDisplay}
 							readOnly
 							disabled
-							placeholder='Pack Size × Qty per Packaging Type'
+							placeholder='Pack Size × Unit Per Packaging Unit'
 							className='h-8 text-xs bg-muted/30 cursor-not-allowed'
 						/>
 						<p className='text-[10px] text-muted-foreground'>
-							Auto-calculated from Pack Size × Qty per Packaging Type
+							Auto-calculated value in MoU
 						</p>
 					</div>
 
-					<SelectField
-						label='MoU'
-						value={form.mou}
-						onChange={(v) => set("mou", v)}
-						options={uomOptions}
-						placeholder='Select MoU…'
-						disabled={readOnly}
-						error={errors.mou}
-					/>
+					<div className='space-y-1'>
+						<Label className='text-xs font-medium'>MoU</Label>
+						<Input
+							value={form.mou}
+							readOnly
+							disabled
+							placeholder='Auto from Unit'
+							className='h-8 text-xs bg-muted/30 cursor-not-allowed'
+						/>
+						<p className='text-[10px] text-muted-foreground'>
+							Auto-populated from selected Unit
+						</p>
+					</div>
 
 					<div className='space-y-1'>
 						<Label className='text-xs font-medium'>Gross Weight</Label>
@@ -697,8 +694,8 @@ export function ProductForm({
 						</div>
 						<p className='text-[10px] text-muted-foreground'>
 							{form.mou
-								? `Unit from MoU (${form.mou})`
-								: "Select MoU to set the weight unit"}
+								? `Enter weight in ${form.mou}`
+								: "Select Unit to set the weight unit"}
 						</p>
 						<FieldError msg={errors.grossWeight} />
 					</div>
@@ -988,7 +985,12 @@ export function validateProductForm(
 		errors.packSize = "Must be a positive number";
 	}
 	if (!form.baseUnit) errors.baseUnit = "Unit is required";
-	if (!form.packagingUnit) errors.packagingUnit = "Packaging type is required";
+	if (!form.packagingUnit) errors.packagingUnit = "Packaging unit is required";
+	if (!form.unitPerCase) {
+		errors.unitPerCase = "Unit per packaging unit is required";
+	} else if (isNaN(Number(form.unitPerCase)) || Number(form.unitPerCase) <= 0) {
+		errors.unitPerCase = "Must be a positive number";
+	}
 	if (
 		form.grossWeight &&
 		(isNaN(Number(form.grossWeight)) || Number(form.grossWeight) <= 0)
@@ -1015,8 +1017,11 @@ export function formValuesToProduct(
 
 	const packSize = parseOptionalNum(form.packSize);
 	const unitPerCase = parseOptionalNum(form.unitPerCase);
+	const baseUnit = normalizeProductUnit(form.baseUnit);
+	const mou =
+		getMouFromUnit(baseUnit) ?? (form.mou.trim() || undefined);
 	const netWeightPerPackagingUnit =
-		calculateNetWeightPerPackagingUnit(packSize, unitPerCase) ??
+		calculateNetWeightPerPackagingUnit(packSize, unitPerCase, baseUnit) ??
 		parseOptionalNum(form.netWeightPerPackagingUnit);
 	const grossWeight = parseOptionalNum(form.grossWeight);
 	const mrp = parseOptionalNum(form.mrp);
@@ -1042,8 +1047,8 @@ export function formValuesToProduct(
 		gstRate: form.gstRate,
 		gstId: form.gstId ? Number(form.gstId) : undefined,
 		packSize,
-		baseUnit: form.baseUnit,
-		mou: form.mou.trim() || undefined,
+		baseUnit,
+		mou,
 		unitPerCase,
 		packagingUnit: form.packagingUnit,
 		netWeightPerPackagingUnit,

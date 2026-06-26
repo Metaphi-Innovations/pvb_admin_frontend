@@ -19,6 +19,7 @@ interface SchemeMultiSelectProps {
   onChange: (ids: string[]) => void;
   error?: string;
   className?: string;
+  maxSelection?: number;
 }
 
 export function SchemeMultiSelect({
@@ -29,6 +30,7 @@ export function SchemeMultiSelect({
   onChange,
   error,
   className,
+  maxSelection,
 }: SchemeMultiSelectProps) {
   const selected = options.filter((o) => selectedIds.includes(o.id));
   const summary =
@@ -39,9 +41,16 @@ export function SchemeMultiSelect({
         : `${selected.length} selected`;
 
   const toggle = (id: string) => {
-    onChange(
-      selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id],
-    );
+    if (selectedIds.includes(id)) {
+      onChange(selectedIds.filter((x) => x !== id));
+      return;
+    }
+    if (maxSelection === 1) {
+      onChange([id]);
+      return;
+    }
+    if (maxSelection && selectedIds.length >= maxSelection) return;
+    onChange([...selectedIds, id]);
   };
 
   return (
@@ -63,7 +72,7 @@ export function SchemeMultiSelect({
             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           </button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-[260px] p-0">
+        <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] min-w-[16rem] p-0">
           <div className="flex items-center justify-between border-b border-border px-2.5 py-1.5">
             <span className="text-[11px] text-muted-foreground">{selected.length} selected</span>
             {selected.length > 0 && (

@@ -26,13 +26,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { MasterListingSheets } from "@/components/masters/MasterListingSheets";
 import { PricingForm as PricingFormFields } from "./components/PricingForm";
 import { MasterDrawerSection } from "@/components/masters/MasterRecordDrawer";
@@ -47,6 +40,7 @@ import {
   formatIndianRupeeDisplay,
   getSellingPriceFromRecord,
   loadActiveProductOptions,
+  loadActiveSupplierFilterOptions,
   loadPricingRecords,
   pricingToForm,
   validatePricingForm,
@@ -96,7 +90,7 @@ export default function PricingMasterPage() {
   const router = useRouter();
   const [records, setRecords] = useState<PricingRecord[]>([]);
   const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "priceListName", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "productCode", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -125,6 +119,12 @@ export default function PricingMasterPage() {
     [records],
   );
 
+  const supplierFilterOptions = useMemo(
+    () =>
+      loadActiveSupplierFilterOptions().map((s) => ({ label: s, value: s })),
+    [records],
+  );
+
   const dashboardStats = useMemo(() => computePricingDashboardStats(records), [records]);
 
   useEffect(() => {
@@ -146,8 +146,6 @@ export default function PricingMasterPage() {
           productId: String(record.productId),
           customerType: record.customerType,
           state: record.state,
-          effectiveFrom: record.effectiveFrom,
-          effectiveTo: record.effectiveTo,
           status: "active",
         },
         records,
@@ -155,7 +153,7 @@ export default function PricingMasterPage() {
       );
       if (duplicate) {
         setToast({
-          msg: `Cannot activate — overlaps with active rule "${duplicate.priceListName}".`,
+          msg: `Cannot activate — an active rule already exists for this product, state, and customer type.`,
           type: "error",
         });
         return;
@@ -182,20 +180,52 @@ export default function PricingMasterPage() {
 
   const columns: ColumnConfig<PricingRecord>[] = useMemo(() => [
     {
-      key: "priceListName",
-      header: "Price List Name",
+      key: "productCode",
+      header: "Product Code",
       sortable: true,
       filterable: true,
       filterType: "text",
-      width: "200px",
+      width: "120px",
       render: (_val, row) => (
         <button
           type="button"
           onClick={() => openView(row)}
-          className="text-xs text-foreground hover:text-brand-600 hover:underline text-left"
+          className="text-left text-xs font-mono font-semibold text-foreground hover:text-brand-600 hover:underline"
         >
-          {row.priceListName || "—"}
+          {row.productCode || row.sku}
         </button>
+      ),
+    },
+    {
+      key: "productName",
+      header: "Product Name",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "170px",
+      render: (_val, row) => (
+        <span className="text-xs font-medium text-foreground">{row.productName}</span>
+      ),
+    },
+    {
+      key: "supplierName",
+      header: "Supplier Name",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: supplierFilterOptions,
+      width: "140px",
+      render: (_val, row) => <span className="text-xs">{row.supplierName || "—"}</span>,
+    },
+    {
+      key: "supplierCode",
+      header: "Supplier Code",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "110px",
+      render: (_val, row) => (
+        <span className="text-xs font-mono">{row.supplierCode || "—"}</span>
       ),
     },
     {
@@ -217,39 +247,6 @@ export default function PricingMasterPage() {
       filterOptions: PRICING_CUSTOMER_TYPES.map((t) => ({ label: t, value: t })),
       width: "110px",
       render: (_val, row) => <span className="text-xs">{row.customerType}</span>,
-    },
-    {
-      key: "productCode",
-      header: "Product Code",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (_val, row) => (
-        <span className="text-xs font-mono font-semibold text-foreground">
-          {row.productCode || row.sku}
-        </span>
-      ),
-    },
-    {
-      key: "productName",
-      header: "Product Name",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "170px",
-      render: (_val, row) => (
-        <span className="text-xs font-medium text-foreground">{row.productName}</span>
-      ),
-    },
-    {
-      key: "sku",
-      header: "SKU",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "120px",
-      render: (_val, row) => <span className="text-xs font-mono">{row.sku}</span>,
     },
     {
       key: "category",
@@ -279,6 +276,30 @@ export default function PricingMasterPage() {
       render: (_val, row) => <span className="text-xs">{row.packSize || "—"}</span>,
     },
     {
+      key: "unit",
+      header: "Unit",
+      sortable: true,
+      width: "80px",
+      render: (_val, row) => (
+        <span className="text-xs">{row.unit || row.mou || row.baseUnit || "—"}</span>
+      ),
+    },
+    {
+      key: "gstPct",
+      header: "GST %",
+      sortable: true,
+      width: "70px",
+      render: (_val, row) => <span className="text-xs">{row.gstPct || "—"}</span>,
+    },
+    {
+      key: "costPrice",
+      header: "Cost Price",
+      sortable: true,
+      width: "100px",
+      align: "right",
+      render: (_val, row) => <MoneyCell value={row.costPrice} />,
+    },
+    {
       key: "dealerPrice",
       header: "Dealer Price",
       sortable: true,
@@ -287,24 +308,12 @@ export default function PricingMasterPage() {
       render: (_val, row) => <MoneyCell value={row.dealerPrice || getSellingPriceFromRecord(row)} />,
     },
     {
-      key: "effectiveFrom",
-      header: "Effective From",
+      key: "mrp",
+      header: "MRP",
       sortable: true,
-      filterable: true,
-      filterType: "date",
-      width: "110px",
-      render: (_val, row) => (
-        <span className="text-xs font-mono">{row.effectiveFrom || "—"}</span>
-      ),
-    },
-    {
-      key: "effectiveTo",
-      header: "Effective To",
-      sortable: true,
-      width: "110px",
-      render: (_val, row) => (
-        <span className="text-xs font-mono">{row.effectiveTo || "—"}</span>
-      ),
+      width: "100px",
+      align: "right",
+      render: (_val, row) => <MoneyCell value={row.mrp} />,
     },
     {
       key: "status",
@@ -324,7 +333,7 @@ export default function PricingMasterPage() {
         />
       ),
     },
-  ], [categoryFilterOptions, segmentFilterOptions]);
+  ], [categoryFilterOptions, segmentFilterOptions, supplierFilterOptions]);
 
   const actions: ActionItemConfig<PricingRecord>[] = [
     { label: "View", action: "view", icon: Eye, onClick: (row) => openView(row) },
@@ -348,7 +357,9 @@ export default function PricingMasterPage() {
           r.productCode.toLowerCase().includes(q) ||
           r.sku.toLowerCase().includes(q) ||
           r.productName.toLowerCase().includes(q) ||
-          r.priceListName.toLowerCase().includes(q),
+          (r.supplierName || "").toLowerCase().includes(q) ||
+          (r.supplierCode || "").toLowerCase().includes(q) ||
+          (r.hsnCode || "").toLowerCase().includes(q),
       );
     }
 
@@ -440,46 +451,46 @@ export default function PricingMasterPage() {
     saveMasterRecords(PRICING_STORAGE_KEY, updated);
     setRecords(updated);
     setDeleteTarget(null);
-    setToast({ msg: `"${deleteTarget.priceListName}" marked as inactive`, type: "success" });
+    setToast({ msg: `"${deleteTarget.productName}" marked as inactive`, type: "success" });
   };
 
   const handleExport = () => {
     try {
       const headers = [
-        "Price List Name",
-        "State",
-        "Customer Type",
         "Product Code",
         "Product Name",
-        "SKU",
+        "Supplier Name",
+        "Supplier Code",
+        "State",
+        "Customer Type",
         "Category",
         "Segment",
         "Pack Size",
+        "Unit",
+        "GST %",
         "Cost Price",
         "Dealer Price",
         "MRP",
-        "Effective From",
-        "Effective To",
         "Status",
       ];
       const csvRows = [headers.join(",")];
       for (const r of records) {
         csvRows.push(
           [
-            `"${r.priceListName.replace(/"/g, '""')}"`,
-            r.state,
-            r.customerType,
             r.productCode || r.sku,
             `"${r.productName.replace(/"/g, '""')}"`,
-            r.sku,
+            `"${(r.supplierName || "").replace(/"/g, '""')}"`,
+            r.supplierCode,
+            r.state,
+            r.customerType,
             r.category,
             r.segment,
             r.packSize,
+            r.unit || r.mou || r.baseUnit,
+            r.gstPct,
             r.costPrice,
             r.dealerPrice || getSellingPriceFromRecord(r),
             r.mrp,
-            r.effectiveFrom,
-            r.effectiveTo,
             r.status,
           ].join(","),
         );
@@ -501,7 +512,7 @@ export default function PricingMasterPage() {
 
   const viewDrawer = active
     ? {
-        title: active.priceListName || active.productName,
+        title: active.productName,
         subtitle: `${active.productCode || active.sku} · ${active.state} · ${active.customerType}`,
         status: active.status,
         basicInfo: [],
@@ -513,16 +524,15 @@ export default function PricingMasterPage() {
                 {[
                   { label: "Product Code", value: active.productCode || active.sku },
                   { label: "Product Name", value: active.productName },
+                  { label: "Supplier Name", value: active.supplierName || "—" },
+                  { label: "Supplier Code", value: active.supplierCode || "—" },
                   { label: "SKU", value: active.sku },
                   { label: "Category", value: active.category || "—" },
                   { label: "Segment", value: active.segment || "—" },
                   { label: "Pack Size", value: active.packSize || "—" },
+                  { label: "Unit", value: active.unit || active.mou || active.baseUnit || "—" },
                   { label: "HSN", value: active.hsnCode || "—" },
                   { label: "GST %", value: active.gstPct || "—" },
-                  { label: "Base Unit", value: active.baseUnit || "—" },
-                  { label: "MoU", value: active.mou || "—" },
-                  { label: "Unit Per Case", value: String(active.unitsPerCase || "—") },
-                  { label: "Packaging Unit", value: active.uom || "—" },
                 ].map((item) => (
                   <div key={item.label} className="space-y-0.5">
                     <p className="text-[11px] text-muted-foreground">{item.label}</p>
@@ -545,8 +555,6 @@ export default function PricingMasterPage() {
                     ),
                   },
                   { label: "MRP", value: formatIndianRupeeDisplay(active.mrp) },
-                  { label: "Effective From", value: active.effectiveFrom },
-                  { label: "Effective To", value: active.effectiveTo || "—" },
                   {
                     label: "Status",
                     value: active.status === "active" ? "Active" : "Inactive",
@@ -617,59 +625,9 @@ export default function PricingMasterPage() {
       <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50/80 px-3 py-2.5 text-xs text-blue-900">
         <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-600" />
         <p>
-          Sales price will be picked based on Product + Customer Type + State + Effective Date.
+          Sales price will be picked based on Product + Customer Type + State.
           Sales Order integration will be handled later.
         </p>
-      </div>
-
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Select
-          value={String(filters.category ?? "all")}
-          onValueChange={(v) =>
-            setFilters((prev) => {
-              const next = { ...prev };
-              if (v === "all") delete next.category;
-              else next.category = v;
-              return next;
-            })
-          }
-        >
-          <SelectTrigger className="h-8 w-[160px] text-xs">
-            <SelectValue placeholder="Category" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Categories</SelectItem>
-            {categoryFilterOptions.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={String(filters.segment ?? "all")}
-          onValueChange={(v) =>
-            setFilters((prev) => {
-              const next = { ...prev };
-              if (v === "all") delete next.segment;
-              else next.segment = v;
-              return next;
-            })
-          }
-        >
-          <SelectTrigger className="h-8 w-[160px] text-xs">
-            <SelectValue placeholder="Segment" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Segments</SelectItem>
-            {segmentFilterOptions.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
       <MasterListing<PricingRecord>
@@ -687,7 +645,7 @@ export default function PricingMasterPage() {
         addLabel="Add Pricing"
         onExport={handleExport}
         emptyMessage="pricing rules"
-        searchPlaceholder="Search product code, name, SKU, or price list..."
+        searchPlaceholder="Search product code, name, supplier, SKU, or HSN..."
         currentFilters={filters}
         currentSort={sort}
       />
@@ -736,7 +694,7 @@ export default function PricingMasterPage() {
             <DialogDescription className="text-xs pt-1">
               {deleteTarget && (
                 <>
-                  <strong className="text-foreground">{deleteTarget.priceListName}</strong> will be
+                  <strong className="text-foreground">{deleteTarget.productName}</strong> will be
                   marked as inactive.
                 </>
               )}

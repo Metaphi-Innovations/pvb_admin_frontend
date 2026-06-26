@@ -110,7 +110,7 @@ export default function ViewVendorPage() {
           icon: Clock,
           iconBg: "#FFFBEB",
           iconColor: "#D97706",
-          value: formatPaymentTerms(vendor.paymentTerms),
+          value: formatPaymentTerms(vendor),
           label: "Payment Terms",
         },
       ]}
@@ -128,7 +128,7 @@ export default function ViewVendorPage() {
           { label: "Supplier Type", value: vendor.vendorType || "—" },
           { label: "GST", value: vendor.gstNumber || "—" },
           { label: "PAN", value: vendor.panNumber || "—" },
-          { label: "Payment Terms", value: formatPaymentTerms(vendor.paymentTerms) },
+          { label: "Payment Terms", value: formatPaymentTerms(vendor) },
           { label: "Created", value: vendor.createdDate },
           { label: "Updated", value: vendor.updatedDate },
         ],
@@ -145,7 +145,7 @@ export default function ViewVendorPage() {
           <RecordKvRow label="Supplier Code" value={vendor.vendorCode || "—"} mono highlight />
           <RecordKvRow label="Supplier Name" value={vendor.vendorName} highlight />
           <RecordKvRow label="Supplier Type" value={vendor.vendorType || "—"} />
-          <RecordKvRow label="Payment Terms" value={formatPaymentTerms(vendor.paymentTerms)} />
+          <RecordKvRow label="Payment Terms" value={formatPaymentTerms(vendor)} />
           <RecordKvRow label="Contact Person" value={vendor.contactPerson || "—"} />
           <RecordKvRow
             label="Mobile Number"

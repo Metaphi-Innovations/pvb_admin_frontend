@@ -12,6 +12,7 @@ import SalesOrderForm, {
 	type SalesOrderFormValues,
 	validateSalesOrderForm,
 } from "../components/SalesOrderForm";
+import { syncSchemeUtilizationFromOrder } from "@/app/(app)/masters/scheme/scheme-utilization-data";
 import {
 	type ProductCatalogItem,
 	buildOrderFromForm,
@@ -46,6 +47,8 @@ export default function AddSalesOrderPage() {
 		additionalExpenses: [],
 		warehouseId: null,
 		warehouseName: "",
+		billToAddressId: "",
+		shipToAddressId: "",
 	});
 	const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -86,6 +89,10 @@ export default function AddSalesOrderPage() {
 
 		const orders = loadOrders();
 		saveOrders([...orders, newOrder]);
+		const customer = customers.find((c) => c.id === newOrder.customerId);
+		if (customer) {
+			syncSchemeUtilizationFromOrder(newOrder, customer, { isDraft: asDraft });
+		}
 		setToast({
 			msg: asDraft
 				? "Sales order saved as draft."

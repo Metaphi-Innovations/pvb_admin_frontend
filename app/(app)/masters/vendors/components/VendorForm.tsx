@@ -9,7 +9,6 @@ import {
 	Trash2,
 	Upload,
 	RefreshCw,
-	ChevronsUpDown,
 	Check,
 	ChevronDown,
 	Loader2,
@@ -31,7 +30,7 @@ import {
 	todayStr,
 } from "../vendor-data";
 import { loadActiveVendorTypeOptions } from "../../vendor-type/vendor-type-data";
-import { PaymentTermsSelect } from "@/components/masters/erp/PaymentTermsSelect";
+import { PaymentTermsFields } from "@/components/masters/erp/PaymentTermsFields";
 import { getActiveTDSMasters, toTdsSelectOptions } from "../../tds/tds-data";
 import { SearchableSelect } from "../../customers/components/SearchableSelect";
 import { loadGeoNodes, getStateSelectOptions } from "../../geography/geo-data";
@@ -248,148 +247,6 @@ function ProductSelect({
 			className='h-8 text-xs font-normal'
 			multiple={multiple}
 		/>
-	);
-}
-
-function DocumentNameField({
-	value,
-	documentTypeId,
-	onChange,
-	readOnly,
-	error,
-}: {
-	value: string;
-	documentTypeId?: string;
-	onChange: (next: { documentName: string; documentTypeId?: string }) => void;
-	readOnly?: boolean;
-	error?: string;
-}) {
-	const activeDocTypes = useMemo(
-		() => loadDocumentTypes().filter((d) => d.status === "Active"),
-		[],
-	);
-	const [open, setOpen] = useState(false);
-	const rootRef = useRef<HTMLDivElement | null>(null);
-	const filtered = useMemo(() => {
-		const q = value.trim().toLowerCase();
-		if (!q) return activeDocTypes;
-		return activeDocTypes.filter(
-			(d) =>
-				d.title.toLowerCase().includes(q) ||
-				d.description.toLowerCase().includes(q) ||
-				d.id.toLowerCase().includes(q),
-		);
-	}, [activeDocTypes, value]);
-	const selected = activeDocTypes.find((d) => d.id === documentTypeId);
-
-	useEffect(() => {
-		if (!open || readOnly) return;
-
-		const onPointerDown = (event: PointerEvent) => {
-			const target = event.target as Node | null;
-			if (target && rootRef.current?.contains(target)) return;
-			setOpen(false);
-		};
-
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") setOpen(false);
-		};
-
-		document.addEventListener("pointerdown", onPointerDown);
-		document.addEventListener("keydown", onKeyDown);
-		return () => {
-			document.removeEventListener("pointerdown", onPointerDown);
-			document.removeEventListener("keydown", onKeyDown);
-		};
-	}, [open, readOnly]);
-
-	return (
-		<div className='relative space-y-1' ref={rootRef}>
-			<div className='relative'>
-				<Input
-					disabled={readOnly}
-					value={value}
-					onChange={(e) => {
-						onChange({
-							documentName: e.target.value,
-							documentTypeId: undefined,
-						});
-						setOpen(true);
-					}}
-					onFocus={() => setOpen(true)}
-					onClick={() => setOpen(true)}
-					onKeyDown={(e) => {
-						if (!readOnly) {
-							if (e.key === "Escape") setOpen(false);
-							else setOpen(true);
-						}
-					}}
-					className={cn(
-						"h-8 text-xs border-border/60 pr-9",
-						error && "border-red-400 focus-visible:ring-red-300",
-					)}
-					placeholder='Type or select document type'
-				/>
-				<button
-					type='button'
-					tabIndex={-1}
-					className='absolute -translate-y-1/2 right-2 top-1/2 text-muted-foreground'
-					onMouseDown={(e) => e.preventDefault()}
-					onClick={() => {
-						if (!readOnly) setOpen(true);
-					}}
-				>
-					<ChevronsUpDown className='w-3.5 h-3.5' />
-				</button>
-			</div>
-			{open && !readOnly && (
-				<div className='absolute left-0 z-50 w-full mt-1 bg-white border rounded-lg shadow-lg top-full border-border/60'>
-					<div className='py-1 overflow-y-auto max-h-56'>
-						{filtered.length === 0 ? (
-							<p className='px-3 py-3 text-xs text-muted-foreground'>
-								No matching document types
-							</p>
-						) : (
-							filtered.map((docType) => (
-								<button
-									key={docType.id}
-									type='button'
-									className={cn(
-										"w-full px-3 py-2 text-left hover:bg-muted/60 flex items-start gap-2",
-										selected?.id === docType.id && "bg-brand-50",
-									)}
-									onMouseDown={(e) => e.preventDefault()}
-									onClick={() => {
-										onChange({
-											documentName: docType.title,
-											documentTypeId: docType.id,
-										});
-										setOpen(false);
-									}}
-								>
-									<div className='flex-1 min-w-0'>
-										<div className='flex items-center min-w-0 gap-2'>
-											<span className='text-xs font-medium truncate text-foreground'>
-												{docType.title}
-											</span>
-											{selected?.id === docType.id && (
-												<Check className='w-3 h-3 text-brand-600 shrink-0' />
-											)}
-										</div>
-										{docType.description && (
-											<p className='text-[10px] text-muted-foreground truncate mt-0.5'>
-												{docType.description}
-											</p>
-										)}
-									</div>
-								</button>
-							))
-						)}
-					</div>
-				</div>
-			)}
-			{error && <p className='text-[11px] text-red-500'>{error}</p>}
-		</div>
 	);
 }
 
@@ -663,40 +520,8 @@ export function VendorForm({
 		);
 	};
 
-	const addDocumentRow = () => {
-		const incompleteIndex = form.documents.findIndex(
-			(doc) => !doc.documentName.trim(),
-		);
-		if (incompleteIndex !== -1) {
-			showToast("Please fill the current document before adding another.");
-			return;
-		}
-
-		set("documents", [
-			...form.documents,
-			{
-				uid: `d-${Date.now()}`,
-				documentName: "",
-				documentTypeId: undefined,
-				file: undefined,
-				fileUrl: undefined,
-				uploaded: false,
-				fileName: "",
-				uploadedAt: "",
-				size: "",
-			},
-		]);
-	};
-
 	const addSelectedDocumentTypes = () => {
 		if (bulkDocumentTypeIds.length === 0) return;
-		const incompleteIndex = form.documents.findIndex(
-			(doc) => !doc.documentName.trim(),
-		);
-		if (incompleteIndex !== -1) {
-			showToast("Please fill the current document before adding another.");
-			return;
-		}
 
 		const selectedIds = Array.from(new Set(bulkDocumentTypeIds));
 		const existingTypeIds = new Set(
@@ -756,13 +581,6 @@ export function VendorForm({
 		);
 	};
 
-	const updateDocument = (uid: string, patch: Partial<VendorDocument>) => {
-		set(
-			"documents",
-			form.documents.map((d) => (d.uid === uid ? { ...d, ...patch } : d)),
-		);
-	};
-
 	const removeDocumentRow = (uid: string) => {
 		const row = form.documents.find((d) => d.uid === uid);
 		if (row?.fileUrl && row.fileUrl.startsWith("blob:")) {
@@ -787,7 +605,7 @@ export function VendorForm({
 	};
 
 	return (
-		<div className='shadow-sm'>
+		<div className='shadow-sm min-w-0 max-w-full overflow-x-hidden'>
 			<VendorTabBar
 				tabs={ALL_TABS}
 				active={tab}
@@ -1141,17 +959,16 @@ export function VendorForm({
 				{tab === "banking" && (
 					<div className={ERP.sectionGap}>
 						<ErpFormSection title='Payment Terms'>
-							<div className={ERP.field}>
-								<Label className={ERP.label}>
-									Payment Terms <span className='text-red-500'>*</span>
-								</Label>
-								<PaymentTermsSelect
-									value={form.paymentTerms}
-									onChange={(value) => set("paymentTerms", value)}
-									readOnly={readOnly}
-									required
-								/>
-							</div>
+							<PaymentTermsFields
+								values={{
+									paymentType: form.paymentType,
+									creditDays: form.creditDays,
+									advancePercentage: form.advancePercentage,
+								}}
+								onChange={(patch) => onChange({ ...form, ...patch })}
+								readOnly={readOnly}
+								inputClassName={bankFieldClass}
+							/>
 						</ErpFormSection>
 
 						<ErpFormSection title='Bank Details'>
@@ -1535,50 +1352,44 @@ export function VendorForm({
 									</div>
 								</div>
 							)}
-							<div className='overflow-x-auto border rounded-lg border-border/50'>
-								<table className='w-full text-xs min-w-[640px]'>
-									<thead>
-										<tr className='text-left border-b bg-muted/25 border-border/50 text-muted-foreground'>
-											<th className='px-3 py-2 font-medium'>Document Name</th>
-											<th className='px-3 py-2 font-medium'>Upload File</th>
-											<th className='px-3 py-2 text-right w-36' />
-										</tr>
-									</thead>
-									<tbody>
-										{form.documents.map((doc) => (
-											<DocRow
-												key={doc.uid}
-												doc={doc}
-												readOnly={readOnly}
-												fileRef={(el) => {
-													fileRefs.current[doc.uid] = el;
-												}}
-												onNameChange={(patch) => updateDocument(doc.uid, patch)}
-												onUpload={(file) => uploadDoc(doc.uid, file)}
-												onDelete={() => removeDocumentRow(doc.uid)}
-												onPickFile={() => {
-													fileRefs.current[doc.uid]?.click();
-												}}
-												onOpenFile={() => openFile(doc.fileUrl)}
-												canReupload={
-													!!doc.fileName || !!doc.fileUrl || !!doc.uploaded
-												}
-											/>
-										))}
-									</tbody>
-								</table>
-							</div>
-							{!readOnly && (
-								<div className='mt-2.5 flex flex-wrap gap-2'>
-									<Button
-										type='button'
-										variant='outline'
-										size='sm'
-										className='h-8 text-xs border-dashed'
-										onClick={addDocumentRow}
-									>
-										<Plus className='w-3.5 h-3.5 mr-1' /> Add Manual Document
-									</Button>
+							{form.documents.length === 0 ? (
+								<div className='rounded-lg border border-dashed border-border/60 px-4 py-6 text-center'>
+									<p className='text-xs text-muted-foreground'>
+										Select document types above and click Add Selected to upload files.
+									</p>
+								</div>
+							) : (
+								<div className='overflow-x-auto border rounded-lg border-border/50'>
+									<table className='w-full text-xs min-w-[640px]'>
+										<thead>
+											<tr className='text-left border-b bg-muted/25 border-border/50 text-muted-foreground'>
+												<th className='px-3 py-2 font-medium'>Document Name</th>
+												<th className='px-3 py-2 font-medium'>Upload File</th>
+												<th className='px-3 py-2 text-right w-36' />
+											</tr>
+										</thead>
+										<tbody>
+											{form.documents.map((doc) => (
+												<DocRow
+													key={doc.uid}
+													doc={doc}
+													readOnly={readOnly}
+													fileRef={(el) => {
+														fileRefs.current[doc.uid] = el;
+													}}
+													onUpload={(file) => uploadDoc(doc.uid, file)}
+													onDelete={() => removeDocumentRow(doc.uid)}
+													onPickFile={() => {
+														fileRefs.current[doc.uid]?.click();
+													}}
+													onOpenFile={() => openFile(doc.fileUrl)}
+													canReupload={
+														!!doc.fileName || !!doc.fileUrl || !!doc.uploaded
+													}
+												/>
+											))}
+										</tbody>
+									</table>
 								</div>
 							)}
 						</section>
@@ -1611,7 +1422,6 @@ function DocRow({
 	doc,
 	readOnly,
 	fileRef,
-	onNameChange,
 	onUpload,
 	onDelete,
 	onPickFile,
@@ -1621,10 +1431,6 @@ function DocRow({
 	doc: VendorDocument;
 	readOnly?: boolean;
 	fileRef: (el: HTMLInputElement | null) => void;
-	onNameChange: (patch: {
-		documentName: string;
-		documentTypeId?: string;
-	}) => void;
 	onUpload: (file: File) => void;
 	onDelete: () => void;
 	onPickFile: () => void;
@@ -1634,12 +1440,9 @@ function DocRow({
 	return (
 		<tr className='border-b border-border/40 last:border-0 hover:bg-muted/10'>
 			<td className='px-3 py-2'>
-				<DocumentNameField
-					value={doc.documentName}
-					documentTypeId={doc.documentTypeId}
-					readOnly={readOnly}
-					onChange={onNameChange}
-				/>
+				<span className='text-xs font-medium text-foreground'>
+					{doc.documentName || "—"}
+				</span>
 			</td>
 			<td className='px-3 py-2'>
 				<input

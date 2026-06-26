@@ -6,10 +6,18 @@ import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { saveMasterRecords, loadMasterRecords } from "@/lib/masters/common";
+import { saveMasterRecords } from "@/lib/masters/common";
+import { ProductDiscountSchemeForm } from "../../components/ProductDiscountSchemeForm";
 import { SchemeFormSheet, countBulkPreview } from "../../components/SchemeFormSheet";
 import {
-  SCHEME_SEED,
+  productDiscountFormToRecord,
+  productDiscountRecordToForm,
+  validateProductDiscountForm,
+  loadConsolidatedSchemeRecords,
+  canEditProductDiscountScheme,
+  type ProductDiscountForm,
+} from "../../product-discount-scheme";
+import {
   SCHEME_STORAGE_KEY,
   bulkFormToSingleRecord,
   canEditRecord,
@@ -26,32 +34,64 @@ export default function SchemeEditPageClient() {
   const params = useParams();
   const schemeId = Number(params.id);
 
-  const [form, setForm] = useState<SchemeBulkForm | null>(null);
   const [record, setRecord] = useState<SchemeRecord | null>(null);
+  const [productDiscountForm, setProductDiscountForm] = useState<ProductDiscountForm | null>(null);
+  const [bulkForm, setBulkForm] = useState<SchemeBulkForm | null>(null);
   const [formError, setFormError] = useState("");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
+  const isProductDiscount = record?.schemeType === "Product Discount Scheme";
+
   useEffect(() => {
-    const list = loadMasterRecords<SchemeRecord>(SCHEME_STORAGE_KEY, SCHEME_SEED);
+    const list = loadConsolidatedSchemeRecords();
     const found = list.find((r) => r.id === schemeId);
     if (!found) {
       router.replace("/masters/scheme");
       return;
     }
-    if (!canEditRecord(found)) {
-      setToast({ msg: "Only draft schemes can be edited", type: "error" });
+    if (
+      isProductDiscount
+        ? !canEditProductDiscountScheme(found)
+        : !canEditRecord(found)
+    ) {
+      setToast({ msg: "This scheme cannot be edited after approval", type: "error" });
       setTimeout(() => router.replace("/masters/scheme"), 1200);
       return;
     }
     setRecord(found);
-    setForm(recordToBulkForm(found));
+    if (found.schemeType === "Product Discount Scheme") {
+      setProductDiscountForm(productDiscountRecordToForm(found));
+    } else {
+      setBulkForm(recordToBulkForm(found));
+    }
   }, [schemeId, router]);
 
-  const bulkPreviewCount = useMemo(() => (form ? countBulkPreview(form) : 0), [form]);
+  const bulkPreviewCount = useMemo(() => (bulkForm ? countBulkPreview(bulkForm) : 0), [bulkForm]);
 
   const handleSave = () => {
-    if (!form || !record) return;
-    const err = validateSchemeBulkForm(form, "edit");
+    if (!record) return;
+
+    if (isProductDiscount && productDiscountForm) {
+      const list = loadConsolidatedSchemeRecords();
+      const err = validateProductDiscountForm(productDiscountForm, "edit", list, record.id);
+      if (err) {
+        setFormError(err);
+        setToast({ msg: err, type: "error" });
+        setTimeout(() => setToast(null), 3200);
+        return;
+      }
+
+      const updated = list.map((r) =>
+        r.id === record.id ? productDiscountFormToRecord(productDiscountForm, list, record.id, record) : r,
+      );
+      saveMasterRecords(SCHEME_STORAGE_KEY, updated);
+      setToast({ msg: "Product discount scheme updated", type: "success" });
+      setTimeout(() => router.push("/masters/scheme"), 900);
+      return;
+    }
+
+    if (!bulkForm) return;
+    const err = validateSchemeBulkForm(bulkForm, "edit");
     if (err) {
       setFormError(err);
       setToast({ msg: err, type: "error" });
@@ -59,14 +99,14 @@ export default function SchemeEditPageClient() {
       return;
     }
 
-    const list = loadMasterRecords<SchemeRecord>(SCHEME_STORAGE_KEY, SCHEME_SEED);
+    const list = loadConsolidatedSchemeRecords();
     const wasApproved =
       record.approvalStatus === "approved" ||
       record.approvalStatus === "active" ||
       PENDING_APPROVAL_STATUSES.includes(record.approvalStatus);
 
     let updated = list.map((r) =>
-      r.id === record.id ? bulkFormToSingleRecord(form, record.id, record) : r,
+      r.id === record.id ? bulkFormToSingleRecord(bulkForm, record.id, record) : r,
     );
     if (wasApproved) {
       updated = updated.map((r) => (r.id === record.id ? schemeNeedsReapproval(r) : r));
@@ -77,7 +117,7 @@ export default function SchemeEditPageClient() {
     setTimeout(() => router.push("/masters/scheme"), 900);
   };
 
-  if (!form || !record) {
+  if (!record || (isProductDiscount ? !productDiscountForm : !bulkForm)) {
     return (
       <FormContainer title="Edit Scheme" description="Loading...">
         <p className="text-xs text-muted-foreground">Loading scheme...</p>
@@ -87,9 +127,10 @@ export default function SchemeEditPageClient() {
 
   return (
     <FormContainer
-      title="Edit Draft Scheme"
+      title={isProductDiscount ? "Edit Product Discount Scheme" : "Edit Scheme"}
       description={`Masters → Scheme → ${record.schemeName}`}
       onBack={() => router.push("/masters/scheme")}
+      noCard={isProductDiscount}
       actions={
         <div className="flex items-center gap-2">
           <Button
@@ -109,16 +150,32 @@ export default function SchemeEditPageClient() {
         </div>
       }
     >
-      <SchemeFormSheet
-        form={form}
-        onChange={(next) => {
-          setForm(next);
-          setFormError("");
-        }}
-        mode="edit"
-        bulkPreviewCount={bulkPreviewCount}
-        error={formError}
-      />
+      {isProductDiscount && productDiscountForm ? (
+        <ProductDiscountSchemeForm
+          form={productDiscountForm}
+          onChange={(next) => {
+            setProductDiscountForm(next);
+            setFormError("");
+          }}
+          mode="edit"
+          schemeCode={record.schemeCode}
+          error={formError}
+        />
+      ) : (
+        bulkForm && (
+          <SchemeFormSheet
+            form={bulkForm}
+            onChange={(next) => {
+              setBulkForm(next);
+              setFormError("");
+            }}
+            mode="edit"
+            bulkPreviewCount={bulkPreviewCount}
+            schemeCode={record.schemeCode}
+            error={formError}
+          />
+        )
+      )}
 
       {toast && (
         <div
