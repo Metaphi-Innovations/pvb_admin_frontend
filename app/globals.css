@@ -109,6 +109,39 @@
     @apply transition-colors duration-100 hover:bg-brand-50/50 cursor-pointer;
   }
 
+  /* Shared master listing table (Customer Type, Product, Pricing, Scheme, etc.) */
+  .master-listing-table-shell {
+    @apply border border-border rounded-xl bg-white shadow-sm overflow-hidden;
+  }
+
+  .master-listing-thead-row {
+    @apply bg-muted/40 border-b border-border;
+  }
+
+  .master-listing-th {
+    @apply bg-muted/40;
+  }
+
+  .master-listing-th-sorted {
+    @apply bg-brand-50/60 text-brand-700;
+  }
+
+  .master-listing-th-sticky {
+    @apply sticky right-0 z-20 bg-muted/40 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border;
+  }
+
+  .master-listing-th-sticky-sorted {
+    @apply sticky right-0 z-20 bg-brand-50/60 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border;
+  }
+
+  .master-listing-row {
+    @apply border-b border-border/60 bg-white transition-colors hover:bg-[#fbfaf7];
+  }
+
+  .master-listing-td-sticky {
+    @apply sticky right-0 z-10 bg-white shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border group-hover:bg-[#fbfaf7];
+  }
+
   .input-base {
     @apply w-full h-8 rounded-input border border-input bg-white px-3 text-xs
            placeholder:text-muted-foreground

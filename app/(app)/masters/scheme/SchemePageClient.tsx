@@ -8,51 +8,61 @@ import {
   Edit2,
   Eye,
   Gift,
+  PlayCircle,
+  RotateCcw,
   Send,
-  Settings,
   ShieldCheck,
   ShieldX,
   Power,
   X,
 } from "lucide-react";
 import { ListingContainer } from "@/components/layout/ListingContainer";
-import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { applyFilters } from "@/components/listing/filter-utils";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
-  loadMasterRecords,
   saveMasterRecords,
   nextMasterCode,
   masterToday,
 } from "@/lib/masters/common";
 import {
   APPROVAL_STATUS_LABELS,
-  SCHEME_SEED,
   SCHEME_STORAGE_KEY,
-  SCHEME_TYPES,
-  DEFAULT_SCHEME_SETTINGS,
   copyRecord,
-  formatBenefit,
   formatValidity,
-  loadSchemeSettings,
   matchesListingTab,
-  saveSchemeSettings,
   canApproveRecord,
+  canActivateRecord,
   canDeactivateRecord,
   canEditRecord,
   canRejectRecord,
+  canSendBackRecord,
   canSubmitRecord,
   approveRecord,
+  activateRecord,
   rejectRecord,
+  sendBackRecord,
   submitRecord,
   deactivateRecord,
+  resolveDisplayApprovalStatus,
   type SchemeRecord,
-  type SchemeSettings,
 } from "./scheme-data";
-import { SchemeSettingsDialog } from "./components/SchemeSettingsDialog";
+import {
+  formatProductDiscountOperationalStatus,
+  isProductDiscountRecord,
+  loadConsolidatedSchemeRecords,
+  countProductDiscountProducts,
+  countProductDiscountStates,
+  canEditProductDiscountScheme,
+  canSubmitProductDiscountScheme,
+  canApproveProductDiscountScheme,
+  canRejectProductDiscountScheme,
+  canSendBackProductDiscountScheme,
+  canActivateProductDiscountScheme,
+  canDeactivateProductDiscountScheme,
+  canCopyProductDiscountScheme,
+} from "./product-discount-scheme";
 import { SchemeApprovalBadge, SchemeStatusBadge } from "./components/SchemeBadges";
 
 interface ToastState {
@@ -62,7 +72,6 @@ interface ToastState {
 
 const LISTING_TABS = [
   { value: "all", label: "All" },
-  { value: "draft", label: "Draft" },
   { value: "pending", label: "Pending Approval" },
   { value: "approved", label: "Approved" },
   { value: "active", label: "Active" },
@@ -87,10 +96,17 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
   );
 }
 
+function schemeActionAllowed(
+  row: SchemeRecord,
+  productDiscountCheck: (record: SchemeRecord) => boolean,
+  defaultCheck: (record: SchemeRecord) => boolean,
+): boolean {
+  return isProductDiscountRecord(row) ? productDiscountCheck(row) : defaultCheck(row);
+}
+
 export default function SchemeMasterPage() {
   const router = useRouter();
   const [records, setRecords] = useState<SchemeRecord[]>([]);
-  const [settings, setSettings] = useState<SchemeSettings>(DEFAULT_SCHEME_SETTINGS);
   const [activeTab, setActiveTab] = useState<string>("all");
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortState>({ key: "schemeName", direction: "asc" });
@@ -98,21 +114,10 @@ export default function SchemeMasterPage() {
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
 
-  const [sheetMode, setSheetMode] = useState<"view" | null>(null);
-  const [active, setActive] = useState<SchemeRecord | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [draftSettings, setDraftSettings] = useState<SchemeSettings>(DEFAULT_SCHEME_SETTINGS);
-
   useEffect(() => {
-    const loaded = loadMasterRecords<SchemeRecord>(SCHEME_STORAGE_KEY, SCHEME_SEED);
-    const needsMigration = loaded.some((r) => !r.schemeType);
-    if (needsMigration) {
-      localStorage.removeItem(SCHEME_STORAGE_KEY);
-      setRecords(loadMasterRecords<SchemeRecord>(SCHEME_STORAGE_KEY, SCHEME_SEED));
-    } else {
-      setRecords(loaded);
-    }
-    setSettings(loadSchemeSettings());
+    const migrated = loadConsolidatedSchemeRecords();
+    saveMasterRecords(SCHEME_STORAGE_KEY, migrated);
+    setRecords(migrated);
   }, []);
 
   useEffect(() => {
@@ -136,14 +141,25 @@ export default function SchemeMasterPage() {
 
   const columns: ColumnConfig<SchemeRecord>[] = [
     {
+      key: "schemeCode",
+      header: "Scheme Code",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "90px",
+      render: (_v, row) => (
+        <span className="text-[11px] font-mono font-medium text-foreground">{row.schemeCode}</span>
+      ),
+    },
+    {
       key: "schemeName",
       header: "Scheme Name",
       sortable: true,
       filterable: true,
       filterType: "text",
-      width: "180px",
+      width: "160px",
       render: (_v, row) => (
-        <span className="text-xs font-semibold text-foreground line-clamp-2">{row.schemeName}</span>
+        <span className="text-[11px] font-medium line-clamp-2">{row.schemeName}</span>
       ),
     },
     {
@@ -151,30 +167,29 @@ export default function SchemeMasterPage() {
       header: "Scheme Type",
       sortable: true,
       filterable: true,
-      filterType: "dropdown",
-      filterOptions: SCHEME_TYPES.map((t) => ({ label: t, value: t })),
+      filterType: "text",
       width: "140px",
       render: (_v, row) => <span className="text-[11px]">{row.schemeType}</span>,
     },
     {
-      key: "productName",
-      header: "Product",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "100px",
+      key: "productCount",
+      header: "No. of Products",
+      width: "90px",
       render: (_v, row) => (
-        <span className="text-[11px]">{row.productName ?? "—"}</span>
+        <span className="text-[11px]">
+          {isProductDiscountRecord(row) ? countProductDiscountProducts(row) : (row.productName ?? "—")}
+        </span>
       ),
     },
     {
-      key: "stateName",
-      header: "State",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "100px",
-      render: (_v, row) => <span className="text-[11px]">{row.stateName}</span>,
+      key: "stateCount",
+      header: "No. of States",
+      width: "85px",
+      render: (_v, row) => (
+        <span className="text-[11px]">
+          {isProductDiscountRecord(row) ? countProductDiscountStates(row) : row.stateName}
+        </span>
+      ),
     },
     {
       key: "customerType",
@@ -184,14 +199,6 @@ export default function SchemeMasterPage() {
       filterType: "text",
       width: "100px",
       render: (_v, row) => <span className="text-[11px]">{row.customerType}</span>,
-    },
-    {
-      key: "benefit",
-      header: "Benefit",
-      width: "100px",
-      render: (_v, row) => (
-        <span className="text-[11px] font-medium">{formatBenefit(row)}</span>
-      ),
     },
     {
       key: "validity",
@@ -204,35 +211,48 @@ export default function SchemeMasterPage() {
       ),
     },
     {
-      key: "priority",
-      header: "Priority",
-      sortable: true,
-      width: "60px",
-      render: (_v, row) => <span className="text-[11px]">{row.priority}</span>,
-    },
-    {
       key: "status",
       header: "Status",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
       filterOptions: [
+        { label: "Pending", value: "pending" },
         { label: "Active", value: "active" },
         { label: "Inactive", value: "inactive" },
       ],
       width: "80px",
-      render: (_v, row) => <SchemeStatusBadge active={row.status === "active"} />,
+      render: (_v, row) => {
+        if (isProductDiscountRecord(row)) {
+          const label = formatProductDiscountOperationalStatus(row);
+          return (
+            <span
+              className={cn(
+                "inline-flex items-center rounded border px-1.5 py-0 h-5 text-[10px] font-medium",
+                label === "Active"
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : label === "Approved"
+                    ? "bg-blue-50 text-blue-700 border-blue-200"
+                    : label === "Pending"
+                      ? "bg-amber-50 text-amber-700 border-amber-200"
+                      : label === "Expired"
+                        ? "bg-orange-50 text-orange-700 border-orange-200"
+                        : label === "Rejected"
+                          ? "bg-red-50 text-red-700 border-red-200"
+                          : "bg-slate-50 text-slate-600 border-slate-200",
+              )}
+            >
+              {label}
+            </span>
+          );
+        }
+        return <SchemeStatusBadge active={row.status === "active"} />;
+      },
     },
     {
       key: "approvalStatus",
-      header: "Approval",
+      header: "Approval Status",
       sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: Object.entries(APPROVAL_STATUS_LABELS).map(([value, label]) => ({
-        label,
-        value,
-      })),
       width: "110px",
       render: (_v, row) => <SchemeApprovalBadge record={row} />,
     },
@@ -251,37 +271,50 @@ export default function SchemeMasterPage() {
       onClick: (row) => openView(row),
     },
     {
-      label: "Edit Draft",
+      label: "Edit",
       action: "edit",
       icon: Edit2,
       onClick: (row) => openEdit(row),
-      hide: (row) => !canEditRecord(row),
+      disabled: (row) =>
+        !schemeActionAllowed(row, canEditProductDiscountScheme, canEditRecord),
     },
     {
-      label: "Copy",
-      action: "copy",
-      icon: Copy,
-      onClick: (row) => handleCopy(row),
-    },
-    {
-      label: "Submit for Approval",
+      label: "Resubmit for Approval",
       action: "submit",
       icon: Send,
       onClick: (row) => {
         updateRecord(row.id, submitRecord);
         setToast({ msg: "Scheme submitted for approval", type: "success" });
       },
-      hide: (row) => !canSubmitRecord(row),
+      hide: (row) =>
+        !schemeActionAllowed(row, canSubmitProductDiscountScheme, canSubmitRecord),
     },
     {
       label: "Approve",
       action: "approve",
       icon: ShieldCheck,
       onClick: (row) => {
-        updateRecord(row.id, approveRecord);
-        setToast({ msg: "Scheme approved to next stage", type: "success" });
+        const updated = approveRecord(row);
+        updateRecord(row.id, () => updated);
+        const msg =
+          updated.approvalStatus === "approved"
+            ? "Scheme approved — ready for activation"
+            : "Scheme moved to next approval stage";
+        setToast({ msg, type: "success" });
       },
-      hide: (row) => !canApproveRecord(row),
+      hide: (row) =>
+        !schemeActionAllowed(row, canApproveProductDiscountScheme, canApproveRecord),
+    },
+    {
+      label: "Send Back",
+      action: "send_back",
+      icon: RotateCcw,
+      onClick: (row) => {
+        updateRecord(row.id, sendBackRecord);
+        setToast({ msg: "Scheme sent back for correction", type: "success" });
+      },
+      hide: (row) =>
+        !schemeActionAllowed(row, canSendBackProductDiscountScheme, canSendBackRecord),
     },
     {
       label: "Reject",
@@ -292,7 +325,19 @@ export default function SchemeMasterPage() {
         updateRecord(row.id, rejectRecord);
         setToast({ msg: "Scheme rejected", type: "success" });
       },
-      hide: (row) => !canRejectRecord(row),
+      hide: (row) =>
+        !schemeActionAllowed(row, canRejectProductDiscountScheme, canRejectRecord),
+    },
+    {
+      label: "Activate",
+      action: "activate",
+      icon: PlayCircle,
+      onClick: (row) => {
+        updateRecord(row.id, activateRecord);
+        setToast({ msg: "Scheme activated", type: "success" });
+      },
+      hide: (row) =>
+        !schemeActionAllowed(row, canActivateProductDiscountScheme, canActivateRecord),
     },
     {
       label: "Deactivate",
@@ -302,7 +347,16 @@ export default function SchemeMasterPage() {
         updateRecord(row.id, deactivateRecord);
         setToast({ msg: "Scheme deactivated", type: "success" });
       },
-      hide: (row) => !canDeactivateRecord(row),
+      hide: (row) =>
+        !schemeActionAllowed(row, canDeactivateProductDiscountScheme, canDeactivateRecord),
+    },
+    {
+      label: "Copy Scheme",
+      action: "copy",
+      icon: Copy,
+      onClick: (row) => handleCopy(row),
+      hide: (row) =>
+        isProductDiscountRecord(row) ? !canCopyProductDiscountScheme(row) : false,
     },
   ];
 
@@ -313,6 +367,7 @@ export default function SchemeMasterPage() {
       const q = String(filters.search).trim().toLowerCase();
       result = result.filter(
         (r) =>
+          r.schemeCode.toLowerCase().includes(q) ||
           r.schemeName.toLowerCase().includes(q) ||
           (r.productName ?? "").toLowerCase().includes(q) ||
           r.stateName.toLowerCase().includes(q) ||
@@ -346,25 +401,23 @@ export default function SchemeMasterPage() {
   const openAdd = () => router.push("/masters/scheme/add");
 
   const openEdit = (row: SchemeRecord) => {
-    if (!canEditRecord(row)) {
-      setToast({ msg: "Only draft schemes can be edited", type: "error" });
+    const canEdit = schemeActionAllowed(row, canEditProductDiscountScheme, canEditRecord);
+    if (!canEdit) {
+      setToast({
+        msg: "Approved and active schemes cannot be edited. Edit is allowed only while pending approval or rejected.",
+        type: "error",
+      });
       return;
     }
     router.push(`/masters/scheme/${row.id}/edit`);
   };
 
   const openView = (row: SchemeRecord) => {
-    setActive(row);
-    setSheetMode("view");
-  };
-
-  const closeSheet = () => {
-    setSheetMode(null);
-    setActive(null);
+    router.push(`/masters/scheme/${row.id}`);
   };
 
   const handleCopy = (row: SchemeRecord) => {
-    const list = loadMasterRecords<SchemeRecord>(SCHEME_STORAGE_KEY, SCHEME_SEED);
+    const list = loadConsolidatedSchemeRecords();
     const newId = list.length ? Math.max(...list.map((r) => r.id)) + 1 : 1;
     const newCode = nextMasterCode(
       "SCH-",
@@ -372,35 +425,37 @@ export default function SchemeMasterPage() {
     );
     const copy = copyRecord(row, newId, newCode);
     persistRecords([...list, copy]);
-    setToast({ msg: "Scheme copied as draft", type: "success" });
+    setToast({ msg: "Scheme copied and submitted for approval", type: "success" });
   };
 
   const handleExport = () => {
     try {
       const headers = [
+        "Scheme Code",
         "Scheme Name",
         "Scheme Type",
-        "Product",
-        "State",
+        "No. of Products",
+        "No. of States",
         "Customer Type",
-        "Benefit",
         "Validity",
-        "Priority",
         "Status",
         "Approval Status",
       ];
       const rows = filtered.map((r) =>
         [
+          r.schemeCode,
           `"${r.schemeName.replace(/"/g, '""')}"`,
           r.schemeType,
-          r.productName ?? "",
-          r.stateName,
+          isProductDiscountRecord(r) ? countProductDiscountProducts(r) : (r.productName ?? ""),
+          isProductDiscountRecord(r) ? countProductDiscountStates(r) : r.stateName,
           r.customerType,
-          `"${formatBenefit(r)}"`,
           `"${formatValidity(r)}"`,
-          r.priority,
-          r.status,
-          APPROVAL_STATUS_LABELS[r.approvalStatus],
+          isProductDiscountRecord(r)
+            ? formatProductDiscountOperationalStatus(r)
+            : r.status === "active"
+              ? "Active"
+              : "Inactive",
+          APPROVAL_STATUS_LABELS[resolveDisplayApprovalStatus(r)],
         ].join(","),
       );
       const blob = new Blob([[headers.join(","), ...rows].join("\n")], {
@@ -418,52 +473,6 @@ export default function SchemeMasterPage() {
     }
   };
 
-  const openSettings = () => {
-    setDraftSettings(settings);
-    setSettingsOpen(true);
-  };
-
-  const saveSettings = () => {
-    saveSchemeSettings(draftSettings);
-    setSettings(draftSettings);
-    setSettingsOpen(false);
-    setToast({ msg: "Scheme settings saved", type: "success" });
-  };
-
-  const viewDrawer = active
-    ? buildSimpleMasterViewDrawer<SchemeRecord>({
-        drawerTitle: "Scheme",
-        getRecordCode: (r) => r.schemeName,
-        basicInfo: (r) => [
-          { label: "Scheme Name", value: r.schemeName },
-          { label: "Scheme Type", value: r.schemeType },
-          { label: "Product", value: r.productName ?? "—" },
-          { label: "State", value: r.stateName },
-          { label: "Customer Type", value: r.customerType },
-          { label: "Benefit", value: formatBenefit(r) },
-          { label: "Validity", value: formatValidity(r) },
-          { label: "Priority", value: String(r.priority) },
-          { label: "Status", value: r.status === "active" ? "Active" : "Inactive" },
-          {
-            label: "Approval",
-            value: APPROVAL_STATUS_LABELS[r.approvalStatus],
-          },
-          ...(r.expiryWithinDays
-            ? [{ label: "Expiry Within Days", value: String(r.expiryWithinDays) }]
-            : []),
-          ...(r.minimumOrderValue
-            ? [{ label: "Min Order Value", value: `₹${r.minimumOrderValue}` }]
-            : []),
-          ...(r.festivalName ? [{ label: "Festival", value: r.festivalName }] : []),
-          ...(r.paymentMode ? [{ label: "Payment Mode", value: r.paymentMode }] : []),
-          ...(r.isPaymentLevel
-            ? [{ label: "Benefit Level", value: "Payment-level (not product discount)" }]
-            : []),
-        ],
-        showDescription: false,
-      })(active)
-    : { title: "Scheme", basicInfo: [] };
-
   return (
     <ListingContainer
       title="Scheme Management"
@@ -474,17 +483,6 @@ export default function SchemeMasterPage() {
       }))}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-      actions={
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs gap-1.5"
-          onClick={openSettings}
-        >
-          <Settings className="h-3.5 w-3.5" />
-          Conflict Settings
-        </Button>
-      }
     >
       <MasterListing<SchemeRecord>
         columns={columns}
@@ -498,32 +496,12 @@ export default function SchemeMasterPage() {
         onFilterChange={setFilters}
         actions={actions}
         onAdd={openAdd}
-        addLabel="Create Scheme"
+        addLabel="Create Product Discount"
         onExport={handleExport}
         emptyMessage="schemes"
-        searchPlaceholder="Search name, product, state..."
+        searchPlaceholder="Search code, name, product, state..."
         currentFilters={filters}
         currentSort={sort}
-      />
-
-      <MasterListingSheets
-        sheetMode={sheetMode}
-        active={active}
-        onClose={closeSheet}
-        onEdit={() => active && openEdit(active)}
-        onSave={closeSheet}
-        sheetTitle="View Scheme"
-        icon={Gift}
-        viewDrawer={viewDrawer}
-        formContent={null}
-      />
-
-      <SchemeSettingsDialog
-        open={settingsOpen}
-        settings={draftSettings}
-        onChange={setDraftSettings}
-        onClose={() => setSettingsOpen(false)}
-        onSave={saveSettings}
       />
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}

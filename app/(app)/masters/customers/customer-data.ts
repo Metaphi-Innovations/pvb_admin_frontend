@@ -13,6 +13,11 @@ import {
 } from "@/lib/masters/code-generation";
 import { getInitialCodeForCustomerType } from "../customer-types/customer-type-data";
 import { deriveGstCategory } from "@/lib/masters/gst-compliance";
+import {
+	type PaymentType,
+	paymentTermsToLegacy,
+	resolveStructuredPaymentTerms,
+} from "@/lib/masters/payment-terms";
 
 export type CustomerStatus = "active" | "inactive" | "draft" | "blocked";
 
@@ -104,7 +109,11 @@ export interface Customer {
 
 	creditLimit: number;
 	interestRate: number;
+	/** @deprecated Legacy string — synced from structured fields for downstream modules */
 	paymentTerms: string;
+	paymentType?: PaymentType;
+	creditDays?: number;
+	advancePercentage?: number;
 
 	bankName: string;
 	bankBranchAddress: string;
@@ -212,9 +221,32 @@ export function formatPaymentTerms(value: string): string {
 	return value;
 }
 
+function applyStructuredPaymentTerms<
+	T extends {
+		paymentType?: PaymentType;
+		creditDays?: number;
+		advancePercentage?: number;
+		paymentTerms?: string;
+	},
+>(record: T): T & {
+	paymentType: PaymentType;
+	creditDays: number;
+	advancePercentage: number;
+	paymentTerms: string;
+} {
+	const structured = resolveStructuredPaymentTerms(record);
+	return {
+		...record,
+		paymentType: structured.paymentType,
+		creditDays: structured.creditDays,
+		advancePercentage: structured.advancePercentage,
+		paymentTerms: paymentTermsToLegacy(structured),
+	};
+}
+
 const STORAGE_KEY = "ds_customers_v4";
 
-const SEED_CUSTOMERS: Customer[] = [
+const SEED_CUSTOMERS_RAW = [
 	{
 		id: 1,
 		customerCode: "CUST-0001",
@@ -1914,6 +1946,10 @@ const SEED_CUSTOMERS: Customer[] = [
 	},
 ];
 
+const SEED_CUSTOMERS: Customer[] = SEED_CUSTOMERS_RAW.map((c) =>
+	applyStructuredPaymentTerms(c) as Customer,
+);
+
 function migrateCustomer(raw: Record<string, unknown>): Customer {
 	const c = raw as Partial<Customer> & {
 		phones?: { countryCode: string; number: string }[];
@@ -1975,7 +2011,12 @@ function migrateCustomer(raw: Record<string, unknown>): Customer {
 		salesManName: c.salesManName ?? "",
 		creditLimit: c.creditLimit ?? 0,
 		interestRate: c.interestRate ?? 0,
-		paymentTerms: c.paymentTerms ?? "net-30",
+		...applyStructuredPaymentTerms({
+			paymentType: c.paymentType,
+			creditDays: c.creditDays,
+			advancePercentage: c.advancePercentage,
+			paymentTerms: c.paymentTerms ?? "net-30",
+		}),
 		bankName: c.bankName ?? "",
 		bankBranchAddress: c.bankBranchAddress ?? "",
 		bankAccountNo: c.bankAccountNo ?? "",

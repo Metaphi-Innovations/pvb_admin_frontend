@@ -7,27 +7,28 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { saveMasterRecords, loadMasterRecords } from "@/lib/masters/common";
-import { SchemeFormSheet, countBulkPreview } from "../components/SchemeFormSheet";
+import { ProductDiscountSchemeForm } from "../components/ProductDiscountSchemeForm";
 import {
-  DEFAULT_SCHEME_BULK_FORM,
-  SCHEME_SEED,
-  SCHEME_STORAGE_KEY,
-  bulkFormToRecords,
-  validateSchemeBulkForm,
-  type SchemeBulkForm,
-  type SchemeRecord,
-} from "../scheme-data";
+  DEFAULT_PRODUCT_DISCOUNT_FORM,
+  getProductDiscountCodePreview,
+  loadConsolidatedSchemeRecords,
+  productDiscountFormToRecord,
+  validateProductDiscountForm,
+  type ProductDiscountForm,
+} from "../product-discount-scheme";
+import { SCHEME_STORAGE_KEY } from "../scheme-data";
 
 export default function SchemeAddPageClient() {
   const router = useRouter();
-  const [form, setForm] = useState<SchemeBulkForm>({ ...DEFAULT_SCHEME_BULK_FORM });
+  const [form, setForm] = useState<ProductDiscountForm>({ ...DEFAULT_PRODUCT_DISCOUNT_FORM });
   const [formError, setFormError] = useState("");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
-  const bulkPreviewCount = useMemo(() => countBulkPreview(form), [form]);
+  const codePreview = useMemo(() => getProductDiscountCodePreview(), []);
 
   const handleSave = () => {
-    const err = validateSchemeBulkForm(form, "add");
+    const list = loadConsolidatedSchemeRecords();
+    const err = validateProductDiscountForm(form, "add", list);
     if (err) {
       setFormError(err);
       setToast({ msg: err, type: "error" });
@@ -35,23 +36,20 @@ export default function SchemeAddPageClient() {
       return;
     }
 
-    const list = loadMasterRecords<SchemeRecord>(SCHEME_STORAGE_KEY, SCHEME_SEED);
     const startId = list.length ? Math.max(...list.map((r) => r.id)) + 1 : 1;
-    const newRecords = bulkFormToRecords(form, list, startId);
-    saveMasterRecords(SCHEME_STORAGE_KEY, [...list, ...newRecords]);
+    const newRecord = productDiscountFormToRecord(form, list, startId);
+    saveMasterRecords(SCHEME_STORAGE_KEY, [...list, newRecord]);
 
-    setToast({
-      msg: `${newRecords.length} scheme${newRecords.length > 1 ? "s" : ""} created as draft`,
-      type: "success",
-    });
+    setToast({ msg: "Product discount scheme submitted for approval", type: "success" });
     setTimeout(() => router.push("/masters/scheme"), 900);
   };
 
   return (
     <FormContainer
-      title="Create Scheme"
-      description="Masters → Scheme Management → Create"
+      title="Create Product Discount Scheme"
+      description="Masters → Scheme Management → Product Discount"
       onBack={() => router.push("/masters/scheme")}
+      noCard
       actions={
         <div className="flex items-center gap-2">
           <Button
@@ -71,14 +69,14 @@ export default function SchemeAddPageClient() {
         </div>
       }
     >
-      <SchemeFormSheet
+      <ProductDiscountSchemeForm
         form={form}
         onChange={(next) => {
           setForm(next);
           setFormError("");
         }}
         mode="add"
-        bulkPreviewCount={bulkPreviewCount}
+        codePreview={codePreview}
         error={formError}
       />
 

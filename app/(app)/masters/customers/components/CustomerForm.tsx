@@ -59,7 +59,15 @@ import { GstRegistrationFields, GstRegisteredToggleControl } from "@/components/
 import { ErpFormSection } from "@/components/masters/erp/ErpFormSection";
 import { ComplianceCertificationsGrid } from "@/components/masters/erp/ComplianceCertificationsGrid";
 import { BranchAddressFields } from "@/components/masters/erp/BranchAddressFields";
-import { PaymentTermsSelect } from "@/components/masters/erp/PaymentTermsSelect";
+import { PaymentTermsFields } from "@/components/masters/erp/PaymentTermsFields";
+import {
+	formValuesToStructured,
+	paymentTermsToLegacy,
+	resolveStructuredPaymentTerms,
+	structuredToFormValues,
+	validatePaymentTermsForm,
+	type PaymentType,
+} from "@/lib/masters/payment-terms";
 import { ERP } from "@/components/masters/erp/erp-form-styles";
 import {
 	complianceRegistrationToStored,
@@ -193,7 +201,9 @@ export interface CustomerFormValues {
 	pincode: string;
 	salesManId: string;
 	creditLimit: string;
-	paymentTerms: string;
+	paymentType: PaymentType | "";
+	creditDays: string;
+	advancePercentage: string;
 	bankName: string;
 	bankBranchAddress: string;
 	bankAccountNo: string;
@@ -260,7 +270,9 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
 	pincode: "",
 	salesManId: "",
 	creditLimit: "",
-	paymentTerms: "net-30",
+	paymentType: "credit",
+	creditDays: "30",
+	advancePercentage: "",
 	bankName: "",
 	bankBranchAddress: "",
 	bankAccountNo: "",
@@ -346,7 +358,14 @@ export function customerToFormValues(c: Customer): CustomerFormValues {
 		pincode: c.pincode || "",
 		salesManId: c.salesManId != null ? String(c.salesManId) : "",
 		creditLimit: c.creditLimit ? String(c.creditLimit) : "",
-		paymentTerms: c.paymentTerms,
+		...structuredToFormValues(
+			resolveStructuredPaymentTerms({
+				paymentType: c.paymentType,
+				creditDays: c.creditDays,
+				advancePercentage: c.advancePercentage,
+				paymentTerms: c.paymentTerms,
+			}),
+		),
 		bankName: c.bankName,
 		bankBranchAddress: c.bankBranchAddress,
 		bankAccountNo: c.bankAccountNo,
@@ -1423,7 +1442,7 @@ export function CustomerForm({
 				<TabsContent value='commercial' className='mt-0'>
 					<div className={ERP.sectionGap}>
 						<ErpFormSection title='Credit Terms'>
-							<div className={ERP.grid2}>
+							<div className={cn(ERP.grid3, "lg:grid-cols-3")}>
 								<div className={ERP.field}>
 									<Label className={ERP.label}>Credit Limit</Label>
 									<Input
@@ -1438,14 +1457,27 @@ export function CustomerForm({
 									/>
 									<FieldError msg={errors.creditLimit} />
 								</div>
-								<div className={ERP.field}>
-									<Label className={ERP.label}>Payment Terms</Label>
-									<PaymentTermsSelect
-										value={form.paymentTerms}
-										onChange={(value) => set("paymentTerms", value)}
-										readOnly={readOnly}
-									/>
-								</div>
+								<PaymentTermsFields
+									layout="embedded"
+									values={{
+										paymentType: form.paymentType,
+										creditDays: form.creditDays,
+										advancePercentage: form.advancePercentage,
+									}}
+									onChange={(patch) => {
+										onChange({ ...form, ...patch });
+										for (const key of Object.keys(patch)) {
+											onClearError(key);
+										}
+									}}
+									errors={{
+										paymentType: errors.paymentType,
+										creditDays: errors.creditDays,
+										advancePercentage: errors.advancePercentage,
+									}}
+									readOnly={readOnly}
+									inputClassName={inputCls("paymentType")}
+								/>
 							</div>
 						</ErpFormSection>
 
@@ -2229,6 +2261,14 @@ export function validateCustomerForm(
 
 	if (form.creditLimit.trim() && isNaN(parseFloat(form.creditLimit)))
 		e.creditLimit = "Invalid amount";
+	Object.assign(
+		e,
+		validatePaymentTermsForm({
+			paymentType: form.paymentType,
+			creditDays: form.creditDays,
+			advancePercentage: form.advancePercentage,
+		}),
+	);
 	if (form.accountNumber && form.accountNumber !== form.confirmAccountNumber) {
 		e.confirmAccountNumber = "Account number mismatch";
 	}
@@ -2329,7 +2369,24 @@ export function formValuesToCustomer(
 			(sales ? `${sales.firstName} ${sales.lastName}`.trim() : ""),
 		creditLimit: parseFloat(form.creditLimit) || 0,
 		interestRate: 0,
-		paymentTerms: form.paymentTerms,
+		...((): {
+			paymentType: PaymentType;
+			creditDays: number;
+			advancePercentage: number;
+			paymentTerms: string;
+		} => {
+			const structured = formValuesToStructured({
+				paymentType: form.paymentType,
+				creditDays: form.creditDays,
+				advancePercentage: form.advancePercentage,
+			})!;
+			return {
+				paymentType: structured.paymentType,
+				creditDays: structured.creditDays,
+				advancePercentage: structured.advancePercentage,
+				paymentTerms: paymentTermsToLegacy(structured),
+			};
+		})(),
 		bankName: form.bankName.trim(),
 		bankBranchAddress: form.branch.trim(),
 		bankAccountNo: form.accountNumber.trim(),

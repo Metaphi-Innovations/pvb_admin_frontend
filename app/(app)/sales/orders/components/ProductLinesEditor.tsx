@@ -22,15 +22,31 @@ import {
 import {
 	type SalesOrderLineItem,
 	type ProductCatalogItem,
+	type SalesOrderPricingContext,
 	createEmptyLineItem,
-	applyProductToLine,
+	applySchemePricingToLine,
+	applyManualSchemeToLine,
+	removeAppliedSchemeFromLine,
 	recalculateLineItem,
-	computeGstAmount,
+	applyLineTaxFields,
+	computeLineTaxBreakdown,
 	getProductById,
-	calculateDiscountPercentFromValue,
-	calculateLineDiscountValue,
+	repriceOrderLineItems,
+	isProductDiscountSchemeApplied,
+	getEligibleSchemesForSalesOrderLine,
+	type TaxSupplyType,
 } from "../orders-data";
-import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
+import {
+	formatSchemeRupee,
+	formatSchemeOfferLabel,
+	mapCustomerMasterTypeToSchemeType,
+} from "@/app/(app)/masters/scheme/product-discount-scheme";
+import type { EligibleProductDiscountSchemeOffer } from "@/app/(app)/masters/scheme/product-discount-scheme";
+import { Badge } from "@/components/ui/badge";
+import ProductSchemeOfferDialog, {
+	type ProductSchemeOfferDialogMode,
+} from "./ProductSchemeOfferDialog";
+import { Tag } from "lucide-react";
 
 interface ProductLinesEditorProps {
 	lines: SalesOrderLineItem[];
@@ -39,6 +55,10 @@ interface ProductLinesEditorProps {
 	error?: string;
 	/** When true (SEZ + active LUT), line GST is zeroed. */
 	zeroGst?: boolean;
+	/** Customer state + type + order date for Product Discount Scheme lookup */
+	pricingContext?: SalesOrderPricingContext | null;
+	/** Intra-state (CGST+SGST) vs inter-state (IGST) based on warehouse vs ship-to */
+	taxSupplyType?: TaxSupplyType;
 }
 
 function ProductSelect({
@@ -186,38 +206,147 @@ function ProductSelect({
 	);
 }
 
+function formatRupee(value: number): string {
+	return `₹${value.toLocaleString("en-IN", {
+		minimumFractionDigits: 2,
+		maximumFractionDigits: 2,
+	})}`;
+}
+
 export default function ProductLinesEditor({
 	lines,
 	products,
 	onChange,
 	error,
 	zeroGst = false,
+	pricingContext = null,
+	taxSupplyType = "intra",
 }: ProductLinesEditorProps) {
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [localError, setLocalError] = useState<string | null>(null);
+	const [schemeDialog, setSchemeDialog] = useState<{
+		lineId: string;
+		mode: ProductSchemeOfferDialogMode;
+		offers: EligibleProductDiscountSchemeOffer[];
+		selectedOffer: EligibleProductDiscountSchemeOffer | null;
+	} | null>(null);
+
+	const schemeCustomerTypeLabel = pricingContext?.customerMasterType
+		? mapCustomerMasterTypeToSchemeType(pricingContext.customerMasterType)
+		: undefined;
+
+	const contextKey = pricingContext
+		? `${pricingContext.stateName}|${pricingContext.customerMasterType}|${pricingContext.orderDate}`
+		: "";
+
+	const taxOptionsKey = `${taxSupplyType}|${zeroGst}`;
+
+	useEffect(() => {
+		if (!pricingContext?.stateName || !pricingContext.customerMasterType) return;
+		const repriced = repriceOrderLineItems(lines, pricingContext, {
+			zeroGst,
+			supplyType: taxSupplyType,
+		});
+		const changed = repriced.some((line, index) => {
+			const prev = lines[index];
+			if (!prev) return true;
+			return (
+				line.dealerPrice !== prev.dealerPrice ||
+				line.schemeDiscountPercent !== prev.schemeDiscountPercent ||
+				line.schemeDiscountAmount !== prev.schemeDiscountAmount ||
+				line.finalRate !== prev.finalRate ||
+				line.schemeDiscountType !== prev.schemeDiscountType ||
+				line.schemeDiscountValue !== prev.schemeDiscountValue ||
+				line.schemeCode !== prev.schemeCode ||
+				line.schemeApplied !== prev.schemeApplied ||
+				line.unitPrice !== prev.unitPrice ||
+				line.discount !== prev.discount ||
+				line.gstAmount !== prev.gstAmount ||
+				line.lineTotal !== prev.lineTotal
+			);
+		});
+		if (changed) onChange(repriced);
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- repricing when customer/state/date changes
+	}, [contextKey, zeroGst, taxSupplyType]);
 
 	useEffect(() => {
 		const nextLines = lines.map((line) => {
 			if (!line.productId) return line;
 			const product = getProductById(line.productId);
 			if (!product) return line;
-			const gstAmount = computeGstAmount(
-				line.quantity,
-				line.unitPrice,
-				line.discount,
-				product.gstRate,
-				zeroGst,
-			);
-			return recalculateLineItem({ ...line, gstAmount });
+			return applyLineTaxFields(line, product.gstRate, taxSupplyType, zeroGst);
 		});
 		const changed = nextLines.some(
 			(l, i) =>
 				l.gstAmount !== lines[i]?.gstAmount ||
+				l.cgstAmount !== lines[i]?.cgstAmount ||
+				l.sgstAmount !== lines[i]?.sgstAmount ||
+				l.igstAmount !== lines[i]?.igstAmount ||
 				l.lineTotal !== lines[i]?.lineTotal,
 		);
 		if (changed) onChange(nextLines);
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- recalc when LUT zero-tax toggles
-	}, [zeroGst]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- recalc when tax supply type or LUT toggles
+	}, [taxOptionsKey]);
+
+	const getLineEligibleSchemes = (
+		line: SalesOrderLineItem,
+	): EligibleProductDiscountSchemeOffer[] => {
+		if (
+			!line.productId ||
+			!pricingContext?.stateName ||
+			!pricingContext.customerMasterType ||
+			!pricingContext.orderDate
+		) {
+			return [];
+		}
+		return getEligibleSchemesForSalesOrderLine(line.productId, pricingContext);
+	};
+
+	const openSchemeDialog = (line: SalesOrderLineItem) => {
+		const eligible = getLineEligibleSchemes(line);
+		if (eligible.length > 0) {
+			setSchemeDialog({
+				lineId: line.id,
+				mode: "apply",
+				offers: eligible,
+				selectedOffer: eligible[0],
+			});
+			return;
+		}
+		setSchemeDialog({
+			lineId: line.id,
+			mode: "no-scheme",
+			offers: [],
+			selectedOffer: null,
+		});
+	};
+
+	const handleApplyScheme = () => {
+		if (!schemeDialog?.selectedOffer) return;
+		const line = lines.find((entry) => entry.id === schemeDialog.lineId);
+		if (!line?.productId) return;
+		const product = getProductById(line.productId);
+		if (!product) return;
+
+		const updated = applyManualSchemeToLine(
+			line,
+			schemeDialog.selectedOffer,
+			product,
+			{ zeroGst, supplyType: taxSupplyType },
+		);
+		onChange(lines.map((entry) => (entry.id === line.id ? updated : entry)));
+	};
+
+	const handleRemoveScheme = (line: SalesOrderLineItem) => {
+		if (!line.productId) return;
+		const product = getProductById(line.productId);
+		if (!product) return;
+		const updated = removeAppliedSchemeFromLine(line, product, {
+			zeroGst,
+			supplyType: taxSupplyType,
+		});
+		onChange(lines.map((entry) => (entry.id === line.id ? updated : entry)));
+	};
 
 	const updateLine = (id: string, patch: Partial<SalesOrderLineItem>) => {
 		setLocalError(null);
@@ -226,48 +355,34 @@ export default function ProductLinesEditor({
 				if (line.id !== id) return line;
 				let next = { ...line, ...patch };
 
-				if (patch.discountValue !== undefined && patch.discount === undefined) {
-					next.discount = calculateDiscountPercentFromValue(
-						next.quantity,
-						next.unitPrice,
-						next.discountValue,
-					);
-				}
-
 				if (patch.productId !== undefined && patch.productId !== null) {
 					const product = getProductById(patch.productId);
 					if (product) {
-						next = applyProductToLine(next, product);
-						if (zeroGst) {
-							next.gstAmount = 0;
-							next = recalculateLineItem(next);
-						}
+						next = applySchemePricingToLine(next, product, pricingContext, {
+							zeroGst,
+							supplyType: taxSupplyType,
+						});
 					}
-				} else if (
-					patch.quantity !== undefined ||
-					patch.unitPrice !== undefined ||
-					patch.discount !== undefined ||
-					patch.discountValue !== undefined
-				) {
+				} else if (patch.quantity !== undefined) {
 					const product = next.productId
 						? getProductById(next.productId)
 						: undefined;
 					if (product) {
-						next.gstAmount = computeGstAmount(
-							next.quantity,
-							next.unitPrice,
-							next.discount,
+						next = applyLineTaxFields(
+							next,
 							product.gstRate,
+							taxSupplyType,
 							zeroGst,
 						);
+					} else {
+						next = recalculateLineItem(next);
 					}
-					next.discountValue = calculateLineDiscountValue(
-						next.quantity,
-						next.unitPrice,
-						next.discount,
-					);
-					next = recalculateLineItem(next);
-				} else if (patch.gstAmount !== undefined) {
+				} else if (
+					patch.gstAmount !== undefined ||
+					patch.cgstAmount !== undefined ||
+					patch.sgstAmount !== undefined ||
+					patch.igstAmount !== undefined
+				) {
 					next = recalculateLineItem(next);
 				}
 				return next;
@@ -313,16 +428,22 @@ export default function ProductLinesEditor({
 
 		const newLines = [...lines];
 
-		// First selected product updates the current row
 		const p1 = selectedProducts[0];
-		newLines[lineIndex] = applyProductToLine(newLines[lineIndex], p1);
+		newLines[lineIndex] = applySchemePricingToLine(
+			newLines[lineIndex],
+			p1,
+			pricingContext,
+			{ zeroGst, supplyType: taxSupplyType },
+		);
 
-		// Additional selected products are added as new lines
 		for (let i = 1; i < selectedProducts.length; i++) {
 			const p = selectedProducts[i];
 			let newLine = createEmptyLineItem();
 			newLine.productId = p.id;
-			newLine = applyProductToLine(newLine, p);
+			newLine = applySchemePricingToLine(newLine, p, pricingContext, {
+				zeroGst,
+				supplyType: taxSupplyType,
+			});
 			newLines.push(newLine);
 		}
 
@@ -331,6 +452,21 @@ export default function ProductLinesEditor({
 
 	return (
 		<div className='space-y-2'>
+			<ProductSchemeOfferDialog
+				open={schemeDialog != null}
+				mode={schemeDialog?.mode ?? "no-scheme"}
+				offers={schemeDialog?.offers ?? []}
+				selectedOffer={schemeDialog?.selectedOffer ?? null}
+				customerType={schemeCustomerTypeLabel}
+				stateName={pricingContext?.stateName}
+				onSelectOffer={(offer) =>
+					setSchemeDialog((prev) =>
+						prev ? { ...prev, selectedOffer: offer } : prev,
+					)
+				}
+				onClose={() => setSchemeDialog(null)}
+				onApply={handleApplyScheme}
+			/>
 			<div className='flex flex-col items-end gap-1'>
 				{localError && (
 					<span className='text-xs text-red-500 font-medium flex items-center gap-1'>
@@ -357,18 +493,19 @@ export default function ProductLinesEditor({
 			) : (
 				<div className='border border-border rounded-xl bg-white shadow-sm overflow-hidden'>
 					<div className='overflow-x-auto'>
-						<table className='w-full min-w-[1100px]'>
+						<table className='w-full min-w-[1050px]'>
 							<thead>
 								<tr className='bg-muted/40 border-b border-border'>
 									{[
-										{ h: "Product", className: "" },
+										{ h: "Product", className: "min-w-[180px]" },
 										{ h: "Stock", className: "w-16" },
 										{ h: "Qty", className: "w-16" },
-										{ h: "Unit Price", className: "min-w-[120px] w-32" },
-										{ h: "Discount (%)", className: "w-24" },
-										{ h: "Discount Value (₹)", className: "min-w-[120px] w-28" },
-										{ h: "GST % / Amt", className: "min-w-[140px] w-24" },
-										{ h: "Item Total", className: "min-w-[100px]" },
+										{ h: "DP", className: "min-w-[80px]" },
+										{ h: "Offer", className: "min-w-[130px]" },
+										{ h: "Disc. Amt", className: "min-w-[80px]" },
+										{ h: "Final Rate", className: "min-w-[80px]" },
+										{ h: "Tax", className: "min-w-[130px]" },
+										{ h: "Line Total", className: "min-w-[90px]" },
 										{ h: "", className: "w-16" },
 									].map(({ h, className }) => (
 										<th
@@ -389,6 +526,18 @@ export default function ProductLinesEditor({
 									const product = line.productId
 										? getProductById(line.productId)
 										: undefined;
+									const hasScheme = isProductDiscountSchemeApplied(line);
+									const eligibleSchemes = hasScheme ? [] : getLineEligibleSchemes(line);
+									const hasEligibleScheme = eligibleSchemes.length > 0;
+									const taxBreakdown =
+										line.productId && product
+											? computeLineTaxBreakdown(
+													line,
+													product.gstRate,
+													taxSupplyType,
+													zeroGst,
+												)
+											: null;
 									return (
 										<tr
 											key={line.id}
@@ -457,114 +606,107 @@ export default function ProductLinesEditor({
 													</span>
 												)}
 											</td>
-											<td className='px-2 py-1.5 min-w-[120px] w-32'>
-												{isEditing ? (
-													<Input
-														type='number'
-														min={0}
-														value={line.unitPrice || ""}
-														onChange={(e) =>
-															updateLine(line.id, {
-																unitPrice: Number(e.target.value) || 0,
-															})
-														}
-														className={cn(
-															"h-7 text-xs w-full min-w-[100px]",
-															localError &&
-																line.unitPrice < 0 &&
-																"border-red-400 focus-visible:ring-red-400 bg-red-50/10",
-														)}
-													/>
-												) : (
-													<span
-														className={cn(
-															"text-xs whitespace-nowrap",
-															localError &&
-																line.unitPrice < 0 &&
-																"text-red-500 font-semibold",
-														)}
-													>
-														₹{line.unitPrice.toLocaleString()}
-													</span>
-												)}
+											<td className='px-2 py-1.5'>
+												<span className='text-xs tabular-nums whitespace-nowrap'>
+													{line.productId
+														? formatSchemeRupee(line.dealerPrice)
+														: "—"}
+												</span>
 											</td>
-											<td className='px-2 py-1.5 w-24'>
-												{isEditing ? (
-													<div className='relative flex items-center'>
-														<Input
-															type='number'
-															min={0}
-															max={100}
-															value={line.discount || ""}
-															onChange={(e) =>
-																updateLine(line.id, {
-																	discount: Number(e.target.value) || 0,
-																})
-															}
-															className='h-7 text-xs pr-6 w-full'
-														/>
-														<span className='absolute right-2 text-[10px] text-muted-foreground pointer-events-none'>
-															%
-														</span>
-													</div>
+											<td className='px-2 py-1.5'>
+												{line.productId ? (
+													hasScheme ? (
+														<div className='flex flex-col gap-0.5 max-w-[140px]'>
+															<Badge className='w-fit px-1.5 py-0 text-[10px] font-semibold bg-emerald-600 hover:bg-emerald-600'>
+																Applied
+															</Badge>
+															<span className='text-[10px] font-mono text-brand-700 truncate'>
+																{line.appliedSchemeCode ?? line.schemeCode}
+															</span>
+															<span className='text-[10px] text-emerald-700 tabular-nums'>
+																{formatSchemeRupee(line.schemeDiscountAmount)} off
+															</span>
+															<button
+																type='button'
+																onClick={() => handleRemoveScheme(line)}
+																className='text-[10px] font-medium text-red-600 hover:text-red-700 hover:underline text-left w-fit'
+															>
+																Remove scheme
+															</button>
+														</div>
+													) : hasEligibleScheme ? (
+														<div className='flex flex-col gap-0.5 max-w-[140px]'>
+															<button
+																type='button'
+																onClick={() => openSchemeDialog(line)}
+																className='inline-flex items-center gap-1 w-fit max-w-full rounded-full border border-dashed border-brand-400 bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-700 hover:bg-brand-100 transition-colors truncate'
+																title={formatSchemeOfferLabel(eligibleSchemes[0])}
+															>
+																<Tag className='w-3 h-3 shrink-0' />
+																<span className='truncate'>
+																	{formatSchemeOfferLabel(eligibleSchemes[0])}
+																</span>
+															</button>
+															{eligibleSchemes.length > 1 && (
+																<span className='text-[9px] text-muted-foreground pl-0.5'>
+																	+{eligibleSchemes.length - 1} more scheme
+																	{eligibleSchemes.length > 2 ? "s" : ""}
+																</span>
+															)}
+														</div>
+													) : (
+														<button
+															type='button'
+															onClick={() => openSchemeDialog(line)}
+															className='text-[10px] font-medium text-muted-foreground hover:text-brand-700 transition-colors'
+														>
+															No Scheme
+														</button>
+													)
 												) : (
-													<span className='text-xs'>{line.discount}%</span>
-												)}
-											</td>
-											<td className='px-2 py-1.5 min-w-[120px] w-28'>
-												{isEditing ? (
-													<IndianRupeeInput
-														value={line.discountValue}
-														onChange={(n) =>
-															updateLine(line.id, { discountValue: n })
-														}
-														className="h-7 text-xs"
-													/>
-												) : (
-													<span className='text-xs tabular-nums'>
-														₹{line.discountValue.toLocaleString("en-IN", {
-															minimumFractionDigits: 2,
-															maximumFractionDigits: 2,
-														})}
-													</span>
-												)}
-											</td>
-											<td className='px-2 py-1.5 min-w-[140px] w-24'>
-												{isEditing ? (
-													<div className='flex items-center gap-1.5'>
-														<span className='text-[10px] text-muted-foreground font-semibold shrink-0'>
-															{product?.gstRate || "0%"}
-														</span>
-														<Input
-															type='number'
-															min={0}
-															value={line.gstAmount || ""}
-															onChange={(e) =>
-																updateLine(line.id, {
-																	gstAmount: Number(e.target.value) || 0,
-																})
-															}
-															className='h-7 text-xs w-full min-w-[80px]'
-														/>
-													</div>
-												) : (
-													<div className='flex items-center gap-1.5'>
-														<span className='text-[10px] text-muted-foreground font-semibold shrink-0'>
-															{product?.gstRate || "0%"}
-														</span>
-														<span className='text-xs whitespace-nowrap'>
-															₹
-															{line.gstAmount.toLocaleString(undefined, {
-																minimumFractionDigits: 2,
-																maximumFractionDigits: 2,
-															})}
-														</span>
-													</div>
+													"—"
 												)}
 											</td>
 											<td className='px-2 py-1.5'>
-												<span className='text-xs font-semibold text-foreground'>
-													₹{line.lineTotal.toLocaleString()}
+												<span className='text-xs tabular-nums whitespace-nowrap'>
+													{line.productId && hasScheme
+														? formatSchemeRupee(line.schemeDiscountAmount)
+														: "—"}
+												</span>
+											</td>
+											<td className='px-2 py-1.5'>
+												<span className='text-xs font-medium tabular-nums whitespace-nowrap'>
+													{line.productId ? formatSchemeRupee(line.finalRate) : "—"}
+												</span>
+											</td>
+											<td className='px-2 py-1.5 min-w-[130px]'>
+												{line.productId && product && taxBreakdown ? (
+													<div className='space-y-0.5'>
+														{taxSupplyType === "intra" ? (
+															<>
+																<p className='text-[10px] text-muted-foreground whitespace-nowrap tabular-nums'>
+																	CGST {taxBreakdown.cgstRate}%:{" "}
+																	{formatRupee(line.cgstAmount ?? 0)}
+																</p>
+																<p className='text-[10px] text-muted-foreground whitespace-nowrap tabular-nums'>
+																	SGST {taxBreakdown.sgstRate}%:{" "}
+																	{formatRupee(line.sgstAmount ?? 0)}
+																</p>
+															</>
+														) : (
+															<p className='text-[10px] text-muted-foreground whitespace-nowrap tabular-nums'>
+																IGST {taxBreakdown.igstRate}%:{" "}
+																{formatRupee(line.igstAmount ?? 0)}
+															</p>
+														)}
+													</div>
+												) : (
+													"—"
+												)}
+											</td>
+											<td className='px-2 py-1.5'>
+												<span className='text-xs font-semibold text-foreground tabular-nums'>
+													{formatRupee(line.lineTotal)}
 												</span>
 											</td>
 											<td className='px-2 py-1.5'>

@@ -116,6 +116,59 @@ export const PACKING_CONTAINER_OPTIONS = [
   "Case",
 ] as const;
 
+/** Allowed product units (hardcoded — no Unit/UOM master dependency). */
+export const PRODUCT_UNIT_OPTIONS = [
+  { value: "Kg", label: "Kg" },
+  { value: "Gms", label: "Gms" },
+  { value: "Ltr", label: "Ltr" },
+  { value: "Ml", label: "Ml" },
+] as const;
+
+/** Allowed packaging units (hardcoded — no master dependency). */
+export const PRODUCT_PACKAGING_UNIT_OPTIONS = [
+  { value: "Box", label: "Box" },
+  { value: "Case", label: "Case" },
+] as const;
+
+export type ProductUnit = (typeof PRODUCT_UNIT_OPTIONS)[number]["value"];
+export type ProductMou = "Kg" | "Ltr";
+
+const LEGACY_UNIT_TO_PRODUCT_UNIT: Record<string, ProductUnit> = {
+  kg: "Kg",
+  gms: "Gms",
+  gram: "Gms",
+  grams: "Gms",
+  g: "Gms",
+  ltr: "Ltr",
+  liter: "Ltr",
+  litre: "Ltr",
+  l: "Ltr",
+  ml: "Ml",
+};
+
+/** Normalize legacy or variant unit strings to allowed product units. */
+export function normalizeProductUnit(unit: string): string {
+  const trimmed = unit.trim();
+  if (!trimmed) return "";
+  const exact = PRODUCT_UNIT_OPTIONS.find((o) => o.value === trimmed);
+  if (exact) return exact.value;
+  const mapped = LEGACY_UNIT_TO_PRODUCT_UNIT[trimmed.toLowerCase()];
+  return mapped ?? trimmed;
+}
+
+/** MoU is derived from Unit: Gms/Kg → Kg, Ml/Ltr → Ltr. */
+export function getMouFromUnit(baseUnit: string): ProductMou | undefined {
+  const unit = normalizeProductUnit(baseUnit);
+  if (unit === "Gms" || unit === "Kg") return "Kg";
+  if (unit === "Ml" || unit === "Ltr") return "Ltr";
+  return undefined;
+}
+
+function formatWeightValue(value: number): string {
+  if (Number.isInteger(value)) return String(value);
+  return parseFloat(value.toFixed(4)).toString();
+}
+
 export const CONTAINER_TYPE_OPTIONS = [
   "Primary",
   "Secondary",
@@ -639,6 +692,7 @@ const SEED_PRODUCTS: Product[] = [
     unitSize: 1,
     netWeight: 10,
     grossWeight: 10,
+    mrp: 980,
     productImages: [
       {
         id: "prd-2-media-1",
@@ -676,6 +730,7 @@ const SEED_PRODUCTS: Product[] = [
     unitSize: 1,
     netWeight: 200,
     grossWeight: 200,
+    mrp: 1250,
     productImages: [],
     productUrls: [],
   },
@@ -701,6 +756,7 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "Gram",
     packagingUnit: "Packet",
     conversionQuantity: 50,
+    mrp: 720,
     productImages: [],
     productUrls: [],
   },
@@ -725,6 +781,7 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "KG",
     packagingUnit: "Bag",
     conversionQuantity: 50,
+    mrp: 620,
     productImages: [],
     productUrls: [],
   },
@@ -749,6 +806,7 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "KG",
     packagingUnit: "Bag",
     conversionQuantity: 50,
+    mrp: 890,
     productImages: [],
     productUrls: [],
   },
@@ -773,6 +831,7 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "KG",
     packagingUnit: "Bag",
     conversionQuantity: 50,
+    mrp: 1150,
     productImages: [],
     productUrls: [],
   },
@@ -797,6 +856,7 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "KG",
     packagingUnit: "Bag",
     conversionQuantity: 25,
+    mrp: 580,
     productImages: [],
     productUrls: [],
   },
@@ -821,6 +881,7 @@ const SEED_PRODUCTS: Product[] = [
     baseUnit: "KG",
     packagingUnit: "Bag",
     conversionQuantity: 25,
+    mrp: 1050,
     productImages: [],
     productUrls: [],
   },
@@ -869,15 +930,17 @@ function migrateProduct(raw: Record<string, unknown>): Product {
       : p.conversionQuantity !== undefined
         ? Number(p.conversionQuantity)
         : undefined;
+  const baseUnit = normalizeProductUnit(p.baseUnit ?? "");
+  const mou = getMouFromUnit(baseUnit) ?? normalizeProductUnit(p.mou ?? "");
   const netWeightPerPackagingUnit =
-    p.netWeightPerPackagingUnit !== undefined
+    calculateNetWeightPerPackagingUnit(packSize, unitPerCase, baseUnit) ??
+    (p.netWeightPerPackagingUnit !== undefined
       ? Number(p.netWeightPerPackagingUnit)
-      : calculateNetWeightPerPackagingUnit(packSize, unitPerCase) ??
-        (p.netWeightPerCase !== undefined
-          ? Number(p.netWeightPerCase)
-          : p.netWeight !== undefined
-            ? Number(p.netWeight)
-            : undefined);
+      : p.netWeightPerCase !== undefined
+        ? Number(p.netWeightPerCase)
+        : p.netWeight !== undefined
+          ? Number(p.netWeight)
+          : undefined);
   const grossWeight =
     p.grossWeight !== undefined
       ? Number(p.grossWeight)
@@ -904,8 +967,8 @@ function migrateProduct(raw: Record<string, unknown>): Product {
     gstId: p.gstId !== undefined ? Number(p.gstId) : undefined,
     sku,
     packSize,
-    baseUnit: p.baseUnit ?? "",
-    mou: p.mou ?? "",
+    baseUnit,
+    mou,
     unitPerCase,
     packagingUnit: p.packagingUnit ?? "",
     unitPerPackagingUnit,
@@ -966,18 +1029,43 @@ function loadProductsRaw(): Product[] {
   }
 }
 
-const PRODUCT_DEMO_SEED_VERSION = "2026-jun-product-master-v3";
+const PRODUCT_DEMO_SEED_VERSION = "2026-jun-product-master-v4";
 const PRODUCT_SEED_VERSION_KEY = "ds_product_seed_version";
+
+function mergeSeedMasterFields(existing: Product[]): Product[] {
+  const seedById = new Map(SEED_PRODUCTS.map((p) => [p.id, p]));
+  const seedBySku = new Map(SEED_PRODUCTS.map((p) => [p.sku.toUpperCase(), p]));
+
+  const merged = existing.map((product) => {
+    const seed =
+      seedById.get(product.id) ?? seedBySku.get(product.sku.toUpperCase());
+    if (!seed) return product;
+
+    const mrp =
+      product.mrp != null && Number(product.mrp) > 0
+        ? Number(product.mrp)
+        : seed.mrp;
+
+    return {
+      ...product,
+      ...(mrp != null && mrp > 0 ? { mrp } : {}),
+      productCode: product.productCode || seed.productCode,
+      supplier: product.supplier || seed.supplier,
+      supplierCode: product.supplierCode || seed.supplierCode,
+    };
+  });
+
+  const existingSkus = new Set(merged.map((p) => p.sku.toUpperCase()));
+  const toAdd = SEED_PRODUCTS.filter((p) => !existingSkus.has(p.sku.toUpperCase()));
+  return [...merged, ...toAdd];
+}
 
 function ensureProductDemoSeed(): void {
   if (typeof window === "undefined") return;
   if (localStorage.getItem(PRODUCT_SEED_VERSION_KEY) === PRODUCT_DEMO_SEED_VERSION) return;
+
   const existing = loadProductsRaw();
-  const existingSkus = new Set(existing.map((p) => p.sku));
-  const toAdd = SEED_PRODUCTS.filter((p) => p.id >= 5 && !existingSkus.has(p.sku));
-  if (toAdd.length > 0) {
-    saveProducts([...existing, ...toAdd]);
-  }
+  saveProducts(mergeSeedMasterFields(existing));
   localStorage.setItem(PRODUCT_SEED_VERSION_KEY, PRODUCT_DEMO_SEED_VERSION);
 }
 
@@ -1037,11 +1125,52 @@ export function formatPackSize(product: Pick<Product, "packSize" | "unitSize" | 
 }
 
 export function formatGrossWeight(
-  product: Pick<Product, "grossWeight" | "mou">,
+  product: Pick<Product, "grossWeight" | "mou" | "baseUnit">,
 ): string | undefined {
   if (product.grossWeight === undefined || product.grossWeight === null) return undefined;
-  const unit = product.mou?.trim();
-  return unit ? `${product.grossWeight} ${unit}` : String(product.grossWeight);
+  const unit =
+    product.mou?.trim() || getMouFromUnit(product.baseUnit ?? "") || "";
+  const value = formatWeightValue(product.grossWeight);
+  return unit ? `${value} ${unit}` : value;
+}
+
+/** Numeric net weight in MoU (unit shown separately in MoU field). */
+export function formatNetWeightDisplay(
+  packSize: number | undefined,
+  unitPerCase: number | undefined,
+  baseUnit: string,
+): string {
+  const value = calculateNetWeightPerPackagingUnit(
+    packSize,
+    unitPerCase,
+    baseUnit,
+  );
+  if (value === undefined) return "";
+  return formatWeightValue(value);
+}
+
+export function formatNetWeight(
+  product: Pick<
+    Product,
+    | "packSize"
+    | "unitSize"
+    | "unitPerCase"
+    | "unitsPerCase"
+    | "baseUnit"
+    | "netWeightPerPackagingUnit"
+  >,
+): string | undefined {
+  const packSize = product.packSize ?? product.unitSize;
+  const unitPerCase = product.unitPerCase ?? product.unitsPerCase;
+  const baseUnit = normalizeProductUnit(product.baseUnit ?? "");
+  if (packSize !== undefined && unitPerCase !== undefined && baseUnit) {
+    const display = formatNetWeightDisplay(packSize, unitPerCase, baseUnit);
+    if (display) return display;
+  }
+  if (product.netWeightPerPackagingUnit !== undefined) {
+    return formatWeightValue(product.netWeightPerPackagingUnit);
+  }
+  return undefined;
 }
 
 /** User-friendly packaging label e.g. Bottle (12/Case), Bag (50). */
@@ -1086,10 +1215,14 @@ export function resolveSupplierCode(supplierName: string): string {
   return vendor?.vendorCode?.trim() ?? "";
 }
 
-/** Net weight per packaging unit = pack size × unit per case */
+/**
+ * Net weight in MoU = (pack size × unit per packaging unit), converted per Unit.
+ * Gms/Ml are divided by 1000 to Kg/Ltr; Kg/Ltr stay as-is.
+ */
 export function calculateNetWeightPerPackagingUnit(
   packSize: number | undefined,
   unitPerCase: number | undefined,
+  baseUnit?: string,
 ): number | undefined {
   if (
     packSize === undefined ||
@@ -1101,7 +1234,12 @@ export function calculateNetWeightPerPackagingUnit(
   ) {
     return undefined;
   }
-  return packSize * unitPerCase;
+  const unit = normalizeProductUnit(baseUnit ?? "");
+  if (!unit) return undefined;
+  const raw = packSize * unitPerCase;
+  if (unit === "Gms" || unit === "Ml") return raw / 1000;
+  if (unit === "Kg" || unit === "Ltr") return raw;
+  return undefined;
 }
 
 export function formatMoney(value: number): string {
