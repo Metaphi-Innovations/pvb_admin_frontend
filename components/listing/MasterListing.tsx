@@ -220,8 +220,11 @@ export function MasterListing<T = any>({
                   );
                 })}
                 {actions && actions.length > 0 && (
-                  <th className="master-listing-th-sticky w-16 px-4 py-2.5 text-center text-xs font-semibold text-foreground">
-                    Actions
+                  <th
+                    aria-label="Actions"
+                    className="master-listing-th-sticky w-11 min-w-[2.75rem] max-w-[2.75rem] px-2 py-2.5 text-center text-xs font-semibold text-foreground"
+                  >
+                    <span className="sr-only">Actions</span>
                   </th>
                 )}
               </tr>
@@ -276,7 +279,7 @@ export function MasterListing<T = any>({
                         );
                       })}
                       {actions && actions.length > 0 && (
-                        <td className="master-listing-td-sticky px-4 py-2.5 text-center">
+                        <td className="master-listing-td-sticky w-11 min-w-[2.75rem] max-w-[2.75rem] px-2 py-2.5 text-center">
                           <ActionMenu actions={actions} row={row} />
                         </td>
                       )}

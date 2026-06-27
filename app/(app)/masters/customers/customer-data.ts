@@ -18,6 +18,10 @@ import {
 	paymentTermsToLegacy,
 	resolveStructuredPaymentTerms,
 } from "@/lib/masters/payment-terms";
+import {
+	CREDIT_LIMIT_DEMO_CUSTOMERS_RAW,
+	CREDIT_LIMIT_DEMO_CUSTOMER_IDS,
+} from "@/lib/sales/credit-limit-demo-seed";
 
 export type CustomerStatus = "active" | "inactive" | "draft" | "blocked";
 
@@ -1944,6 +1948,7 @@ const SEED_CUSTOMERS_RAW = [
 			},
 		],
 	},
+	...CREDIT_LIMIT_DEMO_CUSTOMERS_RAW,
 ];
 
 const SEED_CUSTOMERS: Customer[] = SEED_CUSTOMERS_RAW.map((c) =>
@@ -2040,6 +2045,17 @@ function migrateCustomer(raw: Record<string, unknown>): Customer {
 	};
 }
 
+const MERGED_SEED_CUSTOMER_IDS = [1004, 1005, ...CREDIT_LIMIT_DEMO_CUSTOMER_IDS];
+
+function mergeMissingSeedCustomers(loaded: Customer[]): Customer[] {
+	const missing = SEED_CUSTOMERS.filter(
+		(c) =>
+			MERGED_SEED_CUSTOMER_IDS.includes(c.id) &&
+			!loaded.some((row) => row.id === c.id),
+	);
+	return missing.length > 0 ? [...loaded, ...missing] : loaded;
+}
+
 export function loadCustomers(): Customer[] {
 	if (typeof window === "undefined") return SEED_CUSTOMERS;
 	try {
@@ -2047,12 +2063,11 @@ export function loadCustomers(): Customer[] {
 		if (!raw) return SEED_CUSTOMERS;
 		const data = JSON.parse(raw) as Record<string, unknown>[];
 		let loaded = data.map(migrateCustomer);
-		const hasReference = loaded.some(c => c.id === 1004 || c.id === 1005);
-		if (!hasReference) {
-			const refCustomers = SEED_CUSTOMERS.filter(c => c.id === 1004 || c.id === 1005);
-			if (refCustomers.length > 0) {
-				loaded = [...loaded, ...refCustomers];
-			}
+		const hadMergedSeed = MERGED_SEED_CUSTOMER_IDS.every((id) =>
+			loaded.some((c) => c.id === id),
+		);
+		if (!hadMergedSeed) {
+			loaded = mergeMissingSeedCustomers(loaded);
 		}
 		const needsCodes = loaded.some((c) => isMasterCodeEmpty(c.customerCode));
 		if (needsCodes) {
@@ -2072,11 +2087,8 @@ export function loadCustomers(): Customer[] {
 			if (changed) {
 				localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
 			}
-		} else if (!hasReference) {
-			const refCustomers = SEED_CUSTOMERS.filter(c => c.id === 1004 || c.id === 1005);
-			if (refCustomers.length > 0) {
-				localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
-			}
+		} else if (!hadMergedSeed) {
+			localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
 		}
 		return loaded;
 	} catch {
@@ -2153,7 +2165,21 @@ export function isCustomerTransactable(c: Customer): boolean {
 
 /** For SO / invoice customer dropdowns */
 export function getCustomersForTransactionDropdown(): Customer[] {
-	return loadCustomers().filter(isCustomerTransactable);
+	const list = loadCustomers().filter(isCustomerTransactable);
+	return list.sort((a, b) => {
+		const aDemo = (CREDIT_LIMIT_DEMO_CUSTOMER_IDS as readonly number[]).includes(
+			a.id,
+		)
+			? 0
+			: 1;
+		const bDemo = (CREDIT_LIMIT_DEMO_CUSTOMER_IDS as readonly number[]).includes(
+			b.id,
+		)
+			? 0
+			: 1;
+		if (aDemo !== bDemo) return aDemo - bDemo;
+		return a.customerName.localeCompare(b.customerName);
+	});
 }
 
 export function getActiveGSTMasters(): GSTMaster[] {

@@ -11,6 +11,7 @@ export const PRODUCT_OPTIONS = [
   { label: "Hybrid Maize Seed", value: "Hybrid Maize Seed" },
   { label: "DAP 50kg", value: "DAP 50kg" },
   { label: "Zinc Sulphate 21%", value: "Zinc Sulphate 21%" },
+  { label: "Bio Fertilizer A", value: "Bio Fertilizer A" },
 ];
 
 export const CUSTOMER_OPTIONS = [
@@ -19,6 +20,7 @@ export const CUSTOMER_OPTIONS = [
   { label: "Reliance Agri", value: "Reliance Agri" },
   { label: "Mahindra Farms", value: "Mahindra Farms" },
   { label: "Tata Agro", value: "Tata Agro" },
+  { label: "Agro Solutions Pvt Ltd", value: "Agro Solutions Pvt Ltd" },
 ];
 
 export const PACKED_BY_OPTIONS = [

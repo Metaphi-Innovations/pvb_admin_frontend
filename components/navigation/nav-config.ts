@@ -9,7 +9,6 @@ import {
   UserCheck,
   Wallet,
   CalendarDays,
-  Settings,
   Palette,
   CalendarCheck,
   Settings2,
@@ -194,28 +193,6 @@ export const NAV_ITEMS: NavItem[] = [
   //   icon: Palette,
   //   href: "/template",
   // },
-  {
-    id: "settings",
-    label: "Settings",
-    icon: Settings,
-    iconOnly: true,
-    href: "/settings",
-    menuLayout: "sidebar",
-    groupedChildren: [
-      {
-        label: "GST & Tax Configuration",
-        description:
-          "Financial-year wise LUT records, company GSTIN mapping, and SEZ supply rules.",
-        icon: Receipt,
-        children: [
-          {
-            label: "GST & Tax Configuration",
-            href: "/settings/gst-tax-configuration",
-          },
-        ],
-      },
-    ],
-  },
 ];
 
 export function collectNavHrefs(items: NavItem[] = NAV_ITEMS): string[] {

@@ -13,7 +13,7 @@ import {
   loadPricingRecords,
   PRICING_STATES,
 } from "../pricing/pricing-data";
-import { migrateSchemeRecord, mergeSchemeSeedRecords, normalizeSchemeApprovalStatus, PENDING_APPROVAL_STATUSES, resolveDisplayApprovalStatus, SCHEME_SEED, SCHEME_STORAGE_KEY, isSchemeEditable, type CustomerType, type ProductDiscountSchemeLine, type SchemeRecord } from "./scheme-data";
+import { migrateSchemeRecord, mergeSchemeSeedRecords, normalizeSchemeApprovalStatus, resolveDisplayApprovalStatus, resolveSchemeOperationalStatus, SCHEME_SEED, SCHEME_STORAGE_KEY, isSchemeEditable, type CustomerType, type ProductDiscountSchemeLine, type SchemeRecord } from "./scheme-data";
 
 export type ProductDiscountDiscountType = "Percentage" | "Rupees";
 export type DiscountApplicationMode = "Common" | "Product-wise";
@@ -494,12 +494,7 @@ export function isProductDiscountSchemeExpired(record: SchemeRecord): boolean {
 }
 
 export function formatProductDiscountOperationalStatus(record: SchemeRecord): string {
-  if (PENDING_APPROVAL_STATUSES.includes(record.approvalStatus)) return "Pending";
-  if (record.approvalStatus === "approved") return "Approved";
-  if (record.approvalStatus === "active" && record.status === "active") return "Active";
-  if (isProductDiscountSchemeExpired(record)) return "Expired";
-  if (record.approvalStatus === "rejected") return "Rejected";
-  return "Inactive";
+  return resolveSchemeOperationalStatus(record);
 }
 
 export function canEditProductDiscountScheme(record: SchemeRecord): boolean {
@@ -612,7 +607,8 @@ export function calculateProductDiscountScheme(input: {
 }
 
 function parseDiscountValue(raw: string): number {
-  const value = parseFloat(raw);
+  const cleaned = raw.replace(/[₹,\s]/g, "");
+  const value = parseFloat(cleaned);
   return Number.isNaN(value) ? 0 : value;
 }
 

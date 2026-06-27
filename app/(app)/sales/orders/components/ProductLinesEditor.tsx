@@ -61,6 +61,20 @@ interface ProductLinesEditorProps {
 	taxSupplyType?: TaxSupplyType;
 }
 
+function EmptyTaxCell() {
+	return (
+		<td className='px-2 py-1.5 min-w-[72px] text-xs text-muted-foreground'>
+			—
+		</td>
+	);
+}
+
+const TAX_HEAD =
+	"px-2 py-1.5 text-left text-[10px] font-semibold text-foreground whitespace-nowrap";
+const TAX_CELL = "px-2 py-1.5 text-xs tabular-nums";
+const TAX_CELL_AMT =
+	"px-2 py-1.5 text-xs font-medium tabular-nums whitespace-nowrap text-foreground";
+
 function ProductSelect({
 	products,
 	value,
@@ -493,28 +507,57 @@ export default function ProductLinesEditor({
 			) : (
 				<div className='border border-border rounded-xl bg-white shadow-sm overflow-hidden'>
 					<div className='overflow-x-auto'>
-						<table className='w-full min-w-[1050px]'>
+						<table className='w-full min-w-[1180px]'>
 							<thead>
-								<tr className='bg-muted/40 border-b border-border'>
+								<tr className='bg-muted/40 border-b border-border/60'>
 									{[
-										{ h: "Product", className: "min-w-[180px]" },
-										{ h: "Stock", className: "w-16" },
-										{ h: "Qty", className: "w-16" },
-										{ h: "DP", className: "min-w-[80px]" },
-										{ h: "Offer", className: "min-w-[130px]" },
-										{ h: "Disc. Amt", className: "min-w-[80px]" },
-										{ h: "Final Rate", className: "min-w-[80px]" },
-										{ h: "Tax", className: "min-w-[130px]" },
-										{ h: "Line Total", className: "min-w-[90px]" },
-										{ h: "", className: "w-16" },
-									].map(({ h, className }) => (
+										{ h: "Product", rowSpan: 2, className: "min-w-[180px]" },
+										{ h: "Stock", rowSpan: 2, className: "w-16" },
+										{ h: "Qty", rowSpan: 2, className: "w-16" },
+										{ h: "DP", rowSpan: 2, className: "min-w-[80px]" },
+										{ h: "Offer", rowSpan: 2, className: "min-w-[130px]" },
+										{ h: "Disc. Amt", rowSpan: 2, className: "min-w-[80px]" },
+										{ h: "Final Rate", rowSpan: 2, className: "min-w-[80px]" },
+									].map(({ h, rowSpan, className }) => (
 										<th
-											key={h || "actions"}
+											key={h}
+											rowSpan={rowSpan}
 											className={cn(
-												"px-2 py-2 text-left text-xs font-semibold text-foreground whitespace-nowrap",
+												"px-2 py-2 text-left text-xs font-semibold text-foreground whitespace-nowrap align-middle",
 												className,
 											)}
 										>
+											{h}
+										</th>
+									))}
+									<th
+										colSpan={taxSupplyType === "intra" ? 4 : 2}
+										className='px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-foreground border-b border-border/60'
+									>
+										{taxSupplyType === "intra" ? "Tax — CGST + SGST" : "Tax — IGST"}
+									</th>
+									{[
+										{ h: "Line Total", rowSpan: 2, className: "min-w-[90px]" },
+										{ h: "", rowSpan: 2, className: "w-16" },
+									].map(({ h, rowSpan, className }) => (
+										<th
+											key={h || "actions"}
+											rowSpan={rowSpan}
+											className={cn(
+												"px-2 py-2 text-left text-xs font-semibold text-foreground whitespace-nowrap align-middle",
+												className,
+											)}
+										>
+											{h}
+										</th>
+									))}
+								</tr>
+								<tr className='bg-muted/40 border-b border-border/60'>
+									{(taxSupplyType === "intra"
+										? ["CGST %", "CGST Amt", "SGST %", "SGST Amt"]
+										: ["IGST %", "IGST Amt"]
+									).map((h) => (
+										<th key={h} className={TAX_HEAD}>
 											{h}
 										</th>
 									))}
@@ -679,31 +722,45 @@ export default function ProductLinesEditor({
 													{line.productId ? formatSchemeRupee(line.finalRate) : "—"}
 												</span>
 											</td>
-											<td className='px-2 py-1.5 min-w-[130px]'>
-												{line.productId && product && taxBreakdown ? (
-													<div className='space-y-0.5'>
-														{taxSupplyType === "intra" ? (
-															<>
-																<p className='text-[10px] text-muted-foreground whitespace-nowrap tabular-nums'>
-																	CGST {taxBreakdown.cgstRate}%:{" "}
-																	{formatRupee(line.cgstAmount ?? 0)}
-																</p>
-																<p className='text-[10px] text-muted-foreground whitespace-nowrap tabular-nums'>
-																	SGST {taxBreakdown.sgstRate}%:{" "}
-																	{formatRupee(line.sgstAmount ?? 0)}
-																</p>
-															</>
-														) : (
-															<p className='text-[10px] text-muted-foreground whitespace-nowrap tabular-nums'>
-																IGST {taxBreakdown.igstRate}%:{" "}
-																{formatRupee(line.igstAmount ?? 0)}
-															</p>
-														)}
-													</div>
+											{line.productId && product && taxBreakdown ? (
+												taxSupplyType === "intra" ? (
+													<>
+														<td className={cn(TAX_CELL, "min-w-[72px] text-muted-foreground")}>
+															{taxBreakdown.cgstRate}%
+														</td>
+														<td className={cn(TAX_CELL_AMT, "min-w-[80px]")}>
+															{formatRupee(line.cgstAmount ?? 0)}
+														</td>
+														<td className={cn(TAX_CELL, "min-w-[72px] text-muted-foreground")}>
+															{taxBreakdown.sgstRate}%
+														</td>
+														<td className={cn(TAX_CELL_AMT, "min-w-[80px]")}>
+															{formatRupee(line.sgstAmount ?? 0)}
+														</td>
+													</>
 												) : (
-													"—"
-												)}
-											</td>
+													<>
+														<td className={cn(TAX_CELL, "min-w-[72px] text-muted-foreground")}>
+															{taxBreakdown.igstRate}%
+														</td>
+														<td className={cn(TAX_CELL_AMT, "min-w-[80px]")}>
+															{formatRupee(line.igstAmount ?? 0)}
+														</td>
+													</>
+												)
+											) : taxSupplyType === "intra" ? (
+												<>
+													<EmptyTaxCell />
+													<EmptyTaxCell />
+													<EmptyTaxCell />
+													<EmptyTaxCell />
+												</>
+											) : (
+												<>
+													<EmptyTaxCell />
+													<EmptyTaxCell />
+												</>
+											)}
 											<td className='px-2 py-1.5'>
 												<span className='text-xs font-semibold text-foreground tabular-nums'>
 													{formatRupee(line.lineTotal)}

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Eye, MapPin, Wheat } from "lucide-react";
+import { Eye, MapPin, Smartphone, Users, Wheat } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
 import { MasterListing } from "@/components/listing/MasterListing";
@@ -15,18 +15,15 @@ import {
 } from "@/components/listing/types";
 import { cn } from "@/lib/utils";
 
+import { type Farmer, SEED, VIEW_FARMER_STORAGE_KEY } from "./farmer-data";
+import { FarmerAvatar } from "./components/FarmerAvatar";
 import {
-  type Farmer,
-  SEED,
-  VIEW_FARMER_STORAGE_KEY,
-} from "./farmer-data";
+  formatIndianMobile,
+  formatOwnershipLabel,
+  parseAreaValue,
+} from "./farmer-utils";
 
 const PER_PAGE = 10;
-
-function parseAreaValue(value: string) {
-  const numericValue = Number.parseFloat(value.replace(/[^\d.]/g, ""));
-  return Number.isNaN(numericValue) ? 0 : numericValue;
-}
 
 function KpiCard({
   label,
@@ -36,26 +33,51 @@ function KpiCard({
   color,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   icon: React.ElementType;
   accent?: boolean;
   color?: string;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-white p-3">
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-white p-3 shadow-sm">
       <div
         className={cn(
-          "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg",
+          "flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg",
           accent ? "bg-brand-600" : color ?? "bg-muted",
         )}
       >
         <Icon className={cn("h-4 w-4", accent ? "text-white" : "text-muted-foreground")} />
       </div>
-      <div>
-        <p className="text-base font-bold leading-none text-foreground">{value}</p>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">{label}</p>
+      <div className="min-w-0">
+        <p className="text-lg font-bold leading-none text-foreground">{value}</p>
+        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{label}</p>
       </div>
     </div>
+  );
+}
+
+/** Standard table cell text — matches MasterListing td base styles */
+const cellText = "text-xs text-foreground";
+const cellMono = "font-mono text-xs text-foreground whitespace-nowrap";
+const cellNum = "text-xs text-foreground tabular-nums";
+
+function StatusPill({ status }: { status: Farmer["status"] }) {
+  const active = status === "Active";
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
+        active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600",
+      )}
+    >
+      <span
+        className={cn(
+          "h-1.5 w-1.5 rounded-full",
+          active ? "bg-emerald-500" : "bg-slate-400",
+        )}
+      />
+      {status}
+    </span>
   );
 }
 
@@ -67,22 +89,11 @@ export default function FarmerPage() {
 
   const farmers = SEED;
 
-  const states = useMemo(
-    () =>
-      [...new Set(farmers.map((farmer) => farmer.state))]
-        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
-    [farmers],
-  );
-
   const stats = useMemo(
     () => ({
       total: farmers.length,
-      owned: farmers.filter((farmer) =>
-        farmer.cropEntries.some((entry) => entry.ownershipType === "Owned"),
-      ).length,
-      leased: farmers.filter((farmer) =>
-        farmer.cropEntries.some((entry) => entry.ownershipType === "Leased"),
-      ).length,
+      active: farmers.filter((f) => f.status === "Active").length,
+      states: new Set(farmers.map((f) => f.state)).size,
     }),
     [farmers],
   );
@@ -90,23 +101,21 @@ export default function FarmerPage() {
   const columns = useMemo<ColumnConfig<Farmer>[]>(
     () => [
       {
+        key: "photo",
+        header: "Photo",
+        width: "72px",
+        render: (_, row) => <FarmerAvatar name={row.name} size="sm" variant="muted" />,
+      },
+      {
         key: "name",
         header: "Farmer Name",
         sortable: true,
         filterable: true,
         filterType: "text",
-        width: "180px",
-        render: (_, row) => (
-          <p className="text-xs font-semibold text-foreground">{row.name}</p>
-        ),
-      },
-      {
-        key: "phoneNumber",
-        header: "Phone Number",
-        sortable: true,
-        filterable: true,
-        filterType: "text",
         width: "150px",
+        render: (_, row) => (
+          <span className={cn(cellText, "block truncate")}>{row.name}</span>
+        ),
       },
       {
         key: "village",
@@ -114,62 +123,71 @@ export default function FarmerPage() {
         sortable: true,
         filterable: true,
         filterType: "text",
-        width: "140px",
-      },
-      {
-        key: "district",
-        header: "District",
-        sortable: true,
-        filterable: true,
-        filterType: "text",
-        width: "140px",
-      },
-      {
-        key: "state",
-        header: "State",
-        sortable: true,
-        filterable: true,
-        filterType: "dropdown",
-        filterOptions: states.map((state) => ({ label: state, value: state })),
-        width: "140px",
-      },
-      {
-        key: "currentCrop",
-        header: "Current Crop Grown",
-        sortable: true,
-        filterable: true,
-        filterType: "text",
-        width: "220px",
+        width: "110px",
         render: (_, row) => (
-          <span className="block max-w-[220px] truncate" title={row.currentCrop}>
-            {row.currentCrop}
-          </span>
+          <span className={cn(cellText, "block truncate")}>{row.village}</span>
         ),
       },
       {
-        key: "farmlandSize",
-        header: "Size of Farmland",
+        key: "phoneNumber",
+        header: "Mobile",
         sortable: true,
         filterable: true,
         filterType: "text",
-        width: "140px",
-        align: "left",
+        width: "120px",
+        render: (_, row) => (
+          <span className={cellMono}>{formatIndianMobile(row.phoneNumber)}</span>
+        ),
       },
       {
         key: "ownershipType",
-        header: "Owned / Leased",
+        header: "Ownership",
         sortable: true,
         filterable: true,
         filterType: "dropdown",
         filterOptions: [
           { label: "Owned", value: "Owned" },
           { label: "Leased", value: "Leased" },
-          { label: "Owned + Leased", value: "Owned + Leased" },
+          { label: "Both", value: "Owned + Leased" },
         ],
-        width: "160px",
+        width: "90px",
+        render: (_, row) => (
+          <span className={cellText}>{formatOwnershipLabel(row.ownershipType)}</span>
+        ),
+      },
+      {
+        key: "farmlandSize",
+        header: "Total Area",
+        sortable: true,
+        width: "100px",
+        render: (_, row) => (
+          <span className={cellNum}>{row.farmlandSize}</span>
+        ),
+      },
+      {
+        key: "lastUpdated",
+        header: "Last Updated",
+        sortable: true,
+        width: "110px",
+        render: (_, row) => (
+          <span className={cellNum}>{row.lastUpdated}</span>
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: [
+          { label: "Active", value: "Active" },
+          { label: "Inactive", value: "Inactive" },
+        ],
+        width: "90px",
+        render: (_, row) => <StatusPill status={row.status} />,
       },
     ],
-    [states],
+    [],
   );
 
   const actions = useMemo<ActionItemConfig<Farmer>[]>(
@@ -195,18 +213,7 @@ export default function FarmerPage() {
     if (filters.search) {
       const query = String(filters.search).trim().toLowerCase();
       result = result.filter((farmer) =>
-        [
-          farmer.name,
-          farmer.fatherName,
-          farmer.phoneNumber,
-          farmer.village,
-          farmer.town,
-          farmer.city,
-          farmer.district,
-          farmer.state,
-          farmer.currentCrop,
-          ...farmer.cropEntries.map((entry) => entry.produceCropName),
-        ]
+        [farmer.name, farmer.phoneNumber, farmer.village, farmer.district, farmer.state]
           .join(" ")
           .toLowerCase()
           .includes(query),
@@ -221,6 +228,11 @@ export default function FarmerPage() {
           const diff = parseAreaValue(a.farmlandSize) - parseAreaValue(b.farmlandSize);
           return sort.direction === "asc" ? diff : -diff;
         }
+        if (sort.key === "photo") {
+          return sort.direction === "asc"
+            ? a.name.localeCompare(b.name)
+            : b.name.localeCompare(a.name);
+        }
 
         const aValue = String(a[sort.key as keyof Farmer] ?? "").toLowerCase();
         const bValue = String(b[sort.key as keyof Farmer] ?? "").toLowerCase();
@@ -234,8 +246,8 @@ export default function FarmerPage() {
   }, [farmers, filters, sort]);
 
   const paginated = useMemo(() => {
-    const startOffset = (page - 1) * PER_PAGE;
-    return filtered.slice(startOffset, startOffset + PER_PAGE);
+    const start = (page - 1) * PER_PAGE;
+    return filtered.slice(start, start + PER_PAGE);
   }, [filtered, page]);
 
   useEffect(() => {
@@ -244,15 +256,24 @@ export default function FarmerPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-5">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Farmer Listing</h1>
+      <div className="mx-auto max-w-[1600px] space-y-3">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-foreground">Farmer Database</h1>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              SFA Mobile submissions · View only
+            </p>
+          </div>
+          <div className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/20 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+            <Smartphone className="h-3.5 w-3.5 text-brand-600" />
+            Read-only CRM view
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-3 gap-3">
           <KpiCard label="Total Farmers" value={stats.total} icon={Wheat} accent />
-          <KpiCard label="Owned" value={stats.owned} icon={CheckCircle2} color="bg-emerald-600" />
-          <KpiCard label="Leased" value={stats.leased} icon={MapPin} color="bg-amber-500" />
+          <KpiCard label="Active" value={stats.active} icon={Users} color="bg-emerald-600" />
+          <KpiCard label="States" value={stats.states} icon={MapPin} color="bg-navy-600" />
         </div>
 
         <MasterListing<Farmer>
@@ -266,8 +287,7 @@ export default function FarmerPage() {
           onFilterChange={setFilters}
           actions={actions}
           emptyMessage="farmers"
-          onExport={() => {}}
-          searchPlaceholder="Search by farmer name, phone number, village, district, or crop..."
+          searchPlaceholder="Search name, village, mobile, district..."
           currentFilters={filters}
           currentSort={sort}
         />

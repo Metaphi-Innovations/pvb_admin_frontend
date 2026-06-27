@@ -15,6 +15,28 @@ import { findPostedSalesInvoiceVoucher } from "@/lib/accounts/sales-invoice-acco
 import { customerMasterToTransactionFields } from "@/lib/accounts/transaction-master-fetch";
 import { validateProductForSalesInvoice } from "@/lib/accounts/erp-accounting-mapping";
 import { backfillInvoiceCustomerLedgerLinks } from "@/lib/accounts/invoice-ledger-match";
+import {
+  NEAR_EXPIRY_SETTLEMENT_REQUIRED_LABEL,
+} from "@/app/(app)/warehouse/dispatch/near-expiry-dispatch";
+import { mergeNearExpiryDemoSalesInvoice } from "@/lib/accounts/near-expiry-scheme-invoice-demo";
+
+export const SCHEME_SETTLEMENT_SETTLED_LABEL = "Settled";
+
+export function isSchemeSettlementPending(status: string | undefined): boolean {
+  if (!status) return true;
+  const normalized = status.trim().toLowerCase();
+  return normalized !== "settled" && normalized !== "completed" && normalized !== "closed";
+}
+
+/** Listing badge: Settlement Required | Settled | null (no scheme). */
+export function getInvoiceSchemeSettlementLabel(
+  invoice: Pick<InvoiceRecord, "nearExpirySchemeSettlements">,
+): string | null {
+  const entries = invoice.nearExpirySchemeSettlements;
+  if (!entries?.length) return null;
+  const hasPending = entries.some((entry) => isSchemeSettlementPending(entry.settlementStatus));
+  return hasPending ? NEAR_EXPIRY_SETTLEMENT_REQUIRED_LABEL : SCHEME_SETTLEMENT_SETTLED_LABEL;
+}
 
 export type InvoiceStatus = "draft" | "sent" | "cancelled";
 export type InvoicePaymentStatus = "unpaid" | "partially_paid" | "paid";
@@ -23,6 +45,33 @@ export type InvoiceCreditStatus =
 	| "partially_credited"
 	| "fully_credited";
 export type SOAdjustmentStatus = "open" | "partially_returned" | "closed";
+
+/** Near Expiry scheme settlement carried from dispatch — informational only; does not affect invoice totals. */
+export interface InvoiceNearExpirySchemeSettlement {
+	schemeId: number;
+	schemeCode: string;
+	schemeName: string;
+	schemeType: "Near Expiry";
+	schemeStatus: string;
+	product: string;
+	productId: string;
+	batchNumber: string;
+	batchExpiryDate: string;
+	remainingExpiryDays: number;
+	benefitType: string;
+	benefitValue: number;
+	estimatedBenefitAmount: number;
+	settlementMethod: string;
+	settlementStatus: string;
+	invoiceNo?: string;
+	customerName?: string;
+	salesOrderNo?: string;
+	settlementDocumentType?: "credit_note" | "journal_voucher";
+	settlementDocumentNo?: string;
+	settlementDate?: string;
+	settlementAmount?: number;
+	settledBy?: string;
+}
 
 export interface InvoiceLineItem {
 	id: string;
@@ -130,6 +179,8 @@ export interface InvoiceRecord {
 	updatedBy: string;
 	createdAt: string;
 	updatedAt: string;
+	/** Pending Near Expiry scheme settlements — informational; no impact on invoice totals. */
+	nearExpirySchemeSettlements?: InvoiceNearExpirySchemeSettlement[];
 }
 
 const STORAGE_KEY = "ds_accounts_invoices_v1";
@@ -503,7 +554,7 @@ export function loadInvoices(): InvoiceRecord[] {
 	try {
 		const raw = localStorage.getItem(STORAGE_KEY);
 		const list: InvoiceRecord[] = raw ? JSON.parse(raw) : SEED;
-		const normalized = list.map(normalizeInvoice);
+		const normalized = mergeNearExpiryDemoSalesInvoice(list.map(normalizeInvoice));
 		const { invoices: linked, changed } = backfillInvoiceCustomerLedgerLinks(normalized);
 		if (changed || !raw) {
 			localStorage.setItem(STORAGE_KEY, JSON.stringify(linked));
@@ -668,6 +719,7 @@ export type InvoiceFormInput = {
 	lineItems: InvoiceLineItem[];
 	attachments: InvoiceAttachment[];
 	invoiceStatus: InvoiceStatus;
+	nearExpirySchemeSettlements?: InvoiceNearExpirySchemeSettlement[];
 };
 
 export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
@@ -681,10 +733,20 @@ export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
 	}
 	const all = loadInvoices();
 	const id = all.length ? Math.max(...all.map((r) => r.id)) + 1 : 1;
+	const invoiceNo = nextInvoiceNo(all);
+	const nearExpirySchemeSettlements = input.nearExpirySchemeSettlements?.length
+		? input.nearExpirySchemeSettlements.map((entry) => ({
+				...entry,
+				invoiceNo,
+				customerName: input.customerName.trim(),
+				salesOrderNo: entry.salesOrderNo ?? input.salesOrderNo ?? "",
+			}))
+		: undefined;
 	const base: InvoiceRecord = {
 		id,
-		invoiceNo: nextInvoiceNo(all),
+		invoiceNo,
 		...input,
+		nearExpirySchemeSettlements,
 		subtotal: 0,
 		discountTotal: 0,
 		taxAmount: 0,

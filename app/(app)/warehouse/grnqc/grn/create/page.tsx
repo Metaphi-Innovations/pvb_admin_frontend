@@ -416,13 +416,6 @@ export default function GenerateGrnPage() {
       actions={
         <>
           <Button
-            variant="outline"
-            className="h-9 text-xs font-semibold rounded-lg gap-1.5"
-            onClick={() => handleSubmit("draft")}
-          >
-            <Save className="w-3.5 h-3.5 text-muted-foreground" /> Save Draft
-          </Button>
-          <Button
             className="h-9 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white rounded-lg gap-1.5"
             onClick={() => handleSubmit("qc_pending")}
           >

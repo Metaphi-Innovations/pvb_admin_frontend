@@ -3,6 +3,13 @@ import { getCustomersForTransactionDropdown } from "@/app/(app)/masters/customer
 import { calcLineAmounts, loadInvoices, type InvoiceRecord } from "../invoices/invoices-data";
 import { loadOrders } from "@/app/(app)/sales/orders/orders-data";
 import { maybePostCreditNote } from "@/lib/accounts/document-posting-bridge";
+import {
+  markSchemeSettlementSettled,
+  SCHEME_SETTLEMENT_ALREADY_SETTLED_MSG,
+  validateSchemeSettlementAmount,
+  findPendingSchemeSettlement,
+  isSchemeSettlementAlreadySettled,
+} from "@/lib/accounts/scheme-settlement-data";
 
 export type CreditNoteAgainst = "sales_invoice" | "sales_order" | "general";
 export type NoteWorkflowStatus = "draft" | "pending_approval" | "approved" | "rejected" | "cancelled";
@@ -83,6 +90,10 @@ export interface CreditNoteRecord {
   approvedAt?: string;
   createdAt: string;
   updatedAt: string;
+  /** Near Expiry scheme settlement reference — settled on post */
+  schemeSettlementKey?: string;
+  schemeCode?: string;
+  schemeSettlementAmount?: number;
 }
 
 const STORAGE_KEY = "ds_accounts_credit_notes_v1";
@@ -407,6 +418,9 @@ export type CreditNoteFormInput = {
   reason: string;
   remarks: string;
   status: NoteWorkflowStatus;
+  schemeSettlementKey?: string;
+  schemeCode?: string;
+  schemeSettlementAmount?: number;
 };
 
 function inferAgainstType(input: CreditNoteFormInput): CreditNoteAgainst {
@@ -446,6 +460,9 @@ export function createCreditNote(input: CreditNoteFormInput): CreditNoteRecord {
     reason: input.reason,
     remarks: input.remarks,
     status: input.status,
+    schemeSettlementKey: input.schemeSettlementKey,
+    schemeCode: input.schemeCode,
+    schemeSettlementAmount: input.schemeSettlementAmount,
     activity: [{ at: new Date().toISOString(), action: "created", by: ACCOUNTS_CURRENT_USER, detail: "Credit note created" }],
     createdBy: ACCOUNTS_CURRENT_USER,
     updatedBy: ACCOUNTS_CURRENT_USER,
@@ -488,6 +505,9 @@ export function updateCreditNote(id: number, input: CreditNoteFormInput): Credit
     reason: input.reason,
     remarks: input.remarks,
     status: input.status,
+    schemeSettlementKey: input.schemeSettlementKey,
+    schemeCode: input.schemeCode,
+    schemeSettlementAmount: input.schemeSettlementAmount,
     activity: appendActivity(cur.activity, "updated", "Credit note updated"),
     updatedBy: ACCOUNTS_CURRENT_USER,
     updatedAt: new Date().toISOString(),
@@ -505,6 +525,18 @@ export function approveCreditNote(id: number): CreditNoteRecord {
   if (cur.status !== "draft" && cur.status !== "pending_approval") {
     throw new Error("Only draft or pending credit notes can be approved.");
   }
+  if (cur.schemeSettlementKey) {
+    if (isSchemeSettlementAlreadySettled(cur.schemeSettlementKey)) {
+      throw new Error(SCHEME_SETTLEMENT_ALREADY_SETTLED_MSG);
+    }
+    const pending = findPendingSchemeSettlement(cur.schemeSettlementKey);
+    const amount = cur.schemeSettlementAmount ?? cur.currentCreditAmount;
+    const amountErr = validateSchemeSettlementAmount(
+      amount,
+      pending?.estimatedBenefitAmount ?? amount,
+    );
+    if (amountErr) throw new Error(amountErr);
+  }
   const updated = normalizeCreditNote({
     ...cur,
     status: "approved",
@@ -516,6 +548,16 @@ export function approveCreditNote(id: number): CreditNoteRecord {
   });
   all[idx] = updated;
   saveCreditNotes(all);
+  if (updated.schemeSettlementKey) {
+    markSchemeSettlementSettled({
+      settlementKey: updated.schemeSettlementKey,
+      documentType: "credit_note",
+      documentNo: updated.creditNoteNo,
+      settlementAmount: updated.schemeSettlementAmount ?? updated.currentCreditAmount,
+      settlementDate: updated.creditNoteDate,
+      settledBy: ACCOUNTS_CURRENT_USER,
+    });
+  }
   maybePostCreditNote(updated);
   return updated;
 }

@@ -94,14 +94,6 @@ export default function AddStockTransferPage() {
       actions={
         <div className="flex items-center gap-2">
           <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => handleSave(true)}
-          >
-            Save as Draft
-          </Button>
-          <Button
             size="sm"
             className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
             onClick={() => handleSave(false)}

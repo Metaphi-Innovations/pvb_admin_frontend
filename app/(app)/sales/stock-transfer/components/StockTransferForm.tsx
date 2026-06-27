@@ -341,7 +341,7 @@ export default function StockTransferForm({
       />
 
       <SectionDivider title="Total Summary" />
-      <div className="flex justify-start">
+      <div className="flex justify-end">
         <div className="w-full max-w-md overflow-hidden border rounded-lg border-border bg-muted/20">
           <div className="divide-y divide-border/60">
             {[
@@ -356,10 +356,6 @@ export default function StockTransferForm({
               {
                 label: "Additional Expenses Total:",
                 value: formatRupee(totalsSummary.additionalExpensesTotal),
-              },
-              {
-                label: "Expense Discount Total:",
-                value: formatRupee(totalsSummary.expenseDiscountTotal),
               },
               {
                 label: "Taxable Amount:",

@@ -45,6 +45,14 @@ import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { creditNoteImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { getActivePostingLedgers, getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 import { StatusBadge } from "../components/AccountsUI";
+import { SchemeSettlementSelector } from "@/components/accounts/SchemeSettlementSelector";
+import {
+  validateSchemeSettlementAmount,
+  isSchemeSettlementAlreadySettled,
+  SCHEME_SETTLEMENT_ALREADY_SETTLED_MSG,
+  findPendingSchemeSettlement,
+  type PendingSchemeSettlementOption,
+} from "@/lib/accounts/scheme-settlement-data";
 
 export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteId?: number }) {
   const router = useRouter();
@@ -89,6 +97,9 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
   const [status, setStatus] = useState<NoteWorkflowStatus>("draft");
   const [error, setError] = useState<string | null>(null);
   const [adjustment, setAdjustment] = useState(0);
+  const [schemeSettlementKey, setSchemeSettlementKey] = useState("");
+  const [schemeSelection, setSchemeSelection] = useState<PendingSchemeSettlementOption | null>(null);
+  const [schemeSettlementAmount, setSchemeSettlementAmount] = useState(0);
 
   const readOnly = status === "approved";
 
@@ -143,6 +154,7 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
   };
 
   const onInvoiceSelect = (id: string) => {
+    if (schemeSettlementKey) return;
     setReferenceInvoiceId(id);
     if (!id) {
       setReferencePreview(null);
@@ -164,6 +176,50 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
       }
     }
   };
+
+  const onSchemeChange = (key: string, opt: PendingSchemeSettlementOption | null) => {
+    setSchemeSettlementKey(key);
+    setSchemeSelection(opt);
+    if (!opt) {
+      setLines([createEmptyCreditLine()]);
+      return;
+    }
+    setSchemeSettlementAmount(opt.estimatedBenefitAmount);
+    setSourceInvoiceId(opt.invoiceId);
+    setSourceInvoiceNo(opt.invoiceNo);
+    setSourceOrderNo(opt.salesOrderNo);
+    setReferenceInvoiceId(String(opt.invoiceId));
+    setOriginalAmount(String(opt.estimatedBenefitAmount));
+    const preview = buildReferenceFromInvoice(opt.invoiceId);
+    if (preview) setReferencePreview(preview);
+    const cust = customers.find(
+      (c) => c.id === opt.customerId || c.customerName === opt.customerName,
+    );
+    if (cust) {
+      const fields = customerMasterToTransactionFields(cust);
+      onCustomerChange(String(cust.id), fields);
+    } else {
+      setReceivableLedger(opt.customerName);
+    }
+    setSubject(`Near Expiry Scheme Settlement — ${opt.schemeCode}`);
+    setLines([
+      {
+        ...createEmptyCreditLine(),
+        productName: `${opt.product} — Near Expiry Scheme`,
+        description: `Scheme ${opt.schemeCode} · Batch ${opt.batchNumber}`,
+        creditAmount: opt.estimatedBenefitAmount,
+        reason: "Near Expiry Scheme Settlement",
+      },
+    ]);
+  };
+
+  useEffect(() => {
+    if (!schemeSettlementKey || !schemeSelection) return;
+    setLines((prev) => {
+      if (prev.length !== 1 || !prev[0].productName.includes("Near Expiry Scheme")) return prev;
+      return [{ ...prev[0], creditAmount: schemeSettlementAmount }];
+    });
+  }, [schemeSettlementAmount, schemeSettlementKey, schemeSelection]);
 
   useEffect(() => {
     if (isEdit) return;
@@ -220,6 +276,12 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
       const p = buildReferenceFromInvoice(rec.sourceInvoiceId);
       if (p) setReferencePreview(p);
     }
+    if (rec.schemeSettlementKey) {
+      setSchemeSettlementKey(rec.schemeSettlementKey);
+      setSchemeSettlementAmount(rec.schemeSettlementAmount ?? rec.currentCreditAmount);
+      const pending = findPendingSchemeSettlement(rec.schemeSettlementKey);
+      if (pending) setSchemeSelection(pending);
+    }
   }, [isEdit, creditNoteId, router]);
 
   const subTotal = lines.reduce((s, l) => s + l.creditAmount, 0);
@@ -259,31 +321,37 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
     originalAmount: original,
     alreadyAdjustedAmount: alreadyAdjustedNum,
     lineItems: lines.filter((l) => l.productName || l.creditAmount > 0),
-    reason: "Sales return",
+    reason: schemeSettlementKey ? "Near Expiry Scheme Settlement" : "Sales return",
     remarks: remarks || customerNotes,
     status: nextStatus,
+    schemeSettlementKey: schemeSettlementKey || undefined,
+    schemeCode: schemeSelection?.schemeCode,
+    schemeSettlementAmount: schemeSettlementKey ? schemeSettlementAmount : undefined,
   });
-
-  const saveDraft = () => {
-    setError(null);
-    try {
-      if (isEdit && creditNoteId != null) {
-        updateCreditNote(creditNoteId, buildInput("draft"));
-        router.push(`${CREDIT_NOTES_LIST_PATH}/${creditNoteId}`);
-      } else {
-        const rec = createCreditNote(buildInput("draft"));
-        router.push(`${CREDIT_NOTES_LIST_PATH}/${rec.id}`);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save.");
-    }
-  };
 
   const postNote = () => {
     setError(null);
     try {
+      if (schemeSettlementKey && schemeSelection) {
+        if (isSchemeSettlementAlreadySettled(schemeSettlementKey)) {
+          setError(SCHEME_SETTLEMENT_ALREADY_SETTLED_MSG);
+          return;
+        }
+        const schemeErr = validateSchemeSettlementAmount(
+          schemeSettlementAmount,
+          schemeSelection.estimatedBenefitAmount,
+        );
+        if (schemeErr) {
+          setError(schemeErr);
+          return;
+        }
+      }
       if (grandTotal <= 0) {
-        setError("Enter return quantity on at least one line before posting.");
+        setError(
+          schemeSettlementKey
+            ? "Enter a settlement amount before posting."
+            : "Enter return quantity on at least one line before posting.",
+        );
         return;
       }
       if (isEdit && creditNoteId != null) {
@@ -322,9 +390,6 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.push(CREDIT_NOTES_LIST_PATH)}>
               Cancel
-            </Button>
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={saveDraft}>
-              Save Draft
             </Button>
             <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={postNote}>
               Post Credit Note
@@ -400,6 +465,17 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
             <Input className="h-9 text-xs" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Brief description for this credit note" disabled={readOnly} />
           </div>
 
+          <div className="max-w-2xl">
+            <SchemeSettlementSelector
+              value={schemeSettlementKey}
+              onChange={onSchemeChange}
+              settlementAmount={schemeSettlementAmount}
+              onSettlementAmountChange={setSchemeSettlementAmount}
+              disabled={readOnly}
+              variant="credit_note"
+            />
+          </div>
+
           <div className="max-w-md">
             <SearchableSelect
               label="Reference Invoice"
@@ -407,7 +483,7 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
               onChange={onInvoiceSelect}
               options={invoiceOptions}
               placeholder="Select invoice to credit against"
-              disabled={readOnly}
+              disabled={readOnly || Boolean(schemeSettlementKey)}
             />
             {referencePreview && (
               <p className="text-[10px] text-muted-foreground mt-1">

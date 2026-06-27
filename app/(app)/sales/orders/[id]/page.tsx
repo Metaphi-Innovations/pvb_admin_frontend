@@ -302,7 +302,8 @@ export default function ViewSalesOrderPage() {
               <RecordKvRow label="Territory" value={order.territory} />
               <RecordKvRow label="Order Status" value={formatOrderStatus(order.status)} />
               <RecordKvRow label="Approval Status" value={formatApprovalStatus(approvalStatus)} />
-              <RecordKvRow label="Total Amount" value={formatRupee(order.totalAmount)} amount isLast />
+              <RecordKvRow label="Total Amount" value={formatRupee(order.totalAmount)} amount />
+              <RecordKvRow label="Remarks" value={order.remarks?.trim() || "—"} isLast />
             </RecordSectionCard>
 
             <div className="space-y-4">

@@ -144,13 +144,6 @@ function CreateQcForm() {
       actions={
         <>
           <Button
-            variant="outline"
-            className="h-9 text-xs font-semibold rounded-lg"
-            onClick={() => handleSubmit("pending")}
-          >
-            Save Draft
-          </Button>
-          <Button
             disabled={hasErrors}
             className="h-9 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white rounded-lg gap-1.5"
             onClick={() => handleSubmit("completed")}

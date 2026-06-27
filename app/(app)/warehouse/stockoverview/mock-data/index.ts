@@ -5,18 +5,46 @@ import { SEED_GRN_PENDING_STOCK } from "./grnPendingStock";
 
 // Storage Keys
 const KEY_QC_PASSED = "ds_stock_qc_passed";
+const KEY_QC_PASSED_VERSION = "ds_stock_qc_passed_version";
+const QC_PASSED_SEED_VERSION = "4";
 const KEY_REJECTED = "ds_stock_rejected";
 const KEY_GRN_PENDING = "ds_stock_grn_pending";
+
+function mergeQcPassedSeed(stored: QcPassedStockRecord[]): QcPassedStockRecord[] {
+  const merged = [...stored];
+  const indexById = new Map(merged.map((row, index) => [row.id, index]));
+  for (const seedRow of SEED_QC_PASSED_STOCK) {
+    const existingIndex = indexById.get(seedRow.id);
+    if (existingIndex === undefined) {
+      merged.push(seedRow);
+      indexById.set(seedRow.id, merged.length - 1);
+      continue;
+    }
+    if (
+      seedRow.id === "st-26" ||
+      seedRow.id === "st-27" ||
+      seedRow.id === "st-7" ||
+      seedRow.id === "st-21" ||
+      seedRow.id === "st-28"
+    ) {
+      merged[existingIndex] = seedRow;
+    }
+  }
+  return merged;
+}
 
 // QC Passed Stock Accessors
 export function getQcPassedStockRecords(): QcPassedStockRecord[] {
   if (typeof window === "undefined") return SEED_QC_PASSED_STOCK;
+  const version = localStorage.getItem(KEY_QC_PASSED_VERSION);
   const stored = localStorage.getItem(KEY_QC_PASSED);
-  if (!stored) {
-    localStorage.setItem(KEY_QC_PASSED, JSON.stringify(SEED_QC_PASSED_STOCK));
-    return SEED_QC_PASSED_STOCK;
+  if (!stored || version !== QC_PASSED_SEED_VERSION) {
+    const merged = mergeQcPassedSeed(stored ? JSON.parse(stored) : []);
+    localStorage.setItem(KEY_QC_PASSED, JSON.stringify(merged));
+    localStorage.setItem(KEY_QC_PASSED_VERSION, QC_PASSED_SEED_VERSION);
+    return merged;
   }
-  return JSON.parse(stored);
+  return mergeQcPassedSeed(JSON.parse(stored));
 }
 
 export function saveQcPassedStockRecords(records: QcPassedStockRecord[]): void {

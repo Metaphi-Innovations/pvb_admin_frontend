@@ -176,9 +176,6 @@ export default function NewCustomerPage() {
           <Button variant="ghost" size="sm" onClick={() => router.back()}>
             Discard
           </Button>
-          <Button variant="outline" size="sm" onClick={() => persist(true)}>
-            Save Draft
-          </Button>
           <Button variant="default" size="sm" onClick={() => persist(false)}>
             <Save className="w-4 h-4" /> Save
           </Button>

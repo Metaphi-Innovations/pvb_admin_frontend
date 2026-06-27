@@ -312,9 +312,6 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
           <Button variant="outline" size="sm" className="h-9 text-xs" onClick={() => router.push("/accounts/transactions/purchase")}>
             Cancel
           </Button>
-          <Button variant="outline" size="sm" className="h-9 text-xs" disabled={saving} onClick={() => doSave(false)}>
-            Save Draft
-          </Button>
           <Button size="sm" className="h-9 text-xs bg-brand-600 text-white" disabled={saving} onClick={() => doSave(true)}>
             Post Invoice
           </Button>

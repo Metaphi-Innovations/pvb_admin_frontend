@@ -817,17 +817,6 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
           >
             Cancel
           </Button>
-          {mode !== "grn" && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 text-xs"
-              disabled={saving}
-              onClick={() => doSave(false)}
-            >
-              Save Draft
-            </Button>
-          )}
           <Button
             size="sm"
             className="h-9 text-xs bg-brand-600 text-white gap-1.5"

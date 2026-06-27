@@ -24,14 +24,13 @@ import { cn } from "@/lib/utils";
 import {
   saveMasterRecords,
   nextMasterCode,
-  masterToday,
 } from "@/lib/masters/common";
 import {
-  APPROVAL_STATUS_LABELS,
   SCHEME_STORAGE_KEY,
   copyRecord,
   formatValidity,
   matchesListingTab,
+  resolveSchemeOperationalStatus,
   canApproveRecord,
   canActivateRecord,
   canDeactivateRecord,
@@ -45,13 +44,10 @@ import {
   sendBackRecord,
   submitRecord,
   deactivateRecord,
-  resolveDisplayApprovalStatus,
   type SchemeRecord,
 } from "./scheme-data";
 import {
-  formatProductDiscountOperationalStatus,
   isProductDiscountRecord,
-  loadConsolidatedSchemeRecords,
   countProductDiscountProducts,
   countProductDiscountStates,
   canEditProductDiscountScheme,
@@ -63,7 +59,47 @@ import {
   canDeactivateProductDiscountScheme,
   canCopyProductDiscountScheme,
 } from "./product-discount-scheme";
-import { SchemeApprovalBadge, SchemeStatusBadge } from "./components/SchemeBadges";
+import {
+  countNearExpiryProducts,
+  countNearExpiryStates,
+  isNearExpiryRecord,
+  loadConsolidatedSchemeRecords,
+  deduplicateSchemesByCode,
+  canEditNearExpiryScheme,
+  canSubmitNearExpiryScheme,
+  canApproveNearExpiryScheme,
+  canRejectNearExpiryScheme,
+  canSendBackNearExpiryScheme,
+  canActivateNearExpiryScheme,
+  canDeactivateNearExpiryScheme,
+  canCopyNearExpiryScheme,
+  copyNearExpiryRecord,
+} from "./product-near-expiry-scheme";
+import {
+  canActivateStandardSchemeRecord,
+  canApproveStandardSchemeRecord,
+  canCopyStandardSchemeRecord,
+  canDeactivateStandardSchemeRecord,
+  canEditStandardSchemeRecord,
+  canRejectStandardSchemeRecord,
+  canSendBackStandardSchemeRecord,
+  canSubmitStandardSchemeRecord,
+  copyStandardSchemeRecord,
+  countStandardSchemeStates,
+  formatPaymentCustomerDisplay,
+  formatPaymentListingSettlement,
+  formatPaymentOfferBasis,
+  isPaymentRecord,
+  isStandardSchemeRecord,
+  resolveStandardSchemeScope,
+} from "./standard-schemes";
+import { formatSchemeRupee } from "./product-discount-scheme";
+import { SchemeApprovalBadge } from "./components/SchemeBadges";
+import {
+  formatSchemeAnalyticsRupee,
+  formatUtilizationPercent,
+  getSchemeUtilizationStats,
+} from "./scheme-analytics-data";
 
 interface ToastState {
   msg: string;
@@ -99,9 +135,85 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 function schemeActionAllowed(
   row: SchemeRecord,
   productDiscountCheck: (record: SchemeRecord) => boolean,
+  nearExpiryCheck: (record: SchemeRecord) => boolean,
   defaultCheck: (record: SchemeRecord) => boolean,
 ): boolean {
-  return isProductDiscountRecord(row) ? productDiscountCheck(row) : defaultCheck(row);
+  if (isProductDiscountRecord(row)) return productDiscountCheck(row);
+  if (isNearExpiryRecord(row)) return nearExpiryCheck(row);
+  if (isStandardSchemeRecord(row)) return defaultCheck(row);
+  return defaultCheck(row);
+}
+
+function renderOperationalStatusBadge(label: "Active" | "Inactive" | "Pending") {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded border px-1.5 py-0 h-5 text-[10px] font-medium",
+        label === "Active"
+          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+          : label === "Pending"
+            ? "bg-amber-50 text-amber-700 border-amber-200"
+            : "bg-slate-100 text-slate-600 border-slate-200",
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function resolveScopeDisplay(row: SchemeRecord): string | number {
+  if (isPaymentRecord(row)) return formatPaymentCustomerDisplay(row);
+  if (isProductDiscountRecord(row)) return countProductDiscountProducts(row);
+  if (isNearExpiryRecord(row)) return countNearExpiryProducts(row);
+  if (isStandardSchemeRecord(row)) return resolveStandardSchemeScope(row);
+  return row.productName ?? "—";
+}
+
+function resolveStateDisplay(row: SchemeRecord): string | number {
+  if (isPaymentRecord(row)) {
+    return row.minimumOutstandingAmount !== undefined
+      ? formatSchemeRupee(row.minimumOutstandingAmount)
+      : "—";
+  }
+  if (isProductDiscountRecord(row)) return countProductDiscountStates(row);
+  if (isNearExpiryRecord(row)) return countNearExpiryStates(row);
+  if (isStandardSchemeRecord(row)) return countStandardSchemeStates(row);
+  return row.stateName || "—";
+}
+
+function canEditSchemeRow(row: SchemeRecord): boolean {
+  if (isStandardSchemeRecord(row)) return canEditStandardSchemeRecord(row);
+  return canEditRecord(row);
+}
+
+function canSubmitSchemeRow(row: SchemeRecord): boolean {
+  if (isStandardSchemeRecord(row)) return canSubmitStandardSchemeRecord(row);
+  return canSubmitRecord(row);
+}
+
+function canApproveSchemeRow(row: SchemeRecord): boolean {
+  if (isStandardSchemeRecord(row)) return canApproveStandardSchemeRecord(row);
+  return canApproveRecord(row);
+}
+
+function canRejectSchemeRow(row: SchemeRecord): boolean {
+  if (isStandardSchemeRecord(row)) return canRejectStandardSchemeRecord(row);
+  return canRejectRecord(row);
+}
+
+function canSendBackSchemeRow(row: SchemeRecord): boolean {
+  if (isStandardSchemeRecord(row)) return canSendBackStandardSchemeRecord(row);
+  return canSendBackRecord(row);
+}
+
+function canActivateSchemeRow(row: SchemeRecord): boolean {
+  if (isStandardSchemeRecord(row)) return canActivateStandardSchemeRecord(row);
+  return canActivateRecord(row);
+}
+
+function canDeactivateSchemeRow(row: SchemeRecord): boolean {
+  if (isStandardSchemeRecord(row)) return canDeactivateStandardSchemeRecord(row);
+  return canDeactivateRecord(row);
 }
 
 export default function SchemeMasterPage() {
@@ -115,7 +227,7 @@ export default function SchemeMasterPage() {
   const [toast, setToast] = useState<ToastState | null>(null);
 
   useEffect(() => {
-    const migrated = loadConsolidatedSchemeRecords();
+    const migrated = deduplicateSchemesByCode(loadConsolidatedSchemeRecords());
     saveMasterRecords(SCHEME_STORAGE_KEY, migrated);
     setRecords(migrated);
   }, []);
@@ -173,32 +285,17 @@ export default function SchemeMasterPage() {
     },
     {
       key: "productCount",
-      header: "No. of Products",
-      width: "90px",
+      header: "Customer / Scope",
+      width: "120px",
       render: (_v, row) => (
-        <span className="text-[11px]">
-          {isProductDiscountRecord(row) ? countProductDiscountProducts(row) : (row.productName ?? "—")}
-        </span>
+        <span className="text-[11px] line-clamp-2">{resolveScopeDisplay(row)}</span>
       ),
     },
     {
       key: "stateCount",
-      header: "No. of States",
-      width: "85px",
-      render: (_v, row) => (
-        <span className="text-[11px]">
-          {isProductDiscountRecord(row) ? countProductDiscountStates(row) : row.stateName}
-        </span>
-      ),
-    },
-    {
-      key: "customerType",
-      header: "Customer Type",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "100px",
-      render: (_v, row) => <span className="text-[11px]">{row.customerType}</span>,
+      header: "Min Out / States",
+      width: "90px",
+      render: (_v, row) => <span className="text-[11px]">{resolveStateDisplay(row)}</span>,
     },
     {
       key: "validity",
@@ -222,39 +319,69 @@ export default function SchemeMasterPage() {
         { label: "Inactive", value: "inactive" },
       ],
       width: "80px",
-      render: (_v, row) => {
-        if (isProductDiscountRecord(row)) {
-          const label = formatProductDiscountOperationalStatus(row);
-          return (
-            <span
-              className={cn(
-                "inline-flex items-center rounded border px-1.5 py-0 h-5 text-[10px] font-medium",
-                label === "Active"
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : label === "Approved"
-                    ? "bg-blue-50 text-blue-700 border-blue-200"
-                    : label === "Pending"
-                      ? "bg-amber-50 text-amber-700 border-amber-200"
-                      : label === "Expired"
-                        ? "bg-orange-50 text-orange-700 border-orange-200"
-                        : label === "Rejected"
-                          ? "bg-red-50 text-red-700 border-red-200"
-                          : "bg-slate-50 text-slate-600 border-slate-200",
-              )}
-            >
-              {label}
-            </span>
-          );
-        }
-        return <SchemeStatusBadge active={row.status === "active"} />;
-      },
+      render: (_v, row) => renderOperationalStatusBadge(resolveSchemeOperationalStatus(row)),
     },
     {
       key: "approvalStatus",
-      header: "Approval Status",
+      header: "Approval",
       sortable: true,
-      width: "110px",
+      width: "100px",
       render: (_v, row) => <SchemeApprovalBadge record={row} />,
+    },
+    {
+      key: "utilizedCount",
+      header: "Utilized Count",
+      width: "88px",
+      render: (_v, row) => {
+        const stats = getSchemeUtilizationStats(row);
+        return (
+          <span
+            className={cn(
+              "text-[11px] font-semibold tabular-nums",
+              stats.utilizedCount > 0 ? "text-foreground" : "text-muted-foreground",
+            )}
+          >
+            {stats.utilizedCount}
+          </span>
+        );
+      },
+    },
+    {
+      key: "utilizationPercent",
+      header: "Offer / Util %",
+      width: "96px",
+      render: (_v, row) => {
+        if (isPaymentRecord(row)) {
+          return (
+            <span className="text-[11px] font-medium text-foreground line-clamp-2">
+              {formatPaymentOfferBasis(row)}
+            </span>
+          );
+        }
+        const stats = getSchemeUtilizationStats(row);
+        return (
+          <span
+            className={cn(
+              "text-[11px] font-medium",
+              stats.isUtilized ? "text-brand-700" : "text-muted-foreground",
+            )}
+          >
+            {formatUtilizationPercent(stats)}
+          </span>
+        );
+      },
+    },
+    {
+      key: "benefitAmount",
+      header: "Payable / Benefit",
+      width: "110px",
+      render: (_v, row) => (
+        <span className="text-[11px] tabular-nums font-medium">
+          {isPaymentRecord(row)
+            ? formatPaymentListingSettlement(row)
+            : formatSchemeAnalyticsRupee(getSchemeUtilizationStats(row).totalBenefitGiven)}
+        </span>
+      ),
     },
   ];
 
@@ -276,7 +403,7 @@ export default function SchemeMasterPage() {
       icon: Edit2,
       onClick: (row) => openEdit(row),
       disabled: (row) =>
-        !schemeActionAllowed(row, canEditProductDiscountScheme, canEditRecord),
+        !schemeActionAllowed(row, canEditProductDiscountScheme, canEditNearExpiryScheme, canEditSchemeRow),
     },
     {
       label: "Resubmit for Approval",
@@ -287,7 +414,12 @@ export default function SchemeMasterPage() {
         setToast({ msg: "Scheme submitted for approval", type: "success" });
       },
       hide: (row) =>
-        !schemeActionAllowed(row, canSubmitProductDiscountScheme, canSubmitRecord),
+        !schemeActionAllowed(
+          row,
+          canSubmitProductDiscountScheme,
+          canSubmitNearExpiryScheme,
+          canSubmitSchemeRow,
+        ),
     },
     {
       label: "Approve",
@@ -303,7 +435,12 @@ export default function SchemeMasterPage() {
         setToast({ msg, type: "success" });
       },
       hide: (row) =>
-        !schemeActionAllowed(row, canApproveProductDiscountScheme, canApproveRecord),
+        !schemeActionAllowed(
+          row,
+          canApproveProductDiscountScheme,
+          canApproveNearExpiryScheme,
+          canApproveSchemeRow,
+        ),
     },
     {
       label: "Send Back",
@@ -314,7 +451,12 @@ export default function SchemeMasterPage() {
         setToast({ msg: "Scheme sent back for correction", type: "success" });
       },
       hide: (row) =>
-        !schemeActionAllowed(row, canSendBackProductDiscountScheme, canSendBackRecord),
+        !schemeActionAllowed(
+          row,
+          canSendBackProductDiscountScheme,
+          canSendBackNearExpiryScheme,
+          canSendBackSchemeRow,
+        ),
     },
     {
       label: "Reject",
@@ -326,7 +468,12 @@ export default function SchemeMasterPage() {
         setToast({ msg: "Scheme rejected", type: "success" });
       },
       hide: (row) =>
-        !schemeActionAllowed(row, canRejectProductDiscountScheme, canRejectRecord),
+        !schemeActionAllowed(
+          row,
+          canRejectProductDiscountScheme,
+          canRejectNearExpiryScheme,
+          canRejectSchemeRow,
+        ),
     },
     {
       label: "Activate",
@@ -337,7 +484,12 @@ export default function SchemeMasterPage() {
         setToast({ msg: "Scheme activated", type: "success" });
       },
       hide: (row) =>
-        !schemeActionAllowed(row, canActivateProductDiscountScheme, canActivateRecord),
+        !schemeActionAllowed(
+          row,
+          canActivateProductDiscountScheme,
+          canActivateNearExpiryScheme,
+          canActivateSchemeRow,
+        ),
     },
     {
       label: "Deactivate",
@@ -348,15 +500,24 @@ export default function SchemeMasterPage() {
         setToast({ msg: "Scheme deactivated", type: "success" });
       },
       hide: (row) =>
-        !schemeActionAllowed(row, canDeactivateProductDiscountScheme, canDeactivateRecord),
+        !schemeActionAllowed(
+          row,
+          canDeactivateProductDiscountScheme,
+          canDeactivateNearExpiryScheme,
+          canDeactivateSchemeRow,
+        ),
     },
     {
       label: "Copy Scheme",
       action: "copy",
       icon: Copy,
       onClick: (row) => handleCopy(row),
-      hide: (row) =>
-        isProductDiscountRecord(row) ? !canCopyProductDiscountScheme(row) : false,
+      hide: (row) => {
+        if (isProductDiscountRecord(row)) return !canCopyProductDiscountScheme(row);
+        if (isNearExpiryRecord(row)) return !canCopyNearExpiryScheme(row);
+        if (isStandardSchemeRecord(row)) return !canCopyStandardSchemeRecord(row);
+        return true;
+      },
     },
   ];
 
@@ -401,7 +562,12 @@ export default function SchemeMasterPage() {
   const openAdd = () => router.push("/masters/scheme/add");
 
   const openEdit = (row: SchemeRecord) => {
-    const canEdit = schemeActionAllowed(row, canEditProductDiscountScheme, canEditRecord);
+    const canEdit = schemeActionAllowed(
+      row,
+      canEditProductDiscountScheme,
+      canEditNearExpiryScheme,
+      canEditSchemeRow,
+    );
     if (!canEdit) {
       setToast({
         msg: "Approved and active schemes cannot be edited. Edit is allowed only while pending approval or rejected.",
@@ -419,58 +585,27 @@ export default function SchemeMasterPage() {
   const handleCopy = (row: SchemeRecord) => {
     const list = loadConsolidatedSchemeRecords();
     const newId = list.length ? Math.max(...list.map((r) => r.id)) + 1 : 1;
+    const prefix =
+      row.schemeType === "Festive Discount Scheme"
+        ? "FST-"
+        : row.schemeType === "Cash Discount Scheme"
+          ? "CSH-"
+          : row.schemeType === "Turnover Discount Scheme"
+            ? "TUR-"
+            : row.schemeType === "Payment Discount Scheme"
+              ? "PAY-"
+              : "SCH-";
     const newCode = nextMasterCode(
-      "SCH-",
+      prefix,
       list.map((r) => r.schemeCode),
     );
-    const copy = copyRecord(row, newId, newCode);
+    const copy = isNearExpiryRecord(row)
+      ? copyNearExpiryRecord(row, newId, newCode)
+      : isStandardSchemeRecord(row)
+        ? copyStandardSchemeRecord(row, newId, newCode)
+        : copyRecord(row, newId, newCode);
     persistRecords([...list, copy]);
-    setToast({ msg: "Scheme copied and submitted for approval", type: "success" });
-  };
-
-  const handleExport = () => {
-    try {
-      const headers = [
-        "Scheme Code",
-        "Scheme Name",
-        "Scheme Type",
-        "No. of Products",
-        "No. of States",
-        "Customer Type",
-        "Validity",
-        "Status",
-        "Approval Status",
-      ];
-      const rows = filtered.map((r) =>
-        [
-          r.schemeCode,
-          `"${r.schemeName.replace(/"/g, '""')}"`,
-          r.schemeType,
-          isProductDiscountRecord(r) ? countProductDiscountProducts(r) : (r.productName ?? ""),
-          isProductDiscountRecord(r) ? countProductDiscountStates(r) : r.stateName,
-          r.customerType,
-          `"${formatValidity(r)}"`,
-          isProductDiscountRecord(r)
-            ? formatProductDiscountOperationalStatus(r)
-            : r.status === "active"
-              ? "Active"
-              : "Inactive",
-          APPROVAL_STATUS_LABELS[resolveDisplayApprovalStatus(r)],
-        ].join(","),
-      );
-      const blob = new Blob([[headers.join(","), ...rows].join("\n")], {
-        type: "text/csv;charset=utf-8;",
-      });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `schemes_export_${masterToday()}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
-      setToast({ msg: "Schemes exported", type: "success" });
-    } catch {
-      setToast({ msg: "Export failed", type: "error" });
-    }
+    setToast({ msg: "Scheme copied as draft", type: "success" });
   };
 
   return (
@@ -496,8 +631,7 @@ export default function SchemeMasterPage() {
         onFilterChange={setFilters}
         actions={actions}
         onAdd={openAdd}
-        addLabel="Create Product Discount"
-        onExport={handleExport}
+        addLabel="Create Scheme"
         emptyMessage="schemes"
         searchPlaceholder="Search code, name, product, state..."
         currentFilters={filters}

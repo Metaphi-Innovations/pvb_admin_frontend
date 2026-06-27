@@ -1,4 +1,4 @@
-import { SalesOrderRecord, PackingRecord, PackingRecordUnion } from "../types";
+import { SalesOrderRecord, PackingRecord, PackingRecordUnion, PackedBatchAllocation, PackingNearExpirySchemeEntry } from "../types";
 import {
   getSalesOrderRecords,
   saveSalesOrderRecords,
@@ -6,6 +6,9 @@ import {
   savePackingRecords
 } from "../mock-data";
 import { loadTransfers, saveTransfers, type StockTransfer } from "@/app/(app)/sales/stock-transfer/stock-transfer-data";
+import {
+  hasNearExpiryEligibility,
+} from "../../dispatch/near-expiry-dispatch";
 
 function mapStockTransferToSalesOrder(st: StockTransfer): SalesOrderRecord {
   return {
@@ -174,7 +177,9 @@ export function createPackingRecord(
   salesOrderId: string,
   packingQtyMap: Record<string, number>,
   packedBy: string = "Rahul S.",
-  isDraft: boolean = false
+  isDraft: boolean = false,
+  batchAllocationMap: Record<string, PackedBatchAllocation[]> = {},
+  nearExpirySchemes: PackingNearExpirySchemeEntry[] = [],
 ): PackingRecord | null {
   if (salesOrderId.startsWith("st-")) {
     const stId = Number(salesOrderId.replace("st-", ""));
@@ -185,11 +190,25 @@ export function createPackingRecord(
 
     const packingProducts = transfer.lineItems.map(item => {
       const sessionQty = packingQtyMap[item.productCode] || 0;
+      const batchAllocations =
+        batchAllocationMap[item.productCode] ?? [];
+      const nearExpirySchemeEligible =
+        sessionQty > 0 &&
+        hasNearExpiryEligibility({
+          productName: item.productName,
+          sku: item.productCode,
+          warehouse: transfer.sourceWarehouseName,
+          customerName: `Transfer to ${transfer.targetWarehouseName}`,
+          quantity: sessionQty,
+          batchAllocations,
+        });
       return {
         product: item.productName,
         sku: item.productCode,
         orderedQty: item.quantity,
-        packedQty: sessionQty
+        packedQty: sessionQty,
+        batchAllocations: batchAllocations.length ? batchAllocations : undefined,
+        nearExpirySchemeEligible: nearExpirySchemeEligible || undefined,
       };
     }).filter(p => p.packedQty > 0);
 
@@ -234,6 +253,7 @@ export function createPackingRecord(
       sourceDocumentNo: transfer.transferNumber,
       sourceWarehouse: transfer.sourceWarehouseName,
       targetWarehouse: transfer.targetWarehouseName,
+      nearExpirySchemes: nearExpirySchemes.length ? nearExpirySchemes : undefined,
     };
 
     return newPacking;
@@ -247,11 +267,24 @@ export function createPackingRecord(
 
   const packingProducts = order.products.map(p => {
     const sessionQty = packingQtyMap[p.sku] || 0;
+    const batchAllocations = batchAllocationMap[p.sku] ?? [];
+    const nearExpirySchemeEligible =
+      sessionQty > 0 &&
+      hasNearExpiryEligibility({
+        productName: p.product,
+        sku: p.sku,
+        warehouse: order.warehouse,
+        customerName: order.customer,
+        quantity: sessionQty,
+        batchAllocations,
+      });
     return {
       product: p.product,
       sku: p.sku,
       orderedQty: p.orderedQty,
-      packedQty: sessionQty
+      packedQty: sessionQty,
+      batchAllocations: batchAllocations.length ? batchAllocations : undefined,
+      nearExpirySchemeEligible: nearExpirySchemeEligible || undefined,
     };
   }).filter(p => p.packedQty > 0);
 
@@ -297,7 +330,8 @@ export function createPackingRecord(
     packedBy,
     status: isDraft ? "Cancelled" : "Packed",
     warehouse: order.warehouse,
-    products: packingProducts
+    products: packingProducts,
+    nearExpirySchemes: nearExpirySchemes.length ? nearExpirySchemes : undefined,
   };
 
   packings.push(newPacking);
