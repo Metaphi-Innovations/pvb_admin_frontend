@@ -1,6 +1,12 @@
 // ── Sales Orders — types, catalog, persistence, approval rules ───────────────
 
 import { loadCustomers, getCustomersForTransactionDropdown } from "@/app/(app)/masters/customers/customer-data";
+import {
+  resolveSalesOrderDealerPrice,
+  lookupEligibleSchemesForSalesOrder,
+  buildManualSchemePricingFromOffer,
+  type EligibleProductDiscountSchemeOffer,
+} from "@/app/(app)/masters/scheme/product-discount-scheme";
 import { loadEmployees, type Employee } from "@/app/(app)/user-management/employee/employee-data";
 import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
 import { resolveSezLutSupply } from "@/lib/settings/gst-tax-config";
@@ -66,12 +72,38 @@ export interface SalesOrderLineItem {
   productName: string;
   availableStock: number;
   quantity: number;
+  /** Dealer price (DP) from Pricing Master */
+  dealerPrice: number;
+  /** Unit price used for line totals — equals dealerPrice before scheme discount */
   unitPrice: number;
-  /** Discount percentage */
+  /** Discount percentage — set when user manually applies Product Discount Scheme */
   discount: number;
   /** Discount amount in ₹ (synced with discount %) */
   discountValue: number;
+  /** Per-unit scheme discount % (display) */
+  schemeDiscountPercent: number;
+  /** Per-unit scheme discount amount from Product Discount Scheme */
+  schemeDiscountAmount: number;
+  /** Scheme discount type from Product Discount Scheme */
+  schemeDiscountType?: "Percentage" | "Rupees";
+  /** Raw scheme discount value (% or ₹) from Product Discount Scheme */
+  schemeDiscountValue?: number;
+  /** Final rate per unit after scheme discount (DP − scheme discount) */
+  finalRate: number;
+  schemeCode?: string;
+  schemeName?: string;
+  /** Persisted applied scheme reference */
+  appliedSchemeId?: number;
+  appliedSchemeCode?: string;
+  appliedSchemeName?: string;
+  originalDealerPrice?: number;
+  finalRateAfterScheme?: number;
+  /** "Yes" when user manually applied Product Discount Scheme; "No" otherwise */
+  schemeApplied: "Yes" | "No";
   gstAmount: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  igstAmount?: number;
   lineTotal: number;
   /** Split form only: parent line when qty is taken from original order */
   splitSourceLineId?: string;
@@ -138,6 +170,8 @@ export interface SalesOrder {
   packingStatus?: PackingStatus;
   warehouseId?: number;
   warehouseName?: string;
+  billToAddressId?: string;
+  shipToAddressId?: string;
 }
 
 export interface InventoryBatch {
@@ -247,9 +281,14 @@ function buildSeedLineItems(orderId: number, lineCount: number): SalesOrderLineI
       productName: product.name,
       availableStock: product.stock,
       quantity,
+      dealerPrice: product.sellingPrice,
       unitPrice: product.sellingPrice,
       discount,
       discountValue: 0,
+      schemeDiscountPercent: discount,
+      schemeDiscountAmount: 0,
+      finalRate: product.sellingPrice,
+      schemeApplied: "No",
       gstAmount,
       lineTotal: 0,
     }));
@@ -396,13 +435,204 @@ export function calculateLineSubtotal(quantity: number, unitPrice: number, disco
   return Math.max(0, subtotalBeforeDiscount - discountAmount);
 }
 
+export function calculateLineSubtotalFromFinalRate(quantity: number, finalRate: number): number {
+  return Math.max(0, quantity * finalRate);
+}
+
 export function calculateLineTotal(quantity: number, unitPrice: number, discountPercent: number, gstAmount: number): number {
   return calculateLineSubtotal(quantity, unitPrice, discountPercent) + Math.max(0, gstAmount);
 }
 
+export function calculateLineTotalFromFinalRate(quantity: number, finalRate: number, gstAmount: number): number {
+  return calculateLineSubtotalFromFinalRate(quantity, finalRate) + Math.max(0, gstAmount);
+}
+
+export function isProductDiscountSchemeApplied(line: Pick<
+  SalesOrderLineItem,
+  "schemeApplied" | "schemeCode" | "appliedSchemeId" | "appliedSchemeCode"
+>): boolean {
+  return (
+    line.schemeApplied === "Yes" ||
+    Boolean(line.appliedSchemeId) ||
+    Boolean(line.appliedSchemeCode) ||
+    Boolean(line.schemeCode)
+  );
+}
+
+export type TaxSupplyType = "intra" | "inter";
+
+export interface LineTaxOptions {
+  /** @alias zeroTax */
+  zeroGst?: boolean;
+  zeroTax?: boolean;
+  supplyType?: TaxSupplyType;
+}
+
+function isZeroTax(options?: LineTaxOptions): boolean {
+  return Boolean(options?.zeroTax ?? options?.zeroGst);
+}
+
+export interface LineTaxBreakdown {
+  taxableLineAmount: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  cgstRate: number;
+  sgstRate: number;
+  igstRate: number;
+  gstAmount: number;
+}
+
+export function normalizeStateName(state: string): string {
+  return state.trim().toLowerCase();
+}
+
+export function resolveTaxSupplyType(
+  sourceState: string,
+  destinationState: string,
+): TaxSupplyType {
+  if (!sourceState.trim() || !destinationState.trim()) return "intra";
+  return normalizeStateName(sourceState) === normalizeStateName(destinationState)
+    ? "intra"
+    : "inter";
+}
+
+function getLineTaxableAmount(
+  line: Pick<
+    SalesOrderLineItem,
+    "quantity" | "unitPrice" | "discount" | "finalRate" | "schemeApplied" | "schemeCode"
+  >,
+): number {
+  if (isProductDiscountSchemeApplied(line) && line.finalRate >= 0) {
+    return calculateLineSubtotalFromFinalRate(line.quantity, line.finalRate);
+  }
+  return calculateLineSubtotal(line.quantity, line.unitPrice, line.discount);
+}
+
+export function computeLineTaxBreakdown(
+  line: Pick<
+    SalesOrderLineItem,
+    "quantity" | "unitPrice" | "discount" | "finalRate" | "schemeApplied" | "schemeCode"
+  >,
+  gstRate: string,
+  supplyType: TaxSupplyType = "intra",
+  zeroTax = false,
+): LineTaxBreakdown {
+  const taxableLineAmount = getLineTaxableAmount(line);
+  const rate = parseGstRate(gstRate);
+  if (zeroTax || rate <= 0) {
+    return {
+      taxableLineAmount,
+      cgstAmount: 0,
+      sgstAmount: 0,
+      igstAmount: 0,
+      cgstRate: 0,
+      sgstRate: 0,
+      igstRate: 0,
+      gstAmount: 0,
+    };
+  }
+
+  if (supplyType === "intra") {
+    const halfRate = rate / 2;
+    const cgstAmount = Math.round(taxableLineAmount * (halfRate / 100) * 100) / 100;
+    const sgstAmount = Math.round(taxableLineAmount * (halfRate / 100) * 100) / 100;
+    return {
+      taxableLineAmount,
+      cgstAmount,
+      sgstAmount,
+      igstAmount: 0,
+      cgstRate: halfRate,
+      sgstRate: halfRate,
+      igstRate: 0,
+      gstAmount: Math.round((cgstAmount + sgstAmount) * 100) / 100,
+    };
+  }
+
+  const igstAmount = Math.round(taxableLineAmount * (rate / 100) * 100) / 100;
+  return {
+    taxableLineAmount,
+    cgstAmount: 0,
+    sgstAmount: 0,
+    igstAmount,
+    cgstRate: 0,
+    sgstRate: 0,
+    igstRate: rate,
+    gstAmount: igstAmount,
+  };
+}
+
+export function computeGstAmount(
+  quantity: number,
+  unitPrice: number,
+  discountPercent: number,
+  gstRate: string,
+  zeroTax = false,
+  supplyType: TaxSupplyType = "intra",
+): number {
+  return computeLineTaxBreakdown(
+    { quantity, unitPrice, discount: discountPercent, finalRate: 0, schemeApplied: "No" },
+    gstRate,
+    supplyType,
+    zeroTax,
+  ).gstAmount;
+}
+
+export function computeGstAmountFromFinalRate(
+  quantity: number,
+  finalRate: number,
+  gstRate: string,
+  zeroTax = false,
+  supplyType: TaxSupplyType = "intra",
+): number {
+  return computeLineTaxBreakdown(
+    {
+      quantity,
+      unitPrice: finalRate,
+      discount: 0,
+      finalRate,
+      schemeApplied: "Yes",
+      schemeCode: "x",
+    },
+    gstRate,
+    supplyType,
+    zeroTax,
+  ).gstAmount;
+}
+
+export function computeLineGstAmount(
+  line: Pick<SalesOrderLineItem, "quantity" | "unitPrice" | "discount" | "finalRate" | "schemeApplied" | "schemeCode">,
+  gstRate: string,
+  zeroTax = false,
+  supplyType: TaxSupplyType = "intra",
+): number {
+  return computeLineTaxBreakdown(line, gstRate, supplyType, zeroTax).gstAmount;
+}
+
+export function applyLineTaxFields(
+  line: SalesOrderLineItem,
+  gstRate: string,
+  supplyType: TaxSupplyType = "intra",
+  zeroTax = false,
+): SalesOrderLineItem {
+  const breakdown = computeLineTaxBreakdown(line, gstRate, supplyType, zeroTax);
+  return recalculateLineItem({
+    ...line,
+    cgstAmount: breakdown.cgstAmount,
+    sgstAmount: breakdown.sgstAmount,
+    igstAmount: breakdown.igstAmount,
+    gstAmount: breakdown.gstAmount,
+  });
+}
+
 export function recalculateLineItem(line: SalesOrderLineItem): SalesOrderLineItem {
-  const discountValue = calculateLineDiscountValue(line.quantity, line.unitPrice, line.discount);
-  const lineTotal = calculateLineTotal(line.quantity, line.unitPrice, line.discount, line.gstAmount);
+  const hasScheme = isProductDiscountSchemeApplied(line);
+  const discountValue = hasScheme
+    ? Math.round(line.schemeDiscountAmount * line.quantity * 100) / 100
+    : calculateLineDiscountValue(line.quantity, line.unitPrice, line.discount);
+  const lineTotal = hasScheme
+    ? calculateLineTotalFromFinalRate(line.quantity, line.finalRate, line.gstAmount)
+    : calculateLineTotal(line.quantity, line.unitPrice, line.discount, line.gstAmount);
   return { ...line, discountValue, lineTotal };
 }
 
@@ -426,6 +656,10 @@ export interface OrderTotalsSummary {
   totalGst: number;
   /** @alias totalGst */
   gstAmount: number;
+  cgstTotal: number;
+  sgstTotal: number;
+  igstTotal: number;
+  taxSupplyType: TaxSupplyType;
   grandTotal: number;
 }
 
@@ -459,20 +693,34 @@ export function createEmptyExpense(): SalesOrderAdditionalExpense {
 export function calculateOrderTotalsSummary(
   lines: SalesOrderLineItem[],
   expenses: SalesOrderAdditionalExpense[] = [],
-  options?: { sezLutApplies?: boolean },
+  options?: { sezLutApplies?: boolean; taxSupplyType?: TaxSupplyType },
 ): OrderTotalsSummary {
   let subtotalBeforeDiscount = 0;
   let totalItemDiscounts = 0;
   let netTotal = 0;
   let totalGst = 0;
+  let cgstTotal = 0;
+  let sgstTotal = 0;
+  let igstTotal = 0;
 
   for (const line of lines) {
+    const hasScheme = isProductDiscountSchemeApplied(line);
     const lineSubtotalBeforeDiscount = line.quantity * line.unitPrice;
-    const lineDiscount = calculateLineDiscountValue(line.quantity, line.unitPrice, line.discount);
-    subtotalBeforeDiscount += lineSubtotalBeforeDiscount;
-    totalItemDiscounts += lineDiscount;
-    netTotal += calculateLineSubtotal(line.quantity, line.unitPrice, line.discount);
+    if (hasScheme) {
+      const lineDiscount = Math.round(line.schemeDiscountAmount * line.quantity * 100) / 100;
+      subtotalBeforeDiscount += lineSubtotalBeforeDiscount;
+      totalItemDiscounts += lineDiscount;
+      netTotal += calculateLineSubtotalFromFinalRate(line.quantity, line.finalRate);
+    } else {
+      const lineDiscount = calculateLineDiscountValue(line.quantity, line.unitPrice, line.discount);
+      subtotalBeforeDiscount += lineSubtotalBeforeDiscount;
+      totalItemDiscounts += lineDiscount;
+      netTotal += calculateLineSubtotal(line.quantity, line.unitPrice, line.discount);
+    }
     totalGst += line.gstAmount;
+    cgstTotal += line.cgstAmount ?? 0;
+    sgstTotal += line.sgstAmount ?? 0;
+    igstTotal += line.igstAmount ?? 0;
   }
 
   let additionalExpensesTotal = 0;
@@ -492,10 +740,17 @@ export function calculateOrderTotalsSummary(
   expenseDiscountTotal = Math.round(expenseDiscountTotal * 100) / 100;
   netAdditionalExpenses = Math.round(netAdditionalExpenses * 100) / 100;
   const taxableAmount = Math.round((netTotal + netAdditionalExpenses) * 100) / 100;
+  const taxSupplyType = options?.taxSupplyType ?? "intra";
   if (options?.sezLutApplies) {
     totalGst = 0;
+    cgstTotal = 0;
+    sgstTotal = 0;
+    igstTotal = 0;
   } else {
     totalGst = Math.round(totalGst * 100) / 100;
+    cgstTotal = Math.round(cgstTotal * 100) / 100;
+    sgstTotal = Math.round(sgstTotal * 100) / 100;
+    igstTotal = Math.round(igstTotal * 100) / 100;
   }
   const grandTotal = Math.round((taxableAmount + totalGst) * 100) / 100;
 
@@ -511,15 +766,12 @@ export function calculateOrderTotalsSummary(
     taxableAmount,
     totalGst,
     gstAmount: totalGst,
+    cgstTotal,
+    sgstTotal,
+    igstTotal,
+    taxSupplyType,
     grandTotal,
   };
-}
-
-export function computeGstAmount(quantity: number, unitPrice: number, discountPercent: number, gstRate: string, zeroTax = false): number {
-  if (zeroTax) return 0;
-  const subtotal = calculateLineSubtotal(quantity, unitPrice, discountPercent);
-  const rate = parseGstRate(gstRate);
-  return Math.round(subtotal * (rate / 100) * 100) / 100;
 }
 
 export function orderRequiresApproval(totalAmount: number): boolean {
@@ -598,6 +850,12 @@ export function generateOrderNumber(orders: SalesOrder[]): string {
   return `SO-${year}-${String(maxNum + 1).padStart(3, "0")}`;
 }
 
+export interface SalesOrderPricingContext {
+  stateName: string;
+  customerMasterType: string;
+  orderDate: string;
+}
+
 export function createEmptyLineItem(): SalesOrderLineItem {
   return {
     id: `line-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -606,19 +864,199 @@ export function createEmptyLineItem(): SalesOrderLineItem {
     productName: "",
     availableStock: 0,
     quantity: 1,
+    dealerPrice: 0,
     unitPrice: 0,
     discount: 0,
     discountValue: 0,
+    schemeDiscountPercent: 0,
+    schemeDiscountAmount: 0,
+    finalRate: 0,
+    schemeApplied: "No",
     gstAmount: 0,
     lineTotal: 0,
   };
 }
 
-export function applyProductToLine(line: SalesOrderLineItem, product: ProductCatalogItem): SalesOrderLineItem {
+function defaultLineSchemeFields(line: SalesOrderLineItem): SalesOrderLineItem {
+  const dealerPrice = line.dealerPrice ?? line.unitPrice ?? 0;
+  const schemeDiscountAmount = line.schemeDiscountAmount ?? 0;
+  const finalRate = line.finalRate ?? Math.max(0, dealerPrice - schemeDiscountAmount);
+  let schemeApplied: "Yes" | "No" =
+    line.schemeApplied === "Yes" || line.schemeApplied === "No"
+      ? line.schemeApplied
+      : line.appliedSchemeCode || line.schemeCode
+        ? "Yes"
+        : "No";
+  const appliedSchemeCode = line.appliedSchemeCode ?? line.schemeCode;
+  const appliedSchemeName = line.appliedSchemeName ?? line.schemeName;
+  const originalDealerPrice = line.originalDealerPrice ?? dealerPrice;
+  const finalRateAfterScheme = line.finalRateAfterScheme ?? finalRate;
+  return {
+    ...line,
+    dealerPrice,
+    schemeDiscountPercent: line.schemeDiscountPercent ?? line.discount ?? 0,
+    schemeDiscountAmount,
+    finalRate,
+    schemeApplied,
+    appliedSchemeCode,
+    appliedSchemeName,
+    schemeCode: appliedSchemeCode,
+    schemeName: appliedSchemeName,
+    originalDealerPrice,
+    finalRateAfterScheme,
+  };
+}
+
+function clearLineSchemeFields(dealerPrice: number): Pick<
+  SalesOrderLineItem,
+  | "dealerPrice"
+  | "unitPrice"
+  | "discount"
+  | "schemeDiscountPercent"
+  | "schemeDiscountAmount"
+  | "schemeDiscountType"
+  | "schemeDiscountValue"
+  | "finalRate"
+  | "schemeCode"
+  | "schemeName"
+  | "appliedSchemeId"
+  | "appliedSchemeCode"
+  | "appliedSchemeName"
+  | "originalDealerPrice"
+  | "finalRateAfterScheme"
+  | "schemeApplied"
+> {
+  return {
+    dealerPrice,
+    unitPrice: dealerPrice,
+    discount: 0,
+    schemeDiscountPercent: 0,
+    schemeDiscountAmount: 0,
+    schemeDiscountType: undefined,
+    schemeDiscountValue: undefined,
+    finalRate: dealerPrice,
+    schemeCode: undefined,
+    schemeName: undefined,
+    appliedSchemeId: undefined,
+    appliedSchemeCode: undefined,
+    appliedSchemeName: undefined,
+    originalDealerPrice: undefined,
+    finalRateAfterScheme: undefined,
+    schemeApplied: "No",
+  };
+}
+
+export function getEligibleSchemesForSalesOrderLine(
+  productId: number,
+  context: SalesOrderPricingContext,
+): EligibleProductDiscountSchemeOffer[] {
+  return lookupEligibleSchemesForSalesOrder({
+    productId,
+    stateName: context.stateName,
+    customerMasterType: context.customerMasterType,
+    orderDate: context.orderDate,
+  });
+}
+
+export function applyManualSchemeToLine(
+  line: SalesOrderLineItem,
+  offer: EligibleProductDiscountSchemeOffer,
+  product: ProductCatalogItem,
+  options?: LineTaxOptions,
+): SalesOrderLineItem {
   const quantity = line.quantity > 0 ? line.quantity : 1;
-  const unitPrice = product.sellingPrice;
-  const discount = line.discount;
-  const gstAmount = computeGstAmount(quantity, unitPrice, discount, product.gstRate);
+  const schemePricing = buildManualSchemePricingFromOffer(offer);
+  const dealerPrice = offer.dealerPrice;
+  const supplyType = options?.supplyType ?? "intra";
+
+  const updated: SalesOrderLineItem = {
+    ...line,
+    quantity,
+    dealerPrice,
+    unitPrice: dealerPrice,
+    discount: schemePricing.discountPercent,
+    schemeDiscountPercent: schemePricing.schemeDiscountPercent,
+    schemeDiscountAmount: schemePricing.schemeDiscountAmount,
+    schemeDiscountType: schemePricing.schemeDiscountType,
+    schemeDiscountValue: schemePricing.schemeDiscountValue,
+    finalRate: schemePricing.finalRate,
+    schemeCode: schemePricing.schemeCode,
+    schemeName: schemePricing.schemeName,
+    appliedSchemeId: offer.schemeId,
+    appliedSchemeCode: offer.schemeCode,
+    appliedSchemeName: offer.schemeName,
+    originalDealerPrice: dealerPrice,
+    finalRateAfterScheme: schemePricing.finalRate,
+    schemeApplied: "Yes",
+    gstAmount: 0,
+    lineTotal: 0,
+  };
+
+  return applyLineTaxFields(updated, product.gstRate, supplyType, isZeroTax(options));
+}
+
+/** Clear a manually applied Product Discount Scheme and revert line to dealer price. */
+export function removeAppliedSchemeFromLine(
+  line: SalesOrderLineItem,
+  product: ProductCatalogItem,
+  options?: LineTaxOptions,
+): SalesOrderLineItem {
+  const quantity = line.quantity > 0 ? line.quantity : 1;
+  const dealerPrice = line.originalDealerPrice ?? line.dealerPrice ?? line.unitPrice ?? product.sellingPrice;
+  const cleared = clearLineSchemeFields(dealerPrice);
+  const supplyType = options?.supplyType ?? "intra";
+
+  const updated: SalesOrderLineItem = {
+    ...line,
+    quantity,
+    ...cleared,
+    discountValue: 0,
+    gstAmount: 0,
+    lineTotal: 0,
+  };
+
+  return applyLineTaxFields(updated, product.gstRate, supplyType, isZeroTax(options));
+}
+
+export function applySchemePricingToLine(
+  line: SalesOrderLineItem,
+  product: ProductCatalogItem,
+  context: SalesOrderPricingContext | null,
+  options?: LineTaxOptions,
+): SalesOrderLineItem {
+  const quantity = line.quantity > 0 ? line.quantity : 1;
+  const isProductChange = line.productId != null && line.productId !== product.id;
+  const dealerPrice =
+    context?.stateName && context.customerMasterType
+      ? resolveSalesOrderDealerPrice({
+          productId: product.id,
+          stateName: context.stateName,
+          customerMasterType: context.customerMasterType,
+        })
+      : product.sellingPrice;
+
+  if (
+    !isProductChange &&
+    line.schemeApplied === "Yes" &&
+    line.schemeCode &&
+    context?.stateName &&
+    context.customerMasterType &&
+    context.orderDate
+  ) {
+    const eligible = getEligibleSchemesForSalesOrderLine(product.id, context);
+    const matching = eligible.find(
+      (entry) =>
+        entry.schemeCode === (line.appliedSchemeCode ?? line.schemeCode) ||
+        entry.schemeId === line.appliedSchemeId,
+    );
+    if (matching) {
+      return applyManualSchemeToLine(line, matching, product, options);
+    }
+  }
+
+  const cleared = clearLineSchemeFields(dealerPrice > 0 ? dealerPrice : product.sellingPrice);
+  const supplyType = options?.supplyType ?? "intra";
+
   const updated: SalesOrderLineItem = {
     ...line,
     productId: product.id,
@@ -626,12 +1064,76 @@ export function applyProductToLine(line: SalesOrderLineItem, product: ProductCat
     productName: product.name,
     availableStock: product.stock,
     quantity,
-    unitPrice,
-    discount,
-    gstAmount,
+    ...cleared,
+    gstAmount: 0,
     lineTotal: 0,
   };
-  return recalculateLineItem(updated);
+
+  return applyLineTaxFields(updated, product.gstRate, supplyType, isZeroTax(options));
+}
+
+export function recalculateOrderLineTaxes(
+  lines: SalesOrderLineItem[],
+  options?: LineTaxOptions,
+): SalesOrderLineItem[] {
+  const supplyType = options?.supplyType ?? "intra";
+  return lines.map((line) => {
+    if (!line.productId) return line;
+    const product = getProductById(line.productId);
+    if (!product) return line;
+    return applyLineTaxFields(line, product.gstRate, supplyType, isZeroTax(options));
+  });
+}
+
+export function repriceOrderLineItems(
+  lines: SalesOrderLineItem[],
+  context: SalesOrderPricingContext | null,
+  options?: LineTaxOptions,
+): SalesOrderLineItem[] {
+  return lines.map((line) => {
+    if (!line.productId) return defaultLineSchemeFields(line);
+    const product = getProductById(line.productId);
+    if (!product) return defaultLineSchemeFields(line);
+    return applySchemePricingToLine(line, product, context, options);
+  });
+}
+
+export function applyProductToLine(
+  line: SalesOrderLineItem,
+  product: ProductCatalogItem,
+  context?: SalesOrderPricingContext | null,
+  options?: LineTaxOptions,
+): SalesOrderLineItem {
+  if (context) {
+    return applySchemePricingToLine(line, product, context, options);
+  }
+
+  const quantity = line.quantity > 0 ? line.quantity : 1;
+  const unitPrice = product.sellingPrice;
+  const discount = line.discount;
+  const supplyType = options?.supplyType ?? "intra";
+  const updated: SalesOrderLineItem = {
+    ...line,
+    productId: product.id,
+    productCode: product.code,
+    productName: product.name,
+    availableStock: product.stock,
+    quantity,
+    dealerPrice: unitPrice,
+    unitPrice,
+    discount,
+    schemeDiscountPercent: discount,
+    schemeDiscountAmount: 0,
+    schemeDiscountType: undefined,
+    schemeDiscountValue: undefined,
+    finalRate: unitPrice,
+    schemeCode: undefined,
+    schemeName: undefined,
+    schemeApplied: "No",
+    gstAmount: 0,
+    lineTotal: 0,
+  };
+  return applyLineTaxFields(updated, product.gstRate, supplyType, isZeroTax(options));
 }
 
 export function formatOrderStatus(status: OrderStatus): string {
@@ -748,7 +1250,15 @@ export function hydrateOrderLineItems(order: SalesOrder): SalesOrder {
     return {
       ...order,
       additionalExpenses,
-      lineItems: order.lineItems.map((l) => recalculateLineItem({ ...l, discountValue: l.discountValue ?? calculateLineDiscountValue(l.quantity, l.unitPrice, l.discount) })),
+      lineItems: order.lineItems.map((l) =>
+        recalculateLineItem(
+          defaultLineSchemeFields({
+            ...l,
+            discountValue:
+              l.discountValue ?? calculateLineDiscountValue(l.quantity, l.unitPrice, l.discount),
+          }),
+        ),
+      ),
     };
   }
   if (order.items <= 0) return { ...order, additionalExpenses };
@@ -770,9 +1280,14 @@ export function hydrateOrderLineItems(order: SalesOrder): SalesOrder {
       productName: product.name,
       availableStock: product.stock,
       quantity,
+      dealerPrice: product.sellingPrice,
       unitPrice: product.sellingPrice,
       discount,
       discountValue: 0,
+      schemeDiscountPercent: discount,
+      schemeDiscountAmount: 0,
+      finalRate: product.sellingPrice,
+      schemeApplied: "No",
       gstAmount,
       lineTotal: 0,
     }));
@@ -841,6 +1356,8 @@ export interface SalesOrderFormValues {
   additionalExpenses: SalesOrderAdditionalExpense[];
   warehouseId?: number | null;
   warehouseName?: string;
+  billToAddressId?: string;
+  shipToAddressId?: string;
 }
 
 export function orderToFormValues(order: SalesOrder): SalesOrderFormValues {
@@ -855,6 +1372,8 @@ export function orderToFormValues(order: SalesOrder): SalesOrderFormValues {
     additionalExpenses: hydrated.additionalExpenses ?? [],
     warehouseId: hydrated.warehouseId ?? null,
     warehouseName: hydrated.warehouseName ?? "",
+    billToAddressId: hydrated.billToAddressId ?? "",
+    shipToAddressId: hydrated.shipToAddressId ?? "",
   };
 }
 
@@ -927,6 +1446,8 @@ export function buildOrderFromForm(
     packingStatus: existing.packingStatus,
     warehouseId: warehouse?.id ?? undefined,
     warehouseName: warehouse?.warehouseName ?? "",
+    billToAddressId: form.billToAddressId || undefined,
+    shipToAddressId: form.shipToAddressId || undefined,
   };
 }
 

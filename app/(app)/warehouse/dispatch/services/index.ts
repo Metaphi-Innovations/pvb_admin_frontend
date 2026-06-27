@@ -4,6 +4,7 @@ import { PackingRecord } from "../../packing/types";
 import { getPackingRecordsList } from "../../packing/services";
 import { getPackingRecords, savePackingRecords } from "../../packing/mock-data";
 import { loadTransfers, saveTransfers } from "@/app/(app)/sales/stock-transfer/stock-transfer-data";
+import { loadOrders, saveOrders } from "@/app/(app)/sales/sample-order/orders-data";
 
 export function getDispatchesByWarehouse(warehouse: string = "All"): DispatchRecord[] {
   const dispatches = getDispatchRecords();
@@ -32,8 +33,10 @@ export function saveDispatch(record: DispatchRecord): void {
     if (record.packingNumbers && record.packingNumbers.length > 0) {
       const packingList = getPackingRecords();
       const transfers = loadTransfers();
+      const sampleOrders = loadOrders();
       let packingUpdated = false;
       let transfersUpdated = false;
+      let sampleOrdersUpdated = false;
 
       record.packingNumbers.forEach(pNo => {
         // Check standard packing records
@@ -49,10 +52,19 @@ export function saveDispatch(record: DispatchRecord): void {
           transfers[tIdx].packingStatus = "Dispatched";
           transfersUpdated = true;
         }
+
+        // Check sample orders
+        const sIdx = sampleOrders.findIndex(so => so.packingListNumber === pNo || `PL-${so.soNumber}` === pNo);
+        if (sIdx !== -1) {
+          sampleOrders[sIdx].status = "dispatched";
+          sampleOrders[sIdx].packingStatus = "packed";
+          sampleOrdersUpdated = true;
+        }
       });
 
       if (packingUpdated) savePackingRecords(packingList);
       if (transfersUpdated) saveTransfers(transfers);
+      if (sampleOrdersUpdated) saveOrders(sampleOrders);
     }
   } else {
     dispatches[idx] = record;

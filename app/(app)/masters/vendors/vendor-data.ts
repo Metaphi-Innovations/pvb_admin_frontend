@@ -1,9 +1,14 @@
 import {
-  PAYMENT_TERMS_OPTIONS,
-  formatPaymentTerms,
-} from "../customers/customer-data";
+  formatPartyPaymentTerms,
+  formValuesToStructured,
+  paymentTermsToLegacy,
+  resolveStructuredPaymentTerms,
+  structuredToFormValues,
+  validatePaymentTermsForm,
+  type PaymentType,
+} from "@/lib/masters/payment-terms";
 
-export { formatPaymentTerms };
+export { formatPartyPaymentTerms as formatPaymentTerms };
 
 import {
   VENDOR_TYPE_EXPENSES,
@@ -49,6 +54,29 @@ export const EXPENSE_CATEGORY_OPTIONS = [
 export function formatExpenseCategory(value: string): string {
   if (!value) return "—";
   return EXPENSE_CATEGORY_OPTIONS.find((o) => o.value === value)?.label ?? value;
+}
+
+function applyVendorPaymentTerms<
+  T extends {
+    paymentType?: PaymentType;
+    creditDays?: number;
+    advancePercentage?: number;
+    paymentTerms?: string;
+  },
+>(record: T): T & {
+  paymentType: PaymentType;
+  creditDays: number;
+  advancePercentage: number;
+  paymentTerms: string;
+} {
+  const structured = resolveStructuredPaymentTerms(record);
+  return {
+    ...record,
+    paymentType: structured.paymentType,
+    creditDays: structured.creditDays,
+    advancePercentage: structured.advancePercentage,
+    paymentTerms: paymentTermsToLegacy(structured),
+  };
 }
 
 export interface VendorAddress {
@@ -99,7 +127,11 @@ export interface Vendor {
   vendorName: string;
   vendorType: string;
   contactPerson: string;
+  /** @deprecated Legacy string — synced from structured fields for downstream modules */
   paymentTerms: string;
+  paymentType?: PaymentType;
+  creditDays?: number;
+  advancePercentage?: number;
   companyName: string;
   mobileCountryCode: string;
   mobile: string;
@@ -275,7 +307,7 @@ export type { GstRegistrationDetails };
 
 const STORAGE_KEY = "ds_vendor_masters_v7";
 
-const SEED: Vendor[] = [
+const SEED_RAW = [
   {
     id: 1,
     vendorCode: "CG-001",
@@ -473,6 +505,8 @@ const SEED: Vendor[] = [
   },
 ];
 
+const SEED: Vendor[] = SEED_RAW.map((v) => applyVendorPaymentTerms(v) as Vendor);
+
 function migrateLegacy(raw: Record<string, unknown>): Vendor {
   const billing = (raw.billingAddress as VendorAddress) ?? emptyAddress();
   const legacyContact = String(raw.contactPerson ?? "");
@@ -505,7 +539,16 @@ function migrateLegacy(raw: Record<string, unknown>): Vendor {
     vendorName: String(raw.vendorName ?? ""),
     vendorType,
     contactPerson: primaryContact,
-    paymentTerms: String(raw.paymentTerms ?? "net-30"),
+    ...applyVendorPaymentTerms({
+      paymentType: raw.paymentType as PaymentType | undefined,
+      creditDays:
+        raw.creditDays !== undefined ? Number(raw.creditDays) : undefined,
+      advancePercentage:
+        raw.advancePercentage !== undefined
+          ? Number(raw.advancePercentage)
+          : undefined,
+      paymentTerms: String(raw.paymentTerms ?? "net-30"),
+    }),
     companyName: String(raw.companyName ?? raw.vendorName ?? ""),
     mobileCountryCode: String(raw.mobileCountryCode ?? "+91"),
     mobile: String(raw.mobile ?? ""),
@@ -574,7 +617,7 @@ function normalize(v: Vendor | Record<string, unknown>): Vendor {
   } else {
     vendor = migrateLegacy(raw);
   }
-  return vendor;
+  return applyVendorPaymentTerms(vendor);
 }
 
 function migrateMissingVendorCodes(vendors: Vendor[]): { list: Vendor[]; changed: boolean } {
@@ -640,7 +683,9 @@ export interface VendorFormValues {
   vendorName: string;
   vendorType: string;
   contactPerson: string;
-  paymentTerms: string;
+  paymentType: PaymentType | "";
+  creditDays: string;
+  advancePercentage: string;
   companyName: string;
   mobileCountryCode: string;
   mobile: string;
@@ -678,7 +723,9 @@ export const DEFAULT_VENDOR_FORM: VendorFormValues = {
   vendorName: "",
   vendorType: "",
   contactPerson: "",
-  paymentTerms: "net-30",
+  paymentType: "credit",
+  creditDays: "30",
+  advancePercentage: "",
   companyName: "",
   mobileCountryCode: "+91",
   mobile: "",
@@ -719,7 +766,14 @@ export function vendorToForm(v: Vendor): VendorFormValues {
     vendorName: v.vendorName,
     vendorType: v.vendorType,
     contactPerson: v.contactPerson,
-    paymentTerms: v.paymentTerms || "net-30",
+    ...structuredToFormValues(
+      resolveStructuredPaymentTerms({
+        paymentType: v.paymentType,
+        creditDays: v.creditDays,
+        advancePercentage: v.advancePercentage,
+        paymentTerms: v.paymentTerms,
+      }),
+    ),
     companyName: v.companyName,
     mobileCountryCode: v.mobileCountryCode,
     mobile: v.mobile,
@@ -777,7 +831,24 @@ export function formToVendor(
     vendorName: form.vendorName.trim(),
     vendorType: form.vendorType,
     contactPerson: form.contactPerson.trim(),
-    paymentTerms: form.paymentTerms,
+    ...((): {
+      paymentType: PaymentType;
+      creditDays: number;
+      advancePercentage: number;
+      paymentTerms: string;
+    } => {
+      const structured = formValuesToStructured({
+        paymentType: form.paymentType,
+        creditDays: form.creditDays,
+        advancePercentage: form.advancePercentage,
+      })!;
+      return {
+        paymentType: structured.paymentType,
+        creditDays: structured.creditDays,
+        advancePercentage: structured.advancePercentage,
+        paymentTerms: paymentTermsToLegacy(structured),
+      };
+    })(),
     companyName: form.companyName.trim() || form.vendorName.trim(),
     mobileCountryCode: form.mobileCountryCode,
     mobile: form.mobile.trim(),
@@ -839,7 +910,14 @@ export function validateVendorForm(form: VendorFormValues): string | null {
   if (!validateVendorPAN(form.panNumber)) {
     return "Enter a valid PAN number.";
   }
-  if (!form.paymentTerms) return "Payment terms are required.";
+
+  const paymentErrors = validatePaymentTermsForm({
+    paymentType: form.paymentType,
+    creditDays: form.creditDays,
+    advancePercentage: form.advancePercentage,
+  });
+  const paymentError = Object.values(paymentErrors)[0];
+  if (paymentError) return paymentError;
 
   if (!form.billingAddress.line1.trim()) {
     return "Address Line 1 is required.";
