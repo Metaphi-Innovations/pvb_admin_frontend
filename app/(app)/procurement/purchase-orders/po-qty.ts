@@ -1,4 +1,4 @@
-import { getGrnRecords } from "@/app/(app)/warehouse/grnqc/grn/mock-data";
+import { getGrnRecords } from "@/app/(app)/warehouse/grn/mock-data";
 import type { PurchaseOrder, POLineItem, POStatus } from "./po-data";
 
 export type ShortCloseReason =

@@ -635,7 +635,7 @@ export default function SalesOrdersPage() {
             onPageSizeChange={setPageSize}
             onSortChange={setSort}
             onFilterChange={setFilters}
-            emptyMessage="orders"
+            emptyMessage=""
             searchPlaceholder="Search orders, customers…"
             currentFilters={filters}
             currentSort={sort}

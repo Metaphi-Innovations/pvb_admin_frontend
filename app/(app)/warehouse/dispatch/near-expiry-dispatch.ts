@@ -23,7 +23,34 @@ import {
   resolveDealerPriceForScheme,
 } from "@/app/(app)/masters/scheme/product-discount-scheme";
 import { getSellableQcPassedStockRecords } from "../stockoverview/services";
+import {
+  productMatchesStockRecord,
+  warehouseMatchesStockRecord,
+} from "@/lib/warehouse/demo-stock-matching";
 import type { DispatchNearExpirySchemeEntry } from "./types";
+import {
+  NEAR_EXPIRY_SCHEME_TYPE_LABEL,
+  NEAR_EXPIRY_SCHEME_STATUS_ACTIVE,
+  NEAR_EXPIRY_SETTLEMENT_STATUS_PENDING,
+  NEAR_EXPIRY_SETTLEMENT_STATUS_SETTLED,
+  NEAR_EXPIRY_SETTLEMENT_METHOD,
+  NEAR_EXPIRY_SETTLEMENT_REQUIRED_LABEL,
+  NEAR_EXPIRY_ELIGIBLE_LABEL,
+  NEAR_EXPIRY_SETTLEMENT_TOOLTIP,
+  NEAR_EXPIRY_SETTLEMENT_LABEL,
+} from "./near-expiry-constants";
+
+export {
+  NEAR_EXPIRY_SCHEME_TYPE_LABEL,
+  NEAR_EXPIRY_SCHEME_STATUS_ACTIVE,
+  NEAR_EXPIRY_SETTLEMENT_STATUS_PENDING,
+  NEAR_EXPIRY_SETTLEMENT_STATUS_SETTLED,
+  NEAR_EXPIRY_SETTLEMENT_METHOD,
+  NEAR_EXPIRY_SETTLEMENT_REQUIRED_LABEL,
+  NEAR_EXPIRY_ELIGIBLE_LABEL,
+  NEAR_EXPIRY_SETTLEMENT_TOOLTIP,
+  NEAR_EXPIRY_SETTLEMENT_LABEL,
+} from "./near-expiry-constants";
 
 export interface BatchAllocation {
   batchNumber: string;
@@ -100,19 +127,6 @@ export function resolveCustomerSchemeType(customerName: string): CustomerType {
   return "Distributor";
 }
 
-export const NEAR_EXPIRY_SCHEME_TYPE_LABEL = "Near Expiry";
-export const NEAR_EXPIRY_SCHEME_STATUS_ACTIVE = "Active";
-export const NEAR_EXPIRY_SETTLEMENT_STATUS_PENDING = "Pending";
-export const NEAR_EXPIRY_SETTLEMENT_STATUS_SETTLED = "Settled";
-export const NEAR_EXPIRY_SETTLEMENT_METHOD = "Credit Note / Journal Voucher";
-export const NEAR_EXPIRY_SETTLEMENT_REQUIRED_LABEL = "Settlement Required";
-export const NEAR_EXPIRY_ELIGIBLE_LABEL = "Near Expiry Eligible";
-export const NEAR_EXPIRY_SETTLEMENT_TOOLTIP =
-  "Near Expiry Scheme is eligible. Financial settlement is pending through Credit Note / Journal Voucher.";
-
-/** @deprecated Use NEAR_EXPIRY_SETTLEMENT_METHOD */
-export const NEAR_EXPIRY_SETTLEMENT_LABEL = NEAR_EXPIRY_SETTLEMENT_METHOD;
-
 export interface ProductBatchRow {
   batchNumber: string;
   availableQty: number;
@@ -125,12 +139,13 @@ export function getProductBatchRows(
   productName: string,
   warehouse: string,
   asOn = masterToday(),
+  sku?: string,
 ): ProductBatchRow[] {
   return getSellableQcPassedStockRecords(asOn)
     .filter(
       (r) =>
-        r.warehouse === warehouse &&
-        normalizeName(r.product) === normalizeName(productName),
+        warehouseMatchesStockRecord(r.warehouse, warehouse) &&
+        productMatchesStockRecord(r.product, productName, sku),
     )
     .sort(
       (a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime(),

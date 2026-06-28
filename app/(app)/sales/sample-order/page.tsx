@@ -31,6 +31,8 @@ import {
   Clock,
   RotateCcw,
   Search,
+  Check,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -39,6 +41,8 @@ import { MasterListing } from "@/components/listing/MasterListing";
 import type { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
 import CancelOrderDialog from "./components/CancelOrderDialog";
 import PackingListDialog from "./components/PackingListDialog";
+import ApproveOrderDialog from "./components/ApproveOrderDialog";
+import RejectOrderDialog from "./components/RejectOrderDialog";
 import { downloadProformaInvoice } from "./pi-document";
 import {
   type SalesOrder,
@@ -53,6 +57,9 @@ import {
   canGeneratePackingList,
   hydrateOrderLineItems,
   isApprovalRelatedOrder,
+  getSampleOrderDisplayRecipient,
+  approveSalesOrder,
+  canApproveOrder,
 } from "./orders-data";
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
@@ -61,12 +68,13 @@ const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   approved: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
   rejected: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-400" },
   confirmed: { bg: "bg-blue-50", text: "text-blue-700", dot: "bg-blue-500" },
+  packed: { bg: "bg-navy-50", text: "text-navy-700", dot: "bg-navy-500" },
   dispatched: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
   delivered: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
   cancelled: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-400" },
 };
 
-const FILTER_STATUSES: OrderStatus[] = [...ORDER_STATUS_OPTIONS.map((o) => o.value), "dispatched", "delivered"];
+const FILTER_STATUSES: OrderStatus[] = [...ORDER_STATUS_OPTIONS.map((o) => o.value)];
 
 type OrderListTab = "all" | "draft" | "pending_approval" | "rejected" | "sales_return";
 
@@ -213,6 +221,8 @@ export default function SalesOrdersPage() {
 
   const [cancelOrder, setCancelOrder] = useState<SalesOrder | null>(null);
   const [packingOrder, setPackingOrder] = useState<SalesOrder | null>(null);
+  const [approveOrder, setApproveOrder] = useState<SalesOrder | null>(null);
+  const [rejectOrder, setRejectOrder] = useState<SalesOrder | null>(null);
 
   const refreshOrders = () => setOrders(loadOrders());
 
@@ -222,7 +232,9 @@ export default function SalesOrdersPage() {
 
   useEffect(() => {
     const tab = searchParams.get("tab");
-    if (tab === "all" || tab === "draft" || tab === "pending_approval" || tab === "rejected" || tab === "sales_return") {
+    if (tab === "approval") {
+      setActiveTab("pending_approval");
+    } else if (tab === "all" || tab === "draft" || tab === "pending_approval" || tab === "rejected" || tab === "sales_return") {
       setActiveTab(tab as OrderListTab);
     }
     const toastType = searchParams.get("toast");
@@ -250,6 +262,7 @@ export default function SalesOrdersPage() {
         (o) =>
           o.soNumber.toLowerCase().includes(q) ||
           o.customerName.toLowerCase().includes(q) ||
+          (o.issuedToEmployeeName ?? "").toLowerCase().includes(q) ||
           o.territory.toLowerCase().includes(q)
       );
     }
@@ -261,7 +274,7 @@ export default function SalesOrdersPage() {
 
     const customerVal = filters.customerName as string[];
     if (customerVal && customerVal.length > 0) {
-      d = d.filter((o) => customerVal.includes(o.customerName));
+      d = d.filter((o) => customerVal.includes(getSampleOrderDisplayRecipient(o)));
     }
 
     const territoryVal = filters.territory as string[];
@@ -301,7 +314,7 @@ export default function SalesOrdersPage() {
     confirmed: orders.filter((o) => o.status === "confirmed").length,
     dispatched: orders.filter((o) => o.status === "dispatched").length,
     delivered: orders.filter((o) => o.status === "delivered").length,
-    totalValue: orders.reduce((s, o) => s + o.totalAmount, 0),
+    totalValue: 0,
   };
 
   const tabCounts = useMemo(() => {
@@ -324,8 +337,8 @@ export default function SalesOrdersPage() {
 
   const isApprovalTab = activeTab === "pending_approval";
 
-  const customerOptions = useMemo(() => {
-    return Array.from(new Set(orders.map((o) => o.customerName)))
+  const recipientOptions = useMemo(() => {
+    return Array.from(new Set(orders.map((o) => getSampleOrderDisplayRecipient(o))))
       .filter(Boolean)
       .map((name) => ({ label: name, value: name }));
   }, [orders]);
@@ -339,7 +352,7 @@ export default function SalesOrdersPage() {
   const columns: ColumnConfig<SalesOrder>[] = [
     {
       key: "soNumber",
-      header: "SO Number",
+      header: "Sample Order No.",
       sortable: true,
       filterable: true,
       filterType: "text",
@@ -354,15 +367,15 @@ export default function SalesOrdersPage() {
     },
     {
       key: "customerName",
-      header: "Customer",
+      header: "Salesperson",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: customerOptions,
+      filterOptions: recipientOptions,
       render: (val, row) => (
         <div>
-          <p className="text-xs font-semibold text-foreground">{row.customerName}</p>
-          <p className="text-[11px] text-muted-foreground">{row.customerCode}</p>
+          <p className="text-xs font-semibold text-foreground">{getSampleOrderDisplayRecipient(row)}</p>
+          <p className="text-[11px] text-muted-foreground">{row.issuedToEmployeeRole ?? row.customerCode}</p>
         </div>
       )
     },
@@ -391,7 +404,7 @@ export default function SalesOrdersPage() {
       header: "Amount",
       sortable: true,
       render: (val, row) => (
-        <span className="text-xs font-semibold text-foreground">₹{row.totalAmount.toLocaleString()}</span>
+        <span className="text-xs font-semibold text-foreground">₹0</span>
       )
     },
     {
@@ -430,14 +443,36 @@ export default function SalesOrdersPage() {
         const packingAllowed = canGeneratePackingList(hydrated);
 
         return isApprovalTab ? (
-          <button
-            type="button"
-            title="View"
-            onClick={() => router.push(`/sales/sample-order/${row.id}?from=approval`)}
-            className="p-1.5 hover:bg-muted rounded-md transition-colors"
-          >
-            <Eye className="w-4 h-4 text-muted-foreground" />
-          </button>
+          <div className="flex items-center justify-end gap-1">
+            <button
+              type="button"
+              title="View"
+              onClick={() => router.push(`/sales/sample-order/${row.id}?from=approval`)}
+              className="p-1.5 hover:bg-muted rounded-md transition-colors"
+            >
+              <Eye className="w-4 h-4 text-muted-foreground" />
+            </button>
+            {canApproveOrder(hydrated) && (
+              <>
+                <button
+                  type="button"
+                  title="Approve"
+                  onClick={() => setApproveOrder(hydrated)}
+                  className="p-1.5 hover:bg-emerald-50 rounded-md transition-colors"
+                >
+                  <Check className="w-4 h-4 text-emerald-600" />
+                </button>
+                <button
+                  type="button"
+                  title="Reject"
+                  onClick={() => setRejectOrder(hydrated)}
+                  className="p-1.5 hover:bg-red-50 rounded-md transition-colors"
+                >
+                  <X className="w-4 h-4 text-red-600" />
+                </button>
+              </>
+            )}
+          </div>
         ) : (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -488,7 +523,7 @@ export default function SalesOrdersPage() {
                   !piAllowed ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
                 )}
               >
-                <FileText className="w-3.5 h-3.5 mr-2" /> Download PI
+                <FileText className="w-3.5 h-3.5 mr-2" /> Sample Issue Note
               </button>
               <button
                 type="button"
@@ -635,12 +670,12 @@ export default function SalesOrdersPage() {
             onPageSizeChange={setPageSize}
             onSortChange={setSort}
             onFilterChange={setFilters}
-            emptyMessage="orders"
-            searchPlaceholder="Search orders, customers…"
+            emptyMessage=""
+            searchPlaceholder="Search sample orders, employees…"
             currentFilters={filters}
             currentSort={sort}
             onAdd={() => router.push("/sales/sample-order/add")}
-            addLabel="New Order"
+            addLabel="New Sample Order"
             onExport={() => console.log("Exporting sample orders...")}
           />
         </div>
@@ -663,6 +698,34 @@ export default function SalesOrdersPage() {
         onSuccess={(updatedOrder, list) => {
           refreshOrders();
           showToast(`Packing list ${list.packingListNumber} generated for ${updatedOrder.soNumber}.`);
+        }}
+      />
+
+      <ApproveOrderDialog
+        order={approveOrder}
+        open={!!approveOrder}
+        onClose={() => setApproveOrder(null)}
+        onConfirm={() => {
+          if (!approveOrder) return;
+          const result = approveSalesOrder(approveOrder.id);
+          if ("error" in result) {
+            showToast(result.error, "error");
+            return;
+          }
+          refreshOrders();
+          showToast("Sample Order approved successfully.");
+          setApproveOrder(null);
+        }}
+      />
+
+      <RejectOrderDialog
+        order={rejectOrder}
+        open={!!rejectOrder}
+        onClose={() => setRejectOrder(null)}
+        onSuccess={() => {
+          refreshOrders();
+          showToast("Sample Order rejected successfully.");
+          setRejectOrder(null);
         }}
       />
 

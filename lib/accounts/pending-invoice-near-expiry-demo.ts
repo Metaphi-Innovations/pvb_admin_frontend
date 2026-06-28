@@ -15,7 +15,7 @@ import {
   NEAR_EXPIRY_SCHEME_STATUS_ACTIVE,
   NEAR_EXPIRY_SETTLEMENT_METHOD,
   NEAR_EXPIRY_SETTLEMENT_STATUS_PENDING,
-} from "@/app/(app)/warehouse/dispatch/near-expiry-dispatch";
+} from "@/app/(app)/warehouse/dispatch/near-expiry-constants";
 
 export const NEAR_EXPIRY_PENDING_DEMO_DISPATCH_ID = "dp-ne-pending-demo";
 export const NEAR_EXPIRY_PENDING_DEMO_DISPATCH_NO = "DSP-2026-NE-001";

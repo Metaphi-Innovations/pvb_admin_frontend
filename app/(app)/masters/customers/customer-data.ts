@@ -25,6 +25,17 @@ import {
 
 export type CustomerStatus = "active" | "inactive" | "draft" | "blocked";
 
+export type CustomerCreditSource = "direct" | "distributor_conversion";
+
+export interface CustomerCreditAuditEntry {
+	date: string;
+	by: string;
+	field: "creditLimit" | "creditDays" | "finalCreditStatus";
+	previousValue: string;
+	newValue: string;
+	reason: string;
+}
+
 export interface StatusChange {
 	date: string;
 	from: string;
@@ -118,6 +129,20 @@ export interface Customer {
 	paymentType?: PaymentType;
 	creditDays?: number;
 	advancePercentage?: number;
+
+	/** Distributor conversion — system-derived reference (read-only in UI) */
+	creditSource?: CustomerCreditSource;
+	linkedDistributorId?: number | null;
+	linkedDistributorName?: string;
+	distributorScore?: number | null;
+	distributorCategory?: "A" | "B" | "C" | null;
+	recommendedCreditLimit?: number | null;
+	recommendedCreditDays?: number | null;
+	recommendedCreditStatus?: string | null;
+	/** Editable final credit status (operational) */
+	finalCreditStatus?: string | null;
+	creditOverrideReason?: string | null;
+	creditAuditLog?: CustomerCreditAuditEntry[];
 
 	bankName: string;
 	bankBranchAddress: string;

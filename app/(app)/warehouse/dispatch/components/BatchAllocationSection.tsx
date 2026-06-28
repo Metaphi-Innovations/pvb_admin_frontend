@@ -62,14 +62,6 @@ export function BatchAllocationSection({
     });
   }, [productName, sku, warehouse, customerName, requiredQty, batchAllocations]);
 
-  const selectedTotal = useMemo(
-    () => Object.values(selections).reduce((sum, qty) => sum + (qty || 0), 0),
-    [selections],
-  );
-
-  const allocationMismatch =
-    requiredQty > 0 && selectedTotal > 0 && selectedTotal !== requiredQty;
-
   const multipleBatches = batchRows.length > 1;
   const activeBatchNumber = getActiveBatchSelection(selections);
 
@@ -99,6 +91,7 @@ export function BatchAllocationSection({
   };
 
   if (requiredQty <= 0) return null;
+  if (batchRows.length === 0) return null;
 
   return (
     <div
@@ -113,27 +106,11 @@ export function BatchAllocationSection({
             <Layers className="h-3.5 w-3.5 text-brand-600" />
             Batch Allocation — {productName}
           </p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">
-            {multipleBatches
-              ? "Multiple batches available — select one batch for this allocation. Near Expiry scheme applies per eligible batch."
-              : "Select quantities from available batches. Near Expiry scheme applies per eligible batch."}
-          </p>
         </div>
         <div className="flex items-center gap-3 text-[11px]">
           <span>
             <span className="text-muted-foreground">{qtyLabel}: </span>
             <span className="font-bold text-foreground">{requiredQty}</span>
-          </span>
-          <span>
-            <span className="text-muted-foreground">Selected: </span>
-            <span
-              className={cn(
-                "font-bold",
-                allocationMismatch ? "text-amber-700" : "text-emerald-700",
-              )}
-            >
-              {selectedTotal}
-            </span>
           </span>
           {schemeEntries.length > 0 && (
             <NearExpirySchemeBadge entries={schemeEntries} />
@@ -141,12 +118,7 @@ export function BatchAllocationSection({
         </div>
       </div>
 
-      {batchRows.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground py-2">
-          No QC-passed batches found for this product in {warehouse}.
-        </p>
-      ) : (
-        <div className="overflow-x-auto rounded-md border border-border/70">
+      <div className="overflow-x-auto rounded-md border border-border/70">
           <table className="w-full min-w-[760px] border-collapse text-left">
             <thead>
               <tr className="border-b border-border bg-slate-50/70">
@@ -246,7 +218,7 @@ export function BatchAllocationSection({
                       {schemeStatus === NEAR_EXPIRY_ELIGIBLE_LABEL ? (
                         <NearExpirySchemeBadge entries={rowEntries} />
                       ) : (
-                        <span className="text-muted-foreground">No Near Expiry Scheme</span>
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </td>
                   </tr>
@@ -255,19 +227,6 @@ export function BatchAllocationSection({
             </tbody>
           </table>
         </div>
-      )}
-
-      {multipleBatches && !activeBatchNumber && requiredQty > 0 && (
-        <p className="text-[10px] font-semibold text-amber-700">
-          Select one batch using the radio button before packing.
-        </p>
-      )}
-
-      {allocationMismatch && (
-        <p className="text-[10px] font-semibold text-amber-700">
-          Selected batch quantity ({selectedTotal}) should match {qtyLabel.toLowerCase()} ({requiredQty}).
-        </p>
-      )}
     </div>
   );
 }

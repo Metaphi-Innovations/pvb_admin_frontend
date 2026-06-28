@@ -108,6 +108,28 @@ export const SEED_SALES_ORDERS: SalesOrderRecord[] = [
       },
     ],
   },
+  {
+    id: "so-chl-demo",
+    salesOrderNo: "SO-2026-CHL-DEMO",
+    customer: "Kisan Agro Traders",
+    totalItems: 1,
+    totalQuantity: 25,
+    orderAmount: 18750,
+    orderDate: "2026-06-22",
+    deliveryDate: "2026-06-30",
+    priority: "High",
+    status: "Ready For Packing",
+    warehouse: "South Zone Depot",
+    products: [
+      {
+        product: "Chlorpyrifos 20 EC",
+        sku: "PRD-004",
+        orderedQty: 25,
+        packedQty: 0,
+        pendingQty: 25,
+      },
+    ],
+  },
 ];
 
 export const SEED_PACKINGS: PackingRecord[] = [
@@ -216,17 +238,12 @@ export const SEED_PACKINGS: PackingRecord[] = [
 const KEY_SALES_ORDERS = "ds_packing_sales_orders";
 const KEY_PACKINGS = "ds_packing_records";
 const KEY_PACKING_SEED_VERSION = "ds_packing_seed_version";
-const PACKING_SEED_VERSION = "2";
+const PACKING_SEED_VERSION = "3";
 
 function mergeSalesOrderSeed(stored: SalesOrderRecord[]): SalesOrderRecord[] {
-  const merged = [...stored];
-  const indexById = new Map(merged.map((row, index) => [row.id, index]));
-  for (const seedRow of SEED_SALES_ORDERS) {
-    if (!indexById.has(seedRow.id)) {
-      merged.push(seedRow);
-    }
-  }
-  return merged;
+  const seedById = new Map(SEED_SALES_ORDERS.map((row) => [row.id, row]));
+  const userRows = stored.filter((row) => !seedById.has(row.id));
+  return [...userRows, ...SEED_SALES_ORDERS];
 }
 
 function mergePackingSeed(stored: PackingRecord[]): PackingRecord[] {
@@ -250,10 +267,9 @@ export function getSalesOrderRecords(): SalesOrderRecord[] {
   const version = localStorage.getItem(KEY_PACKING_SEED_VERSION);
   const stored = localStorage.getItem(KEY_SALES_ORDERS);
   if (!stored || version !== PACKING_SEED_VERSION) {
-    const merged = mergeSalesOrderSeed(stored ? JSON.parse(stored) : []);
-    localStorage.setItem(KEY_SALES_ORDERS, JSON.stringify(merged));
+    localStorage.setItem(KEY_SALES_ORDERS, JSON.stringify(SEED_SALES_ORDERS));
     localStorage.setItem(KEY_PACKING_SEED_VERSION, PACKING_SEED_VERSION);
-    return merged;
+    return [...SEED_SALES_ORDERS];
   }
   return mergeSalesOrderSeed(JSON.parse(stored));
 }

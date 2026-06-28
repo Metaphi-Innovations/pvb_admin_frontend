@@ -27,7 +27,7 @@ export function ProfileCard({
   return (
     <div
       className={cn(
-        "flex h-full flex-col overflow-hidden rounded-xl border border-border bg-white shadow-sm",
+        "flex h-full w-full min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-white shadow-sm",
         className,
       )}
     >
@@ -234,6 +234,8 @@ export function ProfileCardGrid({
   }[cols];
 
   return (
-    <div className={cn("grid gap-3 items-stretch", colCls, className)}>{children}</div>
+    <div className={cn("grid w-full min-w-0 gap-3 items-stretch", colCls, className)}>
+      {children}
+    </div>
   );
 }

@@ -14,7 +14,7 @@ import {
   loadWarehouses,
   type WarehouseMaster,
 } from "@/app/(app)/masters/warehouse/warehouse-data";
-import ProductLinesEditor from "@/app/(app)/sales/orders/components/ProductLinesEditor";
+import TransferProductLinesEditor from "./TransferProductLinesEditor";
 import AdditionalExpensesEditor from "@/app/(app)/sales/orders/components/AdditionalExpensesEditor";
 import {
   type StockTransferFormValues,
@@ -290,12 +290,12 @@ export default function StockTransferForm({
 
         <div className="space-y-1 col-span-1 md:col-span-2 lg:col-span-1">
           <SearchableDropdown<WarehouseMaster>
-            label="Source Warehouse"
+            label="From Warehouse"
             required
             value={form.sourceWarehouseId}
             onChange={(id) => set("sourceWarehouseId", id)}
             options={warehouses}
-            placeholder="Select source warehouse…"
+            placeholder="Select from warehouse…"
             error={errors.sourceWarehouseId}
             getLabel={(w) => `${w.warehouseCode} — ${w.warehouseName}`}
           />
@@ -303,14 +303,59 @@ export default function StockTransferForm({
 
         <div className="space-y-1 col-span-1 md:col-span-2 lg:col-span-1">
           <SearchableDropdown<WarehouseMaster>
-            label="Target Warehouse"
+            label="To Warehouse"
             required
             value={form.targetWarehouseId}
             onChange={(id) => set("targetWarehouseId", id)}
             options={warehouses}
-            placeholder="Select target warehouse…"
+            placeholder="Select to warehouse…"
             error={errors.targetWarehouseId}
             getLabel={(w) => `${w.warehouseCode} — ${w.warehouseName}`}
+          />
+        </div>
+
+        <div className="space-y-1 col-span-1 md:col-span-2">
+          <Label className="text-xs font-medium">Requested By</Label>
+          <Input
+            value={form.requestedBy}
+            onChange={(e) => set("requestedBy", e.target.value)}
+            placeholder="Employee / user name"
+            className="h-8 text-xs rounded-lg"
+          />
+        </div>
+
+        <div className="space-y-1 col-span-1 md:col-span-2 lg:col-span-2">
+          <Label className="text-xs font-medium">
+            Reason / Purpose <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            value={form.reasonPurpose}
+            onChange={(e) => set("reasonPurpose", e.target.value)}
+            placeholder="e.g. Replenish branch warehouse stock"
+            className={cn("h-8 text-xs rounded-lg", errors.reasonPurpose && "border-red-400")}
+          />
+          {errors.reasonPurpose && (
+            <p className="text-[11px] text-red-500">{errors.reasonPurpose}</p>
+          )}
+        </div>
+
+        <div className="space-y-1 col-span-1 md:col-span-2">
+          <Label className="text-xs font-medium">Transport Details</Label>
+          <Input
+            value={form.transportDetails}
+            onChange={(e) => set("transportDetails", e.target.value)}
+            placeholder="Vehicle / transporter (optional)"
+            className="h-8 text-xs rounded-lg"
+          />
+        </div>
+
+        <div className="space-y-1 col-span-1 md:col-span-2 lg:col-span-2">
+          <Label className="text-xs font-medium">Remarks</Label>
+          <Input
+            value={form.remarks}
+            onChange={(e) => set("remarks", e.target.value)}
+            placeholder="Optional notes"
+            className="h-8 text-xs rounded-lg"
           />
         </div>
 
@@ -328,9 +373,11 @@ export default function StockTransferForm({
 
       <SectionDivider title="Products" />
       
-      <ProductLinesEditor
+      <TransferProductLinesEditor
         lines={form.lineItems}
         products={products}
+        sourceWarehouseId={form.sourceWarehouseId}
+        targetWarehouseId={form.targetWarehouseId}
         onChange={(lines) => set("lineItems", lines)}
         error={errors.lineItems}
       />

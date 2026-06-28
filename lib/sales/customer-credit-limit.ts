@@ -4,6 +4,7 @@
 
 import type { Customer } from "@/app/(app)/masters/customers/customer-data";
 import type { OrderStatus, SalesOrder } from "@/app/(app)/sales/orders/orders-data";
+import { getFinalCreditLimit } from "@/lib/masters/customer-credit";
 import { loadOrders } from "@/app/(app)/sales/orders/orders-data";
 import {
 	getCustomerOutstandingDetail,
@@ -149,7 +150,8 @@ export function calculateCustomerCreditSummary(params: {
 	orders?: SalesOrder[];
 }): CustomerCreditSummary {
 	const { customer, currentOrderValue, excludeOrderId, orders } = params;
-	const totalCreditLimit = round2(Math.max(0, customer.creditLimit ?? 0));
+	/** Operational limit — final credit from Customer Master (not distributor recommendation). */
+	const totalCreditLimit = round2(getFinalCreditLimit(customer));
 	const invoiceOutstanding = getCustomerInvoiceOutstanding(customer.id);
 	const openOrdersAmount = getOpenSalesOrdersCreditAmount(
 		customer.id,

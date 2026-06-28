@@ -122,8 +122,8 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Warehouse",
     icon: Warehouse,
     children: [
-      { label: "GRN & QC", href: "/warehouse/grnqc" },
-      { label: "Batch Register", href: "/warehouse/batch-register" },
+      { label: "GRN", href: "/warehouse/grn" },
+      { label: "QC", href: "/warehouse/qc" },
       { label: "Packing", href: "/warehouse/packing" },
       { label: "Dispatch", href: "/warehouse/dispatch" },
       { label: "Reorder Level", href: "/warehouse/reorder-level" },

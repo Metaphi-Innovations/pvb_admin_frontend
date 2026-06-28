@@ -7,14 +7,15 @@ import {
   NEAR_EXPIRY_SCHEME_STATUS_ACTIVE,
   NEAR_EXPIRY_SETTLEMENT_METHOD,
   NEAR_EXPIRY_SETTLEMENT_STATUS_PENDING,
-} from "@/app/(app)/warehouse/dispatch/near-expiry-dispatch";
+} from "@/app/(app)/warehouse/dispatch/near-expiry-constants";
 import type {
   InvoiceNearExpirySchemeSettlement,
   InvoiceRecord,
 } from "@/app/(app)/accounts/invoices/invoices-data";
-import { NEAR_EXPIRY_PENDING_DEMO_CUSTOMER } from "@/lib/accounts/pending-invoice-near-expiry-demo";
 
 export const NEAR_EXPIRY_DEMO_INVOICE_NO = "INV-NE-DEMO";
+
+const NEAR_EXPIRY_DEMO_CUSTOMER = "ABC Distributor";
 
 const DEMO_SETTLEMENT: InvoiceNearExpirySchemeSettlement = {
   schemeId: 9,
@@ -33,7 +34,7 @@ const DEMO_SETTLEMENT: InvoiceNearExpirySchemeSettlement = {
   settlementMethod: NEAR_EXPIRY_SETTLEMENT_METHOD,
   settlementStatus: NEAR_EXPIRY_SETTLEMENT_STATUS_PENDING,
   invoiceNo: NEAR_EXPIRY_DEMO_INVOICE_NO,
-  customerName: NEAR_EXPIRY_PENDING_DEMO_CUSTOMER,
+  customerName: NEAR_EXPIRY_DEMO_CUSTOMER,
   salesOrderNo: "SO-2026-NE-SAMPLE",
 };
 
@@ -48,7 +49,7 @@ export const NEAR_EXPIRY_DEMO_SALES_INVOICE: InvoiceRecord = {
   salesOrderNo: "SO-2026-NE-SAMPLE",
   remarks: "Demo invoice — Near Expiry scheme settlement pending",
   customerId: null,
-  customerName: NEAR_EXPIRY_PENDING_DEMO_CUSTOMER,
+  customerName: NEAR_EXPIRY_DEMO_CUSTOMER,
   customerMobile: "9898989898",
   customerEmail: "accounts@abcdistributor.in",
   customerGst: "27AABCA1234B1Z5",

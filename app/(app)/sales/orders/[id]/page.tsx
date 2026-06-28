@@ -390,11 +390,7 @@ export default function ViewSalesOrderPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {order.lineItems.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="px-4 py-8 text-xs text-center text-muted-foreground">No product lines</td>
-                    </tr>
-                  ) : order.lineItems.map(line => {
+                  {order.lineItems.map(line => {
                     const product = line.productId ? getProductById(line.productId) : undefined;
                     const hasScheme = isProductDiscountSchemeApplied(line);
                     return (

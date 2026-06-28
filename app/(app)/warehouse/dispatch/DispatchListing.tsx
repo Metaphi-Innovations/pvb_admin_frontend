@@ -37,6 +37,16 @@ import {
 } from "./constants";
 
 import Link from "next/link";
+import {
+  resolveWarehouseOrderType,
+  matchesOrderTypeFilter,
+  ORDER_TYPE_BADGE_CONFIG,
+  formatWarehouseOrderAmount,
+  formatDispatchStatusLabel,
+  type OrderTypeFilterTab,
+} from "@/app/(app)/warehouse/lib/order-document-type";
+import { getSampleOrderByDocumentNo } from "@/app/(app)/sales/sample-order/packing-sync";
+import { downloadProformaInvoice } from "@/app/(app)/sales/sample-order/pi-document";
 
 interface DispatchListingProps {
   rawDispatches: DispatchRecord[];
@@ -52,7 +62,7 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [subTab, setSubTab] = useState<"sales_order" | "sample_order" | "stock_transfer">("sales_order");
+  const [subTab, setSubTab] = useState<OrderTypeFilterTab>("all");
 
   // Table state for Sales Returns
   const [returnFilters, setReturnFilters] = useState<FilterState>({});
@@ -85,9 +95,14 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
   }, [subTab]);
 
   const filteredDispatches = useMemo(() => {
-    return rawDispatches.filter(d => {
-      const type = d.source_type || (d.sourceDocumentType === "Stock Transfer" ? "stock_transfer" : d.sourceDocumentType === "Sample Order" ? "sample_order" : "sales_order");
-      return type === subTab;
+    return rawDispatches.filter((d) => {
+      const type = resolveWarehouseOrderType({
+        sourceDocumentType: d.sourceDocumentType,
+        source_type: d.source_type,
+        salesOrderNo: d.salesOrderNumber,
+        source_document_no: d.source_document_no,
+      });
+      return matchesOrderTypeFilter(type, subTab);
     });
   }, [rawDispatches, subTab]);
 
@@ -181,9 +196,36 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
     return returnProcessed.slice(start, start + returnPageSize);
   }, [returnProcessed, returnPage, returnPageSize]);
 
-  // Columns
-  const salesOrderColumns = useMemo(() => {
+  const partyHeader =
+    subTab === "sample"
+      ? "Issued To Employee"
+      : subTab === "all"
+        ? "Customer / Issued To / Target"
+        : "Customer";
+
+  const columns = useMemo(() => {
     return [
+      {
+        key: "orderType",
+        header: "Order Type",
+        width: "100px",
+        render: (_: unknown, row: DispatchRecord) => {
+          const type = resolveWarehouseOrderType({
+            sourceDocumentType: row.sourceDocumentType,
+            source_type: row.source_type,
+            salesOrderNo: row.salesOrderNumber,
+            source_document_no: row.source_document_no,
+          });
+          const cfg = ORDER_TYPE_BADGE_CONFIG[type];
+          return (
+            <span
+              className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}
+            >
+              {cfg.label}
+            </span>
+          );
+        },
+      },
       {
         key: "dispatch_no",
         header: "Dispatch No",
@@ -191,243 +233,136 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
         filterable: true,
         filterType: "text",
         width: "135px",
-        render: (val: any, row: DispatchRecord) => (
+        render: (_: unknown, row: DispatchRecord) => (
           <Link
             href={`/warehouse/dispatch/view/${row.id}`}
             className="font-mono text-xs font-semibold text-brand-700 hover:underline"
           >
             {row.dispatch_no || row.dispatchNumber}
           </Link>
-        )
+        ),
       },
       {
         key: "source_document_no",
-        header: "Sales Order No",
+        header: "Order No",
         sortable: true,
         filterable: true,
         filterType: "text",
         width: "140px",
-        render: (val: any, row: DispatchRecord) => <span className="font-mono text-xs font-semibold">{row.source_document_no || row.salesOrderNumber}</span>
+        render: (_: unknown, row: DispatchRecord) => (
+          <span className="font-mono text-xs font-semibold">
+            {row.source_document_no || row.salesOrderNumber}
+          </span>
+        ),
       },
       {
         key: "customer_name",
-        header: "Customer",
+        header: partyHeader,
         sortable: true,
         filterable: true,
         filterType: "dropdown",
         filterOptions: CUSTOMER_OPTIONS,
         width: "160px",
-        render: (val: any, row: DispatchRecord) => <span className="text-xs font-bold text-foreground">{row.customer_name || row.customer}</span>
-      },
-      {
-        key: "vehicleNumber",
-        header: "Vehicle No",
-        sortable: true,
-        filterable: true,
-        filterType: "text",
-        width: "120px",
-        render: (val: any) => <span className="font-mono text-xs">{val}</span>
-      },
-      { key: "driverName", header: "Driver Name", sortable: true, filterable: true, filterType: "text" },
-      { key: "transporterName", header: "Transporter", sortable: true },
-      {
-        key: "dispatch_date",
-        header: "Dispatch Date",
-        sortable: true,
-        filterable: true,
-        filterType: "date",
-        width: "135px",
-        render: (val: any, row: DispatchRecord) => <span className="text-xs">{row.dispatch_date || row.dispatchDate}</span>
-      },
-      {
-        key: "dispatch_status",
-        header: "Dispatch Status",
-        sortable: true,
-        filterable: true,
-        filterType: "dropdown",
-        filterOptions: DELIVERY_STATUS_OPTIONS,
-        width: "155px",
-        render: (val: any, row: DispatchRecord) => {
-          const status = row.dispatch_status || row.deliveryStatus;
-          const cfg = DELIVERY_STATUS_BADGE_CONFIG[status] || { bg: "bg-slate-100 text-slate-600 border-slate-200", label: status };
-          return (
-            <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
-              {cfg.label}
-            </span>
-          );
+        render: (_: unknown, row: DispatchRecord) => {
+          const type = resolveWarehouseOrderType({
+            sourceDocumentType: row.sourceDocumentType,
+            source_type: row.source_type,
+            salesOrderNo: row.salesOrderNumber,
+            source_document_no: row.source_document_no,
+          });
+          const label =
+            type === "stock_transfer"
+              ? row.target_warehouse_name || row.targetWarehouse || row.customer
+              : row.customer_name || row.customer;
+          return <span className="text-xs font-bold text-foreground">{label}</span>;
         },
-      },
-    ] as ColumnConfig<DispatchRecord>[];
-  }, []);
-
-  const sampleOrderColumns = useMemo(() => {
-    return [
-      {
-        key: "dispatch_no",
-        header: "Dispatch No",
-        sortable: true,
-        filterable: true,
-        filterType: "text",
-        width: "135px",
-        render: (val: any, row: DispatchRecord) => (
-          <Link
-            href={`/warehouse/dispatch/view/${row.id}`}
-            className="font-mono text-xs font-semibold text-brand-700 hover:underline"
-          >
-            {row.dispatch_no || row.dispatchNumber}
-          </Link>
-        )
-      },
-      {
-        key: "source_document_no",
-        header: "Sample Order No",
-        sortable: true,
-        filterable: true,
-        filterType: "text",
-        width: "140px",
-        render: (val: any, row: DispatchRecord) => <span className="font-mono text-xs font-semibold">{row.source_document_no || row.salesOrderNumber}</span>
-      },
-      {
-        key: "customer_name",
-        header: "Customer",
-        sortable: true,
-        filterable: true,
-        filterType: "dropdown",
-        filterOptions: CUSTOMER_OPTIONS,
-        width: "160px",
-        render: (val: any, row: DispatchRecord) => <span className="text-xs font-bold text-foreground">{row.customer_name || row.customer}</span>
-      },
-      {
-        key: "vehicleNumber",
-        header: "Vehicle No",
-        sortable: true,
-        filterable: true,
-        filterType: "text",
-        width: "120px",
-        render: (val: any) => <span className="font-mono text-xs">{val}</span>
-      },
-      { key: "driverName", header: "Driver Name", sortable: true, filterable: true, filterType: "text" },
-      { key: "transporterName", header: "Transporter", sortable: true },
-      {
-        key: "dispatch_date",
-        header: "Dispatch Date",
-        sortable: true,
-        filterable: true,
-        filterType: "date",
-        width: "135px",
-        render: (val: any, row: DispatchRecord) => <span className="text-xs">{row.dispatch_date || row.dispatchDate}</span>
-      },
-      {
-        key: "dispatch_status",
-        header: "Dispatch Status",
-        sortable: true,
-        filterable: true,
-        filterType: "dropdown",
-        filterOptions: DELIVERY_STATUS_OPTIONS,
-        width: "155px",
-        render: (val: any, row: DispatchRecord) => {
-          const status = row.dispatch_status || row.deliveryStatus;
-          const cfg = DELIVERY_STATUS_BADGE_CONFIG[status] || { bg: "bg-slate-100 text-slate-600 border-slate-200", label: status };
-          return (
-            <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
-              {cfg.label}
-            </span>
-          );
-        },
-      },
-    ] as ColumnConfig<DispatchRecord>[];
-  }, []);
-
-  const stockTransferColumns = useMemo(() => {
-    return [
-      {
-        key: "dispatch_no",
-        header: "Dispatch No.",
-        sortable: true,
-        filterable: true,
-        filterType: "text",
-        width: "135px",
-        render: (val: any, row: DispatchRecord) => (
-          <Link
-            href={`/warehouse/dispatch/view/${row.id}`}
-            className="font-mono text-xs font-semibold text-brand-700 hover:underline"
-          >
-            {row.dispatch_no || row.dispatchNumber}
-          </Link>
-        )
-      },
-      {
-        key: "source_document_no",
-        header: "Stock Transfer No",
-        sortable: true,
-        filterable: true,
-        filterType: "text",
-        width: "140px",
-        render: (val: any, row: DispatchRecord) => <span className="font-mono text-xs font-semibold">{row.source_document_no || row.salesOrderNumber}</span>
-      },
-      {
-        key: "dispatch_date",
-        header: "Dispatch Date",
-        sortable: true,
-        filterable: true,
-        filterType: "date",
-        width: "135px",
-        render: (val: any, row: DispatchRecord) => <span className="text-xs">{row.dispatch_date || row.dispatchDate}</span>
       },
       {
         key: "source_warehouse_name",
         header: "Source Warehouse",
         sortable: true,
-        width: "160px",
-        render: (val: any, row: DispatchRecord) => <span className="text-xs text-foreground font-medium">{row.source_warehouse_name || row.sourceWarehouse || row.warehouse}</span>
+        width: "150px",
+        render: (_: unknown, row: DispatchRecord) => (
+          <span className="text-xs text-foreground font-medium">
+            {row.source_warehouse_name || row.sourceWarehouse || row.warehouse}
+          </span>
+        ),
       },
       {
-        key: "target_warehouse_name",
-        header: "Target Warehouse",
-        sortable: true,
-        width: "160px",
-        render: (val: any, row: DispatchRecord) => <span className="text-xs text-foreground font-bold text-brand-700">{row.target_warehouse_name || row.targetWarehouse || row.customer}</span>
+        key: "orderAmount",
+        header: "Amount",
+        align: "right",
+        width: "90px",
+        render: (_: unknown, row: DispatchRecord) => {
+          const type = resolveWarehouseOrderType({
+            sourceDocumentType: row.sourceDocumentType,
+            source_type: row.source_type,
+            salesOrderNo: row.salesOrderNumber,
+            source_document_no: row.source_document_no,
+          });
+          if (type === "sample_order") {
+            return (
+              <span className="font-mono text-xs tabular-nums">
+                {formatWarehouseOrderAmount(type, 0)}
+              </span>
+            );
+          }
+          return <span className="text-xs text-muted-foreground">—</span>;
+        },
       },
       {
-        key: "total_items",
-        header: "Total Items",
+        key: "vehicleNumber",
+        header: "Vehicle No",
         sortable: true,
-        width: "100px",
-        render: (val: any, row: DispatchRecord) => <span className="text-xs">{row.total_items ?? row.products.length}</span>
-      },
-      {
-        key: "total_quantity",
-        header: "Dispatch Quantity",
-        sortable: true,
+        filterable: true,
+        filterType: "text",
         width: "120px",
-        render: (val: any, row: DispatchRecord) => <span className="text-xs font-bold">{row.total_quantity ?? row.products.reduce((acc, p) => acc + p.dispatchQty, 0)}</span>
+        render: (val: unknown) => <span className="font-mono text-xs">{val as string}</span>,
+      },
+      { key: "driverName", header: "Driver Name", sortable: true, filterable: true, filterType: "text" },
+      {
+        key: "dispatch_date",
+        header: "Dispatch Date",
+        sortable: true,
+        filterable: true,
+        filterType: "date",
+        width: "135px",
+        render: (_: unknown, row: DispatchRecord) => (
+          <span className="text-xs">{row.dispatch_date || row.dispatchDate}</span>
+        ),
       },
       {
         key: "dispatch_status",
-        header: "Dispatch Status",
+        header: "Status",
         sortable: true,
         filterable: true,
         filterType: "dropdown",
         filterOptions: DELIVERY_STATUS_OPTIONS,
         width: "155px",
-        render: (val: any, row: DispatchRecord) => {
-          const status = row.dispatch_status || row.deliveryStatus;
-          const cfg = DELIVERY_STATUS_BADGE_CONFIG[status] || { bg: "bg-slate-100 text-slate-600 border-slate-200", label: status };
+        render: (_: unknown, row: DispatchRecord) => {
+          const type = resolveWarehouseOrderType({
+            sourceDocumentType: row.sourceDocumentType,
+            source_type: row.source_type,
+            salesOrderNo: row.salesOrderNumber,
+            source_document_no: row.source_document_no,
+          });
+          const rawStatus = row.dispatch_status || row.deliveryStatus;
+          const label = formatDispatchStatusLabel(type, rawStatus);
+          const cfg = DELIVERY_STATUS_BADGE_CONFIG[label] || {
+            bg: "bg-slate-100 text-slate-600 border-slate-200",
+            label,
+          };
           return (
-            <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+            <span
+              className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}
+            >
               {cfg.label}
             </span>
           );
         },
       },
     ] as ColumnConfig<DispatchRecord>[];
-  }, []);
-
-  const columns = useMemo(() => {
-    if (subTab === "sales_order") return salesOrderColumns;
-    if (subTab === "sample_order") return sampleOrderColumns;
-    return stockTransferColumns;
-  }, [subTab, salesOrderColumns, sampleOrderColumns, stockTransferColumns]);
+  }, [partyHeader]);
 
   const returnColumns: ColumnConfig<SalesReturnRecord>[] = [
     {
@@ -505,6 +440,30 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
       action: "challan",
       icon: FileText,
       onClick: (row) => setChallanTarget(row),
+      hide: (row) =>
+        resolveWarehouseOrderType({
+          sourceDocumentType: row.sourceDocumentType,
+          source_type: row.source_type,
+          salesOrderNo: row.salesOrderNumber,
+          source_document_no: row.source_document_no,
+        }) === "sample_order",
+    },
+    {
+      label: "Sample Issue Note",
+      action: "sample_issue_note",
+      icon: FileText,
+      onClick: (row) => {
+        const docNo = row.source_document_no || row.salesOrderNumber;
+        const order = getSampleOrderByDocumentNo(docNo);
+        if (order) downloadProformaInvoice(order);
+      },
+      hide: (row) =>
+        resolveWarehouseOrderType({
+          sourceDocumentType: row.sourceDocumentType,
+          source_type: row.source_type,
+          salesOrderNo: row.salesOrderNumber,
+          source_document_no: row.source_document_no,
+        }) !== "sample_order",
     },
     {
       label: "Delivery Done",
@@ -521,7 +480,16 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
       action: "return_sales",
       icon: RotateCcw,
       onClick: (row) => openReturnSales(row),
-      hide: (row) => row.deliveryStatus !== "Delivered",
+      hide: (row) => {
+        const isSample =
+          resolveWarehouseOrderType({
+            sourceDocumentType: row.sourceDocumentType,
+            source_type: row.source_type,
+            salesOrderNo: row.salesOrderNumber,
+            source_document_no: row.source_document_no,
+          }) === "sample_order";
+        return row.deliveryStatus !== "Delivered" || isSample;
+      },
     },
   ];
 
@@ -617,10 +585,11 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
     <div className="space-y-4">
 
       {activeTab === "dispatch" && (
-        <Tabs value={subTab} onValueChange={(val: any) => setSubTab(val)} className="w-full">
+        <Tabs value={subTab} onValueChange={(val) => setSubTab(val as OrderTypeFilterTab)} className="w-full">
           <TabsList>
-            <TabsTrigger value="sales_order" className="text-xs">Sales Order</TabsTrigger>
-            <TabsTrigger value="sample_order" className="text-xs">Sample Order</TabsTrigger>
+            <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
+            <TabsTrigger value="sales" className="text-xs">Sales</TabsTrigger>
+            <TabsTrigger value="sample" className="text-xs">Sample</TabsTrigger>
             <TabsTrigger value="stock_transfer" className="text-xs">Stock Transfer</TabsTrigger>
           </TabsList>
         </Tabs>
@@ -640,7 +609,7 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
           actions={actions}
           onAdd={() => router.push("/warehouse/dispatch/create")}
           addLabel="Create Dispatch"
-          emptyMessage="dispatch records"
+          emptyMessage=""
           searchPlaceholder="Search dispatch..."
         />
       ) : (
@@ -655,7 +624,7 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
           onSortChange={setReturnSort}
           onFilterChange={setReturnFilters}
           actions={returnActions}
-          emptyMessage="sales return records"
+          emptyMessage=""
           searchPlaceholder="Search return number, dispatch number, customer..."
         />
       )}

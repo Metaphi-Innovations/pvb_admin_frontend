@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { Eye, Truck } from "lucide-react";
@@ -11,38 +11,61 @@ import {
   CUSTOMER_OPTIONS,
   PACKED_BY_OPTIONS,
   DONE_STATUS_OPTIONS,
-  STATUS_BADGE_CONFIG
+  STATUS_BADGE_CONFIG,
 } from "../constants";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  resolveWarehouseOrderType,
+  matchesOrderTypeFilter,
+  ORDER_TYPE_BADGE_CONFIG,
+  formatWarehouseOrderAmount,
+  type OrderTypeFilterTab,
+} from "@/app/(app)/warehouse/lib/order-document-type";
+
+type PackingSourceTab = Exclude<OrderTypeFilterTab, "all">;
 
 interface DonePackingListingProps {
   packingsForWarehouse: PackingRecord[];
+  sourceFilter: PackingSourceTab;
 }
 
-export function DonePackingListing({ packingsForWarehouse }: DonePackingListingProps) {
-  const router = useRouter();
+function OrderTypeBadge({ row }: { row: PackingRecord }) {
+  const type = resolveWarehouseOrderType(row);
+  const cfg = ORDER_TYPE_BADGE_CONFIG[type];
+  return (
+    <span
+      className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}
+    >
+      {cfg.label}
+    </span>
+  );
+}
 
-  // Table state
+function doneStatusLabel(row: PackingRecord): string {
+  const type = resolveWarehouseOrderType(row);
+  if (type === "sample_order" && row.status === "Packed") {
+    return "Packed";
+  }
+  return row.status;
+}
+
+export function DonePackingListing({ packingsForWarehouse, sourceFilter }: DonePackingListingProps) {
+  const router = useRouter();
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [subTab, setSubTab] = useState<"sales_order" | "sample_order" | "stock_transfer">("sales_order");
 
   React.useEffect(() => {
     setPage(1);
-  }, [subTab]);
+  }, [sourceFilter]);
 
   const filteredPackings = useMemo(() => {
-    return packingsForWarehouse.filter(item => {
-      const type = item.sourceDocumentType === "Stock Transfer" 
-        ? "stock_transfer" 
-        : (item.salesOrderNo.startsWith("SM-") || item.salesOrderNo.startsWith("SMP-") || item.sourceDocumentType === "Sample Order" ? "sample_order" : "sales_order");
-      return type === subTab;
+    return packingsForWarehouse.filter((item) => {
+      const type = resolveWarehouseOrderType(item);
+      return matchesOrderTypeFilter(type, sourceFilter);
     });
-  }, [packingsForWarehouse, subTab]);
+  }, [packingsForWarehouse, sourceFilter]);
 
-  // Process filters/sort client side
   const processed = useMemo(() => {
     let result = [...filteredPackings];
     Object.keys(filters).forEach((key) => {
@@ -51,27 +74,31 @@ export function DonePackingListing({ packingsForWarehouse }: DonePackingListingP
 
       if (key === "search") {
         const q = (val as string).toLowerCase();
-        result = result.filter(item =>
-          item.packingNo.toLowerCase().includes(q) ||
-          item.salesOrderNo.toLowerCase().includes(q) ||
-          item.customer.toLowerCase().includes(q) ||
-          (item.sourceDocumentNo && item.sourceDocumentNo.toLowerCase().includes(q)) ||
-          (item.packingListNo && item.packingListNo.toLowerCase().includes(q))
+        result = result.filter(
+          (item) =>
+            item.packingNo.toLowerCase().includes(q) ||
+            item.salesOrderNo.toLowerCase().includes(q) ||
+            item.customer.toLowerCase().includes(q) ||
+            (item.sourceDocumentNo && item.sourceDocumentNo.toLowerCase().includes(q)) ||
+            (item.packingListNo && item.packingListNo.toLowerCase().includes(q)),
         );
       } else if (key === "packingNo" || key === "salesOrderNo" || key === "packingListNo") {
         const q = (val as string).toLowerCase();
-        result = result.filter(item => 
-          String(item.packingNo).toLowerCase().includes(q) || 
-          String(item.salesOrderNo).toLowerCase().includes(q) ||
-          (item.packingListNo && item.packingListNo.toLowerCase().includes(q))
+        result = result.filter(
+          (item) =>
+            String(item.packingNo).toLowerCase().includes(q) ||
+            String(item.salesOrderNo).toLowerCase().includes(q) ||
+            (item.packingListNo && item.packingListNo.toLowerCase().includes(q)),
         );
       } else if (key === "customer" || key === "packedBy" || key === "status") {
         const selected = val as string[];
-        result = result.filter(item => selected.includes(String(item[key as keyof PackingRecord])));
+        result = result.filter((item) =>
+          selected.includes(String(item[key as keyof PackingRecord])),
+        );
       } else if (key === "packingDate") {
         const range = val as { fromDate: string; toDate: string };
-        if (range.fromDate) result = result.filter(item => item.packingDate >= range.fromDate);
-        if (range.toDate) result = result.filter(item => item.packingDate <= range.toDate);
+        if (range.fromDate) result = result.filter((item) => item.packingDate >= range.fromDate);
+        if (range.toDate) result = result.filter((item) => item.packingDate <= range.toDate);
       }
     });
 
@@ -79,8 +106,10 @@ export function DonePackingListing({ packingsForWarehouse }: DonePackingListingP
       result.sort((a, b) => {
         if (sort.key === "totalItems" || sort.key === "packedQuantity") {
           return sort.direction === "asc"
-            ? (a[sort.key as keyof PackingRecord] as number) - (b[sort.key as keyof PackingRecord] as number)
-            : (b[sort.key as keyof PackingRecord] as number) - (a[sort.key as keyof PackingRecord] as number);
+            ? (a[sort.key as keyof PackingRecord] as number) -
+                (b[sort.key as keyof PackingRecord] as number)
+            : (b[sort.key as keyof PackingRecord] as number) -
+                (a[sort.key as keyof PackingRecord] as number);
         }
         const valA = String(a[sort.key as keyof PackingRecord] || "");
         const valB = String(b[sort.key as keyof PackingRecord] || "");
@@ -95,206 +124,119 @@ export function DonePackingListing({ packingsForWarehouse }: DonePackingListingP
     return processed.slice(start, start + pageSize);
   }, [processed, page, pageSize]);
 
-  // Columns
-  const salesOrderColumns = useMemo(() => {
-    return [
+  const partyHeader =
+    sourceFilter === "sample"
+      ? "Issued To Employee"
+      : sourceFilter === "stock_transfer"
+        ? "Target Warehouse"
+        : "Customer";
+
+  const columns = useMemo(() => {
+    const cols: ColumnConfig<PackingRecord>[] = [
+      {
+        key: "orderType",
+        header: "Order Type",
+        width: "100px",
+        render: (_: unknown, row: PackingRecord) => <OrderTypeBadge row={row} />,
+      },
       {
         key: "salesOrderNo",
-        header: "Sales Order No",
+        header: "Order No",
         sortable: true,
         filterable: true,
         filterType: "text",
         width: "140px",
-        render: (val: any, row: PackingRecord) => (
+        render: (_: unknown, row: PackingRecord) => (
           <Link
             href={`/warehouse/packing/view/${row.id}`}
             className="font-mono text-xs font-semibold text-brand-700 hover:underline"
           >
             {row.salesOrderNo}
           </Link>
-        )
+        ),
       },
       {
         key: "customer",
-        header: "Customer",
+        header: partyHeader,
         sortable: true,
         filterable: true,
         filterType: "dropdown",
         filterOptions: CUSTOMER_OPTIONS,
         width: "180px",
-        render: (val: any, row: PackingRecord) => <span className="text-xs text-foreground font-semibold">{row.customer}</span>
-      },
-      {
-        key: "totalItems",
-        header: "Total Items",
-        sortable: true,
-        align: "right",
-        width: "100px",
-        render: (val: any) => <span className="font-mono text-xs tabular-nums">{val}</span>
-      },
-      {
-        key: "packedQuantity",
-        header: "Packed Quantity",
-        sortable: true,
-        align: "right",
-        width: "120px",
-        render: (val: any) => <span className="font-mono text-xs tabular-nums">{val}</span>
-      },
-      { key: "packedBy", header: "Packed By", sortable: true, filterable: true, filterType: "dropdown", filterOptions: PACKED_BY_OPTIONS, width: "120px" },
-      {
-        key: "packingDate",
-        header: "Packing Date",
-        sortable: true,
-        width: "120px",
-        render: (val: any) => <span className="text-xs text-muted-foreground">{val}</span>
-      },
-      {
-        key: "status",
-        header: "Status",
-        sortable: true,
-        filterable: true,
-        filterType: "dropdown",
-        filterOptions: DONE_STATUS_OPTIONS,
-        width: "110px",
-        render: (val: any) => {
-          const cfg = STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: val };
-          return (
-            <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
-              {cfg.label}
-            </span>
-          );
-        }
-      },
-    ] as ColumnConfig<PackingRecord>[];
-  }, []);
-
-  const sampleOrderColumns = useMemo(() => {
-    return [
-      {
-        key: "salesOrderNo",
-        header: "Sample Order No",
-        sortable: true,
-        filterable: true,
-        filterType: "text",
-        width: "140px",
-        render: (val: any, row: PackingRecord) => (
-          <Link
-            href={`/warehouse/packing/view/${row.id}`}
-            className="font-mono text-xs font-semibold text-brand-700 hover:underline"
-          >
-            {row.salesOrderNo}
-          </Link>
-        )
-      },
-      {
-        key: "customer",
-        header: "Customer",
-        sortable: true,
-        filterable: true,
-        filterType: "dropdown",
-        filterOptions: CUSTOMER_OPTIONS,
-        width: "180px",
-        render: (val: any, row: PackingRecord) => <span className="text-xs text-foreground font-semibold">{row.customer}</span>
-      },
-      {
-        key: "totalItems",
-        header: "Total Items",
-        sortable: true,
-        align: "right",
-        width: "100px",
-        render: (val: any) => <span className="font-mono text-xs tabular-nums">{val}</span>
-      },
-      {
-        key: "packedQuantity",
-        header: "Packed Quantity",
-        sortable: true,
-        align: "right",
-        width: "120px",
-        render: (val: any) => <span className="font-mono text-xs tabular-nums">{val}</span>
-      },
-      { key: "packedBy", header: "Packed By", sortable: true, filterable: true, filterType: "dropdown", filterOptions: PACKED_BY_OPTIONS, width: "120px" },
-      {
-        key: "packingDate",
-        header: "Packing Date",
-        sortable: true,
-        width: "120px",
-        render: (val: any) => <span className="text-xs text-muted-foreground">{val}</span>
-      },
-      {
-        key: "status",
-        header: "Status",
-        sortable: true,
-        filterable: true,
-        filterType: "dropdown",
-        filterOptions: DONE_STATUS_OPTIONS,
-        width: "110px",
-        render: (val: any) => {
-          const cfg = STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: val };
-          return (
-            <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
-              {cfg.label}
-            </span>
-          );
-        }
-      },
-    ] as ColumnConfig<PackingRecord>[];
-  }, []);
-
-  const stockTransferColumns = useMemo(() => {
-    return [
-      {
-        key: "salesOrderNo",
-        header: "Stock Transfer No",
-        sortable: true,
-        filterable: true,
-        filterType: "text",
-        width: "140px",
-        render: (val: any, row: PackingRecord) => (
-          <Link
-            href={`/warehouse/packing/view/${row.id}`}
-            className="font-mono text-xs font-semibold text-brand-700 hover:underline"
-          >
-            {row.salesOrderNo}
-          </Link>
-        )
+        render: (_: unknown, row: PackingRecord) => {
+          const type = resolveWarehouseOrderType(row);
+          const label =
+            type === "stock_transfer"
+              ? row.targetWarehouse || row.customer
+              : row.customer;
+          return <span className="text-xs text-foreground font-semibold">{label}</span>;
+        },
       },
       {
         key: "sourceWarehouse",
         header: "Source Warehouse",
         sortable: true,
         width: "160px",
-        render: (val: any, row: PackingRecord) => <span className="text-xs text-foreground font-medium">{row.sourceWarehouse || row.warehouse}</span>
-      },
-      {
-        key: "targetWarehouse",
-        header: "Target Warehouse",
-        sortable: true,
-        width: "180px",
-        render: (val: any, row: PackingRecord) => <span className="text-xs text-foreground font-semibold">{row.targetWarehouse}</span>
+        render: (_: unknown, row: PackingRecord) => (
+          <span className="text-xs text-foreground">
+            {row.sourceWarehouse || row.warehouse}
+          </span>
+        ),
       },
       {
         key: "totalItems",
-        header: "Total Items",
+        header: "Items",
         sortable: true,
         align: "right",
-        width: "100px",
-        render: (val: any) => <span className="font-mono text-xs tabular-nums">{val}</span>
+        width: "80px",
+        render: (val: unknown) => (
+          <span className="font-mono text-xs tabular-nums">{val as number}</span>
+        ),
       },
       {
         key: "packedQuantity",
-        header: "Packed Quantity",
+        header: "Packed Qty",
         sortable: true,
         align: "right",
-        width: "120px",
-        render: (val: any) => <span className="font-mono text-xs tabular-nums">{val}</span>
+        width: "100px",
+        render: (val: unknown) => (
+          <span className="font-mono text-xs tabular-nums">{val as number}</span>
+        ),
       },
-      { key: "packedBy", header: "Packed By", sortable: true, filterable: true, filterType: "dropdown", filterOptions: PACKED_BY_OPTIONS, width: "120px" },
+      {
+        key: "orderAmount",
+        header: "Amount",
+        align: "right",
+        width: "90px",
+        render: (_: unknown, row: PackingRecord) => {
+          const type = resolveWarehouseOrderType(row);
+          if (type === "sample_order") {
+            return (
+              <span className="font-mono text-xs tabular-nums">
+                {formatWarehouseOrderAmount(type, 0)}
+              </span>
+            );
+          }
+          return <span className="text-xs text-muted-foreground">—</span>;
+        },
+      },
+      {
+        key: "packedBy",
+        header: "Packed By",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: PACKED_BY_OPTIONS,
+        width: "120px",
+      },
       {
         key: "packingDate",
         header: "Packing Date",
         sortable: true,
         width: "120px",
-        render: (val: any) => <span className="text-xs text-muted-foreground">{val}</span>
+        render: (val: unknown) => (
+          <span className="text-xs text-muted-foreground">{val as string}</span>
+        ),
       },
       {
         key: "status",
@@ -304,25 +246,25 @@ export function DonePackingListing({ packingsForWarehouse }: DonePackingListingP
         filterType: "dropdown",
         filterOptions: DONE_STATUS_OPTIONS,
         width: "110px",
-        render: (val: any) => {
-          const cfg = STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: val };
+        render: (_: unknown, row: PackingRecord) => {
+          const label = doneStatusLabel(row);
+          const cfg = STATUS_BADGE_CONFIG[label] || {
+            bg: "bg-slate-100 text-slate-700 border-slate-200",
+            label,
+          };
           return (
-            <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+            <span
+              className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}
+            >
               {cfg.label}
             </span>
           );
-        }
+        },
       },
-    ] as ColumnConfig<PackingRecord>[];
-  }, []);
+    ];
+    return cols;
+  }, [partyHeader]);
 
-  const columns = useMemo(() => {
-    if (subTab === "sales_order") return salesOrderColumns;
-    if (subTab === "sample_order") return sampleOrderColumns;
-    return stockTransferColumns;
-  }, [subTab, salesOrderColumns, sampleOrderColumns, stockTransferColumns]);
-
-  // Actions
   const actions: ActionItemConfig<PackingRecord>[] = [
     {
       label: "View Details",
@@ -340,15 +282,7 @@ export function DonePackingListing({ packingsForWarehouse }: DonePackingListingP
   ];
 
   return (
-    <div className="space-y-3">
-      <Tabs value={subTab} onValueChange={(val: any) => setSubTab(val)} className="w-full">
-        <TabsList>
-          <TabsTrigger value="sales_order" className="text-xs">Sales Order</TabsTrigger>
-          <TabsTrigger value="sample_order" className="text-xs">Sample Order</TabsTrigger>
-          <TabsTrigger value="stock_transfer" className="text-xs">Stock Transfer</TabsTrigger>
-        </TabsList>
-      </Tabs>
-      <MasterListing<PackingRecord>
+    <MasterListing<PackingRecord>
         columns={columns}
         data={paginated}
         totalRecords={processed.length}
@@ -359,9 +293,8 @@ export function DonePackingListing({ packingsForWarehouse }: DonePackingListingP
         onSortChange={setSort}
         onFilterChange={setFilters}
         actions={actions}
-        emptyMessage="completed packing records"
-        searchPlaceholder="Search Packing No..."
+        emptyMessage=""
+        searchPlaceholder="Search packing no, order no..."
       />
-    </div>
   );
 }

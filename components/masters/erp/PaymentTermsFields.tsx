@@ -19,12 +19,14 @@ export function PaymentTermsFields({
 	inputClassName,
 	layout = "compact",
 	className,
+	hideCreditDays = false,
 }: {
 	values: PaymentTermsFormValues;
 	onChange: (patch: Partial<PaymentTermsFormValues>) => void;
 	errors?: Record<string, string>;
 	readOnly?: boolean;
 	inputClassName?: string;
+	hideCreditDays?: boolean;
 	/** embedded: fields join parent grid (e.g. beside Credit Limit). compact: self-contained row. */
 	layout?: "embedded" | "compact";
 	className?: string;
@@ -73,7 +75,7 @@ export function PaymentTermsFields({
 				) : null}
 			</div>
 
-			{values.paymentType === "credit" ? (
+			{values.paymentType === "credit" && !hideCreditDays ? (
 				<div className={ERP.field}>
 					<Label className={ERP.label}>
 						Credit Days <span className="text-red-500">*</span>

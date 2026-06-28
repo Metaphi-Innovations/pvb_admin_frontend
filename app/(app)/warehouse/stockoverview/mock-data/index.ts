@@ -1,4 +1,4 @@
-import { QcPassedStockRecord, RejectedStockRecord, GrnPendingStockRecord } from "../types";
+import { QcPassedStockRecord, RejectedStockRecord, GrnPendingStockRecord, HoldStockRecord } from "../types";
 import { SEED_QC_PASSED_STOCK } from "./qcPassedStock";
 import { SEED_REJECTED_STOCK } from "./rejectedStock";
 import { SEED_GRN_PENDING_STOCK } from "./grnPendingStock";
@@ -6,31 +6,17 @@ import { SEED_GRN_PENDING_STOCK } from "./grnPendingStock";
 // Storage Keys
 const KEY_QC_PASSED = "ds_stock_qc_passed";
 const KEY_QC_PASSED_VERSION = "ds_stock_qc_passed_version";
-const QC_PASSED_SEED_VERSION = "4";
+/** Bump when demo inventory seed changes — forces refresh in development. */
+const QC_PASSED_SEED_VERSION = "5";
 const KEY_REJECTED = "ds_stock_rejected";
 const KEY_GRN_PENDING = "ds_stock_grn_pending";
+const KEY_HOLD = "ds_stock_hold";
 
+/** Merge seed rows into stored data; seed rows always win by id. */
 function mergeQcPassedSeed(stored: QcPassedStockRecord[]): QcPassedStockRecord[] {
-  const merged = [...stored];
-  const indexById = new Map(merged.map((row, index) => [row.id, index]));
-  for (const seedRow of SEED_QC_PASSED_STOCK) {
-    const existingIndex = indexById.get(seedRow.id);
-    if (existingIndex === undefined) {
-      merged.push(seedRow);
-      indexById.set(seedRow.id, merged.length - 1);
-      continue;
-    }
-    if (
-      seedRow.id === "st-26" ||
-      seedRow.id === "st-27" ||
-      seedRow.id === "st-7" ||
-      seedRow.id === "st-21" ||
-      seedRow.id === "st-28"
-    ) {
-      merged[existingIndex] = seedRow;
-    }
-  }
-  return merged;
+  const seedById = new Map(SEED_QC_PASSED_STOCK.map((row) => [row.id, row]));
+  const userRows = stored.filter((row) => !seedById.has(row.id));
+  return [...userRows, ...SEED_QC_PASSED_STOCK];
 }
 
 // QC Passed Stock Accessors
@@ -39,10 +25,9 @@ export function getQcPassedStockRecords(): QcPassedStockRecord[] {
   const version = localStorage.getItem(KEY_QC_PASSED_VERSION);
   const stored = localStorage.getItem(KEY_QC_PASSED);
   if (!stored || version !== QC_PASSED_SEED_VERSION) {
-    const merged = mergeQcPassedSeed(stored ? JSON.parse(stored) : []);
-    localStorage.setItem(KEY_QC_PASSED, JSON.stringify(merged));
+    localStorage.setItem(KEY_QC_PASSED, JSON.stringify(SEED_QC_PASSED_STOCK));
     localStorage.setItem(KEY_QC_PASSED_VERSION, QC_PASSED_SEED_VERSION);
-    return merged;
+    return [...SEED_QC_PASSED_STOCK];
   }
   return mergeQcPassedSeed(JSON.parse(stored));
 }
@@ -82,6 +67,22 @@ export function getGrnPendingStockRecords(): GrnPendingStockRecord[] {
 export function saveGrnPendingStockRecords(records: GrnPendingStockRecord[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(KEY_GRN_PENDING, JSON.stringify(records));
+}
+
+// Hold Stock Accessors
+export function getHoldStockRecords(): HoldStockRecord[] {
+  if (typeof window === "undefined") return [];
+  const stored = localStorage.getItem(KEY_HOLD);
+  if (!stored) {
+    localStorage.setItem(KEY_HOLD, JSON.stringify([]));
+    return [];
+  }
+  return JSON.parse(stored);
+}
+
+export function saveHoldStockRecords(records: HoldStockRecord[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(KEY_HOLD, JSON.stringify(records));
 }
 
 // Re-export old seed stock as qc passed for compatibility if imported anywhere else
