@@ -10,12 +10,11 @@ import { ColumnConfig, FilterState, SortState } from "@/components/listing/types
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Eye, Edit2, Send, CheckCircle2, XCircle, ShoppingCart, Plus, MoreHorizontal } from "lucide-react";
+import { Eye, Edit2, Send, CheckCircle2, XCircle, ShoppingCart, Plus, MoreVertical } from "lucide-react";
 import { Toast } from "../components/ProcurementUI";
 import { ProcurementApprovalModal } from "../components/ProcurementApprovalModal";
 import { ProcAvatar, HighlightText } from "../design/proc-design";
@@ -288,50 +287,73 @@ export default function PurchaseRequestsPage() {
         return (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="p-1.5 hover:bg-muted rounded-md transition-colors">
-                <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+              <button className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-100">
+                <MoreVertical className="w-4 h-4 text-muted-foreground" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44 z-[400]">
-              <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">Actions</DropdownMenuLabel>
+            <DropdownMenuContent align="end" className="w-48 z-[200]">
+              <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
+                Actions
+              </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => router.push(`/procurement/purchase-requests/${row.id}`)} className="cursor-pointer">
-                <Eye className="w-3.5 h-3.5 mr-2" /> View
-              </DropdownMenuItem>
+              <button
+                type="button"
+                onClick={() => router.push(`/procurement/purchase-requests/${row.id}`)}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+              >
+                <Eye className="w-3.5 h-3.5" /> View
+              </button>
               {["draft", "rejected"].includes(approvalStatus) && (
-                <DropdownMenuItem onClick={() => router.push(`/procurement/purchase-requests/${row.id}/edit`)} className="cursor-pointer">
-                  <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
-                </DropdownMenuItem>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/procurement/purchase-requests/${row.id}/edit`)}
+                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+                >
+                  <Edit2 className="w-3.5 h-3.5" /> Edit
+                </button>
               )}
               {approvalStatus === "draft" && (
-                <DropdownMenuItem
-                  className="cursor-pointer"
+                <button
+                  type="button"
                   onClick={() => {
                     const updated = submitPR(row);
                     savePurchaseRequests(loadPurchaseRequests().map((p) => (p.id === updated.id ? updated : p)));
                     refresh();
                     setToast({ msg: "PR submitted.", type: "success" });
                   }}
+                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
                 >
-                  <Send className="w-3.5 h-3.5 mr-2" /> Submit
-                </DropdownMenuItem>
+                  <Send className="w-3.5 h-3.5" /> Submit
+                </button>
               )}
               {approvalStatus === "pending_approval" && (
                 <>
-                  <DropdownMenuItem onClick={() => { setApprovalTarget(row); setApprovalAction("approve"); setApprovalOpen(true); }} className="cursor-pointer">
-                    <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Approve
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => { setApprovalTarget(row); setApprovalAction("reject"); setApprovalOpen(true); }} className="cursor-pointer">
-                    <XCircle className="w-3.5 h-3.5 mr-2" /> Reject
-                  </DropdownMenuItem>
+                  <button
+                    type="button"
+                    onClick={() => { setApprovalTarget(row); setApprovalAction("approve"); setApprovalOpen(true); }}
+                    className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setApprovalTarget(row); setApprovalAction("reject"); setApprovalOpen(true); }}
+                    className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+                  >
+                    <XCircle className="w-3.5 h-3.5" /> Reject
+                  </button>
                 </>
               )}
               {approvalStatus === "approved" && poStatus !== "fully_converted" && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => router.push(`/procurement/purchase-orders/new?prId=${row.id}`)} className="cursor-pointer">
-                    <ShoppingCart className="w-3.5 h-3.5 mr-2" /> Create PO
-                  </DropdownMenuItem>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/procurement/purchase-orders/new?prId=${row.id}`)}
+                    className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+                  >
+                    <ShoppingCart className="w-3.5 h-3.5" /> Create PO
+                  </button>
                 </>
               )}
             </DropdownMenuContent>

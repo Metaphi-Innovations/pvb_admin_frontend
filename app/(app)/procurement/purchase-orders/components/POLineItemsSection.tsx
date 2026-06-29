@@ -22,6 +22,15 @@ import { emptyPOLine } from "./PurchaseOrderForm";
 
 const inputCls = "h-8 rounded-lg text-xs";
 
+function SectionHead({ label, sub }: { label: string; sub?: string }) {
+  return (
+    <div className="mb-2.5 mt-0.5">
+      <p className="text-xs font-bold uppercase tracking-wider text-foreground">{label}</p>
+      {sub && <p className="mt-0.5 text-[11px] text-muted-foreground">{sub}</p>}
+    </div>
+  );
+}
+
 const DISCOUNT_TYPE_OPTIONS = [
   { value: "percentage", label: "Percentage" },
   { value: "flat", label: "Flat Amount" },
@@ -281,15 +290,11 @@ export function POLineItemsSection({
   return (
     <div className="border-t border-border/60 pt-4">
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-foreground">
-            {poType === "pr" ? "Products from PR" : "Product / Item Details"}
-          </p>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
-            Packaging quantity, SKU conversion, discount and GST are auto-calculated from product master.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <SectionHead
+          label="Product / Item Details"
+          sub="Packaging quantity, SKU conversion, discount and GST are auto-calculated from product master."
+        />
+        <div className="flex flex-wrap items-center gap-2 mb-2.5 md:mb-0">
           <span className="inline-flex h-6 items-center rounded-full bg-brand-50 px-2.5 text-[11px] font-semibold text-brand-700">
             {filledLines.length} item{filledLines.length === 1 ? "" : "s"}
           </span>
@@ -409,8 +414,8 @@ export function POLineItemsSection({
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border bg-white shadow-sm">
-          <table className="min-w-[1200px] w-full">
+        <div className="overflow-x-auto rounded-xl border border-border shadow-sm">
+          <table className="w-full min-w-[900px] table-fixed">
             <thead>
               <tr className="border-b border-border bg-muted/40">
                 <th className="min-w-[180px] px-3 py-2.5 text-left text-xs font-semibold text-foreground">Product</th>
@@ -609,10 +614,10 @@ export function POLineItemsSection({
                       )}
                     </td>
                     <td className="px-3 py-2 text-right text-xs tabular-nums">{formatCurrency(gstAmt)}</td>
-                    <td className="px-3 py-2 text-right text-xs font-semibold tabular-nums font-mono">
+                    <td className="px-4 py-2 text-right text-xs font-semibold tabular-nums font-mono text-foreground">
                       {formatCurrency(netAmt)}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-2">
                       {isEditing && draft ? (
                         <Input
                           value={draft.remarks}

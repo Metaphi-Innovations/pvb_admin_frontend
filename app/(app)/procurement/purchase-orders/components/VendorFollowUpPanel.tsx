@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { History, MessageSquare, Plus } from "lucide-react";
-import { ProcBadge, ProcButton, ProcCardSection } from "../../design/proc-design";
+import { MessageSquare, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { RecordSectionCard } from "@/components/record-detail";
+import { ProcBadge } from "../../design/proc-design";
 import type { PurchaseOrder } from "../po-data";
 import {
   addPOFollowUp,
@@ -12,7 +13,8 @@ import {
   loadFollowUpsForPO,
 } from "../po-followup-data";
 import { AddFollowUpModal } from "./AddFollowUpModal";
-import { FollowUpTimeline } from "./FollowUpTimeline";
+import { FollowUpActivityFeed } from "./FollowUpActivityFeed";
+import { useCallback, useEffect, useState } from "react";
 
 export function VendorFollowUpPanel({
   po,
@@ -23,14 +25,11 @@ export function VendorFollowUpPanel({
   onPOUpdated: (updated: PurchaseOrder) => void;
   onToast?: (msg: string) => void;
 }) {
-  const historyRef = useRef<HTMLDivElement>(null);
   const [entries, setEntries] = useState(() => loadFollowUpsForPO(po.id));
   const [modalOpen, setModalOpen] = useState(false);
-  const [rev, setRev] = useState(0);
 
   const refresh = useCallback(() => {
     setEntries(loadFollowUpsForPO(po.id));
-    setRev((t) => t + 1);
   }, [po.id]);
 
   useEffect(() => {
@@ -38,63 +37,72 @@ export function VendorFollowUpPanel({
   }, [refresh]);
 
   const summary = getPOFollowUpSummary(po.id);
-  void rev;
-
-  const scrollToHistory = () => {
-    historyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
 
   return (
     <>
-      <div className="space-y-4 xl:sticky xl:top-4">
-        <ProcCardSection accent="amber" title="Supplier Follow-up" icon={<MessageSquare className="w-3.5 h-3.5 text-amber-600" />}>
-          <div className="space-y-2.5 text-[12px]">
+      <div className="space-y-4">
+        <RecordSectionCard title="Supplier Follow-up" icon={MessageSquare} accent="orange">
+          <div className="space-y-2.5 text-xs">
             <div className="flex justify-between gap-2">
-              <span className="text-[#6B80A0]">Last Follow-up Date</span>
-              <span className="text-[#0A1628] text-right">
+              <span className="text-muted-foreground">Last Follow-up Date</span>
+              <span className="text-foreground text-right">
                 {summary.lastFollowUpAt ? formatFollowUpDateTime(summary.lastFollowUpAt) : "—"}
               </span>
             </div>
             <div className="flex justify-between gap-2">
-              <span className="text-[#6B80A0]">Last Spoke With</span>
-              <span className="text-[#0A1628] text-right">{summary.lastSpokeWith || "—"}</span>
+              <span className="text-muted-foreground">Last Spoke With</span>
+              <span className="text-foreground text-right">{summary.lastSpokeWith || "—"}</span>
             </div>
-            <div className="flex justify-between gap-2 border-t border-[#DDE3EF] pt-2">
-              <span className="text-[#6B80A0]">Total Follow-ups</span>
-              <span className="font-semibold tabular-nums text-[#0A1628]">{summary.totalFollowUps}</span>
+            <div className="flex justify-between gap-2 border-t border-border pt-2">
+              <span className="text-muted-foreground">Total Follow-ups</span>
+              <span className="font-semibold tabular-nums text-foreground">{summary.totalFollowUps}</span>
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 mt-3">
-            {canAddPOFollowUp(po) && (
-              <ProcButton variant="primary" size="sm" className="w-full" onClick={() => setModalOpen(true)}>
-                <Plus className="w-3.5 h-3.5" /> Add Follow-up
-              </ProcButton>
-            )}
-            {summary.totalFollowUps > 0 && (
-              <ProcButton variant="outline" size="sm" className="w-full" onClick={scrollToHistory}>
-                <History className="w-3.5 h-3.5" /> View History
-              </ProcButton>
-            )}
-          </div>
-        </ProcCardSection>
+          {canAddPOFollowUp(po) ? (
+            <Button
+              size="sm"
+              className="mt-3 h-8 w-full text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+              onClick={() => setModalOpen(true)}
+            >
+              <Plus className="w-3.5 h-3.5" /> Follow-up &amp; Activities
+            </Button>
+          ) : entries.length > 0 ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-3 h-8 w-full text-xs"
+              onClick={() => setModalOpen(true)}
+            >
+              View Activities
+            </Button>
+          ) : null}
+        </RecordSectionCard>
 
-        <div id="follow-up-history" ref={historyRef}>
-          <ProcCardSection accent="navy" title="Follow-up History">
-            <FollowUpTimeline entries={entries} />
-          </ProcCardSection>
-        </div>
+        <RecordSectionCard title="Recent Activity" accent="blue">
+          <FollowUpActivityFeed entries={entries.slice(0, 3)} showTitle={false} compact />
+          {entries.length > 3 && (
+            <button
+              type="button"
+              className="mt-3 text-xs font-medium text-brand-600 hover:underline"
+              onClick={() => setModalOpen(true)}
+            >
+              View all {entries.length} activities
+            </button>
+          )}
+        </RecordSectionCard>
       </div>
 
       <AddFollowUpModal
         open={modalOpen}
         onOpenChange={setModalOpen}
         po={po}
+        readOnly={!canAddPOFollowUp(po)}
         onSubmit={(input) => {
           const { updatedPo } = addPOFollowUp(po, input);
           onPOUpdated(updatedPo);
           refresh();
-          onToast?.("Follow-up added.");
+          onToast?.("Follow-up saved.");
         }}
       />
     </>
@@ -114,7 +122,7 @@ export function FollowUpListingCell({
       <ProcBadge status={summary.availability} />
       {summary.lastFollowUpAt && (
         <>
-          <p className="text-[10px] text-[#6B80A0] tabular-nums leading-tight">
+          <p className="text-[10px] text-muted-foreground tabular-nums leading-tight">
             {formatFollowUpDateTime(summary.lastFollowUpAt).split(" ").slice(0, 2).join(" ")}
           </p>
           <button
@@ -122,7 +130,7 @@ export function FollowUpListingCell({
             className="text-[10px] text-brand-600 hover:underline inline-flex items-center gap-0.5"
             onClick={onViewHistory}
           >
-            <History className="w-3 h-3" /> View
+            View
           </button>
         </>
       )}

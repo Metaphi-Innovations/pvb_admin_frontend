@@ -15,7 +15,6 @@ import { stateSelectOptions, warehouseSelectOptions } from "@/lib/procurement/wa
 import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
 import { resolvePurchaseCostPrice } from "@/lib/pricing/resolve-pricing";
 import { AdditionalChargesEditor } from "@/components/procurement/AdditionalChargesEditor";
-import { formatCurrency } from "@/lib/procurement/utils";
 import { getActiveSuppliers } from "../../masters/suppliers/supplier-data";
 import { getPRById, loadPurchaseRequests } from "../../purchase-requests/pr-data";
 import type { POLineItem, POAttachment, PurchaseOrder } from "../po-data";
@@ -187,8 +186,8 @@ export function poToFormValues(po: PurchaseOrder): POFormValues {
 
 function SectionHead({ label, sub, required }: { label: string; sub?: string; required?: boolean }) {
 	return (
-		<div className="mb-2.5 mt-0.5">
-			<p className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center">
+		<div className="mb-3 pb-2 border-b border-border">
+			<p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center">
 				{label}
 				{required && <span className="text-red-500 ml-1">*</span>}
 			</p>
@@ -198,6 +197,24 @@ function SectionHead({ label, sub, required }: { label: string; sub?: string; re
 }
 
 const inputCls = "h-8 rounded-lg text-xs";
+const readOnlyCls = cn(inputCls, "bg-muted/30 text-foreground");
+
+function ReadOnlyField({ value }: { value: string }) {
+	return (
+		<Input value={value || "—"} readOnly className={readOnlyCls} />
+	);
+}
+
+function formatDisplayDate(iso: string): string {
+	if (!iso) return "—";
+	const [y, m, d] = iso.split("-");
+	if (!y || !m || !d) return iso;
+	return `${d}-${m}-${y}`;
+}
+
+function paymentTermLabel(value: string): string {
+	return PAYMENT_TERMS_OPTIONS.find((o) => o.value === value)?.label ?? (value || "—");
+}
 
 export function PurchaseOrderForm({
 	form,
@@ -316,7 +333,6 @@ export function PurchaseOrderForm({
 
 	const linkedPr = form.sourcePrId ? getPRById(form.sourcePrId) ?? null : null;
 	const displayPoNo = poNumber || "Auto-generated";
-	const totalQty = form.lines.reduce((s, l) => s + l.orderedQty, 0);
 	const totalGst =
 		preview.summary.totalCgst +
 		preview.summary.totalSgst +
@@ -394,9 +410,13 @@ export function PurchaseOrderForm({
 		sublabel: `Supplier Type: ${s.supplierType || "—"}`,
 	}));
 
+	const detailsGridCls = readOnly
+		? "grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4"
+		: "grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5";
+
 	return (
-		<div className="rounded-xl border border-border bg-white p-5 shadow-sm">
-			<div className="space-y-5">
+		<div className={cn("rounded-xl border border-border bg-white p-4 shadow-sm", readOnly && "w-full")}>
+			<div className="space-y-4">
 				{status === "pending_approval" && (
 					<div className="flex items-start gap-2.5 rounded-[13px] border border-blue-200 bg-blue-50 px-4 py-3 text-[13px] text-blue-800">
 						<Info className="w-4 h-4 shrink-0 mt-0.5" />
@@ -433,116 +453,135 @@ export function PurchaseOrderForm({
 						label="Order Details"
 						sub="Core purchase order information and timeline details."
 					/>
-					<div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+					<div className={detailsGridCls}>
 						<div className="space-y-1">
 							<Label className="text-xs font-medium">PO No.</Label>
 							<Input
 								value={displayPoNo}
 								readOnly
-								className={cn(
-									inputCls,
-									"bg-muted/30 font-mono text-muted-foreground",
-								)}
+								className={cn(inputCls, "bg-muted/30 font-mono text-muted-foreground")}
 							/>
 						</div>
 						<div className="space-y-1">
 							<Label className="text-xs font-medium">PR Reference</Label>
-							<AutocompleteSelect
-								options={prOptions}
-								value={form.sourcePrId ? String(form.sourcePrId) : ""}
-								onChange={(v) => v && loadFromPR(Number(v))}
-								placeholder="Select PR..."
-								searchPlaceholder="Search PR..."
-								disabled={readOnly || poType === "direct"}
-								className="h-8 rounded-lg text-xs"
-							/>
+							{readOnly ? (
+								<ReadOnlyField value={form.sourcePrNumber} />
+							) : (
+								<AutocompleteSelect
+									options={prOptions}
+									value={form.sourcePrId ? String(form.sourcePrId) : ""}
+									onChange={(v) => v && loadFromPR(Number(v))}
+									placeholder="Select PR..."
+									searchPlaceholder="Search PR..."
+									disabled={poType === "direct"}
+									className="h-8 rounded-lg text-xs"
+								/>
+							)}
 						</div>
 						<div className="space-y-1">
 							<Label className="text-xs font-medium">Supplier</Label>
-							<AutocompleteSelect
-								options={supplierOptions}
-								value={form.supplierId ? String(form.supplierId) : ""}
-								onChange={selectSupplier}
-								placeholder="Select supplier..."
-								searchPlaceholder="Search supplier..."
-								disabled={readOnly}
-								className="h-8 rounded-lg text-xs"
-							/>
+							{readOnly ? (
+								<ReadOnlyField value={form.supplierName} />
+							) : (
+								<AutocompleteSelect
+									options={supplierOptions}
+									value={form.supplierId ? String(form.supplierId) : ""}
+									onChange={selectSupplier}
+									placeholder="Select supplier..."
+									searchPlaceholder="Search supplier..."
+									className="h-8 rounded-lg text-xs"
+								/>
+							)}
 						</div>
 						<div className="space-y-1">
 							<Label className="text-xs font-medium">PO Date</Label>
-							<Input
-								type="date"
-								disabled={readOnly}
-								value={form.poDate}
-								onChange={(e) => patch({ poDate: e.target.value })}
-								className={inputCls}
-							/>
+							{readOnly ? (
+								<ReadOnlyField value={formatDisplayDate(form.poDate)} />
+							) : (
+								<Input
+									type="date"
+									value={form.poDate}
+									onChange={(e) => patch({ poDate: e.target.value })}
+									className={inputCls}
+								/>
+							)}
 						</div>
 						<div className="space-y-1">
 							<Label className="text-xs font-medium">Delivery Date</Label>
-							<Input
-								type="date"
-								disabled={readOnly}
-								value={form.expectedDeliveryDate}
-								onChange={(e) => patch({ expectedDeliveryDate: e.target.value })}
-								className={inputCls}
-							/>
+							{readOnly ? (
+								<ReadOnlyField value={formatDisplayDate(form.expectedDeliveryDate)} />
+							) : (
+								<Input
+									type="date"
+									value={form.expectedDeliveryDate}
+									onChange={(e) => patch({ expectedDeliveryDate: e.target.value })}
+									className={inputCls}
+								/>
+							)}
 						</div>
 						<div className="space-y-1">
 							<Label className="text-xs font-medium">Supplier Type</Label>
-							<Input
-								value={form.supplierType || "—"}
-								readOnly
-								className={cn(inputCls, "bg-muted/30 text-muted-foreground")}
-							/>
+							<ReadOnlyField value={form.supplierType} />
 						</div>
 						<div className="space-y-1">
 							<Label className="text-xs font-medium">Payment Terms</Label>
-							<AutocompleteSelect
-								options={PAYMENT_TERMS_OPTIONS}
-								value={form.paymentTerms}
-								onChange={(v) =>
-									patch({
-										paymentTerms: String(v),
-										creditDays: paymentTermDays(String(v)),
-									})
-								}
-								disabled={readOnly}
-								className={inputCls}
-							/>
+							{readOnly ? (
+								<ReadOnlyField value={paymentTermLabel(form.paymentTerms)} />
+							) : (
+								<AutocompleteSelect
+									options={PAYMENT_TERMS_OPTIONS}
+									value={form.paymentTerms}
+									onChange={(v) =>
+										patch({
+											paymentTerms: String(v),
+											creditDays: paymentTermDays(String(v)),
+										})
+									}
+									className={inputCls}
+								/>
+							)}
 						</div>
 						<div className="space-y-1">
 							<Label className="text-xs font-medium">State</Label>
-							<AutocompleteSelect
-								options={stateOptions}
-								value={form.state}
-								onChange={(v) => onStateChange(String(v))}
-								disabled={readOnly}
-								placeholder="Select state"
-								className={inputCls}
-							/>
+							{readOnly ? (
+								<ReadOnlyField value={form.state} />
+							) : (
+								<AutocompleteSelect
+									options={stateOptions}
+									value={form.state}
+									onChange={(v) => onStateChange(String(v))}
+									placeholder="Select state"
+									className={inputCls}
+								/>
+							)}
 						</div>
 						<div className="space-y-1">
 							<Label className="text-xs font-medium">Warehouse</Label>
-							<AutocompleteSelect
-								options={warehouseOptions}
-								value={form.warehouseId ? String(form.warehouseId) : ""}
-								onChange={(v) => onWarehouseChange(String(v))}
-								disabled={readOnly || !form.state}
-								placeholder={form.state ? "Select warehouse" : "Select state first"}
-								className={inputCls}
-							/>
+							{readOnly ? (
+								<ReadOnlyField value={form.warehouseName} />
+							) : (
+								<AutocompleteSelect
+									options={warehouseOptions}
+									value={form.warehouseId ? String(form.warehouseId) : ""}
+									onChange={(v) => onWarehouseChange(String(v))}
+									disabled={!form.state}
+									placeholder={form.state ? "Select warehouse" : "Select state first"}
+									className={inputCls}
+								/>
+							)}
 						</div>
 					</div>
 					<div className="mt-3 space-y-1">
 						<Label className="text-xs font-medium">Delivery Address</Label>
 						<Textarea
-							disabled={readOnly}
+							readOnly={readOnly}
 							value={form.deliveryAddress}
 							onChange={(e) => patch({ deliveryAddress: e.target.value })}
 							rows={2}
-							className="min-h-[60px] rounded-lg text-xs"
+							className={cn(
+								"min-h-[60px] rounded-lg text-xs",
+								readOnly && "bg-muted/30 resize-none",
+							)}
 						/>
 					</div>
 				</div>
@@ -567,22 +606,31 @@ export function PurchaseOrderForm({
 				</div>
 
 				<div className="border-t border-border/60 pt-4">
-					<div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+					<SectionHead
+						label="Remarks & Attachments"
+						sub={readOnly ? undefined : "Additional notes and supporting documents."}
+					/>
+					<div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
 						<div>
-							<SectionHead label="Remarks" sub="Add internal context or notes for review." />
+							{!readOnly && (
+								<p className="mb-1.5 text-xs font-medium text-foreground">Remarks</p>
+							)}
 							<Textarea
-								disabled={readOnly}
+								readOnly={readOnly}
 								value={form.notes}
 								onChange={(e) => patch({ notes: e.target.value })}
 								placeholder="Purpose or internal notes..."
-								className="min-h-[140px] rounded-xl text-xs resize-none"
+								className={cn(
+									"min-h-[90px] rounded-lg text-xs",
+									readOnly ? "bg-muted/30 resize-none" : "min-h-[140px] resize-none",
+								)}
 							/>
 						</div>
 
-						<div className="rounded-xl border border-border bg-white p-3.5">
-							<div className="mb-2.5 flex items-center justify-between gap-2">
-								<SectionHead label="Attachments" sub="Supporting documents." />
-								{!readOnly && (
+						<div className="rounded-xl border border-border bg-muted/10 p-3.5">
+							{!readOnly && (
+								<div className="mb-2.5 flex items-center justify-between gap-2">
+									<p className="text-xs font-medium text-foreground">Attachments</p>
 									<Button
 										type="button"
 										variant="outline"
@@ -592,8 +640,11 @@ export function PurchaseOrderForm({
 									>
 										<Upload className="h-3.5 w-3.5" /> Add File
 									</Button>
-								)}
-							</div>
+								</div>
+							)}
+							{readOnly && (
+								<p className="mb-2 text-xs font-medium text-foreground">Attachments</p>
+							)}
 							{!readOnly && (
 								<input ref={fileRef} type="file" className="hidden" onChange={onFilePick} />
 							)}
@@ -626,26 +677,6 @@ export function PurchaseOrderForm({
 									))}
 								</ul>
 							)}
-						</div>
-
-						<div className="rounded-xl border border-border bg-white p-3.5">
-							<SectionHead label="PO Summary" />
-							<div className="space-y-2 text-xs">
-								<div className="flex justify-between">
-									<span className="text-muted-foreground">Items</span>
-									<span className="font-semibold tabular-nums">{form.lines.length}</span>
-								</div>
-								<div className="flex justify-between">
-									<span className="text-muted-foreground">Total base qty</span>
-									<span className="font-semibold tabular-nums">{totalQty}</span>
-								</div>
-								<div className="flex justify-between border-t border-border/60 pt-2">
-									<span className="font-bold text-foreground">Grand total</span>
-									<span className="font-bold text-brand-700 tabular-nums">
-										{formatCurrency(preview.summary.grandTotal)}
-									</span>
-								</div>
-							</div>
 						</div>
 					</div>
 				</div>

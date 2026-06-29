@@ -4,7 +4,8 @@ import Link from "next/link";
 import { AlertTriangle, ExternalLink, Scale } from "lucide-react";
 import { formatCurrency } from "@/lib/procurement/utils";
 import { THREE_WAY_MATCH_LABELS, computeThreeWayMatch } from "@/lib/erp/three-way-match";
-import { ProcBadge, ProcCardSection } from "../../design/proc-design";
+import { RecordSectionCard } from "@/components/record-detail";
+import { ProcBadge } from "../../design/proc-design";
 import type { PurchaseOrder } from "../po-data";
 
 const TABLE_HEADERS = [
@@ -33,7 +34,7 @@ export function ThreeWayMatchSection({ po, refreshKey = 0 }: { po: PurchaseOrder
   ];
 
   return (
-    <ProcCardSection accent="navy" title="3-Way Match" icon={<Scale className="w-3.5 h-3.5 text-violet-600" />}>
+    <RecordSectionCard title="3-Way Match" icon={Scale} accent="blue">
       <div className="flex items-center justify-between gap-2 mb-3">
         <ProcBadge status={match.status} />
         {match.matchReady && match.status === "mismatch" && (
@@ -55,17 +56,17 @@ export function ThreeWayMatchSection({ po, refreshKey = 0 }: { po: PurchaseOrder
       </div>
 
       {!match.matchReady && (
-        <p className="text-[11px] text-[#6B80A0] mb-3">
+        <p className="text-[11px] text-muted-foreground mb-3">
           3-Way Match becomes ready when PO is approved, supplier invoice is uploaded, GRN is created, and QC is completed in Warehouse.
         </p>
       )}
 
-      <div className="overflow-x-auto rounded-[9px] border border-[#DDE3EF]">
-        <table className="w-full text-[11px] min-w-[1100px]">
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table className="w-full text-xs min-w-[1100px]">
           <thead>
-            <tr className="bg-[#F7F9FC] border-b border-[#DDE3EF]">
+            <tr className="bg-muted/40 border-b border-border">
               {TABLE_HEADERS.map((h) => (
-                <th key={h} className="px-2 py-1.5 text-left font-bold text-[#9AAAC5] uppercase text-[10px] whitespace-nowrap">
+                <th key={h} className="px-2 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase whitespace-nowrap">
                   {h}
                 </th>
               ))}
@@ -74,14 +75,14 @@ export function ThreeWayMatchSection({ po, refreshKey = 0 }: { po: PurchaseOrder
           <tbody>
             {match.lines.length === 0 ? (
               <tr>
-                <td colSpan={TABLE_HEADERS.length} className="px-2 py-4 text-center text-[#6B80A0]">
+                <td colSpan={TABLE_HEADERS.length} className="px-2 py-4 text-center text-muted-foreground">
                   No PO line items to compare.
                 </td>
               </tr>
             ) : (
               match.lines.map((l) => (
-                <tr key={l.productCode} className="border-b border-[#F0F3FA]">
-                  <td className="px-2 py-1.5 text-[#0A1628] font-medium">{l.productName}</td>
+                <tr key={l.productCode} className="border-b border-border/60">
+                  <td className="px-2 py-2 text-xs font-medium text-foreground">{l.productName}</td>
                   <td className="px-2 py-1.5 tabular-nums">{l.poQty}</td>
                   <td className="px-2 py-1.5 tabular-nums">{formatCurrency(l.poRate)}</td>
                   <td className="px-2 py-1.5 tabular-nums">{formatCurrency(l.poAmount)}</td>
@@ -104,7 +105,7 @@ export function ThreeWayMatchSection({ po, refreshKey = 0 }: { po: PurchaseOrder
         </table>
       </div>
 
-      <div className="flex flex-wrap gap-3 mt-3 text-[11px] text-[#6B80A0]">
+      <div className="flex flex-wrap gap-3 mt-3 text-[11px] text-muted-foreground">
         {match.grnNos.length > 0 && <span>GRN: {match.grnNos.join(", ")}</span>}
         {match.qcNos.length > 0 && <span>QC: {match.qcNos.join(", ")}</span>}
         {match.vendorInvoiceNo && <span>Supplier Invoice: {match.vendorInvoiceNo}</span>}
@@ -113,10 +114,10 @@ export function ThreeWayMatchSection({ po, refreshKey = 0 }: { po: PurchaseOrder
         </Link>
       </div>
 
-      <p className="text-[10px] text-[#9AAAC5] mt-2">
+      <p className="text-[10px] text-muted-foreground mt-2">
         Overall status: {THREE_WAY_MATCH_LABELS[match.status]}. Accounts reviews this before payment processing.
       </p>
-    </ProcCardSection>
+    </RecordSectionCard>
   );
 }
 
@@ -126,7 +127,7 @@ export function ThreeWayMatchListingCell({ po, onView }: { po: PurchaseOrder; on
     <div className="py-1.5 space-y-1" onClick={(e) => e.stopPropagation()}>
       <ProcBadge status={match.status} />
       {match.vendorInvoiceNo && (
-        <p className="text-[10px] text-[#6B80A0] leading-tight">{match.vendorInvoiceNo}</p>
+        <p className="text-[10px] text-muted-foreground leading-tight">{match.vendorInvoiceNo}</p>
       )}
       {onView && (
         <button type="button" className="text-[10px] text-brand-600 hover:underline" onClick={onView}>

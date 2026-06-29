@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -29,16 +28,15 @@ import {
   Package,
   XCircle,
   Clock,
-  RotateCcw,
-  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Input } from "@/components/ui/input";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListing } from "@/components/listing/MasterListing";
 import type { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
 import CancelOrderDialog from "./components/CancelOrderDialog";
 import PackingListDialog from "./components/PackingListDialog";
+import { SalesReturnTab } from "./components/SalesReturnTab";
+import { getSalesReturnRecords } from "./sales-return-data";
 import { downloadProformaInvoice } from "./pi-document";
 import {
   type SalesOrder,
@@ -69,30 +67,6 @@ const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
 const FILTER_STATUSES: OrderStatus[] = [...ORDER_STATUS_OPTIONS.map((o) => o.value), "dispatched", "delivered"];
 
 type OrderListTab = "all" | "draft" | "pending_approval" | "rejected" | "sales_return";
-
-interface SalesReturnRecord {
-  id: number;
-  returnNumber: string;
-  soNumber: string;
-  customerName: string;
-  returnDate: string;
-  reason: string;
-  items: number;
-  amount: number;
-  status: "pending" | "approved" | "processed";
-}
-
-const SALES_RETURNS_SEED: SalesReturnRecord[] = [
-  { id: 1, returnNumber: "SR-2024-001", soNumber: "SO-2024-001", customerName: "Green Valley Agro", returnDate: "2024-01-22", reason: "Wrong product delivered", items: 2, amount: 42500, status: "processed" },
-  { id: 2, returnNumber: "SR-2024-002", soNumber: "SO-2024-003", customerName: "Kisan Fertilizers Ltd", returnDate: "2024-02-10", reason: "Damaged during transit", items: 1, amount: 28000, status: "approved" },
-  { id: 3, returnNumber: "SR-2024-003", soNumber: "SO-2024-002", customerName: "Farmtech Solutions", returnDate: "2024-02-18", reason: "Short expiry", items: 3, amount: 15600, status: "pending" },
-];
-
-const RETURN_STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
-  pending: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
-  approved: { bg: "bg-blue-50", text: "text-blue-700", dot: "bg-blue-500" },
-  processed: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
-};
 
 function matchesOrderTab(order: SalesOrder, tab: OrderListTab): boolean {
   switch (tab) {
@@ -199,17 +173,7 @@ export default function SalesOrdersPage() {
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
-  const [returnSearch, setReturnSearch] = useState("");
-
-  const visibleReturns = useMemo(() => {
-    return returnSearch.trim()
-      ? SALES_RETURNS_SEED.filter(
-        (r) =>
-          r.returnNumber.toLowerCase().includes(returnSearch.toLowerCase()) ||
-          r.customerName.toLowerCase().includes(returnSearch.toLowerCase())
-      )
-      : SALES_RETURNS_SEED;
-  }, [returnSearch]);
+  const [salesReturnCount, setSalesReturnCount] = useState(0);
 
   const [cancelOrder, setCancelOrder] = useState<SalesOrder | null>(null);
   const [packingOrder, setPackingOrder] = useState<SalesOrder | null>(null);
@@ -218,6 +182,7 @@ export default function SalesOrdersPage() {
 
   useEffect(() => {
     refreshOrders();
+    setSalesReturnCount(getSalesReturnRecords().length);
   }, []);
 
   useEffect(() => {
@@ -310,9 +275,9 @@ export default function SalesOrdersPage() {
       draft: orders.filter((o) => o.status === "draft").length,
       pending_approval: orders.filter((o) => o.status === "pending_approval").length,
       rejected: orders.filter((o) => o.status === "rejected").length,
-      sales_return: SALES_RETURNS_SEED.length,
+      sales_return: salesReturnCount,
     };
-  }, [orders]);
+  }, [orders, salesReturnCount]);
 
   const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
 
@@ -551,78 +516,13 @@ export default function SalesOrdersPage() {
         { value: "draft", label: `Draft (${tabCounts.draft})` },
         { value: "pending_approval", label: `Approval (${tabCounts.pending_approval})` },
         { value: "rejected", label: `Rejected (${tabCounts.rejected})` },
-        // { value: "sales_return", label: `Sales Return (${tabCounts.sales_return})` },
+        { value: "sales_return", label: `Sales Return (${tabCounts.sales_return})` },
       ]}
       activeTab={activeTab}
       onTabChange={handleTabChange}
     >
       {activeTab === "sales_return" ? (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 min-w-[200px] max-w-xs">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-[9px] text-muted-foreground pointer-events-none" />
-              <Input
-                value={returnSearch}
-                onChange={(e) => setReturnSearch(e.target.value)}
-                placeholder="Search returns…"
-                className="pl-8 h-8 text-xs bg-white"
-              />
-            </div>
-          </div>
-
-          <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/40 border-b border-border">
-                  {["Return No.", "SO Reference", "Customer", "Return Date", "Reason", "Items", "Amount", "Status", ""].map((h, i) => (
-                    <th key={i} className={cn("px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap", i === 8 && "w-10")}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {visibleReturns.map(rec => (
-                  <tr key={rec.id} className="border-b border-border/60 hover:bg-muted/20 transition-colors group">
-                    <td className="px-4 py-2"><span className="font-mono text-xs font-semibold text-brand-700">{rec.returnNumber}</span></td>
-                    <td className="px-4 py-2"><span className="font-mono text-xs text-muted-foreground">{rec.soNumber}</span></td>
-                    <td className="px-4 py-2 text-xs font-medium">{rec.customerName}</td>
-                    <td className="px-4 py-2 text-xs text-muted-foreground">{rec.returnDate}</td>
-                    <td className="px-4 py-2 text-xs text-muted-foreground">{rec.reason}</td>
-                    <td className="px-4 py-2 text-xs font-medium">{rec.items}</td>
-                    <td className="px-4 py-2 text-xs font-semibold">₹{rec.amount.toLocaleString("en-IN")}</td>
-                    <td className="px-4 py-2">
-                      {(() => {
-                        const cfg = RETURN_STATUS_CFG[rec.status] ?? RETURN_STATUS_CFG.pending;
-                        return (
-                          <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium", cfg.bg, cfg.text)}>
-                            <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
-                            {rec.status.charAt(0).toUpperCase() + rec.status.slice(1)}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-3 py-2.5 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto">
-                            <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44 z-[200]">
-                          <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">Actions</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem className="cursor-pointer"><Eye className="w-3.5 h-3.5 mr-2" /> View</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="px-4 py-3 border-t border-border bg-muted/20">
-              <p className="text-[11px] text-muted-foreground">Showing <span className="font-medium text-foreground">{visibleReturns.length}</span> of <span className="font-medium text-foreground">{SALES_RETURNS_SEED.length}</span> returns</p>
-            </div>
-          </div>
-        </div>
+        <SalesReturnTab onCountChange={setSalesReturnCount} />
       ) : (
         <div>
           <MasterListing<SalesOrder>

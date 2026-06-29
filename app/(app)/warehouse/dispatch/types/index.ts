@@ -54,22 +54,3 @@ export interface DispatchRecord {
   total_quantity?: number;
   dispatch_status?: string;
 }
-
-export interface SalesReturnProduct {
-  product: string;
-  sku: string;
-  dispatchQty: number;
-  returnQty: number;
-}
-
-export interface SalesReturnRecord {
-  id: string;
-  returnNumber: string;
-  dispatchNumber: string;
-  salesOrderNumber: string;
-  customer: string;
-  returnDate: string;
-  warehouse: string;
-  products: SalesReturnProduct[];
-  remarks?: string;
-}

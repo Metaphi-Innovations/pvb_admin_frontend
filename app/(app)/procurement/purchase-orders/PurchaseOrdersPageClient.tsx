@@ -10,13 +10,13 @@ import { ColumnConfig, FilterState, SortState } from "@/components/listing/types
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   Plus,
-  MoreHorizontal,
+  MoreVertical,
   Eye,
   Edit2,
   Send,
@@ -59,6 +59,7 @@ import { ThreeWayMatchListingCell } from "./components/ThreeWayMatchSection";
 import { getPOFollowUpSummary } from "./po-followup-data";
 import { ShortClosePOModal } from "./components/ShortClosePOModal";
 import { AddFollowUpModal } from "./components/AddFollowUpModal";
+import { POActionConfirmModal, type POActionConfirmType } from "./components/POActionConfirmModal";
 import { FollowUpListingCell } from "./components/VendorFollowUpPanel";
 import { InvoiceListingCell } from "./components/POVendorInvoiceSection";
 import { UploadVendorInvoiceDialog } from "./components/UploadVendorInvoiceDialog";
@@ -164,6 +165,9 @@ export default function PurchaseOrdersPageClient() {
   const [uploadTarget, setUploadTarget] = useState<PurchaseOrder | null>(null);
   const [uploadReplace, setUploadReplace] = useState(false);
   const [invoiceRev, setInvoiceRev] = useState(0);
+  const [actionConfirmOpen, setActionConfirmOpen] = useState(false);
+  const [actionConfirmType, setActionConfirmType] = useState<POActionConfirmType>("close");
+  const [actionConfirmTarget, setActionConfirmTarget] = useState<PurchaseOrder | null>(null);
 
   // MasterListing States
   const [filters, setFilters] = useState<FilterState>({});
@@ -392,60 +396,112 @@ export default function PurchaseOrdersPageClient() {
       render: (val, row) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="p-1.5 hover:bg-muted rounded-md transition-colors">
-              <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+            <button className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-100">
+              <MoreVertical className="w-4 h-4 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48 z-[400]">
-            <DropdownMenuItem onClick={() => router.push(`/procurement/purchase-orders/${row.id}`)} className="cursor-pointer">
-              <Eye className="w-3.5 h-3.5 mr-2" /> View
-            </DropdownMenuItem>
+          <DropdownMenuContent align="end" className="w-48 z-[200]">
+            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
+              Actions
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <button
+              type="button"
+              onClick={() => router.push(`/procurement/purchase-orders/${row.id}`)}
+              className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+            >
+              <Eye className="w-3.5 h-3.5" /> View
+            </button>
             {["draft", "rejected"].includes(row.status) && (
-              <DropdownMenuItem onClick={() => router.push(`/procurement/purchase-orders/${row.id}/edit`)} className="cursor-pointer">
-                <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
-              </DropdownMenuItem>
+              <button
+                type="button"
+                onClick={() => router.push(`/procurement/purchase-orders/${row.id}/edit`)}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+              >
+                <Edit2 className="w-3.5 h-3.5" /> Edit
+              </button>
             )}
             {row.status === "draft" && (
-              <DropdownMenuItem onClick={() => { updateOne(submitPO(row)); setToast({ msg: "PO submitted.", type: "success" }); }} className="cursor-pointer">
-                <Send className="w-3.5 h-3.5 mr-2" /> Submit
-              </DropdownMenuItem>
+              <button
+                type="button"
+                onClick={() => { updateOne(submitPO(row)); setToast({ msg: "PO submitted.", type: "success" }); }}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+              >
+                <Send className="w-3.5 h-3.5" /> Submit
+              </button>
             )}
             {row.status === "pending_approval" && (
               <>
-                <DropdownMenuItem onClick={() => { setApprovalTarget(row); setApprovalAction("approve"); setApprovalOpen(true); }} className="cursor-pointer">
-                  <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Approve
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => { setApprovalTarget(row); setApprovalAction("reject"); setApprovalOpen(true); }} className="cursor-pointer">
-                  <XCircle className="w-3.5 h-3.5 mr-2" /> Reject
-                </DropdownMenuItem>
+                <button
+                  type="button"
+                  onClick={() => { setApprovalTarget(row); setApprovalAction("approve"); setApprovalOpen(true); }}
+                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Approve
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setApprovalTarget(row); setApprovalAction("reject"); setApprovalOpen(true); }}
+                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+                >
+                  <XCircle className="w-3.5 h-3.5" /> Reject
+                </button>
               </>
             )}
             {canUploadPOInvoice(row) && (
-              <DropdownMenuItem onClick={() => openUpload(row, row.status === "invoice_uploaded")} className="cursor-pointer">
-                <Upload className="w-3.5 h-3.5 mr-2" /> Upload Invoice
-              </DropdownMenuItem>
+              <button
+                type="button"
+                onClick={() => openUpload(row, row.status === "invoice_uploaded")}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+              >
+                <Upload className="w-3.5 h-3.5" /> Upload Invoice
+              </button>
             )}
             {canAddPOFollowUp(row) && (
-              <DropdownMenuItem onClick={() => { setFollowUpTarget(row); setFollowUpOpen(true); }} className="cursor-pointer">
-                <MessageSquare className="w-3.5 h-3.5 mr-2" /> Add Follow-up
-              </DropdownMenuItem>
+              <button
+                type="button"
+                onClick={() => { setFollowUpTarget(row); setFollowUpOpen(true); }}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+              >
+                <MessageSquare className="w-3.5 h-3.5" /> Add Follow-up
+              </button>
             )}
             {canShortClosePO(row) && (
-              <DropdownMenuItem onClick={() => { setShortCloseTarget(row); setShortCloseOpen(true); }} className="cursor-pointer">
-                <Scissors className="w-3.5 h-3.5 mr-2" /> Short Close PO
-              </DropdownMenuItem>
+              <button
+                type="button"
+                onClick={() => { setShortCloseTarget(row); setShortCloseOpen(true); }}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+              >
+                <Scissors className="w-3.5 h-3.5" /> Short Close PO
+              </button>
             )}
             {["approved", "invoice_uploaded"].includes(row.status) && (
-              <DropdownMenuItem onClick={() => { updateOne(closePO(row)); setToast({ msg: "PO closed.", type: "success" }); }} className="cursor-pointer">
+              <button
+                type="button"
+                onClick={() => {
+                  setActionConfirmTarget(row);
+                  setActionConfirmType("close");
+                  setActionConfirmOpen(true);
+                }}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+              >
                 Close PO
-              </DropdownMenuItem>
+              </button>
             )}
             {!["closed", "cancelled", "short_closed"].includes(row.status) && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-red-600 cursor-pointer" onClick={() => { updateOne(cancelPO(row)); setToast({ msg: "PO cancelled.", type: "success" }); }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActionConfirmTarget(row);
+                    setActionConfirmType("cancel");
+                    setActionConfirmOpen(true);
+                  }}
+                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 transition-colors rounded-sm"
+                >
                   Cancel PO
-                </DropdownMenuItem>
+                </button>
               </>
             )}
           </DropdownMenuContent>
@@ -516,12 +572,21 @@ export default function PurchaseOrdersPageClient() {
                     <td className="px-3 py-2.5 text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <button className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto">
-                            <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                          <button className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-100">
+                            <MoreVertical className="w-4 h-4 text-muted-foreground" />
                           </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44 z-[400]">
-                          <DropdownMenuItem className="cursor-pointer"><Eye className="w-3.5 h-3.5 mr-2" /> View</DropdownMenuItem>
+                        <DropdownMenuContent align="end" className="w-48 z-[200]">
+                          <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
+                            Actions
+                          </DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          <button
+                            type="button"
+                            className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+                          >
+                            <Eye className="w-3.5 h-3.5" /> View
+                          </button>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </td>
@@ -581,9 +646,9 @@ export default function PurchaseOrdersPageClient() {
           if (!followUpTarget) return;
           const { updatedPo } = addPOFollowUp(followUpTarget, input);
           updateOne(updatedPo);
-          setFollowUpTarget(null);
+          setFollowUpTarget(updatedPo);
           setFollowUpRev((r) => r + 1);
-          setToast({ msg: "Follow-up added.", type: "success" });
+          setToast({ msg: "Follow-up saved.", type: "success" });
         }}
       />
 
@@ -611,6 +676,30 @@ export default function PurchaseOrdersPageClient() {
           setToast({ msg: approvalAction === "approve" ? "PO approved." : "PO rejected.", type: "success" });
         }}
       />
+
+      <POActionConfirmModal
+        open={actionConfirmOpen}
+        onOpenChange={(open) => {
+          setActionConfirmOpen(open);
+          if (!open) setActionConfirmTarget(null);
+        }}
+        po={actionConfirmTarget}
+        action={actionConfirmType}
+        onConfirm={() => {
+          if (!actionConfirmTarget) return;
+          const updated =
+            actionConfirmType === "close"
+              ? closePO(actionConfirmTarget)
+              : cancelPO(actionConfirmTarget);
+          updateOne(updated);
+          setActionConfirmTarget(null);
+          setToast({
+            msg: actionConfirmType === "close" ? "PO closed." : "PO cancelled.",
+            type: "success",
+          });
+        }}
+      />
+
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </ListingContainer>
   );

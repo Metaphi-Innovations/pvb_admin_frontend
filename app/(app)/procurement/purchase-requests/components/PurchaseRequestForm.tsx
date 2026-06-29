@@ -95,8 +95,8 @@ export const DEFAULT_PR_FORM: PRFormValues = {
 
 function SectionHead({ label, sub, required }: { label: string; sub?: string; required?: boolean }) {
   return (
-    <div className="mb-2.5 mt-0.5">
-      <p className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center">
+    <div className="mb-3 pb-2 border-b border-border">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center">
         {label}
         {required && <span className="text-red-500 ml-1">*</span>}
       </p>
@@ -106,6 +106,24 @@ function SectionHead({ label, sub, required }: { label: string; sub?: string; re
 }
 
 const inputCls = "h-8 rounded-lg text-xs";
+const readOnlyCls = cn(inputCls, "bg-muted/30 text-foreground");
+
+function ReadOnlyField({ value }: { value: string }) {
+  return (
+    <Input
+      value={value || "—"}
+      readOnly
+      className={readOnlyCls}
+    />
+  );
+}
+
+function formatDisplayDate(iso: string): string {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-");
+  if (!y || !m || !d) return iso;
+  return `${d}-${m}-${y}`;
+}
 
 interface InlineEditDraft {
   productId: string;
@@ -336,9 +354,14 @@ export function PurchaseRequestForm({
     });
   };
 
+  const departmentLabel =
+    DEPARTMENT_OPTIONS.find((d) => d.value === form.department)?.label ?? form.department;
+  const priorityLabel =
+    PR_PRIORITY_OPTIONS.find((p) => p.value === form.priority)?.label ?? form.priority;
+
   return (
-    <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
-      <div className="space-y-5">
+    <div className={cn("rounded-xl border border-border bg-white p-4 shadow-sm", readOnly && "w-full")}>
+      <div className="space-y-4">
         <div>
           <SectionHead label="Request Details" sub="Core purchase request information and required timeline." />
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -352,13 +375,16 @@ export function PurchaseRequestForm({
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">PR Date</Label>
-              <Input
-                type="date"
-                disabled={readOnly}
-                value={form.prDate}
-                onChange={(e) => set("prDate", e.target.value)}
-                className={inputCls}
-              />
+              {readOnly ? (
+                <ReadOnlyField value={formatDisplayDate(form.prDate)} />
+              ) : (
+                <Input
+                  type="date"
+                  value={form.prDate}
+                  onChange={(e) => set("prDate", e.target.value)}
+                  className={inputCls}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">Requested By</Label>
@@ -370,68 +396,87 @@ export function PurchaseRequestForm({
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">Department</Label>
-              <AutocompleteSelect
-                options={DEPARTMENT_OPTIONS.map((d) => ({ value: d.value, label: d.label }))}
-                value={form.department}
-                onChange={(v) => set("department", String(v))}
-                disabled={readOnly}
-                placeholder="Select department"
-                className={inputCls}
-              />
+              {readOnly ? (
+                <ReadOnlyField value={departmentLabel} />
+              ) : (
+                <AutocompleteSelect
+                  options={DEPARTMENT_OPTIONS.map((d) => ({ value: d.value, label: d.label }))}
+                  value={form.department}
+                  onChange={(v) => set("department", String(v))}
+                  placeholder="Select department"
+                  className={inputCls}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">Priority</Label>
-              <AutocompleteSelect
-                options={PR_PRIORITY_OPTIONS.map((p) => ({ value: p.value, label: p.label }))}
-                value={form.priority}
-                onChange={(v) => set("priority", v as PRPriority)}
-                disabled={readOnly}
-                placeholder="Select priority"
-                className={inputCls}
-              />
+              {readOnly ? (
+                <ReadOnlyField value={priorityLabel} />
+              ) : (
+                <AutocompleteSelect
+                  options={PR_PRIORITY_OPTIONS.map((p) => ({ value: p.value, label: p.label }))}
+                  value={form.priority}
+                  onChange={(v) => set("priority", v as PRPriority)}
+                  placeholder="Select priority"
+                  className={inputCls}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">State</Label>
-              <AutocompleteSelect
-                options={stateOptions}
-                value={form.state}
-                onChange={(v) => onStateChange(String(v))}
-                disabled={readOnly}
-                placeholder="Select state"
-                className={inputCls}
-              />
+              {readOnly ? (
+                <ReadOnlyField value={form.state} />
+              ) : (
+                <AutocompleteSelect
+                  options={stateOptions}
+                  value={form.state}
+                  onChange={(v) => onStateChange(String(v))}
+                  placeholder="Select state"
+                  className={inputCls}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">Warehouse</Label>
-              <AutocompleteSelect
-                options={warehouseOptions}
-                value={form.warehouseId ? String(form.warehouseId) : ""}
-                onChange={(v) => onWarehouseChange(String(v))}
-                disabled={readOnly || !form.state}
-                placeholder={form.state ? "Select warehouse" : "Select state first"}
-                className={inputCls}
-              />
+              {readOnly ? (
+                <ReadOnlyField value={form.warehouseName} />
+              ) : (
+                <AutocompleteSelect
+                  options={warehouseOptions}
+                  value={form.warehouseId ? String(form.warehouseId) : ""}
+                  onChange={(v) => onWarehouseChange(String(v))}
+                  disabled={!form.state}
+                  placeholder={form.state ? "Select warehouse" : "Select state first"}
+                  className={inputCls}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">Required By Date</Label>
-              <Input
-                type="date"
-                disabled={readOnly}
-                value={form.requiredByDate}
-                onChange={(e) => set("requiredByDate", e.target.value)}
-                className={inputCls}
-              />
+              {readOnly ? (
+                <ReadOnlyField value={formatDisplayDate(form.requiredByDate)} />
+              ) : (
+                <Input
+                  type="date"
+                  value={form.requiredByDate}
+                  onChange={(e) => set("requiredByDate", e.target.value)}
+                  className={inputCls}
+                />
+              )}
             </div>
           </div>
           <div className="mt-3 space-y-1">
             <Label className="text-xs font-medium">Purpose / Justification</Label>
             <Textarea
               rows={2}
-              disabled={readOnly}
+              readOnly={readOnly}
               value={form.purpose}
               onChange={(e) => set("purpose", e.target.value)}
               placeholder="Business justification for this purchase request..."
-              className="min-h-[60px] rounded-lg text-xs"
+              className={cn(
+                "min-h-[60px] rounded-lg text-xs",
+                readOnly && "bg-muted/30 resize-none",
+              )}
             />
           </div>
         </div>
@@ -546,29 +591,29 @@ export function PurchaseRequestForm({
               <p className="mt-1 text-xs text-muted-foreground">Add a product to start building this request.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-border bg-white shadow-sm">
-              <table className="min-w-full">
+            <div className="overflow-x-auto rounded-xl border border-border shadow-sm">
+              <table className="w-full min-w-[900px] table-fixed">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
-                    <th className="min-w-[200px] px-4 py-2.5 text-left text-xs font-semibold text-foreground">
+                    <th className="w-[22%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">
                       Product
                     </th>
-                    <th className="w-24 px-4 py-2.5 text-left text-xs font-semibold text-foreground">
+                    <th className="w-[10%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">
                       HSN Code
                     </th>
-                    <th className="w-28 px-4 py-2.5 text-left text-xs font-semibold text-foreground">
+                    <th className="w-[12%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">
                       Packaging Type
                     </th>
-                    <th className="w-24 px-4 py-2.5 text-right text-xs font-semibold text-foreground">
+                    <th className="w-[10%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">
                       Quantity
                     </th>
-                    <th className="w-28 px-4 py-2.5 text-right text-xs font-semibold text-foreground">
+                    <th className="w-[12%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">
                       Total SKU Qty
                     </th>
-                    <th className="w-28 px-4 py-2.5 text-right text-xs font-semibold text-foreground">
+                    <th className="w-[12%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">
                       Rate / SKU
                     </th>
-                    <th className="w-32 px-4 py-2.5 text-right text-xs font-semibold text-foreground">
+                    <th className="w-[14%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">
                       Total Amount
                     </th>
                     {!readOnly && (
@@ -747,35 +792,46 @@ export function PurchaseRequestForm({
         </div>
 
         <div className="border-t border-border/60 pt-4">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-            <div className="lg:col-span-6">
-              <SectionHead label="Remarks" sub="Additional notes for reviewers and approvers." />
+          <SectionHead
+            label="Remarks & Attachments"
+            sub={readOnly ? undefined : "Additional notes and supporting documents."}
+          />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div>
+              {!readOnly && (
+                <p className="mb-1.5 text-xs font-medium text-foreground">Remarks</p>
+              )}
               <Textarea
                 rows={4}
-                disabled={readOnly}
+                readOnly={readOnly}
                 value={form.remarks}
                 onChange={(e) => set("remarks", e.target.value)}
                 placeholder="Optional remarks..."
-                className="min-h-[90px] rounded-lg text-xs"
+                className={cn(
+                  "min-h-[90px] rounded-lg text-xs",
+                  readOnly && "bg-muted/30 resize-none",
+                )}
               />
             </div>
-            <div className="lg:col-span-6">
-              <div className="rounded-xl border border-border bg-white p-3.5">
+            <div className="rounded-xl border border-border bg-muted/10 p-3.5">
+              {!readOnly && (
                 <div className="mb-2.5 flex items-center justify-between gap-2">
-                  <SectionHead label="Attachments" sub="Upload supporting documents if needed." />
-                  {!readOnly && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 gap-1.5 rounded-lg text-[11px] font-semibold"
-                      onClick={() => fileRef.current?.click()}
-                    >
-                      <Upload className="h-3.5 w-3.5" /> Add File
-                    </Button>
-                  )}
+                  <p className="text-xs font-medium text-foreground">Attachments</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 rounded-lg text-[11px] font-semibold"
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <Upload className="h-3.5 w-3.5" /> Add File
+                  </Button>
                 </div>
-                {!readOnly && <input ref={fileRef} type="file" className="hidden" onChange={onFilePick} />}
+              )}
+              {readOnly && (
+                <p className="mb-2 text-xs font-medium text-foreground">Attachments</p>
+              )}
+              {!readOnly && <input ref={fileRef} type="file" className="hidden" onChange={onFilePick} />}
                 {form.attachments.length === 0 ? (
                   <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
                     No attachments
@@ -809,7 +865,6 @@ export function PurchaseRequestForm({
                     ))}
                   </ul>
                 )}
-              </div>
             </div>
           </div>
         </div>

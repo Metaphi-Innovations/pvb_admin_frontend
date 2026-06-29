@@ -3,12 +3,19 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { CheckCircle2, Edit2, ShoppingCart, XCircle } from "lucide-react";
 import {
-  RecordDetailPage,
-  OVERVIEW_TAB,
-  type RecordDetailSidebarProps,
-} from "@/components/record-detail";
+  Activity,
+  Check,
+  CheckCircle2,
+  Edit2,
+  IndianRupee,
+  ListOrdered,
+  ShoppingCart,
+  X,
+  XCircle,
+} from "lucide-react";
+import { RecordDetailPage } from "@/components/record-detail";
+import { Button } from "@/components/ui/button";
 import { PurchaseRequestForm, prToFormValues } from "../components/PurchaseRequestForm";
 import { PRApprovalModal, type PRApprovalAction } from "../components/PRApprovalModal";
 import {
@@ -23,10 +30,8 @@ import {
 import {
   getPRTotalAmount,
   getPRTotalItems,
-  getPRTotalQuantity,
 } from "../pr-listing-utils";
 import { formatCurrency } from "@/lib/procurement/utils";
-import { DEPARTMENT_OPTIONS, PR_PRIORITY_OPTIONS } from "@/lib/procurement/config";
 import { Toast } from "../../components/ProcurementUI";
 
 function prStatusVariant(status: PRStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
@@ -37,19 +42,11 @@ function prStatusVariant(status: PRStatus): "active" | "inactive" | "draft" | "b
   return "inactive";
 }
 
-function prApprovalTone(status: PRStatus): "pending" | "approved" | "rejected" | "neutral" {
-  if (status === "pending_approval") return "pending";
-  if (status === "approved" || status === "fully_converted" || status === "partially_converted") return "approved";
-  if (status === "rejected") return "rejected";
-  return "neutral";
-}
-
 export default function PRViewPage() {
   const params = useParams();
   const router = useRouter();
   const id = Number(params.id);
   const [pr, setPr] = useState(getPRById(id));
-  const [activeTab, setActiveTab] = useState("overview");
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [approvalAction, setApprovalAction] = useState<PRApprovalAction>("approve");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
@@ -58,92 +55,67 @@ export default function PRViewPage() {
 
   const formValues = useMemo(() => (pr ? prToFormValues(pr) : null), [pr]);
 
-  const departmentLabel =
-    DEPARTMENT_OPTIONS.find((d) => d.value === pr?.department)?.label ?? pr?.department;
-  const priorityLabel =
-    PR_PRIORITY_OPTIONS.find((p) => p.value === pr?.priority)?.label ?? pr?.priority;
-
-	if (!pr || !formValues) {
-		return (
-			<>
-				<div className='p-8 text-sm font-semibold text-muted-foreground'>
-					Purchase Request not found.{" "}
-					<Link
-						href='/procurement/purchase-requests'
-						className='text-brand-650 hover:underline'
-					>
-						Back to listing
-					</Link>
-				</div>
-			</>
-		);
-	}
-
-	const openApproval = (action: PRApprovalAction) => {
-		setApprovalAction(action);
-		setApprovalOpen(true);
-	};
-
-  const quickActions: RecordDetailSidebarProps["quickActions"] = [];
-  if (pr.status === "pending_approval") {
-    quickActions.push(
-      {
-        label: "Approve",
-        icon: CheckCircle2,
-        onClick: () => openApproval("approve"),
-        variant: "primary",
-      },
-      {
-        label: "Reject",
-        icon: XCircle,
-        onClick: () => openApproval("reject"),
-      },
+  if (!pr || !formValues) {
+    return (
+      <div className="p-8 text-sm font-semibold text-muted-foreground">
+        Purchase Request not found.{" "}
+        <Link href="/procurement/purchase-requests" className="text-brand-600 hover:underline">
+          Back to listing
+        </Link>
+      </div>
     );
   }
-  if (["draft", "rejected"].includes(pr.status)) {
-    quickActions.push({
-      label: "Edit",
-      icon: Edit2,
-      onClick: () => router.push(`/procurement/purchase-requests/${id}/edit`),
-    });
-  }
-  if (pr.status === "approved") {
-    quickActions.push({
-      label: "Create PO",
-      icon: ShoppingCart,
-      onClick: () => router.push(`/procurement/purchase-orders/new?prId=${id}`),
-      variant: "primary",
-    });
-  }
 
-  const sidebar: RecordDetailSidebarProps = {
-    quickActions,
-    summary: [
-      { label: "PR Date", value: pr.prDate },
-      { label: "Requested By", value: pr.requestedBy },
-      { label: "Department", value: departmentLabel || "—" },
-      { label: "Priority", value: priorityLabel || "—" },
-      { label: "Required By", value: pr.requiredByDate || "—" },
-      { label: "State / Warehouse", value: pr.state ? `${pr.state}${pr.warehouseName ? ` · ${pr.warehouseName}` : ""}` : "—" },
-      { label: "Line Items", value: String(getPRTotalItems(pr)) },
-      { label: "Total SKU Qty", value: String(getPRTotalQuantity(pr)) },
-      { label: "Total Amount", value: formatCurrency(getPRTotalAmount(pr)) },
-      { label: "Created By", value: pr.createdBy },
-    ],
-    activity: [...pr.activity].reverse().map((a, i) => ({
-      id: `${a.date}-${i}`,
-      title: a.action,
-      subtitle: a.note ? `${a.by} · ${a.note}` : a.by,
-      date: a.date,
-    })),
-    approval: [
-      {
-        label: "Status",
-        value: PR_STATUS_CFG[pr.status]?.label ?? pr.status,
-        tone: prApprovalTone(pr.status),
-      },
-    ],
+  const openApproval = (action: PRApprovalAction) => {
+    setApprovalAction(action);
+    setApprovalOpen(true);
   };
+
+  const statusLabel = PR_STATUS_CFG[pr.status]?.label ?? pr.status;
+  const totalAmount = getPRTotalAmount(pr);
+
+  const headerActions = (
+    <>
+      {["draft", "rejected"].includes(pr.status) && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs gap-1.5"
+          onClick={() => router.push(`/procurement/purchase-requests/${id}/edit`)}
+        >
+          <Edit2 className="w-3.5 h-3.5" /> Edit
+        </Button>
+      )}
+      {pr.status === "pending_approval" && (
+        <>
+          <Button
+            size="sm"
+            className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+            onClick={() => openApproval("approve")}
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" /> Approve
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5 text-red-600 border-red-200 hover:bg-red-50"
+            onClick={() => openApproval("reject")}
+          >
+            <XCircle className="w-3.5 h-3.5" /> Reject
+          </Button>
+        </>
+      )}
+      {pr.status === "approved" && (
+        <Button
+          size="sm"
+          className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+          onClick={() => router.push(`/procurement/purchase-orders/new?prId=${id}`)}
+        >
+          <ShoppingCart className="w-3.5 h-3.5" /> Create PO
+        </Button>
+      )}
+    </>
+  );
 
   return (
     <>
@@ -152,46 +124,60 @@ export default function PRViewPage() {
         listLabel="Purchase Requests"
         recordName="Purchase Request"
         recordCode={pr.prNumber}
-        statusLabel={PR_STATUS_CFG[pr.status]?.label ?? pr.status}
+        statusLabel={statusLabel}
         statusVariant={prStatusVariant(pr.status)}
-        tabs={[OVERVIEW_TAB]}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        sidebar={sidebar}
+        kpis={[
+          {
+            icon: IndianRupee,
+            iconBg: "bg-emerald-100",
+            iconColor: "text-emerald-700",
+            value: formatCurrency(totalAmount),
+            label: "Total Amount",
+          },
+          {
+            icon: ListOrdered,
+            iconBg: "bg-blue-100",
+            iconColor: "text-blue-700",
+            value: String(getPRTotalItems(pr)),
+            label: "Line Items",
+          },
+          {
+            icon: Activity,
+            iconBg: "bg-amber-100",
+            iconColor: "text-amber-700",
+            value: statusLabel,
+            label: "Status",
+          },
+        ]}
+        headerActions={headerActions}
       >
-        {activeTab === "overview" && (
-          <PurchaseRequestForm
-            form={formValues}
-            onChange={() => {}}
-            readOnly
-            prNumber={pr.prNumber}
-          />
-        )}
+        <PurchaseRequestForm
+          form={formValues}
+          onChange={() => {}}
+          readOnly
+          prNumber={pr.prNumber}
+        />
       </RecordDetailPage>
 
-			<PRApprovalModal
-				open={approvalOpen}
-				onClose={() => setApprovalOpen(false)}
-				pr={pr}
-				action={approvalAction}
-				onConfirm={(remarks) => {
-					const updated =
-						approvalAction === "approve"
-							? approvePR(pr, remarks)
-							: rejectPR(pr, remarks);
-					savePurchaseRequests(
-						loadPurchaseRequests().map((p) =>
-							p.id === updated.id ? updated : p,
-						),
-					);
-					setPr(updated);
-					setToast({
-						msg: approvalAction === "approve" ? "PR approved." : "PR rejected.",
-						type: "success",
-					});
-				}}
-			/>
-			{toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
-		</>
-	);
+      <PRApprovalModal
+        open={approvalOpen}
+        onClose={() => setApprovalOpen(false)}
+        pr={pr}
+        action={approvalAction}
+        onConfirm={(remarks) => {
+          const updated =
+            approvalAction === "approve" ? approvePR(pr, remarks) : rejectPR(pr, remarks);
+          savePurchaseRequests(
+            loadPurchaseRequests().map((p) => (p.id === updated.id ? updated : p)),
+          );
+          setPr(updated);
+          setToast({
+            msg: approvalAction === "approve" ? "PR approved." : "PR rejected.",
+            type: "success",
+          });
+        }}
+      />
+      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
+    </>
+  );
 }
