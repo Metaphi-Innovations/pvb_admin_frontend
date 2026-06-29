@@ -120,9 +120,6 @@ export default function ExpenseFormPageClient({
       {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
       <ExpenseForm form={form} onChange={setForm} expenseNumber={expenseNumber} />
       <div className="flex justify-end gap-2 mt-4 pb-6">
-        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => persist(true)}>
-          Save Draft
-        </Button>
         <Button
           size="sm"
           className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"

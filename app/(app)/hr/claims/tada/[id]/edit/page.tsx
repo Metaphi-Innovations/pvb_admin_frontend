@@ -68,7 +68,6 @@ export default function EditTadaClaimPage() {
         form={form}
         onChange={setForm}
         claimNumber={claimNumber}
-        onSaveDraft={() => persist(true)}
         onSubmit={() => persist(false)}
       />
       <p className="text-xs text-muted-foreground mt-2">

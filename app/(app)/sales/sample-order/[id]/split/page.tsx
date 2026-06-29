@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Split, CheckCircle2, XCircle } from "lucide-react";
-import type { Customer } from "@/app/(app)/masters/customers/customer-data";
 import type { Employee } from "@/app/(app)/user-management/employee/employee-data";
 import SalesOrderForm, {
   type SalesOrderFormValues,
@@ -23,7 +22,6 @@ import {
   canSplitOrder,
   generateOrderNumber,
   loadOrders,
-  getCustomersForTransactionDropdown,
   getSalesmenForOrders,
 } from "../../orders-data";
 
@@ -33,7 +31,6 @@ export default function SplitSalesOrderPage() {
   const id = Number(params.id);
 
   const [originalOrder, setOriginalOrder] = useState<SalesOrder | null>(null);
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [salesmen, setSalesmen] = useState<Employee[]>([]);
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
   const [orderNumber, setOrderNumber] = useState("");
@@ -42,7 +39,6 @@ export default function SplitSalesOrderPage() {
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
   useEffect(() => {
-    setCustomers(getCustomersForTransactionDropdown());
     setSalesmen(getSalesmenForOrders());
     setProducts(loadProductCatalog());
     setOrderNumber(generateOrderNumber(loadOrders()));
@@ -60,12 +56,10 @@ export default function SplitSalesOrderPage() {
     setOriginalOrder(hydrated);
     setForm({
       orderDate: hydrated.orderDate,
-      customerId: hydrated.customerId,
       salesManId: hydrated.salesManId,
-      deliveryDate: hydrated.deliveryDate,
+      remarks: hydrated.remarks ?? "",
       status: hydrated.status === "draft" ? "draft" : "confirmed",
       lineItems: [createEmptyLineItem()],
-      additionalExpenses: [],
       warehouseId: hydrated.warehouseId ?? null,
       warehouseName: hydrated.warehouseName ?? "",
     });
@@ -133,14 +127,6 @@ export default function SplitSalesOrderPage() {
             Cancel
           </Button>
           <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => handleSave(true)}
-          >
-            Save as Draft
-          </Button>
-          <Button
             size="sm"
             className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
             onClick={() => handleSave(false)}
@@ -156,7 +142,6 @@ export default function SplitSalesOrderPage() {
             form={form}
             onChange={setForm}
             errors={errors}
-            customers={customers}
             salesmen={salesmen}
             products={products}
             originalOrder={originalOrder}

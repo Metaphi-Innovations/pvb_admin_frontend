@@ -25,6 +25,9 @@ import {
 	getSalesmenForOrders,
 	loadProductCatalog,
 } from "../orders-data";
+import { validateSalesOrderCreditLimit } from "@/lib/sales/sales-order-credit";
+import type { CustomerCreditSummary } from "@/lib/sales/customer-credit-limit";
+import CreditLimitExceededDialog from "../components/CreditLimitExceededDialog";
 
 export default function AddSalesOrderPage() {
 	const router = useRouter();
@@ -49,8 +52,12 @@ export default function AddSalesOrderPage() {
 		warehouseName: "",
 		billToAddressId: "",
 		shipToAddressId: "",
+		remarks: "",
 	});
 	const [errors, setErrors] = useState<Record<string, string>>({});
+	const [creditDialog, setCreditDialog] = useState<CustomerCreditSummary | null>(
+		null,
+	);
 
 	useEffect(() => {
 		setCustomers(getCustomersForTransactionDropdown());
@@ -74,6 +81,13 @@ export default function AddSalesOrderPage() {
 			return;
 		}
 
+		const customer = customers.find((c) => c.id === form.customerId);
+		const creditCheck = validateSalesOrderCreditLimit({ form, customer });
+		if (creditCheck.exceeded && creditCheck.summary) {
+			setCreditDialog(creditCheck.summary);
+			return;
+		}
+
 		const newOrder = buildOrderFromForm(
 			form,
 			{ soNumber: orderNumber },
@@ -89,7 +103,6 @@ export default function AddSalesOrderPage() {
 
 		const orders = loadOrders();
 		saveOrders([...orders, newOrder]);
-		const customer = customers.find((c) => c.id === newOrder.customerId);
 		if (customer) {
 			syncSchemeUtilizationFromOrder(newOrder, customer, { isDraft: asDraft });
 		}
@@ -114,14 +127,6 @@ export default function AddSalesOrderPage() {
 			noCard={true}
 			actions={
 				<div className='flex items-center gap-2'>
-					<Button
-						variant='outline'
-						size='sm'
-						className='h-8 text-xs'
-						onClick={() => handleSave(true)}
-					>
-						Save as Draft
-					</Button>
 					<Button
 						size='sm'
 						className='h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white'
@@ -157,6 +162,14 @@ export default function AddSalesOrderPage() {
 					)}
 					{toast.msg}
 				</div>
+			)}
+
+			{creditDialog && (
+				<CreditLimitExceededDialog
+					open
+					onClose={() => setCreditDialog(null)}
+					summary={creditDialog}
+				/>
 			)}
 		</FormContainer>
 	);

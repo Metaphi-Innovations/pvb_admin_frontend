@@ -129,6 +129,13 @@ export function getUtilizationBySchemeId(schemeId: number): SchemeUtilizationRec
     .sort((a, b) => b.appliedDate.localeCompare(a.appliedDate));
 }
 
+export function getUtilizationBySchemeCode(schemeCode: string): SchemeUtilizationRecord[] {
+  const code = schemeCode.trim();
+  return loadSchemeUtilizationRecords()
+    .filter((record) => record.schemeCode.trim() === code)
+    .sort((a, b) => b.appliedDate.localeCompare(a.appliedDate));
+}
+
 export function getUtilizationSummaryBySchemeId(schemeId: number): SchemeUtilizationSummary {
   const records = getUtilizationBySchemeId(schemeId);
   const orderNumbers = new Set(records.map((record) => record.salesOrderNumber));

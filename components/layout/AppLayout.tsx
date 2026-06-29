@@ -22,7 +22,7 @@ export function AppLayout({ children, className, noPadding = false }: AppLayoutP
   return (
     <div
       className={cn(
-        "flex-1",
+        "w-full min-w-0",
         !noPadding && "px-5 py-4",
         className,
       )}

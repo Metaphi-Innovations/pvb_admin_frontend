@@ -25,6 +25,9 @@ import {
 import { syncSchemeUtilizationFromOrder } from "@/app/(app)/masters/scheme/scheme-utilization-data";
 import type { Customer } from "@/app/(app)/masters/customers/customer-data";
 import type { Employee } from "@/app/(app)/user-management/employee/employee-data";
+import { validateSalesOrderCreditLimit } from "@/lib/sales/sales-order-credit";
+import type { CustomerCreditSummary } from "@/lib/sales/customer-credit-limit";
+import CreditLimitExceededDialog from "../../components/CreditLimitExceededDialog";
 
 export default function EditSalesOrderPage() {
 	const params = useParams();
@@ -49,6 +52,9 @@ export default function EditSalesOrderPage() {
 		msg: string;
 		type: "success" | "error";
 	} | null>(null);
+	const [creditDialog, setCreditDialog] = useState<CustomerCreditSummary | null>(
+		null,
+	);
 
 	useEffect(() => {
 		setCustomers(getCustomersForTransactionDropdown());
@@ -91,6 +97,17 @@ export default function EditSalesOrderPage() {
 			return;
 		}
 
+		const customer = customers.find((c) => c.id === form.customerId);
+		const creditCheck = validateSalesOrderCreditLimit({
+			form,
+			customer,
+			excludeOrderId: existingOrder.id,
+		});
+		if (creditCheck.exceeded && creditCheck.summary) {
+			setCreditDialog(creditCheck.summary);
+			return;
+		}
+
 		const updated = buildOrderFromForm(
 			form,
 			{
@@ -122,7 +139,6 @@ export default function EditSalesOrderPage() {
 
 		const orders = loadOrders();
 		saveOrders(orders.map((o) => (o.id === updated.id ? updated : o)));
-		const customer = customers.find((c) => c.id === updated.customerId);
 		if (customer) {
 			syncSchemeUtilizationFromOrder(updated, customer, { isDraft: asDraft });
 		}
@@ -163,16 +179,6 @@ export default function EditSalesOrderPage() {
 			noCard={true}
 			actions={
 				<div className='flex items-center gap-2'>
-					{form.status === "draft" && (
-						<Button
-							variant='outline'
-							size='sm'
-							className='h-8 text-xs'
-							onClick={() => handleSave(true)}
-						>
-							Save as Draft
-						</Button>
-					)}
 					<Button
 						size='sm'
 						className='h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white'
@@ -194,6 +200,7 @@ export default function EditSalesOrderPage() {
 				products={products}
 				showStatus
 				auditInfo={auditInfo ?? undefined}
+				excludeOrderId={existingOrder?.id}
 			/>
 
 			{toast && (
@@ -210,6 +217,14 @@ export default function EditSalesOrderPage() {
 					)}
 					{toast.msg}
 				</div>
+			)}
+
+			{creditDialog && (
+				<CreditLimitExceededDialog
+					open
+					onClose={() => setCreditDialog(null)}
+					summary={creditDialog}
+				/>
 			)}
 		</FormContainer>
 	);

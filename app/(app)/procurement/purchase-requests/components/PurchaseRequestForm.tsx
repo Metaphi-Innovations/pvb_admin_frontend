@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useRef, useState } from "react";
-import { Download, Eye, Package, Plus, Trash2, Upload } from "lucide-react";
+import { Check, Download, Eye, Package, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,16 +11,15 @@ import { cn } from "@/lib/utils";
 import { CURRENT_USER, DEPARTMENT_OPTIONS, PR_PRIORITY_OPTIONS } from "@/lib/procurement/config";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import {
-  calcTotalQtyBase,
+  calcPackingToBaseQty,
+  calcPrLineAmount,
   enrichProductForProcurement,
-  PACKAGING_UOM_OPTIONS,
   type PackagingUom,
 } from "@/lib/procurement/procurement-line-utils";
 import { stateSelectOptions, warehouseSelectOptions } from "@/lib/procurement/warehouse-filter";
 import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
 import { formatCurrency } from "@/lib/procurement/utils";
-import { ProductInfoStrip } from "@/components/procurement/ProductInfoStrip";
-import type { PRAttachment, PRLineItem, PurchaseRequest } from "../pr-data";
+import { enrichPRLineItem, type PRAttachment, type PRLineItem, type PurchaseRequest } from "../pr-data";
 import type { PRPriority } from "@/lib/procurement/config";
 
 export interface PRFormValues {
@@ -50,7 +49,7 @@ export function prToFormValues(pr: PurchaseRequest): PRFormValues {
     requiredByDate: pr.requiredByDate,
     purpose: pr.purpose,
     remarks: pr.remarks,
-    lines: pr.lines.map((l) => ({ ...l })),
+    lines: pr.lines.map((l) => enrichPRLineItem({ ...l })),
     attachments: [...pr.attachments],
   };
 }
@@ -71,7 +70,9 @@ export function emptyPRLine(): PRLineItem {
     totalQtyBase: 1,
     segment: "",
     category: "",
+    hsnCode: "",
     mrp: 0,
+    ratePerSku: 0,
     uom: "Unit",
     remarks: "",
   };
@@ -94,8 +95,8 @@ export const DEFAULT_PR_FORM: PRFormValues = {
 
 function SectionHead({ label, sub, required }: { label: string; sub?: string; required?: boolean }) {
   return (
-    <div className="mb-2.5 mt-0.5">
-      <p className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center">
+    <div className="mb-3 pb-2 border-b border-border">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center">
         {label}
         {required && <span className="text-red-500 ml-1">*</span>}
       </p>
@@ -105,12 +106,44 @@ function SectionHead({ label, sub, required }: { label: string; sub?: string; re
 }
 
 const inputCls = "h-8 rounded-lg text-xs";
+const readOnlyCls = cn(inputCls, "bg-muted/30 text-foreground");
 
-function lineFromProduct(productId: number, qty: number): PRLineItem | null {
+function ReadOnlyField({ value }: { value: string }) {
+  return (
+    <Input
+      value={value || "—"}
+      readOnly
+      className={readOnlyCls}
+    />
+  );
+}
+
+function formatDisplayDate(iso: string): string {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-");
+  if (!y || !m || !d) return iso;
+  return `${d}-${m}-${y}`;
+}
+
+interface InlineEditDraft {
+  productId: string;
+  packingQty: string;
+  remarks: string;
+}
+
+function packagingUnitToRequestUom(packagingUnit: string): PackagingUom {
+  const norm = packagingUnit.toLowerCase();
+  if (norm.includes("case")) return "Case";
+  if (norm.includes("box")) return "Box";
+  if (norm.includes("carton")) return "Carton";
+  return "Unit";
+}
+
+function lineFromProduct(productId: number, packingQty: number, remarks = ""): PRLineItem | null {
   const info = enrichProductForProcurement(productId);
   if (!info) return null;
-  const requestUom: PackagingUom = "Unit";
-  const requestedQty = qty;
+  const requestedQty = packingQty;
+  const requestUom = packagingUnitToRequestUom(info.packagingUnit);
   return {
     ...emptyPRLine(),
     productId: info.productId,
@@ -123,12 +156,14 @@ function lineFromProduct(productId: number, qty: number): PRLineItem | null {
     conversionQty: info.conversionQty,
     requestUom,
     requestedQty,
-    totalQtyBase: calcTotalQtyBase(requestUom, requestedQty, info.conversionQty),
+    totalQtyBase: calcPackingToBaseQty(requestedQty, info.conversionQty),
     segment: info.segment,
     category: info.category,
+    hsnCode: info.hsnCode,
     mrp: info.mrp,
+    ratePerSku: info.ratePerSku,
     uom: requestUom,
-    remarks: "",
+    remarks,
   };
 }
 
@@ -147,7 +182,10 @@ export function PurchaseRequestForm({
   const masterProducts = loadProducts().filter((p) => p.status === "active");
   const [quickProductIds, setQuickProductIds] = useState<string[]>([]);
   const [quickQty, setQuickQty] = useState("1");
-  const [expandedLineUid, setExpandedLineUid] = useState<string | null>(null);
+  const [quickRemarks, setQuickRemarks] = useState("");
+  const [inlineEditUid, setInlineEditUid] = useState<string | null>(null);
+  const [inlineEditDraft, setInlineEditDraft] = useState<InlineEditDraft | null>(null);
+  const [inlineEditError, setInlineEditError] = useState<string | null>(null);
 
   const stateOptions = useMemo(() => stateSelectOptions(), []);
   const warehouseOptions = useMemo(
@@ -164,51 +202,99 @@ export function PurchaseRequestForm({
       lines: form.lines.map((l) => {
         if (l.uid !== uid) return l;
         const next = { ...l, ...patch };
-        next.totalQtyBase = calcTotalQtyBase(next.requestUom, next.requestedQty, next.conversionQty);
+        next.totalQtyBase = calcPackingToBaseQty(next.requestedQty, next.conversionQty);
         next.uom = next.requestUom;
         return next;
       }),
     });
   };
 
-  const addProductLine = (productId: number, qty: number) => {
-    const line = lineFromProduct(productId, qty);
-    if (!line) return;
-    const existing = form.lines.find((l) => l.productId === productId);
-    if (existing) {
-      updateLine(existing.uid, { requestedQty: existing.requestedQty + qty });
+  const clearQuickFields = () => {
+    setQuickProductIds([]);
+    setQuickQty("1");
+    setQuickRemarks("");
+  };
+
+  const cancelInlineEdit = () => {
+    setInlineEditUid(null);
+    setInlineEditDraft(null);
+    setInlineEditError(null);
+  };
+
+  const startInlineEdit = (line: PRLineItem) => {
+    setInlineEditUid(line.uid);
+    setInlineEditDraft({
+      productId: String(line.productId),
+      packingQty: String(line.requestedQty),
+      remarks: line.remarks,
+    });
+    setInlineEditError(null);
+  };
+
+  const saveInlineEdit = () => {
+    if (!inlineEditUid || !inlineEditDraft) return;
+    const packingQty = Number(inlineEditDraft.packingQty);
+    if (!packingQty || packingQty <= 0) {
+      setInlineEditError("Packing qty is required and must be greater than 0");
       return;
     }
-    onChange({ ...form, lines: [...form.lines, { ...line, uid: emptyPRLine().uid }] });
+    const productId = Number(inlineEditDraft.productId);
+    if (!productId) {
+      setInlineEditError("Product is required");
+      return;
+    }
+    const base = lineFromProduct(productId, packingQty, inlineEditDraft.remarks);
+    if (!base) return;
+    updateLine(inlineEditUid, {
+      productId: base.productId,
+      productCode: base.productCode,
+      productName: base.productName,
+      description: base.description,
+      sku: base.sku,
+      baseUnit: base.baseUnit,
+      packagingUnit: base.packagingUnit,
+      conversionQty: base.conversionQty,
+      segment: base.segment,
+      category: base.category,
+      hsnCode: base.hsnCode,
+      mrp: base.mrp,
+      ratePerSku: base.ratePerSku,
+      requestUom: base.requestUom,
+      requestedQty: packingQty,
+      remarks: inlineEditDraft.remarks,
+    });
+    cancelInlineEdit();
   };
 
   const quickAdd = () => {
     if (quickProductIds.length === 0) return;
-    const qty = Number(quickQty) || 1;
+    const packingQty = Number(quickQty) || 1;
     let nextLines = [...form.lines];
     for (const idStr of Array.from(new Set(quickProductIds))) {
       const productId = Number(idStr);
-      const line = lineFromProduct(productId, qty);
+      const line = lineFromProduct(productId, packingQty, quickRemarks);
       if (!line) continue;
       const idx = nextLines.findIndex((l) => l.productId === productId);
       if (idx >= 0) {
         const existing = nextLines[idx];
+        const nextPackingQty = existing.requestedQty + packingQty;
         nextLines[idx] = {
           ...existing,
-          requestedQty: existing.requestedQty + qty,
-          totalQtyBase: calcTotalQtyBase(
-            existing.requestUom,
-            existing.requestedQty + qty,
-            existing.conversionQty,
-          ),
+          requestedQty: nextPackingQty,
+          totalQtyBase: calcPackingToBaseQty(nextPackingQty, existing.conversionQty),
+          remarks: quickRemarks || existing.remarks,
         };
       } else {
         nextLines.push({ ...line, uid: emptyPRLine().uid });
       }
     }
     onChange({ ...form, lines: nextLines });
-    setQuickProductIds([]);
-    setQuickQty("1");
+    clearQuickFields();
+  };
+
+  const removeLine = (uid: string) => {
+    onChange({ ...form, lines: form.lines.filter((l) => l.uid !== uid) });
+    if (inlineEditUid === uid) cancelInlineEdit();
   };
 
   const onFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -231,6 +317,20 @@ export function PurchaseRequestForm({
   };
 
   const filledLines = form.lines.filter((l) => l.productId > 0);
+  const totalPackingQty = filledLines.reduce((sum, l) => sum + (l.requestedQty || 0), 0);
+  const totalSkuQty = filledLines.reduce((sum, l) => sum + (l.totalQtyBase || 0), 0);
+  const totalAmount = filledLines.reduce(
+    (sum, l) => sum + calcPrLineAmount(l.ratePerSku, l.totalQtyBase),
+    0,
+  );
+  const previewProductId = Number(quickProductIds[0]);
+  const previewProductInfo = previewProductId ? enrichProductForProcurement(previewProductId) : null;
+  const previewSkuQty = previewProductInfo
+    ? calcPackingToBaseQty(Number(quickQty) || 0, previewProductInfo.conversionQty)
+    : 0;
+  const previewAmount = previewProductInfo
+    ? calcPrLineAmount(previewProductInfo.ratePerSku, previewSkuQty)
+    : 0;
   const productOptions = masterProducts.map((p) => ({
     value: String(p.id),
     label: `${p.productName} (${p.sku || p.productId})`,
@@ -254,9 +354,14 @@ export function PurchaseRequestForm({
     });
   };
 
+  const departmentLabel =
+    DEPARTMENT_OPTIONS.find((d) => d.value === form.department)?.label ?? form.department;
+  const priorityLabel =
+    PR_PRIORITY_OPTIONS.find((p) => p.value === form.priority)?.label ?? form.priority;
+
   return (
-    <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
-      <div className="space-y-5">
+    <div className={cn("rounded-xl border border-border bg-white p-4 shadow-sm", readOnly && "w-full")}>
+      <div className="space-y-4">
         <div>
           <SectionHead label="Request Details" sub="Core purchase request information and required timeline." />
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -270,13 +375,16 @@ export function PurchaseRequestForm({
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">PR Date</Label>
-              <Input
-                type="date"
-                disabled={readOnly}
-                value={form.prDate}
-                onChange={(e) => set("prDate", e.target.value)}
-                className={inputCls}
-              />
+              {readOnly ? (
+                <ReadOnlyField value={formatDisplayDate(form.prDate)} />
+              ) : (
+                <Input
+                  type="date"
+                  value={form.prDate}
+                  onChange={(e) => set("prDate", e.target.value)}
+                  className={inputCls}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">Requested By</Label>
@@ -288,83 +396,117 @@ export function PurchaseRequestForm({
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">Department</Label>
-              <AutocompleteSelect
-                options={DEPARTMENT_OPTIONS.map((d) => ({ value: d.value, label: d.label }))}
-                value={form.department}
-                onChange={(v) => set("department", String(v))}
-                disabled={readOnly}
-                placeholder="Select department"
-                className={inputCls}
-              />
+              {readOnly ? (
+                <ReadOnlyField value={departmentLabel} />
+              ) : (
+                <AutocompleteSelect
+                  options={DEPARTMENT_OPTIONS.map((d) => ({ value: d.value, label: d.label }))}
+                  value={form.department}
+                  onChange={(v) => set("department", String(v))}
+                  placeholder="Select department"
+                  className={inputCls}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">Priority</Label>
-              <AutocompleteSelect
-                options={PR_PRIORITY_OPTIONS.map((p) => ({ value: p.value, label: p.label }))}
-                value={form.priority}
-                onChange={(v) => set("priority", v as PRPriority)}
-                disabled={readOnly}
-                placeholder="Select priority"
-                className={inputCls}
-              />
+              {readOnly ? (
+                <ReadOnlyField value={priorityLabel} />
+              ) : (
+                <AutocompleteSelect
+                  options={PR_PRIORITY_OPTIONS.map((p) => ({ value: p.value, label: p.label }))}
+                  value={form.priority}
+                  onChange={(v) => set("priority", v as PRPriority)}
+                  placeholder="Select priority"
+                  className={inputCls}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">State</Label>
-              <AutocompleteSelect
-                options={stateOptions}
-                value={form.state}
-                onChange={(v) => onStateChange(String(v))}
-                disabled={readOnly}
-                placeholder="Select state"
-                className={inputCls}
-              />
+              {readOnly ? (
+                <ReadOnlyField value={form.state} />
+              ) : (
+                <AutocompleteSelect
+                  options={stateOptions}
+                  value={form.state}
+                  onChange={(v) => onStateChange(String(v))}
+                  placeholder="Select state"
+                  className={inputCls}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">Warehouse</Label>
-              <AutocompleteSelect
-                options={warehouseOptions}
-                value={form.warehouseId ? String(form.warehouseId) : ""}
-                onChange={(v) => onWarehouseChange(String(v))}
-                disabled={readOnly || !form.state}
-                placeholder={form.state ? "Select warehouse" : "Select state first"}
-                className={inputCls}
-              />
+              {readOnly ? (
+                <ReadOnlyField value={form.warehouseName} />
+              ) : (
+                <AutocompleteSelect
+                  options={warehouseOptions}
+                  value={form.warehouseId ? String(form.warehouseId) : ""}
+                  onChange={(v) => onWarehouseChange(String(v))}
+                  disabled={!form.state}
+                  placeholder={form.state ? "Select warehouse" : "Select state first"}
+                  className={inputCls}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">Required By Date</Label>
-              <Input
-                type="date"
-                disabled={readOnly}
-                value={form.requiredByDate}
-                onChange={(e) => set("requiredByDate", e.target.value)}
-                className={inputCls}
-              />
+              {readOnly ? (
+                <ReadOnlyField value={formatDisplayDate(form.requiredByDate)} />
+              ) : (
+                <Input
+                  type="date"
+                  value={form.requiredByDate}
+                  onChange={(e) => set("requiredByDate", e.target.value)}
+                  className={inputCls}
+                />
+              )}
             </div>
           </div>
           <div className="mt-3 space-y-1">
             <Label className="text-xs font-medium">Purpose / Justification</Label>
             <Textarea
               rows={2}
-              disabled={readOnly}
+              readOnly={readOnly}
               value={form.purpose}
               onChange={(e) => set("purpose", e.target.value)}
               placeholder="Business justification for this purchase request..."
-              className="min-h-[60px] rounded-lg text-xs"
+              className={cn(
+                "min-h-[60px] rounded-lg text-xs",
+                readOnly && "bg-muted/30 resize-none",
+              )}
             />
           </div>
         </div>
 
         <div className="border-t border-border/60 pt-4">
           <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-            <SectionHead label="Product / Item Details" sub="Add products with packaging UOM and base qty conversion." />
-            <span className="inline-flex h-6 items-center rounded-full bg-brand-50 px-2.5 text-[11px] font-semibold text-brand-700">
-              {filledLines.length} item{filledLines.length === 1 ? "" : "s"}
-            </span>
+            <SectionHead
+              label="Product / Item Details"
+              sub="Enter packaging quantity — total SKU qty and amount are auto-calculated from product master."
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex h-6 items-center rounded-full bg-brand-50 px-2.5 text-[11px] font-semibold text-brand-700">
+                {filledLines.length} item{filledLines.length === 1 ? "" : "s"}
+              </span>
+              {filledLines.length > 0 && (
+                <>
+                  <span className="inline-flex h-6 items-center rounded-full bg-muted px-2.5 text-[11px] font-semibold text-muted-foreground">
+                    {totalSkuQty} SKU qty
+                  </span>
+                  <span className="inline-flex h-6 items-center rounded-full bg-muted px-2.5 text-[11px] font-semibold text-muted-foreground">
+                    {formatCurrency(totalAmount)}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
 
           {!readOnly && (
             <div className="mb-3 rounded-lg border border-border bg-muted/20 p-3">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_96px_auto]">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_96px_minmax(0,1fr)_auto]">
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Product</Label>
                   <AutocompleteSelect
@@ -378,7 +520,7 @@ export function PurchaseRequestForm({
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs font-medium">Qty</Label>
+                  <Label className="text-xs font-medium">Quantity</Label>
                   <Input
                     type="number"
                     min={1}
@@ -387,17 +529,58 @@ export function PurchaseRequestForm({
                     className={inputCls}
                   />
                 </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Remarks</Label>
+                  <Input
+                    value={quickRemarks}
+                    onChange={(e) => setQuickRemarks(e.target.value)}
+                    placeholder="Optional"
+                    className={inputCls}
+                  />
+                </div>
                 <div className="flex items-end">
                   <Button
                     type="button"
                     onClick={quickAdd}
-                    disabled={quickProductIds.length === 0}
+                    disabled={quickProductIds.length === 0 || !!inlineEditUid}
                     className="h-8 gap-1.5 rounded-lg bg-brand-600 px-3 text-xs font-semibold text-white hover:bg-brand-700"
                   >
                     <Plus className="h-3.5 w-3.5" /> Add Item
                   </Button>
                 </div>
               </div>
+              {previewProductInfo && (
+                <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-border/60 bg-white px-3 py-2 text-[11px]">
+                  <span>
+                    <span className="text-muted-foreground">HSN: </span>
+                    <span className="font-mono font-medium text-foreground">{previewProductInfo.hsnCode || "—"}</span>
+                  </span>
+                  <span>
+                    <span className="text-muted-foreground">Packaging: </span>
+                    <span className="font-medium text-foreground">{previewProductInfo.packagingUnit}</span>
+                  </span>
+                  <span>
+                    <span className="text-muted-foreground">Conversion: </span>
+                    <span className="font-medium text-foreground">
+                      1 {previewProductInfo.packagingUnit} = {previewProductInfo.conversionQty} SKU
+                    </span>
+                  </span>
+                  <span>
+                    <span className="text-muted-foreground">Total SKU Qty: </span>
+                    <span className="font-semibold text-brand-700 tabular-nums">{previewSkuQty}</span>
+                  </span>
+                  <span>
+                    <span className="text-muted-foreground">Rate/SKU: </span>
+                    <span className="font-medium text-foreground tabular-nums">
+                      {formatCurrency(previewProductInfo.ratePerSku)}
+                    </span>
+                  </span>
+                  <span>
+                    <span className="text-muted-foreground">Amount: </span>
+                    <span className="font-semibold text-brand-700 tabular-nums">{formatCurrency(previewAmount)}</span>
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -408,127 +591,247 @@ export function PurchaseRequestForm({
               <p className="mt-1 text-xs text-muted-foreground">Add a product to start building this request.</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {filledLines.map((line, idx) => {
-                const info = enrichProductForProcurement(line.productId);
-                const isExpanded = expandedLineUid === line.uid;
-                return (
-                  <div key={line.uid} className="rounded-lg border border-border bg-white p-3">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <p className="text-xs font-semibold text-foreground">
-                        {idx + 1}. {line.productName}
-                        <span className="ml-2 font-mono text-[10px] text-muted-foreground">{line.sku}</span>
-                      </p>
-                      {!readOnly && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600"
-                          onClick={() =>
-                            onChange({ ...form, lines: form.lines.filter((l) => l.uid !== line.uid) })
-                          }
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] text-muted-foreground">Request UOM</Label>
-                        <AutocompleteSelect
-                          options={PACKAGING_UOM_OPTIONS}
-                          value={line.requestUom}
-                          onChange={(v) => updateLine(line.uid, { requestUom: v as PackagingUom })}
-                          disabled={readOnly}
-                          className={inputCls}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] text-muted-foreground">Requested Qty</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          disabled={readOnly}
-                          value={line.requestedQty}
-                          onChange={(e) =>
-                            updateLine(line.uid, { requestedQty: Number(e.target.value) || 0 })
-                          }
-                          className={inputCls}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] text-muted-foreground">Total Qty (Base)</Label>
-                        <Input
-                          readOnly
-                          value={`${line.totalQtyBase} ${line.baseUnit}`}
-                          className={cn(inputCls, "bg-muted/30 font-medium")}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] text-muted-foreground">Conversion</Label>
-                        <Input
-                          readOnly
-                          value={`1 ${line.packagingUnit} = ${line.conversionQty} ${line.baseUnit}`}
-                          className={cn(inputCls, "bg-muted/30 text-[10px]")}
-                        />
-                      </div>
-                      <div className="space-y-1 md:col-span-2">
-                        <Label className="text-[10px] text-muted-foreground">Line Remarks</Label>
-                        <Input
-                          disabled={readOnly}
-                          value={line.remarks}
-                          onChange={(e) => updateLine(line.uid, { remarks: e.target.value })}
-                          placeholder="Optional"
-                          className={inputCls}
-                        />
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="mt-2 text-[10px] font-semibold text-brand-600"
-                      onClick={() => setExpandedLineUid(isExpanded ? null : line.uid)}
-                    >
-                      {isExpanded ? "Hide" : "Show"} product info · MRP {formatCurrency(line.mrp)}
-                    </button>
-                    {isExpanded && <ProductInfoStrip info={info} />}
-                  </div>
-                );
-              })}
+            <div className="overflow-x-auto rounded-xl border border-border shadow-sm">
+              <table className="w-full min-w-[900px] table-fixed">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40">
+                    <th className="w-[22%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">
+                      Product
+                    </th>
+                    <th className="w-[10%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">
+                      HSN Code
+                    </th>
+                    <th className="w-[12%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">
+                      Packaging Type
+                    </th>
+                    <th className="w-[10%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">
+                      Quantity
+                    </th>
+                    <th className="w-[12%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">
+                      Total SKU Qty
+                    </th>
+                    <th className="w-[12%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">
+                      Rate / SKU
+                    </th>
+                    <th className="w-[14%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">
+                      Total Amount
+                    </th>
+                    {!readOnly && (
+                      <th className="w-16 px-4 py-2.5 text-right text-xs font-semibold text-foreground">
+                        Actions
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filledLines.map((line) => {
+                    const isEditing = inlineEditUid === line.uid;
+                    const draft = isEditing ? inlineEditDraft : null;
+                    const draftInfo = draft?.productId
+                      ? enrichProductForProcurement(Number(draft.productId))
+                      : null;
+                    const displayHsn = draftInfo?.hsnCode ?? line.hsnCode;
+                    const displayPackaging = draftInfo?.packagingUnit ?? line.packagingUnit;
+                    const displayConversionQty = draftInfo?.conversionQty ?? line.conversionQty;
+                    const displayRatePerSku = draftInfo?.ratePerSku ?? line.ratePerSku;
+                    const displaySkuQty =
+                      isEditing && draft
+                        ? calcPackingToBaseQty(Number(draft.packingQty) || 0, displayConversionQty)
+                        : line.totalQtyBase;
+                    const displayAmount = calcPrLineAmount(displayRatePerSku, displaySkuQty);
+
+                    return (
+                      <tr
+                        key={line.uid}
+                        className={cn(
+                          "border-b border-border/60 transition-colors",
+                          isEditing ? "bg-brand-50/60" : "hover:bg-muted/20",
+                        )}
+                      >
+                        <td className="px-4 py-2">
+                          {isEditing && draft ? (
+                            <AutocompleteSelect
+                              options={productOptions}
+                              value={draft.productId}
+                              onChange={(val) => {
+                                setInlineEditDraft((prev) =>
+                                  prev ? { ...prev, productId: String(val) } : prev,
+                                );
+                                setInlineEditError(null);
+                              }}
+                              placeholder="Select product..."
+                              searchPlaceholder="Search product..."
+                              className="h-8 rounded-lg text-xs"
+                            />
+                          ) : (
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-foreground">{line.productName}</p>
+                              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                <span className="font-mono font-semibold text-brand-700">{line.sku}</span>
+                                {line.category ? ` · ${line.category}` : ""}
+                              </p>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 font-mono text-xs text-foreground">
+                          {displayHsn || "—"}
+                        </td>
+                        <td className="px-4 py-2 text-xs text-foreground">{displayPackaging}</td>
+                        <td className="px-4 py-2 text-right">
+                          {isEditing && draft ? (
+                            <div className="space-y-0.5">
+                              <Input
+                                type="number"
+                                min={1}
+                                value={draft.packingQty}
+                                onChange={(e) => {
+                                  setInlineEditDraft((prev) =>
+                                    prev ? { ...prev, packingQty: e.target.value } : prev,
+                                  );
+                                  setInlineEditError(null);
+                                }}
+                                className={cn(inputCls, "w-20 ml-auto text-right", inlineEditError && "border-red-400")}
+                              />
+                              {inlineEditError && (
+                                <p className="text-[10px] text-red-500 text-right">{inlineEditError}</p>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs tabular-nums text-foreground">{line.requestedQty}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <span className="text-xs font-semibold tabular-nums text-foreground">{displaySkuQty}</span>
+                          {!isEditing && displayConversionQty > 1 && (
+                            <p className="text-[10px] text-muted-foreground tabular-nums">
+                              {line.requestedQty} × {displayConversionQty}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-right text-xs tabular-nums text-foreground">
+                          {formatCurrency(displayRatePerSku)}
+                        </td>
+                        <td className="px-4 py-2 text-right text-xs font-semibold tabular-nums font-mono text-foreground">
+                          {formatCurrency(displayAmount)}
+                        </td>
+                        {!readOnly && (
+                          <td className="px-4 py-2 text-right">
+                            {isEditing ? (
+                              <div className="inline-flex items-center gap-0.5">
+                                <button
+                                  type="button"
+                                  title="Save"
+                                  onClick={saveInlineEdit}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-emerald-700 hover:bg-emerald-50"
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  title="Cancel"
+                                  onClick={cancelInlineEdit}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="inline-flex items-center gap-0.5">
+                                <button
+                                  type="button"
+                                  title="Edit"
+                                  onClick={() => startInlineEdit(line)}
+                                  disabled={!!inlineEditUid}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-brand-600 hover:bg-brand-50 disabled:pointer-events-none disabled:opacity-40"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  title="Remove"
+                                  onClick={() => removeLine(line.uid)}
+                                  disabled={!!inlineEditUid}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-red-600 hover:bg-red-50 disabled:pointer-events-none disabled:opacity-40"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-muted/20 px-4 py-2.5">
+                <p className="text-[11px] text-muted-foreground">
+                  Showing{" "}
+                  <span className="font-medium text-foreground">{filledLines.length}</span> of{" "}
+                  <span className="font-medium text-foreground">{filledLines.length}</span> items
+                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <p className="text-[11px] text-muted-foreground">
+                    Total quantity:{" "}
+                    <span className="font-medium text-foreground tabular-nums">{totalPackingQty}</span>
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Total SKU qty:{" "}
+                    <span className="font-medium text-foreground tabular-nums">{totalSkuQty}</span>
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Total amount:{" "}
+                    <span className="font-medium text-foreground tabular-nums font-mono">
+                      {formatCurrency(totalAmount)}
+                    </span>
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </div>
 
         <div className="border-t border-border/60 pt-4">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-            <div className="lg:col-span-6">
-              <SectionHead label="Remarks" sub="Additional notes for reviewers and approvers." />
+          <SectionHead
+            label="Remarks & Attachments"
+            sub={readOnly ? undefined : "Additional notes and supporting documents."}
+          />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div>
+              {!readOnly && (
+                <p className="mb-1.5 text-xs font-medium text-foreground">Remarks</p>
+              )}
               <Textarea
                 rows={4}
-                disabled={readOnly}
+                readOnly={readOnly}
                 value={form.remarks}
                 onChange={(e) => set("remarks", e.target.value)}
                 placeholder="Optional remarks..."
-                className="min-h-[90px] rounded-lg text-xs"
+                className={cn(
+                  "min-h-[90px] rounded-lg text-xs",
+                  readOnly && "bg-muted/30 resize-none",
+                )}
               />
             </div>
-            <div className="lg:col-span-6">
-              <div className="rounded-xl border border-border bg-white p-3.5">
+            <div className="rounded-xl border border-border bg-muted/10 p-3.5">
+              {!readOnly && (
                 <div className="mb-2.5 flex items-center justify-between gap-2">
-                  <SectionHead label="Attachments" sub="Upload supporting documents if needed." />
-                  {!readOnly && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 gap-1.5 rounded-lg text-[11px] font-semibold"
-                      onClick={() => fileRef.current?.click()}
-                    >
-                      <Upload className="h-3.5 w-3.5" /> Add File
-                    </Button>
-                  )}
+                  <p className="text-xs font-medium text-foreground">Attachments</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 rounded-lg text-[11px] font-semibold"
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <Upload className="h-3.5 w-3.5" /> Add File
+                  </Button>
                 </div>
-                {!readOnly && <input ref={fileRef} type="file" className="hidden" onChange={onFilePick} />}
+              )}
+              {readOnly && (
+                <p className="mb-2 text-xs font-medium text-foreground">Attachments</p>
+              )}
+              {!readOnly && <input ref={fileRef} type="file" className="hidden" onChange={onFilePick} />}
                 {form.attachments.length === 0 ? (
                   <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
                     No attachments
@@ -562,7 +865,6 @@ export function PurchaseRequestForm({
                     ))}
                   </ul>
                 )}
-              </div>
             </div>
           </div>
         </div>

@@ -5,6 +5,36 @@ export interface DispatchProduct {
   dispatchQty: number;
   unitRate?: number;
   batchNo?: string;
+  batchExpiryDate?: string;
+  batchAllocations?: { batchNumber: string; expiryDate: string; allocatedQty: number }[];
+  nearExpirySchemeEligible?: boolean;
+}
+
+export interface DispatchNearExpirySchemeEntry {
+  schemeId: number;
+  schemeCode: string;
+  schemeName: string;
+  schemeType: "Near Expiry";
+  product: string;
+  productId: string;
+  sku: string;
+  batchNumber: string;
+  batchExpiryDate: string;
+  remainingExpiryDays: number;
+  dispatchQuantity: number;
+  benefitType: string;
+  benefitValue: number;
+  estimatedBenefitAmount: number;
+  /** Scheme master status — only Active schemes are eligible */
+  schemeStatus: "Active";
+  settlementMethod: string;
+  settlementStatus: "Pending";
+  /** @deprecated Use settlementMethod */
+  settlement?: string;
+  /** @deprecated Use settlementStatus */
+  status?: string;
+  pendingSettlement: true;
+  dealerPrice?: number;
 }
 
 export interface DeliveryDetails {
@@ -32,6 +62,7 @@ export interface DispatchRecord {
   warehouse: string;
   products: DispatchProduct[];
   packingNumbers: string[];
+  nearExpirySchemes?: DispatchNearExpirySchemeEntry[];
   deliveryDetails?: DeliveryDetails;
   sourceDocumentType?: "Sales Order" | "Stock Transfer" | "Sample Order";
   sourceWarehouse?: string;
@@ -53,23 +84,4 @@ export interface DispatchRecord {
   total_items?: number;
   total_quantity?: number;
   dispatch_status?: string;
-}
-
-export interface SalesReturnProduct {
-  product: string;
-  sku: string;
-  dispatchQty: number;
-  returnQty: number;
-}
-
-export interface SalesReturnRecord {
-  id: string;
-  returnNumber: string;
-  dispatchNumber: string;
-  salesOrderNumber: string;
-  customer: string;
-  returnDate: string;
-  warehouse: string;
-  products: SalesReturnProduct[];
-  remarks?: string;
 }

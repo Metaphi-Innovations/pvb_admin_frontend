@@ -1,12 +1,57 @@
 // ── Sample Orders — types, catalog, persistence, approval rules ───────────────
 
-import { loadCustomers, getCustomersForTransactionDropdown } from "@/app/(app)/masters/customers/customer-data";
 import { loadEmployees, type Employee } from "@/app/(app)/user-management/employee/employee-data";
 import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
-import { resolveSezLutSupply } from "@/lib/settings/gst-tax-config";
 
-/** Orders above this amount require approval on submit (not draft). */
-export const ORDER_APPROVAL_THRESHOLD = 10_000;
+/** Sample orders always have zero value; approval is policy-based, not amount-based. */
+export const SAMPLE_ORDER_APPROVAL_ENABLED = true;
+export const SAMPLE_BILLING_PARTY = "Paramverse Bio Head Office";
+
+export const SAMPLE_BILLING_DETAILS = {
+  companyName: "Paramverse Bio Head Office",
+  address: "Plot 12, Agri Park, Hinjawadi Phase 2, Pune, Maharashtra 411057",
+  gstin: "27AABCD1234E1Z5",
+  mobile: "+91 98765 43210",
+  contactNo: "+91 20 4567 8900",
+};
+
+export type SamplePurpose =
+  | "farmer_demo"
+  | "distributor_demo"
+  | "retailer_demo"
+  | "event"
+  | "training"
+  | "promotional_sample"
+  | "other";
+
+export type RecipientType =
+  | "farmer"
+  | "distributor"
+  | "retailer"
+  | "institution"
+  | "other";
+
+export type FieldUserRole = "TM" | "DO" | "Intern" | "FMO" | "ASM";
+
+export const SAMPLE_FIELD_USER_ROLES: FieldUserRole[] = ["TM", "DO", "Intern", "FMO", "ASM"];
+
+export const SAMPLE_PURPOSE_OPTIONS: { value: SamplePurpose; label: string }[] = [
+  { value: "farmer_demo", label: "Farmer Demo" },
+  { value: "distributor_demo", label: "Distributor Demo" },
+  { value: "retailer_demo", label: "Retailer Demo" },
+  { value: "event", label: "Event" },
+  { value: "training", label: "Training" },
+  { value: "promotional_sample", label: "Promotional Sample" },
+  { value: "other", label: "Other" },
+];
+
+export const RECIPIENT_TYPE_OPTIONS: { value: RecipientType; label: string }[] = [
+  { value: "farmer", label: "Farmer" },
+  { value: "distributor", label: "Distributor" },
+  { value: "retailer", label: "Retailer" },
+  { value: "institution", label: "Institution" },
+  { value: "other", label: "Other" },
+];
 
 export type OrderStatus =
   | "draft"
@@ -14,6 +59,7 @@ export type OrderStatus =
   | "approved"
   | "rejected"
   | "confirmed"
+  | "packed"
   | "cancelled"
   | "dispatched"
   | "delivered";
@@ -45,6 +91,9 @@ export const ORDER_STATUS_OPTIONS: { value: OrderStatus; label: string }[] = [
   { value: "approved", label: "Approved" },
   { value: "rejected", label: "Rejected" },
   { value: "confirmed", label: "Confirmed" },
+  { value: "packed", label: "Packed" },
+  { value: "dispatched", label: "Dispatched" },
+  { value: "delivered", label: "Delivered" },
   { value: "cancelled", label: "Cancelled" },
 ];
 
@@ -73,6 +122,9 @@ export interface SalesOrderLineItem {
   discountValue: number;
   gstAmount: number;
   lineTotal: number;
+  unit?: string;
+  batchNumber?: string;
+  expiryDate?: string;
   /** Split form only: parent line when qty is taken from original order */
   splitSourceLineId?: string;
   /** Split form only: max qty available from parent line */
@@ -138,6 +190,18 @@ export interface SalesOrder {
   packingStatus?: PackingStatus;
   warehouseId?: number;
   warehouseName?: string;
+  /** Sample issue — field user recipient */
+  issuedToEmployeeId?: number;
+  issuedToEmployeeName?: string;
+  issuedToEmployeeRole?: FieldUserRole | string;
+  purpose?: SamplePurpose;
+  referenceEvent?: string;
+  remarks?: string;
+  recipientType?: RecipientType;
+  recipientName?: string;
+  recipientContact?: string;
+  recipientAddress?: string;
+  billingParty?: string;
 }
 
 export interface InventoryBatch {
@@ -167,42 +231,50 @@ const PRODUCT_CATALOG: ProductCatalogItem[] = [
   { id: 12, code: "PRD-012", name: "Mancozeb 75 WP", uom: "KG", gstRate: "18%", sellingPrice: 235, stock: 130, status: "active" },
 ];
 
-const SEED_VERSION = 2;
+const INVENTORY_BATCHES: InventoryBatch[] = [
+  { id: "b1", productId: 1, productCode: "PRD-001", productName: "NPK 19:19:19", batchNumber: "NPK-2401-A", expiryDate: "2025-06-30", availableQty: 120, warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub" },
+  { id: "b2", productId: 1, productCode: "PRD-001", productName: "NPK 19:19:19", batchNumber: "NPK-2402-B", expiryDate: "2025-09-15", availableQty: 200, warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub" },
+  { id: "b3", productId: 2, productCode: "PRD-002", productName: "DAP Fertilizer", batchNumber: "DAP-2310-C", expiryDate: "2025-04-20", availableQty: 80, warehouseCode: "WH-0002", warehouseName: "Western Regional Depot" },
+  { id: "b4", productId: 2, productCode: "PRD-002", productName: "DAP Fertilizer", batchNumber: "DAP-2401-D", expiryDate: "2025-11-01", availableQty: 150, warehouseCode: "WH-0002", warehouseName: "Western Regional Depot" },
+  { id: "b5", productId: 3, productCode: "PRD-003", productName: "Urea 46%", batchNumber: "URE-2403-E", expiryDate: "2025-08-10", availableQty: 400, warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub" },
+  { id: "b6", productId: 4, productCode: "PRD-004", productName: "Chlorpyrifos 20 EC", batchNumber: "CHL-2308-F", expiryDate: "2025-03-15", availableQty: 45, warehouseCode: "WH-0003", warehouseName: "South Zone Warehouse" },
+  { id: "b7", productId: 4, productCode: "PRD-004", productName: "Chlorpyrifos 20 EC", batchNumber: "CHL-2401-G", expiryDate: "2026-01-20", availableQty: 90, warehouseCode: "WH-0003", warehouseName: "South Zone Warehouse" },
+  { id: "b8", productId: 6, productCode: "PRD-006", productName: "Hybrid Tomato Seeds", batchNumber: "TOM-2401-H", expiryDate: "2025-12-31", availableQty: 250, warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub" },
+  { id: "b9", productId: 8, productCode: "PRD-008", productName: "Vermicompost", batchNumber: "VER-2402-I", expiryDate: "2025-07-01", availableQty: 800, warehouseCode: "WH-0002", warehouseName: "Western Regional Depot" },
+  { id: "b10", productId: 11, productCode: "PRD-011", productName: "MOP Potash", batchNumber: "MOP-2401-J", expiryDate: "2025-05-25", availableQty: 60, warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub" },
+];
+
+const SEED_VERSION = 3;
 const MAX_SEED_ID = 180;
 
-const SEED_CUSTOMERS: {
+const SEED_FIELD_USERS: {
   id: number;
   name: string;
-  code: string;
+  role: FieldUserRole;
   territory: string;
 }[] = [
-  { id: 1, name: "Green Valley Agro", code: "CUST-001", territory: "North Zone" },
-  { id: 2, name: "Kisan Fertilizers Ltd", code: "CUST-002", territory: "South Zone" },
-  { id: 3, name: "Farmtech Solutions", code: "CUST-003", territory: "East Zone" },
-  { id: 4, name: "AgroPlus Distributors", code: "CUST-004", territory: "West Zone" },
-  { id: 5, name: "Sunrise Crops", code: "CUST-005", territory: "North Zone" },
-  { id: 6, name: "Rural Inputs Co.", code: "CUST-006", territory: "Central Zone" },
-  { id: 7, name: "BioGrow Agro", code: "CUST-007", territory: "South Zone" },
-  { id: 8, name: "Fertile Lands Ltd", code: "CUST-008", territory: "East Zone" },
-  { id: 9, name: "CropCare India", code: "CUST-009", territory: "West Zone" },
-  { id: 10, name: "Seeds & More", code: "CUST-010", territory: "North Zone" },
+  { id: 801, name: "Rajesh Kumar", role: "TM", territory: "North Zone" },
+  { id: 802, name: "Priya Singh", role: "ASM", territory: "South Zone" },
+  { id: 803, name: "Amit Sharma", role: "FMO", territory: "East Zone" },
+  { id: 804, name: "Neha Patel", role: "DO", territory: "West Zone" },
+  { id: 805, name: "Vikram Das", role: "Intern", territory: "Central Zone" },
+  { id: 806, name: "Suresh Reddy", role: "TM", territory: "South Zone" },
+  { id: 807, name: "Kavita Nair", role: "FMO", territory: "West Zone" },
+  { id: 808, name: "Rahul Mehta", role: "ASM", territory: "North Zone" },
 ];
 
-const SEED_SALESMEN: { id: number; name: string }[] = [
-  { id: 1, name: "Rajesh Kumar" },
-  { id: 2, name: "Priya Singh" },
-  { id: 3, name: "Amit Sharma" },
-  { id: 4, name: "Neha Patel" },
-  { id: 5, name: "Vikram Das" },
-];
+function sampleOrderRecipientLabel(user: (typeof SEED_FIELD_USERS)[number], recipientName?: string): string {
+  const base = `${user.name} (${user.role})`;
+  return recipientName ? `${base} → ${recipientName}` : base;
+}
 
 const BASE_SEED_ORDERS: SalesOrder[] = [
-  { id: 1, soNumber: "SM-2024-001", customerId: 1, customerName: "Green Valley Agro", customerCode: "CUST-001", territory: "North Zone", salesManId: 1, salesManName: "Rajesh Kumar", orderDate: "2024-02-02", deliveryDate: "2024-02-06", status: "draft", lineItems: [], totalAmount: 24800, requiresApproval: false, items: 1, createdBy: "Sales Team", createdDate: "2024-02-02", updatedBy: "Sales Team", updatedDate: "2024-02-02" },
-  { id: 2, soNumber: "SM-2024-002", customerId: 4, customerName: "AgroPlus Distributors", customerCode: "CUST-004", territory: "West Zone", salesManId: 4, salesManName: "Neha Patel", orderDate: "2024-02-04", deliveryDate: "2024-02-09", status: "pending_approval", approvalStatus: "pending_approval", lineItems: [], totalAmount: 41200, requiresApproval: true, items: 2, createdBy: "Field Rep", createdDate: "2024-02-04", updatedBy: "Field Rep", updatedDate: "2024-02-04" },
-  { id: 3, soNumber: "SM-2024-003", customerId: 6, customerName: "Rural Inputs Co.", customerCode: "CUST-006", territory: "Central Zone", salesManId: 5, salesManName: "Vikram Das", orderDate: "2024-02-06", deliveryDate: "2024-02-11", status: "confirmed", lineItems: [], totalAmount: 68950, requiresApproval: true, items: 3, createdBy: "Sales Team", createdDate: "2024-02-06", updatedBy: "Sales Team", updatedDate: "2024-02-06" },
-  { id: 4, soNumber: "SM-2024-004", customerId: 8, customerName: "Fertile Lands Ltd", customerCode: "CUST-008", territory: "East Zone", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-02-07", deliveryDate: "2024-02-13", status: "approved", approvalStatus: "approved", approvedBy: "Admin", approvedDate: "2024-02-08", lineItems: [], totalAmount: 93500, requiresApproval: true, items: 4, createdBy: "Sales Team", createdDate: "2024-02-07", updatedBy: "Admin", updatedDate: "2024-02-08" },
-  { id: 5, soNumber: "SM-2024-005", customerId: 2, customerName: "Kisan Fertilizers Ltd", customerCode: "CUST-002", territory: "South Zone", salesManId: 2, salesManName: "Priya Singh", orderDate: "2024-02-08", deliveryDate: "2024-02-14", status: "rejected", approvalStatus: "rejected", rejectedBy: "Admin", rejectedDate: "2024-02-09", rejectionReason: "Sample allocation already exhausted for the period.", lineItems: [], totalAmount: 15100, requiresApproval: true, items: 1, createdBy: "Field Rep", createdDate: "2024-02-08", updatedBy: "Admin", updatedDate: "2024-02-09" },
-  { id: 6, soNumber: "SM-2024-006", customerId: 9, customerName: "CropCare India", customerCode: "CUST-009", territory: "West Zone", salesManId: 4, salesManName: "Neha Patel", orderDate: "2024-02-10", deliveryDate: "2024-02-16", status: "dispatched", lineItems: [], totalAmount: 56600, requiresApproval: true, items: 2, createdBy: "Sales Team", createdDate: "2024-02-10", updatedBy: "Sales Team", updatedDate: "2024-02-10" },
+  { id: 1, soNumber: "SM-2024-001", customerId: 801, customerName: "Rajesh Kumar (TM)", customerCode: "EMP-801", territory: "North Zone", salesManId: 801, salesManName: "Rajesh Kumar", issuedToEmployeeId: 801, issuedToEmployeeName: "Rajesh Kumar", issuedToEmployeeRole: "TM", purpose: "farmer_demo", remarks: "Village demo kits for wheat season.", billingParty: SAMPLE_BILLING_PARTY, orderDate: "2024-02-02", deliveryDate: "2024-02-06", status: "draft", lineItems: [], totalAmount: 0, requiresApproval: false, items: 1, createdBy: "Sales Team", createdDate: "2024-02-02", updatedBy: "Sales Team", updatedDate: "2024-02-02" },
+  { id: 2, soNumber: "SM-2024-002", customerId: 803, customerName: "Amit Sharma (FMO)", customerCode: "EMP-803", territory: "East Zone", salesManId: 803, salesManName: "Amit Sharma", issuedToEmployeeId: 803, issuedToEmployeeName: "Amit Sharma", issuedToEmployeeRole: "FMO", purpose: "distributor_demo", remarks: "Distributor counter demo samples.", billingParty: SAMPLE_BILLING_PARTY, orderDate: "2024-02-04", deliveryDate: "2024-02-09", status: "pending_approval", approvalStatus: "pending_approval", lineItems: [], totalAmount: 0, requiresApproval: true, items: 2, createdBy: "Field Rep", createdDate: "2024-02-04", updatedBy: "Field Rep", updatedDate: "2024-02-04" },
+  { id: 3, soNumber: "SMP-2024-003", customerId: 805, customerName: "Vikram Das (Intern)", customerCode: "EMP-805", territory: "Central Zone", salesManId: 805, salesManName: "Vikram Das", issuedToEmployeeId: 805, issuedToEmployeeName: "Vikram Das", issuedToEmployeeRole: "Intern", purpose: "training", remarks: "Training session handouts.", billingParty: SAMPLE_BILLING_PARTY, orderDate: "2024-02-06", deliveryDate: "2024-02-11", status: "confirmed", lineItems: [], totalAmount: 0, requiresApproval: true, items: 3, createdBy: "Sales Team", createdDate: "2024-02-06", updatedBy: "Sales Team", updatedDate: "2024-02-06" },
+  { id: 4, soNumber: "SM-2024-004", customerId: 802, customerName: "Priya Singh (ASM)", customerCode: "EMP-802", territory: "South Zone", salesManId: 802, salesManName: "Priya Singh", issuedToEmployeeId: 802, issuedToEmployeeName: "Priya Singh", issuedToEmployeeRole: "ASM", purpose: "event", referenceEvent: "Agri Expo 2024", remarks: "Event booth display samples.", billingParty: SAMPLE_BILLING_PARTY, orderDate: "2024-02-07", deliveryDate: "2024-02-13", status: "approved", approvalStatus: "approved", approvedBy: "Admin", approvedDate: "2024-02-08", lineItems: [], totalAmount: 0, requiresApproval: true, items: 4, createdBy: "Sales Team", createdDate: "2024-02-07", updatedBy: "Admin", updatedDate: "2024-02-08" },
+  { id: 5, soNumber: "SM-2024-005", customerId: 804, customerName: "Neha Patel (DO)", customerCode: "EMP-804", territory: "West Zone", salesManId: 804, salesManName: "Neha Patel", issuedToEmployeeId: 804, issuedToEmployeeName: "Neha Patel", issuedToEmployeeRole: "DO", purpose: "promotional_sample", remarks: "Promotional sachets for retailer visits.", billingParty: SAMPLE_BILLING_PARTY, orderDate: "2024-02-08", deliveryDate: "2024-02-14", status: "rejected", approvalStatus: "rejected", rejectedBy: "Admin", rejectedDate: "2024-02-09", rejectionReason: "Sample allocation already exhausted for the period.", lineItems: [], totalAmount: 0, requiresApproval: true, items: 1, createdBy: "Field Rep", createdDate: "2024-02-08", updatedBy: "Admin", updatedDate: "2024-02-09" },
+  { id: 6, soNumber: "SMP-2024-006", customerId: 806, customerName: sampleOrderRecipientLabel(SEED_FIELD_USERS[5], "Green Valley Agro"), customerCode: "EMP-806", territory: "South Zone", salesManId: 806, salesManName: "Suresh Reddy", issuedToEmployeeId: 806, issuedToEmployeeName: "Suresh Reddy", issuedToEmployeeRole: "TM", purpose: "farmer_demo", recipientType: "farmer", recipientName: "Green Valley Agro", remarks: "Farmer field day demo.", billingParty: SAMPLE_BILLING_PARTY, orderDate: "2024-02-10", deliveryDate: "2024-02-16", status: "dispatched", lineItems: [], totalAmount: 0, requiresApproval: true, items: 2, createdBy: "Sales Team", createdDate: "2024-02-10", updatedBy: "Sales Team", updatedDate: "2024-02-10" },
 ];
 
 /** Bulk statuses for pagination testing â€” maps to existing OrderStatus values. */
@@ -213,6 +285,7 @@ const BULK_SEED_STATUS_PLAN: { status: OrderStatus; count: number }[] = [
   { status: "approved", count: 2 },
   { status: "rejected", count: 2 },
   { status: "confirmed", count: 2 },
+  { status: "packed", count: 2 },
   { status: "delivered", count: 2 },
 ];
 
@@ -229,45 +302,55 @@ function buildSeedLineItems(orderId: number, lineCount: number): SalesOrderLineI
   for (let i = 0; i < lineCount; i++) {
     const product = products[(orderId + i) % products.length];
     const quantity = 4 + ((orderId + i * 3) % 18);
-    const discount = i === 0 ? 0 : ((orderId + i) % 4) * 5;
-    const gstAmount = computeGstAmount(quantity, product.sellingPrice, discount, product.gstRate);
-    lines.push(recalculateLineItem({
-      id: `line-seed-${orderId}-${i}`,
-      productId: product.id,
-      productCode: product.code,
-      productName: product.name,
-      availableStock: product.stock,
-      quantity,
-      unitPrice: product.sellingPrice,
-      discount,
-      discountValue: 0,
-      gstAmount,
-      lineTotal: 0,
-    }));
+    const batch = INVENTORY_BATCHES.find(b => b.productId === product.id);
+    lines.push(
+      recalculateSampleOrderLineItem({
+        id: `line-seed-${orderId}-${i}`,
+        productId: product.id,
+        productCode: product.code,
+        productName: product.name,
+        availableStock: product.stock,
+        quantity,
+        unitPrice: product.sellingPrice,
+        discount: 0,
+        discountValue: 0,
+        gstAmount: 0,
+        lineTotal: 0,
+        unit: product.uom,
+        batchNumber: batch?.batchNumber,
+        expiryDate: batch?.expiryDate,
+      }),
+    );
   }
 
   return lines;
 }
 
 function buildSeedOrder(id: number, status: OrderStatus): SalesOrder {
-  const customer = SEED_CUSTOMERS[(id - 1) % SEED_CUSTOMERS.length];
-  const salesman = SEED_SALESMEN[(id - 1) % SEED_SALESMEN.length];
+  const user = SEED_FIELD_USERS[(id - 1) % SEED_FIELD_USERS.length];
   const orderDate = seedDateFromId(id);
   const deliveryDate = seedDateFromId(id, 7);
   const lineCount = 1 + (id % 3);
   const lineItems = buildSeedLineItems(id, lineCount);
-  const totalAmount = calculateOrderTotalsSummary(lineItems).grandTotal;
-  const requiresApproval = orderRequiresApproval(totalAmount) || ["pending_approval", "approved", "rejected"].includes(status);
+  const totalAmount = 0;
+  const requiresApproval = sampleOrderRequiresApproval() || ["pending_approval", "approved", "rejected"].includes(status);
+  const prefix = id % 3 === 0 ? "SMP" : "SM";
 
   const order: SalesOrder = {
     id,
-    soNumber: `SM-2024-${String(id).padStart(3, "0")}`,
-    customerId: customer.id,
-    customerName: customer.name,
-    customerCode: customer.code,
-    territory: customer.territory,
-    salesManId: salesman.id,
-    salesManName: salesman.name,
+    soNumber: `${prefix}-2024-${String(id).padStart(3, "0")}`,
+    customerId: user.id,
+    customerName: `${user.name} (${user.role})`,
+    customerCode: `EMP-${user.id}`,
+    territory: user.territory,
+    salesManId: user.id,
+    salesManName: user.name,
+    issuedToEmployeeId: user.id,
+    issuedToEmployeeName: user.name,
+    issuedToEmployeeRole: user.role,
+    purpose: SAMPLE_PURPOSE_OPTIONS[id % SAMPLE_PURPOSE_OPTIONS.length].value,
+    remarks: "Demo sample issue for field activity.",
+    billingParty: SAMPLE_BILLING_PARTY,
     orderDate,
     deliveryDate,
     status,
@@ -324,13 +407,12 @@ function buildFullSeedOrders(): SalesOrder[] {
     if (order.lineItems.length > 0) return order;
     const lineCount = Math.max(1, order.items);
     const lineItems = buildSeedLineItems(order.id, lineCount);
-    const totalAmount = calculateOrderTotalsSummary(lineItems).grandTotal;
     return {
       ...order,
       lineItems,
-      totalAmount,
+      totalAmount: 0,
       items: lineItems.length,
-      requiresApproval: orderRequiresApproval(totalAmount) || order.requiresApproval,
+      requiresApproval: sampleOrderRequiresApproval() || order.requiresApproval,
     };
   });
 
@@ -389,6 +471,21 @@ export function calculateLineSubtotal(quantity: number, unitPrice: number, disco
 
 export function calculateLineTotal(quantity: number, unitPrice: number, discountPercent: number, gstAmount: number): number {
   return calculateLineSubtotal(quantity, unitPrice, discountPercent) + Math.max(0, gstAmount);
+}
+
+/** Sample orders always apply 100% line discount — net line value is ₹0. */
+export const SAMPLE_ORDER_LINE_DISCOUNT_PERCENT = 100;
+
+export function recalculateSampleOrderLineItem(line: SalesOrderLineItem): SalesOrderLineItem {
+  const discount = SAMPLE_ORDER_LINE_DISCOUNT_PERCENT;
+  const discountValue = calculateLineDiscountValue(line.quantity, line.unitPrice, discount);
+  return {
+    ...line,
+    discount,
+    discountValue,
+    gstAmount: 0,
+    lineTotal: 0,
+  };
 }
 
 export function recalculateLineItem(line: SalesOrderLineItem): SalesOrderLineItem {
@@ -513,18 +610,30 @@ export function computeGstAmount(quantity: number, unitPrice: number, discountPe
   return Math.round(subtotal * (rate / 100) * 100) / 100;
 }
 
-export function orderRequiresApproval(totalAmount: number): boolean {
-  return totalAmount > ORDER_APPROVAL_THRESHOLD;
+export function sampleOrderRequiresApproval(): boolean {
+  return SAMPLE_ORDER_APPROVAL_ENABLED;
+}
+
+export function applySampleOrderZeroPricing(line: SalesOrderLineItem): SalesOrderLineItem {
+  return recalculateSampleOrderLineItem(line);
+}
+
+export function zeroSampleOrderLines(lines: SalesOrderLineItem[]): SalesOrderLineItem[] {
+  return lines.map(recalculateSampleOrderLineItem);
+}
+
+export function orderRequiresApproval(_totalAmount = 0): boolean {
+  return sampleOrderRequiresApproval();
 }
 
 export function resolveSubmitStatus(
-  totalAmount: number,
+  _totalAmount: number,
   userStatus: OrderStatus,
   asDraft: boolean,
 ): OrderStatus {
   if (asDraft) return "draft";
-  if (orderRequiresApproval(totalAmount)) return "pending_approval";
-  return userStatus;
+  if (sampleOrderRequiresApproval()) return "pending_approval";
+  return userStatus === "draft" ? "confirmed" : userStatus;
 }
 
 const SEED_ORDERS: SalesOrder[] = buildFullSeedOrders();
@@ -537,12 +646,19 @@ export function getProductById(id: number): ProductCatalogItem | undefined {
   return PRODUCT_CATALOG.find(p => p.id === id);
 }
 
-export { getCustomersForTransactionDropdown, loadCustomers };
+export { loadEmployees };
 
 export function getSalesmenForOrders(): Employee[] {
   return loadEmployees().filter(
-    e => e.status === "active" && (e.department === "Sales" || e.department === "Field Force"),
+    (e) =>
+      e.status === "active" &&
+      (e.department === "Sales" || e.department === "Field Force"),
   );
+}
+
+/** @deprecated Use getSalesmenForOrders */
+export function getFieldUsersForSampleOrders(): Employee[] {
+  return getSalesmenForOrders();
 }
 
 export function loadOrders(): SalesOrder[] {
@@ -583,7 +699,7 @@ export function nextOrderId(orders: SalesOrder[]): number {
 export function generateOrderNumber(orders: SalesOrder[]): string {
   const year = new Date().getFullYear();
   const maxNum = orders.reduce((max, o) => {
-    const m = o.soNumber.match(/SM-\d{4}-(\d+)/);
+    const m = o.soNumber.match(/SM(?:P)?-\d{4}-(\d+)/);
     return m ? Math.max(max, parseInt(m[1], 10)) : max;
   }, 0);
   return `SM-${year}-${String(maxNum + 1).padStart(3, "0")}`;
@@ -596,7 +712,7 @@ export function createEmptyLineItem(): SalesOrderLineItem {
     productCode: "",
     productName: "",
     availableStock: 0,
-    quantity: 1,
+    quantity: 0,
     unitPrice: 0,
     discount: 0,
     discountValue: 0,
@@ -607,9 +723,7 @@ export function createEmptyLineItem(): SalesOrderLineItem {
 
 export function applyProductToLine(line: SalesOrderLineItem, product: ProductCatalogItem): SalesOrderLineItem {
   const quantity = line.quantity > 0 ? line.quantity : 1;
-  const unitPrice = product.sellingPrice;
-  const discount = line.discount;
-  const gstAmount = computeGstAmount(quantity, unitPrice, discount, product.gstRate);
+  const batch = getBatchesForProduct(product.id)[0];
   const updated: SalesOrderLineItem = {
     ...line,
     productId: product.id,
@@ -617,12 +731,13 @@ export function applyProductToLine(line: SalesOrderLineItem, product: ProductCat
     productName: product.name,
     availableStock: product.stock,
     quantity,
-    unitPrice,
-    discount,
-    gstAmount,
-    lineTotal: 0,
+    unit: product.uom,
+    batchNumber: batch?.batchNumber,
+    expiryDate: batch?.expiryDate,
+    unitPrice: product.sellingPrice,
+    gstAmount: 0,
   };
-  return recalculateLineItem(updated);
+  return recalculateSampleOrderLineItem(updated);
 }
 
 export function formatOrderStatus(status: OrderStatus): string {
@@ -639,10 +754,10 @@ const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {
 };
 
 export function resolveApprovalStatus(order: SalesOrder): ApprovalStatus {
-  if (order.approvalStatus) return order.approvalStatus;
   if (order.status === "pending_approval") return "pending_approval";
-  if (order.status === "approved") return "approved";
   if (order.status === "rejected") return "rejected";
+  if (order.approvalStatus) return order.approvalStatus;
+  if (order.status === "approved") return "approved";
   return order.requiresApproval ? "not_required" : "not_required";
 }
 
@@ -655,7 +770,7 @@ export function isApprovalRelatedOrder(order: SalesOrder): boolean {
 }
 
 export function isOrderPendingApproval(order: SalesOrder): boolean {
-  return order.status === "pending_approval" && resolveApprovalStatus(order) === "pending_approval";
+  return order.status === "pending_approval";
 }
 
 export function canApproveOrder(order: SalesOrder): boolean {
@@ -674,19 +789,6 @@ function resolveApprovalStatusOnSubmit(finalStatus: OrderStatus, requiresApprova
 }
 
 // ── Inventory batches (FEFO packing suggestions) ─────────────────────────────
-
-const INVENTORY_BATCHES: InventoryBatch[] = [
-  { id: "b1", productId: 1, productCode: "PRD-001", productName: "NPK 19:19:19", batchNumber: "NPK-2401-A", expiryDate: "2025-06-30", availableQty: 120, warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub" },
-  { id: "b2", productId: 1, productCode: "PRD-001", productName: "NPK 19:19:19", batchNumber: "NPK-2402-B", expiryDate: "2025-09-15", availableQty: 200, warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub" },
-  { id: "b3", productId: 2, productCode: "PRD-002", productName: "DAP Fertilizer", batchNumber: "DAP-2310-C", expiryDate: "2025-04-20", availableQty: 80, warehouseCode: "WH-0002", warehouseName: "Western Regional Depot" },
-  { id: "b4", productId: 2, productCode: "PRD-002", productName: "DAP Fertilizer", batchNumber: "DAP-2401-D", expiryDate: "2025-11-01", availableQty: 150, warehouseCode: "WH-0002", warehouseName: "Western Regional Depot" },
-  { id: "b5", productId: 3, productCode: "PRD-003", productName: "Urea 46%", batchNumber: "URE-2403-E", expiryDate: "2025-08-10", availableQty: 400, warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub" },
-  { id: "b6", productId: 4, productCode: "PRD-004", productName: "Chlorpyrifos 20 EC", batchNumber: "CHL-2308-F", expiryDate: "2025-03-15", availableQty: 45, warehouseCode: "WH-0003", warehouseName: "South Zone Warehouse" },
-  { id: "b7", productId: 4, productCode: "PRD-004", productName: "Chlorpyrifos 20 EC", batchNumber: "CHL-2401-G", expiryDate: "2026-01-20", availableQty: 90, warehouseCode: "WH-0003", warehouseName: "South Zone Warehouse" },
-  { id: "b8", productId: 6, productCode: "PRD-006", productName: "Hybrid Tomato Seeds", batchNumber: "TOM-2401-H", expiryDate: "2025-12-31", availableQty: 250, warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub" },
-  { id: "b9", productId: 8, productCode: "PRD-008", productName: "Vermicompost", batchNumber: "VER-2402-I", expiryDate: "2025-07-01", availableQty: 800, warehouseCode: "WH-0002", warehouseName: "Western Regional Depot" },
-  { id: "b10", productId: 11, productCode: "PRD-011", productName: "MOP Potash", batchNumber: "MOP-2401-J", expiryDate: "2025-05-25", availableQty: 60, warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub" },
-];
 
 export function getBatchesForProduct(productId: number): InventoryBatch[] {
   return INVENTORY_BATCHES.filter(b => b.productId === productId);
@@ -738,47 +840,72 @@ export function hydrateOrderLineItems(order: SalesOrder): SalesOrder {
   if (order.lineItems.length > 0) {
     return {
       ...order,
+      totalAmount: 0,
       additionalExpenses,
-      lineItems: order.lineItems.map((l) => recalculateLineItem({ ...l, discountValue: l.discountValue ?? calculateLineDiscountValue(l.quantity, l.unitPrice, l.discount) })),
+      lineItems: order.lineItems.map((l) => {
+        let line = { ...l };
+        if (line.productId && line.unitPrice === 0) {
+          const product = getProductById(line.productId);
+          if (product) {
+            line = {
+              ...line,
+              unitPrice: product.sellingPrice,
+              unit: line.unit ?? product.uom,
+            };
+          }
+        }
+        return recalculateSampleOrderLineItem(line);
+      }),
     };
   }
-  if (order.items <= 0) return { ...order, additionalExpenses };
+  if (order.items <= 0) return { ...order, totalAmount: 0, additionalExpenses };
 
   const catalog = PRODUCT_CATALOG.filter(p => p.status === "active");
   const count = Math.min(order.items, catalog.length);
-  const perLineAmount = order.totalAmount / count;
   const lineItems: SalesOrderLineItem[] = [];
 
   for (let i = 0; i < count; i++) {
     const product = catalog[i];
-    const quantity = Math.max(1, Math.round(perLineAmount / product.sellingPrice));
-    const discount = 0;
-    const gstAmount = computeGstAmount(quantity, product.sellingPrice, discount, product.gstRate);
-    lineItems.push(recalculateLineItem({
-      id: `line-seed-${order.id}-${i}`,
-      productId: product.id,
-      productCode: product.code,
-      productName: product.name,
-      availableStock: product.stock,
-      quantity,
-      unitPrice: product.sellingPrice,
-      discount,
-      discountValue: 0,
-      gstAmount,
-      lineTotal: 0,
-    }));
+    const quantity = Math.max(1, 2 + (i % 5));
+    const batch = getBatchesForProduct(product.id)[0];
+    lineItems.push(
+      recalculateSampleOrderLineItem({
+        id: `line-seed-${order.id}-${i}`,
+        productId: product.id,
+        productCode: product.code,
+        productName: product.name,
+        availableStock: product.stock,
+        quantity,
+        unitPrice: product.sellingPrice,
+        discount: 0,
+        discountValue: 0,
+        gstAmount: 0,
+        lineTotal: 0,
+        unit: product.uom,
+        batchNumber: batch?.batchNumber,
+        expiryDate: batch?.expiryDate,
+      }),
+    );
   }
 
-  return { ...order, lineItems, additionalExpenses: order.additionalExpenses ?? [] };
+  return { ...order, lineItems, totalAmount: 0, additionalExpenses: order.additionalExpenses ?? [] };
 }
 
 export function hydrateOrders(orders: SalesOrder[]): SalesOrder[] {
-  return orders.map(order => {
+  const warehouses = loadWarehouses();
+  const defaultWarehouse = warehouses.find((w) => w.warehouseCode === "WH-0001") ?? warehouses[0];
+
+  return orders.map((order) => {
     const hydrated = hydrateOrderLineItems(order);
+    const packingReady = ["approved", "confirmed"].includes(hydrated.status);
     return {
       ...hydrated,
       additionalExpenses: hydrated.additionalExpenses ?? [],
       approvalStatus: resolveApprovalStatus(hydrated),
+      warehouseId: hydrated.warehouseId ?? (packingReady ? defaultWarehouse?.id : undefined),
+      warehouseName:
+        hydrated.warehouseName ??
+        (packingReady ? defaultWarehouse?.warehouseName : undefined),
     };
   });
 }
@@ -817,33 +944,46 @@ export function canDownloadPI(order: SalesOrder): boolean {
 
 export function canGeneratePackingList(order: SalesOrder): boolean {
   if (isOrderCancelled(order)) return false;
-  if (order.status === "draft") return false;
+  if (order.status === "draft" || order.status === "pending_approval" || order.status === "rejected") return false;
+  if (!["approved", "confirmed", "packed"].includes(order.status) && order.status !== "dispatched" && order.status !== "delivered") {
+    return false;
+  }
   const hydrated = hydrateOrderLineItems(order);
   return hydrated.lineItems.some(l => l.productId && l.quantity > 0);
 }
 
 export interface SalesOrderFormValues {
   orderDate: string;
-  customerId: number | null;
   salesManId: number | null;
-  deliveryDate: string;
+  remarks: string;
   status: OrderStatus;
   lineItems: SalesOrderLineItem[];
-  additionalExpenses: SalesOrderAdditionalExpense[];
   warehouseId?: number | null;
   warehouseName?: string;
+}
+
+export function formatSamplePurpose(purpose: SamplePurpose | "" | undefined): string {
+  if (!purpose) return "—";
+  return SAMPLE_PURPOSE_OPTIONS.find(o => o.value === purpose)?.label ?? purpose;
+}
+
+export function formatRecipientType(type: RecipientType | "" | undefined): string {
+  if (!type) return "—";
+  return RECIPIENT_TYPE_OPTIONS.find(o => o.value === type)?.label ?? type;
+}
+
+export function getSampleOrderDisplayRecipient(order: SalesOrder): string {
+  return order.salesManName || order.issuedToEmployeeName || order.customerName;
 }
 
 export function orderToFormValues(order: SalesOrder): SalesOrderFormValues {
   const hydrated = hydrateOrderLineItems(order);
   return {
     orderDate: hydrated.orderDate,
-    customerId: hydrated.customerId,
     salesManId: hydrated.salesManId,
-    deliveryDate: hydrated.deliveryDate,
+    remarks: hydrated.remarks ?? "",
     status: hydrated.status,
     lineItems: hydrated.lineItems.length > 0 ? hydrated.lineItems : [createEmptyLineItem()],
-    additionalExpenses: hydrated.additionalExpenses ?? [],
     warehouseId: hydrated.warehouseId ?? null,
     warehouseName: hydrated.warehouseName ?? "",
   };
@@ -854,44 +994,40 @@ export function buildOrderFromForm(
   existing: Partial<SalesOrder> & { soNumber: string },
   asDraft: boolean,
 ): SalesOrder | null {
-  const customers = getCustomersForTransactionDropdown();
   const salesmen = getSalesmenForOrders();
   const warehouses = loadWarehouses();
-  const customer = customers.find(c => c.id === form.customerId);
-  const salesman = salesmen.find(s => s.id === form.salesManId);
+  const salesman = salesmen.find((e) => e.id === form.salesManId);
   const warehouse = warehouses.find(w => w.id === form.warehouseId);
-  if (!customer || !salesman) return null;
+  if (!salesman || !warehouse) return null;
 
-  const sezLut = resolveSezLutSupply({
-    customerGstCategory:
-      customer.gstCategory ||
-      (customer.gstApplicable ? "regular" : "unregistered"),
-    transactionDate: form.orderDate,
-  });
-  const totalAmount = calculateOrderTotalsSummary(
-    form.lineItems,
-    form.additionalExpenses ?? [],
-    { sezLutApplies: sezLut.appliesLut },
-  ).grandTotal;
+  const lineItems = form.lineItems
+    .filter((l) => l.productId && l.quantity > 0)
+    .map((l) => recalculateSampleOrderLineItem(l));
+  const totalAmount = 0;
   const finalStatus = resolveSubmitStatus(totalAmount, form.status, asDraft);
-  const requiresApproval = orderRequiresApproval(totalAmount) && !asDraft;
+  const requiresApproval = sampleOrderRequiresApproval() && !asDraft;
   const approvalStatus = resolveApprovalStatusOnSubmit(finalStatus, requiresApproval, asDraft);
   const today = todayStr();
 
   return {
     id: existing.id ?? nextOrderId(loadOrders()),
     soNumber: existing.soNumber,
-    customerId: customer.id,
-    customerName: customer.customerName,
-    customerCode: customer.customerCode,
-    territory: customer.territoryName || "—",
+    customerId: salesman.id,
+    customerName: salesman.fullName,
+    customerCode: salesman.employeeId,
+    territory: salesman.department || salesman.role || "—",
     salesManId: salesman.id,
     salesManName: salesman.fullName,
+    issuedToEmployeeId: salesman.id,
+    issuedToEmployeeName: salesman.fullName,
+    issuedToEmployeeRole: salesman.role,
+    remarks: form.remarks.trim() || undefined,
+    billingParty: SAMPLE_BILLING_DETAILS.companyName,
     orderDate: form.orderDate,
-    deliveryDate: form.deliveryDate,
+    deliveryDate: form.orderDate,
     status: finalStatus,
-    lineItems: form.lineItems,
-    additionalExpenses: (form.additionalExpenses ?? []).map(recalculateExpense),
+    lineItems,
+    additionalExpenses: [],
     totalAmount,
     requiresApproval,
     approvalStatus,
@@ -900,7 +1036,7 @@ export function buildOrderFromForm(
     rejectedBy: existing.rejectedBy,
     rejectedDate: existing.rejectedDate,
     rejectionReason: existing.rejectionReason,
-    items: form.lineItems.length,
+    items: lineItems.length,
     createdBy: existing.createdBy ?? "Admin",
     createdDate: existing.createdDate ?? today,
     updatedBy: "Admin",
@@ -916,14 +1052,14 @@ export function buildOrderFromForm(
     packingListId: existing.packingListId,
     packingListNumber: existing.packingListNumber,
     packingStatus: existing.packingStatus,
-    warehouseId: warehouse?.id ?? undefined,
-    warehouseName: warehouse?.warehouseName ?? "",
+    warehouseId: warehouse.id,
+    warehouseName: warehouse.warehouseName,
   };
 }
 
 function stripSplitLineMeta(line: SalesOrderLineItem): SalesOrderLineItem {
   const { splitSourceLineId: _s, maxSplitQty: _m, ...rest } = line;
-  return recalculateLineItem(rest);
+  return recalculateSampleOrderLineItem(rest);
 }
 
 export function splitSalesOrderFromForm(
@@ -970,7 +1106,7 @@ export function splitSalesOrderFromForm(
     },
     asDraft,
   );
-  if (!built) return { error: "Invalid customer or salesman selection" };
+  if (!built) return { error: "Invalid employee or warehouse selection" };
 
   const updatedOriginalLines: SalesOrderLineItem[] = [];
 
@@ -991,12 +1127,9 @@ export function splitSalesOrderFromForm(
     if (remainQty > 0) {
       const remainDiscount = line.discount;
       const remainGst = Math.round((line.gstAmount - splitGst) * 100) / 100;
-      updatedOriginalLines.push(recalculateLineItem({
+      updatedOriginalLines.push(recalculateSampleOrderLineItem({
         ...line,
         quantity: remainQty,
-        discount: remainDiscount,
-        gstAmount: remainGst,
-        lineTotal: 0,
       }));
     }
   }
@@ -1011,13 +1144,13 @@ export function splitSalesOrderFromForm(
     updatedDate: today,
   };
 
-  const originalTotal = calculateOrderTotal(updatedOriginalLines);
+  const originalTotal = 0;
   const updatedOriginal: SalesOrder = {
     ...order,
-    lineItems: updatedOriginalLines,
+    lineItems: updatedOriginalLines.map(recalculateSampleOrderLineItem),
     totalAmount: originalTotal,
     items: updatedOriginalLines.length,
-    requiresApproval: orderRequiresApproval(originalTotal),
+    requiresApproval: sampleOrderRequiresApproval(),
     updatedBy: "Admin",
     updatedDate: today,
   };
@@ -1121,6 +1254,7 @@ export function attachPackingListToOrder(
     packingListId,
     packingListNumber,
     packingStatus,
+    status: order.status === "approved" || order.status === "confirmed" ? "packed" : order.status,
     warehouseId,
     warehouseName,
     updatedBy: "Admin",

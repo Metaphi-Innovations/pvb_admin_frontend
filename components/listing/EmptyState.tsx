@@ -20,5 +20,9 @@ export function EmptyState({
     return <EmptySearch onClear={onClearFilters} />;
   }
 
+  if (!emptyMessage) {
+    return null;
+  }
+
   return <EmptyModuleState module={emptyMessage} onAdd={onAdd} />;
 }

@@ -98,9 +98,6 @@ export default function AccountItemFormClient({ itemId }: { itemId?: number }) {
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.push("/accounts/masters/items")}>
             Cancel
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => save(true)}>
-            Save Draft
-          </Button>
           <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={() => save(false)}>
             Save Item
           </Button>

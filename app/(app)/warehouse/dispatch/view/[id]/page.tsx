@@ -8,6 +8,9 @@ import { useRouter, useParams } from "next/navigation";
 import { getDispatchById } from "../../services";
 import { DispatchRecord } from "../../types";
 import { DELIVERY_STATUS_BADGE_CONFIG } from "../../constants";
+import { NearExpirySchemeBadge } from "../../components/NearExpirySchemeBadge";
+import { NearExpirySchemeInfoPanel } from "../../components/NearExpirySchemeInfoPanel";
+import { formatBatchExpiryDate } from "../../near-expiry-dispatch";
 
 export default function ViewDispatchPage() {
   const router = useRouter();
@@ -39,6 +42,14 @@ export default function ViewDispatchPage() {
     record.deliveryStatus === "Delivered" ? "active" :
     record.deliveryStatus === "Cancelled" || record.deliveryStatus === "Returned" ? "blocked" :
     record.deliveryStatus === "Pending Dispatch" ? "draft" : "neutral";
+
+  const schemeEntriesBySku = (record.nearExpirySchemes ?? []).reduce<
+    Record<string, NonNullable<DispatchRecord["nearExpirySchemes"]>>
+  >((map, entry) => {
+    if (!map[entry.sku]) map[entry.sku] = [];
+    map[entry.sku]!.push(entry);
+    return map;
+  }, {});
 
   return (
     <RecordDetailPage
@@ -142,7 +153,9 @@ export default function ViewDispatchPage() {
                   <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Product</th>
                   <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">SKU</th>
                   <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Packed Qty</th>
+                  <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Batch</th>
                   <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Dispatch Qty</th>
+                  <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Scheme</th>
                 </tr>
               </thead>
               <tbody>
@@ -151,13 +164,30 @@ export default function ViewDispatchPage() {
                     <td className="py-3 px-3 text-xs font-bold">{p.product}</td>
                     <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{p.sku}</td>
                     <td className="py-3 px-3 text-xs font-bold text-center">{p.packedQty}</td>
+                    <td className="py-3 px-3 text-[10px] text-muted-foreground font-mono">
+                      {p.batchNo ? (
+                        <div>
+                          {p.batchNo}
+                          {p.batchExpiryDate ? ` · ${formatBatchExpiryDate(p.batchExpiryDate)}` : ""}
+                        </div>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td className="py-3 px-3 text-xs font-bold text-center">{p.dispatchQty}</td>
+                    <td className="py-3 px-3">
+                      <NearExpirySchemeBadge entries={schemeEntriesBySku[p.sku] ?? []} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </div>
+
+        {record.nearExpirySchemes && record.nearExpirySchemes.length > 0 && (
+          <NearExpirySchemeInfoPanel entries={record.nearExpirySchemes} />
+        )}
 
         {/* Delivery Details (if delivered) */}
         {record.deliveryDetails && (

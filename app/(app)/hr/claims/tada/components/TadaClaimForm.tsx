@@ -117,12 +117,10 @@ function PolicyPreviewPanel({ form }: { form: TadaClaimFormValues }) {
 function SubmitSummaryPanel({
   form,
   claimNumber,
-  onSaveDraft,
   onSubmit,
 }: {
   form: TadaClaimFormValues;
   claimNumber: string;
-  onSaveDraft?: () => void;
   onSubmit?: () => void;
 }) {
   const preview = useMemo(() => validateClaim(buildClaimValidationInput(form)), [form]);
@@ -143,18 +141,11 @@ function SubmitSummaryPanel({
       <p className="text-[11px] text-muted-foreground">
         Submitting will route this claim through: {preview.approvalRoute.join(" → ")}. All amounts are validated against Sales Force TA/DA Policy Master.
       </p>
-      {(onSaveDraft || onSubmit) && (
+      {onSubmit && (
         <div className="flex justify-end gap-2 pt-2 border-t">
-          {onSaveDraft && (
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={onSaveDraft}>
-              Save Draft
-            </Button>
-          )}
-          {onSubmit && (
-            <Button type="button" size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5" onClick={onSubmit}>
-              <Send className="w-3.5 h-3.5" /> Submit for Approval
-            </Button>
-          )}
+          <Button type="button" size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5" onClick={onSubmit}>
+            <Send className="w-3.5 h-3.5" /> Submit for Approval
+          </Button>
         </div>
       )}
     </div>
@@ -166,14 +157,12 @@ export function TadaClaimForm({
   onChange,
   claimNumber,
   readOnly,
-  onSaveDraft,
   onSubmit,
 }: {
   form: TadaClaimFormValues;
   onChange: (f: TadaClaimFormValues) => void;
   claimNumber: string;
   readOnly?: boolean;
-  onSaveDraft?: () => void;
   onSubmit?: () => void;
 }) {
   const [step, setStep] = useState(0);
@@ -487,7 +476,7 @@ export function TadaClaimForm({
       {step === 3 && <PolicyPreviewPanel form={form} />}
 
       {step === 4 && !readOnly && (
-        <SubmitSummaryPanel form={form} claimNumber={claimNumber} onSaveDraft={onSaveDraft} onSubmit={onSubmit} />
+        <SubmitSummaryPanel form={form} claimNumber={claimNumber} onSubmit={onSubmit} />
       )}
 
       {step === 4 && readOnly && <PolicyPreviewPanel form={form} />}

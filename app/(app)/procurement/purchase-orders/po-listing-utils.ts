@@ -18,6 +18,14 @@ export function getPOTotalItems(po: PurchaseOrder): number {
   return po.lines.filter((l) => l.productId > 0 || l.productName).length;
 }
 
+export function getPOTotalSkuQty(po: PurchaseOrder): number {
+  return po.lines.reduce((sum, l) => sum + (l.orderedQty || 0), 0);
+}
+
+export function getPOTotalAmount(po: PurchaseOrder): number {
+  return po.summary?.productTotal ?? po.summary?.taxableValue ?? 0;
+}
+
 export function getVendorSecondaryLine(po: PurchaseOrder): string {
   if (po.supplierGstin?.trim()) return "GST Registered";
   return po.supplierType ? po.supplierType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "";

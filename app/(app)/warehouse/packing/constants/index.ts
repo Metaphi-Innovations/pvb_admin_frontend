@@ -11,6 +11,7 @@ export const PRODUCT_OPTIONS = [
   { label: "Hybrid Maize Seed", value: "Hybrid Maize Seed" },
   { label: "DAP 50kg", value: "DAP 50kg" },
   { label: "Zinc Sulphate 21%", value: "Zinc Sulphate 21%" },
+  { label: "Bio Fertilizer A", value: "Bio Fertilizer A" },
 ];
 
 export const CUSTOMER_OPTIONS = [
@@ -19,6 +20,7 @@ export const CUSTOMER_OPTIONS = [
   { label: "Reliance Agri", value: "Reliance Agri" },
   { label: "Mahindra Farms", value: "Mahindra Farms" },
   { label: "Tata Agro", value: "Tata Agro" },
+  { label: "Agro Solutions Pvt Ltd", value: "Agro Solutions Pvt Ltd" },
 ];
 
 export const PACKED_BY_OPTIONS = [
@@ -55,6 +57,7 @@ export const PRIORITY_BADGE_CONFIG: Record<string, { bg: string; label: string }
 
 export const STATUS_BADGE_CONFIG: Record<string, { bg: string; label: string }> = {
   "Ready For Packing": { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Ready For Packing" },
+  "Pending Packing": { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Pending Packing" },
   "Partially Packed": { bg: "bg-indigo-50 text-indigo-700 border-indigo-200", label: "Partially Packed" },
   "Packing In Progress": { bg: "bg-blue-50 text-blue-700 border-blue-200", label: "Packing In Progress" },
   "Packed": { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "Packed" },

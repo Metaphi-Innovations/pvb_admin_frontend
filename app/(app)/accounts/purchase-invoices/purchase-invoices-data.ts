@@ -572,13 +572,13 @@ export type GrnPurchaseInput = {
  * Returns GRNs with status qc_completed that do NOT yet have a purchase invoice.
  * Reads from warehouse GRN storage.
  */
-export function getGrnsPendingInvoice(): import("@/app/(app)/warehouse/grnqc/grn/types").GrnRecord[] {
+export function getGrnsPendingInvoice(): import("@/app/(app)/warehouse/grn/types").GrnRecord[] {
   if (typeof window === "undefined") return [];
   try {
-    const { getGrnRecords } = require("@/app/(app)/warehouse/grnqc/grn/mock-data");
+    const { getGrnRecords } = require("@/app/(app)/warehouse/grn/mock-data");
     const all = loadPurchaseInvoices();
     const invoicedGrnIds = new Set(all.map((p) => p.grnId).filter(Boolean));
-    return (getGrnRecords() as import("@/app/(app)/warehouse/grnqc/grn/types").GrnRecord[]).filter(
+    return (getGrnRecords() as import("@/app/(app)/warehouse/grn/types").GrnRecord[]).filter(
       (g) => g.status === "qc_completed" && !invoicedGrnIds.has(g.id),
     );
   } catch {

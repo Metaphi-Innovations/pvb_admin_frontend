@@ -50,7 +50,7 @@ export const SCHEME_EFFECT_MAP: Record<SchemeType, SchemeEffectConfig> = {
   },
   "Payment Discount Scheme": {
     effectType: "POST_PAYMENT_CN_JV",
-    appliedIn: "Payment receipt / Accounts settlement",
+    appliedIn: "Accounts Receivables / Payment Collection",
     settlementMethod: "Credit Note / Journal Voucher",
   },
 };
@@ -101,6 +101,16 @@ export type PaymentMode =
   | "Advance"
   | "Early Payment";
 export type PaymentTiming = "Immediate" | "Within X Days" | "Advance Payment";
+export type OutstandingAgeCondition =
+  | "Any"
+  | "More than 30 Days"
+  | "More than 60 Days"
+  | "More than 90 Days"
+  | "Custom Days";
+export type PaymentOfferBasis =
+  | "Fixed Settlement Amount"
+  | "Discount / Waiver Amount"
+  | "Discount / Waiver %";
 export type ProductScope = "All" | "Specific";
 
 export interface TurnoverSlab {
@@ -121,6 +131,26 @@ export interface ProductDiscountSchemeLine {
   discountValue: number;
   discountAmount: number;
   finalSchemePrice: number;
+  mrp: number;
+}
+
+export interface NearExpirySchemeLine {
+  productId: string;
+  productCode: string;
+  productName: string;
+  sku: string;
+  batchNumber: string;
+  expiryDate: string;
+  warehouseName: string;
+  warehouseState: string;
+  dealerPrice: number;
+  expiryWithinDays: number;
+  benefitType: DiscountType;
+  benefitValue: number;
+  /** @deprecated Use benefitAmount */
+  potentialBenefit?: number;
+  benefitAmount: number;
+  finalPrice: number;
   mrp: number;
 }
 
@@ -155,18 +185,31 @@ export interface SchemeRecord extends BaseMasterRecord {
   minimumOrderValue?: number;
   festivalName?: string;
   productScope?: ProductScope;
+  selectedProductIds?: string[];
   turnoverPeriod?: TurnoverPeriod;
   turnoverSlabs?: TurnoverSlab[];
   customerIds?: string[];
   paymentMode?: PaymentMode;
   paymentTiming?: PaymentTiming;
   paymentWithinDays?: number;
+  /** @deprecated Use minimumOutstandingAmount for Payment Discount Scheme */
   minimumPaymentAmount?: number;
   isPaymentLevel?: boolean;
+  /** Payment Discount Scheme — outstanding / settlement collection */
+  minimumOutstandingAmount?: number;
+  outstandingAgeCondition?: OutstandingAgeCondition;
+  outstandingDays?: number;
+  paymentOfferBasis?: PaymentOfferBasis;
+  originalOutstandingAmount?: number;
+  customerPayableAmount?: number;
+  waiverAmount?: number;
+  waiverPercent?: number;
   startDate?: string;
   endDate?: string;
   /** Product Discount Scheme line items (one row per product in create/edit UI) */
   schemeLines?: ProductDiscountSchemeLine[];
+  /** Product Near Expiry Scheme line items (one row per product) */
+  nearExpiryLines?: NearExpirySchemeLine[];
 }
 
 export interface SchemeBulkForm {
@@ -229,6 +272,7 @@ export const SCHEME_CUSTOMER_OPTIONS = [
   { id: "CUST-001", name: "Sharma Distributors" },
   { id: "CUST-002", name: "Patel Retail Hub" },
   { id: "CUST-003", name: "Metro Wholesalers" },
+  { id: "CUST-004", name: "ABC Distributor" },
 ];
 
 export const SCHEME_TYPE_PRIORITY: Record<SchemeType, number> = {
@@ -259,9 +303,10 @@ export const PENDING_APPROVAL_STATUSES: ApprovalStatus[] = [
   "final_approval",
 ];
 
-/** Schemes in pending approval or rejected may be edited (no draft state). */
+/** Draft, pending approval, or rejected schemes may be edited. */
 export function isSchemeEditable(record: SchemeRecord): boolean {
   return (
+    record.approvalStatus === "draft" ||
     PENDING_APPROVAL_STATUSES.includes(record.approvalStatus) ||
     record.approvalStatus === "rejected"
   );
@@ -597,31 +642,80 @@ export const SCHEME_SEED: SchemeRecord[] = [
   {
     id: 3,
     schemeCode: "SCH-003",
-    schemeName: "Near Expiry - Product A - Karnataka",
+    schemeName: "Near Expiry NPK Offer",
     schemeType: "Product Near Expiry Scheme",
-    description: "Near-expiry incentive for Product A batches expiring within 60 days",
-    batchId: "BATCH-SEED-003",
-    effectType: "POST_SALES_CN_JV",
-    appliedIn: "Sales Order as eligible scheme only",
-    settlementMethod: "Credit Note / Journal Voucher",
-    stateSelectionMode: "Single",
-    productId: "PRD-001",
-    productName: "Product A",
-    stateId: "KA",
-    stateName: "Karnataka",
+    stateId: "Telangana",
+    stateName: "Telangana",
     customerType: "All",
     discountType: "Percentage",
     discountValue: 10,
     expiryWithinDays: 60,
-    priority: 1,
-    approvalStatus: "submitted",
-    startDate: "2025-06-01",
-    endDate: "2025-12-31",
-    status: "inactive",
+    approvalStatus: "active",
+    startDate: "2026-01-01",
+    endDate: "2026-12-31",
+    status: "active",
     createdBy: "Admin",
     updatedBy: "Admin",
     createdAt: "2025-06-10",
-    updatedAt: "2025-06-10",
+    updatedAt: "2026-06-20",
+    nearExpiryLines: [
+      {
+        productId: "6",
+        productCode: "FERT-000003",
+        productName: "NPK 10:26:26",
+        sku: "FERT-000003",
+        batchNumber: "B-NPK-33V",
+        expiryDate: "2026-06-30",
+        warehouseName: "South Zone Depot",
+        warehouseState: "Telangana",
+        dealerPrice: 890,
+        expiryWithinDays: 60,
+        benefitType: "Percentage",
+        benefitValue: 10,
+        benefitAmount: 89,
+        finalPrice: 801,
+        mrp: 890,
+      },
+    ],
+  },
+  {
+    id: 9,
+    schemeCode: "NE-001",
+    schemeName: "Near Expiry 30 Days Offer",
+    schemeType: "Product Near Expiry Scheme",
+    stateId: "Maharashtra",
+    stateName: "Maharashtra, Gujarat",
+    customerType: "Distributor",
+    discountType: "Percentage",
+    discountValue: 10,
+    expiryWithinDays: 30,
+    approvalStatus: "active",
+    startDate: "2026-01-01",
+    endDate: "2026-12-31",
+    status: "active",
+    createdBy: "Admin",
+    updatedBy: "Admin",
+    createdAt: "2026-06-01",
+    updatedAt: "2026-06-20",
+    nearExpiryLines: [
+      {
+        productId: "10",
+        productCode: "BIO-000001",
+        productName: "Bio Fertilizer A",
+        sku: "BIO-000001",
+        batchNumber: "B001",
+        expiryDate: "2026-07-21",
+        warehouseName: "Central Warehouse",
+        warehouseState: "Maharashtra",
+        dealerPrice: 420,
+        expiryWithinDays: 30,
+        benefitType: "Percentage",
+        benefitValue: 10,
+        benefitAmount: 42,
+        finalPrice: 378,
+        mrp: 650,
+      },
+    ],
   },
 ];
 
@@ -634,16 +728,12 @@ const REFRESHABLE_SCHEME_CODES = new Set([
   "SCH-006",
   "SCH-007",
   "SCH-008",
+  "NE-001",
 ]);
 
-/** Normalize legacy draft records — draft is not used in the workflow. */
+/** Preserve draft — schemes start as Draft and move to Submitted via explicit submit. */
 export function normalizeSchemeApprovalStatus(record: SchemeRecord): SchemeRecord {
-  if (record.approvalStatus !== "draft") return record;
-  return {
-    ...record,
-    approvalStatus: "submitted",
-    status: record.status === "active" ? "inactive" : record.status,
-  };
+  return record;
 }
 
 /** Merge missing seed schemes and refresh sample schemes from seed data. */
@@ -718,7 +808,11 @@ export function formatBenefit(record: SchemeRecord): string {
     return `${first.benefitPercent}%–${last.benefitPercent}% slabs`;
   }
   if (record.schemeType === "Product Near Expiry Scheme") {
-    return `${record.discountValue ?? 0}% (≤${record.expiryWithinDays ?? 0}d)`;
+    const benefit =
+      record.discountType === "Fixed Amount"
+        ? `₹${record.discountValue ?? 0}`
+        : `${record.discountValue ?? 0}%`;
+    return `${benefit} (≤${record.expiryWithinDays ?? 0}d)`;
   }
   if (record.discountType === "Free Quantity") {
     return `${record.freeQuantity ?? record.discountValue ?? 0} Qty Free`;
@@ -742,12 +836,29 @@ export function isSchemeExpired(record: SchemeRecord): boolean {
   return record.endDate < masterToday();
 }
 
+export type SchemeOperationalStatus = "Active" | "Inactive" | "Pending";
+
+/** Listing / view status: Active, Inactive, or Pending (in approval workflow). */
+export function resolveSchemeOperationalStatus(record: SchemeRecord): SchemeOperationalStatus {
+  if (PENDING_APPROVAL_STATUSES.includes(record.approvalStatus)) {
+    return "Pending";
+  }
+  if (
+    record.approvalStatus === "active" &&
+    record.status === "active" &&
+    !isSchemeExpired(record)
+  ) {
+    return "Active";
+  }
+  return "Inactive";
+}
+
 export function resolveDisplayApprovalStatus(record: SchemeRecord): ApprovalStatus {
   if (record.approvalStatus === "rejected") {
     return record.approvalStatus;
   }
   if (record.approvalStatus === "draft") {
-    return "submitted";
+    return "draft";
   }
   if (isSchemeExpired(record)) {
     return "expired";
@@ -761,7 +872,7 @@ export function matchesListingTab(record: SchemeRecord, tab: string): boolean {
     case "all":
       return true;
     case "pending":
-      return PENDING_APPROVAL_STATUSES.includes(status);
+      return status === "draft" || PENDING_APPROVAL_STATUSES.includes(status);
     case "approved":
       return status === "approved";
     case "active":
@@ -780,7 +891,7 @@ export function canEditRecord(record: SchemeRecord): boolean {
 }
 
 export function canSubmitRecord(record: SchemeRecord): boolean {
-  return record.approvalStatus === "rejected";
+  return record.approvalStatus === "draft" || record.approvalStatus === "rejected";
 }
 
 export function canApproveRecord(record: SchemeRecord): boolean {
@@ -927,6 +1038,9 @@ export function validateSchemeBulkForm(form: SchemeBulkForm, mode: "add" | "edit
   if (form.schemeType === "Product Discount Scheme") {
     return "Use the Product Discount Scheme form to create or edit this scheme type.";
   }
+  if (form.schemeType === "Product Near Expiry Scheme") {
+    return "Use the Product Near Expiry Scheme form to create or edit this scheme type.";
+  }
 
   const productIds = enforceSelectionLimits(form.productIds, form.productSelectionMode);
   const stateIds = enforceSelectionLimits(form.stateIds, form.stateSelectionMode);
@@ -943,19 +1057,10 @@ export function validateSchemeBulkForm(form: SchemeBulkForm, mode: "add" | "edit
   }
   if (
     form.schemeType !== "Turnover Discount Scheme" &&
-    form.schemeType !== "Product Near Expiry Scheme" &&
     form.discountType !== "Free Quantity"
   ) {
     if (!form.discountValue || parseFloat(form.discountValue) <= 0) {
       return "Discount value must be greater than 0.";
-    }
-  }
-  if (form.schemeType === "Product Near Expiry Scheme") {
-    if (!form.expiryWithinDays || parseInt(form.expiryWithinDays, 10) <= 0) {
-      return "Expiry within days is required.";
-    }
-    if (!form.discountValue || parseFloat(form.discountValue) <= 0) {
-      return "Discount % is required.";
     }
   }
   if (form.discountType === "Free Quantity") {

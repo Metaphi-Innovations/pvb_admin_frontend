@@ -30,7 +30,7 @@ import {
   getGrnsPendingInvoice,
   type PurchaseInvoiceRecord,
 } from "./purchase-invoices-data";
-import type { GrnRecord } from "@/app/(app)/warehouse/grnqc/grn/types";
+import type { GrnRecord } from "@/app/(app)/warehouse/grn/types";
 
 type Tab = "invoices" | "grn_pending";
 

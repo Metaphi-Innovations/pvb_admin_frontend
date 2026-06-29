@@ -35,17 +35,17 @@ export function POIntegrationTabs({
 
   return (
     <div className="space-y-3">
-      <div className="inline-flex rounded-lg border border-[#DDE3EF] bg-[#F7F9FC] p-0.5 gap-0.5">
+      <div className="inline-flex rounded-lg border border-border bg-muted/30 p-0.5 gap-0.5">
         {tabs.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
             className={cn(
-              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-semibold transition-colors",
+              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors",
               tab === t.id
-                ? "bg-white text-brand-700 shadow-sm border border-[#DDE3EF]"
-                : "text-[#6B80A0] hover:text-[#0A1628]",
+                ? "bg-white text-brand-700 shadow-sm border border-border"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             {t.icon}

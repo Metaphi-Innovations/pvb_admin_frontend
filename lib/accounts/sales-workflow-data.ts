@@ -16,6 +16,8 @@ export interface PendingTaxInvoiceRow {
   gstAmount: number;
   invoiceValue: number;
   status: string;
+  schemeLabel: string | null;
+  settlementLabel: string | null;
 }
 
 /** Pending invoices sourced from Warehouse dispatch (Delivered / In Transit / Partially Delivered). */
@@ -32,5 +34,7 @@ export function listPendingTaxInvoices(): PendingTaxInvoiceRow[] {
     gstAmount: row.gstAmount,
     invoiceValue: row.invoiceValue,
     status: row.status,
+    schemeLabel: row.schemeLabel,
+    settlementLabel: row.settlementLabel,
   }));
 }

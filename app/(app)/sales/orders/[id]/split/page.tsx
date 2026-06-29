@@ -26,6 +26,9 @@ import {
   getCustomersForTransactionDropdown,
   getSalesmenForOrders,
 } from "../../orders-data";
+import { validateSalesOrderCreditLimit } from "@/lib/sales/sales-order-credit";
+import type { CustomerCreditSummary } from "@/lib/sales/customer-credit-limit";
+import CreditLimitExceededDialog from "../../components/CreditLimitExceededDialog";
 
 export default function SplitSalesOrderPage() {
   const params = useParams();
@@ -40,6 +43,7 @@ export default function SplitSalesOrderPage() {
   const [form, setForm] = useState<SalesOrderFormValues | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const [creditDialog, setCreditDialog] = useState<CustomerCreditSummary | null>(null);
 
   useEffect(() => {
     setCustomers(getCustomersForTransactionDropdown());
@@ -68,6 +72,7 @@ export default function SplitSalesOrderPage() {
       additionalExpenses: [],
       warehouseId: hydrated.warehouseId ?? null,
       warehouseName: hydrated.warehouseName ?? "",
+      remarks: "",
     });
   }, [id, router]);
 
@@ -84,6 +89,13 @@ export default function SplitSalesOrderPage() {
     setErrors(e);
     if (Object.keys(e).length > 0) {
       setToast({ msg: "Please fix the errors before saving.", type: "error" });
+      return;
+    }
+
+    const customer = customers.find((c) => c.id === form.customerId);
+    const creditCheck = validateSalesOrderCreditLimit({ form, customer });
+    if (creditCheck.exceeded && creditCheck.summary) {
+      setCreditDialog(creditCheck.summary);
       return;
     }
 
@@ -133,14 +145,6 @@ export default function SplitSalesOrderPage() {
             Cancel
           </Button>
           <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => handleSave(true)}
-          >
-            Save as Draft
-          </Button>
-          <Button
             size="sm"
             className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
             onClick={() => handleSave(false)}
@@ -174,6 +178,14 @@ export default function SplitSalesOrderPage() {
           {toast.type === "success" ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
           {toast.msg}
         </div>
+      )}
+
+      {creditDialog && (
+        <CreditLimitExceededDialog
+          open
+          onClose={() => setCreditDialog(null)}
+          summary={creditDialog}
+        />
       )}
     </AppLayout>
   );

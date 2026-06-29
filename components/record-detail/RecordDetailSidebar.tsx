@@ -91,10 +91,8 @@ export function RecordDetailSidebar({
         </SidebarPanel>
       )}
 
-      <SidebarPanel title="Activity" icon={Clock}>
-        {activity.length === 0 ? (
-          <p className="text-xs text-muted-foreground py-2 text-center">No recent activity</p>
-        ) : (
+      {activity.length > 0 && (
+        <SidebarPanel title="Activity" icon={Clock}>
           <ul className="space-y-2.5">
             {activity.map((item) => (
               <li key={item.id} className="border-b border-border/40 pb-2.5 last:border-0 last:pb-0">
@@ -108,8 +106,8 @@ export function RecordDetailSidebar({
               </li>
             ))}
           </ul>
-        )}
-      </SidebarPanel>
+        </SidebarPanel>
+      )}
 
       {approval.length > 0 && (
         <SidebarPanel title="Approval & Status" icon={Shield}>

@@ -15,6 +15,11 @@ import {
 import { SchemeMultiSelect } from "./SchemeMultiSelect";
 import { SchemeProductMultiSelect } from "./SchemeProductMultiSelect";
 import {
+  SchemeNumberField,
+  SchemeRupeeField,
+  schemeCompactFieldClass as compactFieldClass,
+} from "./scheme-form-inputs";
+import {
   applyDiscountApplicationMode,
   buildProductDiscountUIPreviewRows,
   formatSchemeRupee,
@@ -37,8 +42,6 @@ interface ProductDiscountSchemeFormProps {
 }
 
 const CUSTOMER_TYPES = ["All", "Distributor", "Retailer", "Wholesaler", "Institutional"] as const;
-
-const compactFieldClass = "h-8 text-xs";
 
 export function ProductDiscountSchemeForm({
   form,
@@ -116,7 +119,7 @@ export function ProductDiscountSchemeForm({
 
       <div className="rounded-md border border-border bg-white px-3 py-2.5">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-          <div className="space-y-1 sm:col-span-2">
+          <div className="col-span-2 min-w-0 space-y-1 sm:col-span-1 lg:col-span-1">
             <Label className="text-[11px] font-medium text-muted-foreground">
               Scheme Name <span className="text-red-500">*</span>
             </Label>
@@ -124,18 +127,18 @@ export function ProductDiscountSchemeForm({
               value={form.schemeName}
               onChange={(e) => set("schemeName", e.target.value)}
               placeholder="e.g. Kharif Product Discount"
-              className={compactFieldClass}
+              className={cn(compactFieldClass, "w-full")}
             />
           </div>
-          <div className="space-y-1">
+          <div className="col-span-1 min-w-0 space-y-1 lg:col-span-1">
             <Label className="text-[11px] font-medium text-muted-foreground">Scheme Code</Label>
             <Input
               value={mode === "edit" ? (schemeCode ?? "") : (codePreview ?? "Auto")}
               readOnly
-              className={cn(compactFieldClass, "bg-muted/40 cursor-not-allowed")}
+              className={cn(compactFieldClass, "w-full bg-muted/40 cursor-not-allowed")}
             />
           </div>
-          <div className="space-y-1">
+          <div className="col-span-1 min-w-0 space-y-1 lg:col-span-1">
             <Label className="text-[11px] font-medium text-muted-foreground">
               Customer Type <span className="text-red-500">*</span>
             </Label>
@@ -143,7 +146,7 @@ export function ProductDiscountSchemeForm({
               value={form.customerType}
               onValueChange={(v) => set("customerType", v as ProductDiscountForm["customerType"])}
             >
-              <SelectTrigger className={compactFieldClass}>
+              <SelectTrigger className={cn(compactFieldClass, "w-full")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -155,7 +158,7 @@ export function ProductDiscountSchemeForm({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1">
+          <div className="col-span-1 min-w-0 space-y-1 lg:col-span-1">
             <Label className="text-[11px] font-medium text-muted-foreground">
               Start Date <span className="text-red-500">*</span>
             </Label>
@@ -163,10 +166,10 @@ export function ProductDiscountSchemeForm({
               type="date"
               value={form.startDate}
               onChange={(e) => set("startDate", e.target.value)}
-              className={compactFieldClass}
+              className={cn(compactFieldClass, "w-full")}
             />
           </div>
-          <div className="space-y-1">
+          <div className="col-span-1 min-w-0 space-y-1 lg:col-span-1">
             <Label className="text-[11px] font-medium text-muted-foreground">
               End Date <span className="text-red-500">*</span>
             </Label>
@@ -174,7 +177,7 @@ export function ProductDiscountSchemeForm({
               type="date"
               value={form.endDate}
               onChange={(e) => set("endDate", e.target.value)}
-              className={compactFieldClass}
+              className={cn(compactFieldClass, "w-full")}
             />
           </div>
         </div>
@@ -230,13 +233,21 @@ export function ProductDiscountSchemeForm({
               <Label className="text-[11px] font-medium text-muted-foreground">
                 {discountValueLabel} <span className="text-red-500">*</span>
               </Label>
-              <Input
-                type="number"
-                value={form.discountValue}
-                onChange={(e) => set("discountValue", e.target.value)}
-                placeholder={form.discountType === "Percentage" ? "5" : "150"}
-                className={compactFieldClass}
-              />
+              {form.discountType === "Rupees" ? (
+                <SchemeRupeeField
+                  value={form.discountValue}
+                  onChange={(v) => set("discountValue", v)}
+                  placeholder="₹ 150"
+                />
+              ) : (
+                <SchemeNumberField
+                  value={form.discountValue}
+                  onChange={(v) => set("discountValue", v)}
+                  placeholder="5"
+                  max={100}
+                  step="any"
+                />
+              )}
             </div>
           </div>
         )}
@@ -335,17 +346,27 @@ export function ProductDiscountSchemeForm({
                       </td>
                       <td className="px-2 py-1 text-right">
                         {isProductWise ? (
-                          <Input
-                            type="number"
-                            value={rowDiscountValue}
-                            onChange={(e) =>
-                              updateProductDiscount(row.productId, {
-                                discountValue: e.target.value,
-                              })
-                            }
-                            placeholder={rowDiscountType === "Percentage" ? "5" : "40"}
-                            className="ml-auto h-7 w-20 text-right text-[11px]"
-                          />
+                          rowDiscountType === "Rupees" ? (
+                            <SchemeRupeeField
+                              value={rowDiscountValue}
+                              onChange={(v) =>
+                                updateProductDiscount(row.productId, { discountValue: v })
+                              }
+                              className="ml-auto h-7 w-24 text-right text-[11px]"
+                              placeholder="₹ 40"
+                            />
+                          ) : (
+                            <SchemeNumberField
+                              value={rowDiscountValue}
+                              onChange={(v) =>
+                                updateProductDiscount(row.productId, { discountValue: v })
+                              }
+                              className="ml-auto h-7 w-20 text-right text-[11px]"
+                              placeholder="5"
+                              max={100}
+                              step="any"
+                            />
+                          )
                         ) : (
                           <span className="tabular-nums">
                             {row.discountType === "Percentage"

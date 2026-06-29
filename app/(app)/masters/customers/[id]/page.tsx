@@ -63,6 +63,11 @@ import {
 import { ComplianceRegistrationViewRows } from "@/components/masters/ComplianceRegistrationViewRows";
 import { ErpPartyAccountingCard } from "@/components/masters/ErpPartyAccountingCard";
 import { getCustomerAccountingSummary } from "@/lib/accounts/erp-accounting-mapping";
+import {
+  getCreditSourceLabel,
+  isDistributorConvertedCustomer,
+} from "@/lib/masters/customer-credit";
+import { formatCategoryLabel } from "@/lib/distributor/distributor-scoring";
 
 const STATUS_VARIANT: Record<
   CustomerStatus,
@@ -80,6 +85,14 @@ const STATUS_LABEL: Record<CustomerStatus, string> = {
   draft: "Draft",
   blocked: "Blocked",
 };
+
+function ConvertedDistributorBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-navy-200 bg-navy-50 px-2 py-0.5 text-[11px] font-semibold text-navy-700">
+      Converted from Distributor
+    </span>
+  );
+}
 
 function TypeBadge({ label }: { label: string }) {
   return (
@@ -479,6 +492,7 @@ export default function CustomerDetailPage() {
               />
             </RecordSectionCard>
           </div>
+          </div>
         );
 
       case "bank":
@@ -543,11 +557,73 @@ export default function CustomerDetailPage() {
 
       case "commercial":
         return (
+          <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <RecordSectionCard title="Commercial Details" icon={IndianRupee} accent="orange">
-              <RecordKvRow label="Credit Limit" value={formatCreditLimit(customer.creditLimit)} amount highlight />
+            {isDistributorConvertedCustomer(customer) && (
+              <RecordSectionCard title="Distributor Reference" icon={Info} accent="blue" className="lg:col-span-2">
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <RecordKvRow label="Source" value={getCreditSourceLabel(customer)} />
+                  <RecordKvRow
+                    label="Linked Distributor"
+                    value={customer.linkedDistributorName ?? "—"}
+                  />
+                  <RecordKvRow
+                    label="Distributor Score"
+                    value={
+                      customer.distributorScore != null
+                        ? `${customer.distributorScore}%`
+                        : "—"
+                    }
+                  />
+                  <RecordKvRow
+                    label="Distributor Category"
+                    value={
+                      customer.distributorCategory
+                        ? formatCategoryLabel(customer.distributorCategory)
+                        : "—"
+                    }
+                  />
+                  <RecordKvRow
+                    label="Recommended Credit Limit"
+                    value={formatCreditLimit(customer.recommendedCreditLimit ?? 0)}
+                    amount
+                  />
+                  <RecordKvRow
+                    label="Recommended Credit Days"
+                    value={
+                      customer.recommendedCreditDays != null
+                        ? `${customer.recommendedCreditDays} Days`
+                        : "—"
+                    }
+                  />
+                  <RecordKvRow
+                    label="Recommended Credit Status"
+                    value={customer.recommendedCreditStatus ?? "—"}
+                    isLast
+                  />
+                </div>
+              </RecordSectionCard>
+            )}
+
+            <RecordSectionCard title="Final Customer Credit" icon={IndianRupee} accent="orange">
+              <RecordKvRow label="Final Credit Limit" value={formatCreditLimit(customer.creditLimit)} amount highlight />
+              <RecordKvRow
+                label="Final Credit Days"
+                value={customer.creditDays != null ? `${customer.creditDays} Days` : "—"}
+              />
+              <RecordKvRow
+                label="Credit Status"
+                value={customer.finalCreditStatus ?? customer.recommendedCreditStatus ?? "—"}
+              />
               <RecordKvRow label="Payment Terms" value={payLabel} />
-              <RecordKvRow label="Sales Man" value={customer.salesManName} isLast />
+              <RecordKvRow
+                label="Sales Man"
+                value={customer.salesManName}
+                isLast={!customer.creditOverrideReason}
+              />
+              {customer.creditOverrideReason ? (
+                <RecordKvRow label="Override Reason" value={customer.creditOverrideReason} isLast />
+              ) : null}
             </RecordSectionCard>
 
             <RecordSectionCard title="Credit Usage" icon={CreditCard} accent="green">
@@ -612,6 +688,22 @@ export default function CustomerDetailPage() {
               </div>
             </RecordSectionCard>
           </div>
+
+          {isDistributorConvertedCustomer(customer) &&
+            (customer.creditAuditLog?.length ?? 0) > 0 && (
+              <RecordSectionCard title="Credit Override Audit" icon={Clock} accent="slate">
+                {[...(customer.creditAuditLog ?? [])]
+                  .reverse()
+                  .map((entry, i, arr) => (
+                    <RecordKvRow
+                      key={`${entry.date}-${entry.field}-${i}`}
+                      label={entry.date}
+                      value={`${entry.field}: ${entry.previousValue} → ${entry.newValue} — ${entry.reason} (${entry.by})`}
+                      isLast={i === arr.length - 1}
+                    />
+                  ))}
+              </RecordSectionCard>
+            )}
           </div>
         );
 
@@ -666,7 +758,12 @@ export default function CustomerDetailPage() {
       listLabel="Customers"
       recordName={customer.customerName}
       recordCode={customer.customerCode}
-        typeBadge={<TypeBadge label={typeLabel} />}
+        typeBadge={
+          <>
+            <TypeBadge label={typeLabel} />
+            {isDistributorConvertedCustomer(customer) && <ConvertedDistributorBadge />}
+          </>
+        }
         statusLabel={STATUS_LABEL[customer.status]}
         statusVariant={STATUS_VARIANT[customer.status]}
         metaItems={[

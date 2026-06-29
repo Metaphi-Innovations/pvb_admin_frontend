@@ -103,7 +103,7 @@ export default function ViewStockDetailsPage({ params }: { params: { id: string 
                   icon: ClipboardCheck,
                   variant: "primary" as const,
                   onClick: () =>
-                    router.push(`/warehouse/grnqc/qc/create?grnId=${String(grnData.grnNo ?? "")}`),
+                    router.push(`/warehouse/qc/create?grnId=${String(grnData.grnNo ?? "")}`),
                 },
               ]
             : [],
