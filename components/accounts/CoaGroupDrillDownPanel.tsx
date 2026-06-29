@@ -242,10 +242,7 @@ export function CoaGroupDrillDownPanel({
         actions={
           <>
             <Button asChild variant="outline" size="sm" className="h-8 text-xs">
-              <Link href="/warehouse/batch-register">Stock Ledger</Link>
-            </Button>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
-              <Link href="/warehouse/batch-register">Batch Register</Link>
+              <Link href="/warehouse/stockoverview">Stock Position</Link>
             </Button>
             <Button asChild variant="outline" size="sm" className="h-8 text-xs">
               <Link href="/accounts/reports/stock-valuation">Stock Valuation</Link>

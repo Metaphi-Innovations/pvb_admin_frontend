@@ -284,11 +284,7 @@ export default function ViewStockTransferPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {transfer.lineItems.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="px-4 py-8 text-xs text-center text-muted-foreground">No product lines</td>
-                      </tr>
-                    ) : transfer.lineItems.map(line => {
+                    {transfer.lineItems.map(line => {
                       const product = line.productId ? getProductById(line.productId) : undefined;
                       return (
                         <tr key={line.id} className="border-b border-border/60">

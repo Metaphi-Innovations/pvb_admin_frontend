@@ -50,8 +50,22 @@ import CancelTransferDialog from "./components/CancelTransferDialog";
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   draft: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
+  pending_approval: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
   pending: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
+  confirmed: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
   approved: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
+  pending_packing: { bg: "bg-navy-50", text: "text-navy-700", dot: "bg-navy-500" },
+  packing_in_progress: { bg: "bg-navy-50", text: "text-navy-700", dot: "bg-navy-500" },
+  packed: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
+  ready_to_dispatch: { bg: "bg-sky-50", text: "text-sky-700", dot: "bg-sky-500" },
+  dispatched: { bg: "bg-sky-50", text: "text-sky-700", dot: "bg-sky-500" },
+  in_transit: { bg: "bg-sky-100", text: "text-sky-700", dot: "bg-sky-500" },
+  grn_pending: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
+  partially_received: { bg: "bg-orange-50", text: "text-orange-700", dot: "bg-orange-400" },
+  received: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
+  qc_pending: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
+  qc_passed: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
+  completed: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
   rejected: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-400" },
   cancelled: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-400" },
 };
@@ -105,7 +119,11 @@ export default function StockTransferPage() {
   const filtered = useMemo(() => {
     let d = transfers;
     if (activeTab !== "all") {
-      d = d.filter((t) => t.status === activeTab);
+      d = d.filter((t) => {
+        if (activeTab === "pending") return t.status === "pending" || t.status === "pending_approval";
+        if (activeTab === "approved") return t.status === "approved" || t.status === "confirmed";
+        return t.status === activeTab;
+      });
     }
 
     const searchVal = filters.search as string;
@@ -165,8 +183,8 @@ export default function StockTransferPage() {
   const kpi = {
     total: transfers.length,
     draft: transfers.filter((t) => t.status === "draft").length,
-    pending: transfers.filter((t) => t.status === "pending").length,
-    approved: transfers.filter((t) => t.status === "approved").length,
+    pending: transfers.filter((t) => t.status === "pending" || t.status === "pending_approval").length,
+    approved: transfers.filter((t) => t.status === "approved" || t.status === "confirmed").length,
     rejected: transfers.filter((t) => t.status === "rejected").length,
     cancelled: transfers.filter((t) => t.status === "cancelled").length,
     totalAmount: transfers.reduce((sum, t) => sum + (t.totalAmount || 0), 0),
@@ -427,7 +445,7 @@ export default function StockTransferPage() {
           onPageSizeChange={setPageSize}
           onSortChange={setSort}
           onFilterChange={setFilters}
-          emptyMessage="transfers"
+          emptyMessage=""
           searchPlaceholder="Search transfers, warehouses…"
           currentFilters={filters}
           currentSort={sort}

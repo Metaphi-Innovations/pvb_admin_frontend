@@ -23,6 +23,10 @@ import { MasterFormGrid } from "@/components/masters/MasterModule";
 import { cn } from "@/lib/utils";
 import { SchemeMultiSelect } from "./SchemeMultiSelect";
 import {
+  SchemeNumberField,
+  SchemeRupeeField,
+} from "./scheme-form-inputs";
+import {
   SCHEME_TYPES,
   SCHEME_PRODUCT_OPTIONS,
   SCHEME_STATE_OPTIONS,
@@ -45,6 +49,8 @@ interface SchemeFormSheetProps {
   schemeCode?: string;
   codePreview?: string;
   error?: string;
+  /** Hide scheme type field when type is selected in parent (Create Scheme page). */
+  hideSchemeTypeField?: boolean;
 }
 
 const CUSTOMER_TYPES = ["All", "Distributor", "Retailer", "Wholesaler", "Institutional"] as const;
@@ -58,6 +64,7 @@ export function SchemeFormSheet({
   schemeCode,
   codePreview,
   error,
+  hideSchemeTypeField = false,
 }: SchemeFormSheetProps) {
   const set = <K extends keyof SchemeBulkForm>(key: K, value: SchemeBulkForm[K]) => {
     onChange({ ...form, [key]: value });
@@ -124,6 +131,7 @@ export function SchemeFormSheet({
           </AccordionTrigger>
           <AccordionContent data-value="basic" className="px-3 pb-3 pt-1">
             <MasterFormGrid>
+              {!hideSchemeTypeField && (
               <div className="col-span-2 space-y-1">
                 <Label className="text-xs font-medium">
                   Scheme Type <span className="text-red-500">*</span>
@@ -141,6 +149,7 @@ export function SchemeFormSheet({
                   </SelectContent>
                 </Select>
               </div>
+              )}
 
               <div className="col-span-2 space-y-1 sm:col-span-1">
                 <Label className="text-xs font-medium">Scheme Code</Label>
@@ -153,10 +162,9 @@ export function SchemeFormSheet({
 
               <div className="col-span-2 space-y-1 sm:col-span-1">
                 <Label className="text-xs font-medium">Priority</Label>
-                <Input
-                  type="number"
+                <SchemeNumberField
                   value={form.priority || String(SCHEME_TYPE_PRIORITY[form.schemeType])}
-                  onChange={(e) => set("priority", e.target.value)}
+                  onChange={(v) => set("priority", v)}
                   placeholder={String(SCHEME_TYPE_PRIORITY[form.schemeType])}
                   className="h-8 text-xs"
                 />
@@ -424,24 +432,25 @@ export function SchemeFormSheet({
                     <Label className="text-xs font-medium">
                       Expiry Within Days <span className="text-red-500">*</span>
                     </Label>
-                    <Input
-                      type="number"
+                    <SchemeNumberField
                       value={form.expiryWithinDays}
-                      onChange={(e) => set("expiryWithinDays", e.target.value)}
+                      onChange={(v) => set("expiryWithinDays", v)}
                       placeholder="e.g., 60"
                       className="h-8 text-xs"
+                      min={1}
                     />
                   </div>
                   <div className="col-span-2 space-y-1 sm:col-span-1">
                     <Label className="text-xs font-medium">
                       Discount % <span className="text-red-500">*</span>
                     </Label>
-                    <Input
-                      type="number"
+                    <SchemeNumberField
                       value={form.discountValue}
-                      onChange={(e) => set("discountValue", e.target.value)}
+                      onChange={(v) => set("discountValue", v)}
                       placeholder="e.g., 10"
                       className="h-8 text-xs"
+                      max={100}
+                      step="any"
                     />
                   </div>
                 </>
@@ -476,38 +485,37 @@ export function SchemeFormSheet({
                     <div className="space-y-1.5">
                       {form.turnoverSlabs.map((slab, i) => (
                         <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-1.5 items-end">
-                          <Input
-                            type="number"
+                          <SchemeRupeeField
                             value={slab.fromTurnover}
-                            onChange={(e) => {
+                            onChange={(v) => {
                               const slabs = [...form.turnoverSlabs];
-                              slabs[i] = { ...slabs[i], fromTurnover: e.target.value };
+                              slabs[i] = { ...slabs[i], fromTurnover: v };
                               set("turnoverSlabs", slabs);
                             }}
                             placeholder="From ₹"
                             className="h-8 text-xs"
                           />
-                          <Input
-                            type="number"
+                          <SchemeRupeeField
                             value={slab.toTurnover}
-                            onChange={(e) => {
+                            onChange={(v) => {
                               const slabs = [...form.turnoverSlabs];
-                              slabs[i] = { ...slabs[i], toTurnover: e.target.value };
+                              slabs[i] = { ...slabs[i], toTurnover: v };
                               set("turnoverSlabs", slabs);
                             }}
                             placeholder="To ₹ (blank=above)"
                             className="h-8 text-xs"
                           />
-                          <Input
-                            type="number"
+                          <SchemeNumberField
                             value={slab.benefitPercent}
-                            onChange={(e) => {
+                            onChange={(v) => {
                               const slabs = [...form.turnoverSlabs];
-                              slabs[i] = { ...slabs[i], benefitPercent: e.target.value };
+                              slabs[i] = { ...slabs[i], benefitPercent: v };
                               set("turnoverSlabs", slabs);
                             }}
                             placeholder="Benefit %"
                             className="h-8 text-xs"
+                            max={100}
+                            step="any"
                           />
                           <Button
                             type="button"
@@ -590,11 +598,11 @@ export function SchemeFormSheet({
                   {form.paymentTiming === "Within X Days" && (
                     <div className="col-span-2 space-y-1 sm:col-span-1">
                       <Label className="text-xs font-medium">Within Days</Label>
-                      <Input
-                        type="number"
+                      <SchemeNumberField
                         value={form.paymentWithinDays}
-                        onChange={(e) => set("paymentWithinDays", e.target.value)}
+                        onChange={(v) => set("paymentWithinDays", v)}
                         className="h-8 text-xs"
+                        min={1}
                       />
                     </div>
                   )}
@@ -602,10 +610,9 @@ export function SchemeFormSheet({
                     <Label className="text-xs font-medium">
                       Min Payment Amount <span className="text-red-500">*</span>
                     </Label>
-                    <Input
-                      type="number"
+                    <SchemeRupeeField
                       value={form.minimumPaymentAmount}
-                      onChange={(e) => set("minimumPaymentAmount", e.target.value)}
+                      onChange={(v) => set("minimumPaymentAmount", v)}
                       className="h-8 text-xs"
                     />
                   </div>
@@ -656,23 +663,32 @@ export function SchemeFormSheet({
                       <Label className="text-xs font-medium">
                         Discount Value <span className="text-red-500">*</span>
                       </Label>
-                      <Input
-                        type="number"
-                        value={form.discountValue}
-                        onChange={(e) => set("discountValue", e.target.value)}
-                        className="h-8 text-xs"
-                      />
+                      {form.discountType === "Fixed Amount" ? (
+                        <SchemeRupeeField
+                          value={form.discountValue}
+                          onChange={(v) => set("discountValue", v)}
+                          className="h-8 text-xs"
+                        />
+                      ) : (
+                        <SchemeNumberField
+                          value={form.discountValue}
+                          onChange={(v) => set("discountValue", v)}
+                          className="h-8 text-xs"
+                          max={form.discountType === "Percentage" ? 100 : undefined}
+                          step="any"
+                        />
+                      )}
                     </div>
                   ) : (
                     <div className="col-span-2 space-y-1 sm:col-span-1">
                       <Label className="text-xs font-medium">
                         Free Quantity <span className="text-red-500">*</span>
                       </Label>
-                      <Input
-                        type="number"
+                      <SchemeNumberField
                         value={form.freeQuantity}
-                        onChange={(e) => set("freeQuantity", e.target.value)}
+                        onChange={(v) => set("freeQuantity", v)}
                         className="h-8 text-xs"
+                        min={1}
                       />
                     </div>
                   )}
@@ -682,10 +698,9 @@ export function SchemeFormSheet({
               {(isCash || isFestive) && (
                 <div className="col-span-2 space-y-1 sm:col-span-1">
                   <Label className="text-xs font-medium">Min Order Value (optional)</Label>
-                  <Input
-                    type="number"
+                  <SchemeRupeeField
                     value={form.minimumOrderValue}
-                    onChange={(e) => set("minimumOrderValue", e.target.value)}
+                    onChange={(v) => set("minimumOrderValue", v)}
                     className="h-8 text-xs"
                   />
                 </div>

@@ -15,8 +15,8 @@ import {
   type PurchaseInvoiceLine,
   type PurchaseInvoiceRecord,
 } from "../purchase-invoices/purchase-invoices-data";
-import { getGrnRecords } from "@/app/(app)/warehouse/grnqc/grn/mock-data";
-import { getQcRecords } from "@/app/(app)/warehouse/grnqc/qc/mock-data";
+import { getGrnRecords } from "@/app/(app)/warehouse/grn/mock-data";
+import { getQcRecords } from "@/app/(app)/warehouse/qc/mock-data";
 
 export type DebitNoteAgainst = "purchase_invoice" | "purchase_order" | "standalone_adjustment";
 export type DebitReferenceType = DebitNoteAgainst;

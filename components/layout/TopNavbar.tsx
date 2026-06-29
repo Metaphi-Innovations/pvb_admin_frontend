@@ -7,7 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, BookOpen, ShoppingCart, BarChart3,
-  UserCheck, Wallet, Wheat, CalendarDays, Monitor, Settings,
+  UserCheck, Wallet, Wheat, CalendarDays, Monitor,
   Palette, ChevronDown, Warehouse, ChevronLeft, ChevronRight, type LucideIcon,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";

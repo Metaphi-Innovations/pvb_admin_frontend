@@ -172,6 +172,7 @@ export interface SalesOrder {
   warehouseName?: string;
   billToAddressId?: string;
   shipToAddressId?: string;
+  remarks?: string;
 }
 
 export interface InventoryBatch {
@@ -201,7 +202,7 @@ const PRODUCT_CATALOG: ProductCatalogItem[] = [
   { id: 12, code: "PRD-012", name: "Mancozeb 75 WP", uom: "KG", gstRate: "18%", sellingPrice: 235, stock: 130, status: "active" },
 ];
 
-const SEED_VERSION = 2;
+const SEED_VERSION = 3;
 const MAX_SEED_ID = 180;
 
 const SEED_CUSTOMERS: {
@@ -233,15 +234,15 @@ const SEED_SALESMEN: { id: number; name: string }[] = [
 const BASE_SEED_ORDERS: SalesOrder[] = [
   { id: 1, soNumber: "SO-2024-001", customerId: 1, customerName: "Green Valley Agro", customerCode: "CUST-001", territory: "North Zone", salesManId: 1, salesManName: "Rajesh Kumar", orderDate: "2024-01-10", deliveryDate: "2024-01-17", status: "delivered", lineItems: [], totalAmount: 125000, requiresApproval: true, items: 5, createdBy: "Admin", createdDate: "2024-01-10", updatedBy: "Admin", updatedDate: "2024-01-10" },
   { id: 2, soNumber: "SO-2024-002", customerId: 2, customerName: "Kisan Fertilizers Ltd", customerCode: "CUST-002", territory: "South Zone", salesManId: 2, salesManName: "Priya Singh", orderDate: "2024-01-12", deliveryDate: "2024-01-19", status: "dispatched", lineItems: [], totalAmount: 78500, requiresApproval: true, items: 3, createdBy: "Admin", createdDate: "2024-01-12", updatedBy: "Admin", updatedDate: "2024-01-12" },
-  { id: 3, soNumber: "SO-2024-003", customerId: 3, customerName: "Farmtech Solutions", customerCode: "CUST-003", territory: "East Zone", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-01-14", deliveryDate: "2024-01-21", status: "confirmed", lineItems: [], totalAmount: 234000, requiresApproval: true, items: 8, createdBy: "Admin", createdDate: "2024-01-14", updatedBy: "Admin", updatedDate: "2024-01-14" },
+  { id: 3, soNumber: "SO-2024-003", customerId: 3, customerName: "Farmtech Solutions", customerCode: "CUST-003", territory: "East Zone", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-01-14", deliveryDate: "2024-01-21", status: "confirmed", lineItems: [], totalAmount: 95000, requiresApproval: true, items: 2, createdBy: "Admin", createdDate: "2024-01-14", updatedBy: "Admin", updatedDate: "2024-01-14" },
   { id: 4, soNumber: "SO-2024-004", customerId: 4, customerName: "AgroPlus Distributors", customerCode: "CUST-004", territory: "West Zone", salesManId: 4, salesManName: "Neha Patel", orderDate: "2024-01-15", deliveryDate: "2024-01-22", status: "draft", lineItems: [], totalAmount: 45000, requiresApproval: true, items: 2, createdBy: "Admin", createdDate: "2024-01-15", updatedBy: "Admin", updatedDate: "2024-01-15" },
   { id: 5, soNumber: "SO-2024-005", customerId: 5, customerName: "Sunrise Crops", customerCode: "CUST-005", territory: "North Zone", salesManId: 1, salesManName: "Rajesh Kumar", orderDate: "2024-01-08", deliveryDate: "2024-01-15", status: "delivered", lineItems: [], totalAmount: 189000, requiresApproval: true, items: 6, createdBy: "Admin", createdDate: "2024-01-08", updatedBy: "Admin", updatedDate: "2024-01-08" },
   { id: 6, soNumber: "SO-2024-006", customerId: 6, customerName: "Rural Inputs Co.", customerCode: "CUST-006", territory: "Central Zone", salesManId: 5, salesManName: "Vikram Das", orderDate: "2024-01-09", deliveryDate: "2024-01-16", status: "cancelled", lineItems: [], totalAmount: 92000, requiresApproval: true, items: 4, createdBy: "Admin", createdDate: "2024-01-09", updatedBy: "Admin", updatedDate: "2024-01-09" },
-  { id: 7, soNumber: "SO-2024-007", customerId: 7, customerName: "BioGrow Agro", customerCode: "CUST-007", territory: "South Zone", salesManId: 2, salesManName: "Priya Singh", orderDate: "2024-01-16", deliveryDate: "2024-01-23", status: "confirmed", lineItems: [], totalAmount: 310000, requiresApproval: true, items: 7, createdBy: "Admin", createdDate: "2024-01-16", updatedBy: "Admin", updatedDate: "2024-01-16" },
+  { id: 7, soNumber: "SO-2024-007", customerId: 7, customerName: "BioGrow Agro", customerCode: "CUST-007", territory: "South Zone", salesManId: 2, salesManName: "Priya Singh", orderDate: "2024-01-16", deliveryDate: "2024-01-23", status: "confirmed", lineItems: [], totalAmount: 72000, requiresApproval: true, items: 2, createdBy: "Admin", createdDate: "2024-01-16", updatedBy: "Admin", updatedDate: "2024-01-16" },
   { id: 8, soNumber: "SO-2024-008", customerId: 8, customerName: "Fertile Lands Ltd", customerCode: "CUST-008", territory: "East Zone", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-01-17", deliveryDate: "2024-01-24", status: "dispatched", lineItems: [], totalAmount: 67500, requiresApproval: true, items: 3, createdBy: "Admin", createdDate: "2024-01-17", updatedBy: "Admin", updatedDate: "2024-01-17" },
   { id: 9, soNumber: "SO-2024-009", customerId: 9, customerName: "CropCare India", customerCode: "CUST-009", territory: "West Zone", salesManId: 4, salesManName: "Neha Patel", orderDate: "2024-01-05", deliveryDate: "2024-01-12", status: "delivered", lineItems: [], totalAmount: 445000, requiresApproval: true, items: 9, createdBy: "Admin", createdDate: "2024-01-05", updatedBy: "Admin", updatedDate: "2024-01-05" },
   { id: 10, soNumber: "SO-2024-010", customerId: 10, customerName: "Seeds & More", customerCode: "CUST-010", territory: "North Zone", salesManId: 1, salesManName: "Rajesh Kumar", orderDate: "2024-01-18", deliveryDate: "2024-01-25", status: "draft", lineItems: [], totalAmount: 28000, requiresApproval: true, items: 2, createdBy: "Admin", createdDate: "2024-01-18", updatedBy: "Admin", updatedDate: "2024-01-18" },
-  { id: 11, soNumber: "SO-2024-011", customerId: 3, customerName: "Farmtech Solutions", customerCode: "CUST-003", territory: "East Zone", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-01-19", deliveryDate: "2024-01-26", status: "pending_approval", approvalStatus: "pending_approval", lineItems: [], totalAmount: 156000, requiresApproval: true, items: 4, createdBy: "Admin", createdDate: "2024-01-19", updatedBy: "Admin", updatedDate: "2024-01-19" },
+  { id: 11, soNumber: "SO-2024-011", customerId: 3, customerName: "Farmtech Solutions", customerCode: "CUST-003", territory: "East Zone", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-01-19", deliveryDate: "2024-01-26", status: "pending_approval", approvalStatus: "pending_approval", lineItems: [], totalAmount: 62000, requiresApproval: true, items: 2, createdBy: "Admin", createdDate: "2024-01-19", updatedBy: "Admin", updatedDate: "2024-01-19" },
   { id: 12, soNumber: "SO-2024-012", customerId: 5, customerName: "Sunrise Crops", customerCode: "CUST-005", territory: "North Zone", salesManId: 1, salesManName: "Rajesh Kumar", orderDate: "2024-01-20", deliveryDate: "2024-01-27", status: "pending_approval", approvalStatus: "pending_approval", lineItems: [], totalAmount: 98000, requiresApproval: true, items: 3, createdBy: "Admin", createdDate: "2024-01-20", updatedBy: "Admin", updatedDate: "2024-01-20" },
   { id: 13, soNumber: "SO-2024-013", customerId: 2, customerName: "Kisan Fertilizers Ltd", customerCode: "CUST-002", territory: "South Zone", salesManId: 2, salesManName: "Priya Singh", orderDate: "2024-01-06", deliveryDate: "2024-01-13", status: "approved", approvalStatus: "approved", approvedBy: "Admin", approvedDate: "2024-01-07", lineItems: [], totalAmount: 54000, requiresApproval: true, items: 2, createdBy: "Admin", createdDate: "2024-01-06", updatedBy: "Admin", updatedDate: "2024-01-07" },
   { id: 14, soNumber: "SO-2024-014", customerId: 8, customerName: "Fertile Lands Ltd", customerCode: "CUST-008", territory: "East Zone", salesManId: 3, salesManName: "Amit Sharma", orderDate: "2024-01-04", deliveryDate: "2024-01-11", status: "rejected", approvalStatus: "rejected", rejectedBy: "Admin", rejectedDate: "2024-01-05", rejectionReason: "Discount exceeds approved limit for this customer tier.", lineItems: [], totalAmount: 112000, requiresApproval: true, items: 3, createdBy: "Admin", createdDate: "2024-01-04", updatedBy: "Admin", updatedDate: "2024-01-05" },
@@ -249,13 +250,13 @@ const BASE_SEED_ORDERS: SalesOrder[] = [
 
 /** Bulk statuses for pagination testing — maps to existing OrderStatus values. */
 const BULK_SEED_STATUS_PLAN: { status: OrderStatus; count: number }[] = [
-  { status: "draft", count: 35 },
-  { status: "dispatched", count: 27 },
-  { status: "pending_approval", count: 18 },
-  { status: "approved", count: 12 },
+  { status: "draft", count: 48 },
+  { status: "dispatched", count: 6 },
+  { status: "pending_approval", count: 4 },
+  { status: "approved", count: 3 },
   { status: "rejected", count: 12 },
-  { status: "confirmed", count: 25 },
-  { status: "delivered", count: 25 },
+  { status: "confirmed", count: 6 },
+  { status: "delivered", count: 49 },
   { status: "cancelled", count: 12 },
 ];
 
@@ -664,19 +665,21 @@ export interface OrderTotalsSummary {
 }
 
 export function calculateExpenseNet(
-  expense: Pick<SalesOrderAdditionalExpense, "amount" | "discountType" | "discountValue">,
+	expense: Pick<SalesOrderAdditionalExpense, "amount">,
 ): number {
-  const amount = Math.max(0, expense.amount || 0);
-  if (expense.discountType === "percent") {
-    const pct = Math.min(100, Math.max(0, expense.discountValue || 0));
-    return Math.round(Math.max(0, amount - amount * (pct / 100)) * 100) / 100;
-  }
-  return Math.round(Math.max(0, amount - (expense.discountValue || 0)) * 100) / 100;
+	return Math.round(Math.max(0, expense.amount || 0) * 100) / 100;
 }
 
-export function recalculateExpense(expense: SalesOrderAdditionalExpense): SalesOrderAdditionalExpense {
-  const netAmount = calculateExpenseNet(expense);
-  return { ...expense, netAmount };
+export function recalculateExpense(
+	expense: SalesOrderAdditionalExpense,
+): SalesOrderAdditionalExpense {
+	const netAmount = calculateExpenseNet(expense);
+	return {
+		...expense,
+		discountType: "percent",
+		discountValue: 0,
+		netAmount,
+	};
 }
 
 export function createEmptyExpense(): SalesOrderAdditionalExpense {
@@ -1358,6 +1361,7 @@ export interface SalesOrderFormValues {
   warehouseName?: string;
   billToAddressId?: string;
   shipToAddressId?: string;
+  remarks?: string;
 }
 
 export function orderToFormValues(order: SalesOrder): SalesOrderFormValues {
@@ -1374,6 +1378,7 @@ export function orderToFormValues(order: SalesOrder): SalesOrderFormValues {
     warehouseName: hydrated.warehouseName ?? "",
     billToAddressId: hydrated.billToAddressId ?? "",
     shipToAddressId: hydrated.shipToAddressId ?? "",
+    remarks: hydrated.remarks ?? "",
   };
 }
 
@@ -1448,6 +1453,7 @@ export function buildOrderFromForm(
     warehouseName: warehouse?.warehouseName ?? "",
     billToAddressId: form.billToAddressId || undefined,
     shipToAddressId: form.shipToAddressId || undefined,
+    remarks: form.remarks?.trim() || undefined,
   };
 }
 

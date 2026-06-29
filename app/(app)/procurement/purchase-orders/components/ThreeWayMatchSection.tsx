@@ -108,9 +108,14 @@ export function ThreeWayMatchSection({ po, refreshKey = 0 }: { po: PurchaseOrder
         {match.grnNos.length > 0 && <span>GRN: {match.grnNos.join(", ")}</span>}
         {match.qcNos.length > 0 && <span>QC: {match.qcNos.join(", ")}</span>}
         {match.vendorInvoiceNo && <span>Supplier Invoice: {match.vendorInvoiceNo}</span>}
-        <Link href="/warehouse/grnqc" className="text-brand-600 hover:underline inline-flex items-center gap-0.5 ml-auto">
-          Warehouse GRN & QC <ExternalLink className="w-3 h-3" />
-        </Link>
+        <div className="flex flex-wrap items-center gap-3 ml-auto">
+          <Link href="/warehouse/grn" className="text-brand-600 hover:underline inline-flex items-center gap-0.5">
+            Warehouse GRN <ExternalLink className="w-3 h-3" />
+          </Link>
+          <Link href="/warehouse/qc" className="text-brand-600 hover:underline inline-flex items-center gap-0.5">
+            Warehouse QC <ExternalLink className="w-3 h-3" />
+          </Link>
+        </div>
       </div>
 
       <p className="text-[10px] text-[#9AAAC5] mt-2">

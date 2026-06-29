@@ -1,3 +1,7 @@
+export type FarmerStatus = "Active" | "Inactive";
+export type FarmingPracticeType = "Chemical" | "Biological" | "Both";
+export type OwnershipType = "Owned" | "Leased" | "Owned + Leased";
+
 export interface Farmer {
   id: number;
   name: string;
@@ -12,7 +16,7 @@ export interface Farmer {
   state: string;
   pincode: string;
   farmlandSize: string;
-  ownershipType: "Owned" | "Leased" | "Owned + Leased";
+  ownershipType: OwnershipType;
   currentCrop: string;
   cropRotation: string;
   cropEntries: Array<{
@@ -28,10 +32,86 @@ export interface Farmer {
   brandsRecall: string;
   currentProblem: string;
   majorDiseases: string;
+  majorPests: string;
+  productsUsed: string;
+  currentBrandUsed: string;
+  farmingPractice: FarmingPracticeType;
+  chemicalPercent?: number;
+  biologicalPercent?: number;
   latLong: string;
+  status: FarmerStatus;
+  lastUpdated: string;
 }
 
-export const SEED: Farmer[] = [
+type FarmerSeedRecord = Omit<
+  Farmer,
+  | "status"
+  | "lastUpdated"
+  | "majorPests"
+  | "productsUsed"
+  | "currentBrandUsed"
+  | "farmingPractice"
+  | "chemicalPercent"
+  | "biologicalPercent"
+> & {
+  /** Optional override — comma-separated brands currently in use */
+  currentBrandUsed?: string;
+};
+
+const MAJOR_PESTS_BY_ID: Record<number, string> = {
+  1: "Whitefly, bollworm",
+  2: "Aphids, thrips",
+  3: "Stem borer, leaf folder",
+  4: "Fall armyworm, cutworm",
+  5: "Termites, mealybug",
+  6: "Girdle beetle, pod borer",
+  7: "Leaf folder, hispa",
+  8: "Semilooper, jute hairy caterpillar",
+  9: "Leaf miner, thrips",
+  10: "Pod borer, stem fly",
+  11: "Aphids, brown planthopper",
+  12: "Stem borer, top borer",
+  13: "Aphids, thrips",
+  14: "Leaf folder, gall midge",
+  15: "Thrips, onion maggot",
+  16: "Cutworm, aphid",
+  17: "Bollworm, jassids",
+  18: "Pod borer, stem borer",
+  19: "Stem weevil, rhinoceros beetle",
+  20: "Fall armyworm, shoot borer",
+};
+
+function enrichFarmerRecord(raw: FarmerSeedRecord, index: number): Farmer {
+  const chemicalMatch = raw.chemicalBiologicalPercentage.match(/Chemical\s*(\d+)/i);
+  const biologicalMatch = raw.chemicalBiologicalPercentage.match(/Biological\s*(\d+)/i);
+  const chemicalPercent = chemicalMatch ? Number(chemicalMatch[1]) : undefined;
+  const biologicalPercent = biologicalMatch ? Number(biologicalMatch[1]) : undefined;
+
+  let farmingPractice: FarmingPracticeType = "Both";
+  if (chemicalPercent !== undefined && biologicalPercent !== undefined) {
+    if (chemicalPercent >= 95) farmingPractice = "Chemical";
+    else if (biologicalPercent >= 95) farmingPractice = "Biological";
+  }
+
+  const products = raw.brandProductUses
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return {
+    ...raw,
+    majorPests: MAJOR_PESTS_BY_ID[raw.id] ?? "—",
+    productsUsed: raw.brandProductUses,
+    currentBrandUsed: raw.currentBrandUsed ?? products[0] ?? raw.brandProductUses,
+    farmingPractice,
+    chemicalPercent,
+    biologicalPercent,
+    status: raw.id === 20 ? "Inactive" : "Active",
+    lastUpdated: `2026-06-${String((index % 26) + 1).padStart(2, "0")}`,
+  };
+}
+
+const RAW_SEED: FarmerSeedRecord[] = [
   {
     id: 1,
     name: "Ramesh Patel",
@@ -242,15 +322,18 @@ export const SEED: Farmer[] = [
     pincode: "742149",
     farmlandSize: "2.5 Acres",
     ownershipType: "Owned",
-    currentCrop: "Jute, Rice (Paddy)",
-    cropRotation: "Parcel based",
-    cropEntries: [
-      { type: "Cash Crop", category: "Fibre", produceCropName: "Jute", landSize: "1.5 Acres", ownershipType: "Owned", cropRotation: "Jute -> Paddy" },
-      { type: "Cereal", category: "Kharif Cereal", produceCropName: "Rice (Paddy)", landSize: "1.0 Acre", ownershipType: "Owned", cropRotation: "Paddy -> Fallow" },
-    ],
+    currentCrop:
+      "Jute, Rice (Paddy), Wheat, Maize, Mustard, Potato, Sugarcane, Sesame, Lentil, Chickpea, Groundnut, Soybean, Vegetables, Mango, Banana, Coconut, Turmeric, Ginger, Onion, Garlic",
+    cropRotation:
+      "Jute, Paddy, Wheat, Mustard, Fallow, Potato, Sugarcane, Sesame, Groundnut, Soybean, Tur, Moong, Maize, Vegetables, Onion",
+    cropEntries: [],
     chemicalBiologicalPercentage: "Chemical 58% / Biological 42%",
-    brandProductUses: "Jute Pro Growth Mix",
-    brandsRecall: "Jute Pro, GreenField Bio",
+    currentBrandUsed:
+      "Jute Pro Growth Mix, GreenField Bio, Paddy Shield, AgriMax Plus, BioRise Kharif, CropCare Elite, Kisan Shakti, NaturaGrow, Assam Bio Pack, Harvest Gold, SeedMaster Pro, FieldForce Mix",
+    brandProductUses:
+      "Jute Pro Growth Mix, Jute Stem Booster, Paddy NutriMix, Bio Fungicide Spray, Nematode Control, Micronutrient Blend, Organic Compost Tea, Drip Fertigation A, Soil pH Balancer, Rhizobium Culture",
+    brandsRecall:
+      "Jute Pro, GreenField Bio, Paddy Bio, Mustard Plus, CropShield, AgriGold, BioFarm, Kisan Kit, Harvest Plus, NaturaRoot, FieldMax, GreenLeaf, ProGrow, SeedCare, TerraMix",
     currentProblem: "Slow stem growth and pest spots",
     majorDiseases: "Semilooper, stem rot",
     latLong: "24.1750, 88.2750",
@@ -592,5 +675,7 @@ export const SEED: Farmer[] = [
     latLong: "23.1911, 73.8916",
   },
 ];
+
+export const SEED: Farmer[] = RAW_SEED.map(enrichFarmerRecord);
 
 export const VIEW_FARMER_STORAGE_KEY = "farmer:view-id";

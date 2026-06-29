@@ -228,7 +228,6 @@ export default function FormDemoPage() {
                       {saving ? <BtnLoader /> : null}
                       Save Distributor
                     </Button>
-                    <Button variant="outline" className="w-full">Save as Draft</Button>
                   </div>
 
                   {/* Status badges showcase */}

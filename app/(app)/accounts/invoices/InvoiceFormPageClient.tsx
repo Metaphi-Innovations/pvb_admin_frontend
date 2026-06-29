@@ -20,8 +20,10 @@ import {
   buildSalesInvoicePrefill,
   type SalesInvoicePrefill,
 } from "@/lib/accounts/sales-invoice-prefill";
-import { buildSalesInvoicePrefillFromDispatch } from "@/lib/accounts/dispatch-invoice-bridge";
+import { buildSalesInvoicePrefillFromDispatch, mapDispatchSchemeToInvoiceSettlement } from "@/lib/accounts/dispatch-invoice-bridge";
 import type { PendingDispatchInvoiceRow } from "@/lib/accounts/dispatch-invoice-bridge";
+import type { DispatchNearExpirySchemeEntry } from "@/app/(app)/warehouse/dispatch/types";
+import { InvoiceSchemeSettlementPanel } from "./components/InvoiceSchemeSettlementPanel";
 import { InvoiceLinesEditor } from "./components/InvoiceLinesEditor";
 import { SalesInvoiceCustomerSection } from "./components/SalesInvoiceCustomerSection";
 import { SalesInvoiceDispatchSelect } from "./components/SalesInvoiceDispatchSelect";
@@ -36,6 +38,7 @@ import {
   getProductsForInvoice,
   updateInvoice,
   type InvoiceAttachment,
+  type InvoiceNearExpirySchemeSettlement,
   type InvoiceStatus,
 } from "./invoices-data";
 import { formatINR, INVOICES_LIST_PATH } from "./invoice-utils";
@@ -120,6 +123,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [remarks, setRemarks] = useState("");
   const [lines, setLines] = useState([createEmptyLine()]);
   const [attachments] = useState<InvoiceAttachment[]>([]);
+  const [schemeSettlementEntries, setSchemeSettlementEntries] = useState<
+    DispatchNearExpirySchemeEntry[] | InvoiceNearExpirySchemeSettlement[]
+  >([]);
   const [error, setError] = useState<string | null>(null);
 
   const products = useMemo(
@@ -222,6 +228,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     }
 
     if (prefill.lineItems.length) setLines(prefill.lineItems);
+    setSchemeSettlementEntries(prefill.nearExpirySchemes);
   };
 
   const clearDispatchLinkedFields = () => {
@@ -237,6 +244,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setBranch("Head Office");
     setLines([createEmptyLine()]);
     setError(null);
+    setSchemeSettlementEntries([]);
   };
 
   const onCustomerSelect = (id: string, fields: CustomerTransactionFields | null) => {
@@ -264,6 +272,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       setBranch("Head Office");
       setLines([createEmptyLine()]);
       setError(null);
+      setSchemeSettlementEntries([]);
       return;
     }
 
@@ -363,6 +372,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setReferenceNo(rec.referenceNo);
     setRemarks(rec.remarks);
     setLines(rec.lineItems.length ? rec.lineItems : [createEmptyLine()]);
+    setSchemeSettlementEntries(rec.nearExpirySchemeSettlements ?? []);
   }, [isEdit, invoiceId, router, customers]);
 
   const totals = useMemo(() => {
@@ -474,6 +484,13 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     lineItems: lines.filter((l) => l.productName || l.productId),
     attachments,
     invoiceStatus,
+    nearExpirySchemeSettlements: schemeSettlementEntries.length
+      ? schemeSettlementEntries.map((entry) =>
+          "settlementMethod" in entry
+            ? entry
+            : mapDispatchSchemeToInvoiceSettlement(entry),
+        )
+      : undefined,
   });
 
   const isManualInvoice = !sourceDispatchId;
@@ -519,9 +536,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.push(INVOICES_LIST_PATH)}>
             Back
-          </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => submit(true)}>
-            Save as Draft
           </Button>
           <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={() => submit(false)}>
             Post Invoice
@@ -602,6 +616,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             </div>
           </Section>
         </div>
+
+        {schemeSettlementEntries.length > 0 && (
+          <InvoiceSchemeSettlementPanel entries={schemeSettlementEntries} />
+        )}
 
         <Section title="Item Details">
           <InvoiceLinesEditor

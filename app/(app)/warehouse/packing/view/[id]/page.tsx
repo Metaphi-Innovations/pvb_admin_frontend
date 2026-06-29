@@ -11,6 +11,9 @@ import { useRouter } from "next/navigation";
 import { getPackingUnionById } from "../../services";
 import { PackingRecordUnion } from "../../types";
 import { STATUS_BADGE_CONFIG } from "../../constants";
+import { formatBatchExpiryDate } from "../../../dispatch/near-expiry-dispatch";
+import { NearExpirySchemeBadge } from "../../../dispatch/components/NearExpirySchemeBadge";
+import { NearExpirySchemeInfoPanel } from "../../../dispatch/components/NearExpirySchemeInfoPanel";
 
 function packingStatusVariant(status: string): "active" | "inactive" | "draft" | "blocked" | "neutral" {
   const s = status.toLowerCase();
@@ -275,21 +278,47 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
                         {rowData.sourceDocumentType === "Stock Transfer" ? "Transfer Qty" : "Ordered Qty"}
                       </th>
                       <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Packed Qty</th>
+                      <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Batch Allocation</th>
+                      <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Scheme</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rowData.products && (rowData.products as any).map((p: any) => (
+                    {rowData.products && (rowData.products as any).map((p: any) => {
+                      const schemeEntries = (rowData.nearExpirySchemes ?? []).filter(
+                        (entry: { sku: string }) => entry.sku === p.sku,
+                      );
+                      return (
                       <tr key={p.sku} className="border-b border-border/60 hover:bg-slate-50/40">
                         <td className="py-3 px-3 text-xs font-bold text-foreground">{p.product}</td>
                         <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{p.sku}</td>
                         <td className="py-3 px-3 text-xs font-semibold text-center">{p.orderedQty}</td>
                         <td className="py-3 px-3 text-xs font-bold text-center text-emerald-600">{p.packedQty}</td>
+                        <td className="py-3 px-3 text-[10px] text-muted-foreground">
+                          {(p.batchAllocations ?? []).length > 0 ? (
+                            <div className="space-y-1">
+                              {p.batchAllocations.map((batch: { batchNumber: string; expiryDate: string; allocatedQty: number }) => (
+                                <div key={batch.batchNumber} className="font-mono">
+                                  {batch.batchNumber} · {formatBatchExpiryDate(batch.expiryDate)} · {batch.allocatedQty}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="py-3 px-3">
+                          <NearExpirySchemeBadge entries={schemeEntries} />
+                        </td>
                       </tr>
-                    ))}
+                    );})}
                   </tbody>
                 </table>
               </div>
             </div>
+
+            {rowData.nearExpirySchemes?.length > 0 && (
+              <NearExpirySchemeInfoPanel entries={rowData.nearExpirySchemes} />
+            )}
           </div>
         )}
       </div>

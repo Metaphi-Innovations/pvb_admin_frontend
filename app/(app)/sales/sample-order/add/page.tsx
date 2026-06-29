@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Save, CheckCircle2, XCircle } from "lucide-react";
-import type { Customer } from "@/app/(app)/masters/customers/customer-data";
+import { Save, CheckCircle2, XCircle } from "lucide-react";
 import type { Employee } from "@/app/(app)/user-management/employee/employee-data";
 import SalesOrderForm, {
 	type SalesOrderFormValues,
@@ -20,14 +19,12 @@ import {
 	loadOrders,
 	saveOrders,
 	todayStr,
-	getCustomersForTransactionDropdown,
 	getSalesmenForOrders,
 	loadProductCatalog,
 } from "../orders-data";
 
 export default function AddSalesOrderPage() {
 	const router = useRouter();
-	const [customers, setCustomers] = useState<Customer[]>([]);
 	const [salesmen, setSalesmen] = useState<Employee[]>([]);
 	const [products, setProducts] = useState<ProductCatalogItem[]>([]);
 	const [orderNumber, setOrderNumber] = useState("SM-2024-011");
@@ -38,19 +35,16 @@ export default function AddSalesOrderPage() {
 
 	const [form, setForm] = useState<SalesOrderFormValues>({
 		orderDate: todayStr(),
-		customerId: null,
 		salesManId: null,
-		deliveryDate: "",
+		remarks: "",
 		status: "confirmed",
 		lineItems: [createEmptyLineItem()],
-		additionalExpenses: [],
 		warehouseId: null,
 		warehouseName: "",
 	});
 	const [errors, setErrors] = useState<Record<string, string>>({});
 
 	useEffect(() => {
-		setCustomers(getCustomersForTransactionDropdown());
 		setSalesmen(getSalesmenForOrders());
 		setProducts(loadProductCatalog());
 		const orders = loadOrders();
@@ -71,16 +65,9 @@ export default function AddSalesOrderPage() {
 			return;
 		}
 
-		const newOrder = buildOrderFromForm(
-			form,
-			{ soNumber: orderNumber },
-			asDraft,
-		);
+		const newOrder = buildOrderFromForm(form, { soNumber: orderNumber }, asDraft);
 		if (!newOrder) {
-			setToast({
-				msg: "Invalid customer or salesman selection.",
-				type: "error",
-			});
+			setToast({ msg: "Invalid salesperson or warehouse selection.", type: "error" });
 			return;
 		}
 
@@ -99,39 +86,38 @@ export default function AddSalesOrderPage() {
 
 	return (
 		<FormContainer
-			title='Add Sample Order'
-			description='Sales → Orders → New Order'
+			title="Add Sample Order"
+			description="Sales → Sample Orders → New Order"
 			onBack={() => router.push("/sales/sample-order")}
 			onCancel={() => router.push("/sales/sample-order")}
-			cancelLabel='Discard'
+			cancelLabel="Discard"
 			noCard={true}
 			actions={
-				<div className='flex items-center gap-2'>
+				<div className="flex items-center gap-2">
 					<Button
-						variant='outline'
-						size='sm'
-						className='h-8 text-xs'
+						variant="outline"
+						size="sm"
+						className="h-8 text-xs"
 						onClick={() => handleSave(true)}
 					>
-						Save as Draft
+						Save Draft
 					</Button>
 					<Button
-						size='sm'
-						className='h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white'
+						size="sm"
+						className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
 						onClick={() => handleSave(false)}
 					>
-						<Save className='w-3.5 h-3.5' /> Submit Order
+						<Save className="w-3.5 h-3.5" /> Submit Order
 					</Button>
 				</div>
 			}
 		>
 			<SalesOrderForm
-				mode='add'
+				mode="add"
 				orderNumber={orderNumber}
 				form={form}
 				onChange={setForm}
 				errors={errors}
-				customers={customers}
 				salesmen={salesmen}
 				products={products}
 			/>
@@ -144,9 +130,9 @@ export default function AddSalesOrderPage() {
 					)}
 				>
 					{toast.type === "success" ? (
-						<CheckCircle2 className='w-4 h-4' />
+						<CheckCircle2 className="w-4 h-4" />
 					) : (
-						<XCircle className='w-4 h-4' />
+						<XCircle className="w-4 h-4" />
 					)}
 					{toast.msg}
 				</div>
@@ -154,5 +140,3 @@ export default function AddSalesOrderPage() {
 		</FormContainer>
 	);
 }
-
-

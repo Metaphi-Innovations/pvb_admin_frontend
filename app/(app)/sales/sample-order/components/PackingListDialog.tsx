@@ -10,7 +10,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  AlertCircle, AlertTriangle, Check, ChevronsUpDown, Package, Printer, Save,
+  AlertCircle, Check, ChevronsUpDown, Package, Printer, Save,
 } from "lucide-react";
 import {
   type SalesOrder,
@@ -74,8 +74,6 @@ export default function PackingListDialog({
   }, [order, warehouseCode]);
 
   if (!order) return null;
-
-  const hasInsufficient = warehouseCode ? lines.some(lineHasInsufficientStock) : false;
 
   const selectWarehouse = (id: number, code: string, name: string) => {
     setWarehouseId(id);
@@ -197,17 +195,6 @@ export default function PackingListDialog({
             </Popover>
           </div>
 
-          {!warehouseCode && (
-            <p className="text-xs text-muted-foreground">Select a warehouse to view FEFO batch and carton suggestions.</p>
-          )}
-
-          {warehouseCode && hasInsufficient && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-amber-700">Insufficient stock in selected warehouse.</p>
-            </div>
-          )}
-
           {warehouseCode && lines.map(line => {
             const allocated = getTotalAllocatedBaseForLine(line);
             const insufficient = lineHasInsufficientStock(line);
@@ -233,17 +220,10 @@ export default function PackingListDialog({
                     <span>Packing: {line.packingUnit}</span>
                     <span>Base: {line.baseUnit}</span>
                     <span>1 {line.packingUnit} = {line.unitsPerPackingUnit} {line.baseUnit}</span>
-                    {!line.hasPackingConfig && (
-                      <span className="text-amber-600">Packing conversion not configured — manual entry allowed</span>
-                    )}
                   </div>
                 </div>
 
-                {line.allocations.length === 0 ? (
-                  <p className="px-3 py-4 text-xs text-muted-foreground text-center">
-                    No stock available in {warehouseName} for this product
-                  </p>
-                ) : (
+                {line.allocations.length === 0 ? null : (
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[900px]">
                       <thead>

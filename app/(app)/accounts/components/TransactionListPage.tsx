@@ -33,6 +33,8 @@ export interface TransactionRow {
   invoiceTotal?: string;
   status: string;
   branch?: string;
+  /** Sales invoice scheme settlement badge: Settlement Required | Settled | undefined (show —) */
+  schemeSettlementLabel?: string | null;
   viewHref?: string;
   viewFields?: { label: string; value: string }[];
   impactLines?: LedgerImpactLine[];
@@ -55,6 +57,8 @@ export interface TransactionListConfig<T> {
   canPost?: (row: TransactionRow) => boolean;
   canDelete?: (row: TransactionRow) => boolean;
   canEdit?: (row: TransactionRow) => boolean;
+  /** Show Scheme Settlement column (Sales Invoices). */
+  showSchemeSettlementColumn?: boolean;
 }
 
 function isDraftStatus(status: string): boolean {
@@ -133,7 +137,8 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
   const showGstColumns = allRows.some(
     (r) => r.taxableValue != null && r.gstAmount != null && r.invoiceTotal != null,
   );
-  const colSpan = showGstColumns ? 8 : 6;
+  const showSchemeSettlementColumn = config.showSchemeSettlementColumn ?? false;
+  const colSpan = (showGstColumns ? 8 : 6) + (showSchemeSettlementColumn ? 1 : 0);
 
   return (
     <>
@@ -191,6 +196,11 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                   <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Amount</th>
                 )}
                 <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
+                {showSchemeSettlementColumn && (
+                  <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Scheme Settlement
+                  </th>
+                )}
                 <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground min-w-[200px]">Actions</th>
               </tr>
             </thead>
@@ -226,6 +236,24 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                     <td className="px-4 py-2.5">
                       <StatusBadge status={r.status} />
                     </td>
+                    {showSchemeSettlementColumn && (
+                      <td className="px-4 py-2.5 text-xs">
+                        {r.schemeSettlementLabel ? (
+                          <span
+                            className={cn(
+                              "inline-flex h-5 items-center rounded-md border px-1.5 text-[10px] font-semibold whitespace-nowrap",
+                              r.schemeSettlementLabel === "Settled"
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                : "border-amber-200 bg-amber-50 text-amber-800",
+                            )}
+                          >
+                            {r.schemeSettlementLabel}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-4 py-2.5">
                       <div className="flex items-center justify-end gap-1 flex-wrap">
                         <Button

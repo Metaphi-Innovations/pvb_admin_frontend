@@ -9,7 +9,47 @@ import {
   recalculateLineItem,
 } from "@/app/(app)/sales/orders/orders-data";
 
-export type TransferStatus = "draft" | "pending" | "approved" | "rejected" | "cancelled";
+import type { PackedBatchAllocation } from "@/app/(app)/warehouse/packing/types";
+import { getStockStatus } from "@/lib/accounts/inventory-accounting-data";
+import {
+  productMatchesStockRecord,
+  warehouseMatchesStockRecord,
+} from "@/lib/warehouse/demo-stock-matching";
+import { getQcPassedStockRecords } from "@/app/(app)/warehouse/stockoverview/mock-data";
+
+export type TransferStatus =
+  | "draft"
+  | "pending_approval"
+  | "confirmed"
+  | "pending_packing"
+  | "packing_in_progress"
+  | "packed"
+  | "ready_to_dispatch"
+  | "dispatched"
+  | "in_transit"
+  | "grn_pending"
+  | "partially_received"
+  | "received"
+  | "qc_pending"
+  | "qc_passed"
+  | "completed"
+  | "rejected"
+  | "cancelled"
+  /** @deprecated legacy values — normalized on load */
+  | "pending"
+  | "approved";
+
+export interface TransferLineItem extends SalesOrderLineItem {
+  batchNumber?: string;
+  mfgDate?: string;
+  expiryDate?: string;
+  gstRate?: string;
+  stockValue?: number;
+  packedQty?: number;
+  pendingQty?: number;
+  receivedQty?: number;
+  batchAllocations?: PackedBatchAllocation[];
+}
 
 export interface StockTransfer {
   id: number;
@@ -23,7 +63,11 @@ export interface StockTransfer {
   targetWarehouseName: string;
   targetWarehouseCode: string;
   status: TransferStatus;
-  lineItems: SalesOrderLineItem[];
+  requestedBy?: string;
+  reasonPurpose?: string;
+  transportDetails?: string;
+  remarks?: string;
+  lineItems: TransferLineItem[];
   additionalExpenses: SalesOrderAdditionalExpense[];
   totalAmount: number;
   totalItems: number;
@@ -41,6 +85,11 @@ export interface StockTransfer {
   rejectionReason?: string;
   rejectedBy?: string;
   rejectedDate?: string;
+  dispatchNumber?: string;
+  dispatchId?: string;
+  grnNumber?: string;
+  qcNumber?: string;
+  receiptStatus?: "pending_receipt" | "partially_received" | "received";
 }
 
 export interface StockTransferFormValues {
@@ -48,8 +97,12 @@ export interface StockTransferFormValues {
   deliveryDate: string;
   sourceWarehouseId: number | null;
   targetWarehouseId: number | null;
+  requestedBy: string;
+  reasonPurpose: string;
+  transportDetails: string;
+  remarks: string;
   status: TransferStatus;
-  lineItems: SalesOrderLineItem[];
+  lineItems: TransferLineItem[];
   additionalExpenses: SalesOrderAdditionalExpense[];
 }
 
@@ -65,15 +118,65 @@ export function createEmptyLineItem(): SalesOrderLineItem {
   return createEmptySalesLine();
 }
 
+export function normalizeTransferStatus(status: TransferStatus): TransferStatus {
+  if (status === "pending") return "pending_approval";
+  if (status === "approved") return "confirmed";
+  return status;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  draft: "Draft",
+  pending_approval: "Pending Approval",
+  pending: "Pending Approval",
+  confirmed: "Confirmed",
+  approved: "Confirmed",
+  pending_packing: "Pending Packing",
+  packing_in_progress: "Packing In Progress",
+  packed: "Packed",
+  ready_to_dispatch: "Ready to Dispatch",
+  dispatched: "Dispatched",
+  in_transit: "In-Transit",
+  grn_pending: "GRN Pending",
+  partially_received: "Partially Received",
+  received: "Received",
+  qc_pending: "QC Pending",
+  qc_passed: "QC Passed",
+  completed: "Completed",
+  rejected: "Rejected",
+  cancelled: "Cancelled",
+};
+
 export function formatTransferStatus(status: TransferStatus): string {
-  switch (status) {
-    case "draft": return "Draft";
-    case "pending": return "Pending Approval";
-    case "approved": return "Approved";
-    case "rejected": return "Rejected";
-    case "cancelled": return "Cancelled";
-    default: return status;
-  }
+  return STATUS_LABELS[normalizeTransferStatus(status)] ?? status;
+}
+
+export {
+  warehouseMatchesStockRecord,
+  productMatchesStockRecord,
+} from "@/lib/warehouse/demo-stock-matching";
+
+export function getAvailableBatchRowsForTransfer(
+  sourceWarehouseName: string,
+  productName: string,
+  productCode?: string,
+  asOn = todayStr(),
+) {
+  return getQcPassedStockRecords()
+    .filter(
+      (r) =>
+        warehouseMatchesStockRecord(r.warehouse, sourceWarehouseName) &&
+        productMatchesStockRecord(r.product, productName, productCode) &&
+        r.availableQuantity > 0,
+    )
+    .map((r) => ({
+      productName: r.product,
+      batchNumber: r.batchNumber,
+      mfgDate: r.manufacturingDate,
+      expiryDate: r.expiryDate,
+      availableQty: r.availableQuantity,
+      status: getStockStatus(r.expiryDate, asOn),
+    }))
+    .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
 }
 
 // Generate base seed data if no data exists in store
@@ -129,8 +232,10 @@ function buildSeedTransfers(): StockTransfer[] {
       targetWarehouseId: wh2.id,
       targetWarehouseName: wh2.warehouseName,
       targetWarehouseCode: wh2.warehouseCode,
-      status: "approved",
-      lineItems: lines1,
+      status: "confirmed",
+      requestedBy: "Admin",
+      reasonPurpose: "Branch replenishment",
+      lineItems: lines1.map((l) => ({ ...l, pendingQty: l.quantity, packedQty: 0 })),
       additionalExpenses: [],
       totalAmount: totals1.grandTotal,
       totalItems: lines1.length,
@@ -151,7 +256,7 @@ function buildSeedTransfers(): StockTransfer[] {
       targetWarehouseId: wh3.id,
       targetWarehouseName: wh3.warehouseName,
       targetWarehouseCode: wh3.warehouseCode,
-      status: "pending",
+      status: "pending_approval",
       lineItems: [
         buildLine(p2.id, p2.code, p2.name, p2.stock, 100, p2.sellingPrice, p2.gstRate)
       ],
@@ -236,6 +341,11 @@ export function getTransferById(id: number): StockTransfer | undefined {
   return transfers.find(t => t.id === id);
 }
 
+export function getStockTransferByDocumentNo(documentNo: string): StockTransfer | undefined {
+  const transfer = loadTransfers().find((t) => t.transferNumber === documentNo.trim());
+  return transfer ? hydrateTransferLineItems(transfer) : undefined;
+}
+
 export function generateTransferNumber(transfers: StockTransfer[]): string {
   const year = new Date().getFullYear();
   const maxNum = transfers.reduce((max, t) => {
@@ -248,27 +358,51 @@ export function generateTransferNumber(transfers: StockTransfer[]): string {
 export function validateStockTransferForm(form: StockTransferFormValues): Record<string, string> {
   const errors: Record<string, string> = {};
   if (!form.sourceWarehouseId) {
-    errors.sourceWarehouseId = "Source Warehouse is required";
+    errors.sourceWarehouseId = "From Warehouse is required";
   }
   if (!form.targetWarehouseId) {
-    errors.targetWarehouseId = "Target Warehouse is required";
+    errors.targetWarehouseId = "To Warehouse is required";
   }
   if (form.sourceWarehouseId && form.targetWarehouseId && form.sourceWarehouseId === form.targetWarehouseId) {
-    errors.targetWarehouseId = "Source and Target Warehouses cannot be the same";
+    errors.targetWarehouseId = "From and To Warehouse cannot be the same";
   }
   if (!form.transferDate) {
     errors.transferDate = "Transfer date is required";
   }
-  if (!form.deliveryDate) {
-    errors.deliveryDate = "Delivery date is required";
+  if (!form.reasonPurpose?.trim()) {
+    errors.reasonPurpose = "Reason / Purpose is required";
   }
   if (form.lineItems.length === 0) {
     errors.lineItems = "Add at least one product line";
   } else {
-    const invalid = form.lineItems.some(l => !l.productId || l.quantity <= 0);
-    if (invalid) {
-      errors.lineItems = "Each line must have a product and quantity greater than zero";
-    }
+    const sourceWh = loadWarehouses().find((w) => w.id === form.sourceWarehouseId);
+    form.lineItems.forEach((line, index) => {
+      if (!line.productId || line.quantity <= 0) {
+        errors.lineItems = "Each line must have a product and transfer qty greater than zero";
+      }
+      if (line.batchNumber && line.expiryDate) {
+        const batchStatus = getStockStatus(line.expiryDate);
+        if (batchStatus === "Expired") {
+          errors[`line_${index}_batch`] = `Batch ${line.batchNumber} is expired and cannot be transferred`;
+        }
+      }
+      if (line.quantity > (line.availableStock ?? 0)) {
+        errors[`line_${index}_qty`] = `Transfer qty cannot exceed available qty (${line.availableStock ?? 0})`;
+      }
+      if (sourceWh && line.productName) {
+        const batches = getAvailableBatchRowsForTransfer(
+          sourceWh.warehouseName,
+          line.productName,
+          line.productCode,
+        );
+        if (line.batchNumber) {
+          const batch = batches.find((b) => b.batchNumber === line.batchNumber);
+          if (batch && line.quantity > batch.availableQty) {
+            errors[`line_${index}_qty`] = `Transfer qty exceeds batch available qty (${batch.availableQty})`;
+          }
+        }
+      }
+    });
   }
   return errors;
 }
@@ -290,19 +424,27 @@ export function buildTransferFromForm(
 
   const transfers = loadTransfers();
   const nextId = existing.id ?? (Math.max(0, ...transfers.map(t => t.id)) + 1);
-  const finalStatus = asDraft ? "draft" : "approved";
+  const finalStatus: TransferStatus = asDraft
+    ? "draft"
+    : form.status === "pending_approval"
+      ? "pending_approval"
+      : "pending_approval";
 
   return {
     id: nextId,
     transferNumber: existing.transferNumber,
     transferDate: form.transferDate,
-    deliveryDate: form.deliveryDate,
+    deliveryDate: form.deliveryDate || form.transferDate,
     sourceWarehouseId: sourceWh.id,
     sourceWarehouseName: sourceWh.warehouseName,
     sourceWarehouseCode: sourceWh.warehouseCode,
     targetWarehouseId: targetWh.id,
     targetWarehouseName: targetWh.warehouseName,
     targetWarehouseCode: targetWh.warehouseCode,
+    requestedBy: form.requestedBy?.trim() || existing.requestedBy || "Admin",
+    reasonPurpose: form.reasonPurpose?.trim() || "",
+    transportDetails: form.transportDetails?.trim() || "",
+    remarks: form.remarks?.trim() || "",
     status: finalStatus,
     lineItems: form.lineItems,
     additionalExpenses: form.additionalExpenses || [],
@@ -327,7 +469,8 @@ export function buildTransferFromForm(
 
 export function canEditTransfer(transfer: StockTransfer): boolean {
   if (transfer.status === "cancelled") return false;
-  return ["draft", "pending", "approved", "rejected"].includes(transfer.status);
+  const status = normalizeTransferStatus(transfer.status);
+  return ["draft", "pending_approval", "confirmed", "rejected"].includes(status);
 }
 
 export function cancelStockTransfer(id: number, reason: string): StockTransfer | { error: string } {
@@ -352,7 +495,8 @@ export function cancelStockTransfer(id: number, reason: string): StockTransfer |
 
 export function canCancelTransfer(transfer: StockTransfer): boolean {
   if (transfer.status === "cancelled") return false;
-  return ["draft", "pending", "approved", "rejected"].includes(transfer.status);
+  const status = normalizeTransferStatus(transfer.status);
+  return ["draft", "pending_approval", "confirmed", "rejected"].includes(status);
 }
 
 export function canDownloadNote(transfer: StockTransfer): boolean {
@@ -390,7 +534,12 @@ export function approveStockTransfer(id: number): StockTransfer | { error: strin
 
   const updated: StockTransfer = {
     ...transfer,
-    status: "approved",
+    status: "confirmed",
+    lineItems: transfer.lineItems.map((item) => ({
+      ...item,
+      pendingQty: item.pendingQty ?? item.quantity,
+      packedQty: item.packedQty ?? 0,
+    })),
     updatedBy: "Admin",
     updatedDate: todayStr(),
   };
@@ -419,8 +568,10 @@ export function rejectStockTransfer(id: number, reason: string = "Stock transfer
 }
 
 export function canGeneratePackingList(transfer: StockTransfer): boolean {
-  if (transfer.status === "cancelled" || transfer.status === "draft" || transfer.status === "rejected" || transfer.status === "pending") return false;
-  if (transfer.packingListId) return false;
+  const status = normalizeTransferStatus(transfer.status);
+  if (transfer.status === "cancelled" || status === "rejected") return false;
+  if (status === "draft" || status === "pending_approval") return false;
+  if (transfer.packingStatus === "Completed" || transfer.packingStatus === "packed") return false;
   if (!transfer.sourceWarehouseId || !transfer.targetWarehouseId) return false;
   return transfer.lineItems.some(l => l.productId && l.quantity > 0);
 }

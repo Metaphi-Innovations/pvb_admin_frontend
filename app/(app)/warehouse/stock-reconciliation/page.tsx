@@ -102,7 +102,7 @@ export default function StockReconciliationPage() {
             <Input className="h-8 text-xs" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Count variance reason" />
           </div>
           <Button size="sm" className="h-8 text-xs" onClick={handleCreate}>
-            <Plus className="w-3.5 h-3.5 mr-1" /> Save Draft
+            <Plus className="w-3.5 h-3.5 mr-1" /> Add Reconciliation
           </Button>
         </div>
         {selected && (

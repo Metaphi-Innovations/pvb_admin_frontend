@@ -175,7 +175,7 @@ export function GrnPendingListing({ grnPendingForWarehouse }: GrnPendingListingP
       label: "Generate QC",
       action: "generate_qc",
       icon: CheckCircle2,
-      onClick: (row) => router.push(`/warehouse/grnqc/qc/create?grnId=${row.grnNo}`),
+      onClick: (row) => router.push(`/warehouse/qc/create?grnId=${row.grnNo}`),
     },
   ];
 
@@ -195,7 +195,7 @@ export function GrnPendingListing({ grnPendingForWarehouse }: GrnPendingListingP
         onSortChange={setSort}
         onFilterChange={setFilters}
         actions={actions}
-        emptyMessage="GRN pending stock records"
+        emptyMessage=""
         searchPlaceholder="Search GRN Pending..."
       />
     </div>

@@ -45,9 +45,6 @@ function FullPageFormDemo() {
           <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
             <X className="w-3.5 h-3.5" /> Discard
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-            Save as Draft
-          </Button>
           <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white">
             <Save className="w-3.5 h-3.5" /> Save &amp; Publish
           </Button>
@@ -127,9 +124,6 @@ function FullPageFormDemo() {
             <div className="space-y-2">
               <Button size="sm" className="w-full h-9 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white justify-center">
                 <Save className="w-3.5 h-3.5" /> Save &amp; Publish
-              </Button>
-              <Button variant="outline" size="sm" className="w-full h-9 text-xs justify-center">
-                Save as Draft
               </Button>
             </div>
           </div>

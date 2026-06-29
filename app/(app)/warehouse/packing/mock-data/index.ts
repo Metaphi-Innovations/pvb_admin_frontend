@@ -86,6 +86,50 @@ export const SEED_SALES_ORDERS: SalesOrderRecord[] = [
       { product: "DAP 50kg", sku: "SKU-DAP-50", orderedQty: 100, packedQty: 0, pendingQty: 100 },
     ],
   },
+  {
+    id: "so-ne-demo",
+    salesOrderNo: "SO-2026-NE-DEMO",
+    customer: "Agro Solutions Pvt Ltd",
+    totalItems: 1,
+    totalQuantity: 40,
+    orderAmount: 16800,
+    orderDate: "2026-06-20",
+    deliveryDate: "2026-06-28",
+    priority: "High",
+    status: "Ready For Packing",
+    warehouse: "Central Warehouse",
+    products: [
+      {
+        product: "Bio Fertilizer A",
+        sku: "BIO-000001",
+        orderedQty: 40,
+        packedQty: 0,
+        pendingQty: 40,
+      },
+    ],
+  },
+  {
+    id: "so-chl-demo",
+    salesOrderNo: "SO-2026-CHL-DEMO",
+    customer: "Kisan Agro Traders",
+    totalItems: 1,
+    totalQuantity: 25,
+    orderAmount: 18750,
+    orderDate: "2026-06-22",
+    deliveryDate: "2026-06-30",
+    priority: "High",
+    status: "Ready For Packing",
+    warehouse: "South Zone Depot",
+    products: [
+      {
+        product: "Chlorpyrifos 20 EC",
+        sku: "PRD-004",
+        orderedQty: 25,
+        packedQty: 0,
+        pendingQty: 25,
+      },
+    ],
+  },
 ];
 
 export const SEED_PACKINGS: PackingRecord[] = [
@@ -136,19 +180,98 @@ export const SEED_PACKINGS: PackingRecord[] = [
       { product: "Urea 50kg", sku: "SKU-UR-50", orderedQty: 200, packedQty: 200 },
     ],
   },
+  {
+    id: "pk-ne-demo",
+    packingNo: "PKG-2026-NE-DEMO",
+    salesOrderNo: "SO-2026-NE-DEMO",
+    customer: "Agro Solutions Pvt Ltd",
+    totalItems: 1,
+    packedQuantity: 30,
+    packingDate: "2026-06-25",
+    packedBy: "Rahul S.",
+    status: "Packed",
+    warehouse: "Central Warehouse",
+    products: [
+      {
+        product: "Bio Fertilizer A",
+        sku: "BIO-000001",
+        orderedQty: 40,
+        packedQty: 30,
+        batchAllocations: [
+          {
+            batchNumber: "B001",
+            expiryDate: "2026-07-21",
+            allocatedQty: 30,
+          },
+        ],
+        nearExpirySchemeEligible: true,
+      },
+    ],
+    nearExpirySchemes: [
+      {
+        schemeId: 9,
+        schemeCode: "NE-001",
+        schemeName: "Near Expiry 30 Days Offer",
+        schemeType: "Near Expiry",
+        product: "Bio Fertilizer A",
+        productId: "10",
+        sku: "BIO-000001",
+        batchNumber: "B001",
+        batchExpiryDate: "2026-07-21",
+        remainingExpiryDays: 25,
+        dispatchQuantity: 30,
+        benefitType: "Percentage",
+        benefitValue: 10,
+        estimatedBenefitAmount: 1260,
+        schemeStatus: "Active",
+        settlementMethod: "Credit Note / Journal Voucher",
+        settlementStatus: "Pending",
+        settlement: "Credit Note / Journal Voucher",
+        status: "Pending",
+        pendingSettlement: true,
+        dealerPrice: 420,
+      },
+    ],
+  },
 ];
 
 const KEY_SALES_ORDERS = "ds_packing_sales_orders";
 const KEY_PACKINGS = "ds_packing_records";
+const KEY_PACKING_SEED_VERSION = "ds_packing_seed_version";
+const PACKING_SEED_VERSION = "3";
+
+function mergeSalesOrderSeed(stored: SalesOrderRecord[]): SalesOrderRecord[] {
+  const seedById = new Map(SEED_SALES_ORDERS.map((row) => [row.id, row]));
+  const userRows = stored.filter((row) => !seedById.has(row.id));
+  return [...userRows, ...SEED_SALES_ORDERS];
+}
+
+function mergePackingSeed(stored: PackingRecord[]): PackingRecord[] {
+  const merged = [...stored];
+  const indexById = new Map(merged.map((row, index) => [row.id, index]));
+  for (const seedRow of SEED_PACKINGS) {
+    const existingIndex = indexById.get(seedRow.id);
+    if (existingIndex === undefined) {
+      merged.push(seedRow);
+      continue;
+    }
+    if (seedRow.id === "pk-ne-demo") {
+      merged[existingIndex] = seedRow;
+    }
+  }
+  return merged;
+}
 
 export function getSalesOrderRecords(): SalesOrderRecord[] {
   if (typeof window === "undefined") return SEED_SALES_ORDERS;
+  const version = localStorage.getItem(KEY_PACKING_SEED_VERSION);
   const stored = localStorage.getItem(KEY_SALES_ORDERS);
-  if (!stored) {
+  if (!stored || version !== PACKING_SEED_VERSION) {
     localStorage.setItem(KEY_SALES_ORDERS, JSON.stringify(SEED_SALES_ORDERS));
-    return SEED_SALES_ORDERS;
+    localStorage.setItem(KEY_PACKING_SEED_VERSION, PACKING_SEED_VERSION);
+    return [...SEED_SALES_ORDERS];
   }
-  return JSON.parse(stored);
+  return mergeSalesOrderSeed(JSON.parse(stored));
 }
 
 export function saveSalesOrderRecords(records: SalesOrderRecord[]): void {
@@ -158,12 +281,15 @@ export function saveSalesOrderRecords(records: SalesOrderRecord[]): void {
 
 export function getPackingRecords(): PackingRecord[] {
   if (typeof window === "undefined") return SEED_PACKINGS;
+  const version = localStorage.getItem(KEY_PACKING_SEED_VERSION);
   const stored = localStorage.getItem(KEY_PACKINGS);
-  if (!stored) {
-    localStorage.setItem(KEY_PACKINGS, JSON.stringify(SEED_PACKINGS));
-    return SEED_PACKINGS;
+  if (!stored || version !== PACKING_SEED_VERSION) {
+    const merged = mergePackingSeed(stored ? JSON.parse(stored) : []);
+    localStorage.setItem(KEY_PACKINGS, JSON.stringify(merged));
+    localStorage.setItem(KEY_PACKING_SEED_VERSION, PACKING_SEED_VERSION);
+    return merged;
   }
-  return JSON.parse(stored);
+  return mergePackingSeed(JSON.parse(stored));
 }
 
 export function savePackingRecords(records: PackingRecord[]): void {

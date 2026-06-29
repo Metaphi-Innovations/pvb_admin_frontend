@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
 	Popover,
 	PopoverContent,
@@ -55,6 +56,9 @@ import {
 	LUT_SUPPLY_DECLARATION,
 	resolveSezLutSupply,
 } from "@/lib/settings/gst-tax-config";
+import { calculateCustomerCreditSummary } from "@/lib/sales/customer-credit-limit";
+import { seedAccountsDemoData } from "@/lib/accounts/accounts-demo-seed";
+import CreditLimitSummaryCard from "./CreditLimitSummaryCard";
 
 export type { SalesOrderFormValues };
 
@@ -261,6 +265,8 @@ interface SalesOrderFormProps {
 		updatedBy: string;
 		updatedDate: string;
 	};
+	/** Exclude this order from utilized credit (edit mode). */
+	excludeOrderId?: number;
 }
 
 export function validateSalesOrderForm(
@@ -425,8 +431,13 @@ export default function SalesOrderForm({
 	showStatus = false,
 	originalOrder,
 	auditInfo,
+	excludeOrderId,
 }: SalesOrderFormProps) {
 	const [customerInfoOpen, setCustomerInfoOpen] = useState(false);
+
+	useEffect(() => {
+		seedAccountsDemoData();
+	}, []);
 
 	const warehouses = useMemo(() => {
 		return loadWarehouses().filter((w) => w.status === "active");
@@ -509,6 +520,15 @@ export default function SalesOrderForm({
 	);
 
 	const needsApproval = orderRequiresApproval(totalsSummary.grandTotal);
+
+	const creditSummary = useMemo(() => {
+		if (!selectedCustomer) return null;
+		return calculateCustomerCreditSummary({
+			customer: selectedCustomer,
+			currentOrderValue: totalsSummary.grandTotal,
+			excludeOrderId,
+		});
+	}, [selectedCustomer, totalsSummary.grandTotal, excludeOrderId]);
 
 	const formatRupee = (n: number) =>
 		`₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -730,6 +750,8 @@ export default function SalesOrderForm({
 						</div>
 					)}
 
+				{creditSummary && <CreditLimitSummaryCard summary={creditSummary} />}
+
 				<SectionDivider title='Bill To / Ship To' />
 				<BillToShipToSection
 					addresses={customerAddresses}
@@ -771,7 +793,7 @@ export default function SalesOrderForm({
 				/>
 
 				<SectionDivider title='Total Summary' />
-				<div className='flex justify-start'>
+				<div className='flex justify-end'>
 					<div className='w-full max-w-md overflow-hidden border rounded-lg border-border bg-muted/20'>
 						<div className='divide-y divide-border/60'>
 							{[
@@ -786,10 +808,6 @@ export default function SalesOrderForm({
 								{
 									label: "Additional Expenses Total:",
 									value: formatRupee(totalsSummary.additionalExpensesTotal),
-								},
-								{
-									label: "Expense Discount Total:",
-									value: formatRupee(totalsSummary.expenseDiscountTotal),
 								},
 								{
 									label: "Taxable Amount:",
@@ -833,6 +851,21 @@ export default function SalesOrderForm({
 							</div>
 						</div>
 					</div>
+				</div>
+
+				<SectionDivider title='Remarks' />
+				<div className='space-y-1.5'>
+					<Label className='text-xs font-medium'>Remarks</Label>
+					<Textarea
+						value={form.remarks ?? ""}
+						onChange={(e) => set("remarks", e.target.value)}
+						placeholder='Optional order remarks…'
+						rows={2}
+						className='text-sm rounded-lg resize-y min-h-[72px]'
+					/>
+					<p className='text-[11px] text-muted-foreground'>
+						Internal notes or special instructions for this order.
+					</p>
 				</div>
 
 				{mode === "edit" && auditInfo && (
