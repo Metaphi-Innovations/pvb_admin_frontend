@@ -72,8 +72,8 @@ export function VendorFormLayout({
           )}
         </header>
 
-        <div className="flex-1 overflow-y-auto px-6 py-3">
-          <div className="w-full">{children}</div>
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-3 min-w-0">
+          <div className="w-full min-w-0 max-w-full">{children}</div>
         </div>
 
         {footer && (
@@ -148,7 +148,7 @@ export function VendorTabBar({
   onChange: (id: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-0.5 border-b border-border/60 bg-white rounded-t-lg px-1 overflow-x-auto">
+    <div className="flex items-center gap-0.5 flex-wrap border-b border-border/60 bg-white rounded-t-lg px-1">
       {tabs.map((t) => (
         <button
           key={t.id}

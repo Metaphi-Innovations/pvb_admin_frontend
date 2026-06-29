@@ -15,34 +15,33 @@ import {
   type POListingKpis,
   formatPoValueKpi,
 } from "@/lib/procurement/listing-kpis";
-import { ProcCompactKpi, ProcCompactKpiGrid } from "../analytics/ProcCompactKpi";
+import { SalesStyleKpiCard, SalesStyleKpiGrid } from "./SalesStyleKpiRow";
 
 export function PRListingKpiRow({ kpis }: { kpis: PRListingKpis }) {
   return (
-    <ProcCompactKpiGrid cols={5}>
-      <ProcCompactKpi label="Total PR" value={kpis.total} icon={FileText} accent="brand" />
-      <ProcCompactKpi label="Pending Approval" value={kpis.pendingApproval} icon={Clock} accent="amber" />
-      <ProcCompactKpi label="Approved" value={kpis.approved} icon={CheckCircle2} accent="green" />
-      <ProcCompactKpi label="Rejected" value={kpis.rejected} icon={XCircle} accent="red" />
-      <ProcCompactKpi label="Closed" value={kpis.closed} icon={FileCheck2} accent="slate" />
-    </ProcCompactKpiGrid>
+    <SalesStyleKpiGrid cols={5}>
+      <SalesStyleKpiCard label="Total PR" value={kpis.total} icon={FileText} accent />
+      <SalesStyleKpiCard label="Pending Approval" value={kpis.pendingApproval} icon={Clock} />
+      <SalesStyleKpiCard label="Approved" value={kpis.approved} icon={CheckCircle2} />
+      <SalesStyleKpiCard label="Rejected" value={kpis.rejected} icon={XCircle} />
+      <SalesStyleKpiCard label="Closed" value={kpis.closed} icon={FileCheck2} />
+    </SalesStyleKpiGrid>
   );
 }
 
 export function POListingKpiRow({ kpis }: { kpis: POListingKpis }) {
   return (
-    <ProcCompactKpiGrid cols={6}>
-      <ProcCompactKpi label="Total PO" value={kpis.total} icon={FileText} accent="brand" />
-      <ProcCompactKpi label="Open PO" value={kpis.openPo} icon={ShoppingCart} accent="navy" />
-      <ProcCompactKpi label="Partial Receipt" value={kpis.partialReceived} icon={Truck} accent="amber" />
-      <ProcCompactKpi label="Fully Received" value={kpis.fullyReceived} icon={CheckCircle2} accent="blue" />
-      <ProcCompactKpi label="Closed" value={kpis.closedPo} icon={FileCheck2} accent="green" />
-      <ProcCompactKpi
+    <SalesStyleKpiGrid cols={6}>
+      <SalesStyleKpiCard label="Total PO" value={kpis.total} icon={FileText} accent />
+      <SalesStyleKpiCard label="Open PO" value={kpis.openPo} icon={ShoppingCart} />
+      <SalesStyleKpiCard label="Partial Receipt" value={kpis.partialReceived} icon={Truck} />
+      <SalesStyleKpiCard label="Fully Received" value={kpis.fullyReceived} icon={CheckCircle2} />
+      <SalesStyleKpiCard label="Closed" value={kpis.closedPo} icon={FileCheck2} />
+      <SalesStyleKpiCard
         label="Total PO Value"
         value={formatPoValueKpi(kpis.totalPoValue)}
         icon={IndianRupee}
-        accent="purple"
       />
-    </ProcCompactKpiGrid>
+    </SalesStyleKpiGrid>
   );
 }

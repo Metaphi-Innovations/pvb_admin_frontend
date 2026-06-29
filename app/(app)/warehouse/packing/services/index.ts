@@ -1,4 +1,4 @@
-import { SalesOrderRecord, PackingRecord, PackingRecordUnion } from "../types";
+import { SalesOrderRecord, PackingRecord, PackingRecordUnion, PackedBatchAllocation, PackingNearExpirySchemeEntry } from "../types";
 import {
   getSalesOrderRecords,
   saveSalesOrderRecords,
@@ -6,63 +6,29 @@ import {
   savePackingRecords
 } from "../mock-data";
 import { loadTransfers, saveTransfers, type StockTransfer } from "@/app/(app)/sales/stock-transfer/stock-transfer-data";
+import {
+  getStockTransfersForPacking,
+  mapStockTransferToPackingRecord,
+  mapStockTransferToPackingDoneRecord,
+  getStockTransferByStId,
+  updateStockTransferAfterWarehousePacking,
+} from "@/app/(app)/sales/stock-transfer/packing-sync";
+import {
+  getSampleOrdersForPacking,
+  mapSampleOrderToPackingRecord,
+  getSampleOrderBySmId,
+  updateSampleOrderAfterWarehousePacking,
+} from "@/app/(app)/sales/sample-order/packing-sync";
+import {
+  hasNearExpiryEligibility,
+} from "../../dispatch/near-expiry-dispatch";
 
 function mapStockTransferToSalesOrder(st: StockTransfer): SalesOrderRecord {
-  return {
-    id: `st-${st.id}`,
-    salesOrderNo: st.transferNumber,
-    customer: `Transfer to ${st.targetWarehouseName}`,
-    totalItems: st.totalItems,
-    totalQuantity: st.totalQuantity,
-    orderAmount: st.totalAmount,
-    orderDate: st.transferDate,
-    deliveryDate: st.deliveryDate,
-    priority: "Medium",
-    status: st.packingStatus === "In Progress" ? "Packing In Progress" : "Ready For Packing",
-    warehouse: st.sourceWarehouseName,
-    products: st.lineItems.map(item => ({
-      product: item.productName,
-      sku: item.productCode,
-      orderedQty: item.quantity,
-      packedQty: (item as any).packedQty ?? 0,
-      pendingQty: (item as any).pendingQty ?? item.quantity,
-    })),
-    sourceDocumentType: "Stock Transfer",
-    sourceDocumentNo: st.transferNumber,
-    sourceWarehouse: st.sourceWarehouseName,
-    targetWarehouse: st.targetWarehouseName,
-    createdDate: st.createdDate,
-    packingListNo: st.packingListNumber,
-  };
+  return mapStockTransferToPackingRecord(st);
 }
 
 function mapStockTransferToPacking(st: StockTransfer): PackingRecord {
-  const totalItems = st.lineItems.length;
-  const packedQuantity = st.lineItems.reduce((sum, item) => sum + ((item as any).packedQty ?? 0), 0);
-  return {
-    id: `st-pkg-${st.id}`,
-    packingNo: st.packingListNumber || `PL-ST-${st.id}`,
-    salesOrderNo: st.transferNumber,
-    customer: `Transfer to ${st.targetWarehouseName}`,
-    totalItems,
-    packedQuantity,
-    packingDate: st.updatedDate || st.transferDate,
-    packedBy: st.updatedBy || "Admin",
-    status: "Packed",
-    warehouse: st.sourceWarehouseName,
-    products: st.lineItems.map(item => ({
-      product: item.productName,
-      sku: item.productCode,
-      orderedQty: item.quantity,
-      packedQty: (item as any).packedQty ?? item.quantity,
-    })),
-    sourceDocumentType: "Stock Transfer",
-    sourceDocumentNo: st.transferNumber,
-    sourceWarehouse: st.sourceWarehouseName,
-    targetWarehouse: st.targetWarehouseName,
-    createdDate: st.createdDate,
-    packingListNo: st.packingListNumber,
-  };
+  return mapStockTransferToPackingDoneRecord(st);
 }
 
 export function getSalesOrders(warehouse: string = "All"): SalesOrderRecord[] {
@@ -76,28 +42,41 @@ export function getSalesOrders(warehouse: string = "All"): SalesOrderRecord[] {
     packingListNo: `PL-${o.salesOrderNo}`,
   }));
 
-  const transfers = loadTransfers()
-    .filter(t => t.packingListId && t.packingStatus !== "Completed" && t.status !== "cancelled")
-    .map(mapStockTransferToSalesOrder);
+  const transfers = getStockTransfersForPacking().map(mapStockTransferToPackingRecord);
 
-  const all = [...orders, ...transfers];
+  const sampleOrders = getSampleOrdersForPacking().map(mapSampleOrderToPackingRecord);
+
+  const all = [...orders, ...transfers, ...sampleOrders];
   if (warehouse === "All") return all;
   return all.filter(o => o.warehouse === warehouse || o.sourceWarehouse === warehouse);
 }
 
 export function getPackingRecordsList(warehouse: string = "All"): PackingRecord[] {
-  const packings = getPackingRecords().map(p => ({
-    ...p,
-    sourceDocumentType: "Sales Order" as const,
-    sourceDocumentNo: p.salesOrderNo,
-    sourceWarehouse: p.warehouse,
-    targetWarehouse: "—",
-    createdDate: p.packingDate,
-    packingListNo: p.packingNo,
-  }));
+  const packings = getPackingRecords().map((p) => {
+    const isSample =
+      p.sourceDocumentType === "Sample Order" ||
+      p.salesOrderNo.startsWith("SM-") ||
+      p.salesOrderNo.startsWith("SMP-") ||
+      p.id.startsWith("sm-pkg-");
+    return {
+      ...p,
+      sourceDocumentType: isSample ? ("Sample Order" as const) : ("Sales Order" as const),
+      sourceDocumentNo: p.salesOrderNo,
+      sourceWarehouse: p.sourceWarehouse ?? p.warehouse,
+      targetWarehouse: p.targetWarehouse ?? "—",
+      createdDate: p.packingDate,
+      packingListNo: p.packingNo,
+    };
+  });
 
   const transfers = loadTransfers()
-    .filter(t => t.packingListId && t.packingStatus === "Completed" && t.status !== "cancelled")
+    .filter(
+      (t) =>
+        t.status !== "cancelled" &&
+        (t.packingStatus === "Completed" ||
+          t.status === "packed" ||
+          t.status === "ready_to_dispatch"),
+    )
     .map(mapStockTransferToPacking);
 
   const all = [...packings, ...transfers];
@@ -106,6 +85,11 @@ export function getPackingRecordsList(warehouse: string = "All"): PackingRecord[
 }
 
 export function getSalesOrderById(id: string): SalesOrderRecord | undefined {
+  if (id.startsWith("sm-")) {
+    const smId = Number(id.replace("sm-", ""));
+    const sample = getSampleOrdersForPacking().find((o) => o.id === smId);
+    return sample ? mapSampleOrderToPackingRecord(sample) : undefined;
+  }
   if (id.startsWith("st-")) {
     const stId = Number(id.replace("st-", ""));
     const transfer = loadTransfers().find(t => t.id === stId);
@@ -127,6 +111,19 @@ export function getSalesOrderById(id: string): SalesOrderRecord | undefined {
 }
 
 export function getPackingRecordById(id: string): PackingRecord | undefined {
+  if (id.startsWith("sm-pkg-")) {
+    const packing = getPackingRecords().find((p) => p.id === id);
+    if (!packing) return undefined;
+    return {
+      ...packing,
+      sourceDocumentType: "Sample Order",
+      sourceDocumentNo: packing.salesOrderNo,
+      sourceWarehouse: packing.sourceWarehouse ?? packing.warehouse,
+      targetWarehouse: "—",
+      createdDate: packing.packingDate,
+      packingListNo: packing.packingNo,
+    };
+  }
   if (id.startsWith("st-pkg-") || id.startsWith("st-")) {
     const stId = Number(id.replace("st-pkg-", "").replace("st-", ""));
     const transfer = loadTransfers().find(t => t.id === stId);
@@ -134,11 +131,15 @@ export function getPackingRecordById(id: string): PackingRecord | undefined {
   }
   const packing = getPackingRecords().find(p => p.id === id);
   if (packing) {
+    const isSample =
+      packing.sourceDocumentType === "Sample Order" ||
+      packing.salesOrderNo.startsWith("SM-") ||
+      packing.salesOrderNo.startsWith("SMP-");
     return {
       ...packing,
-      sourceDocumentType: "Sales Order",
+      sourceDocumentType: isSample ? "Sample Order" : "Sales Order",
       sourceDocumentNo: packing.salesOrderNo,
-      sourceWarehouse: packing.warehouse,
+      sourceWarehouse: packing.sourceWarehouse ?? packing.warehouse,
       targetWarehouse: "—",
       createdDate: packing.packingDate,
       packingListNo: packing.packingNo,
@@ -148,6 +149,13 @@ export function getPackingRecordById(id: string): PackingRecord | undefined {
 }
 
 export function getPackingUnionById(id: string): PackingRecordUnion | undefined {
+  if (id.startsWith("sm-")) {
+    const order = getSalesOrderById(id);
+    if (order) return { type: "order", data: order };
+    const packing = getPackingRecordById(id.startsWith("sm-pkg-") ? id : `sm-pkg-${id.replace("sm-", "")}`);
+    if (packing) return { type: "packing", data: packing };
+    return undefined;
+  }
   if (id.startsWith("st-")) {
     const stId = Number(id.replace("st-pkg-", "").replace("st-", ""));
     const transfer = loadTransfers().find(t => t.id === stId);
@@ -174,57 +182,108 @@ export function createPackingRecord(
   salesOrderId: string,
   packingQtyMap: Record<string, number>,
   packedBy: string = "Rahul S.",
-  isDraft: boolean = false
+  isDraft: boolean = false,
+  batchAllocationMap: Record<string, PackedBatchAllocation[]> = {},
+  nearExpirySchemes: PackingNearExpirySchemeEntry[] = [],
 ): PackingRecord | null {
-  if (salesOrderId.startsWith("st-")) {
-    const stId = Number(salesOrderId.replace("st-", ""));
-    const transfers = loadTransfers();
-    const stIndex = transfers.findIndex(t => t.id === stId);
-    if (stIndex === -1) return null;
-    const transfer = transfers[stIndex];
+  if (salesOrderId.startsWith("sm-")) {
+    const smId = Number(salesOrderId.replace("sm-", ""));
+    const order = getSampleOrderBySmId(salesOrderId);
+    if (!order) return null;
 
-    const packingProducts = transfer.lineItems.map(item => {
-      const sessionQty = packingQtyMap[item.productCode] || 0;
-      return {
-        product: item.productName,
-        sku: item.productCode,
-        orderedQty: item.quantity,
-        packedQty: sessionQty
-      };
-    }).filter(p => p.packedQty > 0);
+    const packingProducts = order.lineItems
+      .filter((l) => l.productId)
+      .map((line) => {
+        const sessionQty = packingQtyMap[line.productCode] || 0;
+        const batchAllocations = batchAllocationMap[line.productCode] ?? [];
+        return {
+          product: line.productName,
+          sku: line.productCode,
+          orderedQty: line.quantity,
+          packedQty: sessionQty,
+          batchAllocations: batchAllocations.length ? batchAllocations : undefined,
+        };
+      })
+      .filter((p) => p.packedQty > 0);
+
+    const packings = getPackingRecords();
+    const nextNo = `PKG-SM-${String(smId).padStart(4, "0")}`;
+    const customer = order.issuedToEmployeeName
+      ? `${order.issuedToEmployeeName}${order.issuedToEmployeeRole ? ` (${order.issuedToEmployeeRole})` : ""}`
+      : order.salesManName;
 
     if (!isDraft) {
-      let allCompleted = true;
-      transfer.lineItems = transfer.lineItems.map(item => {
-        const sessionQty = packingQtyMap[item.productCode] || 0;
-        const newPacked = ((item as any).packedQty ?? 0) + sessionQty;
-        const newPending = Math.max(0, item.quantity - newPacked);
-        if (newPending > 0) {
-          allCompleted = false;
-        }
-        return {
-          ...item,
-          packedQty: newPacked,
-          pendingQty: newPending,
-        };
-      });
-
-      transfer.packingStatus = allCompleted ? "Completed" : "In Progress";
-      transfers[stIndex] = transfer;
-      saveTransfers(transfers);
+      updateSampleOrderAfterWarehousePacking(smId, nextNo, false, packedBy);
     }
 
-    const nextNo = transfer.packingListNumber || `PL-ST-${transfer.id}`;
-    const totalItems = packingProducts.length;
-    const packedQuantity = packingProducts.reduce((sum, p) => sum + p.packedQty, 0);
+    const newPacking: PackingRecord = {
+      id: `sm-pkg-${smId}`,
+      packingNo: nextNo,
+      salesOrderNo: order.soNumber,
+      customer,
+      totalItems: packingProducts.length,
+      packedQuantity: packingProducts.reduce((sum, p) => sum + p.packedQty, 0),
+      packingDate: new Date().toISOString().split("T")[0],
+      packedBy,
+      status: isDraft ? "Cancelled" : "Packed",
+      warehouse: order.warehouseName || "Central Warehouse",
+      products: packingProducts,
+      sourceDocumentType: "Sample Order",
+      sourceDocumentNo: order.soNumber,
+      sourceWarehouse: order.warehouseName || "Central Warehouse",
+      targetWarehouse: "—",
+      nearExpirySchemes: nearExpirySchemes.length ? nearExpirySchemes : undefined,
+    };
+
+    const existingIdx = packings.findIndex((p) => p.id === newPacking.id);
+    if (existingIdx === -1) {
+      packings.push(newPacking);
+    } else {
+      packings[existingIdx] = newPacking;
+    }
+    savePackingRecords(packings);
+    return newPacking;
+  }
+
+  if (salesOrderId.startsWith("st-")) {
+    const stId = Number(salesOrderId.replace("st-", ""));
+    const transfer = getStockTransferByStId(salesOrderId);
+    if (!transfer) return null;
+
+    const packingProducts = transfer.lineItems
+      .map((item) => {
+        const sessionQty = packingQtyMap[item.productCode] || 0;
+        const batchAllocations = batchAllocationMap[item.productCode] ?? [];
+        return {
+          product: item.productName,
+          sku: item.productCode,
+          orderedQty: item.quantity,
+          packedQty: sessionQty,
+          batchAllocations: batchAllocations.length ? batchAllocations : undefined,
+        };
+      })
+      .filter((p) => p.packedQty > 0);
+
+    const nextNo = `PKG-ST-${String(stId).padStart(4, "0")}`;
+
+    if (!isDraft) {
+      updateStockTransferAfterWarehousePacking(
+        stId,
+        nextNo,
+        packingQtyMap,
+        batchAllocationMap,
+        false,
+        packedBy,
+      );
+    }
 
     const newPacking: PackingRecord = {
-      id: `st-pkg-${transfer.id}`,
+      id: `st-pkg-${stId}`,
       packingNo: nextNo,
       salesOrderNo: transfer.transferNumber,
       customer: `Transfer to ${transfer.targetWarehouseName}`,
-      totalItems,
-      packedQuantity,
+      totalItems: packingProducts.length,
+      packedQuantity: packingProducts.reduce((sum, p) => sum + p.packedQty, 0),
       packingDate: new Date().toISOString().split("T")[0],
       packedBy,
       status: isDraft ? "Cancelled" : "Packed",
@@ -234,7 +293,19 @@ export function createPackingRecord(
       sourceDocumentNo: transfer.transferNumber,
       sourceWarehouse: transfer.sourceWarehouseName,
       targetWarehouse: transfer.targetWarehouseName,
+      nearExpirySchemes: nearExpirySchemes.length ? nearExpirySchemes : undefined,
     };
+
+    if (!isDraft) {
+      const packings = getPackingRecords();
+      const existingIdx = packings.findIndex((p) => p.id === newPacking.id);
+      if (existingIdx === -1) {
+        packings.push(newPacking);
+      } else {
+        packings[existingIdx] = newPacking;
+      }
+      savePackingRecords(packings);
+    }
 
     return newPacking;
   }
@@ -247,11 +318,24 @@ export function createPackingRecord(
 
   const packingProducts = order.products.map(p => {
     const sessionQty = packingQtyMap[p.sku] || 0;
+    const batchAllocations = batchAllocationMap[p.sku] ?? [];
+    const nearExpirySchemeEligible =
+      sessionQty > 0 &&
+      hasNearExpiryEligibility({
+        productName: p.product,
+        sku: p.sku,
+        warehouse: order.warehouse,
+        customerName: order.customer,
+        quantity: sessionQty,
+        batchAllocations,
+      });
     return {
       product: p.product,
       sku: p.sku,
       orderedQty: p.orderedQty,
-      packedQty: sessionQty
+      packedQty: sessionQty,
+      batchAllocations: batchAllocations.length ? batchAllocations : undefined,
+      nearExpirySchemeEligible: nearExpirySchemeEligible || undefined,
     };
   }).filter(p => p.packedQty > 0);
 
@@ -297,7 +381,8 @@ export function createPackingRecord(
     packedBy,
     status: isDraft ? "Cancelled" : "Packed",
     warehouse: order.warehouse,
-    products: packingProducts
+    products: packingProducts,
+    nearExpirySchemes: nearExpirySchemes.length ? nearExpirySchemes : undefined,
   };
 
   packings.push(newPacking);

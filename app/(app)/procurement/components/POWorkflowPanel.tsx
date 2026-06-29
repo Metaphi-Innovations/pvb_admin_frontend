@@ -69,7 +69,7 @@ export function POWorkflowPanel({
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2">
             <Package className="w-4 h-4 text-cyan-600" />
-            <h3 className="text-xs font-semibold">Warehouse GRN & QC</h3>
+            <h3 className="text-xs font-semibold">Warehouse GRN</h3>
           </div>
           <StatusPill status={wf.grnStatus} config={GRN_STATUS_CFG} />
         </div>
@@ -88,9 +88,14 @@ export function POWorkflowPanel({
         ) : (
           <p className="text-[10px] text-muted-foreground">GRN created in Warehouse module will appear here.</p>
         )}
-        <Link href="/warehouse/grnqc" className="text-[10px] text-brand-600 hover:underline mt-2 inline-block">
-          View Warehouse GRN & QC →
-        </Link>
+        <div className="flex items-center gap-3 mt-2">
+          <Link href="/warehouse/grn" className="text-[10px] text-brand-600 hover:underline inline-block">
+            View GRN →
+          </Link>
+          <Link href="/warehouse/qc" className="text-[10px] text-brand-600 hover:underline inline-block">
+            View QC →
+          </Link>
+        </div>
       </section>
 
       {/* 3-Way Match */}

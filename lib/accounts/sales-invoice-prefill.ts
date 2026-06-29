@@ -139,6 +139,7 @@ function prefillFromOrderOnly(order: SalesOrder): SalesInvoicePrefill {
     receivableLedger: ledger?.accountName ?? custFields.receivableLedger,
     lineItems: lines,
     lineErrors: errors,
+    nearExpirySchemes: [],
   };
 }
 

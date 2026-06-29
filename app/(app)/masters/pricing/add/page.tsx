@@ -16,14 +16,11 @@ import {
   validatePricingForm,
   type PricingForm as PricingFormValues,
 } from "../pricing-data";
-import { saveMasterRecords, masterToday } from "@/lib/masters/common";
+import { saveMasterRecords } from "@/lib/masters/common";
 
 export default function AddPricingPage() {
   const router = useRouter();
-  const [form, setForm] = useState<PricingFormValues>({
-    ...DEFAULT_PRICING_FORM,
-    effectiveFrom: masterToday(),
-  });
+  const [form, setForm] = useState<PricingFormValues>(DEFAULT_PRICING_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 

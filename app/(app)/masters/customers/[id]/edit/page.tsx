@@ -17,6 +17,7 @@ import {
 } from "../../components/CustomerForm";
 import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
 import { hasCustomerPermission } from "../../customer-permissions";
+import { buildCreditAuditEntriesOnSave } from "@/lib/masters/customer-credit";
 
 interface ToastState {
   msg: string;
@@ -88,6 +89,7 @@ export default function EditCustomerPage() {
     const today = todayStr();
     const updated = formValuesToCustomer(form, {
       ...existing,
+      creditAuditLog: buildCreditAuditEntriesOnSave({ form, existing }),
       lastStatusChange:
         existing.status !== form.status ? today : existing.lastStatusChange,
       statusHistory:

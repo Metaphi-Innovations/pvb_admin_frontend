@@ -35,7 +35,7 @@ import {
   type PurchaseInvoiceLine,
 } from "./purchase-invoices-data";
 import { maybePostPurchaseInvoice } from "@/lib/accounts/document-posting-bridge";
-import type { GrnRecord } from "@/app/(app)/warehouse/grnqc/grn/types";
+import type { GrnRecord } from "@/app/(app)/warehouse/grn/types";
 import { VendorMasterPanel } from "@/components/accounts/master-fetch/VendorMasterPanel";
 import { TransactionProductSelect } from "@/components/accounts/master-fetch/TransactionProductSelect";
 import { MasterFetchedBadge } from "@/components/accounts/master-fetch/MasterFetchedBadge";
@@ -817,17 +817,6 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
           >
             Cancel
           </Button>
-          {mode !== "grn" && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 text-xs"
-              disabled={saving}
-              onClick={() => doSave(false)}
-            >
-              Save Draft
-            </Button>
-          )}
           <Button
             size="sm"
             className="h-9 text-xs bg-brand-600 text-white gap-1.5"

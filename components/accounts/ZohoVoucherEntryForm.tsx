@@ -39,11 +39,11 @@ import {
   createVoucher,
   generateVoucherNumber,
   loadVouchers,
-  validateVoucherDraft,
   validateVoucherForPost,
   VOUCHER_TYPE_LABELS,
   type VoucherLine,
   type VoucherTypeCode,
+  type AccountingVoucher,
 } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { findLedgerById } from "@/lib/accounts/coa-hierarchy";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
@@ -62,6 +62,9 @@ export interface ZohoVoucherEntryFormProps {
   extraHeader?: React.ReactNode;
   breadcrumbSection?: string;
   ledgerFilter?: (ledger: ChartOfAccount) => boolean;
+  controlledLines?: VoucherLine[];
+  validateBeforePost?: () => string | null;
+  onPostComplete?: (voucher: AccountingVoucher) => void;
 }
 
 export function ZohoVoucherEntryForm({
@@ -76,6 +79,9 @@ export function ZohoVoucherEntryForm({
   extraHeader,
   breadcrumbSection = "Transactions",
   ledgerFilter,
+  controlledLines,
+  validateBeforePost,
+  onPostComplete,
 }: ZohoVoucherEntryFormProps) {
   const label = VOUCHER_TYPE_LABELS[voucherType];
   const financialYears = useMemo(() => loadFinancialYears(), []);
@@ -96,6 +102,12 @@ export function ZohoVoucherEntryForm({
     initialLines ?? [EMPTY_LINE(), EMPTY_LINE()],
   );
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (controlledLines?.length) {
+      setLines(controlledLines);
+    }
+  }, [controlledLines]);
 
   const previewNumber = useMemo(
     () => voucherNumber ?? generateVoucherNumber(voucherType, loadVouchers()),
@@ -163,19 +175,14 @@ export function ZohoVoucherEntryForm({
     };
   };
 
-  const handleSaveDraft = () => {
-    const err = validateVoucherDraft({ date });
-    if (err) {
-      setError(err);
-      return;
-    }
-    createVoucher(voucherType, buildPayload("draft"));
-    onDone();
-  };
-
   const handlePost = () => {
     if (showFinancialYear && !financialYearId) {
       setError("Financial year is required.");
+      return;
+    }
+    const preErr = validateBeforePost?.();
+    if (preErr) {
+      setError(preErr);
       return;
     }
     const err = validateVoucherForPost({
@@ -187,7 +194,8 @@ export function ZohoVoucherEntryForm({
       setError(err);
       return;
     }
-    createVoucher(voucherType, buildPayload("posted"));
+    const voucher = createVoucher(voucherType, buildPayload("posted"));
+    onPostComplete?.(voucher);
     onDone();
   };
 
@@ -247,9 +255,6 @@ export function ZohoVoucherEntryForm({
           <>
             <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleCancel}>
               <X className="w-3.5 h-3.5" /> Cancel
-            </Button>
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleSaveDraft}>
-              Save Draft
             </Button>
             <Button
               size="sm"
@@ -546,7 +551,7 @@ export function ZohoVoucherEntryForm({
 
           {!readOnly && !balanced && totalDebit + totalCredit > 0 && (
             <p className="text-[11px] text-red-600 mt-2">
-              Debit total must equal Credit total before posting. Save as Draft is allowed.
+              Debit total must equal Credit total before posting.
             </p>
           )}
         </div>

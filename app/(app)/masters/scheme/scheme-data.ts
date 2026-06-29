@@ -6,8 +6,60 @@ import {
   type MasterStatus,
 } from "@/lib/masters/common";
 
-export const SCHEME_STORAGE_KEY = "ds_master_scheme_v2";
+export const SCHEME_STORAGE_KEY = "ds_master_scheme_v5";
 export const SCHEME_SETTINGS_KEY = "ds_master_scheme_settings_v1";
+
+export type SchemeEffectType =
+  | "DIRECT_ORDER_DISCOUNT"
+  | "POST_SALES_CN_JV"
+  | "POST_PAYMENT_CN_JV";
+
+export type SelectionMode = "Single" | "Multiple";
+
+export interface SchemeEffectConfig {
+  effectType: SchemeEffectType;
+  appliedIn: string;
+  settlementMethod: string;
+}
+
+export const SCHEME_EFFECT_MAP: Record<SchemeType, SchemeEffectConfig> = {
+  "Product Discount Scheme": {
+    effectType: "DIRECT_ORDER_DISCOUNT",
+    appliedIn: "Sales Order",
+    settlementMethod: "Immediate Order Discount",
+  },
+  "Product Near Expiry Scheme": {
+    effectType: "POST_SALES_CN_JV",
+    appliedIn: "Sales Order as eligible scheme only",
+    settlementMethod: "Credit Note / Journal Voucher",
+  },
+  "Cash Discount Scheme": {
+    effectType: "POST_SALES_CN_JV",
+    appliedIn: "Sales Order as eligible scheme only",
+    settlementMethod: "Credit Note / Journal Voucher",
+  },
+  "Festive Discount Scheme": {
+    effectType: "POST_SALES_CN_JV",
+    appliedIn: "Sales Order as eligible scheme only",
+    settlementMethod: "Credit Note / Journal Voucher",
+  },
+  "Turnover Discount Scheme": {
+    effectType: "POST_SALES_CN_JV",
+    appliedIn: "Turnover review / Accounts settlement",
+    settlementMethod: "Credit Note / Journal Voucher",
+  },
+  "Payment Discount Scheme": {
+    effectType: "POST_PAYMENT_CN_JV",
+    appliedIn: "Accounts Receivables / Payment Collection",
+    settlementMethod: "Credit Note / Journal Voucher",
+  },
+};
+
+export const SCHEME_EFFECT_TYPE_LABELS: Record<SchemeEffectType, string> = {
+  DIRECT_ORDER_DISCOUNT: "Direct Order Discount",
+  POST_SALES_CN_JV: "Post-Sales CN / JV",
+  POST_PAYMENT_CN_JV: "Post-Payment CN / JV",
+};
 
 export const SCHEME_TYPES = [
   "Product Discount Scheme",
@@ -49,6 +101,16 @@ export type PaymentMode =
   | "Advance"
   | "Early Payment";
 export type PaymentTiming = "Immediate" | "Within X Days" | "Advance Payment";
+export type OutstandingAgeCondition =
+  | "Any"
+  | "More than 30 Days"
+  | "More than 60 Days"
+  | "More than 90 Days"
+  | "Custom Days";
+export type PaymentOfferBasis =
+  | "Fixed Settlement Amount"
+  | "Discount / Waiver Amount"
+  | "Discount / Waiver %";
 export type ProductScope = "All" | "Specific";
 
 export interface TurnoverSlab {
@@ -57,39 +119,105 @@ export interface TurnoverSlab {
   benefitPercent: number;
 }
 
+export type DiscountApplicationMode = "same" | "per_product";
+
+export interface ProductDiscountSchemeLine {
+  productId: string;
+  productCode: string;
+  productName: string;
+  stateNames: string[];
+  dealerPrice: number;
+  discountType: DiscountType;
+  discountValue: number;
+  discountAmount: number;
+  finalSchemePrice: number;
+  mrp: number;
+}
+
+export interface NearExpirySchemeLine {
+  productId: string;
+  productCode: string;
+  productName: string;
+  sku: string;
+  batchNumber: string;
+  expiryDate: string;
+  warehouseName: string;
+  warehouseState: string;
+  dealerPrice: number;
+  expiryWithinDays: number;
+  benefitType: DiscountType;
+  benefitValue: number;
+  /** @deprecated Use benefitAmount */
+  potentialBenefit?: number;
+  benefitAmount: number;
+  finalPrice: number;
+  mrp: number;
+}
+
 export interface SchemeRecord extends BaseMasterRecord {
   schemeCode: string;
   schemeName: string;
   schemeType: SchemeType;
+  description?: string;
+  batchId?: string;
+  effectType?: SchemeEffectType;
+  appliedIn?: string;
+  settlementMethod?: string;
+  productSelectionMode?: SelectionMode;
+  stateSelectionMode?: SelectionMode;
   productId?: string;
+  productCode?: string;
   productName?: string;
+  dealerPrice?: number;
+  discountAmount?: number;
+  finalSchemePrice?: number;
+  mrp?: number;
+  discountApplication?: DiscountApplicationMode;
   stateId: string;
   stateName: string;
   customerType: CustomerType;
   discountType?: DiscountType | FestiveDiscountType;
   discountValue?: number;
   freeQuantity?: number;
-  priority: number;
+  priority?: number;
   approvalStatus: ApprovalStatus;
   expiryWithinDays?: number;
   minimumOrderValue?: number;
   festivalName?: string;
   productScope?: ProductScope;
+  selectedProductIds?: string[];
   turnoverPeriod?: TurnoverPeriod;
   turnoverSlabs?: TurnoverSlab[];
   customerIds?: string[];
   paymentMode?: PaymentMode;
   paymentTiming?: PaymentTiming;
   paymentWithinDays?: number;
+  /** @deprecated Use minimumOutstandingAmount for Payment Discount Scheme */
   minimumPaymentAmount?: number;
   isPaymentLevel?: boolean;
+  /** Payment Discount Scheme — outstanding / settlement collection */
+  minimumOutstandingAmount?: number;
+  outstandingAgeCondition?: OutstandingAgeCondition;
+  outstandingDays?: number;
+  paymentOfferBasis?: PaymentOfferBasis;
+  originalOutstandingAmount?: number;
+  customerPayableAmount?: number;
+  waiverAmount?: number;
+  waiverPercent?: number;
   startDate?: string;
   endDate?: string;
+  /** Product Discount Scheme line items (one row per product in create/edit UI) */
+  schemeLines?: ProductDiscountSchemeLine[];
+  /** Product Near Expiry Scheme line items (one row per product) */
+  nearExpiryLines?: NearExpirySchemeLine[];
 }
 
 export interface SchemeBulkForm {
   schemeType: SchemeType;
   schemeName: string;
+  description: string;
+  productSelectionMode: SelectionMode;
+  stateSelectionMode: SelectionMode;
   productIds: string[];
   stateIds: string[];
   customerType: CustomerType;
@@ -97,6 +225,7 @@ export interface SchemeBulkForm {
   discountValue: string;
   freeQuantity: string;
   priority: string;
+  status: MasterStatus;
   startDate: string;
   endDate: string;
   expiryWithinDays: string;
@@ -143,6 +272,7 @@ export const SCHEME_CUSTOMER_OPTIONS = [
   { id: "CUST-001", name: "Sharma Distributors" },
   { id: "CUST-002", name: "Patel Retail Hub" },
   { id: "CUST-003", name: "Metro Wholesalers" },
+  { id: "CUST-004", name: "ABC Distributor" },
 ];
 
 export const SCHEME_TYPE_PRIORITY: Record<SchemeType, number> = {
@@ -173,8 +303,16 @@ export const PENDING_APPROVAL_STATUSES: ApprovalStatus[] = [
   "final_approval",
 ];
 
+/** Draft, pending approval, or rejected schemes may be edited. */
+export function isSchemeEditable(record: SchemeRecord): boolean {
+  return (
+    record.approvalStatus === "draft" ||
+    PENDING_APPROVAL_STATUSES.includes(record.approvalStatus) ||
+    record.approvalStatus === "rejected"
+  );
+}
+
 const APPROVAL_FLOW: ApprovalStatus[] = [
-  "draft",
   "submitted",
   "manager_approval",
   "finance_approval",
@@ -186,6 +324,9 @@ const APPROVAL_FLOW: ApprovalStatus[] = [
 export const DEFAULT_SCHEME_BULK_FORM: SchemeBulkForm = {
   schemeType: "Product Discount Scheme",
   schemeName: "",
+  description: "",
+  productSelectionMode: "Multiple",
+  stateSelectionMode: "Multiple",
   productIds: [],
   stateIds: [],
   customerType: "All",
@@ -193,6 +334,7 @@ export const DEFAULT_SCHEME_BULK_FORM: SchemeBulkForm = {
   discountValue: "",
   freeQuantity: "",
   priority: "",
+  status: "inactive",
   startDate: "",
   endDate: "",
   expiryWithinDays: "",
@@ -208,75 +350,419 @@ export const DEFAULT_SCHEME_BULK_FORM: SchemeBulkForm = {
   minimumPaymentAmount: "",
 };
 
+export function getSchemeEffectConfig(type: SchemeType): SchemeEffectConfig {
+  return SCHEME_EFFECT_MAP[type];
+}
+
+export function generateBatchId(): string {
+  const stamp = masterToday().replace(/-/g, "");
+  const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return `BATCH-${stamp}-${suffix}`;
+}
+
+export function applyEffectFields(
+  record: Omit<SchemeRecord, "effectType" | "appliedIn" | "settlementMethod"> & {
+    schemeType: SchemeType;
+  },
+): Pick<SchemeRecord, "effectType" | "appliedIn" | "settlementMethod"> {
+  const config = getSchemeEffectConfig(record.schemeType);
+  return {
+    effectType: config.effectType,
+    appliedIn: config.appliedIn,
+    settlementMethod: config.settlementMethod,
+  };
+}
+
+export function migrateSchemeRecord(record: SchemeRecord): SchemeRecord {
+  if (record.schemeType === "Product Discount Scheme") {
+    if (record.schemeLines?.length) {
+      return record;
+    }
+    const dealerPrice = record.dealerPrice ?? 0;
+    const discountValue = record.discountValue ?? 0;
+    const isPct = record.discountType === "Percentage";
+    const discountAmount =
+      record.discountAmount ??
+      (isPct ? (dealerPrice * discountValue) / 100 : discountValue);
+    const finalSchemePrice =
+      record.finalSchemePrice ?? Math.max(0, dealerPrice - discountAmount);
+    const line: ProductDiscountSchemeLine | null =
+      record.productId && record.stateName
+        ? {
+            productId: record.productId,
+            productCode: record.productCode ?? "",
+            productName: record.productName ?? "",
+            stateNames: [record.stateName],
+            dealerPrice: dealerPrice || 0,
+            discountType: record.discountType === "Fixed Amount" ? "Fixed Amount" : "Percentage",
+            discountValue,
+            discountAmount: discountAmount || 0,
+            finalSchemePrice: finalSchemePrice || 0,
+            mrp: record.mrp ?? 0,
+          }
+        : null;
+
+    return {
+      ...record,
+      schemeLines: line ? [line] : [],
+      dealerPrice: dealerPrice || undefined,
+      discountAmount: discountAmount || undefined,
+      finalSchemePrice: finalSchemePrice || undefined,
+    };
+  }
+
+  const effect = applyEffectFields(record);
+  return {
+    ...record,
+    ...effect,
+    stateSelectionMode: record.stateSelectionMode ?? "Single",
+    productSelectionMode: record.productSelectionMode,
+    batchId: record.batchId,
+  };
+}
+
 export const SCHEME_SEED: SchemeRecord[] = [
   {
     id: 1,
     schemeCode: "SCH-001",
-    schemeName: "Product A - Maharashtra Scheme",
+    schemeName: "Kharif NPK Distributor Offer",
     schemeType: "Product Discount Scheme",
-    productId: "PRD-001",
-    productName: "Product A",
-    stateId: "MH",
-    stateName: "Maharashtra",
     customerType: "Distributor",
-    discountType: "Percentage",
-    discountValue: 10,
-    priority: 3,
+    stateId: "Maharashtra",
+    stateName: "Maharashtra, Gujarat",
     approvalStatus: "active",
-    startDate: "2025-06-01",
-    endDate: "2025-12-31",
+    startDate: "2026-01-01",
+    endDate: "2026-12-31",
     status: "active",
     createdBy: "Admin",
     updatedBy: "Admin",
-    createdAt: "2025-05-01",
-    updatedAt: "2025-05-01",
+    createdAt: "2026-01-05",
+    updatedAt: "2026-01-05",
+    schemeLines: [
+      {
+        productId: "1",
+        productCode: "PRD-001",
+        productName: "NPK 19:19:19",
+        stateNames: ["Maharashtra", "Gujarat"],
+        dealerPrice: 1050,
+        discountType: "Percentage",
+        discountValue: 5,
+        discountAmount: 52.5,
+        finalSchemePrice: 997.5,
+        mrp: 1250,
+      },
+    ],
   },
   {
     id: 2,
     schemeCode: "SCH-002",
-    schemeName: "Product B - Gujarat Scheme",
+    schemeName: "Gujarat Summer Draft Scheme",
     schemeType: "Product Discount Scheme",
-    productId: "PRD-002",
-    productName: "Product B",
-    stateId: "GJ",
-    stateName: "Gujarat",
     customerType: "All",
-    discountType: "Fixed Amount",
-    discountValue: 500,
-    priority: 3,
-    approvalStatus: "draft",
-    startDate: "2025-07-01",
-    endDate: "2025-09-30",
+    stateId: "Gujarat",
+    stateName: "Gujarat",
+    approvalStatus: "submitted",
+    startDate: "2026-04-01",
+    endDate: "2026-09-30",
     status: "inactive",
     createdBy: "Admin",
     updatedBy: "Admin",
-    createdAt: "2025-06-01",
-    updatedAt: "2025-06-01",
+    createdAt: "2026-02-01",
+    updatedAt: "2026-02-01",
+    schemeLines: [
+      {
+        productId: "1",
+        productCode: "PRD-001",
+        productName: "NPK 19:19:19",
+        stateNames: ["Gujarat"],
+        dealerPrice: 1050,
+        discountType: "Fixed Amount",
+        discountValue: 50,
+        discountAmount: 50,
+        finalSchemePrice: 1000,
+        mrp: 1250,
+      },
+    ],
+  },
+  {
+    id: 4,
+    schemeCode: "SCH-004",
+    schemeName: "Winter Retailer Approved Scheme",
+    schemeType: "Product Discount Scheme",
+    customerType: "Retailer",
+    stateId: "Maharashtra",
+    stateName: "Maharashtra",
+    approvalStatus: "approved",
+    startDate: "2026-06-01",
+    endDate: "2026-12-31",
+    status: "inactive",
+    createdBy: "Admin",
+    updatedBy: "Admin",
+    createdAt: "2026-05-15",
+    updatedAt: "2026-05-20",
+    schemeLines: [
+      {
+        productId: "1",
+        productCode: "PRD-001",
+        productName: "NPK 19:19:19",
+        stateNames: ["Maharashtra"],
+        dealerPrice: 1050,
+        discountType: "Percentage",
+        discountValue: 5,
+        discountAmount: 52.5,
+        finalSchemePrice: 997.5,
+        mrp: 1250,
+      },
+    ],
+  },
+  {
+    id: 5,
+    schemeCode: "SCH-005",
+    schemeName: "Maharashtra DAP Active Offer",
+    schemeType: "Product Discount Scheme",
+    customerType: "Distributor",
+    stateId: "Maharashtra",
+    stateName: "Maharashtra",
+    approvalStatus: "active",
+    startDate: "2026-01-01",
+    endDate: "2026-12-31",
+    status: "active",
+    createdBy: "Admin",
+    updatedBy: "Admin",
+    createdAt: "2026-01-10",
+    updatedAt: "2026-01-10",
+    schemeLines: [
+      {
+        productId: "2",
+        productCode: "PRD-002",
+        productName: "DAP Fertilizer",
+        stateNames: ["Maharashtra"],
+        dealerPrice: 1250,
+        discountType: "Percentage",
+        discountValue: 8,
+        discountAmount: 100,
+        finalSchemePrice: 1150,
+        mrp: 1500,
+      },
+    ],
+  },
+  {
+    id: 6,
+    schemeCode: "SCH-006",
+    schemeName: "Urea Draft Scheme Maharashtra",
+    schemeType: "Product Discount Scheme",
+    customerType: "Distributor",
+    stateId: "Maharashtra",
+    stateName: "Maharashtra",
+    approvalStatus: "submitted",
+    startDate: "2026-07-01",
+    endDate: "2026-12-31",
+    status: "inactive",
+    createdBy: "Admin",
+    updatedBy: "Admin",
+    createdAt: "2026-03-01",
+    updatedAt: "2026-03-01",
+    schemeLines: [
+      {
+        productId: "3",
+        productCode: "PRD-003",
+        productName: "Urea 46%",
+        stateNames: ["Maharashtra"],
+        dealerPrice: 820,
+        discountType: "Fixed Amount",
+        discountValue: 40,
+        discountAmount: 40,
+        finalSchemePrice: 780,
+        mrp: 950,
+      },
+    ],
+  },
+  {
+    id: 7,
+    schemeCode: "SCH-007",
+    schemeName: "NPK Pending Approval Scheme",
+    schemeType: "Product Discount Scheme",
+    customerType: "Distributor",
+    stateId: "Maharashtra",
+    stateName: "Maharashtra",
+    approvalStatus: "submitted",
+    startDate: "2026-06-01",
+    endDate: "2026-12-31",
+    status: "inactive",
+    createdBy: "Admin",
+    updatedBy: "Admin",
+    createdAt: "2026-05-01",
+    updatedAt: "2026-05-01",
+    schemeLines: [
+      {
+        productId: "1",
+        productCode: "PRD-001",
+        productName: "NPK 19:19:19",
+        stateNames: ["Maharashtra"],
+        dealerPrice: 1050,
+        discountType: "Percentage",
+        discountValue: 12,
+        discountAmount: 126,
+        finalSchemePrice: 924,
+        mrp: 1250,
+      },
+    ],
+  },
+  {
+    id: 8,
+    schemeCode: "SCH-008",
+    schemeName: "NPK 10% Active — Maharashtra Only",
+    schemeType: "Product Discount Scheme",
+    customerType: "Distributor",
+    stateId: "Maharashtra",
+    stateName: "Maharashtra",
+    approvalStatus: "active",
+    startDate: "2026-01-01",
+    endDate: "2026-12-31",
+    status: "active",
+    createdBy: "Admin",
+    updatedBy: "Admin",
+    createdAt: "2026-01-12",
+    updatedAt: "2026-06-01",
+    schemeLines: [
+      {
+        productId: "1",
+        productCode: "PRD-001",
+        productName: "NPK 19:19:19",
+        stateNames: ["Maharashtra"],
+        dealerPrice: 1050,
+        discountType: "Percentage",
+        discountValue: 10,
+        discountAmount: 105,
+        finalSchemePrice: 945,
+        mrp: 1250,
+      },
+    ],
   },
   {
     id: 3,
     schemeCode: "SCH-003",
-    schemeName: "Near Expiry - Product A - Karnataka",
+    schemeName: "Near Expiry NPK Offer",
     schemeType: "Product Near Expiry Scheme",
-    productId: "PRD-001",
-    productName: "Product A",
-    stateId: "KA",
-    stateName: "Karnataka",
+    stateId: "Telangana",
+    stateName: "Telangana",
     customerType: "All",
     discountType: "Percentage",
     discountValue: 10,
     expiryWithinDays: 60,
-    priority: 1,
-    approvalStatus: "submitted",
-    startDate: "2025-06-01",
-    endDate: "2025-12-31",
-    status: "inactive",
+    approvalStatus: "active",
+    startDate: "2026-01-01",
+    endDate: "2026-12-31",
+    status: "active",
     createdBy: "Admin",
     updatedBy: "Admin",
     createdAt: "2025-06-10",
-    updatedAt: "2025-06-10",
+    updatedAt: "2026-06-20",
+    nearExpiryLines: [
+      {
+        productId: "6",
+        productCode: "FERT-000003",
+        productName: "NPK 10:26:26",
+        sku: "FERT-000003",
+        batchNumber: "B-NPK-33V",
+        expiryDate: "2026-06-30",
+        warehouseName: "South Zone Depot",
+        warehouseState: "Telangana",
+        dealerPrice: 890,
+        expiryWithinDays: 60,
+        benefitType: "Percentage",
+        benefitValue: 10,
+        benefitAmount: 89,
+        finalPrice: 801,
+        mrp: 890,
+      },
+    ],
+  },
+  {
+    id: 9,
+    schemeCode: "NE-001",
+    schemeName: "Near Expiry 30 Days Offer",
+    schemeType: "Product Near Expiry Scheme",
+    stateId: "Maharashtra",
+    stateName: "Maharashtra, Gujarat",
+    customerType: "Distributor",
+    discountType: "Percentage",
+    discountValue: 10,
+    expiryWithinDays: 30,
+    approvalStatus: "active",
+    startDate: "2026-01-01",
+    endDate: "2026-12-31",
+    status: "active",
+    createdBy: "Admin",
+    updatedBy: "Admin",
+    createdAt: "2026-06-01",
+    updatedAt: "2026-06-20",
+    nearExpiryLines: [
+      {
+        productId: "10",
+        productCode: "BIO-000001",
+        productName: "Bio Fertilizer A",
+        sku: "BIO-000001",
+        batchNumber: "B001",
+        expiryDate: "2026-07-21",
+        warehouseName: "Central Warehouse",
+        warehouseState: "Maharashtra",
+        dealerPrice: 420,
+        expiryWithinDays: 30,
+        benefitType: "Percentage",
+        benefitValue: 10,
+        benefitAmount: 42,
+        finalPrice: 378,
+        mrp: 650,
+      },
+    ],
   },
 ];
+
+/** Sample scheme codes kept in sync with SCHEME_SEED for Sales Order testing. */
+const REFRESHABLE_SCHEME_CODES = new Set([
+  "SCH-001",
+  "SCH-002",
+  "SCH-004",
+  "SCH-005",
+  "SCH-006",
+  "SCH-007",
+  "SCH-008",
+  "NE-001",
+]);
+
+/** Preserve draft — schemes start as Draft and move to Submitted via explicit submit. */
+export function normalizeSchemeApprovalStatus(record: SchemeRecord): SchemeRecord {
+  return record;
+}
+
+/** Merge missing seed schemes and refresh sample schemes from seed data. */
+export function mergeSchemeSeedRecords(
+  stored: SchemeRecord[],
+  seed: SchemeRecord[],
+): SchemeRecord[] {
+  const merged = stored.map(normalizeSchemeApprovalStatus);
+  const indexByCode = new Map(merged.map((record, index) => [record.schemeCode, index]));
+  let nextId = merged.length ? Math.max(...merged.map((record) => record.id)) + 1 : 1;
+
+  for (const seedRecord of seed) {
+    const existingIndex = indexByCode.get(seedRecord.schemeCode);
+    if (existingIndex === undefined) {
+      const id = seedRecord.id > 0 ? seedRecord.id : nextId++;
+      merged.push({ ...seedRecord, id });
+      indexByCode.set(seedRecord.schemeCode, merged.length - 1);
+      continue;
+    }
+
+    const existing = merged[existingIndex];
+    if (REFRESHABLE_SCHEME_CODES.has(seedRecord.schemeCode)) {
+      merged[existingIndex] = { ...seedRecord, id: existing.id };
+      continue;
+    }
+  }
+
+  return merged;
+}
 
 export function schemeTypeUsesProducts(type: SchemeType): boolean {
   return (
@@ -322,7 +808,11 @@ export function formatBenefit(record: SchemeRecord): string {
     return `${first.benefitPercent}%–${last.benefitPercent}% slabs`;
   }
   if (record.schemeType === "Product Near Expiry Scheme") {
-    return `${record.discountValue ?? 0}% (≤${record.expiryWithinDays ?? 0}d)`;
+    const benefit =
+      record.discountType === "Fixed Amount"
+        ? `₹${record.discountValue ?? 0}`
+        : `${record.discountValue ?? 0}%`;
+    return `${benefit} (≤${record.expiryWithinDays ?? 0}d)`;
   }
   if (record.discountType === "Free Quantity") {
     return `${record.freeQuantity ?? record.discountValue ?? 0} Qty Free`;
@@ -346,9 +836,29 @@ export function isSchemeExpired(record: SchemeRecord): boolean {
   return record.endDate < masterToday();
 }
 
+export type SchemeOperationalStatus = "Active" | "Inactive" | "Pending";
+
+/** Listing / view status: Active, Inactive, or Pending (in approval workflow). */
+export function resolveSchemeOperationalStatus(record: SchemeRecord): SchemeOperationalStatus {
+  if (PENDING_APPROVAL_STATUSES.includes(record.approvalStatus)) {
+    return "Pending";
+  }
+  if (
+    record.approvalStatus === "active" &&
+    record.status === "active" &&
+    !isSchemeExpired(record)
+  ) {
+    return "Active";
+  }
+  return "Inactive";
+}
+
 export function resolveDisplayApprovalStatus(record: SchemeRecord): ApprovalStatus {
-  if (record.approvalStatus === "rejected" || record.approvalStatus === "draft") {
+  if (record.approvalStatus === "rejected") {
     return record.approvalStatus;
+  }
+  if (record.approvalStatus === "draft") {
+    return "draft";
   }
   if (isSchemeExpired(record)) {
     return "expired";
@@ -361,10 +871,8 @@ export function matchesListingTab(record: SchemeRecord, tab: string): boolean {
   switch (tab) {
     case "all":
       return true;
-    case "draft":
-      return status === "draft";
     case "pending":
-      return PENDING_APPROVAL_STATUSES.includes(status);
+      return status === "draft" || PENDING_APPROVAL_STATUSES.includes(status);
     case "approved":
       return status === "approved";
     case "active":
@@ -379,27 +887,36 @@ export function matchesListingTab(record: SchemeRecord, tab: string): boolean {
 }
 
 export function canEditRecord(record: SchemeRecord): boolean {
-  return record.approvalStatus === "draft";
+  return isSchemeEditable(record);
 }
 
 export function canSubmitRecord(record: SchemeRecord): boolean {
-  return record.approvalStatus === "draft";
+  return record.approvalStatus === "draft" || record.approvalStatus === "rejected";
 }
 
 export function canApproveRecord(record: SchemeRecord): boolean {
-  return PENDING_APPROVAL_STATUSES.includes(record.approvalStatus) || record.approvalStatus === "approved";
+  return PENDING_APPROVAL_STATUSES.includes(record.approvalStatus);
 }
 
 export function canRejectRecord(record: SchemeRecord): boolean {
-  return (
-    PENDING_APPROVAL_STATUSES.includes(record.approvalStatus) ||
-    record.approvalStatus === "approved" ||
-    record.approvalStatus === "active"
-  );
+  return PENDING_APPROVAL_STATUSES.includes(record.approvalStatus);
+}
+
+export function canSendBackRecord(record: SchemeRecord): boolean {
+  return PENDING_APPROVAL_STATUSES.includes(record.approvalStatus);
+}
+
+export function canActivateRecord(record: SchemeRecord): boolean {
+  return record.approvalStatus === "approved";
 }
 
 export function canDeactivateRecord(record: SchemeRecord): boolean {
-  return record.approvalStatus === "active" || record.approvalStatus === "approved";
+  return record.approvalStatus === "active" && record.status === "active";
+}
+
+export function canCopyRecord(record: SchemeRecord): boolean {
+  if (resolveDisplayApprovalStatus(record) === "expired") return false;
+  return record.approvalStatus === "rejected";
 }
 
 export function nextApprovalStatus(current: ApprovalStatus): ApprovalStatus | null {
@@ -412,13 +929,34 @@ export function approveRecord(record: SchemeRecord): SchemeRecord {
   const next = nextApprovalStatus(record.approvalStatus);
   if (!next) return record;
   const today = masterToday();
-  const withinDates =
-    (!record.startDate || record.startDate <= today) && (!record.endDate || record.endDate >= today);
-  const approvalStatus = next === "approved" && withinDates ? "active" : next;
   return {
     ...record,
-    approvalStatus,
-    status: approvalStatus === "active" ? "active" : record.status,
+    approvalStatus: next,
+    status: next === "active" ? "active" : record.status,
+    updatedBy: MASTER_CURRENT_USER,
+    updatedAt: today,
+  };
+}
+
+export function sendBackRecord(record: SchemeRecord): SchemeRecord {
+  if (!PENDING_APPROVAL_STATUSES.includes(record.approvalStatus)) return record;
+  const today = masterToday();
+  return {
+    ...record,
+    approvalStatus: "rejected",
+    status: "inactive",
+    updatedBy: MASTER_CURRENT_USER,
+    updatedAt: today,
+  };
+}
+
+export function activateRecord(record: SchemeRecord): SchemeRecord {
+  if (record.approvalStatus !== "approved") return record;
+  const today = masterToday();
+  return {
+    ...record,
+    approvalStatus: "active",
+    status: "active",
     updatedBy: MASTER_CURRENT_USER,
     updatedAt: today,
   };
@@ -444,11 +982,13 @@ export function submitRecord(record: SchemeRecord): SchemeRecord {
 }
 
 export function deactivateRecord(record: SchemeRecord): SchemeRecord {
+  const today = masterToday();
   return {
     ...record,
+    approvalStatus: "approved",
     status: "inactive",
     updatedBy: MASTER_CURRENT_USER,
-    updatedAt: masterToday(),
+    updatedAt: today,
   };
 }
 
@@ -456,6 +996,9 @@ export function recordToBulkForm(record: SchemeRecord): SchemeBulkForm {
   return {
     schemeType: record.schemeType,
     schemeName: record.schemeName.replace(` - ${record.stateName}`, "").replace(` - ${record.productName ?? ""}`, ""),
+    description: record.description ?? "",
+    productSelectionMode: record.productSelectionMode ?? "Single",
+    stateSelectionMode: record.stateSelectionMode ?? "Single",
     productIds: record.productId ? [record.productId] : [],
     stateIds: [record.stateId],
     customerType: record.customerType,
@@ -463,6 +1006,7 @@ export function recordToBulkForm(record: SchemeRecord): SchemeBulkForm {
     discountValue: record.discountValue !== undefined ? String(record.discountValue) : "",
     freeQuantity: record.freeQuantity !== undefined ? String(record.freeQuantity) : "",
     priority: String(record.priority),
+    status: record.status,
     startDate: record.startDate ?? "",
     endDate: record.endDate ?? "",
     expiryWithinDays: record.expiryWithinDays !== undefined ? String(record.expiryWithinDays) : "",
@@ -485,9 +1029,27 @@ export function recordToBulkForm(record: SchemeRecord): SchemeBulkForm {
   };
 }
 
+function enforceSelectionLimits(ids: string[], mode: SelectionMode): string[] {
+  if (mode === "Single" && ids.length > 1) return [ids[0]];
+  return ids;
+}
+
 export function validateSchemeBulkForm(form: SchemeBulkForm, mode: "add" | "edit"): string | null {
-  if (!form.stateIds.length) return "Select at least one state.";
-  if (schemeTypeRequiresProducts(form.schemeType, form.productScope) && !form.productIds.length) {
+  if (form.schemeType === "Product Discount Scheme") {
+    return "Use the Product Discount Scheme form to create or edit this scheme type.";
+  }
+  if (form.schemeType === "Product Near Expiry Scheme") {
+    return "Use the Product Near Expiry Scheme form to create or edit this scheme type.";
+  }
+
+  const productIds = enforceSelectionLimits(form.productIds, form.productSelectionMode);
+  const stateIds = enforceSelectionLimits(form.stateIds, form.stateSelectionMode);
+
+  if (!stateIds.length) return "Select at least one state.";
+  if (form.stateSelectionMode === "Single" && form.stateIds.length > 1) {
+    return "State selection mode is Single — select only one state.";
+  }
+  if (schemeTypeRequiresProducts(form.schemeType, form.productScope) && !productIds.length) {
     return "Select at least one product.";
   }
   if (form.schemeType === "Festive Discount Scheme" && !form.festivalName.trim()) {
@@ -495,19 +1057,10 @@ export function validateSchemeBulkForm(form: SchemeBulkForm, mode: "add" | "edit
   }
   if (
     form.schemeType !== "Turnover Discount Scheme" &&
-    form.schemeType !== "Product Near Expiry Scheme" &&
     form.discountType !== "Free Quantity"
   ) {
     if (!form.discountValue || parseFloat(form.discountValue) <= 0) {
       return "Discount value must be greater than 0.";
-    }
-  }
-  if (form.schemeType === "Product Near Expiry Scheme") {
-    if (!form.expiryWithinDays || parseInt(form.expiryWithinDays, 10) <= 0) {
-      return "Expiry within days is required.";
-    }
-    if (!form.discountValue || parseFloat(form.discountValue) <= 0) {
-      return "Discount % is required.";
     }
   }
   if (form.discountType === "Free Quantity") {
@@ -548,8 +1101,10 @@ interface BulkCombo {
 }
 
 function buildCombos(form: SchemeBulkForm): BulkCombo[] {
-  const states = SCHEME_STATE_OPTIONS.filter((s) => form.stateIds.includes(s.id));
-  const products = SCHEME_PRODUCT_OPTIONS.filter((p) => form.productIds.includes(p.id));
+  const stateIds = enforceSelectionLimits(form.stateIds, form.stateSelectionMode);
+  const productIds = enforceSelectionLimits(form.productIds, form.productSelectionMode);
+  const states = SCHEME_STATE_OPTIONS.filter((s) => stateIds.includes(s.id));
+  const products = SCHEME_PRODUCT_OPTIONS.filter((p) => productIds.includes(p.id));
 
   if (!schemeTypeUsesProducts(form.schemeType)) {
     return states.map((s) => ({ stateId: s.id, stateName: s.name }));
@@ -605,6 +1160,7 @@ export function bulkFormToRecords(
   form: SchemeBulkForm,
   existingRecords: SchemeRecord[],
   startId: number,
+  batchId?: string,
 ): SchemeRecord[] {
   const combos = buildCombos(form);
   const existingCodes = existingRecords.map((r) => r.schemeCode);
@@ -617,6 +1173,8 @@ export function bulkFormToRecords(
   const now = masterToday();
   const priority = getDefaultPriority(form.schemeType, form.priority);
   const isPaymentLevel = form.schemeType === "Payment Discount Scheme";
+  const effect = getSchemeEffectConfig(form.schemeType);
+  const parentBatchId = batchId ?? generateBatchId();
 
   return combos.map((combo, index) => {
     const discountValue =
@@ -631,6 +1189,14 @@ export function bulkFormToRecords(
       schemeCode: codes[index],
       schemeName: buildSchemeName(form, combo),
       schemeType: form.schemeType,
+      description: form.description.trim() || undefined,
+      batchId: parentBatchId,
+      effectType: effect.effectType,
+      appliedIn: effect.appliedIn,
+      settlementMethod: effect.settlementMethod,
+      productSelectionMode:
+        form.schemeType === "Product Discount Scheme" ? form.productSelectionMode : undefined,
+      stateSelectionMode: form.stateSelectionMode ?? "Multiple",
       productId: combo.productId,
       productName: combo.productName,
       stateId: combo.stateId,
@@ -641,10 +1207,10 @@ export function bulkFormToRecords(
       freeQuantity:
         form.discountType === "Free Quantity" ? parseFloat(form.freeQuantity || form.discountValue) : undefined,
       priority,
-      approvalStatus: "draft",
+      approvalStatus: "submitted",
       startDate: form.startDate || undefined,
       endDate: form.endDate || undefined,
-      status: "inactive",
+      status: form.status === "active" ? "inactive" : form.status,
       createdBy: MASTER_CURRENT_USER,
       updatedBy: MASTER_CURRENT_USER,
       createdAt: now,
@@ -684,12 +1250,14 @@ export function bulkFormToSingleRecord(
   id: number,
   existing: SchemeRecord,
 ): SchemeRecord {
-  const [record] = bulkFormToRecords(form, [], id);
+  const [record] = bulkFormToRecords(form, [], id, existing.batchId);
   return {
     ...record,
     id: existing.id,
     schemeCode: existing.schemeCode,
-    approvalStatus: existing.approvalStatus === "draft" ? "draft" : "draft",
+    batchId: existing.batchId,
+    approvalStatus:
+      existing.approvalStatus === "draft" ? "submitted" : existing.approvalStatus,
     createdBy: existing.createdBy,
     createdAt: existing.createdAt,
     updatedBy: MASTER_CURRENT_USER,
@@ -703,7 +1271,8 @@ export function copyRecord(record: SchemeRecord, newId: number, newCode: string)
     ...record,
     id: newId,
     schemeCode: newCode,
-    approvalStatus: "draft",
+    batchId: generateBatchId(),
+    approvalStatus: "submitted",
     status: "inactive",
     createdBy: MASTER_CURRENT_USER,
     updatedBy: MASTER_CURRENT_USER,
@@ -715,7 +1284,7 @@ export function copyRecord(record: SchemeRecord, newId: number, newCode: string)
 export function schemeNeedsReapproval(record: SchemeRecord): SchemeRecord {
   return {
     ...record,
-    approvalStatus: "draft",
+    approvalStatus: "submitted",
     status: "inactive",
     updatedBy: MASTER_CURRENT_USER,
     updatedAt: masterToday(),

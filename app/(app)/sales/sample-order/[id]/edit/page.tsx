@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Save, CheckCircle2, XCircle } from "lucide-react";
+import { Save, CheckCircle2, XCircle } from "lucide-react";
 import SalesOrderForm, {
 	type SalesOrderFormValues,
 	validateSalesOrderForm,
@@ -16,13 +16,11 @@ import {
 	canEditOrder,
 	getOrderById,
 	orderToFormValues,
-	getCustomersForTransactionDropdown,
 	getSalesmenForOrders,
 	loadOrders,
 	loadProductCatalog,
 	saveOrders,
 } from "../../orders-data";
-import type { Customer } from "@/app/(app)/masters/customers/customer-data";
 import type { Employee } from "@/app/(app)/user-management/employee/employee-data";
 
 export default function EditSalesOrderPage() {
@@ -30,7 +28,6 @@ export default function EditSalesOrderPage() {
 	const router = useRouter();
 	const id = Number(params.id);
 
-	const [customers, setCustomers] = useState<Customer[]>([]);
 	const [salesmen, setSalesmen] = useState<Employee[]>([]);
 	const [products, setProducts] = useState<ProductCatalogItem[]>([]);
 	const [orderNumber, setOrderNumber] = useState("");
@@ -50,7 +47,6 @@ export default function EditSalesOrderPage() {
 	} | null>(null);
 
 	useEffect(() => {
-		setCustomers(getCustomersForTransactionDropdown());
 		setSalesmen(getSalesmenForOrders());
 		setProducts(loadProductCatalog());
 
@@ -107,15 +103,17 @@ export default function EditSalesOrderPage() {
 				warehouseName: existingOrder.warehouseName,
 				packingListNumber: existingOrder.packingListNumber,
 				packingStatus: existingOrder.packingStatus,
+				approvedBy: existingOrder.approvedBy,
+				approvedDate: existingOrder.approvedDate,
+				rejectedBy: existingOrder.rejectedBy,
+				rejectedDate: existingOrder.rejectedDate,
+				rejectionReason: existingOrder.rejectionReason,
 			},
 			asDraft,
 		);
 
 		if (!updated) {
-			setToast({
-				msg: "Invalid customer or salesman selection.",
-				type: "error",
-			});
+			setToast({ msg: "Invalid salesperson or warehouse selection.", type: "error" });
 			return;
 		}
 
@@ -136,55 +134,54 @@ export default function EditSalesOrderPage() {
 	if (!form) {
 		return (
 			<FormContainer
-				title='Edit Sample Order'
-				description='Sales → Orders → Edit Order'
+				title="Edit Sample Order"
+				description="Sales → Sample Orders → Edit Order"
 				onBack={() => router.push("/sales/sample-order")}
 				onCancel={() => router.push("/sales/sample-order")}
-				cancelLabel='Discard'
+				cancelLabel="Discard"
 				noCard={true}
 			>
-				<p className='text-sm text-muted-foreground p-4'>Loading order…</p>
+				<p className="text-sm text-muted-foreground p-4">Loading order…</p>
 			</FormContainer>
 		);
 	}
 
 	return (
 		<FormContainer
-			title='Edit Sample Order'
-			description='Sales → Orders → Edit Order'
+			title="Edit Sample Order"
+			description="Sales → Sample Orders → Edit Order"
 			onBack={() => router.push("/sales/sample-order")}
 			onCancel={() => router.push("/sales/sample-order")}
-			cancelLabel='Discard'
+			cancelLabel="Discard"
 			noCard={true}
 			actions={
-				<div className='flex items-center gap-2'>
+				<div className="flex items-center gap-2">
 					{form.status === "draft" && (
 						<Button
-							variant='outline'
-							size='sm'
-							className='h-8 text-xs'
+							variant="outline"
+							size="sm"
+							className="h-8 text-xs"
 							onClick={() => handleSave(true)}
 						>
-							Save as Draft
+							Save Draft
 						</Button>
 					)}
 					<Button
-						size='sm'
-						className='h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white'
+						size="sm"
+						className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
 						onClick={() => handleSave(false)}
 					>
-						<Save className='w-3.5 h-3.5' /> Save Changes
+						<Save className="w-3.5 h-3.5" /> Save Changes
 					</Button>
 				</div>
 			}
 		>
 			<SalesOrderForm
-				mode='edit'
+				mode="edit"
 				orderNumber={orderNumber}
 				form={form}
 				onChange={setForm}
 				errors={errors}
-				customers={customers}
 				salesmen={salesmen}
 				products={products}
 				showStatus
@@ -199,9 +196,9 @@ export default function EditSalesOrderPage() {
 					)}
 				>
 					{toast.type === "success" ? (
-						<CheckCircle2 className='w-4 h-4' />
+						<CheckCircle2 className="w-4 h-4" />
 					) : (
-						<XCircle className='w-4 h-4' />
+						<XCircle className="w-4 h-4" />
 					)}
 					{toast.msg}
 				</div>
@@ -209,5 +206,3 @@ export default function EditSalesOrderPage() {
 		</FormContainer>
 	);
 }
-
-

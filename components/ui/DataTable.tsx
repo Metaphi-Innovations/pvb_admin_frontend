@@ -235,9 +235,9 @@ export function DataTable<T = Record<string, unknown>>({
 
       {/* Table */}
       <div className="overflow-x-auto max-h-[calc(100vh-280px)]">
-        <table className="w-full">
-          <thead className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm shadow-[0_1px_0_0_hsl(var(--border))]">
-            <tr className="border-b border-border/80">
+        <table className="w-full border-collapse">
+          <thead className="sticky top-0 z-10 master-listing-thead-row">
+            <tr>
               {bulkActions && (
                 <th className="w-10 px-4 py-2.5">
                   <Checkbox
@@ -252,10 +252,11 @@ export function DataTable<T = Record<string, unknown>>({
                 <th
                   key={col.key}
                   className={cn(
-                    "px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap",
+                    "px-4 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap master-listing-th",
                     col.align === "center" && "text-center",
                     col.align === "right" && "text-right",
-                    col.sortable && "cursor-pointer select-none hover:text-foreground",
+                    col.sortable && "cursor-pointer select-none hover:bg-muted/60",
+                    sortKey === col.key && "master-listing-th-sorted",
                   )}
                   style={col.width ? { width: col.width } : undefined}
                   onClick={() => col.sortable && handleSort(col.key)}
@@ -267,7 +268,7 @@ export function DataTable<T = Record<string, unknown>>({
                 </th>
               ))}
               {actions && (
-                <th className="w-12 px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="master-listing-th-sticky w-12 px-4 py-2.5 text-right text-xs font-semibold text-foreground">
                   Actions
                 </th>
               )}
@@ -298,8 +299,8 @@ export function DataTable<T = Record<string, unknown>>({
                   <tr
                     key={key}
                     className={cn(
-                      "border-b border-border/50 transition-colors duration-100",
-                      isSelected ? "bg-brand-50/60" : "hover:bg-muted/30",
+                      "master-listing-row group",
+                      isSelected && "bg-brand-50/60 hover:bg-brand-50/60",
                       onRowClick && "cursor-pointer",
                     )}
                     onClick={() => onRowClick?.(row)}

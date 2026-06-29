@@ -332,9 +332,6 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.push(DEBIT_NOTES_LIST_PATH)}>
             Cancel
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => submit("draft")}>
-            Save as Draft
-          </Button>
           <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={() => submit("pending_approval")}>
             Save & Submit
           </Button>

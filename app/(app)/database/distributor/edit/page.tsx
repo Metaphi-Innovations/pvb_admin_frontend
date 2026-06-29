@@ -9,6 +9,10 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { cn } from "@/lib/utils";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import {
+  computeDistributorAssessment,
+  formatCategoryLabel,
+} from "@/lib/distributor/distributor-scoring";
+import {
   loadDistributors,
   saveDistributors,
   type Distributor,
@@ -33,7 +37,6 @@ type DistributorFormValues = {
   annualTurnover: string;
   annualBusinessPotential: string;
   farmerNetwork: string;
-  distributorCategory: string;
 };
 
 type DistributorFormErrors = Partial<Record<keyof DistributorFormValues, string>>;
@@ -57,12 +60,16 @@ function toFormValues(distributor: Distributor): DistributorFormValues {
     annualTurnover: distributor.annualTurnover,
     annualBusinessPotential: distributor.annualBusinessPotential,
     farmerNetwork: distributor.farmerNetwork,
-    distributorCategory: distributor.distributorCategory,
   };
 }
 
-function toDistributor(id: number, form: DistributorFormValues): Distributor {
+function toDistributor(
+  id: number,
+  form: DistributorFormValues,
+  existing: Distributor,
+): Distributor {
   return {
+    ...existing,
     id,
     firmName: form.firmName.trim(),
     contactPersonName: form.contactPersonName.trim(),
@@ -81,7 +88,6 @@ function toDistributor(id: number, form: DistributorFormValues): Distributor {
     annualTurnover: form.annualTurnover.trim(),
     annualBusinessPotential: form.annualBusinessPotential.trim(),
     farmerNetwork: form.farmerNetwork.trim(),
-    distributorCategory: form.distributorCategory.trim(),
   };
 }
 
@@ -259,7 +265,7 @@ export default function DistributorEditPage() {
   };
 
   const handleSave = () => {
-    if (!form || currentDistributorId === null) {
+    if (!form || currentDistributorId === null || !currentDistributor) {
       return;
     }
 
@@ -271,7 +277,7 @@ export default function DistributorEditPage() {
       return;
     }
 
-    const updatedDistributor = toDistributor(currentDistributorId, form);
+    const updatedDistributor = toDistributor(currentDistributorId, form, currentDistributor);
     const updatedDistributors = distributors.map((distributor) =>
       distributor.id === currentDistributorId ? updatedDistributor : distributor,
     );
@@ -291,6 +297,16 @@ export default function DistributorEditPage() {
       router.push("/database/distributor");
     }, 700);
   };
+
+  const liveAssessment = useMemo(
+    () => (form ? computeDistributorAssessment({
+      companiesDealingIn: form.companiesDealingIn,
+      annualTurnover: form.annualTurnover,
+      yearsInBusiness: Number.parseInt(form.yearsInBusiness, 10) || 0,
+      annualBusinessPotential: form.annualBusinessPotential,
+    }) : null),
+    [form],
+  );
 
   if (!form || !currentDistributor) {
     return null;
@@ -487,17 +503,17 @@ export default function DistributorEditPage() {
                   setField("annualTurnover", event.target.value)
                 }
                 className={fieldClass}
-                placeholder="Enter annual turnover"
+                placeholder="e.g. ₹1.80 Cr"
               />
             </Field>
-            <Field label="Annual Business He Can Do for Us">
+            <Field label="Annual Business Plan">
               <Input
                 value={form.annualBusinessPotential}
                 onChange={(event) =>
                   setField("annualBusinessPotential", event.target.value)
                 }
                 className={fieldClass}
-                placeholder="Enter business potential"
+                placeholder="e.g. ₹0.42 Cr"
               />
             </Field>
             <Field label="Farmer Network">
@@ -510,18 +526,45 @@ export default function DistributorEditPage() {
                 placeholder="Enter farmer network"
               />
             </Field>
-            <Field label="Distributor Category">
-              <Input
-                value={form.distributorCategory}
-                onChange={(event) =>
-                  setField("distributorCategory", event.target.value)
-                }
-                className={fieldClass}
-                placeholder="Enter distributor category"
-              />
-            </Field>
           </div>
         </section>
+
+        {liveAssessment && (
+          <section>
+            <SectionDivider
+              title="ERP Auto Assessment"
+              subtitle="Category and credit are recalculated on save — not editable"
+            />
+            <div className="grid grid-cols-1 gap-3 rounded-xl border border-border bg-muted/20 p-4 md:grid-cols-4">
+              <div>
+                <p className="text-[11px] text-muted-foreground">Weighted Score</p>
+                <p className="text-lg font-bold text-foreground">{liveAssessment.weightedScore}</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground">Category (Auto)</p>
+                <p className="text-lg font-bold text-brand-700">
+                  {formatCategoryLabel(liveAssessment.category)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground">Credit Limit</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {liveAssessment.creditLimit > 0
+                    ? `₹${liveAssessment.creditLimit.toLocaleString("en-IN")}`
+                    : "Cash & Carry"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground">Credit Period</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {liveAssessment.creditPeriodDays > 0
+                    ? `${liveAssessment.creditPeriodDays} days`
+                    : "0 days"}
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
       </div>
 
       {toast && (

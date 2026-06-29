@@ -86,9 +86,6 @@ export default function FundTransferFormClient() {
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.back()}>
             Cancel
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => save(false)}>
-            Save as Draft
-          </Button>
           <Button size="sm" className="h-8 text-xs bg-brand-600 text-white" onClick={() => save(true)}>
             Post Transfer
           </Button>

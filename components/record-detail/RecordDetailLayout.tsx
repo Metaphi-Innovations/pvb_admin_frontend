@@ -24,6 +24,17 @@ import type {
   RecordMetaItem,
 } from "./types";
 
+function hasSidebarContent(sidebar?: RecordDetailSidebarProps): sidebar is RecordDetailSidebarProps {
+  if (!sidebar) return false;
+  return (
+    (sidebar.quickActions?.length ?? 0) > 0 ||
+    (sidebar.summary?.length ?? 0) > 0 ||
+    (sidebar.activity?.length ?? 0) > 0 ||
+    (sidebar.approval?.length ?? 0) > 0 ||
+    (sidebar.documents?.length ?? 0) > 0
+  );
+}
+
 export interface RecordDetailLayoutProps {
   listHref: string;
   listLabel: string;
@@ -80,6 +91,7 @@ export function RecordDetailLayout({
 }: RecordDetailLayoutProps) {
   const isProfileHeader = headerVariant === "profile";
   const showTabs = tabs && tabs.length > 0;
+  const showSidebar = hasSidebarContent(sidebar);
   const codeMeta: RecordMetaItem[] = recordCode
     ? [{ icon: FileText, label: recordCode }]
     : [];
@@ -227,13 +239,13 @@ export function RecordDetailLayout({
         <div
           className={cn(
             "grid gap-4 w-full",
-            sidebar
+            showSidebar
               ? "grid-cols-1 xl:grid-cols-[minmax(0,7fr)_minmax(280px,3fr)]"
               : "grid-cols-1",
           )}
         >
           <main className="min-w-0 space-y-4">{children}</main>
-          {sidebar && (
+          {showSidebar && (
             <aside className="min-w-0">
               <div className="xl:sticky xl:top-[calc(4rem+1px)]">
                 <RecordDetailSidebar {...sidebar} />

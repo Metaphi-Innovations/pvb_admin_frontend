@@ -345,10 +345,10 @@ export function MasterModule<T extends BaseMasterRecord, F>({
               <div className="h-8 flex-1 max-w-sm rounded-lg skeleton" />
               <div className="h-8 w-28 rounded-lg skeleton" />
             </div>
-            <div className="bg-white border border-border/60 rounded-lg overflow-hidden">
-              <table className="w-full">
+            <div className="master-listing-table-shell overflow-hidden">
+              <table className="w-full border-collapse">
                 <thead>
-                  <tr className="border-b border-border/60 bg-muted/20">
+                  <tr className="master-listing-thead-row">
                     {Array.from({ length: 6 }).map((_, i) => (
                       <th key={i} className="px-4 py-3">
                         <div className="h-3 w-16 rounded skeleton" />

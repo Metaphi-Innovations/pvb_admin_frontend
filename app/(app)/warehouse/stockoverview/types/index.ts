@@ -41,7 +41,21 @@ export interface GrnPendingStockRecord {
   inspectionDueDate: string;
 }
 
+export interface HoldStockRecord {
+  id: string;
+  product: string;
+  warehouse: string;
+  batchNumber: string;
+  holdQuantity: number;
+  qcNumber: string;
+  grnNo: string;
+  inspectionDate: string;
+  status: string;
+  remarks?: string;
+}
+
 export type StockRecordUnion =
   | { type: "qc-passed"; data: QcPassedStockRecord }
   | { type: "rejected"; data: RejectedStockRecord }
-  | { type: "grn-pending"; data: GrnPendingStockRecord };
+  | { type: "grn-pending"; data: GrnPendingStockRecord }
+  | { type: "hold"; data: HoldStockRecord };

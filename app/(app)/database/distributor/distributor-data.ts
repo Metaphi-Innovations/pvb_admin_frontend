@@ -1,9 +1,18 @@
+export type DistributorSource = "sfa" | "erp";
+
+export type DistributorConversionStatus =
+  | "not_converted"
+  | "draft_customer"
+  | "customer_completed";
+
+/** Raw distributor data — scoring/category/credit are computed in ERP only. */
 export interface Distributor {
   id: number;
   firmName: string;
   contactPersonName: string;
   yearsInBusiness: number;
   address: string;
+  addressLine2?: string;
   gender: "Male" | "Female" | "Other";
   phoneNumber: string;
   village: string;
@@ -15,9 +24,16 @@ export interface Distributor {
   companiesDealingIn: string;
   latLong: string;
   annualTurnover: string;
+  /** Annual Business Plan — raw SFA field (amount in crores) */
   annualBusinessPotential: string;
   farmerNetwork: string;
-  distributorCategory: string;
+  /** SFA mobile submission metadata */
+  source: DistributorSource;
+  submittedAt?: string;
+  photos?: string[];
+  conversionStatus?: DistributorConversionStatus;
+  /** Linked Customer Master record after conversion */
+  convertedCustomerId?: number | null;
 }
 
 export const SEED: Distributor[] = [
@@ -37,10 +53,11 @@ export const SEED: Distributor[] = [
     pincode: "388001",
     companiesDealingIn: "UPL, Bayer, Dharitri Sutra",
     latLong: "22.5645, 72.9289",
-    annualTurnover: "Rs 1.8 Cr",
-    annualBusinessPotential: "Rs 42 Lakh",
+    annualTurnover: "₹1.8 Cr",
+    annualBusinessPotential: "₹0.42 Cr",
     farmerNetwork: "1,250 Farmers",
-    distributorCategory: "A",
+    source: "sfa",
+    submittedAt: "2026-06-15",
   },
   {
     id: 2,
@@ -58,10 +75,11 @@ export const SEED: Distributor[] = [
     pincode: "384325",
     companiesDealingIn: "Syngenta, PI Industries",
     latLong: "23.8851, 72.6187",
-    annualTurnover: "Rs 95 Lakh",
-    annualBusinessPotential: "Rs 24 Lakh",
+    annualTurnover: "₹0.95 Cr",
+    annualBusinessPotential: "₹0.24 Cr",
     farmerNetwork: "820 Farmers",
-    distributorCategory: "B",
+    source: "sfa",
+    submittedAt: "2026-06-13",
   },
   {
     id: 3,
@@ -79,10 +97,11 @@ export const SEED: Distributor[] = [
     pincode: "492001",
     companiesDealingIn: "Dhanuka, Dharitri Sutra",
     latLong: "21.2514, 81.6296",
-    annualTurnover: "Rs 1.15 Cr",
-    annualBusinessPotential: "Rs 31 Lakh",
+    annualTurnover: "₹1.15 Cr",
+    annualBusinessPotential: "₹0.31 Cr",
     farmerNetwork: "960 Farmers",
-    distributorCategory: "A",
+    source: "sfa",
+    submittedAt: "2026-06-14",
   },
   {
     id: 4,
@@ -100,10 +119,11 @@ export const SEED: Distributor[] = [
     pincode: "501141",
     companiesDealingIn: "Coromandel, Bayer",
     latLong: "17.2473, 77.5767",
-    annualTurnover: "Rs 72 Lakh",
-    annualBusinessPotential: "Rs 18 Lakh",
+    annualTurnover: "₹0.72 Cr",
+    annualBusinessPotential: "₹0.18 Cr",
     farmerNetwork: "640 Farmers",
-    distributorCategory: "B",
+    source: "sfa",
+    submittedAt: "2026-06-13",
   },
   {
     id: 5,
@@ -121,10 +141,11 @@ export const SEED: Distributor[] = [
     pincode: "212601",
     companiesDealingIn: "IFFCO, Dharitri Sutra",
     latLong: "25.9270, 80.8120",
-    annualTurnover: "Rs 1.05 Cr",
-    annualBusinessPotential: "Rs 27 Lakh",
+    annualTurnover: "₹1.05 Cr",
+    annualBusinessPotential: "₹0.27 Cr",
     farmerNetwork: "1,020 Farmers",
-    distributorCategory: "A",
+    source: "sfa",
+    submittedAt: "2026-06-14",
   },
   {
     id: 6,
@@ -142,10 +163,11 @@ export const SEED: Distributor[] = [
     pincode: "413213",
     companiesDealingIn: "UPL, Rallis, Dharitri Sutra",
     latLong: "17.8112, 75.6411",
-    annualTurnover: "Rs 2.1 Cr",
-    annualBusinessPotential: "Rs 48 Lakh",
+    annualTurnover: "₹2.1 Cr",
+    annualBusinessPotential: "₹0.48 Cr",
     farmerNetwork: "1,540 Farmers",
-    distributorCategory: "A+",
+    source: "sfa",
+    submittedAt: "2026-06-12",
   },
   {
     id: 7,
@@ -163,10 +185,11 @@ export const SEED: Distributor[] = [
     pincode: "688001",
     companiesDealingIn: "BioStadt, Organic India",
     latLong: "9.4981, 76.3388",
-    annualTurnover: "Rs 58 Lakh",
-    annualBusinessPotential: "Rs 16 Lakh",
+    annualTurnover: "₹0.58 Cr",
+    annualBusinessPotential: "₹0.16 Cr",
     farmerNetwork: "510 Farmers",
-    distributorCategory: "C",
+    source: "sfa",
+    submittedAt: "2026-06-11",
   },
   {
     id: 8,
@@ -184,10 +207,11 @@ export const SEED: Distributor[] = [
     pincode: "742149",
     companiesDealingIn: "Dharitri Sutra, UPL",
     latLong: "24.1750, 88.2750",
-    annualTurnover: "Rs 88 Lakh",
-    annualBusinessPotential: "Rs 22 Lakh",
+    annualTurnover: "₹0.88 Cr",
+    annualBusinessPotential: "₹0.22 Cr",
     farmerNetwork: "870 Farmers",
-    distributorCategory: "B",
+    source: "sfa",
+    submittedAt: "2026-06-13",
   },
   {
     id: 9,
@@ -205,10 +229,11 @@ export const SEED: Distributor[] = [
     pincode: "516329",
     companiesDealingIn: "UPL, Dharitri Sutra, Crystal",
     latLong: "14.3664, 78.6067",
-    annualTurnover: "Rs 84 Lakh",
-    annualBusinessPotential: "Rs 21 Lakh",
+    annualTurnover: "₹0.84 Cr",
+    annualBusinessPotential: "₹0.21 Cr",
     farmerNetwork: "760 Farmers",
-    distributorCategory: "B",
+    source: "sfa",
+    submittedAt: "2026-06-13",
   },
   {
     id: 10,
@@ -226,10 +251,11 @@ export const SEED: Distributor[] = [
     pincode: "466116",
     companiesDealingIn: "Dhanuka, Bayer, Dharitri Sutra",
     latLong: "23.0173, 76.7247",
-    annualTurnover: "Rs 1.22 Cr",
-    annualBusinessPotential: "Rs 29 Lakh",
+    annualTurnover: "₹1.22 Cr",
+    annualBusinessPotential: "₹0.29 Cr",
     farmerNetwork: "1,110 Farmers",
-    distributorCategory: "A",
+    source: "sfa",
+    submittedAt: "2026-06-14",
   },
   {
     id: 11,
@@ -247,10 +273,11 @@ export const SEED: Distributor[] = [
     pincode: "801302",
     companiesDealingIn: "IFFCO, UPL, PI Industries",
     latLong: "25.3167, 85.2833",
-    annualTurnover: "Rs 78 Lakh",
-    annualBusinessPotential: "Rs 19 Lakh",
+    annualTurnover: "₹0.78 Cr",
+    annualBusinessPotential: "₹0.19 Cr",
     farmerNetwork: "690 Farmers",
-    distributorCategory: "B",
+    source: "sfa",
+    submittedAt: "2026-06-13",
   },
   {
     id: 12,
@@ -268,10 +295,11 @@ export const SEED: Distributor[] = [
     pincode: "571438",
     companiesDealingIn: "Coromandel, Dharitri Sutra, Rallis",
     latLong: "12.4226, 76.6930",
-    annualTurnover: "Rs 1.68 Cr",
-    annualBusinessPotential: "Rs 36 Lakh",
+    annualTurnover: "₹1.68 Cr",
+    annualBusinessPotential: "₹0.36 Cr",
     farmerNetwork: "1,320 Farmers",
-    distributorCategory: "A+",
+    source: "sfa",
+    submittedAt: "2026-06-12",
   },
   {
     id: 13,
@@ -289,10 +317,11 @@ export const SEED: Distributor[] = [
     pincode: "325204",
     companiesDealingIn: "Syngenta, Dharitri Sutra",
     latLong: "25.1032, 76.1647",
-    annualTurnover: "Rs 66 Lakh",
-    annualBusinessPotential: "Rs 17 Lakh",
+    annualTurnover: "₹0.66 Cr",
+    annualBusinessPotential: "₹0.17 Cr",
     farmerNetwork: "540 Farmers",
-    distributorCategory: "C",
+    source: "sfa",
+    submittedAt: "2026-06-11",
   },
   {
     id: 14,
@@ -310,10 +339,11 @@ export const SEED: Distributor[] = [
     pincode: "782426",
     companiesDealingIn: "Organic India, Dharitri Sutra, UPL",
     latLong: "26.3582, 92.6925",
-    annualTurnover: "Rs 74 Lakh",
-    annualBusinessPotential: "Rs 18 Lakh",
+    annualTurnover: "₹0.74 Cr",
+    annualBusinessPotential: "₹0.18 Cr",
     farmerNetwork: "680 Farmers",
-    distributorCategory: "B",
+    source: "sfa",
+    submittedAt: "2026-06-13",
   },
   {
     id: 15,
@@ -331,10 +361,11 @@ export const SEED: Distributor[] = [
     pincode: "422303",
     companiesDealingIn: "Bayer, Rallis, Dharitri Sutra",
     latLong: "20.0837, 74.1078",
-    annualTurnover: "Rs 1.14 Cr",
-    annualBusinessPotential: "Rs 26 Lakh",
+    annualTurnover: "₹1.14 Cr",
+    annualBusinessPotential: "₹0.26 Cr",
     farmerNetwork: "940 Farmers",
-    distributorCategory: "A",
+    source: "sfa",
+    submittedAt: "2026-06-14",
   },
   {
     id: 16,
@@ -352,10 +383,11 @@ export const SEED: Distributor[] = [
     pincode: "194401",
     companiesDealingIn: "Organic India, Dharitri Sutra",
     latLong: "34.5594, 77.5472",
-    annualTurnover: "Rs 36 Lakh",
-    annualBusinessPotential: "Rs 11 Lakh",
+    annualTurnover: "₹0.36 Cr",
+    annualBusinessPotential: "₹0.11 Cr",
     farmerNetwork: "280 Farmers",
-    distributorCategory: "C",
+    source: "sfa",
+    submittedAt: "2026-06-11",
   },
   {
     id: 17,
@@ -373,10 +405,11 @@ export const SEED: Distributor[] = [
     pincode: "431401",
     companiesDealingIn: "UPL, PI Industries, Dharitri Sutra",
     latLong: "19.2699, 76.7708",
-    annualTurnover: "Rs 1.31 Cr",
-    annualBusinessPotential: "Rs 33 Lakh",
+    annualTurnover: "₹1.31 Cr",
+    annualBusinessPotential: "₹0.33 Cr",
     farmerNetwork: "1,180 Farmers",
-    distributorCategory: "A",
+    source: "sfa",
+    submittedAt: "2026-06-14",
   },
   {
     id: 18,
@@ -394,10 +427,11 @@ export const SEED: Distributor[] = [
     pincode: "493118",
     companiesDealingIn: "Dharitri Sutra, Dhanuka, Coromandel",
     latLong: "21.7357, 81.9474",
-    annualTurnover: "Rs 97 Lakh",
-    annualBusinessPotential: "Rs 23 Lakh",
+    annualTurnover: "₹0.97 Cr",
+    annualBusinessPotential: "₹0.23 Cr",
     farmerNetwork: "850 Farmers",
-    distributorCategory: "B",
+    source: "sfa",
+    submittedAt: "2026-06-13",
   },
   {
     id: 19,
@@ -415,10 +449,11 @@ export const SEED: Distributor[] = [
     pincode: "686575",
     companiesDealingIn: "BioStadt, Dharitri Sutra, Organic India",
     latLong: "9.7116, 76.6863",
-    annualTurnover: "Rs 82 Lakh",
-    annualBusinessPotential: "Rs 20 Lakh",
+    annualTurnover: "₹0.82 Cr",
+    annualBusinessPotential: "₹0.20 Cr",
     farmerNetwork: "610 Farmers",
-    distributorCategory: "B",
+    source: "sfa",
+    submittedAt: "2026-06-13",
   },
   {
     id: 20,
@@ -436,15 +471,70 @@ export const SEED: Distributor[] = [
     pincode: "389260",
     companiesDealingIn: "Dharitri Sutra, Crystal, IFFCO",
     latLong: "23.1911, 73.8916",
-    annualTurnover: "Rs 63 Lakh",
-    annualBusinessPotential: "Rs 16 Lakh",
+    annualTurnover: "₹0.63 Cr",
+    annualBusinessPotential: "₹0.16 Cr",
     farmerNetwork: "520 Farmers",
-    distributorCategory: "C",
+    source: "sfa",
+    submittedAt: "2026-06-11",
   },
 ];
 
 export const DISTRIBUTORS_STORAGE_KEY = "database:distributors";
 export const VIEW_DISTRIBUTOR_STORAGE_KEY = "distributor:view-id";
+
+function normalizeDistributor(raw: Record<string, unknown>): Distributor {
+  const { distributorCategory: _removed, ...rest } = raw;
+  const base = rest as unknown as Distributor;
+  const convertedCustomerId =
+    raw.convertedCustomerId === undefined ? null : (raw.convertedCustomerId as number | null);
+
+  let conversionStatus = raw.conversionStatus as DistributorConversionStatus | undefined;
+  if (!conversionStatus) {
+    if (convertedCustomerId) conversionStatus = "customer_completed";
+    else conversionStatus = "not_converted";
+  }
+
+  return {
+    ...base,
+    source: (raw.source as DistributorSource) ?? "sfa",
+    addressLine2: (raw.addressLine2 as string) ?? "",
+    convertedCustomerId,
+    conversionStatus,
+  };
+}
+
+export function getConversionStatusLabel(status: DistributorConversionStatus): string {
+  switch (status) {
+    case "draft_customer":
+      return "Draft Customer Created";
+    case "customer_completed":
+      return "Customer Completed";
+    default:
+      return "Not Converted";
+  }
+}
+
+export function updateDistributorConversion(
+  distributorId: number,
+  customerId: number,
+  status: DistributorConversionStatus,
+) {
+  const distributors = loadDistributors();
+  const updated = distributors.map((distributor) =>
+    distributor.id === distributorId
+      ? {
+          ...distributor,
+          convertedCustomerId: customerId,
+          conversionStatus: status,
+        }
+      : distributor,
+  );
+  saveDistributors(updated);
+}
+
+export function markDistributorConverted(distributorId: number, customerId: number) {
+  updateDistributorConversion(distributorId, customerId, "customer_completed");
+}
 
 export function loadDistributors(): Distributor[] {
   if (typeof window === "undefined") {
@@ -458,14 +548,20 @@ export function loadDistributors(): Distributor[] {
     }
 
     const parsedDistributors = JSON.parse(storedDistributors);
-    if (!Array.isArray(parsedDistributors)) {
+    if (!Array.isArray(parsedDistributors) || parsedDistributors.length === 0) {
       return SEED.map((distributor) => ({ ...distributor }));
     }
 
-    return parsedDistributors as Distributor[];
+    return parsedDistributors.map((item) =>
+      normalizeDistributor(item as Record<string, unknown>),
+    );
   } catch {
     return SEED.map((distributor) => ({ ...distributor }));
   }
+}
+
+export function getDistributorById(id: number): Distributor | undefined {
+  return loadDistributors().find((distributor) => distributor.id === id);
 }
 
 export function saveDistributors(distributors: Distributor[]) {

@@ -13,8 +13,28 @@ import {
 } from "@/lib/masters/code-generation";
 import { getInitialCodeForCustomerType } from "../customer-types/customer-type-data";
 import { deriveGstCategory } from "@/lib/masters/gst-compliance";
+import {
+	type PaymentType,
+	paymentTermsToLegacy,
+	resolveStructuredPaymentTerms,
+} from "@/lib/masters/payment-terms";
+import {
+	CREDIT_LIMIT_DEMO_CUSTOMERS_RAW,
+	CREDIT_LIMIT_DEMO_CUSTOMER_IDS,
+} from "@/lib/sales/credit-limit-demo-seed";
 
 export type CustomerStatus = "active" | "inactive" | "draft" | "blocked";
+
+export type CustomerCreditSource = "direct" | "distributor_conversion";
+
+export interface CustomerCreditAuditEntry {
+	date: string;
+	by: string;
+	field: "creditLimit" | "creditDays" | "finalCreditStatus";
+	previousValue: string;
+	newValue: string;
+	reason: string;
+}
 
 export interface StatusChange {
 	date: string;
@@ -104,7 +124,25 @@ export interface Customer {
 
 	creditLimit: number;
 	interestRate: number;
+	/** @deprecated Legacy string — synced from structured fields for downstream modules */
 	paymentTerms: string;
+	paymentType?: PaymentType;
+	creditDays?: number;
+	advancePercentage?: number;
+
+	/** Distributor conversion — system-derived reference (read-only in UI) */
+	creditSource?: CustomerCreditSource;
+	linkedDistributorId?: number | null;
+	linkedDistributorName?: string;
+	distributorScore?: number | null;
+	distributorCategory?: "A" | "B" | "C" | null;
+	recommendedCreditLimit?: number | null;
+	recommendedCreditDays?: number | null;
+	recommendedCreditStatus?: string | null;
+	/** Editable final credit status (operational) */
+	finalCreditStatus?: string | null;
+	creditOverrideReason?: string | null;
+	creditAuditLog?: CustomerCreditAuditEntry[];
 
 	bankName: string;
 	bankBranchAddress: string;
@@ -212,9 +250,32 @@ export function formatPaymentTerms(value: string): string {
 	return value;
 }
 
+function applyStructuredPaymentTerms<
+	T extends {
+		paymentType?: PaymentType;
+		creditDays?: number;
+		advancePercentage?: number;
+		paymentTerms?: string;
+	},
+>(record: T): T & {
+	paymentType: PaymentType;
+	creditDays: number;
+	advancePercentage: number;
+	paymentTerms: string;
+} {
+	const structured = resolveStructuredPaymentTerms(record);
+	return {
+		...record,
+		paymentType: structured.paymentType,
+		creditDays: structured.creditDays,
+		advancePercentage: structured.advancePercentage,
+		paymentTerms: paymentTermsToLegacy(structured),
+	};
+}
+
 const STORAGE_KEY = "ds_customers_v4";
 
-const SEED_CUSTOMERS: Customer[] = [
+const SEED_CUSTOMERS_RAW = [
 	{
 		id: 1,
 		customerCode: "CUST-0001",
@@ -1912,7 +1973,12 @@ const SEED_CUSTOMERS: Customer[] = [
 			},
 		],
 	},
+	...CREDIT_LIMIT_DEMO_CUSTOMERS_RAW,
 ];
+
+const SEED_CUSTOMERS: Customer[] = SEED_CUSTOMERS_RAW.map((c) =>
+	applyStructuredPaymentTerms(c) as Customer,
+);
 
 function migrateCustomer(raw: Record<string, unknown>): Customer {
 	const c = raw as Partial<Customer> & {
@@ -1975,7 +2041,12 @@ function migrateCustomer(raw: Record<string, unknown>): Customer {
 		salesManName: c.salesManName ?? "",
 		creditLimit: c.creditLimit ?? 0,
 		interestRate: c.interestRate ?? 0,
-		paymentTerms: c.paymentTerms ?? "net-30",
+		...applyStructuredPaymentTerms({
+			paymentType: c.paymentType,
+			creditDays: c.creditDays,
+			advancePercentage: c.advancePercentage,
+			paymentTerms: c.paymentTerms ?? "net-30",
+		}),
 		bankName: c.bankName ?? "",
 		bankBranchAddress: c.bankBranchAddress ?? "",
 		bankAccountNo: c.bankAccountNo ?? "",
@@ -1999,6 +2070,17 @@ function migrateCustomer(raw: Record<string, unknown>): Customer {
 	};
 }
 
+const MERGED_SEED_CUSTOMER_IDS = [1004, 1005, ...CREDIT_LIMIT_DEMO_CUSTOMER_IDS];
+
+function mergeMissingSeedCustomers(loaded: Customer[]): Customer[] {
+	const missing = SEED_CUSTOMERS.filter(
+		(c) =>
+			MERGED_SEED_CUSTOMER_IDS.includes(c.id) &&
+			!loaded.some((row) => row.id === c.id),
+	);
+	return missing.length > 0 ? [...loaded, ...missing] : loaded;
+}
+
 export function loadCustomers(): Customer[] {
 	if (typeof window === "undefined") return SEED_CUSTOMERS;
 	try {
@@ -2006,12 +2088,11 @@ export function loadCustomers(): Customer[] {
 		if (!raw) return SEED_CUSTOMERS;
 		const data = JSON.parse(raw) as Record<string, unknown>[];
 		let loaded = data.map(migrateCustomer);
-		const hasReference = loaded.some(c => c.id === 1004 || c.id === 1005);
-		if (!hasReference) {
-			const refCustomers = SEED_CUSTOMERS.filter(c => c.id === 1004 || c.id === 1005);
-			if (refCustomers.length > 0) {
-				loaded = [...loaded, ...refCustomers];
-			}
+		const hadMergedSeed = MERGED_SEED_CUSTOMER_IDS.every((id) =>
+			loaded.some((c) => c.id === id),
+		);
+		if (!hadMergedSeed) {
+			loaded = mergeMissingSeedCustomers(loaded);
 		}
 		const needsCodes = loaded.some((c) => isMasterCodeEmpty(c.customerCode));
 		if (needsCodes) {
@@ -2031,11 +2112,8 @@ export function loadCustomers(): Customer[] {
 			if (changed) {
 				localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
 			}
-		} else if (!hasReference) {
-			const refCustomers = SEED_CUSTOMERS.filter(c => c.id === 1004 || c.id === 1005);
-			if (refCustomers.length > 0) {
-				localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
-			}
+		} else if (!hadMergedSeed) {
+			localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
 		}
 		return loaded;
 	} catch {
@@ -2112,7 +2190,21 @@ export function isCustomerTransactable(c: Customer): boolean {
 
 /** For SO / invoice customer dropdowns */
 export function getCustomersForTransactionDropdown(): Customer[] {
-	return loadCustomers().filter(isCustomerTransactable);
+	const list = loadCustomers().filter(isCustomerTransactable);
+	return list.sort((a, b) => {
+		const aDemo = (CREDIT_LIMIT_DEMO_CUSTOMER_IDS as readonly number[]).includes(
+			a.id,
+		)
+			? 0
+			: 1;
+		const bDemo = (CREDIT_LIMIT_DEMO_CUSTOMER_IDS as readonly number[]).includes(
+			b.id,
+		)
+			? 0
+			: 1;
+		if (aDemo !== bDemo) return aDemo - bDemo;
+		return a.customerName.localeCompare(b.customerName);
+	});
 }
 
 export function getActiveGSTMasters(): GSTMaster[] {

@@ -8,52 +8,98 @@ import {
   Edit2,
   Eye,
   Gift,
+  PlayCircle,
+  RotateCcw,
   Send,
-  Settings,
   ShieldCheck,
   ShieldX,
   Power,
   X,
 } from "lucide-react";
 import { ListingContainer } from "@/components/layout/ListingContainer";
-import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { applyFilters } from "@/components/listing/filter-utils";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
-  loadMasterRecords,
   saveMasterRecords,
   nextMasterCode,
-  masterToday,
 } from "@/lib/masters/common";
 import {
-  APPROVAL_STATUS_LABELS,
-  SCHEME_SEED,
   SCHEME_STORAGE_KEY,
-  SCHEME_TYPES,
-  DEFAULT_SCHEME_SETTINGS,
   copyRecord,
-  formatBenefit,
   formatValidity,
-  loadSchemeSettings,
   matchesListingTab,
-  saveSchemeSettings,
+  resolveSchemeOperationalStatus,
   canApproveRecord,
+  canActivateRecord,
   canDeactivateRecord,
   canEditRecord,
   canRejectRecord,
+  canSendBackRecord,
   canSubmitRecord,
   approveRecord,
+  activateRecord,
   rejectRecord,
+  sendBackRecord,
   submitRecord,
   deactivateRecord,
   type SchemeRecord,
-  type SchemeSettings,
 } from "./scheme-data";
-import { SchemeSettingsDialog } from "./components/SchemeSettingsDialog";
-import { SchemeApprovalBadge, SchemeStatusBadge } from "./components/SchemeBadges";
+import {
+  isProductDiscountRecord,
+  countProductDiscountProducts,
+  countProductDiscountStates,
+  canEditProductDiscountScheme,
+  canSubmitProductDiscountScheme,
+  canApproveProductDiscountScheme,
+  canRejectProductDiscountScheme,
+  canSendBackProductDiscountScheme,
+  canActivateProductDiscountScheme,
+  canDeactivateProductDiscountScheme,
+  canCopyProductDiscountScheme,
+} from "./product-discount-scheme";
+import {
+  countNearExpiryProducts,
+  countNearExpiryStates,
+  isNearExpiryRecord,
+  loadConsolidatedSchemeRecords,
+  deduplicateSchemesByCode,
+  canEditNearExpiryScheme,
+  canSubmitNearExpiryScheme,
+  canApproveNearExpiryScheme,
+  canRejectNearExpiryScheme,
+  canSendBackNearExpiryScheme,
+  canActivateNearExpiryScheme,
+  canDeactivateNearExpiryScheme,
+  canCopyNearExpiryScheme,
+  copyNearExpiryRecord,
+} from "./product-near-expiry-scheme";
+import {
+  canActivateStandardSchemeRecord,
+  canApproveStandardSchemeRecord,
+  canCopyStandardSchemeRecord,
+  canDeactivateStandardSchemeRecord,
+  canEditStandardSchemeRecord,
+  canRejectStandardSchemeRecord,
+  canSendBackStandardSchemeRecord,
+  canSubmitStandardSchemeRecord,
+  copyStandardSchemeRecord,
+  countStandardSchemeStates,
+  formatPaymentCustomerDisplay,
+  formatPaymentListingSettlement,
+  formatPaymentOfferBasis,
+  isPaymentRecord,
+  isStandardSchemeRecord,
+  resolveStandardSchemeScope,
+} from "./standard-schemes";
+import { formatSchemeRupee } from "./product-discount-scheme";
+import { SchemeApprovalBadge } from "./components/SchemeBadges";
+import {
+  formatSchemeAnalyticsRupee,
+  formatUtilizationPercent,
+  getSchemeUtilizationStats,
+} from "./scheme-analytics-data";
 
 interface ToastState {
   msg: string;
@@ -62,7 +108,6 @@ interface ToastState {
 
 const LISTING_TABS = [
   { value: "all", label: "All" },
-  { value: "draft", label: "Draft" },
   { value: "pending", label: "Pending Approval" },
   { value: "approved", label: "Approved" },
   { value: "active", label: "Active" },
@@ -87,10 +132,93 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
   );
 }
 
+function schemeActionAllowed(
+  row: SchemeRecord,
+  productDiscountCheck: (record: SchemeRecord) => boolean,
+  nearExpiryCheck: (record: SchemeRecord) => boolean,
+  defaultCheck: (record: SchemeRecord) => boolean,
+): boolean {
+  if (isProductDiscountRecord(row)) return productDiscountCheck(row);
+  if (isNearExpiryRecord(row)) return nearExpiryCheck(row);
+  if (isStandardSchemeRecord(row)) return defaultCheck(row);
+  return defaultCheck(row);
+}
+
+function renderOperationalStatusBadge(label: "Active" | "Inactive" | "Pending") {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded border px-1.5 py-0 h-5 text-[10px] font-medium",
+        label === "Active"
+          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+          : label === "Pending"
+            ? "bg-amber-50 text-amber-700 border-amber-200"
+            : "bg-slate-100 text-slate-600 border-slate-200",
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function resolveScopeDisplay(row: SchemeRecord): string | number {
+  if (isPaymentRecord(row)) return formatPaymentCustomerDisplay(row);
+  if (isProductDiscountRecord(row)) return countProductDiscountProducts(row);
+  if (isNearExpiryRecord(row)) return countNearExpiryProducts(row);
+  if (isStandardSchemeRecord(row)) return resolveStandardSchemeScope(row);
+  return row.productName ?? "—";
+}
+
+function resolveStateDisplay(row: SchemeRecord): string | number {
+  if (isPaymentRecord(row)) {
+    return row.minimumOutstandingAmount !== undefined
+      ? formatSchemeRupee(row.minimumOutstandingAmount)
+      : "—";
+  }
+  if (isProductDiscountRecord(row)) return countProductDiscountStates(row);
+  if (isNearExpiryRecord(row)) return countNearExpiryStates(row);
+  if (isStandardSchemeRecord(row)) return countStandardSchemeStates(row);
+  return row.stateName || "—";
+}
+
+function canEditSchemeRow(row: SchemeRecord): boolean {
+  if (isStandardSchemeRecord(row)) return canEditStandardSchemeRecord(row);
+  return canEditRecord(row);
+}
+
+function canSubmitSchemeRow(row: SchemeRecord): boolean {
+  if (isStandardSchemeRecord(row)) return canSubmitStandardSchemeRecord(row);
+  return canSubmitRecord(row);
+}
+
+function canApproveSchemeRow(row: SchemeRecord): boolean {
+  if (isStandardSchemeRecord(row)) return canApproveStandardSchemeRecord(row);
+  return canApproveRecord(row);
+}
+
+function canRejectSchemeRow(row: SchemeRecord): boolean {
+  if (isStandardSchemeRecord(row)) return canRejectStandardSchemeRecord(row);
+  return canRejectRecord(row);
+}
+
+function canSendBackSchemeRow(row: SchemeRecord): boolean {
+  if (isStandardSchemeRecord(row)) return canSendBackStandardSchemeRecord(row);
+  return canSendBackRecord(row);
+}
+
+function canActivateSchemeRow(row: SchemeRecord): boolean {
+  if (isStandardSchemeRecord(row)) return canActivateStandardSchemeRecord(row);
+  return canActivateRecord(row);
+}
+
+function canDeactivateSchemeRow(row: SchemeRecord): boolean {
+  if (isStandardSchemeRecord(row)) return canDeactivateStandardSchemeRecord(row);
+  return canDeactivateRecord(row);
+}
+
 export default function SchemeMasterPage() {
   const router = useRouter();
   const [records, setRecords] = useState<SchemeRecord[]>([]);
-  const [settings, setSettings] = useState<SchemeSettings>(DEFAULT_SCHEME_SETTINGS);
   const [activeTab, setActiveTab] = useState<string>("all");
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortState>({ key: "schemeName", direction: "asc" });
@@ -98,21 +226,10 @@ export default function SchemeMasterPage() {
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
 
-  const [sheetMode, setSheetMode] = useState<"view" | null>(null);
-  const [active, setActive] = useState<SchemeRecord | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [draftSettings, setDraftSettings] = useState<SchemeSettings>(DEFAULT_SCHEME_SETTINGS);
-
   useEffect(() => {
-    const loaded = loadMasterRecords<SchemeRecord>(SCHEME_STORAGE_KEY, SCHEME_SEED);
-    const needsMigration = loaded.some((r) => !r.schemeType);
-    if (needsMigration) {
-      localStorage.removeItem(SCHEME_STORAGE_KEY);
-      setRecords(loadMasterRecords<SchemeRecord>(SCHEME_STORAGE_KEY, SCHEME_SEED));
-    } else {
-      setRecords(loaded);
-    }
-    setSettings(loadSchemeSettings());
+    const migrated = deduplicateSchemesByCode(loadConsolidatedSchemeRecords());
+    saveMasterRecords(SCHEME_STORAGE_KEY, migrated);
+    setRecords(migrated);
   }, []);
 
   useEffect(() => {
@@ -136,14 +253,25 @@ export default function SchemeMasterPage() {
 
   const columns: ColumnConfig<SchemeRecord>[] = [
     {
+      key: "schemeCode",
+      header: "Scheme Code",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "90px",
+      render: (_v, row) => (
+        <span className="text-[11px] font-mono font-medium text-foreground">{row.schemeCode}</span>
+      ),
+    },
+    {
       key: "schemeName",
       header: "Scheme Name",
       sortable: true,
       filterable: true,
       filterType: "text",
-      width: "180px",
+      width: "160px",
       render: (_v, row) => (
-        <span className="text-xs font-semibold text-foreground line-clamp-2">{row.schemeName}</span>
+        <span className="text-[11px] font-medium line-clamp-2">{row.schemeName}</span>
       ),
     },
     {
@@ -151,47 +279,23 @@ export default function SchemeMasterPage() {
       header: "Scheme Type",
       sortable: true,
       filterable: true,
-      filterType: "dropdown",
-      filterOptions: SCHEME_TYPES.map((t) => ({ label: t, value: t })),
+      filterType: "text",
       width: "140px",
       render: (_v, row) => <span className="text-[11px]">{row.schemeType}</span>,
     },
     {
-      key: "productName",
-      header: "Product",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "100px",
+      key: "productCount",
+      header: "Customer / Scope",
+      width: "120px",
       render: (_v, row) => (
-        <span className="text-[11px]">{row.productName ?? "—"}</span>
+        <span className="text-[11px] line-clamp-2">{resolveScopeDisplay(row)}</span>
       ),
     },
     {
-      key: "stateName",
-      header: "State",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "100px",
-      render: (_v, row) => <span className="text-[11px]">{row.stateName}</span>,
-    },
-    {
-      key: "customerType",
-      header: "Customer Type",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "100px",
-      render: (_v, row) => <span className="text-[11px]">{row.customerType}</span>,
-    },
-    {
-      key: "benefit",
-      header: "Benefit",
-      width: "100px",
-      render: (_v, row) => (
-        <span className="text-[11px] font-medium">{formatBenefit(row)}</span>
-      ),
+      key: "stateCount",
+      header: "Min Out / States",
+      width: "90px",
+      render: (_v, row) => <span className="text-[11px]">{resolveStateDisplay(row)}</span>,
     },
     {
       key: "validity",
@@ -204,37 +308,80 @@ export default function SchemeMasterPage() {
       ),
     },
     {
-      key: "priority",
-      header: "Priority",
-      sortable: true,
-      width: "60px",
-      render: (_v, row) => <span className="text-[11px]">{row.priority}</span>,
-    },
-    {
       key: "status",
       header: "Status",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
       filterOptions: [
+        { label: "Pending", value: "pending" },
         { label: "Active", value: "active" },
         { label: "Inactive", value: "inactive" },
       ],
       width: "80px",
-      render: (_v, row) => <SchemeStatusBadge active={row.status === "active"} />,
+      render: (_v, row) => renderOperationalStatusBadge(resolveSchemeOperationalStatus(row)),
     },
     {
       key: "approvalStatus",
       header: "Approval",
       sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: Object.entries(APPROVAL_STATUS_LABELS).map(([value, label]) => ({
-        label,
-        value,
-      })),
-      width: "110px",
+      width: "100px",
       render: (_v, row) => <SchemeApprovalBadge record={row} />,
+    },
+    {
+      key: "utilizedCount",
+      header: "Utilized Count",
+      width: "88px",
+      render: (_v, row) => {
+        const stats = getSchemeUtilizationStats(row);
+        return (
+          <span
+            className={cn(
+              "text-[11px] font-semibold tabular-nums",
+              stats.utilizedCount > 0 ? "text-foreground" : "text-muted-foreground",
+            )}
+          >
+            {stats.utilizedCount}
+          </span>
+        );
+      },
+    },
+    {
+      key: "utilizationPercent",
+      header: "Offer / Util %",
+      width: "96px",
+      render: (_v, row) => {
+        if (isPaymentRecord(row)) {
+          return (
+            <span className="text-[11px] font-medium text-foreground line-clamp-2">
+              {formatPaymentOfferBasis(row)}
+            </span>
+          );
+        }
+        const stats = getSchemeUtilizationStats(row);
+        return (
+          <span
+            className={cn(
+              "text-[11px] font-medium",
+              stats.isUtilized ? "text-brand-700" : "text-muted-foreground",
+            )}
+          >
+            {formatUtilizationPercent(stats)}
+          </span>
+        );
+      },
+    },
+    {
+      key: "benefitAmount",
+      header: "Payable / Benefit",
+      width: "110px",
+      render: (_v, row) => (
+        <span className="text-[11px] tabular-nums font-medium">
+          {isPaymentRecord(row)
+            ? formatPaymentListingSettlement(row)
+            : formatSchemeAnalyticsRupee(getSchemeUtilizationStats(row).totalBenefitGiven)}
+        </span>
+      ),
     },
   ];
 
@@ -251,37 +398,65 @@ export default function SchemeMasterPage() {
       onClick: (row) => openView(row),
     },
     {
-      label: "Edit Draft",
+      label: "Edit",
       action: "edit",
       icon: Edit2,
       onClick: (row) => openEdit(row),
-      hide: (row) => !canEditRecord(row),
+      disabled: (row) =>
+        !schemeActionAllowed(row, canEditProductDiscountScheme, canEditNearExpiryScheme, canEditSchemeRow),
     },
     {
-      label: "Copy",
-      action: "copy",
-      icon: Copy,
-      onClick: (row) => handleCopy(row),
-    },
-    {
-      label: "Submit for Approval",
+      label: "Resubmit for Approval",
       action: "submit",
       icon: Send,
       onClick: (row) => {
         updateRecord(row.id, submitRecord);
         setToast({ msg: "Scheme submitted for approval", type: "success" });
       },
-      hide: (row) => !canSubmitRecord(row),
+      hide: (row) =>
+        !schemeActionAllowed(
+          row,
+          canSubmitProductDiscountScheme,
+          canSubmitNearExpiryScheme,
+          canSubmitSchemeRow,
+        ),
     },
     {
       label: "Approve",
       action: "approve",
       icon: ShieldCheck,
       onClick: (row) => {
-        updateRecord(row.id, approveRecord);
-        setToast({ msg: "Scheme approved to next stage", type: "success" });
+        const updated = approveRecord(row);
+        updateRecord(row.id, () => updated);
+        const msg =
+          updated.approvalStatus === "approved"
+            ? "Scheme approved — ready for activation"
+            : "Scheme moved to next approval stage";
+        setToast({ msg, type: "success" });
       },
-      hide: (row) => !canApproveRecord(row),
+      hide: (row) =>
+        !schemeActionAllowed(
+          row,
+          canApproveProductDiscountScheme,
+          canApproveNearExpiryScheme,
+          canApproveSchemeRow,
+        ),
+    },
+    {
+      label: "Send Back",
+      action: "send_back",
+      icon: RotateCcw,
+      onClick: (row) => {
+        updateRecord(row.id, sendBackRecord);
+        setToast({ msg: "Scheme sent back for correction", type: "success" });
+      },
+      hide: (row) =>
+        !schemeActionAllowed(
+          row,
+          canSendBackProductDiscountScheme,
+          canSendBackNearExpiryScheme,
+          canSendBackSchemeRow,
+        ),
     },
     {
       label: "Reject",
@@ -292,7 +467,29 @@ export default function SchemeMasterPage() {
         updateRecord(row.id, rejectRecord);
         setToast({ msg: "Scheme rejected", type: "success" });
       },
-      hide: (row) => !canRejectRecord(row),
+      hide: (row) =>
+        !schemeActionAllowed(
+          row,
+          canRejectProductDiscountScheme,
+          canRejectNearExpiryScheme,
+          canRejectSchemeRow,
+        ),
+    },
+    {
+      label: "Activate",
+      action: "activate",
+      icon: PlayCircle,
+      onClick: (row) => {
+        updateRecord(row.id, activateRecord);
+        setToast({ msg: "Scheme activated", type: "success" });
+      },
+      hide: (row) =>
+        !schemeActionAllowed(
+          row,
+          canActivateProductDiscountScheme,
+          canActivateNearExpiryScheme,
+          canActivateSchemeRow,
+        ),
     },
     {
       label: "Deactivate",
@@ -302,7 +499,25 @@ export default function SchemeMasterPage() {
         updateRecord(row.id, deactivateRecord);
         setToast({ msg: "Scheme deactivated", type: "success" });
       },
-      hide: (row) => !canDeactivateRecord(row),
+      hide: (row) =>
+        !schemeActionAllowed(
+          row,
+          canDeactivateProductDiscountScheme,
+          canDeactivateNearExpiryScheme,
+          canDeactivateSchemeRow,
+        ),
+    },
+    {
+      label: "Copy Scheme",
+      action: "copy",
+      icon: Copy,
+      onClick: (row) => handleCopy(row),
+      hide: (row) => {
+        if (isProductDiscountRecord(row)) return !canCopyProductDiscountScheme(row);
+        if (isNearExpiryRecord(row)) return !canCopyNearExpiryScheme(row);
+        if (isStandardSchemeRecord(row)) return !canCopyStandardSchemeRecord(row);
+        return true;
+      },
     },
   ];
 
@@ -313,6 +528,7 @@ export default function SchemeMasterPage() {
       const q = String(filters.search).trim().toLowerCase();
       result = result.filter(
         (r) =>
+          r.schemeCode.toLowerCase().includes(q) ||
           r.schemeName.toLowerCase().includes(q) ||
           (r.productName ?? "").toLowerCase().includes(q) ||
           r.stateName.toLowerCase().includes(q) ||
@@ -346,123 +562,51 @@ export default function SchemeMasterPage() {
   const openAdd = () => router.push("/masters/scheme/add");
 
   const openEdit = (row: SchemeRecord) => {
-    if (!canEditRecord(row)) {
-      setToast({ msg: "Only draft schemes can be edited", type: "error" });
+    const canEdit = schemeActionAllowed(
+      row,
+      canEditProductDiscountScheme,
+      canEditNearExpiryScheme,
+      canEditSchemeRow,
+    );
+    if (!canEdit) {
+      setToast({
+        msg: "Approved and active schemes cannot be edited. Edit is allowed only while pending approval or rejected.",
+        type: "error",
+      });
       return;
     }
     router.push(`/masters/scheme/${row.id}/edit`);
   };
 
   const openView = (row: SchemeRecord) => {
-    setActive(row);
-    setSheetMode("view");
-  };
-
-  const closeSheet = () => {
-    setSheetMode(null);
-    setActive(null);
+    router.push(`/masters/scheme/${row.id}`);
   };
 
   const handleCopy = (row: SchemeRecord) => {
-    const list = loadMasterRecords<SchemeRecord>(SCHEME_STORAGE_KEY, SCHEME_SEED);
+    const list = loadConsolidatedSchemeRecords();
     const newId = list.length ? Math.max(...list.map((r) => r.id)) + 1 : 1;
+    const prefix =
+      row.schemeType === "Festive Discount Scheme"
+        ? "FST-"
+        : row.schemeType === "Cash Discount Scheme"
+          ? "CSH-"
+          : row.schemeType === "Turnover Discount Scheme"
+            ? "TUR-"
+            : row.schemeType === "Payment Discount Scheme"
+              ? "PAY-"
+              : "SCH-";
     const newCode = nextMasterCode(
-      "SCH-",
+      prefix,
       list.map((r) => r.schemeCode),
     );
-    const copy = copyRecord(row, newId, newCode);
+    const copy = isNearExpiryRecord(row)
+      ? copyNearExpiryRecord(row, newId, newCode)
+      : isStandardSchemeRecord(row)
+        ? copyStandardSchemeRecord(row, newId, newCode)
+        : copyRecord(row, newId, newCode);
     persistRecords([...list, copy]);
     setToast({ msg: "Scheme copied as draft", type: "success" });
   };
-
-  const handleExport = () => {
-    try {
-      const headers = [
-        "Scheme Name",
-        "Scheme Type",
-        "Product",
-        "State",
-        "Customer Type",
-        "Benefit",
-        "Validity",
-        "Priority",
-        "Status",
-        "Approval Status",
-      ];
-      const rows = filtered.map((r) =>
-        [
-          `"${r.schemeName.replace(/"/g, '""')}"`,
-          r.schemeType,
-          r.productName ?? "",
-          r.stateName,
-          r.customerType,
-          `"${formatBenefit(r)}"`,
-          `"${formatValidity(r)}"`,
-          r.priority,
-          r.status,
-          APPROVAL_STATUS_LABELS[r.approvalStatus],
-        ].join(","),
-      );
-      const blob = new Blob([[headers.join(","), ...rows].join("\n")], {
-        type: "text/csv;charset=utf-8;",
-      });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `schemes_export_${masterToday()}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
-      setToast({ msg: "Schemes exported", type: "success" });
-    } catch {
-      setToast({ msg: "Export failed", type: "error" });
-    }
-  };
-
-  const openSettings = () => {
-    setDraftSettings(settings);
-    setSettingsOpen(true);
-  };
-
-  const saveSettings = () => {
-    saveSchemeSettings(draftSettings);
-    setSettings(draftSettings);
-    setSettingsOpen(false);
-    setToast({ msg: "Scheme settings saved", type: "success" });
-  };
-
-  const viewDrawer = active
-    ? buildSimpleMasterViewDrawer<SchemeRecord>({
-        drawerTitle: "Scheme",
-        getRecordCode: (r) => r.schemeName,
-        basicInfo: (r) => [
-          { label: "Scheme Name", value: r.schemeName },
-          { label: "Scheme Type", value: r.schemeType },
-          { label: "Product", value: r.productName ?? "—" },
-          { label: "State", value: r.stateName },
-          { label: "Customer Type", value: r.customerType },
-          { label: "Benefit", value: formatBenefit(r) },
-          { label: "Validity", value: formatValidity(r) },
-          { label: "Priority", value: String(r.priority) },
-          { label: "Status", value: r.status === "active" ? "Active" : "Inactive" },
-          {
-            label: "Approval",
-            value: APPROVAL_STATUS_LABELS[r.approvalStatus],
-          },
-          ...(r.expiryWithinDays
-            ? [{ label: "Expiry Within Days", value: String(r.expiryWithinDays) }]
-            : []),
-          ...(r.minimumOrderValue
-            ? [{ label: "Min Order Value", value: `₹${r.minimumOrderValue}` }]
-            : []),
-          ...(r.festivalName ? [{ label: "Festival", value: r.festivalName }] : []),
-          ...(r.paymentMode ? [{ label: "Payment Mode", value: r.paymentMode }] : []),
-          ...(r.isPaymentLevel
-            ? [{ label: "Benefit Level", value: "Payment-level (not product discount)" }]
-            : []),
-        ],
-        showDescription: false,
-      })(active)
-    : { title: "Scheme", basicInfo: [] };
 
   return (
     <ListingContainer
@@ -474,17 +618,6 @@ export default function SchemeMasterPage() {
       }))}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-      actions={
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs gap-1.5"
-          onClick={openSettings}
-        >
-          <Settings className="h-3.5 w-3.5" />
-          Conflict Settings
-        </Button>
-      }
     >
       <MasterListing<SchemeRecord>
         columns={columns}
@@ -499,31 +632,10 @@ export default function SchemeMasterPage() {
         actions={actions}
         onAdd={openAdd}
         addLabel="Create Scheme"
-        onExport={handleExport}
         emptyMessage="schemes"
-        searchPlaceholder="Search name, product, state..."
+        searchPlaceholder="Search code, name, product, state..."
         currentFilters={filters}
         currentSort={sort}
-      />
-
-      <MasterListingSheets
-        sheetMode={sheetMode}
-        active={active}
-        onClose={closeSheet}
-        onEdit={() => active && openEdit(active)}
-        onSave={closeSheet}
-        sheetTitle="View Scheme"
-        icon={Gift}
-        viewDrawer={viewDrawer}
-        formContent={null}
-      />
-
-      <SchemeSettingsDialog
-        open={settingsOpen}
-        settings={draftSettings}
-        onChange={setDraftSettings}
-        onClose={() => setSettingsOpen(false)}
-        onSave={saveSettings}
       />
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}

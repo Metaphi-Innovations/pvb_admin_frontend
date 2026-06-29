@@ -139,21 +139,19 @@ export function Toast({
   }, [toast.msg, autoHideMs, onDismiss]);
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 pointer-events-none">
-      <div
-        className={cn(
-          "flex items-center gap-3 px-5 py-4 rounded-xl shadow-2xl text-white text-sm font-medium min-w-[280px] max-w-sm pointer-events-auto",
-          toast.type === "success" ? "bg-brand-600" : "bg-red-600",
-        )}
-        role="status"
-        aria-live="polite"
-      >
+    <div
+      className={cn(
+        "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium animate-in slide-in-from-bottom-2 fade-in-0 duration-300",
+        toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
+      )}
+      role="status"
+      aria-live="polite"
+    >
         {toast.type === "success" ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <XCircle className="w-5 h-5 shrink-0" />}
         <span className="flex-1">{toast.msg}</span>
-        <button type="button" onClick={onDismiss} className="opacity-80 hover:opacity-100 shrink-0">
-          <X className="w-4 h-4" />
-        </button>
-      </div>
+      <button type="button" onClick={onDismiss} className="opacity-80 hover:opacity-100 shrink-0">
+        <X className="w-4 h-4" />
+      </button>
     </div>
   );
 }

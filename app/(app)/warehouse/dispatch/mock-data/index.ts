@@ -1,4 +1,4 @@
-import { DispatchRecord, SalesReturnRecord } from "../types";
+import { DispatchRecord } from "../types";
 
 export const SEED_DISPATCHES: DispatchRecord[] = [
   {
@@ -14,8 +14,8 @@ export const SEED_DISPATCHES: DispatchRecord[] = [
     warehouse: "Central Warehouse",
     packingNumbers: ["PKG-2026-001"],
     products: [
-      { product: "Urea 50kg", sku: "SKU-UR-50", packedQty: 300, dispatchQty: 300 },
-      { product: "NPK 10:26:26", sku: "SKU-NPK-26", packedQty: 200, dispatchQty: 200 },
+      { product: "Urea 50kg", sku: "SKU-UR-50", packedQty: 300, dispatchQty: 300, unitRate: 2850, batchNo: "B-UR-26A" },
+      { product: "NPK 10:26:26", sku: "SKU-NPK-26", packedQty: 200, dispatchQty: 200, unitRate: 3200, batchNo: "B-NPK-26B" },
     ],
     deliveryDetails: {
       deliveryDate: "2026-05-28",
@@ -207,18 +207,4 @@ export function getDispatchRecords(): DispatchRecord[] {
 export function saveDispatchRecords(records: DispatchRecord[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(KEY_DISPATCHES, JSON.stringify(records));
-}
-
-export const KEY_SALES_RETURNS = "ds_sales_returns";
-
-export function getSalesReturnRecords(): SalesReturnRecord[] {
-  if (typeof window === "undefined") return [];
-  const stored = localStorage.getItem(KEY_SALES_RETURNS);
-  if (!stored) return [];
-  return JSON.parse(stored);
-}
-
-export function saveSalesReturnRecords(records: SalesReturnRecord[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(KEY_SALES_RETURNS, JSON.stringify(records));
 }

@@ -33,7 +33,11 @@ export default function AddStockTransferPage() {
     deliveryDate: "",
     sourceWarehouseId: null,
     targetWarehouseId: null,
-    status: "approved",
+    requestedBy: "Admin",
+    reasonPurpose: "",
+    transportDetails: "",
+    remarks: "",
+    status: "pending_approval",
     lineItems: [createEmptyLineItem()],
     additionalExpenses: [],
   });
@@ -94,19 +98,11 @@ export default function AddStockTransferPage() {
       actions={
         <div className="flex items-center gap-2">
           <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={() => handleSave(true)}
-          >
-            Save as Draft
-          </Button>
-          <Button
             size="sm"
             className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
             onClick={() => handleSave(false)}
           >
-            <Save className="w-3.5 h-3.5" /> Submit Transfer
+            <Save className="w-3.5 h-3.5" /> Submit for Approval
           </Button>
         </div>
       }

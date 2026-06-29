@@ -57,9 +57,23 @@ import {
 } from "@/lib/masters/gst-compliance";
 import { GstRegistrationFields, GstRegisteredToggleControl } from "@/components/masters/GstRegistrationFields";
 import { ErpFormSection } from "@/components/masters/erp/ErpFormSection";
+import { CustomerDistributorCreditSection } from "./CustomerDistributorCreditSection";
+import {
+	isDistributorConvertedForm,
+	validateDistributorCreditOverride,
+	hasCreditOverrideFromRecommended,
+} from "@/lib/masters/customer-credit";
 import { ComplianceCertificationsGrid } from "@/components/masters/erp/ComplianceCertificationsGrid";
 import { BranchAddressFields } from "@/components/masters/erp/BranchAddressFields";
-import { PaymentTermsSelect } from "@/components/masters/erp/PaymentTermsSelect";
+import { PaymentTermsFields } from "@/components/masters/erp/PaymentTermsFields";
+import {
+	formValuesToStructured,
+	paymentTermsToLegacy,
+	resolveStructuredPaymentTerms,
+	structuredToFormValues,
+	validatePaymentTermsForm,
+	type PaymentType,
+} from "@/lib/masters/payment-terms";
 import { ERP } from "@/components/masters/erp/erp-form-styles";
 import {
 	complianceRegistrationToStored,
@@ -193,7 +207,19 @@ export interface CustomerFormValues {
 	pincode: string;
 	salesManId: string;
 	creditLimit: string;
-	paymentTerms: string;
+	paymentType: PaymentType | "";
+	creditDays: string;
+	advancePercentage: string;
+	creditSource: "" | "direct" | "distributor_conversion";
+	linkedDistributorId: string;
+	linkedDistributorName: string;
+	distributorScore: string;
+	distributorCategory: string;
+	recommendedCreditLimit: string;
+	recommendedCreditDays: string;
+	recommendedCreditStatus: string;
+	finalCreditStatus: string;
+	creditOverrideReason: string;
 	bankName: string;
 	bankBranchAddress: string;
 	bankAccountNo: string;
@@ -260,7 +286,19 @@ export const DEFAULT_CUSTOMER_FORM: CustomerFormValues = {
 	pincode: "",
 	salesManId: "",
 	creditLimit: "",
-	paymentTerms: "net-30",
+	paymentType: "credit",
+	creditDays: "30",
+	advancePercentage: "",
+	creditSource: "direct",
+	linkedDistributorId: "",
+	linkedDistributorName: "",
+	distributorScore: "",
+	distributorCategory: "",
+	recommendedCreditLimit: "",
+	recommendedCreditDays: "",
+	recommendedCreditStatus: "",
+	finalCreditStatus: "Credit Allowed",
+	creditOverrideReason: "",
 	bankName: "",
 	bankBranchAddress: "",
 	bankAccountNo: "",
@@ -346,7 +384,27 @@ export function customerToFormValues(c: Customer): CustomerFormValues {
 		pincode: c.pincode || "",
 		salesManId: c.salesManId != null ? String(c.salesManId) : "",
 		creditLimit: c.creditLimit ? String(c.creditLimit) : "",
-		paymentTerms: c.paymentTerms,
+		creditSource: c.creditSource ?? (c.linkedDistributorId ? "distributor_conversion" : "direct"),
+		linkedDistributorId: c.linkedDistributorId != null ? String(c.linkedDistributorId) : "",
+		linkedDistributorName: c.linkedDistributorName ?? "",
+		distributorScore:
+			c.distributorScore != null ? String(c.distributorScore) : "",
+		distributorCategory: c.distributorCategory ?? "",
+		recommendedCreditLimit:
+			c.recommendedCreditLimit != null ? String(c.recommendedCreditLimit) : "",
+		recommendedCreditDays:
+			c.recommendedCreditDays != null ? String(c.recommendedCreditDays) : "",
+		recommendedCreditStatus: c.recommendedCreditStatus ?? "",
+		finalCreditStatus: c.finalCreditStatus ?? c.recommendedCreditStatus ?? "Credit Allowed",
+		creditOverrideReason: c.creditOverrideReason ?? "",
+		...structuredToFormValues(
+			resolveStructuredPaymentTerms({
+				paymentType: c.paymentType,
+				creditDays: c.creditDays,
+				advancePercentage: c.advancePercentage,
+				paymentTerms: c.paymentTerms,
+			}),
+		),
 		bankName: c.bankName,
 		bankBranchAddress: c.bankBranchAddress,
 		bankAccountNo: c.bankAccountNo,
@@ -1422,32 +1480,56 @@ export function CustomerForm({
 				{/* ── TAB 3: BANK & COMMERCIAL ── */}
 				<TabsContent value='commercial' className='mt-0'>
 					<div className={ERP.sectionGap}>
-						<ErpFormSection title='Credit Terms'>
-							<div className={ERP.grid2}>
-								<div className={ERP.field}>
-									<Label className={ERP.label}>Credit Limit</Label>
-									<Input
-										type='number'
-										min={0}
-										step='0.01'
-										value={form.creditLimit}
-										onChange={(e) => set('creditLimit', e.target.value)}
-										placeholder='0.00'
-										className={inputCls('creditLimit')}
-										disabled={readOnly}
-									/>
-									<FieldError msg={errors.creditLimit} />
-								</div>
-								<div className={ERP.field}>
-									<Label className={ERP.label}>Payment Terms</Label>
-									<PaymentTermsSelect
-										value={form.paymentTerms}
-										onChange={(value) => set("paymentTerms", value)}
+						{isDistributorConvertedForm(form) ? (
+							<CustomerDistributorCreditSection
+								form={form}
+								errors={errors}
+								onChange={onChange}
+								onClearError={onClearError}
+								readOnly={readOnly}
+								inputCls={inputCls}
+							/>
+						) : (
+							<ErpFormSection title='Credit Terms'>
+								<div className={cn(ERP.grid3, "lg:grid-cols-3")}>
+									<div className={ERP.field}>
+										<Label className={ERP.label}>Credit Limit</Label>
+										<Input
+											type='number'
+											min={0}
+											step='0.01'
+											value={form.creditLimit}
+											onChange={(e) => set('creditLimit', e.target.value)}
+											placeholder='0.00'
+											className={inputCls('creditLimit')}
+											disabled={readOnly}
+										/>
+										<FieldError msg={errors.creditLimit} />
+									</div>
+									<PaymentTermsFields
+										layout="embedded"
+										values={{
+											paymentType: form.paymentType,
+											creditDays: form.creditDays,
+											advancePercentage: form.advancePercentage,
+										}}
+										onChange={(patch) => {
+											onChange({ ...form, ...patch });
+											for (const key of Object.keys(patch)) {
+												onClearError(key);
+											}
+										}}
+										errors={{
+											paymentType: errors.paymentType,
+											creditDays: errors.creditDays,
+											advancePercentage: errors.advancePercentage,
+										}}
 										readOnly={readOnly}
+										inputClassName={inputCls("paymentType")}
 									/>
 								</div>
-							</div>
-						</ErpFormSection>
+							</ErpFormSection>
+						)}
 
 						<ErpFormSection title='Bank Details'>
 							<div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2'>
@@ -2229,6 +2311,15 @@ export function validateCustomerForm(
 
 	if (form.creditLimit.trim() && isNaN(parseFloat(form.creditLimit)))
 		e.creditLimit = "Invalid amount";
+	Object.assign(e, validateDistributorCreditOverride(form));
+	Object.assign(
+		e,
+		validatePaymentTermsForm({
+			paymentType: form.paymentType,
+			creditDays: form.creditDays,
+			advancePercentage: form.advancePercentage,
+		}),
+	);
 	if (form.accountNumber && form.accountNumber !== form.confirmAccountNumber) {
 		e.confirmAccountNumber = "Account number mismatch";
 	}
@@ -2329,7 +2420,45 @@ export function formValuesToCustomer(
 			(sales ? `${sales.firstName} ${sales.lastName}`.trim() : ""),
 		creditLimit: parseFloat(form.creditLimit) || 0,
 		interestRate: 0,
-		paymentTerms: form.paymentTerms,
+		creditSource: form.creditSource || "direct",
+		linkedDistributorId: form.linkedDistributorId
+			? Number(form.linkedDistributorId)
+			: null,
+		linkedDistributorName: form.linkedDistributorName.trim() || null,
+		distributorScore: form.distributorScore
+			? Number.parseFloat(form.distributorScore)
+			: null,
+		distributorCategory: (form.distributorCategory as "A" | "B" | "C") || null,
+		recommendedCreditLimit: form.recommendedCreditLimit
+			? parseFloat(form.recommendedCreditLimit)
+			: null,
+		recommendedCreditDays: form.recommendedCreditDays
+			? Number.parseInt(form.recommendedCreditDays, 10)
+			: null,
+		recommendedCreditStatus: form.recommendedCreditStatus || null,
+		finalCreditStatus: form.finalCreditStatus || null,
+		creditOverrideReason: hasCreditOverrideFromRecommended(form)
+			? form.creditOverrideReason.trim()
+			: null,
+		creditAuditLog: (base as Customer).creditAuditLog ?? [],
+		...((): {
+			paymentType: PaymentType;
+			creditDays: number;
+			advancePercentage: number;
+			paymentTerms: string;
+		} => {
+			const structured = formValuesToStructured({
+				paymentType: form.paymentType,
+				creditDays: form.creditDays,
+				advancePercentage: form.advancePercentage,
+			})!;
+			return {
+				paymentType: structured.paymentType,
+				creditDays: structured.creditDays,
+				advancePercentage: structured.advancePercentage,
+				paymentTerms: paymentTermsToLegacy(structured),
+			};
+		})(),
 		bankName: form.bankName.trim(),
 		bankBranchAddress: form.branch.trim(),
 		bankAccountNo: form.accountNumber.trim(),

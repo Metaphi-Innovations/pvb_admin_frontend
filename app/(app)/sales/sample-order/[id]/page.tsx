@@ -49,10 +49,12 @@ import {
   formatApprovalStatus,
   resolveApprovalStatus,
   getProductById,
+  getSampleOrderDisplayRecipient,
+  SAMPLE_BILLING_DETAILS,
 } from "../orders-data";
 
 function orderStatusVariant(status: OrderStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
-  if (["approved", "confirmed", "delivered", "dispatched"].includes(status)) return "active";
+  if (["approved", "confirmed", "packed", "delivered", "dispatched"].includes(status)) return "active";
   if (status === "draft") return "draft";
   if (["rejected", "cancelled"].includes(status)) return "blocked";
   if (status === "pending_approval") return "neutral";
@@ -114,11 +116,11 @@ export default function ViewSalesOrderPage() {
   const cancellable = canCancelOrder(order);
   const piAllowed = canDownloadPI(order);
   const packingAllowed = canGeneratePackingList(order);
-  const showApprovalActions = approvalMode && canApproveOrder(order);
+  const pendingApproval = canApproveOrder(order);
+  const showApprovalActions = pendingApproval;
   const approvalStatus = resolveApprovalStatus(order);
 
-  const formatRupee = (n: number) =>
-    `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const formatRupee = (_n: number) => "₹0.00";
 
   const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
 
@@ -128,43 +130,43 @@ export default function ViewSalesOrderPage() {
       showToast(result.error, "error");
       return;
     }
-    router.push("/sales/sample-order?tab=approval&toast=approved");
+    router.push("/sales/sample-order?tab=pending_approval&toast=approved");
   };
 
   const handleRejectSuccess = (_updated: SalesOrder) => {
-    router.push("/sales/sample-order?tab=approval&toast=rejected");
+    router.push("/sales/sample-order?tab=pending_approval&toast=rejected");
   };
 
   const quickActions: RecordDetailSidebarProps["quickActions"] = [];
-  if (!approvalMode && editable) {
+  if (!showApprovalActions && editable) {
     quickActions.push({
       label: "Edit Order",
       icon: Edit,
       onClick: () => router.push(`/sales/sample-order/${order.id}/edit`),
     });
   }
-  if (!approvalMode && piAllowed) {
+  if (!showApprovalActions && piAllowed) {
     quickActions.push({
-      label: "Download PI",
+      label: "Sample Issue Note",
       icon: FileText,
       onClick: () => downloadProformaInvoice(order),
     });
   }
-  if (!approvalMode && packingAllowed) {
+  if (!showApprovalActions && packingAllowed) {
     quickActions.push({
       label: "Generate Packing List",
       icon: Package,
       onClick: () => setPackingOpen(true),
     });
   }
-  if (!approvalMode && splittable) {
+  if (!showApprovalActions && splittable) {
     quickActions.push({
       label: "Split Order",
       icon: Split,
       onClick: () => router.push(`/sales/sample-order/${order.id}/split`),
     });
   }
-  if (!approvalMode && cancellable) {
+  if (!showApprovalActions && cancellable) {
     quickActions.push({
       label: "Cancel Order",
       icon: Trash2,
@@ -197,12 +199,11 @@ export default function ViewSalesOrderPage() {
   const sidebar: RecordDetailSidebarProps = {
     quickActions,
     summary: [
-      { label: "Customer", value: `${order.customerCode} — ${order.customerName}` },
+      { label: "Salesperson", value: getSampleOrderDisplayRecipient(order) },
+      { label: "Billing", value: SAMPLE_BILLING_DETAILS.companyName },
       { label: "Order Date", value: order.orderDate },
-      { label: "Delivery Date", value: order.deliveryDate || "—" },
-      { label: "Salesman", value: order.salesManName || "—" },
-      { label: "Territory", value: order.territory || "—" },
-      { label: "Grand Total", value: formatRupee(order.totalAmount), highlight: true },
+      { label: "Warehouse", value: order.warehouseName || "—" },
+      { label: "Grand Total", value: formatRupee(0), highlight: true },
     ],
     approval: approvalItems,
   };
@@ -248,20 +249,20 @@ export default function ViewSalesOrderPage() {
   return (
     <>
       <RecordDetailPage
-        listHref={approvalMode ? "/sales/sample-order?tab=approval" : "/sales/sample-order"}
+        listHref={approvalMode ? "/sales/sample-order?tab=pending_approval" : "/sales/sample-order"}
         listLabel={approvalMode ? "Sample Order Approvals" : "Sample Orders"}
-        recordName={order.customerName}
+        recordName={getSampleOrderDisplayRecipient(order)}
         recordCode={order.soNumber}
         statusLabel={formatOrderStatus(order.status)}
         statusVariant={orderStatusVariant(order.status)}
-        metaItems={[{ label: order.territory || "—" }]}
+        metaItems={[{ label: (order.issuedToEmployeeRole ?? order.territory) || "—" }]}
         kpis={[
           {
             icon: IndianRupee,
             iconBg: "bg-emerald-100",
             iconColor: "text-emerald-700",
-            value: formatRupee(order.totalAmount),
-            label: "Total Amount",
+            value: formatRupee(0),
+            label: "Order Value",
           },
           {
             icon: ListOrdered,
@@ -287,17 +288,23 @@ export default function ViewSalesOrderPage() {
       >
         {activeTab === "overview" && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <RecordSectionCard title="Order Details" accent="blue">
-              <RecordKvRow label="Order Number" value={order.soNumber} mono />
+            <RecordSectionCard title="Sample Order Details" accent="blue">
+              <RecordKvRow label="Sample Order No." value={order.soNumber} mono />
               <RecordKvRow label="Order Date" value={order.orderDate} />
-              <RecordKvRow label="Delivery Date" value={order.deliveryDate} />
-              <RecordKvRow label="Customer" value={`${order.customerCode} — ${order.customerName}`} />
-              <RecordKvRow label="Salesman ID" value={order.salesManId ?? "—"} />
-              <RecordKvRow label="Salesman" value={order.salesManName} />
-              <RecordKvRow label="Territory" value={order.territory} />
+              <RecordKvRow label="Salesperson" value={order.salesManName} />
+              <RecordKvRow label="Source Warehouse" value={order.warehouseName || "—"} />
+              <RecordKvRow label="Remarks" value={order.remarks || "—"} />
               <RecordKvRow label="Order Status" value={formatOrderStatus(order.status)} />
               <RecordKvRow label="Approval Status" value={formatApprovalStatus(approvalStatus)} />
-              <RecordKvRow label="Total Amount" value={formatRupee(order.totalAmount)} amount isLast />
+              <RecordKvRow label="Total Amount" value={formatRupee(0)} amount isLast />
+            </RecordSectionCard>
+
+            <RecordSectionCard title="Billing" accent="slate">
+              <RecordKvRow label="Company" value={SAMPLE_BILLING_DETAILS.companyName} />
+              <RecordKvRow label="Address" value={SAMPLE_BILLING_DETAILS.address} />
+              <RecordKvRow label="GSTIN" value={SAMPLE_BILLING_DETAILS.gstin} mono />
+              <RecordKvRow label="Mobile" value={SAMPLE_BILLING_DETAILS.mobile} />
+              <RecordKvRow label="Contact No." value={SAMPLE_BILLING_DETAILS.contactNo} isLast />
             </RecordSectionCard>
 
             <div className="space-y-4">
@@ -375,18 +382,16 @@ export default function ViewSalesOrderPage() {
                     <th className="px-4 py-2.5 text-left text-xs font-semibold">Product</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Stock</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Qty</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold">Unit Price</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold w-20">Discount (%)</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">GST % / Amt</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold w-16">Unit</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold">Batch</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold">Expiry</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold">Rate</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">GST %</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold">Line Total</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {order.lineItems.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-8 text-xs text-center text-muted-foreground">No product lines</td>
-                    </tr>
-                  ) : order.lineItems.map(line => {
+                  {order.lineItems.map(line => {
                     const product = line.productId ? getProductById(line.productId) : undefined;
                     return (
                       <tr key={line.id} className="border-b border-border/60">
@@ -396,15 +401,12 @@ export default function ViewSalesOrderPage() {
                         </td>
                         <td className="px-4 py-2 text-xs text-right tabular-nums">{line.productId ? line.availableStock : "—"}</td>
                         <td className="px-4 py-2 text-xs text-right tabular-nums">{line.quantity}</td>
-                        <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(line.unitPrice)}</td>
-                        <td className="px-4 py-2 text-xs text-right tabular-nums">{line.discount}%</td>
-                        <td className="px-4 py-2 text-xs text-right tabular-nums">
-                          <div className="flex flex-col items-end">
-                            <span className="text-[10px] text-muted-foreground font-semibold">{product?.gstRate || "0%"}</span>
-                            <span>{formatRupee(line.gstAmount)}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-2 text-xs font-semibold text-right tabular-nums">{formatRupee(line.lineTotal)}</td>
+                        <td className="px-4 py-2 text-xs">{line.unit || product?.uom || "—"}</td>
+                        <td className="px-4 py-2 text-xs font-mono text-muted-foreground">{line.batchNumber || "—"}</td>
+                        <td className="px-4 py-2 text-xs text-muted-foreground">{line.expiryDate || "—"}</td>
+                        <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(0)}</td>
+                        <td className="px-4 py-2 text-xs text-right tabular-nums">{product?.gstRate || "0%"}</td>
+                        <td className="px-4 py-2 text-xs font-semibold text-right tabular-nums">{formatRupee(0)}</td>
                       </tr>
                     );
                   })}
@@ -413,9 +415,7 @@ export default function ViewSalesOrderPage() {
             </div>
             <div className="flex justify-end px-4 py-3 border-t border-border bg-muted/20">
               <div className="w-full max-w-xs space-y-1 text-xs">
-                <div className="flex justify-between"><span className="text-muted-foreground">Net Total</span><span>{formatRupee(totals.netTotal)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Total GST</span><span>{formatRupee(totals.totalGst)}</span></div>
-                <div className="flex justify-between font-bold text-brand-700"><span>Grand Total</span><span>{formatRupee(totals.grandTotal)}</span></div>
+                <div className="flex justify-between font-bold text-brand-700"><span>Grand Total</span><span>{formatRupee(0)}</span></div>
               </div>
             </div>
           </div>
