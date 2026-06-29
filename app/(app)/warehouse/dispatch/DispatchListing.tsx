@@ -21,14 +21,8 @@ import {
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { DispatchRecord, DeliveryDetails, SalesReturnRecord, SalesReturnProduct } from "./types";
+import { DispatchRecord, DeliveryDetails } from "./types";
 import { markAsDelivered, revertDispatch } from "./services";
-import {
-  getSalesReturnRecords,
-  saveSalesReturnRecords,
-  getDispatchRecords,
-  saveDispatchRecords,
-} from "./mock-data";
 import {
   CUSTOMER_OPTIONS,
   DELIVERY_STATUS_OPTIONS,
@@ -50,11 +44,10 @@ import { downloadProformaInvoice } from "@/app/(app)/sales/sample-order/pi-docum
 
 interface DispatchListingProps {
   rawDispatches: DispatchRecord[];
-  activeTab?: string;
   reload: () => void;
 }
 
-export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchListingProps) {
+export function DispatchListing({ rawDispatches, reload }: DispatchListingProps) {
   const router = useRouter();
 
   // Table state for Dispatches
@@ -62,33 +55,13 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [subTab, setSubTab] = useState<OrderTypeFilterTab>("all");
-
-  // Table state for Sales Returns
-  const [returnFilters, setReturnFilters] = useState<FilterState>({});
-  const [returnSort, setReturnSort] = useState<SortState>({ key: "", direction: "none" });
-  const [returnPage, setReturnPage] = useState(1);
-  const [returnPageSize, setReturnPageSize] = useState(10);
-  const [salesReturns, setSalesReturns] = useState<SalesReturnRecord[]>([]);
+  const [subTab, setSubTab] = useState<"sales_order" | "sample_order" | "stock_transfer">("sales_order");
 
   // Modal states
   const [revertTarget, setRevertTarget] = useState<DispatchRecord | null>(null);
   const [challanTarget, setChallanTarget] = useState<DispatchRecord | null>(null);
   const [deliveryTarget, setDeliveryTarget] = useState<DispatchRecord | null>(null);
   const [deliveryForm, setDeliveryForm] = useState<DeliveryDetails>({ deliveryDate: "", receiverName: "", remarks: "" });
-
-  // Sales Return Form states
-  const [returnSalesTarget, setReturnSalesTarget] = useState<DispatchRecord | null>(null);
-  const [checkedProducts, setCheckedProducts] = useState<Record<string, boolean>>({});
-  const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({});
-  const [returnRemarks, setReturnRemarks] = useState("");
-  const [viewReturnTarget, setViewReturnTarget] = useState<SalesReturnRecord | null>(null);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setSalesReturns(getSalesReturnRecords());
-    }
-  }, [activeTab]);
 
   useEffect(() => {
     setPage(1);
@@ -102,7 +75,13 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
         salesOrderNo: d.salesOrderNumber,
         source_document_no: d.source_document_no,
       });
-      return matchesOrderTypeFilter(type, subTab);
+      const typeFilter: OrderTypeFilterTab =
+        subTab === "sales_order"
+          ? "sales"
+          : subTab === "sample_order"
+            ? "sample"
+            : "stock_transfer";
+      return matchesOrderTypeFilter(type, typeFilter);
     });
   }, [rawDispatches, subTab]);
 
@@ -165,45 +144,17 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
     return processed.slice(start, start + pageSize);
   }, [processed, page, pageSize]);
 
-  // Sales Returns table filtering & sorting
-  const returnProcessed = useMemo(() => {
-    let result = [...salesReturns];
-    Object.keys(returnFilters).forEach(key => {
-      const val = returnFilters[key];
-      if (!val) return;
-      if (key === "search") {
-        const q = (val as string).toLowerCase();
-        result = result.filter(r =>
-          r.returnNumber.toLowerCase().includes(q) ||
-          r.dispatchNumber.toLowerCase().includes(q) ||
-          r.salesOrderNumber.toLowerCase().includes(q) ||
-          r.customer.toLowerCase().includes(q)
-        );
-      }
-    });
-    if (returnSort.key && returnSort.direction !== "none") {
-      result.sort((a, b) => {
-        const valA = String(a[returnSort.key as keyof SalesReturnRecord] || "");
-        const valB = String(b[returnSort.key as keyof SalesReturnRecord] || "");
-        return returnSort.direction === "asc" ? valA.localeCompare(valB) : valB.localeCompare(valA);
-      });
-    }
-    return result;
-  }, [salesReturns, returnFilters, returnSort]);
 
-  const returnPaginated = useMemo(() => {
-    const start = (returnPage - 1) * returnPageSize;
-    return returnProcessed.slice(start, start + returnPageSize);
-  }, [returnProcessed, returnPage, returnPageSize]);
 
   const partyHeader =
-    subTab === "sample"
+    subTab === "sample_order"
       ? "Issued To Employee"
-      : subTab === "all"
-        ? "Customer / Issued To / Target"
+      : subTab === "stock_transfer"
+        ? "Target Warehouse"
         : "Customer";
 
-  const columns = useMemo(() => {
+  // Columns
+  const salesOrderColumns = useMemo(() => {
     return [
       {
         key: "orderType",
@@ -364,54 +315,7 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
     ] as ColumnConfig<DispatchRecord>[];
   }, [partyHeader]);
 
-  const returnColumns: ColumnConfig<SalesReturnRecord>[] = [
-    {
-      key: "returnNumber",
-      header: "Return No",
-      sortable: true,
-      width: "135px",
-      render: (val) => <span className="font-mono text-xs font-semibold text-brand-700">{val}</span>
-    },
-    {
-      key: "dispatchNumber",
-      header: "Dispatch No",
-      sortable: true,
-      width: "135px",
-      render: (val) => <span className="font-mono text-xs">{val}</span>
-    },
-    {
-      key: "salesOrderNumber",
-      header: "Sales Order No",
-      sortable: true,
-      width: "140px",
-      render: (val) => <span className="font-mono text-xs">{val}</span>
-    },
-    { key: "customer", header: "Customer", sortable: true, width: "160px" },
-    { key: "returnDate", header: "Return Date", sortable: true, width: "135px" },
-    {
-      key: "products",
-      header: "Returned Products",
-      width: "250px",
-      render: (val, row) => (
-        <div className="space-y-0.5 text-xs">
-          {row.products.map((p, idx) => (
-            <div key={idx} className="text-foreground font-medium">
-              {p.product} <span className="text-muted-foreground font-semibold">({p.returnQty} / {p.dispatchQty})</span>
-            </div>
-          ))}
-        </div>
-      )
-    }
-  ];
-
-  const returnActions: ActionItemConfig<SalesReturnRecord>[] = [
-    {
-      label: "View",
-      action: "view",
-      icon: Eye,
-      onClick: (row) => setViewReturnTarget(row),
-    },
-  ];
+  const columns = salesOrderColumns;
 
   // Actions
   const actions: ActionItemConfig<DispatchRecord>[] = [
@@ -475,93 +379,7 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
       },
       hide: (row) => row.deliveryStatus === "Delivered" || row.deliveryStatus === "Returned" || row.deliveryStatus === "Cancelled",
     },
-    {
-      label: "Return Sales",
-      action: "return_sales",
-      icon: RotateCcw,
-      onClick: (row) => openReturnSales(row),
-      hide: (row) => {
-        const isSample =
-          resolveWarehouseOrderType({
-            sourceDocumentType: row.sourceDocumentType,
-            source_type: row.source_type,
-            salesOrderNo: row.salesOrderNumber,
-            source_document_no: row.source_document_no,
-          }) === "sample_order";
-        return row.deliveryStatus !== "Delivered" || isSample;
-      },
-    },
   ];
-
-  const openReturnSales = (row: DispatchRecord) => {
-    setReturnSalesTarget(row);
-    setCheckedProducts({});
-    setReturnQuantities(
-      row.products.reduce((acc, p) => ({ ...acc, [p.sku]: String(p.dispatchQty) }), {})
-    );
-    setReturnRemarks("");
-  };
-
-  const handleReturnSalesSave = () => {
-    if (!returnSalesTarget) return;
-
-    const productsToReturn = returnSalesTarget.products
-      .filter((p) => checkedProducts[p.sku])
-      .map((p) => {
-        const returnQty = parseFloat(returnQuantities[p.sku]) || 0;
-        return {
-          product: p.product,
-          sku: p.sku,
-          dispatchQty: p.dispatchQty,
-          returnQty,
-        };
-      });
-
-    if (productsToReturn.length === 0) {
-      alert("Please select at least one product to return.");
-      return;
-    }
-
-    for (const p of productsToReturn) {
-      if (p.returnQty <= 0) {
-        alert(`Please enter a valid return quantity for ${p.product}.`);
-        return;
-      }
-      if (p.returnQty > p.dispatchQty) {
-        alert(`Return quantity for ${p.product} cannot exceed dispatched quantity of ${p.dispatchQty}.`);
-        return;
-      }
-    }
-
-    const existingReturns = getSalesReturnRecords();
-    const returnNumber = `RET-2026-${String(existingReturns.length + 1).padStart(3, "0")}`;
-
-    const newReturn: SalesReturnRecord = {
-      id: `ret-${Date.now()}`,
-      returnNumber,
-      dispatchNumber: returnSalesTarget.dispatchNumber,
-      salesOrderNumber: returnSalesTarget.salesOrderNumber,
-      customer: returnSalesTarget.customer,
-      returnDate: new Date().toISOString().split("T")[0],
-      warehouse: returnSalesTarget.warehouse,
-      products: productsToReturn,
-      remarks: returnRemarks,
-    };
-
-    const updatedReturns = [...existingReturns, newReturn];
-    saveSalesReturnRecords(updatedReturns);
-    setSalesReturns(updatedReturns);
-
-    const allDispatches = getDispatchRecords();
-    const dIdx = allDispatches.findIndex((d) => d.id === returnSalesTarget.id);
-    if (dIdx !== -1) {
-      allDispatches[dIdx].deliveryStatus = "Returned";
-      saveDispatchRecords(allDispatches);
-    }
-
-    setReturnSalesTarget(null);
-    reload();
-  };
 
   const handleRevertConfirm = () => {
     if (!revertTarget) return;
@@ -583,51 +401,30 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
 
   return (
     <div className="space-y-4">
+      <Tabs value={subTab} onValueChange={(val: any) => setSubTab(val)} className="w-full">
+        <TabsList>
+          <TabsTrigger value="sales_order" className="text-xs">Sales Order</TabsTrigger>
+          <TabsTrigger value="sample_order" className="text-xs">Sample Order</TabsTrigger>
+          <TabsTrigger value="stock_transfer" className="text-xs">Stock Transfer</TabsTrigger>
+        </TabsList>
+      </Tabs>
 
-      {activeTab === "dispatch" && (
-        <Tabs value={subTab} onValueChange={(val) => setSubTab(val as OrderTypeFilterTab)} className="w-full">
-          <TabsList>
-            <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
-            <TabsTrigger value="sales" className="text-xs">Sales</TabsTrigger>
-            <TabsTrigger value="sample" className="text-xs">Sample</TabsTrigger>
-            <TabsTrigger value="stock_transfer" className="text-xs">Stock Transfer</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      )}
-
-      {activeTab === "dispatch" ? (
-        <MasterListing<DispatchRecord>
-          columns={columns}
-          data={paginated}
-          totalRecords={processed.length}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-          onSortChange={setSort}
-          onFilterChange={setFilters}
-          actions={actions}
-          onAdd={() => router.push("/warehouse/dispatch/create")}
-          addLabel="Create Dispatch"
-          emptyMessage=""
-          searchPlaceholder="Search dispatch..."
-        />
-      ) : (
-        <MasterListing<SalesReturnRecord>
-          columns={returnColumns}
-          data={returnPaginated}
-          totalRecords={returnProcessed.length}
-          page={returnPage}
-          pageSize={returnPageSize}
-          onPageChange={setReturnPage}
-          onPageSizeChange={setReturnPageSize}
-          onSortChange={setReturnSort}
-          onFilterChange={setReturnFilters}
-          actions={returnActions}
-          emptyMessage=""
-          searchPlaceholder="Search return number, dispatch number, customer..."
-        />
-      )}
+      <MasterListing<DispatchRecord>
+        columns={columns}
+        data={paginated}
+        totalRecords={processed.length}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+        onSortChange={setSort}
+        onFilterChange={setFilters}
+        actions={actions}
+        onAdd={() => router.push("/warehouse/dispatch/create")}
+        addLabel="Create Dispatch"
+        emptyMessage="dispatch records"
+        searchPlaceholder="Search dispatch..."
+      />
 
       {/* ── REVERT CONFIRMATION DIALOG ── */}
       <Dialog open={!!revertTarget} onOpenChange={() => setRevertTarget(null)}>
@@ -786,172 +583,6 @@ export function DispatchListing({ rawDispatches, activeTab, reload }: DispatchLi
               onClick={handleDeliveryConfirm}
             >
               <CheckCircle2 className="w-3.5 h-3.5" /> Confirm Delivery
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── RETURN SALES DIALOG ── */}
-      <Dialog open={!!returnSalesTarget} onOpenChange={() => setReturnSalesTarget(null)}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <div className="w-8 h-8 rounded-lg bg-red-50 border border-red-200 flex items-center justify-center">
-                <RotateCcw className="w-4 h-4 text-red-600" />
-              </div>
-              Process Sales Return
-            </DialogTitle>
-          </DialogHeader>
-          {returnSalesTarget && (
-            <div className="space-y-4 py-1 text-xs">
-              <div className="bg-slate-50 p-3 rounded-lg border border-border space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[9px]">Dispatch No</p>
-                    <p className="font-bold font-mono">{returnSalesTarget.dispatchNumber}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[9px]">Sales Order No</p>
-                    <p className="font-bold font-mono">{returnSalesTarget.salesOrderNumber}</p>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[9px]">Customer</p>
-                  <p className="font-bold">{returnSalesTarget.customer}</p>
-                </div>
-              </div>
-
-              <div className="space-y-2.5">
-                <p className="font-semibold text-foreground border-b pb-1 text-xs">Select Products & Quantities to Return</p>
-                <div className="space-y-3">
-                  {returnSalesTarget.products.map((p) => {
-                    const isChecked = !!checkedProducts[p.sku];
-                    return (
-                      <div key={p.sku} className="flex items-center justify-between gap-3 p-2 rounded-lg border bg-white shadow-sm">
-                        <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 rounded accent-brand-600 cursor-pointer"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              setCheckedProducts((prev) => ({ ...prev, [p.sku]: e.target.checked }));
-                            }}
-                          />
-                          <div className="min-w-0">
-                            <p className="font-semibold text-foreground truncate">{p.product}</p>
-                            <p className="text-[10px] text-muted-foreground font-mono">SKU: {p.sku} | Dispatch Qty: {p.dispatchQty}</p>
-                          </div>
-                        </div>
-
-                        {isChecked && (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] text-muted-foreground whitespace-nowrap">Return Qty:</span>
-                            <Input
-                              type="number"
-                              min={1}
-                              max={p.dispatchQty}
-                              value={returnQuantities[p.sku] || ""}
-                              onChange={(e) => setReturnQuantities((prev) => ({ ...prev, [p.sku]: e.target.value }))}
-                              className="h-8 w-20 text-xs text-center"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[9px]">Return Remarks</p>
-                <textarea
-                  value={returnRemarks}
-                  onChange={(e) => setReturnRemarks(e.target.value)}
-                  className="w-full h-16 text-xs border border-input rounded-md px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  placeholder="Reason for return..."
-                />
-              </div>
-            </div>
-          )}
-          <DialogFooter className="flex gap-2 justify-end pt-2 border-t">
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setReturnSalesTarget(null)}>
-              Cancel
-            </Button>
-            <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white gap-1" onClick={handleReturnSalesSave}>
-              <RotateCcw className="w-3.5 h-3.5" /> Save Return
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      {/* ── VIEW SALES RETURN DIALOG ── */}
-      <Dialog open={!!viewReturnTarget} onOpenChange={() => setViewReturnTarget(null)}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <div className="w-8 h-8 rounded-lg bg-brand-50 border border-brand-200 flex items-center justify-center">
-                <Eye className="w-4 h-4 text-brand-600" />
-              </div>
-              Sales Return Details
-            </DialogTitle>
-          </DialogHeader>
-          {viewReturnTarget && (
-            <div className="space-y-4 py-1 text-xs">
-              <div className="bg-slate-50 p-3 rounded-lg border border-border space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[9px]">Return No</p>
-                    <p className="font-bold font-mono text-brand-700">{viewReturnTarget.returnNumber}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[9px]">Return Date</p>
-                    <p className="font-bold">{viewReturnTarget.returnDate}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2 border-t pt-2 border-slate-200">
-                  <div>
-                    <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[9px]">Dispatch No</p>
-                    <p className="font-bold font-mono">{viewReturnTarget.dispatchNumber}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[9px]">Sales Order No</p>
-                    <p className="font-bold font-mono">{viewReturnTarget.salesOrderNumber}</p>
-                  </div>
-                </div>
-                <div className="border-t pt-2 border-slate-200">
-                  <p className="text-muted-foreground font-semibold uppercase tracking-wider text-[9px]">Customer</p>
-                  <p className="font-bold">{viewReturnTarget.customer}</p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <p className="font-semibold text-foreground border-b pb-1 text-xs">Returned Products</p>
-                <div className="space-y-2">
-                  {viewReturnTarget.products.map((p, idx) => (
-                    <div key={idx} className="flex justify-between items-center p-2 rounded-lg border bg-white shadow-sm">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-foreground truncate">{p.product}</p>
-                        <p className="text-[10px] text-muted-foreground font-mono">SKU: {p.sku}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold text-red-600">{p.returnQty} Qty Returned</p>
-                        <p className="text-[10px] text-muted-foreground">Dispatched Qty: {p.dispatchQty}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {viewReturnTarget.remarks && (
-                <div className="space-y-1 bg-amber-50/50 p-2.5 rounded-lg border border-amber-100">
-                  <p className="text-amber-800 font-semibold uppercase tracking-wider text-[9px]">Return Remarks</p>
-                  <p className="text-muted-foreground italic text-xs">"{viewReturnTarget.remarks}"</p>
-                </div>
-              )}
-            </div>
-          )}
-          <DialogFooter className="pt-2 border-t">
-            <Button variant="outline" size="sm" className="h-8 text-xs w-full" onClick={() => setViewReturnTarget(null)}>
-              Close
             </Button>
           </DialogFooter>
         </DialogContent>

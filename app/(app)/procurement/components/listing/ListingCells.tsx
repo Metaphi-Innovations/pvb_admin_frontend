@@ -21,9 +21,9 @@ export function StackedCell({
 }) {
   return (
     <div className={`py-2 ${className}`}>
-      <div className="text-[13px] text-[#0A1628] leading-tight">{primary}</div>
+      <div className="text-xs text-foreground leading-tight">{primary}</div>
       {secondary != null && secondary !== "" && (
-        <div className="text-[11px] text-[#6B80A0] mt-0.5 leading-tight">{secondary}</div>
+        <div className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{secondary}</div>
       )}
     </div>
   );

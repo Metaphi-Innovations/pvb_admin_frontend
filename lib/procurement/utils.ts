@@ -11,10 +11,14 @@ export function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+export type PODiscountType = "percentage" | "flat";
+
 export interface LineTaxInput {
   orderedQty: number;
   unitPrice: number;
+  discountType?: PODiscountType;
   discountPct: number;
+  discountFlatAmount?: number;
   cgstPct: number;
   sgstPct: number;
   igstPct: number;
@@ -33,7 +37,10 @@ export interface LineTaxResult {
 
 export function calcLineAmounts(input: LineTaxInput): LineTaxResult {
   const grossAmount = round2(input.orderedQty * input.unitPrice);
-  const discountAmount = round2(grossAmount * (input.discountPct / 100));
+  const discountAmount =
+    input.discountType === "flat"
+      ? round2(Math.min(Number(input.discountFlatAmount) || 0, grossAmount))
+      : round2(grossAmount * ((Number(input.discountPct) || 0) / 100));
   const taxableValue = round2(grossAmount - discountAmount);
   const cgstAmount = round2(taxableValue * (input.cgstPct / 100));
   const sgstAmount = round2(taxableValue * (input.sgstPct / 100));
