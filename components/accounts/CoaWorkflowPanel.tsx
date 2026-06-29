@@ -86,7 +86,7 @@ export function CoaWorkflowPanel({
   return (
     <div className="flex-shrink-0 px-6 py-4 border-b border-border/40 bg-brand-50/20">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-800 mb-3">
-        Vendor Ledger — {context.ledgerName}
+        Supplier Ledger — {context.ledgerName}
       </p>
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 max-w-5xl">
         <SummaryField

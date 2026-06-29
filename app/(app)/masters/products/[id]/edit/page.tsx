@@ -52,7 +52,11 @@ export default function EditProductPage() {
     const validation = validateProductForm(form);
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
-      setToast({ msg: "Please fix the errors before saving.", type: "error" });
+      const firstError = Object.values(validation)[0];
+      setToast({
+        msg: firstError ?? "Please fix the errors before saving.",
+        type: "error",
+      });
       setTimeout(() => setToast(null), 3200);
       return;
     }
@@ -85,19 +89,20 @@ export default function EditProductPage() {
   return (
     <FormContainer
       title="Edit Product"
-      description={`Masters → Product Master → ${form.sku || form.productName}`}
+      description={`Masters → Product Master → ${form.productCode || form.productName}`}
       onBack={() => router.back()}
       actions={
         <div className="flex items-center gap-2">
-          {form.sku && (
+          {form.productCode && (
             <span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
-              {form.sku}
+              {form.productCode}
             </span>
           )}
           <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
             Discard
           </Button>
           <Button
+            type="button"
             className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
           >

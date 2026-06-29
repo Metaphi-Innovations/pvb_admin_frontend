@@ -61,6 +61,7 @@ import { DEMO_BANK_SPECS } from "@/lib/accounts/banking-demo-spec";
 import { seedBankingDemoData } from "@/lib/accounts/banking-demo-seed";
 import { createLedgerQuick } from "@/app/(app)/accounts/bank-reconciliation/bank-reconciliation-data";
 import { seedAccountsDemoBankReconciliation } from "@/app/(app)/accounts/bank-reconciliation/bank-reconciliation-demo";
+import { CREDIT_LIMIT_DEMO_INVOICE_SPECS } from "@/lib/sales/credit-limit-demo-seed";
 import {
   assignDemoOpeningBalances,
   seedDemoAccountingVouchers,
@@ -71,7 +72,7 @@ import { seedPayablesDemoData } from "@/lib/accounts/payables-demo-seed";
 import type { CreditNoteRecord } from "@/app/(app)/accounts/credit-notes/credit-notes-data";
 import { findErpPartyLink } from "@/lib/accounts/erp-party-links";
 
-export const ACCOUNTS_DEMO_SEED_VERSION = "2026-jun-demo-v14";
+export const ACCOUNTS_DEMO_SEED_VERSION = "2026-jun-demo-v15";
 const VERSION_KEY = "ds_accounts_demo_seed_version";
 
 // ── Demo master specs (5 each) ───────────────────────────────────────────────
@@ -322,7 +323,7 @@ const COA_LEDGER_SEEDS: Array<{ subGroup: string; name: string; accountType: Acc
   { subGroup: "Inventory / Stock-in-Hand", name: "Seed Inventory", accountType: "Asset" },
 
   { subGroup: "Loans & Advances Given", name: "Staff Advance - Sales Team", accountType: "Asset" },
-  { subGroup: "Loans & Advances Given", name: "Vendor Advance - AgroChem Traders", accountType: "Asset" },
+  { subGroup: "Loans & Advances Given", name: "Supplier Advance - AgroChem Traders", accountType: "Asset" },
   { subGroup: "Loans & Advances Given", name: "Advance to Contractors", accountType: "Asset" },
   { subGroup: "Loans & Advances Given", name: "Security Deposit - Warehouse Landlord", accountType: "Asset" },
 
@@ -429,7 +430,7 @@ const COA_LEDGER_SEEDS: Array<{ subGroup: string; name: string; accountType: Acc
   { subGroup: "Expenses Payable", name: "Audit Fees Payable", accountType: "Liability" },
   { subGroup: "Expenses Payable", name: "Electricity Charges Payable", accountType: "Liability" },
   { subGroup: "Expenses Payable", name: "Rent Payable - Branch", accountType: "Liability" },
-  { subGroup: "Expenses Payable", name: "Vendor Expenses Payable", accountType: "Liability" },
+  { subGroup: "Expenses Payable", name: "Supplier Expenses Payable", accountType: "Liability" },
 
   { subGroup: "Advance Received from Customers", name: "Advance from ABC Agro Distributor", accountType: "Liability" },
   { subGroup: "Advance Received from Customers", name: "Advance from Green Harvest Agro", accountType: "Liability" },
@@ -692,7 +693,20 @@ const COA_LEDGER_SEEDS: Array<{ subGroup: string; name: string; accountType: Acc
 ];
 
 /** 12 posted sales invoices — mixed payment status for receivables demo */
-const DEMO_SALES_INVOICES = [
+type DemoSalesInvoiceSpec = {
+  id: number;
+  invoiceNo: string;
+  customerId: number;
+  invoiceDate: string;
+  dueDate: string;
+  subtotal: number;
+  taxAmount: number;
+  grandTotal: number;
+  amountReceived: number;
+  amountCredited?: number;
+};
+
+const DEMO_SALES_INVOICES: DemoSalesInvoiceSpec[] = [
   {
     id: 1,
     invoiceNo: "INV-2026-001",
@@ -1169,7 +1183,7 @@ function addDays(dateStr: string, days: number): string {
 }
 
 function buildSalesInvoice(
-  spec: (typeof DEMO_SALES_INVOICES)[number],
+  spec: DemoSalesInvoiceSpec,
   customerName: string,
   customerLedgerId: number | null = null,
 ): InvoiceRecord {
@@ -1205,7 +1219,7 @@ function buildSalesInvoice(
         ]
       : [];
 
-  const amountCredited = "amountCredited" in spec ? spec.amountCredited : 0;
+  const amountCredited = spec.amountCredited ?? 0;
   const dueDate =
     "dueDate" in spec && spec.dueDate
       ? spec.dueDate
@@ -1402,7 +1416,7 @@ function seedVendorPayment(
   const voucher = createVoucher("payment", {
     date,
     referenceNo,
-    narration: `Vendor payment — ${vendorName} (${billNo})`,
+    narration: `Supplier payment — ${vendorName} (${billNo})`,
     status: "posted",
     lines: [
       {
@@ -1552,10 +1566,16 @@ export function seedAccountsDemoData(force = false): void {
     seedDemoMasters();
 
     const customers = loadCustomers();
-    const demoInvoiceIds = new Set<number>(DEMO_SALES_INVOICES.map((spec) => spec.id));
+    const allDemoInvoiceSpecs: DemoSalesInvoiceSpec[] = [
+      ...DEMO_SALES_INVOICES,
+      ...CREDIT_LIMIT_DEMO_INVOICE_SPECS,
+    ];
+    const demoInvoiceIds = new Set<number>(
+      allDemoInvoiceSpecs.map((spec) => spec.id),
+    );
     const preservedInvoices = loadInvoices().filter((inv) => !demoInvoiceIds.has(inv.id));
 
-    const invoices = DEMO_SALES_INVOICES.map((spec) => {
+    const invoices = allDemoInvoiceSpecs.map((spec) => {
       const customer = customers.find((c) => c.id === spec.customerId);
       const link = customer ? findErpPartyLink("customer_master", customer.id) : undefined;
       return buildSalesInvoice(

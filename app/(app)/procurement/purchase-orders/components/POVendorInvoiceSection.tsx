@@ -1,8 +1,9 @@
 "use client";
 
 import { Download, Eye, FileText, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { RecordSectionCard } from "@/components/record-detail";
 import { formatCurrency } from "@/lib/procurement/utils";
-import { ProcButton, ProcCardSection } from "../../design/proc-design";
 import { formatListingDate } from "../../components/listing/ListingCells";
 import type { PurchaseOrder } from "../po-data";
 import { canUploadPOInvoice, getPOVendorInvoice } from "../po-invoice-utils";
@@ -25,20 +26,20 @@ export function POVendorInvoiceSection({
     if (!canUploadPOInvoice(po)) return null;
     return (
       <div id="vendor-invoice">
-        <ProcCardSection accent="green" title="Vendor Invoice" icon={<FileText className="w-3.5 h-3.5 text-[#1E9E61]" />}>
-          <p className="text-[12px] text-[#6B80A0] mb-3">No vendor invoice uploaded yet.</p>
-          <ProcButton variant="primary" size="sm" onClick={onUpload}>
+        <RecordSectionCard title="Supplier Invoice" icon={FileText} accent="green">
+          <p className="text-xs text-muted-foreground mb-3">No supplier invoice uploaded yet.</p>
+          <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={onUpload}>
             Upload Invoice
-          </ProcButton>
-        </ProcCardSection>
+          </Button>
+        </RecordSectionCard>
       </div>
     );
   }
 
   const uploadedDate = invoice.updatedAt.slice(0, 10);
   const fields = [
-    { label: "Vendor Invoice No.", value: invoice.vendorInvoiceNo },
-    { label: "Vendor Invoice Date", value: formatListingDate(invoice.invoiceDate) },
+    { label: "Supplier Invoice No.", value: invoice.vendorInvoiceNo },
+    { label: "Supplier Invoice Date", value: formatListingDate(invoice.invoiceDate) },
     { label: "Invoice Amount", value: formatCurrency(invoice.subtotal) },
     { label: "GST Amount", value: formatCurrency(invoice.taxAmount) },
     { label: "Total Amount", value: formatCurrency(invoice.grandTotal) },
@@ -49,24 +50,25 @@ export function POVendorInvoiceSection({
 
   return (
     <div id="vendor-invoice">
-      <ProcCardSection accent="green" title="Vendor Invoice" icon={<FileText className="w-3.5 h-3.5 text-[#1E9E61]" />}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-[13px]">
+      <RecordSectionCard title="Supplier Invoice" icon={FileText} accent="green">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-xs">
           {fields.map((f) => (
             <div key={f.label}>
-              <p className="text-[11px] font-semibold text-[#6B80A0] mb-0.5">{f.label}</p>
-              <p className="text-[#0A1628]">{f.value}</p>
+              <p className="text-[11px] font-medium text-muted-foreground mb-0.5">{f.label}</p>
+              <p className="text-foreground">{f.value}</p>
             </div>
           ))}
         </div>
-        <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-[#DDE3EF]">
+        <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-border">
           {invoice.attachment?.dataUrl && (
             <>
-              <ProcButton variant="outline" size="sm" onClick={() => window.open(invoice.attachment!.dataUrl, "_blank")}>
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => window.open(invoice.attachment!.dataUrl, "_blank")}>
                 <Eye className="w-3.5 h-3.5" /> View File
-              </ProcButton>
-              <ProcButton
+              </Button>
+              <Button
                 variant="outline"
                 size="sm"
+                className="h-8 text-xs gap-1.5"
                 onClick={() => {
                   const a = document.createElement("a");
                   a.href = invoice.attachment!.dataUrl!;
@@ -75,16 +77,16 @@ export function POVendorInvoiceSection({
                 }}
               >
                 <Download className="w-3.5 h-3.5" /> Download File
-              </ProcButton>
+              </Button>
             </>
           )}
           {canUploadPOInvoice(po) && (
-            <ProcButton variant="outline" size="sm" onClick={onReplace}>
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={onReplace}>
               <RefreshCw className="w-3.5 h-3.5" /> Replace Invoice
-            </ProcButton>
+            </Button>
           )}
         </div>
-      </ProcCardSection>
+      </RecordSectionCard>
     </div>
   );
 }
@@ -108,8 +110,8 @@ export function InvoiceListingCell({
           <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
             Invoice Uploaded
           </span>
-          <p className="text-[11px] font-medium text-[#0A1628] leading-tight">{info.vendorInvoiceNo}</p>
-          <p className="text-[10px] text-[#6B80A0]">{formatListingDate(info.invoiceDate)}</p>
+          <p className="text-[11px] font-medium text-foreground leading-tight">{info.vendorInvoiceNo}</p>
+          <p className="text-[10px] text-muted-foreground">{formatListingDate(info.invoiceDate)}</p>
           <button type="button" className="text-[10px] text-brand-600 hover:underline inline-flex items-center gap-0.5" onClick={onView}>
             <Eye className="w-3 h-3" /> View
           </button>

@@ -51,7 +51,7 @@ export function VoucherContactMasterHint({
       <div className="mt-1 rounded border border-emerald-100 bg-emerald-50/60 px-2 py-1 text-[10px] text-emerald-900">
         <div className="flex items-center gap-1 mb-0.5">
           <MasterFetchedBadge />
-          <span className="font-medium">Vendor Master</span>
+          <span className="font-medium">Supplier Master</span>
         </div>
         <span className="font-mono">{f.vendorGst || "No GSTIN"}</span>
         <span className="mx-1">·</span>

@@ -17,10 +17,24 @@ import { resolveSalesUnitPrice } from "@/lib/pricing/resolve-pricing";
 import {
   getDispatchRecords,
 } from "@/app/(app)/warehouse/dispatch/mock-data";
-import type { DispatchRecord, DispatchProduct } from "@/app/(app)/warehouse/dispatch/types";
+import type { DispatchRecord, DispatchProduct, DispatchNearExpirySchemeEntry } from "@/app/(app)/warehouse/dispatch/types";
+import {
+  filterActiveNearExpirySchemeEntries,
+  NEAR_EXPIRY_SCHEME_TYPE_LABEL,
+  NEAR_EXPIRY_SETTLEMENT_REQUIRED_LABEL,
+  NEAR_EXPIRY_SCHEME_STATUS_ACTIVE,
+  NEAR_EXPIRY_SETTLEMENT_METHOD,
+  NEAR_EXPIRY_SETTLEMENT_STATUS_PENDING,
+} from "@/app/(app)/warehouse/dispatch/near-expiry-dispatch";
 import { getOrderById, loadOrders, hydrateOrders, type SalesOrder } from "@/app/(app)/sales/orders/orders-data";
 import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
 import { customerMasterToTransactionFields } from "@/lib/accounts/transaction-master-fetch";
+import type { InvoiceNearExpirySchemeSettlement } from "@/app/(app)/accounts/invoices/invoices-data";
+import {
+  getNearExpiryPendingDemoDispatch,
+  isNearExpiryPendingDemoDispatch,
+  NEAR_EXPIRY_PENDING_DEMO_DISPATCH_ID,
+} from "@/lib/accounts/pending-invoice-near-expiry-demo";
 
 const INVOICE_READY_STATUSES = new Set<DispatchRecord["deliveryStatus"]>([
   "Delivered",
@@ -42,6 +56,50 @@ export interface PendingDispatchInvoiceRow {
   warehouse: string;
   totalQty: number;
   qtyUnit: string;
+  /** Near Expiry scheme type label, e.g. "Near Expiry" */
+  schemeLabel: string | null;
+  /** Financial settlement label, e.g. "Settlement Required" */
+  settlementLabel: string | null;
+}
+
+function getEligibleNearExpirySchemes(
+  dispatch: Pick<DispatchRecord, "nearExpirySchemes">,
+): DispatchNearExpirySchemeEntry[] {
+  return filterActiveNearExpirySchemeEntries(dispatch.nearExpirySchemes);
+}
+
+export function getDispatchSchemeLabels(
+  dispatch: Pick<DispatchRecord, "nearExpirySchemes">,
+): { schemeLabel: string | null; settlementLabel: string | null } {
+  const schemes = getEligibleNearExpirySchemes(dispatch);
+  if (!schemes.length) return { schemeLabel: null, settlementLabel: null };
+  const hasNearExpiry = schemes.some((s) => s.schemeType === "Near Expiry");
+  return {
+    schemeLabel: hasNearExpiry ? NEAR_EXPIRY_SCHEME_TYPE_LABEL : "Scheme",
+    settlementLabel: NEAR_EXPIRY_SETTLEMENT_REQUIRED_LABEL,
+  };
+}
+
+export function mapDispatchSchemeToInvoiceSettlement(
+  entry: DispatchNearExpirySchemeEntry,
+): InvoiceNearExpirySchemeSettlement {
+  return {
+    schemeId: entry.schemeId,
+    schemeCode: entry.schemeCode,
+    schemeName: entry.schemeName,
+    schemeType: entry.schemeType,
+    product: entry.product,
+    productId: entry.productId,
+    batchNumber: entry.batchNumber,
+    batchExpiryDate: entry.batchExpiryDate,
+    remainingExpiryDays: entry.remainingExpiryDays,
+    benefitType: entry.benefitType,
+    benefitValue: entry.benefitValue,
+    estimatedBenefitAmount: entry.estimatedBenefitAmount,
+    schemeStatus: entry.schemeStatus ?? NEAR_EXPIRY_SCHEME_STATUS_ACTIVE,
+    settlementMethod: entry.settlementMethod ?? entry.settlement ?? NEAR_EXPIRY_SETTLEMENT_METHOD,
+    settlementStatus: entry.settlementStatus ?? NEAR_EXPIRY_SETTLEMENT_STATUS_PENDING,
+  };
 }
 
 export interface DispatchInvoiceLineResult {
@@ -114,7 +172,7 @@ export function buildInvoiceLineFromDispatchProduct(
   }
 
   const pricing = findActivePricingForStock(master.sku, master.productName);
-  const taxPct = pricing?.gstPct ?? parseTaxPct(master.gstRate);
+  const taxPct = pricing?.gstPct ? parseTaxPct(pricing.gstPct) : parseTaxPct(master.gstRate);
   const unitPrice = resolveUnitRate(dp, master.id, customerId, order);
   const unit = pricing?.uom ?? master.packagingUnit ?? master.baseUnit ?? "PCS";
 
@@ -187,7 +245,7 @@ function isPendingDispatchForCustomer(row: PendingDispatchInvoiceRow, customerId
 
 function enrichPendingDispatchRow(
   d: DispatchRecord,
-  row: Omit<PendingDispatchInvoiceRow, "warehouse" | "totalQty" | "qtyUnit">,
+  row: Omit<PendingDispatchInvoiceRow, "warehouse" | "totalQty" | "qtyUnit" | "schemeLabel" | "settlementLabel">,
 ): PendingDispatchInvoiceRow {
   let totalQty = 0;
   let qtyUnit = "Units";
@@ -199,11 +257,16 @@ function enrichPendingDispatchRow(
     const master = findProductMaster(firstProduct.sku, firstProduct.product);
     qtyUnit = master?.packagingUnit ?? master?.baseUnit ?? "Bags";
   }
+  const labels = getDispatchSchemeLabels({
+    nearExpirySchemes: getEligibleNearExpirySchemes(d),
+  });
   return {
     ...row,
     warehouse: d.warehouse,
     totalQty,
     qtyUnit,
+    schemeLabel: labels.schemeLabel,
+    settlementLabel: labels.settlementLabel,
   };
 }
 
@@ -219,36 +282,52 @@ export function findPendingDispatchForCustomer(
   return listPendingDispatchesForCustomer(customerId)[0];
 }
 
+function mapDispatchToPendingRow(d: DispatchRecord): PendingDispatchInvoiceRow {
+  const order = findOrderBySoNumber(d.salesOrderNumber);
+  const customer = findCustomerByName(d.customer);
+  const totals = computeDispatchInvoiceTotals(d, customer?.id ?? order?.customerId);
+  return enrichPendingDispatchRow(d, {
+    dispatchId: d.id,
+    dispatchNo: d.dispatchNumber,
+    soNumber: d.salesOrderNumber,
+    salesOrderId: order?.id ?? null,
+    customerName: d.customer,
+    dispatchDate: d.dispatchDate,
+    taxableValue: totals.taxableValue,
+    gstAmount: totals.gstAmount,
+    invoiceValue: totals.invoiceValue,
+    status: d.deliveryStatus,
+  });
+}
+
 export function listPendingDispatchInvoices(): PendingDispatchInvoiceRow[] {
-  return getDispatchRecords()
+  const warehouseRows = getDispatchRecords()
     .filter((d) => INVOICE_READY_STATUSES.has(d.deliveryStatus))
     .filter((d) => !isDispatchInvoiced(d.dispatchNumber))
     .filter((d) => d.products.some((p) => p.dispatchQty > 0))
-    .map((d) => {
-      const order = findOrderBySoNumber(d.salesOrderNumber);
-      const customer = findCustomerByName(d.customer);
-      const totals = computeDispatchInvoiceTotals(d, customer?.id ?? order?.customerId);
-      return enrichPendingDispatchRow(d, {
-        dispatchId: d.id,
-        dispatchNo: d.dispatchNumber,
-        soNumber: d.salesOrderNumber,
-        salesOrderId: order?.id ?? null,
-        customerName: d.customer,
-        dispatchDate: d.dispatchDate,
-        taxableValue: totals.taxableValue,
-        gstAmount: totals.gstAmount,
-        invoiceValue: totals.invoiceValue,
-        status: d.deliveryStatus,
-      });
-    })
-    .sort((a, b) => b.dispatchDate.localeCompare(a.dispatchDate));
+    .map(mapDispatchToPendingRow);
+
+  const demoDispatch = getNearExpiryPendingDemoDispatch();
+  const demoRow = demoDispatch ? mapDispatchToPendingRow(demoDispatch) : null;
+
+  const rows = demoRow
+    ? [demoRow, ...warehouseRows.filter((row) => row.dispatchId !== NEAR_EXPIRY_PENDING_DEMO_DISPATCH_ID)]
+    : warehouseRows;
+
+  return rows.sort((a, b) => b.dispatchDate.localeCompare(a.dispatchDate));
 }
 
 export function getDispatchById(dispatchId: string): DispatchRecord | undefined {
+  if (isNearExpiryPendingDemoDispatch(dispatchId)) {
+    return getNearExpiryPendingDemoDispatch();
+  }
   return getDispatchRecords().find((d) => d.id === dispatchId);
 }
 
 export function getDispatchByNumber(dispatchNo: string): DispatchRecord | undefined {
+  if (isNearExpiryPendingDemoDispatch(null, dispatchNo)) {
+    return getNearExpiryPendingDemoDispatch();
+  }
   return getDispatchRecords().find((d) => d.dispatchNumber === dispatchNo);
 }
 
@@ -289,6 +368,7 @@ export interface DispatchSalesInvoicePrefill {
   receivableLedger: string;
   lineItems: InvoiceLineItem[];
   lineErrors: string[];
+  nearExpirySchemes: DispatchNearExpirySchemeEntry[];
 }
 
 export function buildSalesInvoicePrefillFromDispatch(
@@ -385,5 +465,6 @@ export function buildSalesInvoicePrefillFromDispatch(
     receivableLedger: ledger?.accountName ?? custFields.receivableLedger,
     lineItems,
     lineErrors,
+    nearExpirySchemes: getEligibleNearExpirySchemes(dispatch),
   };
 }

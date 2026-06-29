@@ -1,139 +1,100 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
-import { ListingContainer } from "@/components/layout/ListingContainer";
-import { Boxes, CalendarDays, CheckCircle2, XCircle, Clock, ShieldAlert, Package, IndianRupee } from "lucide-react";
-import { MiniKPICard } from "@/components/ui/KPICard";
-import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { Boxes } from "lucide-react";
+import { masterToday } from "@/lib/masters/common";
+import { DEFAULT_STOCK_POSITION_FILTERS, type StockPositionFilters, type StockPositionLine } from "./types/stock-position";
+import { computeStockPosition, getStockFilterOptions } from "./lib/stock-position-data";
+import { exportStockPositionCsv } from "./lib/stock-position-export";
+import { StockPositionFiltersBar } from "./components/StockPositionFiltersBar";
+import { StockPositionKpiRow } from "./components/StockPositionKpiRow";
+import { StockPositionTable } from "./components/StockPositionTable";
 
-import { QcPassedStockRecord, RejectedStockRecord, GrnPendingStockRecord } from "./types";
-import { getQcPassedStockList, getRejectedStockList, getGrnPendingStockList } from "./services";
-import { WAREHOUSE_OPTIONS } from "./constants";
-import { getInventoryDashboardMetrics } from "@/lib/accounts/inventory-accounting-data";
-import { formatMoney } from "@/lib/accounts/money-format";
-
-import { QcPassedListing } from "./qc-passed/QcPassedListing";
-import { RejectedListing } from "./rejected/RejectedListing";
-import { GrnPendingListing } from "./grn-pending/GrnPendingListing";
+const EMPTY_KPIS = {
+  openingStockQty: 0,
+  dayInQty: 0,
+  dayOutQty: 0,
+  closingStockQty: 0,
+  closingStockValue: 0,
+};
 
 export default function StockOverviewPage() {
-  const [activeTab, setActiveTab] = useState("qc-passed");
-  const [selectedWarehouse, setSelectedWarehouse] = useState<string>("All");
-
-  const [rawQcPassed, setRawQcPassed] = useState<QcPassedStockRecord[]>([]);
-  const [rawRejected, setRawRejected] = useState<RejectedStockRecord[]>([]);
-  const [rawGrnPending, setRawGrnPending] = useState<GrnPendingStockRecord[]>([]);
+  const [today, setToday] = useState("");
+  const [filters, setFilters] = useState<StockPositionFilters>(DEFAULT_STOCK_POSITION_FILTERS);
 
   useEffect(() => {
-    setRawQcPassed(getQcPassedStockList());
-    setRawRejected(getRejectedStockList());
-    setRawGrnPending(getGrnPendingStockList());
+    const t = masterToday();
+    setToday(t);
+    setFilters((prev) => ({
+      ...prev,
+      datePreset: "today",
+      asOnDate: t,
+      fromDate: t,
+      toDate: t,
+    }));
   }, []);
 
-  const qcPassedForWarehouse = useMemo(() => {
-    if (selectedWarehouse === "All") return rawQcPassed;
-    return rawQcPassed.filter((item) => item.warehouse === selectedWarehouse);
-  }, [rawQcPassed, selectedWarehouse]);
+  const filterOptions = useMemo(
+    () => (today ? getStockFilterOptions(today) : { products: [] }),
+    [today],
+  );
 
-  const rejectedForWarehouse = useMemo(() => {
-    if (selectedWarehouse === "All") return rawRejected;
-    return rawRejected.filter((item) => item.warehouse === selectedWarehouse);
-  }, [rawRejected, selectedWarehouse]);
+  const { lines, kpis, dateLabel } = useMemo(() => {
+    if (!filters.asOnDate && filters.dateMode === "single") {
+      return { lines: [], kpis: EMPTY_KPIS, dateLabel: "" };
+    }
+    if (filters.dateMode === "range" && !filters.fromDate && !filters.toDate) {
+      return { lines: [], kpis: EMPTY_KPIS, dateLabel: "" };
+    }
+    return computeStockPosition(filters, today || masterToday());
+  }, [filters, today]);
 
-  const grnPendingForWarehouse = useMemo(() => {
-    if (selectedWarehouse === "All") return rawGrnPending;
-    return rawGrnPending.filter((item) => item.warehouse === selectedWarehouse);
-  }, [rawGrnPending, selectedWarehouse]);
+  const handleFilterChange = (patch: Partial<StockPositionFilters>) => {
+    setFilters((prev) => ({ ...prev, ...patch }));
+  };
 
-  const inventoryMetrics = useMemo(() => getInventoryDashboardMetrics(), []);
+  const [exportLines, setExportLines] = useState<StockPositionLine[]>([]);
 
-  const stats = useMemo(() => {
-    const qcPassedQty = qcPassedForWarehouse.reduce((acc, curr) => acc + curr.availableQuantity, 0);
-    const rejectedQty = rejectedForWarehouse.reduce((acc, curr) => acc + curr.rejectedQuantity, 0);
-    const grnPendingQty = grnPendingForWarehouse.reduce((acc, curr) => acc + curr.receivedQuantity, 0);
-    const nearExpiry = qcPassedForWarehouse.filter((r) => r.status === "Near Expiry").length;
-    const expired = qcPassedForWarehouse.filter((r) => r.status === "Expired").length;
+  const handleExport = useCallback(() => {
+    const rows = exportLines.length > 0 ? exportLines : lines;
+    if (rows.length === 0) return;
+    exportStockPositionCsv(rows, filters, today || masterToday());
+  }, [exportLines, lines, filters, today]);
 
-    return {
-      qcPassedQty,
-      rejectedQty,
-      grnPendingQty,
-      nearExpiry,
-      expired,
-    };
-  }, [qcPassedForWarehouse, rejectedForWarehouse, grnPendingForWarehouse]);
+  const canExport =
+    (exportLines.length > 0 || lines.length > 0) &&
+    (filters.dateMode === "single" ? Boolean(filters.asOnDate) : Boolean(filters.fromDate && filters.toDate));
 
   return (
-    <ListingContainer
-      title="Stock Overview Dashboard"
-      titleIcon={Boxes}
-      metrics={
-        <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <MiniKPICard label="QC Passed Stock" value={stats.qcPassedQty} icon={CheckCircle2} accent />
-            <MiniKPICard label="Rejected Stock" value={stats.rejectedQty} icon={XCircle} />
-            <MiniKPICard label="GRN Pending Stock" value={stats.grnPendingQty} icon={Clock} />
-            <MiniKPICard label="Near Expiry Batches" value={stats.nearExpiry} icon={CalendarDays} />
-            <MiniKPICard label="Expired Batches" value={stats.expired} icon={ShieldAlert} />
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mt-3 pt-3 border-t border-border/50">
-            <MiniKPICard
-              label="Total Available Qty"
-              value={inventoryMetrics.totalAvailableQty}
-              icon={Package}
-              accent
-            />
-            <MiniKPICard
-              label="Total Stock Value"
-              value={formatMoney(inventoryMetrics.totalInventoryValue)}
-              icon={IndianRupee}
-            />
-            <MiniKPICard
-              label="Near Expiry Stock Value"
-              value={formatMoney(inventoryMetrics.nearExpiryStockValue)}
-              icon={CalendarDays}
-            />
-            <MiniKPICard
-              label="Expired Stock Value"
-              value={formatMoney(inventoryMetrics.expiredStockValue)}
-              icon={ShieldAlert}
-            />
-          </div>
-        </>
-      }
-      tabs={[
-        { value: "qc-passed", label: "QC Passed Stock", icon: CheckCircle2 },
-        { value: "rejected", label: "Rejected Stock", icon: XCircle },
-        { value: "grn-pending", label: "GRN Pending Stock", icon: Clock },
-      ]}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      actions={
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-muted-foreground">Warehouse:</span>
-          <AutocompleteSelect
-            options={[{ value: "All", label: "All Warehouses" }, ...WAREHOUSE_OPTIONS]}
-            value={selectedWarehouse}
-            onChange={setSelectedWarehouse}
-            placeholder="All Warehouses"
-            searchPlaceholder="Search warehouse..."
-            className="h-8 w-[180px] text-xs py-1 px-2.5 rounded-lg border-border bg-white"
+    <AppLayout>
+      <div className="max-w-[1440px] mx-auto flex flex-col gap-2.5 min-h-[calc(100vh-104px)]">
+        <h1 className="text-xl font-bold text-navy-700 flex items-center gap-2 flex-shrink-0">
+          <Boxes className="w-5 h-5 text-brand-600 flex-shrink-0" />
+          Stock Position Dashboard
+        </h1>
+
+        <StockPositionFiltersBar
+          filters={filters}
+          onChange={handleFilterChange}
+          products={filterOptions.products}
+          onExport={handleExport}
+          exportDisabled={!canExport}
+          dateLabel={dateLabel}
+          today={today}
+        />
+
+        <StockPositionKpiRow kpis={kpis} dateMode={filters.dateMode} />
+
+        <div className="flex-1 min-h-0">
+          <StockPositionTable
+            lines={lines}
+            className="h-full"
+            dateMode={filters.dateMode}
+            onFilteredLinesChange={setExportLines}
           />
         </div>
-      }
-    >
-      <TabsContent value="qc-passed" className="mt-0 outline-none">
-        <QcPassedListing qcPassedForWarehouse={qcPassedForWarehouse} />
-      </TabsContent>
-
-      <TabsContent value="rejected" className="mt-0 outline-none">
-        <RejectedListing rejectedForWarehouse={rejectedForWarehouse} />
-      </TabsContent>
-
-      <TabsContent value="grn-pending" className="mt-0 outline-none">
-        <GrnPendingListing grnPendingForWarehouse={grnPendingForWarehouse} />
-      </TabsContent>
-    </ListingContainer>
+      </div>
+    </AppLayout>
   );
 }

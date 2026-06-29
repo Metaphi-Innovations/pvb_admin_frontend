@@ -16,3 +16,6 @@ samples/*.xls
 **/bank-statement*.csv
 **/bank-statement*.xlsx
 .vercel
+
+# Official India Post source CSV (large; regenerate postal-master.json via npm run import:postal)
+data/all-india-pincode.csv

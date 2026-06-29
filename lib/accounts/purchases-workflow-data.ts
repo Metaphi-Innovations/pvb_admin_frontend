@@ -2,7 +2,7 @@
  * Purchases workflow — GRN-completed receipts pending vendor bill in Accounts.
  */
 
-import { getGrnRecords } from "@/app/(app)/warehouse/grnqc/grn/mock-data";
+import { getGrnRecords } from "@/app/(app)/warehouse/grn/mock-data";
 import { loadPurchaseInvoices } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
 
 export interface PendingVendorBillRow {

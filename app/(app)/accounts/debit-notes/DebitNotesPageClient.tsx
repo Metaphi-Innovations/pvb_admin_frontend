@@ -92,7 +92,7 @@ export default function DebitNotesPageClient() {
       <div className="max-w-[1600px] mx-auto space-y-3">
         <PageHeader
           title="Debit Notes"
-          description="Vendor debits for purchase returns, short supply, and billing corrections."
+          description="Supplier debits for purchase returns, short supply, and billing corrections."
           breadcrumbs={DEBIT_NOTES_BREADCRUMB}
           actions={
             <div className="flex items-center gap-2">
@@ -118,11 +118,11 @@ export default function DebitNotesPageClient() {
 
         <SectionTabs tabs={TABS} active={tab} onChange={setTab} counts={counts} />
 
-        <ModuleFiltersBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Debit note no., vendor, reference…">
+        <ModuleFiltersBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Debit note no., supplier, reference…">
           <Select value={vendor} onValueChange={setVendor}>
-            <SelectTrigger className="h-8 w-[140px] text-xs bg-white"><SelectValue placeholder="Vendor" /></SelectTrigger>
+            <SelectTrigger className="h-8 w-[140px] text-xs bg-white"><SelectValue placeholder="Supplier" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all" className="text-xs">All vendors</SelectItem>
+              <SelectItem value="all" className="text-xs">All suppliers</SelectItem>
               {vendorNames.map((v) => (
                 <SelectItem key={v} value={v} className="text-xs">{v}</SelectItem>
               ))}
@@ -161,7 +161,7 @@ export default function DebitNotesPageClient() {
                   {[
                     "Debit Note No.",
                     "Date",
-                    "Vendor",
+                    "Supplier",
                     "Reference Type",
                     "Purchase Inv. No.",
                     "PO No.",

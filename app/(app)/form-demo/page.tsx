@@ -228,7 +228,6 @@ export default function FormDemoPage() {
                       {saving ? <BtnLoader /> : null}
                       Save Distributor
                     </Button>
-                    <Button variant="outline" className="w-full">Save as Draft</Button>
                   </div>
 
                   {/* Status badges showcase */}
@@ -378,7 +377,7 @@ export default function FormDemoPage() {
                 </DialogHeader>
                 <div className="py-2 space-y-2">
                   {[
-                    ["Vendor",   "Nashik Agro Supplies"],
+                    ["Supplier",   "Nashik Agro Supplies"],
                     ["Items",    "Urea 50kg × 200 bags"],
                     ["Value",    "₹4,24,000"],
                     ["Due Date", "2025-06-10"],

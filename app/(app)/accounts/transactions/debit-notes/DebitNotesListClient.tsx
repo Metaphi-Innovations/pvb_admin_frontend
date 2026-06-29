@@ -11,7 +11,7 @@ export default function DebitNotesListClient() {
       config={{
         section: "Transactions",
         title: "Debit Notes",
-        description: "Purchase debit notes — reduces vendor payable.",
+        description: "Purchase debit notes — reduces supplier payable.",
         loadData: loadDebitNotes,
         newHref: "/accounts/transactions/debit-notes/new",
         editHref: (id) => `/accounts/transactions/debit-notes/${id}/edit`,

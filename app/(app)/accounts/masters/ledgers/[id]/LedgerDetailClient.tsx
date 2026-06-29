@@ -688,7 +688,7 @@ function PurchaseLedgerDetail({ ledgerName }: { ledgerName: string }) {
   return (
     <DetailTable
       title="Bill-wise Purchases"
-      columns={["Date", "Bill No", "Vendor", "GRN/PO", "Taxable", "GST", "Total"]}
+      columns={["Date", "Bill No", "Supplier", "GRN/PO", "Taxable", "GST", "Total"]}
       rows={bills.map((b) => [
         b.invoiceDate,
         b.invoiceNo,

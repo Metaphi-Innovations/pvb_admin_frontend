@@ -193,7 +193,7 @@ function vendorBranch(vendor: Vendor): string {
   return meta?.branch ?? vendor.billingAddress?.city ?? "—";
 }
 
-// ── Vendor credit notes ──────────────────────────────────────────────────────
+// ── Supplier credit notes ──────────────────────────────────────────────────────
 
 export function loadVendorCreditNotes(): VendorCreditNoteRecord[] {
   if (typeof window === "undefined") return [];
@@ -320,7 +320,7 @@ function buildBillRow(
   };
 }
 
-// ── Vendor outstanding ───────────────────────────────────────────────────────
+// ── Supplier outstanding ───────────────────────────────────────────────────────
 
 export interface PayablesOutstandingFilters {
   vendorId?: number;
@@ -545,7 +545,7 @@ export function computeVendorAgeingRows(
     map.set(vendor.id, row);
   }
 
-  // Vendor credit notes in current bucket (not yet due)
+  // Supplier credit notes in current bucket (not yet due)
   for (const note of loadVendorCreditNotes().filter((n) => n.status === "approved")) {
     const vendor = vendors.find((v) => v.id === note.vendorId);
     if (!vendor) continue;

@@ -31,6 +31,7 @@ export function MasterListing<T = any>({
   addLabel = "Add New",
   onExport,
   searchPlaceholder = "Search...",
+  hideSearch = false,
   currentFilters,
   currentSort,
 }: MasterListingProps<T>) {
@@ -99,16 +100,17 @@ export function MasterListing<T = any>({
     <div className="space-y-4">
       {/* Top Action Bar / Tool Bar */}
       <div className="flex items-center gap-2 flex-wrap">
-        {/* Global Search Input */}
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-[9px] text-muted-foreground pointer-events-none" />
-          <Input
-            value={(filters.search as string) || ""}
-            onChange={(e) => handleFilterItemChange("search", e.target.value)}
-            placeholder={searchPlaceholder}
-            className="pl-8 h-8 text-xs rounded-lg"
-          />
-        </div>
+        {!hideSearch && (
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-[9px] text-muted-foreground pointer-events-none" />
+            <Input
+              value={(filters.search as string) || ""}
+              onChange={(e) => handleFilterItemChange("search", e.target.value)}
+              placeholder={searchPlaceholder}
+              className="pl-8 h-8 text-xs rounded-lg"
+            />
+          </div>
+        )}
 
         {/* Clear Filters Button */}
         {isFiltered && (
@@ -147,11 +149,11 @@ export function MasterListing<T = any>({
       </div>
 
       {/* Table Container */}
-      <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
+      <div className="master-listing-table-shell">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="bg-muted/40 border-b border-border">
+              <tr className="master-listing-thead-row">
                 {columns.map((col) => {
                   const isSorted = sortState.key === col.key;
                   const isSticky = col.sticky;
@@ -162,11 +164,11 @@ export function MasterListing<T = any>({
                       onClick={() => col.sortable && handleSort(col.key)}
                       style={{ width: col.width }}
                       className={cn(
-                        "px-4 py-2.5 text-xs font-semibold text-foreground select-none whitespace-nowrap",
+                        "px-4 py-2.5 text-xs font-semibold text-foreground select-none whitespace-nowrap master-listing-th",
                         col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left",
                         col.sortable && "cursor-pointer hover:bg-muted/60 transition-colors",
-                        isSorted && "bg-brand-50/60 text-brand-700",
-                        isSticky && "sticky right-0 bg-white z-20 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border"
+                        isSorted && "master-listing-th-sorted",
+                        isSticky && (isSorted ? "master-listing-th-sticky-sorted" : "master-listing-th-sticky"),
                       )}
                     >
                       <div
@@ -218,8 +220,11 @@ export function MasterListing<T = any>({
                   );
                 })}
                 {actions && actions.length > 0 && (
-                  <th className="w-16 px-4 py-2.5 text-center text-xs font-semibold text-foreground sticky right-0 bg-white z-20 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border">
-                    Actions
+                  <th
+                    aria-label="Actions"
+                    className="master-listing-th-sticky w-11 min-w-[2.75rem] max-w-[2.75rem] px-2 py-2.5 text-center text-xs font-semibold text-foreground"
+                  >
+                    <span className="sr-only">Actions</span>
                   </th>
                 )}
               </tr>
@@ -247,7 +252,7 @@ export function MasterListing<T = any>({
                   return (
                     <tr
                       key={key}
-                      className="border-b border-border/60 hover:bg-[#fbfaf7] transition-colors group"
+                      className="master-listing-row group"
                     >
                       {columns.map((col) => {
                         const cellVal = (row as any)[col.key];
@@ -260,7 +265,7 @@ export function MasterListing<T = any>({
                               "px-4 py-2.5 text-xs text-foreground whitespace-nowrap",
                               col.align === "center" && "text-center",
                               col.align === "right" && "text-right",
-                              isSticky && "sticky right-0 bg-white group-hover:bg-[#fbfaf7] z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border"
+                              isSticky && "master-listing-td-sticky",
                             )}
                           >
                             {col.render ? (
@@ -274,7 +279,7 @@ export function MasterListing<T = any>({
                         );
                       })}
                       {actions && actions.length > 0 && (
-                        <td className="px-4 py-2.5 text-center sticky right-0 bg-white group-hover:bg-[#fbfaf7] z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border">
+                        <td className="master-listing-td-sticky w-11 min-w-[2.75rem] max-w-[2.75rem] px-2 py-2.5 text-center">
                           <ActionMenu actions={actions} row={row} />
                         </td>
                       )}

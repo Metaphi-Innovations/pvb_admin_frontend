@@ -1,5 +1,5 @@
 import type { Product } from "@/app/(app)/masters/products/product-data";
-import { findProductRef, getStandardMrp } from "@/lib/pricing/resolve-pricing";
+import { findProductRef, getStandardMrp, resolvePurchaseCostPrice } from "@/lib/pricing/resolve-pricing";
 
 export type PackagingUom = "Unit" | "Case" | "Box" | "Carton";
 
@@ -52,6 +52,18 @@ export function sumAdditionalCharges(charges: ProcurementAdditionalCharge[]): nu
   return Math.round(charges.reduce((s, c) => s + (Number(c.amount) || 0), 0) * 100) / 100;
 }
 
+/** Total qty in base unit from packaging quantity (PR / packing orders) */
+export function calcPackingToBaseQty(packingQty: number, conversionQty: number): number {
+  const q = Number(packingQty) || 0;
+  const conv = Number(conversionQty) || 1;
+  return Math.round(q * conv * 1000) / 1000;
+}
+
+/** Line amount = rate per base/SKU unit × total SKU qty */
+export function calcPrLineAmount(ratePerSku: number, totalSkuQty: number): number {
+  return Math.round((Number(ratePerSku) || 0) * (Number(totalSkuQty) || 0) * 100) / 100;
+}
+
 /** Total qty in base unit from packaging UOM */
 export function calcTotalQtyBase(
   uom: PackagingUom,
@@ -60,8 +72,7 @@ export function calcTotalQtyBase(
 ): number {
   const q = Number(qty) || 0;
   if (uom === "Unit") return q;
-  const conv = Number(conversionQty) || 1;
-  return Math.round(q * conv * 1000) / 1000;
+  return calcPackingToBaseQty(q, conversionQty);
 }
 
 export interface EnrichedProductLine {
@@ -74,7 +85,9 @@ export interface EnrichedProductLine {
   conversionQty: number;
   segment: string;
   category: string;
+  hsnCode: string;
   mrp: number;
+  ratePerSku: number;
   description: string;
 }
 
@@ -85,6 +98,7 @@ export function enrichProductForProcurement(productId: number): EnrichedProductL
 }
 
 export function productLineFromMaster(p: Product): EnrichedProductLine {
+  const ratePerSku = resolvePurchaseCostPrice(p.id).amount;
   return {
     productId: p.id,
     productCode: p.sku,
@@ -95,7 +109,9 @@ export function productLineFromMaster(p: Product): EnrichedProductLine {
     conversionQty: p.conversionQuantity ?? 1,
     segment: p.segment ?? "",
     category: p.category ?? "",
+    hsnCode: p.hsnCode ?? "",
     mrp: getStandardMrp(p.id),
+    ratePerSku,
     description: p.scientificName || "",
   };
 }

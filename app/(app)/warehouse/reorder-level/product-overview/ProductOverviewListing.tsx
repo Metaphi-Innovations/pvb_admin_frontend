@@ -145,7 +145,7 @@ export function ProductOverviewListing({ allRecords }: ProductOverviewListingPro
       actions={actions}
       onAdd={() => router.push("/warehouse/reorder-level/create?from=overview")}
       addLabel="Set Reorder Level"
-      emptyMessage="product reorder configurations"
+      emptyMessage=""
       searchPlaceholder="Search product, SKU or warehouse..."
     />
   );

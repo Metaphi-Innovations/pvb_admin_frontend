@@ -9,7 +9,9 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm run lint"
+    "check": "npm run typecheck && npm run lint",
+    "import:postal": "npx tsx scripts/import-india-post.ts",
+    "import:pincodes": "npm run import:postal"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.0.4",

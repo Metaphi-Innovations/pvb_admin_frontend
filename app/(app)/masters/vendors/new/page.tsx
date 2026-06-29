@@ -55,7 +55,7 @@ export default function NewVendorPage() {
       return;
     }
     if (!vendorCode) {
-      setToast({ msg: "Select a vendor type to generate vendor code.", type: "error" });
+      setToast({ msg: "Select a supplier type to generate supplier code.", type: "error" });
       return;
     }
     const list = loadVendors();
@@ -71,14 +71,14 @@ export default function NewVendorPage() {
     });
     saveVendors([...list, record]);
     ensureVendorLedgerFromMaster(record);
-    setToast({ msg: "Vendor created.", type: "success" });
+    setToast({ msg: "Supplier created.", type: "success" });
     setTimeout(() => router.push("/masters/vendors"), 700);
   };
 
   return (
     <FormContainer
-      title="Create Vendor"
-      description="Masters → Vendor Master → New"
+      title="Create Supplier"
+      description="Masters → Supplier Master → New"
       onBack={() => router.push("/masters/vendors")}
       actions={
         <div className="flex items-center gap-2">

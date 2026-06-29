@@ -45,7 +45,7 @@ export function VendorMasterPanel({
   shippingAddress,
   disabled,
   allowSelect = true,
-  title = "Vendor",
+  title = "Supplier",
 }: VendorMasterPanelProps) {
   const options = useMemo(
     () =>
@@ -68,7 +68,7 @@ export function VendorMasterPanel({
         <p className="text-[11px] text-muted-foreground">
           {title} data is loaded from{" "}
           <Link href="/masters/vendors" className="text-brand-700 hover:underline">
-            Vendor Master
+            Supplier Master
           </Link>
           . Edit master records there — not on this form.
         </p>
@@ -92,8 +92,8 @@ export function VendorMasterPanel({
       {fields && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            <MasterReadOnlyField label="Vendor Name" value={fields.vendorName} className="sm:col-span-2" />
-            <MasterReadOnlyField label="Vendor Code" value={fields.vendorCode} mono />
+            <MasterReadOnlyField label="Supplier Name" value={fields.vendorName} className="sm:col-span-2" />
+            <MasterReadOnlyField label="Supplier Code" value={fields.vendorCode} mono />
             <MasterReadOnlyField label="Trade Payables Ledger" value={fields.payableLedger} />
             <MasterReadOnlyField label="GSTIN" value={fields.vendorGst} mono />
             <MasterReadOnlyField label="PAN" value={fields.pan} mono />

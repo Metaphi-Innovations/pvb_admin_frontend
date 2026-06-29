@@ -242,10 +242,7 @@ export function CoaGroupDrillDownPanel({
         actions={
           <>
             <Button asChild variant="outline" size="sm" className="h-8 text-xs">
-              <Link href="/warehouse/batch-register">Stock Ledger</Link>
-            </Button>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
-              <Link href="/warehouse/batch-register">Batch Register</Link>
+              <Link href="/warehouse/stockoverview">Stock Position</Link>
             </Button>
             <Button asChild variant="outline" size="sm" className="h-8 text-xs">
               <Link href="/accounts/reports/stock-valuation">Stock Valuation</Link>
@@ -361,7 +358,7 @@ export function CoaGroupDrillDownPanel({
           title="Trade Payables / Sundry Creditors"
           summary={
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <SummaryField label="Total Vendors" value={context.totalVendors} />
+              <SummaryField label="Total Suppliers" value={context.totalVendors} />
               <SummaryField label="Total Outstanding" value={formatMoney(context.totalPayable)} />
               <SummaryField label="Due This Week" value={formatMoney(context.dueThisWeek)} />
               <SummaryField label="Overdue Payable" value={formatMoney(context.overdueBills)} />
@@ -370,10 +367,10 @@ export function CoaGroupDrillDownPanel({
           actions={
             <>
               <Button asChild variant="outline" size="sm" className="h-8 text-xs">
-                <Link href="/accounts/payables/outstanding">View Vendor Ledger</Link>
+                <Link href="/accounts/payables/outstanding">View Supplier Ledger</Link>
               </Button>
               <Button asChild size="sm" className="h-8 text-xs bg-brand-600 text-white">
-                <Link href="/masters/vendors">Open Vendor Master</Link>
+                <Link href="/masters/vendors">Open Supplier Master</Link>
               </Button>
               <Button asChild variant="outline" size="sm" className="h-8 text-xs">
                 <Link href="/accounts/vouchers/payment/new">Create Payment</Link>
@@ -384,7 +381,7 @@ export function CoaGroupDrillDownPanel({
           <table className="w-full text-sm">
             <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
               <tr>
-                {["Vendor", "Outstanding", "Last Bill", "Due Date", "Aging"].map((h) => (
+                {["Supplier", "Outstanding", "Last Bill", "Due Date", "Aging"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
                     {h}
                   </th>
@@ -525,7 +522,7 @@ export function CoaGroupDrillDownPanel({
             <SummaryField label="Total Purchases" value={formatMoney(context.totalPurchases)} />
             <SummaryField label="Taxable Purchases" value={formatMoney(context.taxablePurchases)} />
             <SummaryField label="GST Input" value={formatMoney(context.gstInput)} />
-            <SummaryField label="Pending Vendor Bills" value={context.pendingVendorBills} />
+            <SummaryField label="Pending Supplier Bills" value={context.pendingVendorBills} />
           </div>
         </div>
         <Tabs value={tab} onValueChange={setTab} className="flex flex-col flex-1 min-h-0">
@@ -741,7 +738,7 @@ export function CoaGroupDrillDownPanel({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <SummaryField label="Total Outstanding" value={formatMoney(context.totalOutstanding)} />
             <SummaryField label="Employee Advances" value={formatMoney(context.employeeAdvances)} />
-            <SummaryField label="Vendor Advances" value={formatMoney(context.vendorAdvances)} />
+            <SummaryField label="Supplier Advances" value={formatMoney(context.vendorAdvances)} />
             <SummaryField label="Other Advances" value={formatMoney(context.otherAdvances)} />
           </div>
         }
@@ -958,7 +955,7 @@ export function CoaGroupDrillDownPanel({
     return (
       <div className="flex-shrink-0 px-6 py-4 border-b border-border/40 bg-brand-50/20">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-800 mb-3">
-          Vendor Ledger — {context.nodeName}
+          Supplier Ledger — {context.nodeName}
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <SummaryField label="Outstanding" value={formatMoney(context.outstanding)} />

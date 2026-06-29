@@ -5,7 +5,7 @@
 
 import { getQcPassedStockRecords } from "@/app/(app)/warehouse/stockoverview/mock-data";
 import type { QcPassedStockRecord } from "@/app/(app)/warehouse/stockoverview/types";
-import { getGrnRecords } from "@/app/(app)/warehouse/grnqc/grn/mock-data";
+import { getGrnRecords } from "@/app/(app)/warehouse/grn/mock-data";
 import { getDispatchRecords } from "@/app/(app)/warehouse/dispatch/mock-data";
 import { loadPricingRecords, findActivePricingForStock, ensurePricingDemoSeed } from "@/app/(app)/masters/pricing/pricing-data";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";

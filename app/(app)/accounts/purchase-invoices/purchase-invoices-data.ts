@@ -246,7 +246,7 @@ function appendPOVendorInvoiceActivity(
       ...po.activity,
       {
         date: todayStr(),
-        action: replaced ? "Vendor Invoice Replaced" : "Vendor Invoice Uploaded",
+        action: replaced ? "Supplier Invoice Replaced" : "Supplier Invoice Uploaded",
         by: ACCOUNTS_CURRENT_USER,
         note: `${vendorInvoiceNo} → ${purchaseNo}`,
       },
@@ -264,12 +264,12 @@ export function createPurchaseFromPOUpload(
   if (!po) throw new Error("Purchase order not found.");
   const allowed: PurchaseOrder["status"][] = ["approved", "invoice_uploaded"];
   if (!allowed.includes(po.status)) {
-    throw new Error("Vendor invoice can be uploaded only after PO is approved.");
+    throw new Error("Supplier invoice can be uploaded only after PO is approved.");
   }
   if (listPurchaseInvoicesByPO(poId).length > 0) {
     throw new Error("Invoice already uploaded for this PO. Use replace instead.");
   }
-  if (!input.vendorInvoiceNo.trim()) throw new Error("Vendor invoice number is required.");
+  if (!input.vendorInvoiceNo.trim()) throw new Error("Supplier invoice number is required.");
   if (input.totalAmount <= 0) throw new Error("Total amount must be greater than zero.");
 
   const all = loadPurchaseInvoices();
@@ -333,7 +333,7 @@ export function replacePurchaseFromPOUpload(
   const existing = listPurchaseInvoicesByPO(poId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
   if (!existing) throw new Error("No invoice found to replace.");
 
-  if (!input.vendorInvoiceNo.trim()) throw new Error("Vendor invoice number is required.");
+  if (!input.vendorInvoiceNo.trim()) throw new Error("Supplier invoice number is required.");
   if (input.totalAmount <= 0) throw new Error("Total amount must be greater than zero.");
 
   const all = loadPurchaseInvoices();
@@ -366,8 +366,8 @@ export function replacePurchaseFromPOUpload(
 
 export function createManualPurchaseEntry(input: ManualPurchaseInput): PurchaseInvoiceRecord {
   const vendor = getActiveVendors().find((v) => v.id === input.vendorId);
-  if (!vendor) throw new Error("Vendor not found.");
-  if (!input.vendorInvoiceNo.trim()) throw new Error("Vendor invoice number is required.");
+  if (!vendor) throw new Error("Supplier not found.");
+  if (!input.vendorInvoiceNo.trim()) throw new Error("Supplier invoice number is required.");
   if (!input.remarks.trim()) throw new Error("Remarks are required.");
   if (input.totalAmount <= 0) throw new Error("Total amount must be greater than zero.");
 
@@ -433,7 +433,7 @@ export function updateManualPurchaseEntry(
   }
 
   const vendor = getActiveVendors().find((v) => v.id === input.vendorId);
-  if (!vendor) throw new Error("Vendor not found.");
+  if (!vendor) throw new Error("Supplier not found.");
 
   const updated = normalizePI({
     ...cur,
@@ -572,13 +572,13 @@ export type GrnPurchaseInput = {
  * Returns GRNs with status qc_completed that do NOT yet have a purchase invoice.
  * Reads from warehouse GRN storage.
  */
-export function getGrnsPendingInvoice(): import("@/app/(app)/warehouse/grnqc/grn/types").GrnRecord[] {
+export function getGrnsPendingInvoice(): import("@/app/(app)/warehouse/grn/types").GrnRecord[] {
   if (typeof window === "undefined") return [];
   try {
-    const { getGrnRecords } = require("@/app/(app)/warehouse/grnqc/grn/mock-data");
+    const { getGrnRecords } = require("@/app/(app)/warehouse/grn/mock-data");
     const all = loadPurchaseInvoices();
     const invoicedGrnIds = new Set(all.map((p) => p.grnId).filter(Boolean));
-    return (getGrnRecords() as import("@/app/(app)/warehouse/grnqc/grn/types").GrnRecord[]).filter(
+    return (getGrnRecords() as import("@/app/(app)/warehouse/grn/types").GrnRecord[]).filter(
       (g) => g.status === "qc_completed" && !invoicedGrnIds.has(g.id),
     );
   } catch {
@@ -588,8 +588,8 @@ export function getGrnsPendingInvoice(): import("@/app/(app)/warehouse/grnqc/grn
 
 /** Create a purchase invoice from a received GRN */
 export function createPurchaseFromGrn(input: GrnPurchaseInput): PurchaseInvoiceRecord {
-  if (!input.vendorId) throw new Error("Vendor is required.");
-  if (!input.vendorInvoiceNo.trim()) throw new Error("Vendor invoice number is required.");
+  if (!input.vendorId) throw new Error("Supplier is required.");
+  if (!input.vendorInvoiceNo.trim()) throw new Error("Supplier invoice number is required.");
   if (!input.lineItems.length) throw new Error("At least one line item is required.");
 
   const all = loadPurchaseInvoices();

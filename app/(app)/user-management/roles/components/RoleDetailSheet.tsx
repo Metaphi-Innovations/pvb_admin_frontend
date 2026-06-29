@@ -33,8 +33,7 @@ export default function RoleDetailSheet({ open, onClose, role, onEdit }: RoleDet
       recordCode={role.roleName}
       status={role.status}
       basicInfo={[{ label: "Department", value: role.department }]}
-      description={role.description}
-      showDescription
+      showDescription={false}
       auditInfo={masterAuditFromRecord({
         createdBy: role.createdBy,
         createdDate: role.createdDate,

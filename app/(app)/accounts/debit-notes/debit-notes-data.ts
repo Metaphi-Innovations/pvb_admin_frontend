@@ -15,8 +15,8 @@ import {
   type PurchaseInvoiceLine,
   type PurchaseInvoiceRecord,
 } from "../purchase-invoices/purchase-invoices-data";
-import { getGrnRecords } from "@/app/(app)/warehouse/grnqc/grn/mock-data";
-import { getQcRecords } from "@/app/(app)/warehouse/grnqc/qc/mock-data";
+import { getGrnRecords } from "@/app/(app)/warehouse/grn/mock-data";
+import { getQcRecords } from "@/app/(app)/warehouse/qc/mock-data";
 
 export type DebitNoteAgainst = "purchase_invoice" | "purchase_order" | "standalone_adjustment";
 export type DebitReferenceType = DebitNoteAgainst;
@@ -611,7 +611,7 @@ export function lookupPurchaseOrderForDebit(poId: number) {
 }
 
 function validateBasic(input: DebitNoteFormInput): void {
-  if (!input.vendorName.trim()) throw new Error("Vendor is required.");
+  if (!input.vendorName.trim()) throw new Error("Supplier is required.");
   if (!input.reason.trim()) throw new Error("Reason is required.");
   if (!input.remarks.trim()) throw new Error("Remarks are required.");
   if (input.againstType === "standalone_adjustment") {

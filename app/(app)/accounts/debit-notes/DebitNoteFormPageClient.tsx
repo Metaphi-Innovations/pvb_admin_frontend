@@ -332,9 +332,6 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.push(DEBIT_NOTES_LIST_PATH)}>
             Cancel
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => submit("draft")}>
-            Save as Draft
-          </Button>
           <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={() => submit("pending_approval")}>
             Save & Submit
           </Button>
@@ -427,7 +424,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
                 rows={
                   referencePreview.referenceType === "purchase_invoice"
                     ? [
-                        { label: "Vendor", value: referencePreview.vendorName },
+                        { label: "Supplier", value: referencePreview.vendorName },
                         { label: "Invoice Date", value: referencePreview.documentDate },
                         { label: "PI No.", value: referencePreview.sourceInvoiceNo },
                         { label: "PO No.", value: referencePreview.sourcePoNo },
@@ -438,7 +435,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
                         { label: "Already Debited", value: formatINR(referencePreview.alreadyAdjustedAmount) },
                       ]
                     : [
-                        { label: "Vendor", value: referencePreview.vendorName },
+                        { label: "Supplier", value: referencePreview.vendorName },
                         { label: "PO Date", value: referencePreview.documentDate },
                         { label: "PO No.", value: referencePreview.sourcePoNo },
                         { label: "PI No.", value: referencePreview.sourceInvoiceNo },
@@ -576,7 +573,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
           </div>
           <LedgerImpactPreview
             lines={debitNoteImpactResolved({
-              vendorName: vendors.find((v) => String(v.id) === vendorId)?.vendorName ?? "Vendor",
+              vendorName: vendors.find((v) => String(v.id) === vendorId)?.vendorName ?? "Supplier",
               taxable:
                 referenceType === "standalone_adjustment"
                   ? totalDebit - lineTotals.gstAmount

@@ -494,7 +494,7 @@ function seedVendorPayment(
   const voucher = createVoucher("payment", {
     date,
     referenceNo,
-    narration: `Vendor payment — ${vendorName} (${billNo})`,
+    narration: `Supplier payment — ${vendorName} (${billNo})`,
     status: "posted",
     lines: [
       {
@@ -645,7 +645,7 @@ function postVendorCreditNoteVoucher(note: VendorCreditNoteRecord): void {
   createVoucher("journal", {
     date: note.creditNoteDate,
     referenceNo: note.creditNoteNo,
-    narration: `Vendor credit note — ${note.vendorName} (${note.reason})`,
+    narration: `Supplier credit note — ${note.vendorName} (${note.reason})`,
     status: "posted",
     lines: [
       {
@@ -702,7 +702,7 @@ export function seedPayablesDemoData(
   const vendors = loadVendors();
   const purchases = PAYABLES_DEMO_BILLS.map((spec) => {
     const vendor = vendors.find((v) => v.id === spec.vendorId);
-    return buildPurchaseBill(spec, vendor?.vendorName ?? "Vendor", vendor?.gstNumber ?? "");
+    return buildPurchaseBill(spec, vendor?.vendorName ?? "Supplier", vendor?.gstNumber ?? "");
   });
   savePurchaseInvoices(purchases);
 

@@ -9,7 +9,6 @@ import {
 	Trash2,
 	Upload,
 	RefreshCw,
-	ChevronsUpDown,
 	Check,
 	ChevronDown,
 	Loader2,
@@ -29,13 +28,12 @@ import {
 	type VendorProductMapping,
 	emptyContact,
 	todayStr,
-	isGoodsVendorType,
 } from "../vendor-data";
 import { loadActiveVendorTypeOptions } from "../../vendor-type/vendor-type-data";
-import { PAYMENT_TERMS_OPTIONS } from "../../customers/customer-data";
+import { PaymentTermsFields } from "@/components/masters/erp/PaymentTermsFields";
 import { getActiveTDSMasters, toTdsSelectOptions } from "../../tds/tds-data";
 import { SearchableSelect } from "../../customers/components/SearchableSelect";
-import { loadGeoNodes, resolvePincodeLocation, getStateSelectOptions } from "../../geography/geo-data";
+import { loadGeoNodes, getStateSelectOptions } from "../../geography/geo-data";
 import { loadDocumentTypes } from "../../document-types/document-type-data";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { cn } from "@/lib/utils";
@@ -50,7 +48,7 @@ import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
 import { getStandardMrp } from "@/lib/pricing/resolve-pricing";
 import { GstRegistrationFields, GstRegisteredToggleControl } from "@/components/masters/GstRegistrationFields";
-import { RegisteredNumberRow } from "@/components/masters/RegisteredNumberRow";
+import { ComplianceCertificationsGrid } from "@/components/masters/erp/ComplianceCertificationsGrid";
 import { ErpFormSection } from "@/components/masters/erp/ErpFormSection";
 import { BranchAddressFields } from "@/components/masters/erp/BranchAddressFields";
 import { ERP } from "@/components/masters/erp/erp-form-styles";
@@ -63,7 +61,6 @@ import {
 	gstApplicableFromCategory,
 	gstDetailsToAddressSnapshot,
 	GST_REGISTRATION_TYPE_DEFAULT,
-	formatUdyamInput,
 	validateGSTIN,
 	type GstAddressSnapshot,
 } from "@/lib/masters/gst-compliance";
@@ -71,7 +68,7 @@ import {
 const ALL_TABS = [
 	{ id: "basic", label: "Basic Details" },
 	{ id: "contact", label: "Contact Information" },
-	{ id: "banking", label: "Bank Details" },
+	{ id: "banking", label: "Bank & Commercial" },
 	{ id: "product", label: "Product Mapping" },
 	{ id: "documents", label: "Documents & Remarks" },
 ] as const;
@@ -253,148 +250,6 @@ function ProductSelect({
 	);
 }
 
-function DocumentNameField({
-	value,
-	documentTypeId,
-	onChange,
-	readOnly,
-	error,
-}: {
-	value: string;
-	documentTypeId?: string;
-	onChange: (next: { documentName: string; documentTypeId?: string }) => void;
-	readOnly?: boolean;
-	error?: string;
-}) {
-	const activeDocTypes = useMemo(
-		() => loadDocumentTypes().filter((d) => d.status === "Active"),
-		[],
-	);
-	const [open, setOpen] = useState(false);
-	const rootRef = useRef<HTMLDivElement | null>(null);
-	const filtered = useMemo(() => {
-		const q = value.trim().toLowerCase();
-		if (!q) return activeDocTypes;
-		return activeDocTypes.filter(
-			(d) =>
-				d.title.toLowerCase().includes(q) ||
-				d.description.toLowerCase().includes(q) ||
-				d.id.toLowerCase().includes(q),
-		);
-	}, [activeDocTypes, value]);
-	const selected = activeDocTypes.find((d) => d.id === documentTypeId);
-
-	useEffect(() => {
-		if (!open || readOnly) return;
-
-		const onPointerDown = (event: PointerEvent) => {
-			const target = event.target as Node | null;
-			if (target && rootRef.current?.contains(target)) return;
-			setOpen(false);
-		};
-
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") setOpen(false);
-		};
-
-		document.addEventListener("pointerdown", onPointerDown);
-		document.addEventListener("keydown", onKeyDown);
-		return () => {
-			document.removeEventListener("pointerdown", onPointerDown);
-			document.removeEventListener("keydown", onKeyDown);
-		};
-	}, [open, readOnly]);
-
-	return (
-		<div className='relative space-y-1' ref={rootRef}>
-			<div className='relative'>
-				<Input
-					disabled={readOnly}
-					value={value}
-					onChange={(e) => {
-						onChange({
-							documentName: e.target.value,
-							documentTypeId: undefined,
-						});
-						setOpen(true);
-					}}
-					onFocus={() => setOpen(true)}
-					onClick={() => setOpen(true)}
-					onKeyDown={(e) => {
-						if (!readOnly) {
-							if (e.key === "Escape") setOpen(false);
-							else setOpen(true);
-						}
-					}}
-					className={cn(
-						"h-8 text-xs border-border/60 pr-9",
-						error && "border-red-400 focus-visible:ring-red-300",
-					)}
-					placeholder='Type or select document type'
-				/>
-				<button
-					type='button'
-					tabIndex={-1}
-					className='absolute -translate-y-1/2 right-2 top-1/2 text-muted-foreground'
-					onMouseDown={(e) => e.preventDefault()}
-					onClick={() => {
-						if (!readOnly) setOpen(true);
-					}}
-				>
-					<ChevronsUpDown className='w-3.5 h-3.5' />
-				</button>
-			</div>
-			{open && !readOnly && (
-				<div className='absolute left-0 z-50 w-full mt-1 bg-white border rounded-lg shadow-lg top-full border-border/60'>
-					<div className='py-1 overflow-y-auto max-h-56'>
-						{filtered.length === 0 ? (
-							<p className='px-3 py-3 text-xs text-muted-foreground'>
-								No matching document types
-							</p>
-						) : (
-							filtered.map((docType) => (
-								<button
-									key={docType.id}
-									type='button'
-									className={cn(
-										"w-full px-3 py-2 text-left hover:bg-muted/60 flex items-start gap-2",
-										selected?.id === docType.id && "bg-brand-50",
-									)}
-									onMouseDown={(e) => e.preventDefault()}
-									onClick={() => {
-										onChange({
-											documentName: docType.title,
-											documentTypeId: docType.id,
-										});
-										setOpen(false);
-									}}
-								>
-									<div className='flex-1 min-w-0'>
-										<div className='flex items-center min-w-0 gap-2'>
-											<span className='text-xs font-medium truncate text-foreground'>
-												{docType.title}
-											</span>
-											{selected?.id === docType.id && (
-												<Check className='w-3 h-3 text-brand-600 shrink-0' />
-											)}
-										</div>
-										{docType.description && (
-											<p className='text-[10px] text-muted-foreground truncate mt-0.5'>
-												{docType.description}
-											</p>
-										)}
-									</div>
-								</button>
-							))
-						)}
-					</div>
-				</div>
-			)}
-			{error && <p className='text-[11px] text-red-500'>{error}</p>}
-		</div>
-	);
-}
-
 export function VendorForm({
 	form,
 	onChange,
@@ -433,23 +288,6 @@ export function VendorForm({
 		() => getStateSelectOptions(geoNodes),
 		[geoNodes],
 	);
-
-	const visibleTabs = useMemo(() => {
-		const tabs = ALL_TABS.filter((t) => {
-			if (t.id === "product") return isGoodsVendorType(form.vendorType);
-			if (t.id === "banking") return Boolean(form.vendorType);
-			return true;
-		});
-		return tabs;
-	}, [form.vendorType]);
-
-	useEffect(() => {
-		if (!visibleTabs.some((t) => t.id === tab)) {
-			setTab("basic");
-		}
-	}, [visibleTabs, tab]);
-
-	const isGoods = isGoodsVendorType(form.vendorType);
 
 	const showToast = (msg: string, type: "success" | "error" = "error") => {
 		setToast({ msg, type });
@@ -577,6 +415,7 @@ export function VendorForm({
 		ERP.input,
 		"border-border/70 rounded-md bg-white shadow-none focus-visible:ring-1 focus-visible:ring-brand-500/30",
 	);
+	const bankFieldClass = inputCls;
 
 	const billingAsBranch = useMemo(
 		() => ({
@@ -584,9 +423,10 @@ export function VendorForm({
 			addressLine2: form.billingAddress.line2,
 			country: form.billingAddress.country || "India",
 			city: form.billingAddress.city,
+			town: form.billingAddress.town ?? "",
+			district: form.billingAddress.district ?? "",
 			state: form.billingAddress.state,
 			pincode: form.billingAddress.pincode,
-			district: "",
 		}),
 		[form.billingAddress],
 	);
@@ -596,6 +436,8 @@ export function VendorForm({
 		addressLine2?: string;
 		country?: string;
 		city: string;
+		town?: string;
+		district?: string;
 		state: string;
 		pincode: string;
 	}) => {
@@ -605,24 +447,11 @@ export function VendorForm({
 			line2: addr.addressLine2 ?? "",
 			country: addr.country ?? "India",
 			city: addr.city,
+			town: addr.town ?? "",
+			district: addr.district ?? "",
 			state: addr.state,
 			pincode: addr.pincode,
 		});
-	};
-
-	const handlePincodeChange = (pincode: string) => {
-		const digits = pincode.replace(/\D/g, "").slice(0, 6);
-		const next = { ...form.billingAddress, pincode: digits };
-		const country = form.billingAddress.country || "India";
-		if (digits.length === 6 && country === "India") {
-			const loc = resolvePincodeLocation(digits, geoNodes);
-			if (loc) {
-				if (loc.city) next.city = loc.city;
-				else if (loc.district) next.city = loc.district;
-				if (loc.state) next.state = loc.state;
-			}
-		}
-		set("billingAddress", next);
 	};
 
 	const handleFetchGst = async () => {
@@ -691,40 +520,8 @@ export function VendorForm({
 		);
 	};
 
-	const addDocumentRow = () => {
-		const incompleteIndex = form.documents.findIndex(
-			(doc) => !doc.documentName.trim(),
-		);
-		if (incompleteIndex !== -1) {
-			showToast("Please fill the current document before adding another.");
-			return;
-		}
-
-		set("documents", [
-			...form.documents,
-			{
-				uid: `d-${Date.now()}`,
-				documentName: "",
-				documentTypeId: undefined,
-				file: undefined,
-				fileUrl: undefined,
-				uploaded: false,
-				fileName: "",
-				uploadedAt: "",
-				size: "",
-			},
-		]);
-	};
-
 	const addSelectedDocumentTypes = () => {
 		if (bulkDocumentTypeIds.length === 0) return;
-		const incompleteIndex = form.documents.findIndex(
-			(doc) => !doc.documentName.trim(),
-		);
-		if (incompleteIndex !== -1) {
-			showToast("Please fill the current document before adding another.");
-			return;
-		}
 
 		const selectedIds = Array.from(new Set(bulkDocumentTypeIds));
 		const existingTypeIds = new Set(
@@ -784,13 +581,6 @@ export function VendorForm({
 		);
 	};
 
-	const updateDocument = (uid: string, patch: Partial<VendorDocument>) => {
-		set(
-			"documents",
-			form.documents.map((d) => (d.uid === uid ? { ...d, ...patch } : d)),
-		);
-	};
-
 	const removeDocumentRow = (uid: string) => {
 		const row = form.documents.find((d) => d.uid === uid);
 		if (row?.fileUrl && row.fileUrl.startsWith("blob:")) {
@@ -815,9 +605,9 @@ export function VendorForm({
 	};
 
 	return (
-		<div className='shadow-sm'>
+		<div className='shadow-sm min-w-0 max-w-full overflow-x-hidden'>
 			<VendorTabBar
-				tabs={visibleTabs}
+				tabs={ALL_TABS}
 				active={tab}
 				onChange={(id) => setTab(id as TabId)}
 			/>
@@ -830,19 +620,19 @@ export function VendorForm({
 								<div className={ERP.grid3}>
 									<div className={ERP.field}>
 										<Label className={ERP.label}>
-											Vendor Type <span className='text-red-500'>*</span>
+											Supplier Type <span className='text-red-500'>*</span>
 										</Label>
 										<AutocompleteSelect
 											disabled={readOnly}
 											value={form.vendorType}
 											onChange={(value) => set("vendorType", String(value))}
 											options={vendorTypeOptions}
-											placeholder='Select vendor type...'
+											placeholder='Select supplier type...'
 											className={inputCls}
 										/>
 									</div>
 									<div className={ERP.field}>
-										<Label className={ERP.label}>Vendor Code</Label>
+										<Label className={ERP.label}>Supplier Code</Label>
 										<Input
 											value={
 												vendorCode ||
@@ -855,7 +645,7 @@ export function VendorForm({
 									</div>
 									<div className={ERP.field}>
 										<Label className={ERP.label}>
-											Vendor Name <span className='text-red-500'>*</span>
+											Supplier Name <span className='text-red-500'>*</span>
 										</Label>
 										<Input
 											disabled={readOnly}
@@ -868,22 +658,6 @@ export function VendorForm({
 								</div>
 
 								<div className={ERP.grid3}>
-									<div className={ERP.field}>
-										<Label className={ERP.label}>
-											Payment Terms <span className='text-red-500'>*</span>
-										</Label>
-										<AutocompleteSelect
-											disabled={readOnly}
-											value={form.paymentTerms}
-											onChange={(value) => set("paymentTerms", String(value))}
-											options={PAYMENT_TERMS_OPTIONS.map((o) => ({
-												value: o.value,
-												label: o.label,
-											}))}
-											placeholder='Select payment terms...'
-											className={inputCls}
-										/>
-									</div>
 									<div className={ERP.field}>
 										<Label className={ERP.label}>Contact Person</Label>
 										<Input
@@ -904,9 +678,6 @@ export function VendorForm({
 											disabled={readOnly}
 										/>
 									</div>
-								</div>
-
-								<div className={ERP.grid3}>
 									<div className={ERP.field}>
 										<Label className={ERP.label}>Email Address</Label>
 										<Input
@@ -974,58 +745,60 @@ export function VendorForm({
 								footer={
 									<div
 										className={cn(
-											ERP.grid3,
+											"space-y-2",
 											form.gstRegistered ? "pt-1.5 border-t border-border/50" : "",
 										)}
 									>
-										<div className={ERP.field}>
-											<Label className={ERP.label}>
-												PAN Number <span className='text-red-500'>*</span>
-											</Label>
-											<Input
-												disabled={readOnly}
-												value={form.panNumber}
-												onChange={(e) =>
-													set("panNumber", e.target.value.toUpperCase())
-												}
-												className={cn(inputCls, "font-mono uppercase")}
-												maxLength={10}
-												placeholder='ABCDE1234F'
-											/>
-										</div>
-										<div className={ERP.field}>
-											<Label className={ERP.label}>TAN Number</Label>
-											<Input
-												disabled={readOnly}
-												value={form.tanNumber}
-												onChange={(e) =>
-													set("tanNumber", e.target.value.toUpperCase())
-												}
-												className={cn(inputCls, "font-mono uppercase")}
-												maxLength={10}
-												placeholder='AAAA99999A'
-											/>
-										</div>
-										<div className={ERP.field}>
-											<Label className={ERP.label}>TDS Applicable</Label>
-											<div className='flex h-8 items-center'>
-												<ListingStatusToggle
-													active={form.tdsApplicable}
-													onChange={(yes) =>
-														!readOnly &&
-														onChange({
-															...form,
-															tdsApplicable: yes,
-															tdsMasterId: yes ? form.tdsMasterId : "",
-														})
-													}
+										<div className={ERP.grid2}>
+											<div className={ERP.field}>
+												<Label className={ERP.label}>
+													PAN Number <span className='text-red-500'>*</span>
+												</Label>
+												<Input
 													disabled={readOnly}
+													value={form.panNumber}
+													onChange={(e) =>
+														set("panNumber", e.target.value.toUpperCase())
+													}
+													className={cn(inputCls, "font-mono uppercase")}
+													maxLength={10}
+													placeholder='ABCDE1234F'
+												/>
+											</div>
+											<div className={ERP.field}>
+												<Label className={ERP.label}>TAN Number</Label>
+												<Input
+													disabled={readOnly}
+													value={form.tanNumber}
+													onChange={(e) =>
+														set("tanNumber", e.target.value.toUpperCase())
+													}
+													className={cn(inputCls, "font-mono uppercase")}
+													maxLength={10}
+													placeholder='AAAA99999A'
 												/>
 											</div>
 										</div>
-										<div className={ERP.field}>
+										<div className="flex flex-wrap items-end gap-3">
+											<div className={ERP.field}>
+												<Label className={ERP.label}>TDS Applicable</Label>
+												<div className='flex h-8 items-center'>
+													<ListingStatusToggle
+														active={form.tdsApplicable}
+														onChange={(yes) =>
+															!readOnly &&
+															onChange({
+																...form,
+																tdsApplicable: yes,
+																tdsMasterId: yes ? form.tdsMasterId : "",
+															})
+														}
+														disabled={readOnly}
+													/>
+												</div>
+											</div>
 											{form.tdsApplicable ? (
-												<>
+												<div className={cn(ERP.field, "min-w-[200px] flex-1")}>
 													<Label className={ERP.label}>
 														TDS Section <span className='text-red-500'>*</span>
 													</Label>
@@ -1036,7 +809,7 @@ export function VendorForm({
 														placeholder='Select TDS...'
 														disabled={readOnly}
 													/>
-												</>
+												</div>
 											) : null}
 										</div>
 									</div>
@@ -1044,26 +817,27 @@ export function VendorForm({
 							/>
 						</ErpFormSection>
 
-						<ErpFormSection title='Compliance & Certifications'>
-							<RegisteredNumberRow
-								label='MSME Registered?'
-								registered={form.msmeRegistered}
-								onRegisteredChange={(yes) =>
+						<ErpFormSection title='Compliance & Certifications' bodyClassName='p-2'>
+							<ComplianceCertificationsGrid
+								rows={["msme"]}
+								values={{
+									msmeRegistered: form.msmeRegistered,
+									msmeNumber: form.msmeNumber,
+									fssaiRegistered: false,
+									fssai: "",
+									cibRegistered: false,
+									cibRegn: "",
+									fcoRegistered: false,
+									fcoRegn: "",
+								}}
+								onChange={(compliance) =>
 									onChange({
 										...form,
-										msmeRegistered: yes,
-										msmeNumber: yes ? form.msmeNumber : "",
+										msmeRegistered: compliance.msmeRegistered,
+										msmeNumber: compliance.msmeNumber,
 									})
 								}
-								numberLabel='MSME Number'
-								numberValue={form.msmeNumber}
-								onNumberChange={(value) =>
-									set("msmeNumber", formatUdyamInput(value))
-								}
-								numberPlaceholder='UDYAM-MH-27-0123456'
-								namePrefix='vendor-msme'
 								readOnly={readOnly}
-								inputClassName={inputCls}
 							/>
 						</ErpFormSection>
 
@@ -1071,7 +845,6 @@ export function VendorForm({
 							<BranchAddressFields
 								address={billingAsBranch}
 								onChange={setBillingFromBranch}
-								onPincodeChange={handlePincodeChange}
 								readOnly={readOnly}
 								stateOptions={stateOptions}
 							/>
@@ -1184,68 +957,90 @@ export function VendorForm({
 				)}
 
 				{tab === "banking" && (
-					<div className=''>
-						<SectionDivider title='Bank Account' required />
-						<div className='grid grid-cols-5 gap-3'>
-							<Field label='Account Holder Name'>
-								<Input
-									disabled={readOnly}
-									value={form.accountHolderName}
-									onChange={(e) => set("accountHolderName", e.target.value)}
-									className={fieldClass}
-									placeholder='e.g. Rajesh Kumar'
-								/>
-							</Field>
-							<Field label='Bank Name'>
-								<Input
-									disabled={readOnly}
-									value={form.bankName}
-									onChange={(e) => set("bankName", e.target.value)}
-									className={fieldClass}
-									placeholder='e.g. HDFC Bank'
-								/>
-							</Field>
-							<Field label='Branch Name'>
-								<Input
-									disabled={readOnly}
-									value={form.branch}
-									onChange={(e) => set("branch", e.target.value)}
-									className={fieldClass}
-									placeholder='e.g. Dadar West'
-								/>
-							</Field>
-							<Field label='Account Number'>
-								<Input
-									disabled={readOnly}
-									value={form.accountNumber}
-									onChange={(e) => set("accountNumber", e.target.value)}
-									className={cn(fieldClass, "font-mono")}
-									placeholder='e.g. 50100234567890'
-								/>
-							</Field>
-							<Field label='Confirm Account Number'>
-								<Input
-									disabled={readOnly}
-									value={form.confirmAccountNumber}
-									onChange={(e) => set("confirmAccountNumber", e.target.value)}
-									className={cn(fieldClass, "font-mono")}
-									placeholder='Re-enter account number'
-								/>
-							</Field>
-						</div>
-						<div className='grid grid-cols-1 gap-3 md:grid-cols-5'>
-							<Field label='IFSC Code'>
-								<Input
-									disabled={readOnly}
-									value={form.ifscCode}
-									onChange={(e) =>
-										set("ifscCode", e.target.value.toUpperCase())
-									}
-									className={cn(fieldClass, "font-mono uppercase")}
-									placeholder='e.g. HDFC0000012'
-								/>
-							</Field>
-						</div>
+					<div className={ERP.sectionGap}>
+						<ErpFormSection title='Payment Terms'>
+							<PaymentTermsFields
+								values={{
+									paymentType: form.paymentType,
+									creditDays: form.creditDays,
+									advancePercentage: form.advancePercentage,
+								}}
+								onChange={(patch) => onChange({ ...form, ...patch })}
+								readOnly={readOnly}
+								inputClassName={bankFieldClass}
+							/>
+						</ErpFormSection>
+
+						<ErpFormSection title='Bank Details'>
+							<div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2'>
+								<div className={ERP.field}>
+									<Label className={ERP.label}>Account Holder Name</Label>
+									<Input
+										disabled={readOnly}
+										value={form.accountHolderName}
+										onChange={(e) => set("accountHolderName", e.target.value)}
+										className={bankFieldClass}
+									/>
+								</div>
+								<div className={ERP.field}>
+									<Label className={ERP.label}>Bank Name</Label>
+									<Input
+										disabled={readOnly}
+										value={form.bankName}
+										onChange={(e) => set("bankName", e.target.value)}
+										className={bankFieldClass}
+									/>
+								</div>
+								<div className={ERP.field}>
+									<Label className={ERP.label}>Branch Name</Label>
+									<Input
+										disabled={readOnly}
+										value={form.branch}
+										onChange={(e) => set("branch", e.target.value)}
+										className={bankFieldClass}
+									/>
+								</div>
+								<div className={ERP.field}>
+									<Label className={ERP.label}>Account Number</Label>
+									<Input
+										disabled={readOnly}
+										value={form.accountNumber}
+										onChange={(e) => set("accountNumber", e.target.value)}
+										className={cn(bankFieldClass, "font-mono")}
+									/>
+								</div>
+								<div className={ERP.field}>
+									<Label className={ERP.label}>Confirm Account Number</Label>
+									<Input
+										disabled={readOnly}
+										value={form.confirmAccountNumber}
+										onChange={(e) => set("confirmAccountNumber", e.target.value)}
+										className={cn(bankFieldClass, "font-mono")}
+									/>
+								</div>
+								<div className={ERP.field}>
+									<Label className={ERP.label}>IFSC Code</Label>
+									<Input
+										disabled={readOnly}
+										value={form.ifscCode}
+										onChange={(e) =>
+											set("ifscCode", e.target.value.toUpperCase())
+										}
+										className={cn(bankFieldClass, "font-mono uppercase")}
+									/>
+								</div>
+								<div className={ERP.field}>
+									<Label className={ERP.label}>SWIFT Code</Label>
+									<Input
+										disabled={readOnly}
+										value={form.swiftCode}
+										onChange={(e) => set("swiftCode", e.target.value.toUpperCase())}
+										className={cn(bankFieldClass, "font-mono uppercase")}
+										placeholder='Optional'
+									/>
+								</div>
+							</div>
+						</ErpFormSection>
 					</div>
 				)}
 
@@ -1254,7 +1049,7 @@ export function VendorForm({
 						<div className='flex items-center justify-between pb-1 border-b border-border/60'>
 							<SectionDivider
 								title='Product Mappings'
-								subtitle='Vendor-specific purchase prices'
+								subtitle='Supplier-specific purchase prices'
 							/>
 						</div>
 
@@ -1424,7 +1219,7 @@ export function VendorForm({
 																	type='number'
 																	min={0}
 																	step='0.01'
-																	placeholder='Enter vendor price'
+																	placeholder='Enter supplier price'
 																	value={p.price === undefined ? "" : p.price}
 																	onChange={(e) => {
 																		const val =
@@ -1557,50 +1352,44 @@ export function VendorForm({
 									</div>
 								</div>
 							)}
-							<div className='overflow-x-auto border rounded-lg border-border/50'>
-								<table className='w-full text-xs min-w-[640px]'>
-									<thead>
-										<tr className='text-left border-b bg-muted/25 border-border/50 text-muted-foreground'>
-											<th className='px-3 py-2 font-medium'>Document Name</th>
-											<th className='px-3 py-2 font-medium'>Upload File</th>
-											<th className='px-3 py-2 text-right w-36' />
-										</tr>
-									</thead>
-									<tbody>
-										{form.documents.map((doc) => (
-											<DocRow
-												key={doc.uid}
-												doc={doc}
-												readOnly={readOnly}
-												fileRef={(el) => {
-													fileRefs.current[doc.uid] = el;
-												}}
-												onNameChange={(patch) => updateDocument(doc.uid, patch)}
-												onUpload={(file) => uploadDoc(doc.uid, file)}
-												onDelete={() => removeDocumentRow(doc.uid)}
-												onPickFile={() => {
-													fileRefs.current[doc.uid]?.click();
-												}}
-												onOpenFile={() => openFile(doc.fileUrl)}
-												canReupload={
-													!!doc.fileName || !!doc.fileUrl || !!doc.uploaded
-												}
-											/>
-										))}
-									</tbody>
-								</table>
-							</div>
-							{!readOnly && (
-								<div className='mt-2.5 flex flex-wrap gap-2'>
-									<Button
-										type='button'
-										variant='outline'
-										size='sm'
-										className='h-8 text-xs border-dashed'
-										onClick={addDocumentRow}
-									>
-										<Plus className='w-3.5 h-3.5 mr-1' /> Add Manual Document
-									</Button>
+							{form.documents.length === 0 ? (
+								<div className='rounded-lg border border-dashed border-border/60 px-4 py-6 text-center'>
+									<p className='text-xs text-muted-foreground'>
+										Select document types above and click Add Selected to upload files.
+									</p>
+								</div>
+							) : (
+								<div className='overflow-x-auto border rounded-lg border-border/50'>
+									<table className='w-full text-xs min-w-[640px]'>
+										<thead>
+											<tr className='text-left border-b bg-muted/25 border-border/50 text-muted-foreground'>
+												<th className='px-3 py-2 font-medium'>Document Name</th>
+												<th className='px-3 py-2 font-medium'>Upload File</th>
+												<th className='px-3 py-2 text-right w-36' />
+											</tr>
+										</thead>
+										<tbody>
+											{form.documents.map((doc) => (
+												<DocRow
+													key={doc.uid}
+													doc={doc}
+													readOnly={readOnly}
+													fileRef={(el) => {
+														fileRefs.current[doc.uid] = el;
+													}}
+													onUpload={(file) => uploadDoc(doc.uid, file)}
+													onDelete={() => removeDocumentRow(doc.uid)}
+													onPickFile={() => {
+														fileRefs.current[doc.uid]?.click();
+													}}
+													onOpenFile={() => openFile(doc.fileUrl)}
+													canReupload={
+														!!doc.fileName || !!doc.fileUrl || !!doc.uploaded
+													}
+												/>
+											))}
+										</tbody>
+									</table>
 								</div>
 							)}
 						</section>
@@ -1611,7 +1400,7 @@ export function VendorForm({
 								disabled={readOnly}
 								value={form.remarks}
 								onChange={(e) => set("remarks", e.target.value)}
-								placeholder='Internal notes about this vendor…'
+								placeholder='Internal notes about this supplier…'
 								className='min-h-[80px] text-sm resize-none rounded-lg border-border/70'
 							/>
 						</section>
@@ -1633,7 +1422,6 @@ function DocRow({
 	doc,
 	readOnly,
 	fileRef,
-	onNameChange,
 	onUpload,
 	onDelete,
 	onPickFile,
@@ -1643,10 +1431,6 @@ function DocRow({
 	doc: VendorDocument;
 	readOnly?: boolean;
 	fileRef: (el: HTMLInputElement | null) => void;
-	onNameChange: (patch: {
-		documentName: string;
-		documentTypeId?: string;
-	}) => void;
 	onUpload: (file: File) => void;
 	onDelete: () => void;
 	onPickFile: () => void;
@@ -1656,12 +1440,9 @@ function DocRow({
 	return (
 		<tr className='border-b border-border/40 last:border-0 hover:bg-muted/10'>
 			<td className='px-3 py-2'>
-				<DocumentNameField
-					value={doc.documentName}
-					documentTypeId={doc.documentTypeId}
-					readOnly={readOnly}
-					onChange={onNameChange}
-				/>
+				<span className='text-xs font-medium text-foreground'>
+					{doc.documentName || "—"}
+				</span>
 			</td>
 			<td className='px-3 py-2'>
 				<input

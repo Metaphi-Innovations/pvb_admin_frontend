@@ -2,7 +2,6 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import type { GeoNode } from "@/app/(app)/masters/geography/geo-data";
 import {
   type StructuredAddress,
   copyStructuredAddress,
@@ -16,7 +15,6 @@ export interface DualAddressSectionProps {
   onPermanentChange: (value: StructuredAddress) => void;
   sameAsCurrent: boolean;
   onSameAsCurrentChange: (checked: boolean) => void;
-  geoNodes: GeoNode[];
   currentErrors?: Partial<Record<keyof StructuredAddress, string>>;
   permanentErrors?: Partial<Record<keyof StructuredAddress, string>>;
 }
@@ -28,7 +26,6 @@ export function DualAddressSection({
   onPermanentChange,
   sameAsCurrent,
   onSameAsCurrentChange,
-  geoNodes,
   currentErrors,
   permanentErrors,
 }: DualAddressSectionProps) {
@@ -52,7 +49,6 @@ export function DualAddressSection({
         title="Current Address"
         value={current}
         onChange={handleCurrentChange}
-        geoNodes={geoNodes}
         errors={currentErrors}
         required
       />
@@ -73,7 +69,6 @@ export function DualAddressSection({
           <AddressBlock
             value={permanent}
             onChange={onPermanentChange}
-            geoNodes={geoNodes}
             disabled={sameAsCurrent}
             errors={permanentErrors}
             required

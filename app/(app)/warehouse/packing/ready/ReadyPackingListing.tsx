@@ -1,69 +1,116 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye, PlusCircle, Clock } from "lucide-react";
+import { Eye, PlusCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { SalesOrderRecord } from "../types";
 import Link from "next/link";
 import {
   CUSTOMER_OPTIONS,
-  PRIORITY_OPTIONS,
   READY_STATUS_OPTIONS,
-  PRIORITY_BADGE_CONFIG,
-  STATUS_BADGE_CONFIG
+  STATUS_BADGE_CONFIG,
 } from "../constants";
+import {
+  resolveWarehouseOrderType,
+  matchesOrderTypeFilter,
+  ORDER_TYPE_BADGE_CONFIG,
+  formatWarehouseOrderAmount,
+  type OrderTypeFilterTab,
+} from "@/app/(app)/warehouse/lib/order-document-type";
+
+type PackingSourceTab = Exclude<OrderTypeFilterTab, "all">;
 
 interface ReadyPackingListingProps {
   ordersForWarehouse: SalesOrderRecord[];
+  sourceFilter: PackingSourceTab;
 }
 
-export function ReadyPackingListing({ ordersForWarehouse }: ReadyPackingListingProps) {
-  const router = useRouter();
+function OrderTypeBadge({ row }: { row: SalesOrderRecord }) {
+  const type = resolveWarehouseOrderType(row);
+  const cfg = ORDER_TYPE_BADGE_CONFIG[type];
+  return (
+    <span
+      className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}
+    >
+      {cfg.label}
+    </span>
+  );
+}
 
-  // Table state
+function readyStatusLabel(row: SalesOrderRecord): string {
+  const type = resolveWarehouseOrderType(row);
+  if (type === "sample_order" && row.status === "Ready For Packing") {
+    return "Pending Packing";
+  }
+  return row.status;
+}
+
+export function ReadyPackingListing({ ordersForWarehouse, sourceFilter }: ReadyPackingListingProps) {
+  const router = useRouter();
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // Process filters/sort client side
+  React.useEffect(() => {
+    setPage(1);
+  }, [sourceFilter]);
+
+  const filteredOrders = useMemo(() => {
+    return ordersForWarehouse.filter((item) => {
+      const type = resolveWarehouseOrderType(item);
+      return matchesOrderTypeFilter(type, sourceFilter);
+    });
+  }, [ordersForWarehouse, sourceFilter]);
+
   const processed = useMemo(() => {
-    let result = [...ordersForWarehouse];
+    let result = [...filteredOrders];
     Object.keys(filters).forEach((key) => {
       const val = filters[key];
       if (!val) return;
 
       if (key === "search") {
         const q = (val as string).toLowerCase();
-        result = result.filter(item =>
-          item.salesOrderNo.toLowerCase().includes(q) ||
-          item.customer.toLowerCase().includes(q)
+        result = result.filter(
+          (item) =>
+            item.salesOrderNo.toLowerCase().includes(q) ||
+            item.customer.toLowerCase().includes(q) ||
+            (item.sourceDocumentNo && item.sourceDocumentNo.toLowerCase().includes(q)) ||
+            (item.packingListNo && item.packingListNo.toLowerCase().includes(q)),
         );
-      } else if (key === "salesOrderNo") {
+      } else if (key === "salesOrderNo" || key === "packingListNo") {
         const q = (val as string).toLowerCase();
-        result = result.filter(item => item.salesOrderNo.toLowerCase().includes(q));
-      } else if (key === "customer" || key === "priority" || key === "status") {
+        result = result.filter(
+          (item) =>
+            item.salesOrderNo.toLowerCase().includes(q) ||
+            (item.packingListNo && item.packingListNo.toLowerCase().includes(q)),
+        );
+      } else if (key === "customer" || key === "status") {
         const selected = val as string[];
-        result = result.filter(item => selected.includes(String(item[key as keyof SalesOrderRecord])));
+        result = result.filter((item) =>
+          selected.includes(String(item[key as keyof SalesOrderRecord])),
+        );
       } else if (key === "orderDate") {
         const range = val as { fromDate: string; toDate: string };
-        if (range.fromDate) result = result.filter(item => item.orderDate >= range.fromDate);
-        if (range.toDate) result = result.filter(item => item.orderDate <= range.toDate);
-      } else if (key === "deliveryDate") {
-        const range = val as { fromDate: string; toDate: string };
-        if (range.fromDate) result = result.filter(item => item.deliveryDate >= range.fromDate);
-        if (range.toDate) result = result.filter(item => item.deliveryDate <= range.toDate);
+        if (range.fromDate) result = result.filter((item) => item.orderDate >= range.fromDate);
+        if (range.toDate) result = result.filter((item) => item.orderDate <= range.toDate);
       }
     });
 
     if (sort.key && sort.direction !== "none") {
       result.sort((a, b) => {
-        if (sort.key === "totalItems" || sort.key === "totalQuantity" || sort.key === "orderAmount") {
+        if (
+          sort.key === "totalItems" ||
+          sort.key === "totalQuantity" ||
+          sort.key === "orderAmount"
+        ) {
           return sort.direction === "asc"
-            ? (a[sort.key as keyof SalesOrderRecord] as number) - (b[sort.key as keyof SalesOrderRecord] as number)
-            : (b[sort.key as keyof SalesOrderRecord] as number) - (a[sort.key as keyof SalesOrderRecord] as number);
+            ? (a[sort.key as keyof SalesOrderRecord] as number) -
+                (b[sort.key as keyof SalesOrderRecord] as number)
+            : (b[sort.key as keyof SalesOrderRecord] as number) -
+                (a[sort.key as keyof SalesOrderRecord] as number);
         }
         const valA = String(a[sort.key as keyof SalesOrderRecord] || "");
         const valB = String(b[sort.key as keyof SalesOrderRecord] || "");
@@ -71,95 +118,108 @@ export function ReadyPackingListing({ ordersForWarehouse }: ReadyPackingListingP
       });
     }
     return result;
-  }, [ordersForWarehouse, filters, sort]);
+  }, [filteredOrders, filters, sort]);
 
   const paginated = useMemo(() => {
     const start = (page - 1) * pageSize;
     return processed.slice(start, start + pageSize);
   }, [processed, page, pageSize]);
 
-  // Columns
-  const columns: ColumnConfig<SalesOrderRecord>[] = [
-    {
-      key: "salesOrderNo",
-      header: "Sales Order No",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "135px",
-      render: (val, row) => (
-        <Link
-          href={`/warehouse/packing/create/${row.id}`}
-          className="font-mono text-xs font-semibold text-brand-700 hover:underline"
-        >
-          {val}
-        </Link>
-      )
-    },
-    { key: "customer", header: "Customer", sortable: true, filterable: true, filterType: "dropdown", filterOptions: CUSTOMER_OPTIONS, width: "160px" },
-    {
-      key: "totalItems",
-      header: "Total Items",
-      sortable: true,
-      align: "right",
-      width: "110px",
-      render: (val) => <span className="font-mono text-xs tabular-nums">{val}</span>
-    },
-    {
-      key: "totalQuantity",
-      header: "Total Qty",
-      sortable: true,
-      align: "right",
-      width: "110px",
-      render: (val) => <span className="font-mono text-xs tabular-nums">{val}</span>
-    },
-    {
-      key: "orderAmount",
-      header: "Order Amount",
-      sortable: true,
-      align: "right",
-      width: "125px",
-      render: (val: any) => `₹${Number(val).toLocaleString("en-IN")}`
-    },
-    { key: "orderDate", header: "Order Date", sortable: true, filterable: true, filterType: "date", width: "140px" },
-    { key: "deliveryDate", header: "Delivery Date", sortable: true, filterable: true, filterType: "date", width: "140px" },
-    {
-      key: "priority",
-      header: "Priority",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: PRIORITY_OPTIONS,
-      width: "110px",
-      render: (val: any) => {
-        const cfg = PRIORITY_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: val };
-        return (
-          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-semibold border ${cfg.bg}`}>
-            {cfg.label}
+  const columns = useMemo(() => {
+    return [
+      {
+        key: "orderType",
+        header: "Order Type",
+        width: "100px",
+        render: (_: unknown, row: SalesOrderRecord) => <OrderTypeBadge row={row} />,
+      },
+      {
+        key: "salesOrderNo",
+        header: "Order No",
+        sortable: true,
+        filterable: true,
+        filterType: "text",
+        width: "140px",
+        render: (_: unknown, row: SalesOrderRecord) => (
+          <Link
+            href={`/warehouse/packing/create/${row.id}`}
+            className="font-mono text-xs font-semibold text-brand-700 hover:underline"
+          >
+            {row.salesOrderNo}
+          </Link>
+        ),
+      },
+      {
+        key: "customer",
+        header: sourceFilter === "sample" ? "Issued To Employee" : "Customer / Issued To",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: CUSTOMER_OPTIONS,
+        width: "180px",
+        render: (_: unknown, row: SalesOrderRecord) => (
+          <span className="text-xs text-foreground font-semibold">{row.customer}</span>
+        ),
+      },
+      {
+        key: "warehouse",
+        header: "Source Warehouse",
+        sortable: true,
+        width: "160px",
+        render: (_: unknown, row: SalesOrderRecord) => (
+          <span className="text-xs text-foreground">
+            {row.sourceWarehouse || row.warehouse}
           </span>
-        );
-      }
-    },
-    {
-      key: "status",
-      header: "Status",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: READY_STATUS_OPTIONS,
-      width: "155px",
-      render: (val: any) => {
-        const cfg = STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: val };
-        return (
-          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
-            {cfg.label}
+        ),
+      },
+      {
+        key: "totalItems",
+        header: "Items",
+        sortable: true,
+        align: "right",
+        width: "80px",
+        render: (val: unknown) => (
+          <span className="font-mono text-xs tabular-nums">{val as number}</span>
+        ),
+      },
+      {
+        key: "orderAmount",
+        header: "Amount",
+        sortable: true,
+        align: "right",
+        width: "100px",
+        render: (_: unknown, row: SalesOrderRecord) => (
+          <span className="font-mono text-xs tabular-nums">
+            {formatWarehouseOrderAmount(resolveWarehouseOrderType(row), row.orderAmount)}
           </span>
-        );
-      }
-    },
-  ];
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: READY_STATUS_OPTIONS,
+        width: "140px",
+        render: (_: unknown, row: SalesOrderRecord) => {
+          const label = readyStatusLabel(row);
+          const cfg = STATUS_BADGE_CONFIG[label] || {
+            bg: "bg-slate-100 text-slate-700 border-slate-200",
+            label,
+          };
+          return (
+            <span
+              className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}
+            >
+              {cfg.label}
+            </span>
+          );
+        },
+      },
+    ] as ColumnConfig<SalesOrderRecord>[];
+  }, [sourceFilter]);
 
-  // Actions
   const actions: ActionItemConfig<SalesOrderRecord>[] = [
     {
       label: "View",
@@ -176,11 +236,7 @@ export function ReadyPackingListing({ ordersForWarehouse }: ReadyPackingListingP
   ];
 
   return (
-    <div className="space-y-3">
-      <div className="flex justify-between items-center">
-        {/* <h2 className="text-sm font-semibold text-foreground">Orders Ready for Packaging</h2> */}
-      </div>
-      <MasterListing<SalesOrderRecord>
+    <MasterListing<SalesOrderRecord>
         columns={columns}
         data={paginated}
         totalRecords={processed.length}
@@ -191,9 +247,8 @@ export function ReadyPackingListing({ ordersForWarehouse }: ReadyPackingListingP
         onSortChange={setSort}
         onFilterChange={setFilters}
         actions={actions}
-        emptyMessage="ready sales orders"
-        searchPlaceholder="Search SO..."
+        emptyMessage=""
+        searchPlaceholder="Search orders..."
       />
-    </div>
   );
 }

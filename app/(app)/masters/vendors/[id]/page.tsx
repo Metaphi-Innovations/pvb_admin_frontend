@@ -72,7 +72,7 @@ export default function ViewVendorPage() {
   return (
     <RecordDetailPage
       listHref="/masters/vendors"
-      listLabel="Vendors"
+      listLabel="Suppliers"
       recordName={vendor.vendorName}
       statusLabel={vendor.status === "active" ? "Active" : "Inactive"}
       statusVariant={vendor.status}
@@ -97,7 +97,7 @@ export default function ViewVendorPage() {
           iconBg: "#EEF3FB",
           iconColor: "#0C3F8A",
           value: vendor.vendorType || "—",
-          label: "Vendor Type",
+          label: "Supplier Type",
         },
         {
           icon: FileText,
@@ -110,7 +110,7 @@ export default function ViewVendorPage() {
           icon: Clock,
           iconBg: "#FFFBEB",
           iconColor: "#D97706",
-          value: formatPaymentTerms(vendor.paymentTerms),
+          value: formatPaymentTerms(vendor),
           label: "Payment Terms",
         },
       ]}
@@ -118,17 +118,17 @@ export default function ViewVendorPage() {
       sidebar={{
         quickActions: [
           {
-            label: "Edit Vendor",
+            label: "Edit Supplier",
             onClick: () => router.push(`/masters/vendors/${id}/edit`),
             variant: "primary",
           },
         ],
         summary: [
-          { label: "Vendor Code", value: vendor.vendorCode || "—", highlight: true },
-          { label: "Vendor Type", value: vendor.vendorType || "—" },
+          { label: "Supplier Code", value: vendor.vendorCode || "—", highlight: true },
+          { label: "Supplier Type", value: vendor.vendorType || "—" },
           { label: "GST", value: vendor.gstNumber || "—" },
           { label: "PAN", value: vendor.panNumber || "—" },
-          { label: "Payment Terms", value: formatPaymentTerms(vendor.paymentTerms) },
+          { label: "Payment Terms", value: formatPaymentTerms(vendor) },
           { label: "Created", value: vendor.createdDate },
           { label: "Updated", value: vendor.updatedDate },
         ],
@@ -138,14 +138,14 @@ export default function ViewVendorPage() {
         <ErpPartyAccountingCard
           title="Accounting Integration"
           summary={accountingSummary}
-          partyLabel="Vendor"
+          partyLabel="Supplier"
         />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <RecordSectionCard title="Vendor Information" icon={Building2} accent="blue">
-          <RecordKvRow label="Vendor Code" value={vendor.vendorCode || "—"} mono highlight />
-          <RecordKvRow label="Vendor Name" value={vendor.vendorName} highlight />
-          <RecordKvRow label="Vendor Type" value={vendor.vendorType || "—"} />
-          <RecordKvRow label="Payment Terms" value={formatPaymentTerms(vendor.paymentTerms)} />
+        <RecordSectionCard title="Supplier Information" icon={Building2} accent="blue">
+          <RecordKvRow label="Supplier Code" value={vendor.vendorCode || "—"} mono highlight />
+          <RecordKvRow label="Supplier Name" value={vendor.vendorName} highlight />
+          <RecordKvRow label="Supplier Type" value={vendor.vendorType || "—"} />
+          <RecordKvRow label="Payment Terms" value={formatPaymentTerms(vendor)} />
           <RecordKvRow label="Contact Person" value={vendor.contactPerson || "—"} />
           <RecordKvRow
             label="Mobile Number"
@@ -169,9 +169,12 @@ export default function ViewVendorPage() {
             <RecordKvRow label="Address Line 2" value={vendor.billingAddress.line2} />
           )}
           <RecordKvRow label="Pincode" value={vendor.billingAddress.pincode || "—"} mono />
+          <RecordKvRow label="City" value={vendor.billingAddress.city || "—"} />
+          {vendor.billingAddress.town ? (
+            <RecordKvRow label="Town" value={vendor.billingAddress.town} />
+          ) : null}
           <RecordKvRow label="Country" value={vendor.billingAddress.country || "—"} />
-          <RecordKvRow label="State" value={vendor.billingAddress.state || "—"} />
-          <RecordKvRow label="City" value={vendor.billingAddress.city || "—"} isLast />
+          <RecordKvRow label="State" value={vendor.billingAddress.state || "—"} isLast />
         </RecordSectionCard>
 
         <RecordSectionCard title="Tax & Registration" icon={FileText} accent="orange">
@@ -209,7 +212,14 @@ export default function ViewVendorPage() {
           <RecordKvRow label="Bank Name" value={vendor.bankName || "—"} />
           <RecordKvRow label="Branch" value={vendor.branch || "—"} />
           <RecordKvRow label="Account Number" value={vendor.accountNumber || "—"} mono copy />
-          <RecordKvRow label="IFSC Code" value={vendor.ifscCode || "—"} mono copy isLast />
+          <RecordKvRow label="IFSC Code" value={vendor.ifscCode || "—"} mono copy />
+          <RecordKvRow
+            label="SWIFT Code"
+            value={vendor.swiftCode || "—"}
+            mono
+            copy
+            isLast
+          />
         </RecordSectionCard>
 
         <RecordSectionCard title="Audit" icon={Clock} accent="orange">

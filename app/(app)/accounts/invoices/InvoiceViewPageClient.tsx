@@ -24,6 +24,7 @@ import { formatINR, INVOICES_LIST_PATH, INVOICE_AMOUNT_LABELS } from "./invoice-
 import { getInvoiceAmountBreakup } from "./invoices-data";
 import { SalesInvoiceAccountingPanel } from "@/components/accounts/SalesInvoiceAccountingPanel";
 import { loadCreditNotes } from "@/app/(app)/accounts/credit-notes/credit-notes-data";
+import { InvoiceSchemeSettlementPanel } from "./components/InvoiceSchemeSettlementPanel";
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -181,6 +182,12 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
               <DetailRow label={INVOICE_AMOUNT_LABELS.invoiceTotal} value={formatINR(invoiceTotal)} />
             </div>
           </div>
+          {record.nearExpirySchemeSettlements && record.nearExpirySchemeSettlements.length > 0 && (
+            <InvoiceSchemeSettlementPanel
+              entries={record.nearExpirySchemeSettlements}
+              variant="detail"
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="items" className="m-0">

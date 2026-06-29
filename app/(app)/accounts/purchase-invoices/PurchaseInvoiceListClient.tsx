@@ -30,7 +30,7 @@ import {
   getGrnsPendingInvoice,
   type PurchaseInvoiceRecord,
 } from "./purchase-invoices-data";
-import type { GrnRecord } from "@/app/(app)/warehouse/grnqc/grn/types";
+import type { GrnRecord } from "@/app/(app)/warehouse/grn/types";
 
 type Tab = "invoices" | "grn_pending";
 
@@ -94,7 +94,7 @@ export default function PurchaseInvoiceListClient() {
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Payables", "Purchase Invoices")}
       title="Purchase Invoices"
-      description="Create and manage vendor purchase bills. Link to GRN or enter manually."
+      description="Create and manage supplier purchase bills. Link to GRN or enter manually."
       actions={
         <div className="flex items-center gap-2">
           <Button
@@ -167,7 +167,7 @@ export default function PurchaseInvoiceListClient() {
             <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-muted-foreground" />
             <Input
               className="h-8 text-xs pl-8"
-              placeholder="Search invoice, vendor, GRN..."
+              placeholder="Search invoice, supplier, GRN..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -195,8 +195,8 @@ export default function PurchaseInvoiceListClient() {
                 <thead className="bg-muted/40 border-b border-border/60">
                   <tr>
                     <Th>Invoice No</Th>
-                    <Th>Vendor Invoice</Th>
-                    <Th>Vendor</Th>
+                    <Th>Supplier Invoice</Th>
+                    <Th>Supplier</Th>
                     <Th>Date</Th>
                     <Th>GRN</Th>
                     <Th>Source</Th>
@@ -300,7 +300,7 @@ export default function PurchaseInvoiceListClient() {
                   <tr>
                     <Th>GRN No</Th>
                     <Th>PO Number</Th>
-                    <Th>Vendor</Th>
+                    <Th>Supplier</Th>
                     <Th>Warehouse</Th>
                     <Th>Receipt Date</Th>
                     <Th className="text-center">Total Qty</Th>

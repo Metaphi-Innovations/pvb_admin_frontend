@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
 	Popover,
 	PopoverContent,
@@ -24,6 +25,11 @@ import {
 import ProductLinesEditor from "./ProductLinesEditor";
 import AdditionalExpensesEditor from "./AdditionalExpensesEditor";
 import CustomerInfoDialog from "./CustomerInfoDialog";
+import BillToShipToSection from "./BillToShipToSection";
+import {
+	getCustomerAddressesForSalesOrder,
+	getDefaultBillShipAddressIds,
+} from "../sales-order-address-utils";
 import {
 	type SalesOrder,
 	type SalesOrderLineItem,
@@ -31,6 +37,7 @@ import {
 	type SalesOrderFormValues,
 	type ProductCatalogItem,
 	type OrderStatus,
+	type SalesOrderPricingContext,
 	ORDER_APPROVAL_THRESHOLD,
 	ORDER_STATUS_OPTIONS,
 	EDITABLE_ORDER_STATUSES,
@@ -39,13 +46,19 @@ import {
 	createEmptyLineItem,
 	recalculateLineItem,
 	getProductById,
-	computeGstAmount,
+	applyLineTaxFields,
+	repriceOrderLineItems,
+	resolveTaxSupplyType,
+	type TaxSupplyType,
 } from "../orders-data";
 import { isSezGstCategory } from "@/lib/masters/gst-compliance";
 import {
 	LUT_SUPPLY_DECLARATION,
 	resolveSezLutSupply,
 } from "@/lib/settings/gst-tax-config";
+import { calculateCustomerCreditSummary } from "@/lib/sales/customer-credit-limit";
+import { seedAccountsDemoData } from "@/lib/accounts/accounts-demo-seed";
+import CreditLimitSummaryCard from "./CreditLimitSummaryCard";
 
 export type { SalesOrderFormValues };
 
@@ -76,7 +89,9 @@ function SearchableDropdown<T extends { id: number }>({
 }) {
 	const [open, setOpen] = useState(false);
 	const [search, setSearch] = useState("");
-	const selected = options.find((o) => o.id === value);
+	const selected = value !== null && value !== undefined
+		? options.find((o) => String(o.id) === String(value))
+		: undefined;
 	const filtered = options.filter((o) =>
 		matchOption
 			? matchOption(o, search)
@@ -135,7 +150,7 @@ function SearchableDropdown<T extends { id: number }>({
 								}}
 								className={cn(
 									"w-full flex items-center gap-2.5 px-3 py-2.5 text-xs text-left transition-colors hover:bg-muted/60",
-									value === opt.id && "bg-brand-50",
+									selected && selected.id === opt.id && "bg-brand-50",
 								)}
 							>
 								{renderOption ? (
@@ -150,7 +165,7 @@ function SearchableDropdown<T extends { id: number }>({
 										)}
 									</span>
 								)}
-								{value === opt.id && (
+								{selected && selected.id === opt.id && (
 									<Check className='w-3.5 h-3.5 text-brand-600 flex-shrink-0 ml-auto' />
 								)}
 							</button>
@@ -250,6 +265,8 @@ interface SalesOrderFormProps {
 		updatedBy: string;
 		updatedDate: string;
 	};
+	/** Exclude this order from utilized credit (edit mode). */
+	excludeOrderId?: number;
 }
 
 export function validateSalesOrderForm(
@@ -258,7 +275,9 @@ export function validateSalesOrderForm(
 	const e: Record<string, string> = {};
 	if (!form.customerId) e.customerId = "Customer is required";
 	if (!form.salesManId) e.salesManId = "Salesman is required";
-	if (!form.warehouseId) e.warehouseId = "Warehouse is required";
+	if (!form.warehouseId) e.warehouseId = "Source warehouse is required";
+	if (!form.billToAddressId) e.billToAddressId = "Bill To address is required";
+	if (!form.shipToAddressId) e.shipToAddressId = "Ship To address is required";
 	if (!form.orderDate) e.orderDate = "Order date is required";
 	if (!form.deliveryDate) e.deliveryDate = "Delivery date is required";
 	if (form.lineItems.length === 0) e.lineItems = "Add at least one product";
@@ -301,10 +320,14 @@ function ImportFromOriginalPopover({
 	originalOrder,
 	form,
 	onChange,
+	taxSupplyType,
+	zeroGst,
 }: {
 	originalOrder: SalesOrder;
 	form: SalesOrderFormValues;
 	onChange: (form: SalesOrderFormValues) => void;
+	taxSupplyType: TaxSupplyType;
+	zeroGst: boolean;
 }) {
 	const [open, setOpen] = useState(false);
 	const sourceLines = originalOrder.lineItems.filter(
@@ -316,12 +339,7 @@ function ImportFromOriginalPopover({
 			? getProductById(parentLine.productId)
 			: undefined;
 		const qty = 1;
-		const unitPrice = parentLine.unitPrice;
-		const discount = 0;
-		const gstAmount = product
-			? computeGstAmount(qty, unitPrice, discount, product.gstRate)
-			: 0;
-		const newLine = recalculateLineItem({
+		let newLine = recalculateLineItem({
 			...createEmptyLineItem(),
 			id: `line-import-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
 			productId: parentLine.productId,
@@ -329,13 +347,35 @@ function ImportFromOriginalPopover({
 			productName: parentLine.productName,
 			availableStock: parentLine.availableStock,
 			quantity: qty,
-			unitPrice,
-			discount,
-			gstAmount,
+			dealerPrice: parentLine.dealerPrice,
+			unitPrice: parentLine.unitPrice,
+			discount: parentLine.discount,
+			schemeDiscountPercent: parentLine.schemeDiscountPercent,
+			schemeDiscountAmount: parentLine.schemeDiscountAmount,
+			schemeDiscountType: parentLine.schemeDiscountType,
+			schemeDiscountValue: parentLine.schemeDiscountValue,
+			appliedSchemeId: parentLine.appliedSchemeId,
+			appliedSchemeCode: parentLine.appliedSchemeCode,
+			appliedSchemeName: parentLine.appliedSchemeName,
+			originalDealerPrice: parentLine.originalDealerPrice,
+			finalRateAfterScheme: parentLine.finalRateAfterScheme,
+			finalRate: parentLine.finalRate,
+			schemeCode: parentLine.schemeCode,
+			schemeName: parentLine.schemeName,
+			schemeApplied: parentLine.schemeApplied,
+			gstAmount: 0,
 			lineTotal: 0,
 			splitSourceLineId: parentLine.id,
 			maxSplitQty: parentLine.quantity,
 		});
+		if (product) {
+			newLine = applyLineTaxFields(
+				newLine,
+				product.gstRate,
+				taxSupplyType,
+				zeroGst,
+			);
+		}
 		const existing = form.lineItems.filter((l) => l.productId);
 		onChange({ ...form, lineItems: [...existing, newLine] });
 		setOpen(false);
@@ -391,8 +431,13 @@ export default function SalesOrderForm({
 	showStatus = false,
 	originalOrder,
 	auditInfo,
+	excludeOrderId,
 }: SalesOrderFormProps) {
 	const [customerInfoOpen, setCustomerInfoOpen] = useState(false);
+
+	useEffect(() => {
+		seedAccountsDemoData();
+	}, []);
 
 	const warehouses = useMemo(() => {
 		return loadWarehouses().filter((w) => w.status === "active");
@@ -408,6 +453,21 @@ export default function SalesOrderForm({
 		[customers, form.customerId],
 	);
 
+	const customerAddresses = useMemo(
+		() => (selectedCustomer ? getCustomerAddressesForSalesOrder(selectedCustomer) : []),
+		[selectedCustomer],
+	);
+
+	const selectedWarehouse = useMemo(
+		() => warehouses.find((w) => w.id === form.warehouseId) ?? null,
+		[warehouses, form.warehouseId],
+	);
+
+	const shipToAddress = useMemo(
+		() => customerAddresses.find((a) => a.id === form.shipToAddressId) ?? null,
+		[customerAddresses, form.shipToAddressId],
+	);
+
 	const sezLutResolution = useMemo(() => {
 		if (!selectedCustomer) return { appliesLut: false };
 		const category =
@@ -419,15 +479,56 @@ export default function SalesOrderForm({
 		});
 	}, [selectedCustomer, form.orderDate]);
 
+	const taxSupplyType = useMemo((): TaxSupplyType => {
+		const sourceState = selectedWarehouse?.state ?? "";
+		const destState = shipToAddress?.state ?? "";
+		return resolveTaxSupplyType(sourceState, destState);
+	}, [selectedWarehouse, shipToAddress]);
+
+	useEffect(() => {
+		if (!selectedCustomer || customerAddresses.length === 0) return;
+		const billValid = customerAddresses.some((a) => a.id === form.billToAddressId);
+		const shipValid = customerAddresses.some((a) => a.id === form.shipToAddressId);
+		if (billValid && shipValid) return;
+		const defaults = getDefaultBillShipAddressIds(customerAddresses);
+		onChange({
+			...form,
+			billToAddressId: billValid ? form.billToAddressId : defaults.billToAddressId,
+			shipToAddressId: shipValid ? form.shipToAddressId : defaults.shipToAddressId,
+		});
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- auto-select when customer addresses load
+	}, [selectedCustomer?.id, customerAddresses.length]);
+
+	const pricingContext = useMemo((): SalesOrderPricingContext | null => {
+		if (!selectedCustomer?.stateName || !selectedCustomer.customerType || !form.orderDate) {
+			return null;
+		}
+		return {
+			stateName: selectedCustomer.stateName,
+			customerMasterType: selectedCustomer.customerType,
+			orderDate: form.orderDate,
+		};
+	}, [selectedCustomer, form.orderDate]);
+
 	const totalsSummary = useMemo(
 		() =>
 			calculateOrderTotalsSummary(form.lineItems, form.additionalExpenses ?? [], {
 				sezLutApplies: sezLutResolution.appliesLut,
+				taxSupplyType,
 			}),
-		[form.lineItems, form.additionalExpenses, sezLutResolution.appliesLut],
+		[form.lineItems, form.additionalExpenses, sezLutResolution.appliesLut, taxSupplyType],
 	);
 
 	const needsApproval = orderRequiresApproval(totalsSummary.grandTotal);
+
+	const creditSummary = useMemo(() => {
+		if (!selectedCustomer) return null;
+		return calculateCustomerCreditSummary({
+			customer: selectedCustomer,
+			currentOrderValue: totalsSummary.grandTotal,
+			excludeOrderId,
+		});
+	}, [selectedCustomer, totalsSummary.grandTotal, excludeOrderId]);
 
 	const formatRupee = (n: number) =>
 		`₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -436,8 +537,8 @@ export default function SalesOrderForm({
 		<>
 			<div className='p-4 space-y-4 bg-white border shadow-sm rounded-xl border-border'>
 				<SectionDivider title='Order' />
-				<div className='grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7'>
-					<div className='space-y-1 col-span-1'>
+				<div className='grid grid-cols-2 gap-3 md:grid-cols-6 lg:grid-cols-12'>
+					<div className='space-y-1 col-span-1 md:col-span-2 lg:col-span-2'>
 						<Label className='text-xs font-medium'>Order Number</Label>
 						<div className='h-8 px-2.5 border border-border rounded-lg bg-muted/30 flex items-center'>
 							<span className='font-mono text-xs font-semibold text-brand-700'>
@@ -446,14 +547,28 @@ export default function SalesOrderForm({
 						</div>
 					</div>
 
-					<div className='space-y-1 col-span-1'>
+					<div className='space-y-1 col-span-1 md:col-span-2 lg:col-span-2'>
 						<Label className='text-xs font-medium'>
 							Order Date <span className='text-red-500'>*</span>
 						</Label>
 						<Input
 							type='date'
 							value={form.orderDate}
-							onChange={(e) => set("orderDate", e.target.value)}
+							onChange={(e) => {
+								const orderDate = e.target.value;
+								const nextForm = { ...form, orderDate };
+								if (pricingContext) {
+									nextForm.lineItems = repriceOrderLineItems(
+										form.lineItems,
+										{ ...pricingContext, orderDate },
+										{
+											zeroGst: sezLutResolution.appliesLut,
+											supplyType: taxSupplyType,
+										},
+									);
+								}
+								onChange(nextForm);
+							}}
 							className={cn(
 								"h-8 text-xs rounded-lg",
 								errors.orderDate && "border-red-400",
@@ -464,7 +579,37 @@ export default function SalesOrderForm({
 						)}
 					</div>
 
-					<div className='space-y-1 col-span-1 md:col-span-2 lg:col-span-1'>
+					<div className='space-y-1 col-span-1 md:col-span-2 lg:col-span-2'>
+						<Label className='text-xs font-medium'>
+							Delivery Date <span className='text-red-500'>*</span>
+						</Label>
+						<Input
+							type='date'
+							value={form.deliveryDate}
+							min={form.orderDate}
+							onChange={(e) => set("deliveryDate", e.target.value)}
+							className={cn(
+								"h-8 text-xs rounded-lg",
+								errors.deliveryDate && "border-red-400",
+							)}
+						/>
+						{errors.deliveryDate && (
+							<p className='text-[11px] text-red-500'>{errors.deliveryDate}</p>
+						)}
+					</div>
+
+					{(showStatus && mode === "edit") || mode === "split" ? (
+						<div className='space-y-1 col-span-1 md:col-span-2 lg:col-span-2'>
+							<Label className='text-xs font-medium'>Order Status</Label>
+							<StatusSelect
+								value={form.status}
+								onChange={(s) => set("status", s)}
+								allowedStatuses={EDITABLE_ORDER_STATUSES}
+							/>
+						</div>
+					) : null}
+
+					<div className='space-y-1 col-span-2 md:col-span-3 lg:col-span-4'>
 						<div className='flex items-center gap-1.5'>
 							<Label className='text-xs font-medium'>
 								Customer <span className='text-red-500'>*</span>
@@ -485,9 +630,36 @@ export default function SalesOrderForm({
 							required
 							value={form.customerId}
 							onChange={(id) => {
-								set("customerId", id);
 								const c = customers.find((x) => x.id === id);
-								if (c?.salesManId) set("salesManId", c.salesManId);
+								const addressDefaults = c
+									? getDefaultBillShipAddressIds(
+											getCustomerAddressesForSalesOrder(c),
+										)
+									: { billToAddressId: "", shipToAddressId: "" };
+								const updatedForm = {
+									...form,
+									customerId: id,
+									billToAddressId: addressDefaults.billToAddressId,
+									shipToAddressId: addressDefaults.shipToAddressId,
+								};
+								if (c?.salesManId) {
+									updatedForm.salesManId = c.salesManId;
+								}
+								if (c?.stateName && c.customerType && form.orderDate) {
+									updatedForm.lineItems = repriceOrderLineItems(
+										form.lineItems,
+										{
+											stateName: c.stateName,
+											customerMasterType: c.customerType,
+											orderDate: form.orderDate,
+										},
+										{
+											zeroGst: sezLutResolution.appliesLut,
+											supplyType: taxSupplyType,
+										},
+									);
+								}
+								onChange(updatedForm);
 							}}
 							options={customers}
 							placeholder='Select customer…'
@@ -498,7 +670,7 @@ export default function SalesOrderForm({
 						/>
 					</div>
 
-					<div className='space-y-1 col-span-1 md:col-span-2 lg:col-span-1'>
+					<div className='space-y-1 col-span-1 md:col-span-2 lg:col-span-2'>
 						<SearchableDropdown<Employee>
 							label='Salesman'
 							required
@@ -511,48 +683,19 @@ export default function SalesOrderForm({
 						/>
 					</div>
 
-					<div className='space-y-1 col-span-1 md:col-span-2 lg:col-span-1'>
+					<div className='space-y-1 col-span-2 md:col-span-3 lg:col-span-4'>
 						<SearchableDropdown<WarehouseMaster>
 							label='Source Warehouse'
 							required
 							value={form.warehouseId ?? null}
 							onChange={(id) => set("warehouseId", id)}
 							options={warehouses}
-							placeholder='Select warehouse…'
+							placeholder='Select source warehouse…'
 							error={errors.warehouseId}
 							getLabel={(w) => `${w.warehouseCode} — ${w.warehouseName}`}
+							getSublabel={(w) => w.state}
 						/>
 					</div>
-
-					<div className='space-y-1 col-span-1'>
-						<Label className='text-xs font-medium'>
-							Delivery Date <span className='text-red-500'>*</span>
-						</Label>
-						<Input
-							type='date'
-							value={form.deliveryDate}
-							min={form.orderDate}
-							onChange={(e) => set("deliveryDate", e.target.value)}
-							className={cn(
-								"h-8 text-xs rounded-lg",
-								errors.deliveryDate && "border-red-400",
-							)}
-						/>
-						{errors.deliveryDate && (
-							<p className='text-[11px] text-red-500'>{errors.deliveryDate}</p>
-						)}
-					</div>
-
-					{(showStatus && mode === "edit") || mode === "split" ? (
-						<div className='space-y-1 col-span-1'>
-							<Label className='text-xs font-medium'>Order Status</Label>
-							<StatusSelect
-								value={form.status}
-								onChange={(s) => set("status", s)}
-								allowedStatuses={EDITABLE_ORDER_STATUSES}
-							/>
-						</div>
-					) : null}
 				</div>
 
 				{mode === "split" && originalOrder && (
@@ -607,6 +750,21 @@ export default function SalesOrderForm({
 						</div>
 					)}
 
+				{creditSummary && <CreditLimitSummaryCard summary={creditSummary} />}
+
+				<SectionDivider title='Bill To / Ship To' />
+				<BillToShipToSection
+					addresses={customerAddresses}
+					billToAddressId={form.billToAddressId ?? ""}
+					shipToAddressId={form.shipToAddressId ?? ""}
+					onBillToChange={(id) => set("billToAddressId", id)}
+					onShipToChange={(id) => set("shipToAddressId", id)}
+					errors={{
+						billToAddressId: errors.billToAddressId,
+						shipToAddressId: errors.shipToAddressId,
+					}}
+				/>
+
 				<SectionDivider title='Products' />
 				{mode === "split" && originalOrder && (
 					<div className='flex items-center justify-end'>
@@ -614,6 +772,8 @@ export default function SalesOrderForm({
 							originalOrder={originalOrder}
 							form={form}
 							onChange={onChange}
+							taxSupplyType={taxSupplyType}
+							zeroGst={sezLutResolution.appliesLut}
 						/>
 					</div>
 				)}
@@ -623,6 +783,8 @@ export default function SalesOrderForm({
 					onChange={(lines) => set("lineItems", lines)}
 					error={errors.lineItems}
 					zeroGst={sezLutResolution.appliesLut}
+					pricingContext={pricingContext}
+					taxSupplyType={taxSupplyType}
 				/>
 
 				<AdditionalExpensesEditor
@@ -631,7 +793,7 @@ export default function SalesOrderForm({
 				/>
 
 				<SectionDivider title='Total Summary' />
-				<div className='flex justify-start'>
+				<div className='flex justify-end'>
 					<div className='w-full max-w-md overflow-hidden border rounded-lg border-border bg-muted/20'>
 						<div className='divide-y divide-border/60'>
 							{[
@@ -648,17 +810,26 @@ export default function SalesOrderForm({
 									value: formatRupee(totalsSummary.additionalExpensesTotal),
 								},
 								{
-									label: "Expense Discount Total:",
-									value: formatRupee(totalsSummary.expenseDiscountTotal),
-								},
-								{
 									label: "Taxable Amount:",
 									value: formatRupee(totalsSummary.taxableAmount),
 								},
-								{
-									label: "GST Amount:",
-									value: formatRupee(totalsSummary.gstAmount),
-								},
+								...(totalsSummary.taxSupplyType === "intra"
+									? [
+											{
+												label: "CGST Total:",
+												value: formatRupee(totalsSummary.cgstTotal),
+											},
+											{
+												label: "SGST Total:",
+												value: formatRupee(totalsSummary.sgstTotal),
+											},
+										]
+									: [
+											{
+												label: "IGST Total:",
+												value: formatRupee(totalsSummary.igstTotal),
+											},
+										]),
 							].map((row) => (
 								<div
 									key={row.label}
@@ -680,6 +851,21 @@ export default function SalesOrderForm({
 							</div>
 						</div>
 					</div>
+				</div>
+
+				<SectionDivider title='Remarks' />
+				<div className='space-y-1.5'>
+					<Label className='text-xs font-medium'>Remarks</Label>
+					<Textarea
+						value={form.remarks ?? ""}
+						onChange={(e) => set("remarks", e.target.value)}
+						placeholder='Optional order remarks…'
+						rows={2}
+						className='text-sm rounded-lg resize-y min-h-[72px]'
+					/>
+					<p className='text-[11px] text-muted-foreground'>
+						Internal notes or special instructions for this order.
+					</p>
 				</div>
 
 				{mode === "edit" && auditInfo && (
