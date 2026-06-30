@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FormContainer } from "@/components/layout/FormContainer";
 import {
@@ -15,33 +15,26 @@ import {
   type Distributor,
   VIEW_DISTRIBUTOR_STORAGE_KEY,
 } from "../distributor-data";
-import {
-  parseMonetaryValueInCrores,
-  parseMonetaryValueInLakhs,
-} from "@/lib/distributor/distributor-scoring";
 
-function toFormValues(distributor: Distributor): DistributorFormValues {
-  const planLakhs = parseMonetaryValueInLakhs(distributor.annualBusinessPotential);
-  const turnoverCrores = parseMonetaryValueInCrores(distributor.annualTurnover);
-
+function emptyFormValues(): DistributorFormValues {
   return {
-    firmName: distributor.firmName,
-    contactPersonName: distributor.contactPersonName,
-    yearsInBusiness: String(distributor.yearsInBusiness),
-    address: distributor.address,
-    addressLine2: distributor.addressLine2 || "",
-    gender: distributor.gender,
-    phoneNumber: distributor.phoneNumber,
-    village: distributor.village,
-    town: distributor.town,
-    city: distributor.city,
-    district: distributor.district,
-    state: distributor.state,
-    pincode: distributor.pincode,
-    companiesDealingIn: distributor.companiesDealingIn,
-    annualTurnover: turnoverCrores > 0 ? String(turnoverCrores) : "",
-    annualBusinessPotential: planLakhs > 0 ? String(planLakhs) : "",
-    farmerNetwork: distributor.farmerNetwork,
+    firmName: "",
+    contactPersonName: "",
+    gender: "Male",
+    phoneNumber: "",
+    yearsInBusiness: "",
+    address: "",
+    addressLine2: "",
+    pincode: "",
+    state: "",
+    district: "",
+    city: "",
+    town: "",
+    village: "",
+    companiesDealingIn: "",
+    annualTurnover: "",
+    annualBusinessPotential: "",
+    farmerNetwork: "",
   };
 }
 
@@ -72,14 +65,14 @@ function validateForm(form: DistributorFormValues): DistributorFormErrors {
     errors.pincode = "Pincode must be exactly 6 digits.";
   }
 
-  if (!form.state.trim()) errors.state = "State is required.";
-  if (!form.district.trim()) errors.district = "District is required.";
-  if (!form.city.trim()) errors.city = "City is required.";
+  if (!form.state.trim()) errors.state = "State is required (auto-fills from pincode).";
+  if (!form.district.trim()) errors.district = "District is required (auto-fills from pincode).";
+  if (!form.city.trim()) errors.city = "City is required (auto-fills from pincode).";
   if (!form.town.trim()) errors.town = "City/Town is required.";
   if (!form.village.trim()) errors.village = "Village is required.";
   
   if (!form.companiesDealingIn.trim()) {
-    errors.companiesDealingIn = "At least one brand must be selected/entered.";
+    errors.companiesDealingIn = "At least one brand or company must be selected/entered.";
   }
 
   const turnover = Number.parseFloat(form.annualTurnover);
@@ -101,57 +94,19 @@ function validateForm(form: DistributorFormValues): DistributorFormErrors {
   return errors;
 }
 
-export default function DistributorEditPage() {
+export default function NewDistributorPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const [distributors, setDistributors] = useState<Distributor[]>([]);
-  const [currentDistributorId, setCurrentDistributorId] = useState<number | null>(null);
-  const [form, setForm] = useState<DistributorFormValues | null>(null);
+  const [form, setForm] = useState<DistributorFormValues>(emptyFormValues());
   const [errors, setErrors] = useState<DistributorFormErrors>({});
   const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    const distributorList = loadDistributors();
-    setDistributors(distributorList);
-
-    const idFromQuery = Number.parseInt(searchParams.get("id") ?? "", 10);
-    const idFromSession =
-      typeof window !== "undefined"
-        ? Number.parseInt(
-            window.sessionStorage.getItem(VIEW_DISTRIBUTOR_STORAGE_KEY) ?? "",
-            10,
-          )
-        : Number.NaN;
-
-    const selectedId = Number.isNaN(idFromQuery) ? idFromSession : idFromQuery;
-    const selectedDistributor = distributorList.find(
-      (distributor) => distributor.id === selectedId,
-    );
-
-    if (!selectedDistributor) {
-      router.replace("/database/distributor");
-      return;
-    }
-
-    if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(
-        VIEW_DISTRIBUTOR_STORAGE_KEY,
-        String(selectedDistributor.id),
-      );
-    }
-
-    setCurrentDistributorId(selectedDistributor.id);
-    setForm(toFormValues(selectedDistributor));
-  }, [router, searchParams]);
-
-  const currentDistributor = useMemo(
-    () =>
-      currentDistributorId === null
-        ? null
-        : distributors.find((distributor) => distributor.id === currentDistributorId) ?? null,
-    [currentDistributorId, distributors],
-  );
+  const setField = <K extends keyof DistributorFormValues>(
+    key: K,
+    value: DistributorFormValues[K],
+  ) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    clearError(key);
+  };
 
   const clearError = (key: keyof DistributorFormValues) => {
     setErrors((current) => {
@@ -167,10 +122,6 @@ export default function DistributorEditPage() {
   };
 
   const handleSave = () => {
-    if (!form || currentDistributorId === null || !currentDistributor) {
-      return;
-    }
-
     const validationErrors = validateForm(form);
     setErrors(validationErrors);
 
@@ -179,14 +130,22 @@ export default function DistributorEditPage() {
     }
 
     setIsSaving(true);
+    const distributorList = loadDistributors();
+    
+    // Find next ID
+    const nextId =
+      distributorList.length > 0
+        ? Math.max(...distributorList.map((d) => d.id)) + 1
+        : 1;
 
+    // Convert form values back to seed structure
     const planLakhs = Number.parseFloat(form.annualBusinessPotential) || 0;
     const planCroresStr = planLakhs > 0 ? `₹${(planLakhs / 100).toFixed(2)} Cr` : "—";
     const turnoverVal = Number.parseFloat(form.annualTurnover) || 0;
     const turnoverStr = turnoverVal > 0 ? `₹${turnoverVal.toFixed(2)} Cr` : "—";
 
-    const updatedDistributor: Distributor = {
-      ...currentDistributor,
+    const newDistributor: Distributor = {
+      id: nextId,
       firmName: form.firmName.trim(),
       contactPersonName: form.contactPersonName.trim(),
       gender: form.gender,
@@ -201,30 +160,33 @@ export default function DistributorEditPage() {
       town: form.town.trim(),
       village: form.village.trim(),
       companiesDealingIn: form.companiesDealingIn.trim(),
+      latLong: "0.0, 0.0", // default coords
       annualTurnover: turnoverStr,
       annualBusinessPotential: planCroresStr,
       farmerNetwork: form.farmerNetwork.trim(),
+      source: "erp",
+      conversionStatus: "not_converted",
+      convertedCustomerId: null,
+      submittedAt: new Date().toISOString().slice(0, 10),
     };
 
-    const updatedDistributors = distributors.map((distributor) =>
-      distributor.id === currentDistributorId ? updatedDistributor : distributor,
-    );
+    const updatedList = [...distributorList, newDistributor];
+    saveDistributors(updatedList);
 
-    saveDistributors(updatedDistributors);
-    
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(VIEW_DISTRIBUTOR_STORAGE_KEY, String(newDistributor.id));
+    }
+
+    // Redirect to list
     setTimeout(() => {
       router.push("/database/distributor");
     }, 500);
   };
 
-  if (!form || !currentDistributor) {
-    return null;
-  }
-
   return (
     <FormContainer
-      title="Edit Distributor"
-      description="Database / Distributor / Edit"
+      title="Add Distributor"
+      description="Database / Distributor / Add"
       onBack={handleCancel}
       actions={
         <div className="flex items-center gap-2">
@@ -234,14 +196,14 @@ export default function DistributorEditPage() {
             onClick={handleCancel}
             disabled={isSaving}
           >
-            Cancel
+            Discard
           </Button>
           <Button
             className="h-9 rounded-lg bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700"
             onClick={handleSave}
             disabled={isSaving}
           >
-            {isSaving ? "Saving..." : "Update Distributor"}
+            {isSaving ? "Saving..." : "Save Distributor"}
           </Button>
         </div>
       }
