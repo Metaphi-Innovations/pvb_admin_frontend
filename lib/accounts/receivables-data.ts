@@ -20,6 +20,7 @@ import { findErpPartyLink } from "@/lib/accounts/erp-party-links";
 import { syncCustomerLedger } from "@/lib/accounts/erp-accounting-mapping";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { isPostedForReports } from "@/lib/accounts/accounts-maker-checker";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -192,7 +193,9 @@ function getCustomerById(id: number): Customer | undefined {
 // ── Invoice helpers ──────────────────────────────────────────────────────────
 
 export function getPostedSalesInvoices(): InvoiceRecord[] {
-  return loadInvoices().filter((inv) => inv.invoiceStatus === "sent");
+  return loadInvoices().filter((inv) =>
+    isPostedForReports(inv.workflow, inv.invoiceStatus),
+  );
 }
 
 export function getInvoiceOutstanding(inv: InvoiceRecord): number {

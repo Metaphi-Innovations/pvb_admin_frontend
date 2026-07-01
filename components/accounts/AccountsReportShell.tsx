@@ -6,8 +6,10 @@ import { Download } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { MiniKPICard } from "@/components/ui/KPICard";
-import { cn } from "@/lib/utils";
-import { MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
+import {
+  AccountsColumnarTable,
+  AccountsTableScroll,
+} from "@/components/accounts/AccountsTable";
 import type { LucideIcon } from "lucide-react";
 
 export interface ReportColumn {
@@ -34,6 +36,10 @@ export interface AccountsReportShellProps {
   rows: Record<string, string | number>[];
   filters?: React.ReactNode;
   emptyMessage?: string;
+  onRowClick?: (row: Record<string, string | number>, index: number) => void;
+  getRowKey?: (row: Record<string, string | number>, index: number) => string | number;
+  clickableColumnKeys?: string[];
+  rowActionFooter?: React.ReactNode;
 }
 
 export function AccountsReportShell({
@@ -45,6 +51,10 @@ export function AccountsReportShell({
   rows,
   filters,
   emptyMessage = "No data for selected filters.",
+  onRowClick,
+  getRowKey,
+  clickableColumnKeys,
+  rowActionFooter,
 }: AccountsReportShellProps) {
   const exportCsv = () => {
     const header = columns.map((c) => c.label).join(",") + "\n";
@@ -81,52 +91,28 @@ export function AccountsReportShell({
           ))}
         </div>
       )}
-      <div className="flex-1 overflow-auto min-h-0">
+      <AccountsTableScroll>
         {rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
             <p className="text-sm font-medium text-foreground">{emptyMessage}</p>
           </div>
         ) : (
-          <table className="w-full text-table">
-            <thead className="bg-muted/20 border-b border-border/60 sticky top-0 z-10">
-              <tr>
-                {columns.map((c) => (
-                  <th
-                    key={c.key}
-                    className={cn(
-                      "px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground",
-                      c.align === "right" && "text-right",
-                      c.align === "center" && "text-center",
-                      (!c.align || c.align === "left") && "text-left",
-                    )}
-                  >
-                    {c.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => (
-                <tr key={i} className="border-b border-border/40 hover:bg-muted/20">
-                  {columns.map((c) => (
-                    <td
-                      key={c.key}
-                      className={cn(
-                        "px-4 py-2.5 text-xs text-foreground",
-                        c.align === "right" && "text-right",
-                        c.money && MONEY_AMOUNT_CLASS,
-                        c.mono && "font-mono",
-                      )}
-                    >
-                      {row[c.key] ?? "—"}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <AccountsColumnarTable
+            columns={columns.map((c) => ({
+              key: c.key,
+              label: c.label,
+              align: c.align,
+              money: c.money,
+              mono: c.mono,
+            }))}
+            rows={rows}
+            onRowClick={onRowClick}
+            getRowKey={getRowKey}
+            clickableColumnKeys={clickableColumnKeys}
+          />
         )}
-      </div>
+      </AccountsTableScroll>
+      {rowActionFooter}
     </AccountsPageShell>
   );
 }

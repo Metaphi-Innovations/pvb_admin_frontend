@@ -44,6 +44,17 @@ export function resolveCoaAddLedgerPolicy(
 ): CoaAddLedgerPolicy {
   const names = [...pathNames(records, node.id), node.accountName];
 
+  if (names.includes("TDS Payable")) {
+    return {
+      blocked: true,
+      reason: "TDS section ledgers are provisioned from TDS Master configuration.",
+      alternatives: [
+        { label: "TDS Settings", href: "/masters/tds", variant: "primary" },
+        { label: "TDS Party-wise Report", href: "/accounts/reports/tds-party-wise" },
+      ],
+    };
+  }
+
   if (names.includes("Trade Receivables / Sundry Debtors")) {
     return {
       blocked: true,

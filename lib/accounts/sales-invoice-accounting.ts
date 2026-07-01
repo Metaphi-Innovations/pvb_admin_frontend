@@ -11,6 +11,7 @@ import {
   type AccountingVoucher,
 } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { resolveHierarchyPath } from "@/lib/accounts/coa-hierarchy";
+import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import { getLedgerById, resolveLedgerType } from "@/lib/accounts/ledger-detail-utils";
 import { salesInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import type { LedgerImpactLine } from "@/components/accounts/LedgerImpactPreview";
@@ -77,7 +78,7 @@ function coaPathForLedger(ledger: ChartOfAccount, records: ChartOfAccount[]): st
   return [
     hierarchy.primaryHead?.accountName,
     hierarchy.accountGroup?.accountName,
-    hierarchy.subGroup?.accountName,
+    hierarchy.standardGroup?.accountName,
     ledger.accountName,
   ]
     .filter(Boolean)
@@ -111,7 +112,7 @@ function postingsFromVoucher(voucher: AccountingVoucher): SalesInvoiceLedgerPost
       coaPath: coaPathForLedger(ledger, records),
       debit: Number(line.debit) || 0,
       credit: Number(line.credit) || 0,
-      ledgerHref: `/accounts/masters/ledgers/${line.ledgerId}?tab=statement`,
+      ledgerHref: buildGeneralLedgerHref(line.ledgerId),
     });
   }
 

@@ -18,6 +18,7 @@ import { syncVendorLedger } from "@/lib/accounts/erp-accounting-mapping";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { isPostedForReports } from "@/lib/accounts/accounts-maker-checker";
 
 const VENDOR_META_KEY = "ds_accounts_payables_vendor_meta_v1";
 
@@ -225,7 +226,7 @@ function vendorCreditNoteTotal(vendorId: number): number {
 // ── Bill helpers ─────────────────────────────────────────────────────────────
 
 export function getPostedPurchaseInvoices(): PurchaseInvoiceRecord[] {
-  return loadPurchaseInvoices();
+  return loadPurchaseInvoices().filter((inv) => isPostedForReports(inv.workflow));
 }
 
 export function getBillOutstanding(bill: PurchaseInvoiceRecord): number {

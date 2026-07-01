@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { computeCustomerOutstanding } from "@/lib/accounts/receivables-data";
@@ -16,15 +17,22 @@ import {
   ReportCustomerFilter,
   ReportBranchFilter,
 } from "@/components/accounts/ReportFilters";
+import {
+  AccountsRichTable,
+  AccountsTableScroll,
+  type AccountsRichColumnDef,
+} from "@/components/accounts/AccountsTable";
 import { cn } from "@/lib/utils";
 
+type CustomerOutstandingRow = ReturnType<typeof computeCustomerOutstanding>[number];
+
 const AMOUNT_HEADERS = [
-  "Invoice Total (Incl. GST)",
-  "Paid",
-  "Credit Note",
-  "Outstanding",
-  "Overdue",
-] as const;
+  { key: "totalInvoiceAmount" as const, label: "Invoice Total (Incl. GST)" },
+  { key: "paidAmount" as const, label: "Paid" },
+  { key: "creditNoteAdjusted" as const, label: "Credit Note" },
+  { key: "outstanding" as const, label: "Outstanding" },
+  { key: "overdueAmount" as const, label: "Overdue" },
+];
 
 function formatReportDate(value: string): string {
   if (!value || value === "—") return "—";
@@ -33,12 +41,11 @@ function formatReportDate(value: string): string {
   return `${d}-${m}-${y}`;
 }
 
-/** Single-line Indian currency — ₹3,20,000.66 (no wrap between symbol and amount). */
 function formatAmount(amount: number): string {
   return `₹${formatMoneyNumber(amount)}`;
 }
 
-function AmountCell({
+function AmountValue({
   amount,
   className,
 }: {
@@ -46,9 +53,9 @@ function AmountCell({
   className?: string;
 }) {
   return (
-    <td className={cn("px-3 py-2.5 align-middle", MONEY_CELL_CLASS, className)}>
-      <span className="inline-block whitespace-nowrap">{formatAmount(amount)}</span>
-    </td>
+    <span className={cn("inline-block whitespace-nowrap", MONEY_CELL_CLASS, className)}>
+      {formatAmount(amount)}
+    </span>
   );
 }
 
@@ -70,6 +77,88 @@ export default function CustomerOutstandingClient() {
     return data;
   }, [asOnDate, customerId, branch]);
 
+  const columns = useMemo((): AccountsRichColumnDef<CustomerOutstandingRow>[] => {
+    const amountCols: AccountsRichColumnDef<CustomerOutstandingRow>[] = AMOUNT_HEADERS.map(
+      ({ key, label }) => ({
+        key,
+        label,
+        align: "right" as const,
+        render: (r) => {
+          const amount = r[key];
+          if (key === "outstanding") {
+            return <AmountValue amount={amount} className="font-semibold text-foreground" />;
+          }
+          if (key === "overdueAmount") {
+            return (
+              <AmountValue
+                amount={amount}
+                className={amount > 0 ? "text-red-600 font-semibold" : "text-muted-foreground"}
+              />
+            );
+          }
+          return <AmountValue amount={amount} />;
+        },
+      }),
+    );
+
+    return [
+      {
+        key: "customerName",
+        label: "Customer",
+        render: (r) => (
+          <Link
+            href={buildGeneralLedgerHref(r.ledgerId)}
+            className="block text-xs font-medium leading-snug line-clamp-2 break-words text-brand-700 hover:underline"
+            title={r.customerName}
+          >
+            {r.customerName}
+          </Link>
+        ),
+      },
+      {
+        key: "customerCode",
+        label: "Code",
+        render: (r) => (
+          <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">{r.customerCode}</span>
+        ),
+      },
+      {
+        key: "branch",
+        label: "Branch",
+        render: (r) => (
+          <span className="block text-xs text-muted-foreground truncate" title={r.branch}>
+            {r.branch}
+          </span>
+        ),
+      },
+      ...amountCols,
+      {
+        key: "lastInvoiceDate",
+        label: "Last Invoice",
+        render: (r) => (
+          <span className="text-muted-foreground whitespace-nowrap tabular-nums">
+            {formatReportDate(r.lastInvoiceDate)}
+          </span>
+        ),
+      },
+      {
+        key: "status",
+        label: "Status",
+        render: (r) => <StatusBadge status={r.status} />,
+      },
+      {
+        key: "action",
+        label: "Action",
+        align: "right",
+        render: (r) => (
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px] text-brand-700" asChild>
+            <Link href={`/accounts/receivables/outstanding/${r.customerId}`}>View</Link>
+          </Button>
+        ),
+      },
+    ];
+  }, []);
+
   return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Receivables", "Customer Outstanding")}
@@ -85,107 +174,15 @@ export default function CustomerOutstandingClient() {
       layout="split"
       className="h-full min-h-0"
     >
-      <div className="flex-1 overflow-x-auto overflow-y-auto min-h-0">
-        <table className="w-full border-collapse text-table table-fixed min-w-[1120px]">
-          <colgroup>
-            <col style={{ width: "220px" }} />
-            <col style={{ width: "96px" }} />
-            <col style={{ width: "112px" }} />
-            <col style={{ width: "132px" }} />
-            <col style={{ width: "112px" }} />
-            <col style={{ width: "112px" }} />
-            <col style={{ width: "120px" }} />
-            <col style={{ width: "112px" }} />
-            <col style={{ width: "104px" }} />
-            <col style={{ width: "96px" }} />
-            <col style={{ width: "72px" }} />
-          </colgroup>
-          <thead className="sticky top-0 z-10 bg-white border-b border-border/60 shadow-[0_1px_0_0_rgba(0,0,0,0.05)]">
-            <tr>
-              <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Customer
-              </th>
-              <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Code
-              </th>
-              <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Branch
-              </th>
-              {AMOUNT_HEADERS.map((h) => (
-                <th
-                  key={h}
-                  className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap"
-                >
-                  {h}
-                </th>
-              ))}
-              <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">
-                Last Invoice
-              </th>
-              <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Status
-              </th>
-              <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Action
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={11} className="px-4 py-14 text-center text-sm text-muted-foreground">
-                  No customer outstanding balances for the selected filters.
-                </td>
-              </tr>
-            ) : (
-              rows.map((r) => (
-                <tr
-                  key={r.customerId}
-                  className="border-b border-border/40 hover:bg-muted/15 h-11"
-                >
-                  <td className="px-3 py-2 align-middle">
-                    <span
-                      className="block text-xs font-medium leading-snug line-clamp-2 break-words"
-                      title={r.customerName}
-                    >
-                      {r.customerName}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 align-middle">
-                    <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
-                      {r.customerCode}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 align-middle">
-                    <span className="block text-xs text-muted-foreground truncate" title={r.branch}>
-                      {r.branch}
-                    </span>
-                  </td>
-                  <AmountCell amount={r.totalInvoiceAmount} />
-                  <AmountCell amount={r.paidAmount} />
-                  <AmountCell amount={r.creditNoteAdjusted} />
-                  <AmountCell amount={r.outstanding} className="font-semibold text-foreground" />
-                  <AmountCell
-                    amount={r.overdueAmount}
-                    className={r.overdueAmount > 0 ? "text-red-600 font-semibold" : "text-muted-foreground"}
-                  />
-                  <td className="px-3 py-2.5 align-middle text-xs text-muted-foreground whitespace-nowrap tabular-nums">
-                    {formatReportDate(r.lastInvoiceDate)}
-                  </td>
-                  <td className="px-3 py-2.5 align-middle whitespace-nowrap">
-                    <StatusBadge status={r.status} />
-                  </td>
-                  <td className="px-3 py-2.5 align-middle text-right whitespace-nowrap">
-                    <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px] text-brand-700" asChild>
-                      <Link href={`/accounts/receivables/outstanding/${r.customerId}`}>View</Link>
-                    </Button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <AccountsTableScroll>
+        <AccountsRichTable
+          columns={columns}
+          rows={rows}
+          minWidth={1120}
+          getRowKey={(r) => r.customerId}
+          emptyMessage="No customer outstanding balances for the selected filters."
+        />
+      </AccountsTableScroll>
     </AccountsPageShell>
   );
 }

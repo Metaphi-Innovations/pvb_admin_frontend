@@ -160,7 +160,7 @@ export function resolveCoaMasterLink(
   ledger: ChartOfAccount,
   records?: ChartOfAccount[],
 ): CoaMasterLink | null {
-  if (ledger.nodeLevel !== "ledger" && ledger.nodeLevel !== "sub_ledger") return null;
+  if (ledger.nodeLevel !== "ledger") return null;
 
   const coa = records ?? loadChartOfAccounts();
 
@@ -391,7 +391,7 @@ export function backfillCoaMasterLinks(): void {
     }
   }
 
-  for (const ledger of records.filter((r) => r.nodeLevel === "ledger" || r.nodeLevel === "sub_ledger")) {
+  for (const ledger of records.filter((r) => r.nodeLevel === "ledger")) {
     const link = resolveCoaMasterLink(ledger, records);
     if (!link || findErpPartyLinkByLedgerId(ledger.id)) continue;
 

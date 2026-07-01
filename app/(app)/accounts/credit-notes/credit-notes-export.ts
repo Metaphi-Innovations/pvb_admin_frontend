@@ -1,22 +1,16 @@
 import { normalizeCreditNote, type CreditNoteRecord } from "./credit-notes-data";
 
+/** Listing export — columns match the credit note listing table. */
 export async function exportCreditNotesToExcel(records: CreditNoteRecord[]): Promise<void> {
   const XLSX = await import("xlsx");
   const rows = records.map((r) => {
     const rec = normalizeCreditNote(r);
     return {
-      "Credit Note No.": rec.creditNoteNo,
       Date: rec.creditNoteDate,
-      Customer: rec.customerName,
-      "Reference Invoice No.": rec.sourceInvoiceNo,
-      "Reference Sales Order No.": rec.sourceOrderNo,
-      "Original Amount": rec.originalAmount,
-      "Already Adjusted": rec.alreadyAdjustedAmount,
-      "Credit Amount": rec.currentCreditAmount,
-      Reason: rec.reason,
-      Status: rec.status.replaceAll("_", " "),
-      "Created By": rec.createdBy,
-      "Updated By": rec.updatedBy,
+      "Credit Note No.": rec.creditNoteNo,
+      "Reference Number": rec.sourceInvoiceNo || "",
+      "Customer Name": rec.customerName,
+      Amount: rec.currentCreditAmount,
     };
   });
   const sheet = XLSX.utils.json_to_sheet(rows);

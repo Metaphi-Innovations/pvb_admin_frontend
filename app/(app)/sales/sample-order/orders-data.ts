@@ -983,7 +983,7 @@ export function orderToFormValues(order: SalesOrder): SalesOrderFormValues {
     salesManId: hydrated.salesManId,
     remarks: hydrated.remarks ?? "",
     status: hydrated.status,
-    lineItems: hydrated.lineItems.length > 0 ? hydrated.lineItems : [createEmptyLineItem()],
+    lineItems: hydrated.lineItems.length > 0 ? hydrated.lineItems : [],
     warehouseId: hydrated.warehouseId ?? null,
     warehouseName: hydrated.warehouseName ?? "",
   };

@@ -12,24 +12,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Download, Plus, Search } from "lucide-react";
+import { Download, Eye, Pencil, Plus, Search } from "lucide-react";
+import { useClientMounted } from "@/lib/use-client-mounted";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb, JOURNAL_VOUCHER_HREF } from "@/lib/accounts/accounts-nav";
 import { SortTh, StatusBadge } from "../../components/AccountsUI";
-import { getJournalVouchers } from "../voucher-data";
+import { getJournalVouchers, canEditVoucher } from "../voucher-data";
 
 const PAGE_SIZE = 15;
 
 export default function JournalListPageClient() {
   const router = useRouter();
+  const mounted = useClientMounted();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortKey, setSortKey] = useState("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
 
-  const records = useMemo(() => getJournalVouchers(), []);
+  const records = useMemo(() => (mounted ? getJournalVouchers() : []), [mounted]);
 
   const visible = useMemo(() => {
     let r = [...records];
@@ -172,8 +174,8 @@ export default function JournalListPageClient() {
       className="h-full min-h-0"
     >
       <div className="flex-1 overflow-auto min-h-0">
-        <table className="w-full text-table min-w-[900px]">
-          <thead className="bg-muted/20 border-b border-border/60 sticky top-0 z-10">
+        <table className="accounts-table w-full text-table min-w-[900px]">
+          <thead className="border-b border-border/60">
             <tr>
               <SortTh label="Voucher Number" colKey="voucherNumber" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <SortTh label="Date" colKey="date" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
@@ -181,12 +183,19 @@ export default function JournalListPageClient() {
               <SortTh label="Total Amount" colKey="totalDebit" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
               <th className="px-4 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
               <SortTh label="Created By" colKey="createdBy" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground min-w-[120px]">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {paged.length === 0 ? (
+            {!mounted ? (
               <tr>
-                <td colSpan={6} className="px-4 py-16 text-center">
+                <td colSpan={7} className="px-4 py-16 text-center text-xs text-muted-foreground">
+                  Loading journal vouchers…
+                </td>
+              </tr>
+            ) : paged.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-16 text-center">
                   <p className="text-sm font-medium text-foreground">No journal vouchers yet</p>
                   <p className="text-xs text-muted-foreground mt-1">Create your first journal entry to get started.</p>
                   <Button
@@ -201,7 +210,14 @@ export default function JournalListPageClient() {
             ) : (
               paged.map((v) => (
                 <tr key={v.id} className="border-b border-border/40 hover:bg-brand-50/30 transition-colors">
-                  <td className="px-4 py-3 text-xs font-medium">{v.voucherNumber}</td>
+                  <td className="px-4 py-3 text-xs font-medium">
+                    <Link
+                      href={`/accounts/vouchers/view/${v.id}`}
+                      className="text-brand-700 hover:underline font-mono"
+                    >
+                      {v.voucherNumber}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3 text-xs tabular-nums">{v.date}</td>
                   <td className="px-4 py-3 text-xs max-w-[280px] truncate">{v.narration || "—"}</td>
                   <td className="px-4 py-3.5 text-right">
@@ -211,6 +227,28 @@ export default function JournalListPageClient() {
                     <StatusBadge status={v.status} />
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{v.createdBy}</td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-0.5">
+                      <button
+                        type="button"
+                        title="View"
+                        className="p-1.5 hover:bg-muted rounded-md transition-colors"
+                        onClick={() => router.push(`/accounts/vouchers/view/${v.id}`)}
+                      >
+                        <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                      </button>
+                      {canEditVoucher(v) && (
+                        <button
+                          type="button"
+                          title="Edit"
+                          className="p-1.5 hover:bg-muted rounded-md transition-colors"
+                          onClick={() => router.push(`/accounts/vouchers/edit/${v.id}`)}
+                        >
+                          <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))
             )}

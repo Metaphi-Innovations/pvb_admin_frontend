@@ -38,7 +38,7 @@ export default function AddStockTransferPage() {
     transportDetails: "",
     remarks: "",
     status: "pending_approval",
-    lineItems: [createEmptyLineItem()],
+    lineItems: [],
     additionalExpenses: [],
   });
   const [errors, setErrors] = useState<Record<string, string>>({});

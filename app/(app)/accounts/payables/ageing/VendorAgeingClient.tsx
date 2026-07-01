@@ -62,8 +62,8 @@ export default function VendorAgeingClient() {
       className="h-full min-h-0"
     >
       <div className="flex-1 overflow-auto min-h-0">
-        <table className="w-full text-table min-w-[1200px]">
-          <thead className="bg-muted/20 border-b sticky top-0 z-10">
+        <table className="accounts-table w-full text-table min-w-[1200px]">
+          <thead className="border-b">
             <tr>
               {[
                 "Supplier Name",
@@ -137,8 +137,8 @@ export default function VendorAgeingClient() {
                 {expandedVendorId === r.vendorId && (
                   <tr className="bg-muted/10">
                     <td colSpan={9} className="px-4 py-3">
-                      <table className="w-full text-table border border-border/60 rounded-lg overflow-hidden bg-white">
-                        <thead className="bg-muted/30">
+                      <table className="accounts-table w-full text-table border border-border/60 rounded-lg overflow-hidden bg-white">
+                        <thead>
                           <tr>
                             {[
                               "Bill No",

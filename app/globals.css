@@ -71,6 +71,18 @@
     background-color: #FFE4C4;
     color: #6B2D07;
   }
+
+  /* Hide number input spinners (debit/credit, qty, amount fields) */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
 }
 
 @layer components {
@@ -140,6 +152,115 @@
 
   .master-listing-td-sticky {
     @apply sticky right-0 z-10 bg-white shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border group-hover:bg-[#fbfaf7];
+  }
+
+  /* Accounts module — unified listing & report tables (Ledger, Day Book, Trial Balance, etc.)
+   * Sticky is applied per th — never on thead/tr (avoids header/first-row overlap in scroll containers).
+   * Row height lives on th/td only — never on tr. */
+  .accounts-table-scroll {
+    @apply flex-1 overflow-auto min-h-0;
+  }
+
+  .accounts-table {
+    @apply w-full text-table border-separate border-spacing-0;
+  }
+
+  .accounts-table-head {
+    @apply bg-muted;
+  }
+
+  .accounts-table-head-row {
+    /* Intentionally no height — fixed height on tr causes sticky th / first-row overlap */
+  }
+
+  .accounts-table-th {
+    @apply px-4 whitespace-nowrap text-xs font-semibold text-foreground text-left;
+    @apply border-b border-border bg-muted;
+    height: 50px;
+    min-height: 50px;
+    padding-top: 0;
+    padding-bottom: 0;
+    box-sizing: border-box;
+    vertical-align: middle;
+  }
+
+  .accounts-table-th-inner {
+    @apply flex h-full min-h-[50px] items-center;
+  }
+
+  .accounts-table-th-sticky {
+    @apply sticky top-0 z-30 bg-muted;
+    box-shadow: 0 1px 0 0 hsl(var(--border));
+  }
+
+  .accounts-table-th-sorted {
+    @apply bg-brand-50 text-brand-700;
+    box-shadow: 0 1px 0 0 hsl(var(--border)), inset 0 -1px 0 0 rgb(244 121 32 / 0.12);
+  }
+
+  .accounts-table-th-sticky.accounts-table-th-sorted {
+    @apply bg-brand-50;
+  }
+
+  .accounts-table-th-uppercase {
+    @apply text-[10px] uppercase tracking-wide text-muted-foreground;
+  }
+
+  .accounts-table-body {
+    @apply bg-white;
+  }
+
+  .accounts-table-row {
+    @apply border-b border-border/60 bg-white transition-colors hover:bg-muted/20;
+  }
+
+  .accounts-table-td {
+    @apply px-4 text-xs text-foreground;
+    height: 54px;
+    min-height: 54px;
+    padding-top: 0;
+    padding-bottom: 0;
+    box-sizing: border-box;
+    vertical-align: middle;
+  }
+
+  .accounts-table-td-inner {
+    @apply flex h-full min-h-[54px] items-center;
+  }
+
+  .accounts-table-empty {
+    @apply !h-auto !min-h-0 py-16 text-center text-sm text-muted-foreground;
+  }
+
+  .accounts-table-foot {
+    @apply bg-muted/15 border-t border-border/60;
+  }
+
+  /* Legacy markup: thead/tr without component classes still get standard layout */
+  .accounts-table > thead > tr > th {
+    @apply px-4 whitespace-nowrap text-xs font-semibold text-foreground text-left;
+    @apply border-b border-border bg-muted sticky top-0 z-30;
+    height: 50px;
+    min-height: 50px;
+    padding-top: 0;
+    padding-bottom: 0;
+    box-sizing: border-box;
+    vertical-align: middle;
+    box-shadow: 0 1px 0 0 hsl(var(--border));
+  }
+
+  .accounts-table > tbody > tr {
+    @apply border-b border-border/60 bg-white transition-colors hover:bg-muted/20;
+  }
+
+  .accounts-table > tbody > tr > td {
+    @apply px-4 text-xs text-foreground;
+    height: 54px;
+    min-height: 54px;
+    padding-top: 0;
+    padding-bottom: 0;
+    box-sizing: border-box;
+    vertical-align: middle;
   }
 
   .input-base {

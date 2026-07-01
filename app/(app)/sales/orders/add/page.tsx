@@ -46,7 +46,7 @@ export default function AddSalesOrderPage() {
 		salesManId: null,
 		deliveryDate: "",
 		status: "confirmed",
-		lineItems: [createEmptyLineItem()],
+		lineItems: [],
 		additionalExpenses: [],
 		warehouseId: null,
 		warehouseName: "",

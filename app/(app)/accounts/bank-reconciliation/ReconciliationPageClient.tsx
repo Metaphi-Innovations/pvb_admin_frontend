@@ -220,8 +220,8 @@ export default function ReconciliationPageClient({ embedded = false }: Reconcili
           <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-0.5">{period}</h2>
           <div className="bg-white border border-border/60 rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-table min-w-[1200px]">
-                <thead className="bg-muted/20 border-b border-border/60">
+              <table className="accounts-table w-full text-table min-w-[1200px]">
+                <thead className="border-b border-border/60">
                   <tr>
                     {[
                       "Bank Account",

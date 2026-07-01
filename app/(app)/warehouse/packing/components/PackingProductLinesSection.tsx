@@ -140,8 +140,9 @@ function PackingProductRow({
   onQtyChange,
   onBatchSelectionsChange,
 }: PackingProductRowProps) {
-  const requiredQty = isSelected ? packingQtyValue : 0;
+  const requiredQty = isSelected ? product.pendingQty : 0;
   const showBatchSection = isSelected && requiredQty > 0;
+  const currentPackedQty = Object.values(batchSelections).reduce((a, b) => a + b, 0);
 
   return (
     <div className={cn(!isSelected && "opacity-70")}>
@@ -200,18 +201,19 @@ function PackingProductRow({
           </span>
         </div>
 
-        <div className="w-[100px] flex-shrink-0">
-          <Input
-            type="number"
-            disabled={!isSelected}
-            value={!isSelected || packingQtyValue === 0 ? "" : packingQtyValue}
-            onChange={(e) => onQtyChange(e.target.value)}
-            className={cn(
-              "h-8 text-xs font-bold text-right px-2 focus:ring-1 focus:ring-brand-500",
-              validationError ? "border-red-400" : "",
-              !isSelected && "bg-muted/30",
-            )}
-          />
+        <div className="w-[120px] flex-shrink-0 text-right pr-2">
+          {isSelected ? (
+            <div className="flex flex-col items-end">
+              <span className="text-xs font-bold text-brand-700">
+                Packing: {currentPackedQty}
+              </span>
+              {validationError && (
+                <span className="text-[10px] text-red-500">{validationError}</span>
+              )}
+            </div>
+          ) : (
+            <span className="text-xs font-medium text-muted-foreground">Not Selected</span>
+          )}
         </div>
       </div>
 

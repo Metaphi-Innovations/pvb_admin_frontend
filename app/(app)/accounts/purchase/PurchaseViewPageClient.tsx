@@ -161,7 +161,7 @@ export default function PurchaseViewPageClient({ purchaseId }: { purchaseId: num
         {record.lineItems.length > 0 && (
           <div className="bg-white rounded-lg border p-4 overflow-x-auto">
             <h2 className="text-sm font-semibold mb-3">Products (from PO)</h2>
-            <table className="w-full text-xs min-w-[640px]">
+            <table className="accounts-table w-full text-xs min-w-[640px]">
               <thead className="border-b">
                 <tr>
                   {["Product", "Qty", "UOM", "Rate", "GST %", "Line Amt"].map((h) => (

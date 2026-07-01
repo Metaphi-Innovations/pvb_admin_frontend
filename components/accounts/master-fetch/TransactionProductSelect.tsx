@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Check, ChevronsUpDown, Search } from "lucide-react";
 import type { TransactionProductOption } from "@/lib/accounts/transaction-master-fetch";
-import { MasterFetchedBadge } from "./MasterFetchedBadge";
 
 export function TransactionProductSelect({
   products,
@@ -56,7 +55,6 @@ export function TransactionProductSelect({
                 className="h-7 text-xs pl-7"
               />
             </div>
-            <MasterFetchedBadge />
           </div>
           <div className="max-h-[200px] overflow-y-auto py-1">
             {filtered.length === 0 ? (

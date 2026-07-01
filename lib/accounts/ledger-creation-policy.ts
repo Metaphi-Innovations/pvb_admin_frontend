@@ -8,7 +8,7 @@ import { isBankAccountsSubGroup, isBankGroupNode } from "@/lib/accounts/bank-coa
 /** Sub-groups whose ledgers are owned by other ERP masters — not manually created in COA/Ledgers. */
 export function isMasterOwnedSubGroup(node: ChartOfAccount): boolean {
   if (isBankAccountsSubGroup(node) || isBankGroupNode(node)) return true;
-  if (node.nodeLevel !== "sub_group") return false;
+  if (node.nodeLevel !== "account_group") return false;
   const name = node.accountName.toLowerCase();
   return (
     name.includes("trade receivables") ||
@@ -21,7 +21,7 @@ export function isMasterOwnedSubGroup(node: ChartOfAccount): boolean {
 }
 
 export function isGstLedgerParent(node: ChartOfAccount): boolean {
-  if (node.nodeLevel !== "sub_group") return false;
+  if (node.nodeLevel !== "account_group") return false;
   const name = node.accountName.toLowerCase();
   return name.includes("gst payable") || name.includes("duties & taxes");
 }
