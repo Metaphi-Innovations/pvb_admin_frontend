@@ -145,8 +145,8 @@ export default function AllocateReceiptClient() {
         {error && <p className="text-xs text-red-600">{error}</p>}
 
         <div className="rounded-lg border border-border/60 overflow-hidden">
-          <table className="w-full text-table">
-            <thead className="bg-muted/20 border-b">
+          <table className="accounts-table w-full text-table">
+            <thead className="border-b">
               <tr>
                 {["Select", "Invoice No", "Invoice Date", "Due Date", "Invoice Amt", "Already Paid", "Outstanding", "Allocation"].map((h) => (
                   <th key={h} className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">{h}</th>

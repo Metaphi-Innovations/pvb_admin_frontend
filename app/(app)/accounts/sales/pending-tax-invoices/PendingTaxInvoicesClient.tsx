@@ -42,8 +42,8 @@ export default function PendingTaxInvoicesClient() {
           </div>
         ) : (
           <TooltipProvider>
-            <table className="w-full text-table min-w-[1060px]">
-              <thead className="bg-muted/20 border-b sticky top-0">
+            <table className="accounts-table w-full text-table min-w-[1060px]">
+              <thead className="border-b">
                 <tr>
                   {[
                     "Sales Order No",

@@ -59,8 +59,8 @@ export default function VendorOutstandingClient() {
       className="h-full min-h-0"
     >
       <div className="flex-1 overflow-auto min-h-0">
-        <table className="w-full text-table min-w-[1400px]">
-          <thead className="bg-muted/20 border-b sticky top-0 z-10">
+        <table className="accounts-table w-full text-table min-w-[1400px]">
+          <thead className="border-b">
             <tr>
               {[
                 "Supplier Name",

@@ -2,7 +2,15 @@ import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { getAncestorPath } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
 import { computeLedgerCurrentBalance } from "@/app/(app)/accounts/masters/ledgers/ledgers-utils";
 import { loadVouchers } from "@/app/(app)/accounts/vouchers/voucher-data";
+import { VOUCHER_TYPE_LABELS } from "@/app/(app)/accounts/masters/masters-data";
 import { statementVoucherNo } from "@/lib/accounts/sales-invoice-accounting";
+import { resolveSourceDocumentLink } from "@/lib/accounts/ledger-source-resolver";
+import {
+  buildCoaTransactionsForDateRange,
+  computeClosingFromPeriodOpening,
+  computePeriodOpeningBalance,
+  ledgerMovementTotalsForRange,
+} from "@/lib/accounts/ledger-transaction-date-filter";
 
 export interface CoaLedgerBalanceRow {
   id: number;
@@ -15,10 +23,16 @@ export interface CoaTransactionRow {
   date: string;
   voucherNo: string;
   voucherType: string;
+  referenceNo: string;
   narration: string;
   debit: number;
   credit: number;
   runningBalance: number;
+  runningBalanceType: "Debit" | "Credit";
+  isOpeningRow?: boolean;
+  voucherId?: number;
+  viewHref?: string;
+  viewLabel?: string;
 }
 
 export interface CoaGroupAccountingSummary {
@@ -37,10 +51,12 @@ export interface CoaLedgerAccountingSummary {
   ledgerId: number;
   ledgerName: string;
   openingBalance: number;
+  openingBalanceType: "Debit" | "Credit";
   currentBalance: number;
   balanceType: "Debit" | "Credit";
   totalDebit: number;
   totalCredit: number;
+  lastTransactionDate: string | null;
   transactions: CoaTransactionRow[];
 }
 
@@ -55,7 +71,7 @@ export function collectDescendantLedgers(records: ChartOfAccount[], nodeId: numb
     const id = queue.shift()!;
     const children = records.filter((r) => r.parentAccountId === id);
     for (const c of children) {
-      if (c.nodeLevel === "ledger" || c.nodeLevel === "sub_ledger") ids.add(c.id);
+      if (c.nodeLevel === "ledger") ids.add(c.id);
       else queue.push(c.id);
     }
   }
@@ -82,25 +98,28 @@ function signedMovement(debit: number, credit: number, balanceType: "Debit" | "C
   return balanceType === "Debit" ? debit - credit : credit - debit;
 }
 
-export function buildLedgerTransactions(
+export function collectLedgerRawCoaTransactions(
   ledger: ChartOfAccount,
-  limit = 30,
-): CoaTransactionRow[] {
-  const balanceType = ledger.balanceType;
-  const raw: Omit<CoaTransactionRow, "runningBalance">[] = [];
+): Omit<CoaTransactionRow, "runningBalance" | "runningBalanceType" | "isOpeningRow">[] {
+  const raw: Omit<CoaTransactionRow, "runningBalance" | "runningBalanceType" | "isOpeningRow">[] = [];
 
   loadVouchers()
     .filter((v) => v.status === "posted" || v.status === "approved")
     .forEach((v) => {
       v.lines.forEach((line) => {
         if (line.ledgerId !== ledger.id) return;
+        const source = resolveSourceDocumentLink(v);
         raw.push({
           date: v.date,
           voucherNo: statementVoucherNo(v),
-          voucherType: v.voucherType,
+          voucherType: VOUCHER_TYPE_LABELS[v.voucherType as keyof typeof VOUCHER_TYPE_LABELS] ?? v.voucherType,
+          referenceNo: v.referenceNo?.trim() || "—",
           narration: line.remarks || v.narration || "—",
           debit: Number(line.debit) || 0,
           credit: Number(line.credit) || 0,
+          voucherId: v.id,
+          viewHref: source.href,
+          viewLabel: source.label,
         });
       });
     });
@@ -111,10 +130,25 @@ export function buildLedgerTransactions(
     return a.voucherNo.localeCompare(b.voucherNo);
   });
 
+  return raw;
+}
+
+export function buildLedgerTransactions(
+  ledger: ChartOfAccount,
+  limit = 30,
+): CoaTransactionRow[] {
+  const balanceType = ledger.balanceType;
+  const raw = collectLedgerRawCoaTransactions(ledger);
+
   let running = ledger.openingBalance;
   const withBalance: CoaTransactionRow[] = raw.map((row) => {
     running += signedMovement(row.debit, row.credit, balanceType);
-    return { ...row, runningBalance: running };
+    const runningType = running >= 0 ? balanceType : balanceType === "Debit" ? "Credit" : "Debit";
+    return {
+      ...row,
+      runningBalance: Math.abs(running),
+      runningBalanceType: runningType,
+    };
   });
 
   return withBalance.reverse().slice(0, limit);
@@ -125,29 +159,38 @@ export function buildGroupTransactions(
   balanceType: "Debit" | "Credit" = "Debit",
   limit = 20,
 ): CoaTransactionRow[] {
-  const raw: Omit<CoaTransactionRow, "runningBalance">[] = [];
+  const raw: Omit<CoaTransactionRow, "runningBalance" | "runningBalanceType" | "isOpeningRow">[] = [];
 
   loadVouchers()
     .filter((v) => v.status === "posted" || v.status === "approved")
     .forEach((v) => {
       v.lines.forEach((line) => {
         if (!line.ledgerId || !ledgerIds.has(line.ledgerId)) return;
+        const source = resolveSourceDocumentLink(v);
         raw.push({
           date: v.date,
           voucherNo: statementVoucherNo(v),
-          voucherType: v.voucherType,
+          voucherType: VOUCHER_TYPE_LABELS[v.voucherType as keyof typeof VOUCHER_TYPE_LABELS] ?? v.voucherType,
+          referenceNo: v.referenceNo?.trim() || "—",
           narration: line.remarks || v.narration || line.ledgerName || "—",
           debit: Number(line.debit) || 0,
           credit: Number(line.credit) || 0,
+          voucherId: v.id,
+          viewHref: source.href,
+          viewLabel: source.label,
         });
       });
     });
 
   raw.sort((a, b) => b.date.localeCompare(a.date) || b.voucherNo.localeCompare(a.voucherNo));
-  return raw.slice(0, limit).map((row) => ({
-    ...row,
-    runningBalance: signedMovement(row.debit, row.credit, balanceType),
-  }));
+  return raw.slice(0, limit).map((row) => {
+    const movement = signedMovement(row.debit, row.credit, balanceType);
+    return {
+      ...row,
+      runningBalance: Math.abs(movement),
+      runningBalanceType: movement >= 0 ? balanceType : balanceType === "Debit" ? "Credit" : "Debit",
+    };
+  });
 }
 
 function sumMonthDebitCredit(ledgerIds: Set<number>): { debit: number; credit: number } {
@@ -223,20 +266,28 @@ export function buildGroupAccountingSummary(
 
 export function buildLedgerAccountingSummary(
   ledger: ChartOfAccount,
-  records: ChartOfAccount[],
+  _records: ChartOfAccount[],
+  dateFrom: string,
+  dateTo: string,
 ): CoaLedgerAccountingSummary {
-  const ledgerIds = new Set([ledger.id]);
-  const totals = sumTotals(ledgerIds);
-  const bal = computeLedgerCurrentBalance(ledger);
+  const raw = collectLedgerRawCoaTransactions(ledger);
+  const { totalDebit, totalCredit } = ledgerMovementTotalsForRange(raw, dateFrom, dateTo);
+  const periodOpening = computePeriodOpeningBalance(ledger, raw, dateFrom);
+  const periodClosing = computeClosingFromPeriodOpening(periodOpening, totalDebit, totalCredit, ledger);
+  const lastTransactionDate =
+    raw.length > 0 ? raw.reduce((max, row) => (row.date > max ? row.date : max), raw[0].date) : null;
+
   return {
     ledgerId: ledger.id,
     ledgerName: ledger.accountName,
-    openingBalance: ledger.openingBalance,
-    currentBalance: bal.amount,
-    balanceType: ledger.balanceType,
-    totalDebit: totals.debit,
-    totalCredit: totals.credit,
-    transactions: buildLedgerTransactions(ledger),
+    openingBalance: periodOpening.amount,
+    openingBalanceType: periodOpening.balanceType,
+    currentBalance: periodClosing.amount,
+    balanceType: periodClosing.balanceType,
+    totalDebit,
+    totalCredit,
+    lastTransactionDate,
+    transactions: buildCoaTransactionsForDateRange(ledger, raw, dateFrom, dateTo, periodOpening),
   };
 }
 

@@ -86,7 +86,7 @@ export default function CustomerOutstandingClient() {
       className="h-full min-h-0"
     >
       <div className="flex-1 overflow-x-auto overflow-y-auto min-h-0">
-        <table className="w-full border-collapse text-table table-fixed min-w-[1120px]">
+        <table className="accounts-table w-full border-separate border-spacing-0 text-table table-fixed min-w-[1120px]">
           <colgroup>
             <col style={{ width: "220px" }} />
             <col style={{ width: "96px" }} />
@@ -100,7 +100,7 @@ export default function CustomerOutstandingClient() {
             <col style={{ width: "96px" }} />
             <col style={{ width: "72px" }} />
           </colgroup>
-          <thead className="sticky top-0 z-10 bg-white border-b border-border/60 shadow-[0_1px_0_0_rgba(0,0,0,0.05)]">
+          <thead className="border-b border-border/60 shadow-[0_1px_0_0_rgba(0,0,0,0.05)]">
             <tr>
               <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Customer

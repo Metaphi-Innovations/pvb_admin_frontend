@@ -149,7 +149,7 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
 
         <div className="bg-white rounded-lg border border-border/60 p-4 overflow-x-auto">
           <h2 className="text-sm font-semibold mb-3">Line Items</h2>
-          <table className="w-full text-xs min-w-[640px]">
+          <table className="accounts-table w-full text-xs min-w-[640px]">
             <thead className="border-b">
               <tr>
                 {["Product", "Description", "Inv Qty", "Return Qty", "Credit Amount"].map((h) => (

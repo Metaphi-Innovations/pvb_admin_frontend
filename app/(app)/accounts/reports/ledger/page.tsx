@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { formatBalanceAmount, formatMoney } from "@/lib/accounts/money-format";
 import { computeLedgerReportRows } from "@/lib/accounts/ledger-reports";
 import { getPostableCoaAccounts } from "@/app/(app)/accounts/data";
@@ -14,6 +15,7 @@ import {
 } from "@/components/accounts/ReportFilters";
 
 export default function LedgerReportPage() {
+  const searchParams = useSearchParams();
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange();
   const [branch, setBranch] = useState("all");
   const [ledgerId, setLedgerId] = useState("all");
@@ -25,6 +27,13 @@ export default function LedgerReportPage() {
         .sort((a, b) => a.name.localeCompare(b.name)),
     [],
   );
+
+  useEffect(() => {
+    const fromUrl = searchParams.get("ledger");
+    if (fromUrl && ledgers.some((l) => String(l.id) === fromUrl)) {
+      setLedgerId(fromUrl);
+    }
+  }, [searchParams, ledgers]);
 
   const rows = useMemo(() => {
     let data = computeLedgerReportRows();
@@ -45,7 +54,7 @@ export default function LedgerReportPage() {
 
   return (
     <AccountingReportPage
-      title="Ledger Report"
+      title="General Ledger"
       description="Ledger-wise opening, movement and closing from voucher entries"
       filters={
         <ReportFilterRow>

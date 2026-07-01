@@ -77,7 +77,7 @@ function coaPathForLedger(ledger: ChartOfAccount, records: ChartOfAccount[]): st
   return [
     hierarchy.primaryHead?.accountName,
     hierarchy.accountGroup?.accountName,
-    hierarchy.subGroup?.accountName,
+    hierarchy.standardGroup?.accountName,
     ledger.accountName,
   ]
     .filter(Boolean)

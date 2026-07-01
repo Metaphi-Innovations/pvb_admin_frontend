@@ -8,6 +8,7 @@ import { RecordDetailPage } from "@/components/record-detail";
 import { NoteWorkflowBadge } from "../components/NoteWorkflowBadge";
 import {
   approveDebitNote,
+  canEditDebitNote,
   getDebitNoteById,
   processDebitNote,
   REFERENCE_TYPE_LABELS,
@@ -59,7 +60,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
 
   if (!record) return null;
 
-  const canEdit = record.status === "draft" || record.status === "pending_approval";
+  const canEdit = canEditDebitNote(record);
 
   return (
     <RecordDetailPage
@@ -171,7 +172,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
         {record.againstType !== "standalone_adjustment" && record.lineItems.length > 0 && (
           <div className="bg-white rounded-lg border border-border/60 p-4 overflow-x-auto">
             <h2 className="text-sm font-semibold mb-3">Line Items</h2>
-            <table className="w-full text-xs min-w-[720px]">
+            <table className="accounts-table w-full text-xs min-w-[720px]">
               <thead className="border-b">
                 <tr>
                   {["Product", "Inv Qty", "Return Qty", "UOM", "Rate", "GST %", "Debit Amount"].map((h) => (

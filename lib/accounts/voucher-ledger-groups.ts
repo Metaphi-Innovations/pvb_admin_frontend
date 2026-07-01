@@ -28,7 +28,7 @@ export function buildGroupedPostingLedgers(records?: ChartOfAccount[]): LedgerGr
   for (const ledger of postable) {
     const path = resolveHierarchyPath(list, ledger.id);
     const groupLabel =
-      path.subGroup?.accountName ??
+      path.standardGroup?.accountName ??
       path.accountGroup?.accountName ??
       path.primaryHead?.accountName ??
       "Other";
@@ -170,7 +170,7 @@ export type LedgerContactType = "customer" | "vendor" | "employee" | null;
 
 function matchesSubGroup(path: ChartOfAccount[], ...terms: string[]): boolean {
   return path
-    .filter((n) => n.nodeLevel === "sub_group")
+    .filter((n) => n.nodeLevel === "account_group")
     .some((n) => {
       const name = n.accountName.toLowerCase();
       return terms.every((t) => name.includes(t.toLowerCase()));

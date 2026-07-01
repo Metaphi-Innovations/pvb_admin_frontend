@@ -822,7 +822,7 @@ export function ensureInventoryAccountingLedgers(): void {
   let changed = false;
   for (const spec of DEMO_LEDGER_SPECS) {
     const subGroup = records.find(
-      (r) => r.nodeLevel === "sub_group" && r.accountName === spec.subGroup,
+      (r) => r.nodeLevel === "account_group" && r.accountName === spec.subGroup,
     );
     if (!subGroup) continue;
     const exists = records.some(

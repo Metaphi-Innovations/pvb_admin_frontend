@@ -8,7 +8,7 @@ function collectDescendantLedgers(records: ChartOfAccount[], nodeId: number): Ch
   while (queue.length) {
     const id = queue.shift()!;
     for (const c of records.filter((r) => r.parentAccountId === id)) {
-      if (c.nodeLevel === "ledger" || c.nodeLevel === "sub_ledger") {
+      if (c.nodeLevel === "ledger") {
         if (!c.bankGroupFlag) ids.add(c.id);
       } else {
         queue.push(c.id);
@@ -32,7 +32,7 @@ export function computeCoaNodeStats(
   records: ChartOfAccount[],
 ): CoaNodeStats {
   const ledgers =
-    node.nodeLevel === "ledger" || node.nodeLevel === "sub_ledger"
+    node.nodeLevel === "ledger"
       ? node.bankGroupFlag
         ? []
         : [node]

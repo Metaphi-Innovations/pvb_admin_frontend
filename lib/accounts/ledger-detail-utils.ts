@@ -172,7 +172,7 @@ export interface StatementRow {
   sourceLabel?: string;
 }
 
-function isDebitNatureLedger(ledger: ChartOfAccount): boolean {
+export function isDebitNatureLedger(ledger: ChartOfAccount): boolean {
   const balance = computeLedgerCurrentBalance(ledger);
   if (balance.balanceType === "Debit") return true;
   if (ledger.accountType === "Asset" || ledger.accountType === "Expense") return true;
@@ -232,6 +232,73 @@ export function buildLedgerStatement(
   return rows;
 }
 
+export function buildLedgerStatementForDateRange(
+  ledger: ChartOfAccount,
+  transactions: LedgerTransactionRow[],
+  from: string,
+  to: string,
+): StatementRow[] {
+  const isDebitNature = isDebitNatureLedger(ledger);
+  const inRange = transactions
+    .filter((t) => t.date >= from && t.date <= to)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  let running = ledger.openingBalance;
+  let runningType: "Debit" | "Credit" = ledger.balanceType;
+
+  for (const tx of transactions.filter((t) => t.date < from).sort((a, b) => a.date.localeCompare(b.date))) {
+    if (isDebitNature) {
+      running += tx.debit - tx.credit;
+      runningType = running >= 0 ? "Debit" : "Credit";
+    } else {
+      running += tx.credit - tx.debit;
+      runningType = running >= 0 ? "Credit" : "Debit";
+    }
+  }
+
+  const rows: StatementRow[] = [];
+
+  rows.push({
+    id: "opening",
+    date: "—",
+    voucherType: "Opening",
+    voucherNo: "—",
+    sourceModule: "Opening Balance",
+    particulars: "Opening Balance",
+    debit: ledger.balanceType === "Debit" ? ledger.openingBalance : 0,
+    credit: ledger.balanceType === "Credit" ? ledger.openingBalance : 0,
+    runningBalance: Math.abs(ledger.openingBalance),
+    balanceType: ledger.balanceType,
+  });
+
+  for (const tx of inRange) {
+    if (isDebitNature) {
+      running += tx.debit - tx.credit;
+      runningType = running >= 0 ? "Debit" : "Credit";
+    } else {
+      running += tx.credit - tx.debit;
+      runningType = running >= 0 ? "Credit" : "Debit";
+    }
+    rows.push({
+      id: tx.id,
+      date: tx.date,
+      voucherType: tx.voucherType,
+      voucherNo: tx.voucherNo,
+      sourceModule: tx.sourceModule,
+      particulars: tx.particulars,
+      debit: tx.debit,
+      credit: tx.credit,
+      runningBalance: Math.abs(running),
+      balanceType: runningType,
+      href: tx.href,
+      sourceHref: tx.sourceHref,
+      sourceLabel: tx.sourceLabel,
+    });
+  }
+
+  return rows;
+}
+
 export function ledgerMovementTotals(transactions: LedgerTransactionRow[]): {
   totalDebit: number;
   totalCredit: number;
@@ -248,7 +315,7 @@ export function ledgerMovementTotals(transactions: LedgerTransactionRow[]): {
 export function getLedgerById(id: number): ChartOfAccount | null {
   const records = loadChartOfAccounts();
   const node = records.find(
-    (r) => r.id === id && (r.nodeLevel === "ledger" || r.nodeLevel === "sub_ledger"),
+    (r) => r.id === id && r.nodeLevel === "ledger",
   );
   return node ?? null;
 }

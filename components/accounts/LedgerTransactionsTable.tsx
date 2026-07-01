@@ -21,8 +21,8 @@ export function LedgerTransactionsTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-xs min-w-[960px]">
-        <thead className="bg-muted/20 border-b border-border/60 sticky top-0 z-10">
+      <table className="accounts-table w-full text-xs min-w-[960px]">
+        <thead className="border-b border-border/60">
           <tr>
             {[
               "Date",

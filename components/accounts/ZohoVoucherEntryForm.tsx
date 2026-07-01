@@ -1,9 +1,8 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -12,34 +11,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { GripVertical, Plus, Save, Trash2, X } from "lucide-react";
+import { GripVertical, Pencil, Plus, Save, Settings, Trash2, X } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { GroupedLedgerSelect } from "@/components/accounts/GroupedLedgerSelect";
 import { JournalLedgerImpactPreview } from "@/components/accounts/JournalLedgerImpactPreview";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { journalEntryImpact } from "@/lib/accounts/ledger-impact-previews";
-import { formatMoney, MONEY_INPUT_CLASS } from "@/lib/accounts/money-format";
-import {
-  applyAutoPartyToLine,
-  applyAutoPartyToLines,
-  isAutoPartyLedger,
-  resolveLedgerContactType,
-} from "@/lib/accounts/voucher-ledger-groups";
+import { formatMoney, MONEY_INPUT_CLASS, parseMoneyInput } from "@/lib/accounts/money-format";
+import { applyAutoPartyToLine, applyAutoPartyToLines } from "@/lib/accounts/voucher-ledger-groups";
 import { cn } from "@/lib/utils";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
-import { getCustomersForInvoice } from "@/app/(app)/accounts/invoices/invoices-data";
-import { getVendorsForDebitNote } from "@/app/(app)/accounts/debit-notes/debit-notes-data";
-import { loadEmployees } from "@/app/(app)/user-management/employee/employee-data";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import type { RecordStatus } from "@/app/(app)/accounts/data";
 import {
   EMPTY_LINE,
   calcLineTotals,
+  canEditVoucher,
+  compactPostedVoucherLines,
   createVoucher,
   generateVoucherNumber,
+  getVoucherById,
+  isVoucherBalanced,
   loadVouchers,
-  validateVoucherForPost,
+  normalizeVoucherLineAmounts,
+  updateVoucher,
+  validateVoucherEntryForPost,
+  voucherAmountDifference,
   VOUCHER_TYPE_LABELS,
   type VoucherLine,
   type VoucherTypeCode,
@@ -47,8 +44,53 @@ import {
 } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { findLedgerById } from "@/lib/accounts/coa-hierarchy";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
-import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
-import { VoucherContactMasterHint } from "@/components/accounts/master-fetch/VoucherContactMasterHint";
+import { useCoaRecords } from "@/lib/accounts/use-coa-records";
+import {
+  resolveVoucherLineScope,
+  type VoucherLedgerScope,
+} from "@/lib/accounts/voucher-quick-add-ledger";
+import { useClientMounted } from "@/lib/use-client-mounted";
+
+const VOUCHER_NUMBER_LABELS: Partial<Record<VoucherTypeCode, string>> = {
+  journal: "Journal#",
+  receipt: "Receipt#",
+  payment: "Payment#",
+  contra: "Contra#",
+};
+
+const VOUCHER_DESCRIPTIONS: Partial<Record<VoucherTypeCode, string>> = {
+  journal: "Record debit and credit entries in any order. Post when ready.",
+  receipt: "Record money received in bank or cash from a customer or income source.",
+  payment: "Record money paid from bank or cash to a party or expense ledger.",
+  contra: "Transfer funds between cash and bank accounts.",
+};
+
+function FormRow({
+  label,
+  required,
+  children,
+  className,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-1 sm:grid-cols-[minmax(140px,200px)_1fr] gap-1.5 sm:gap-4 sm:items-start",
+        className,
+      )}
+    >
+      <label className="text-xs font-medium text-foreground sm:pt-2.5">
+        {label}
+        {required && <span className="text-red-500 ml-0.5">*</span>}
+      </label>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
 
 export interface ZohoVoucherEntryFormProps {
   voucherType: VoucherTypeCode;
@@ -62,9 +104,15 @@ export interface ZohoVoucherEntryFormProps {
   extraHeader?: React.ReactNode;
   breadcrumbSection?: string;
   ledgerFilter?: (ledger: ChartOfAccount) => boolean;
+  /** Fixed quick-add scope (e.g. contra bank/cash only) */
+  quickAddScope?: VoucherLedgerScope;
   controlledLines?: VoucherLine[];
   validateBeforePost?: () => string | null;
   onPostComplete?: (voucher: AccountingVoucher) => void;
+  /** When set, form loads and updates an existing voucher */
+  voucherId?: number;
+  titleOverride?: string;
+  onEdit?: () => void;
 }
 
 export function ZohoVoucherEntryForm({
@@ -79,29 +127,59 @@ export function ZohoVoucherEntryForm({
   extraHeader,
   breadcrumbSection = "Transactions",
   ledgerFilter,
+  quickAddScope: quickAddScopeProp,
   controlledLines,
   validateBeforePost,
   onPostComplete,
+  voucherId,
+  titleOverride,
+  onEdit,
 }: ZohoVoucherEntryFormProps) {
+  const mounted = useClientMounted();
   const label = VOUCHER_TYPE_LABELS[voucherType];
-  const financialYears = useMemo(() => loadFinancialYears(), []);
-  const activeFy = useMemo(() => financialYears.find((fy) => fy.status === "active"), [financialYears]);
-  const customers = useMemo(() => getCustomersForInvoice(), []);
-  const vendors = useMemo(() => getVendorsForDebitNote(), []);
-  const employees = useMemo(
-    () => loadEmployees().filter((e) => e.status === "active"),
-    [],
+  const isEdit = voucherId != null;
+  const existingVoucher = useMemo(
+    () => (mounted && voucherId != null ? getVoucherById(voucherId) : undefined),
+    [voucherId, mounted],
   );
-  const coaRecords = useMemo(() => loadChartOfAccounts(), []);
+  const financialYears = useMemo(() => (mounted ? loadFinancialYears() : []), [mounted]);
+  const activeFy = useMemo(() => financialYears.find((fy) => fy.status === "active"), [financialYears]);
+  const coaRecords = useCoaRecords();
 
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [financialYearId, setFinancialYearId] = useState<string>(activeFy ? String(activeFy.id) : "");
+  const [date, setDate] = useState("");
+  const [financialYearId, setFinancialYearId] = useState("");
   const [referenceNo, setReferenceNo] = useState("");
   const [narration, setNarration] = useState("");
-  const [lines, setLines] = useState<VoucherLine[]>(
-    initialLines ?? [EMPTY_LINE(), EMPTY_LINE()],
-  );
+  const [lines, setLines] = useState<VoucherLine[]>([EMPTY_LINE(), EMPTY_LINE()]);
   const [error, setError] = useState<string | null>(null);
+  const hydratedKeyRef = useRef<string | number | null>(null);
+
+  useEffect(() => {
+    if (!mounted) return;
+
+    setDate(existingVoucher?.date ?? new Date().toISOString().slice(0, 10));
+    setFinancialYearId(
+      existingVoucher?.financialYearId
+        ? String(existingVoucher.financialYearId)
+        : activeFy
+          ? String(activeFy.id)
+          : "",
+    );
+    setReferenceNo(existingVoucher?.referenceNo ?? "");
+    setNarration(existingVoucher?.narration ?? "");
+
+    const formKey = voucherId ?? "new";
+    if (hydratedKeyRef.current !== formKey) {
+      if (initialLines?.length) {
+        setLines(initialLines);
+      } else if (existingVoucher?.lines?.length) {
+        setLines(existingVoucher.lines);
+      } else {
+        setLines([EMPTY_LINE(), EMPTY_LINE()]);
+      }
+      hydratedKeyRef.current = formKey;
+    }
+  }, [mounted, existingVoucher, initialLines, activeFy, voucherId]);
 
   useEffect(() => {
     if (controlledLines?.length) {
@@ -110,13 +188,21 @@ export function ZohoVoucherEntryForm({
   }, [controlledLines]);
 
   const previewNumber = useMemo(
-    () => voucherNumber ?? generateVoucherNumber(voucherType, loadVouchers()),
-    [voucherNumber, voucherType],
+    () =>
+      !mounted
+        ? ""
+        : voucherNumber ??
+          existingVoucher?.voucherNumber ??
+          generateVoucherNumber(voucherType, loadVouchers()),
+    [mounted, voucherNumber, existingVoucher?.voucherNumber, voucherType],
   );
+  const numberLabel = VOUCHER_NUMBER_LABELS[voucherType] ?? "Voucher#";
+  const pageDescription =
+    VOUCHER_DESCRIPTIONS[voucherType] ?? "Add ledger rows and post when ready.";
 
   const { totalDebit, totalCredit } = calcLineTotals(lines);
-  const difference = Math.abs(totalDebit - totalCredit);
-  const balanced = difference < 0.01 && totalDebit > 0;
+  const difference = voucherAmountDifference(totalDebit, totalCredit);
+  const balanced = isVoucherBalanced(totalDebit, totalCredit);
   const selectedFy = financialYears.find((fy) => fy.id === Number(financialYearId));
 
   const impactLines = useMemo(
@@ -134,13 +220,25 @@ export function ZohoVoucherEntryForm({
     [lines],
   );
 
+  const clearError = useCallback(() => setError(null), []);
+
   const updateLine = (idx: number, patch: Partial<VoucherLine>) => {
+    setError(null);
     setLines((prev) =>
       prev.map((l, i) => {
         if (i !== idx) return l;
-        return applyAutoPartyToLine({ ...l, ...patch }, coaRecords);
+        const next = normalizeVoucherLineAmounts({ ...l, ...patch });
+        return applyAutoPartyToLine(next, coaRecords);
       }),
     );
+  };
+
+  const setLineDebit = (idx: number, raw: string) => {
+    updateLine(idx, { debit: parseMoneyInput(raw), credit: 0 });
+  };
+
+  const setLineCredit = (idx: number, raw: string) => {
+    updateLine(idx, { credit: parseMoneyInput(raw), debit: 0 });
   };
 
   const selectLedger = (idx: number, ledgerId: number) => {
@@ -155,27 +253,25 @@ export function ZohoVoucherEntryForm({
   };
 
   const addLine = useCallback(() => {
+    setError(null);
     setLines((prev) => [...prev, EMPTY_LINE()]);
   }, []);
 
   const removeLine = (idx: number) => {
-    setLines((prev) => (prev.length > 2 ? prev.filter((_, i) => i !== idx) : prev));
+    setError(null);
+    setLines((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
   };
 
-  const buildPayload = (postStatus: "draft" | "posted") => {
-    const enrichedLines = applyAutoPartyToLines(lines, coaRecords);
-    return {
-      date,
-      financialYearId: financialYearId ? Number(financialYearId) : null,
-      financialYearName: selectedFy?.name ?? "",
-      referenceNo,
-      narration,
-      lines: enrichedLines,
-      status: postStatus,
-    };
-  };
-
-  const handlePost = () => {
+  const handlePost = useCallback(() => {
+    setError(null);
+    if (!date) {
+      setError("Voucher date is required.");
+      return;
+    }
+    if (!previewNumber) {
+      setError("Voucher number is required.");
+      return;
+    }
     if (showFinancialYear && !financialYearId) {
       setError("Financial year is required.");
       return;
@@ -185,19 +281,47 @@ export function ZohoVoucherEntryForm({
       setError(preErr);
       return;
     }
-    const err = validateVoucherForPost({
-      date,
-      narration,
-      lines: applyAutoPartyToLines(lines, coaRecords),
-    });
+
+    const postedLines = compactPostedVoucherLines(lines);
+    const enrichedLines = applyAutoPartyToLines(postedLines, coaRecords);
+    const err = validateVoucherEntryForPost({ date, lines: enrichedLines });
     if (err) {
       setError(err);
       return;
     }
-    const voucher = createVoucher(voucherType, buildPayload("posted"));
+
+    const payload = {
+      date,
+      financialYearId: financialYearId ? Number(financialYearId) : null,
+      financialYearName: selectedFy?.name ?? "",
+      referenceNo,
+      narration,
+      lines: enrichedLines,
+      status: "posted" as const,
+    };
+    const voucher =
+      isEdit && voucherId != null
+        ? updateVoucher(voucherId, payload)
+        : createVoucher(voucherType, payload);
     onPostComplete?.(voucher);
     onDone();
-  };
+  }, [
+    coaRecords,
+    date,
+    financialYearId,
+    isEdit,
+    lines,
+    narration,
+    onDone,
+    onPostComplete,
+    previewNumber,
+    referenceNo,
+    selectedFy?.name,
+    showFinancialYear,
+    validateBeforePost,
+    voucherId,
+    voucherType,
+  ]);
 
   const handleCancel = () => {
     onDone();
@@ -206,7 +330,7 @@ export function ZohoVoucherEntryForm({
   useEffect(() => {
     if (readOnly) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === "Enter" && balanced) {
+      if (e.ctrlKey && e.key === "Enter") {
         e.preventDefault();
         handlePost();
       }
@@ -221,36 +345,49 @@ export function ZohoVoucherEntryForm({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [balanced, date, narration, lines, financialYearId, referenceNo, addLine, readOnly]);
+  }, [date, narration, lines, financialYearId, referenceNo, addLine, readOnly, handlePost]);
 
-  const contactTypeForLine = (line: VoucherLine) => {
-    if (!line.ledgerId) return null;
-    const ledger = findLedgerById(line.ledgerId, coaRecords);
-    if (!ledger || isAutoPartyLedger(ledger, coaRecords)) return null;
-    return resolveLedgerContactType(ledger, coaRecords);
-  };
+  const shellTitle = titleOverride ?? (isEdit ? `Edit ${label}` : `New ${label}`);
 
-  const showContactColumn = useMemo(
-    () =>
-      lines.some((line) => {
-        if (!line.ledgerId) return false;
-        const ledger = findLedgerById(line.ledgerId, coaRecords);
-        if (!ledger || isAutoPartyLedger(ledger, coaRecords)) return false;
-        return resolveLedgerContactType(ledger, coaRecords) != null;
-      }),
-    [lines, coaRecords],
-  );
+  if (!mounted) {
+    return (
+      <AccountsPageShell
+        breadcrumbs={accountsBreadcrumb(breadcrumbSection, shellTitle, cancelHref)}
+        title={shellTitle}
+        description={pageDescription}
+        layout="standard"
+        className="max-w-none w-full"
+      >
+        <div className="mx-4 my-4 border border-border rounded-xl bg-muted/10 h-64 animate-pulse" />
+      </AccountsPageShell>
+    );
+  }
 
   return (
     <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb(breadcrumbSection, `New ${label}`, cancelHref)}
-      title={`New ${label}`}
-      description="Full-width journal entry. Add ledger rows, ensure debit equals credit before posting."
+      breadcrumbs={accountsBreadcrumb(
+        breadcrumbSection,
+        shellTitle,
+        cancelHref,
+      )}
+      title={shellTitle}
+      description={pageDescription}
       actions={
         readOnly ? (
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleCancel}>
-            Back
-          </Button>
+          <>
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleCancel}>
+              Back
+            </Button>
+            {existingVoucher && canEditVoucher(existingVoucher) && onEdit && (
+              <Button
+                size="sm"
+                className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+                onClick={onEdit}
+              >
+                <Pencil className="w-3.5 h-3.5" /> Edit
+              </Button>
+            )}
+          </>
         ) : (
           <>
             <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleCancel}>
@@ -260,7 +397,6 @@ export function ZohoVoucherEntryForm({
               size="sm"
               className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1"
               onClick={handlePost}
-              disabled={!balanced}
             >
               <Save className="w-3.5 h-3.5" /> Post Voucher
             </Button>
@@ -277,46 +413,71 @@ export function ZohoVoucherEntryForm({
           </div>
         )}
 
-        <div className="px-4 py-4 border-b border-border/60 bg-muted/5">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Date</Label>
+        <div className="px-4 sm:px-6 py-5 border-b border-border/60">
+          <div className="max-w-3xl space-y-3">
+            <FormRow label="Date" required>
               <Input
-                className="h-9 text-xs bg-white"
+                className="h-9 text-sm rounded-lg bg-white max-w-md"
                 type="date"
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => {
+                  clearError();
+                  setDate(e.target.value);
+                }}
                 disabled={readOnly}
               />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Voucher Number</Label>
-              <Input className="h-9 text-xs font-mono bg-muted/30" value={previewNumber} readOnly disabled />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Reference Number</Label>
-              <Input
-                className="h-9 text-xs bg-white"
-                value={referenceNo}
-                onChange={(e) => setReferenceNo(e.target.value)}
-                disabled={readOnly}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Currency</Label>
-              <Input className="h-9 text-xs bg-muted/30" value="INR - Indian Rupee" readOnly disabled />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Status</Label>
-              <div className="h-9 flex items-center">
-                <StatusBadge status={status} />
+            </FormRow>
+
+            <FormRow label={numberLabel} required>
+              <div className="relative max-w-md">
+                <Input
+                  className="h-9 text-sm font-mono bg-muted/30 pr-9 rounded-lg"
+                  value={previewNumber}
+                  readOnly
+                  disabled
+                />
+                <Settings className="w-4 h-4 text-muted-foreground absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
-            </div>
+            </FormRow>
+
+            <FormRow label="Reference#">
+              <Input
+                className="h-9 text-sm bg-white max-w-md rounded-lg"
+                value={referenceNo}
+                onChange={(e) => {
+                  clearError();
+                  setReferenceNo(e.target.value);
+                }}
+                placeholder="Cheque / UTR / receipt ref…"
+                disabled={readOnly}
+              />
+            </FormRow>
+
+            <FormRow label="Notes">
+              <Textarea
+                className="text-sm min-h-[72px] resize-y bg-white rounded-lg max-w-2xl"
+                value={narration}
+                onChange={(e) => {
+                  clearError();
+                  setNarration(e.target.value);
+                }}
+                placeholder="Max. 500 characters"
+                maxLength={500}
+                disabled={readOnly}
+              />
+            </FormRow>
+
             {showFinancialYear && (
-              <div className="space-y-1">
-                <Label className="text-[11px] text-muted-foreground">Financial Year</Label>
-                <Select value={financialYearId} onValueChange={setFinancialYearId} disabled={readOnly}>
-                  <SelectTrigger className="h-9 text-xs bg-white">
+              <FormRow label="Financial Year" required>
+                <Select
+                  value={financialYearId}
+                  onValueChange={(v) => {
+                    clearError();
+                    setFinancialYearId(v);
+                  }}
+                  disabled={readOnly}
+                >
+                  <SelectTrigger className="h-9 text-sm bg-white max-w-md rounded-lg">
                     <SelectValue placeholder="Select FY" />
                   </SelectTrigger>
                   <SelectContent>
@@ -327,177 +488,126 @@ export function ZohoVoucherEntryForm({
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </FormRow>
             )}
           </div>
-          {extraHeader && <div className="mt-3">{extraHeader}</div>}
-          <div className="mt-3 space-y-1">
-            <Label className="text-[11px] text-muted-foreground">Narration / Notes</Label>
-            <Textarea
-              className="text-xs min-h-[52px] resize-none bg-white"
-              value={narration}
-              onChange={(e) => setNarration(e.target.value)}
-              placeholder="Voucher narration…"
-              disabled={readOnly}
-            />
-          </div>
+
+          {extraHeader && <div className="mt-4 max-w-3xl">{extraHeader}</div>}
         </div>
 
-        <div className="px-4 py-4 pb-8">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Entry Lines</h2>
-            {!readOnly && (
-              <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addLine} type="button">
-                <Plus className="w-3 h-3" /> Add New Row
-              </Button>
-            )}
-          </div>
-
-          <div className="border border-border/60 rounded-lg bg-white shadow-sm">
+        <div className="px-4 sm:px-6 py-5 pb-8">
+          <div className="border border-border/60 rounded-lg bg-white shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-xs min-w-[960px] border-collapse">
-                <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm border-b border-border/60 shadow-[0_1px_0_0_rgba(0,0,0,0.05)]">
+              <table className="w-full text-xs min-w-[720px] border-collapse">
+                <thead className="border-b border-border/60">
                   <tr>
-                    <th className="w-8 px-2 py-2.5 bg-muted/95" />
-                    <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground w-[28%] bg-muted/95">
+                    <th className="w-8 px-2 py-2.5" />
+                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
                       Account / Ledger
                     </th>
-                    <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground w-[22%] bg-muted/95">
+                    <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
                       Description
                     </th>
-                    {showContactColumn && (
-                      <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground w-[18%] bg-muted/95">
-                        Contact
-                      </th>
-                    )}
-                    <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase text-muted-foreground w-[12%] bg-muted/95">
+                    <th className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-wide text-muted-foreground w-[120px]">
                       Debit
                     </th>
-                    <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase text-muted-foreground w-[12%] bg-muted/95">
+                    <th className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-wide text-muted-foreground w-[120px]">
                       Credit
                     </th>
-                    <th className="w-10 px-2 py-2.5 bg-muted/95" />
+                    <th className="w-10 px-2 py-2.5" />
                   </tr>
                 </thead>
                 <tbody>
-                  {lines.map((line, idx) => {
-                    const contactType = contactTypeForLine(line);
-                    return (
-                      <tr key={line.id} className="border-b border-border/40 hover:bg-muted/5">
-                        <td className="px-2 py-1.5 text-muted-foreground/50">
-                          <GripVertical className="w-4 h-4" />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          {readOnly ? (
-                            <span className="text-xs font-medium py-2 block">{line.ledgerName || "—"}</span>
-                          ) : (
-                            <GroupedLedgerSelect
-                              value={line.ledgerId}
-                              onChange={(ledger) => selectLedger(idx, ledger.id)}
-                              ledgerFilter={ledgerFilter}
-                            />
-                          )}
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <Input
-                            className="h-9 text-xs"
-                            value={line.remarks}
-                            onChange={(e) => updateLine(idx, { remarks: e.target.value })}
-                            placeholder="Description"
-                            disabled={readOnly}
+                  {lines.map((line, idx) => (
+                    <tr key={line.id} className="border-b border-border/40 hover:bg-muted/5">
+                      <td className="px-2 py-1.5 text-muted-foreground/50">
+                        <GripVertical className="w-4 h-4" />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        {readOnly ? (
+                          <span className="text-xs font-medium py-2 block">{line.ledgerName || "—"}</span>
+                        ) : (
+                          <GroupedLedgerSelect
+                            value={line.ledgerId}
+                            onChange={(ledger) => selectLedger(idx, ledger.id)}
+                            placeholder="Select an account"
+                            ledgerFilter={ledgerFilter}
+                            quickAddScope={
+                              quickAddScopeProp ??
+                              resolveVoucherLineScope(voucherType, line)
+                            }
                           />
-                        </td>
-                        {showContactColumn && (
-                          <td className="px-2 py-1.5">
-                            {contactType === "employee" ? (
-                              <Select
-                                value={line.contactId ? String(line.contactId) : ""}
-                                onValueChange={(v) => {
-                                  const emp = employees.find((x) => x.id === Number(v));
-                                  updateLine(idx, {
-                                    contactId: Number(v),
-                                    contactName: emp?.fullName ?? "",
-                                  });
-                                }}
-                                disabled={readOnly}
-                              >
-                                <SelectTrigger className="h-9 text-xs">
-                                  <SelectValue placeholder="Select employee *" />
-                                </SelectTrigger>
-                                <SelectContent className="max-h-[220px]">
-                                  {[...employees]
-                                    .sort((a, b) => a.fullName.localeCompare(b.fullName))
-                                    .map((e) => (
-                                      <SelectItem key={e.id} value={String(e.id)} className="text-xs">
-                                        {e.fullName}
-                                      </SelectItem>
-                                    ))}
-                                </SelectContent>
-                              </Select>
-                            ) : readOnly && line.contactName ? (
-                              <span className="text-xs py-2 block">{line.contactName}</span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground/40 py-2 block select-none">—</span>
-                            )}
-                            <VoucherContactMasterHint
-                              contactType={contactType}
-                              contactId={line.contactId}
-                              customers={customers}
-                              vendors={vendors}
-                              employees={employees}
-                            />
-                          </td>
                         )}
-                        <td className="px-2 py-1.5">
-                          <Input
-                            className={cn("h-9 text-xs", MONEY_INPUT_CLASS)}
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={line.debit || ""}
-                            onChange={(e) =>
-                              updateLine(idx, { debit: Number(e.target.value) || 0, credit: 0 })
+                      </td>
+                      <td className="px-2 py-1.5 align-top">
+                        <Textarea
+                          className="text-xs min-h-[52px] resize-y rounded-lg"
+                          value={line.remarks}
+                          onChange={(e) => updateLine(idx, { remarks: e.target.value })}
+                          placeholder="Description"
+                          disabled={readOnly}
+                          rows={2}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          className={cn("h-9 text-xs", MONEY_INPUT_CLASS)}
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={line.debit || ""}
+                          onChange={(e) => setLineDebit(idx, e.target.value)}
+                          disabled={readOnly}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && idx === lines.length - 1 && !readOnly) {
+                              e.preventDefault();
+                              addLine();
                             }
-                            disabled={readOnly}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" && idx === lines.length - 1 && !readOnly) {
-                                e.preventDefault();
-                                addLine();
-                              }
-                            }}
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <Input
-                            className={cn("h-9 text-xs", MONEY_INPUT_CLASS)}
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={line.credit || ""}
-                            onChange={(e) =>
-                              updateLine(idx, { credit: Number(e.target.value) || 0, debit: 0 })
-                            }
-                            disabled={readOnly}
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          {!readOnly && (
-                            <button
-                              type="button"
-                              onClick={() => removeLine(idx)}
-                              className="w-8 h-8 flex items-center justify-center rounded hover:bg-red-50 text-muted-foreground hover:text-red-600"
-                              aria-label="Delete row"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          }}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          className={cn("h-9 text-xs", MONEY_INPUT_CLASS)}
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={line.credit || ""}
+                          onChange={(e) => setLineCredit(idx, e.target.value)}
+                          disabled={readOnly}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        {!readOnly && lines.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeLine(idx)}
+                            className="w-8 h-8 flex items-center justify-center rounded hover:bg-red-50 text-muted-foreground hover:text-red-600"
+                            aria-label="Delete row"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
+
+            {!readOnly && (
+              <div className="px-3 py-2 border-t border-border/40">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-xs gap-1 text-brand-600 hover:text-brand-700 hover:bg-brand-50"
+                  onClick={addLine}
+                  type="button"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add New Row
+                </Button>
+              </div>
+            )}
 
             <div className="flex justify-end border-t border-border/60 bg-muted/10 px-4 py-3">
               <div className="w-full max-w-md space-y-1.5 text-xs">
@@ -517,23 +627,21 @@ export function ZohoVoucherEntryForm({
                   <span className="text-right tabular-nums">{formatMoney(totalCredit)}</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 py-1 border-t border-border/40 pt-1">
-                  <span className="font-medium">Difference</span>
+                  <span className="text-[11px] text-muted-foreground">Difference</span>
                   <span
                     className={cn(
-                      "text-right tabular-nums font-semibold col-span-2",
-                      !balanced && difference > 0 ? "text-red-600" : "text-foreground",
+                      "col-span-2 text-right tabular-nums text-[11px]",
+                      balanced ? "text-muted-foreground" : "text-amber-700",
                     )}
                   >
-                    {!balanced && difference > 0
-                      ? `Difference = ${formatMoney(difference)}`
-                      : formatMoney(0)}
+                    {formatMoney(difference)}
                   </span>
                 </div>
               </div>
             </div>
           </div>
 
-          {impactLines.length > 0 &&
+          {readOnly && impactLines.length > 0 &&
             (voucherType === "journal" ? (
               <div className="mt-4 mb-2">
                 <JournalLedgerImpactPreview
@@ -549,11 +657,6 @@ export function ZohoVoucherEntryForm({
               </div>
             ))}
 
-          {!readOnly && !balanced && totalDebit + totalCredit > 0 && (
-            <p className="text-[11px] text-red-600 mt-2">
-              Debit total must equal Credit total before posting.
-            </p>
-          )}
         </div>
       </div>
     </AccountsPageShell>

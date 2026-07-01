@@ -725,8 +725,8 @@ export function updateDebitNote(id: number, input: DebitNoteFormInput): DebitNot
   const idx = all.findIndex((r) => r.id === id);
   if (idx < 0) throw new Error("Debit note not found");
   const cur = all[idx];
-  if (cur.status === "approved" || cur.status === "processed" || cur.status === "cancelled") {
-    throw new Error("Cannot edit this debit note.");
+  if (cur.status === "cancelled") {
+    throw new Error("Cannot edit cancelled debit note.");
   }
   validateBasic(input);
   const meta = metaFromInput(input);
@@ -834,7 +834,7 @@ export function cancelDebitNote(id: number, reason: string): DebitNoteRecord {
 }
 
 export function canEditDebitNote(rec: DebitNoteRecord): boolean {
-  return rec.status === "draft" || rec.status === "pending_approval";
+  return rec.status !== "cancelled";
 }
 
 export function getDebitNoteRowActions(

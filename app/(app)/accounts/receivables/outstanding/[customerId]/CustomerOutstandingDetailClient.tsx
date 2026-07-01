@@ -96,8 +96,8 @@ export default function CustomerOutstandingDetailClient() {
       </div>
 
       <div className="flex-1 overflow-auto min-h-0">
-        <table className="w-full text-table min-w-[1280px]">
-          <thead className="bg-muted/20 border-b sticky top-0 z-10">
+        <table className="accounts-table w-full text-table min-w-[1280px]">
+          <thead className="border-b">
             <tr>
               {[
                 "Invoice No",

@@ -135,8 +135,8 @@ export default function BankAccountsPageClient() {
                       <p className="text-sm font-semibold tabular-nums">{formatMoney(group.totalBalance)}</p>
                     </div>
                   </button>
-                  <table className="w-full text-xs">
-                    <thead className="bg-muted/15 border-b border-border/40">
+                  <table className="accounts-table w-full text-xs">
+                    <thead className="border-b border-border/40">
                       <tr>
                         {["Account", "Account No.", "Type", "Balance", "Recon", "Status"].map((h) => (
                           <th

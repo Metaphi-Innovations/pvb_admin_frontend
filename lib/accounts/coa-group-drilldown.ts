@@ -757,7 +757,7 @@ export function resolveCoaGroupContext(
   const path = getAncestorPath(records, node.id);
   const primaryHead = path.find((p) => p.nodeLevel === "primary_head")?.accountName;
 
-  if (node.nodeLevel === "ledger" || node.nodeLevel === "sub_ledger") {
+  if (node.nodeLevel === "ledger") {
     const ledgerPath = path.map((p) => p.accountName.toLowerCase()).join(" ");
     if (ledgerPath.includes("trade receivables") || ledgerPath.includes("sundry debtors")) {
       const outstanding = ledgerOutstanding(node);

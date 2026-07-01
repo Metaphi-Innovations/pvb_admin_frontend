@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search } from "lucide-react";
+import { Eye, Pencil, Plus, Search } from "lucide-react";
+import { useClientMounted } from "@/lib/use-client-mounted";
 import {
   Sheet,
   SheetBody,
@@ -16,6 +17,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsTableScroll } from "@/components/accounts/AccountsTable";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { StatusBadge, SectionTabs } from "./AccountsUI";
 import { cn } from "@/lib/utils";
@@ -68,6 +70,7 @@ function isDraftStatus(status: string): boolean {
 
 export function TransactionListPage<T>({ config }: { config: TransactionListConfig<T> }) {
   const router = useRouter();
+  const mounted = useClientMounted();
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -77,9 +80,9 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
   const [refreshKey, setRefreshKey] = useState(0);
 
   const allRows = useMemo(
-    () => config.loadData().map(config.getRow),
+    () => (mounted ? config.loadData().map(config.getRow) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [config, refreshKey],
+    [config, refreshKey, mounted],
   );
 
   const bump = () => setRefreshKey((k) => k + 1);
@@ -179,9 +182,9 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
         layout="split"
         className="h-full min-h-0"
       >
-        <div className="flex-1 overflow-auto min-h-0">
-          <table className="w-full text-table">
-            <thead className="bg-muted/20 border-b border-border/60 sticky top-0 z-10">
+        <AccountsTableScroll>
+          <table className="accounts-table w-full text-table">
+            <thead className="border-b border-border/60">
               <tr>
                 <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Number</th>
                 <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Date</th>
@@ -201,11 +204,17 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                     Scheme Settlement
                   </th>
                 )}
-                <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground min-w-[200px]">Actions</th>
+                <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground min-w-[120px]">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 ? (
+              {!mounted ? (
+                <tr>
+                  <td colSpan={colSpan} className="px-4 py-16 text-center">
+                    <p className="text-xs text-muted-foreground">Loading records…</p>
+                  </td>
+                </tr>
+              ) : rows.length === 0 ? (
                 <tr>
                   <td colSpan={colSpan} className="px-4 py-16 text-center">
                     <p className="text-sm font-medium text-foreground">No records found</p>
@@ -255,24 +264,27 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                       </td>
                     )}
                     <td className="px-4 py-2.5">
-                      <div className="flex items-center justify-end gap-1 flex-wrap">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-[11px]"
-                          onClick={() => setViewRow(r)}
+                      <div className="flex items-center justify-end gap-0.5 flex-wrap">
+                        <button
+                          type="button"
+                          title="View"
+                          className="p-1.5 hover:bg-muted rounded-md transition-colors"
+                          onClick={() => {
+                            if (r.viewHref) router.push(r.viewHref);
+                            else setViewRow(r);
+                          }}
                         >
-                          View
-                        </Button>
+                          <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                        </button>
                         {rowCanEdit(r) && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-[11px]"
+                          <button
+                            type="button"
+                            title="Edit"
+                            className="p-1.5 hover:bg-muted rounded-md transition-colors"
                             onClick={() => router.push(config.editHref!(r.id))}
                           >
-                            Edit
-                          </Button>
+                            <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                          </button>
                         )}
                         {rowCanPost(r) && (
                           <Button
@@ -309,7 +321,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
               )}
             </tbody>
           </table>
-        </div>
+        </AccountsTableScroll>
       </AccountsPageShell>
 
       <Sheet open={!!viewRow} onOpenChange={(o) => !o && setViewRow(null)}>
@@ -378,10 +390,10 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs"
+                className="h-8 text-xs gap-1.5"
                 onClick={() => router.push(config.editHref!(viewRow.id))}
               >
-                Edit
+                <Pencil className="w-3.5 h-3.5" /> Edit
               </Button>
             )}
             {viewRow && rowCanPost(viewRow) && (

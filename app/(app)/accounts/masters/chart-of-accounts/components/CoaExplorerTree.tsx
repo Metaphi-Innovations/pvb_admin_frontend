@@ -91,8 +91,8 @@ function TreeNode({
   const isSelected = selectedId === node.id;
   const visualLevel = resolveCoaVisualLevel(node, records);
   const Icon = VISUAL_ICON[visualLevel];
-  const isLedger = node.nodeLevel === "ledger" || node.nodeLevel === "sub_ledger";
-  const isSystemLocked = node.isSystem && node.nodeLevel !== "ledger" && node.nodeLevel !== "sub_ledger";
+  const isLedger = node.nodeLevel === "ledger";
+  const isSystemLocked = node.isSystem && node.nodeLevel !== "ledger";
   const ledgerCount = !isLedger ? countLedgersUnder(records, node.id) : 0;
   const isPrimaryHead = node.nodeLevel === "primary_head";
 

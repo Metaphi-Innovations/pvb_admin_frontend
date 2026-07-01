@@ -4,16 +4,23 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Download, Pencil, Plus, Search } from "lucide-react";
+import { Download, Eye, Pencil, Plus, Search } from "lucide-react";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
+import {
+  LedgerTransactionDateFilter,
+  useLedgerTransactionDateFilter,
+} from "@/components/accounts/LedgerTransactionDateFilter";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import {
+  AccountsTable,
+  AccountsTableBody,
+  AccountsTableCell,
+  AccountsTableHead,
+  AccountsTableHeadCell,
+  AccountsTableHeadRow,
+  AccountsTableRow,
+  AccountsTableScroll,
+} from "@/components/accounts/AccountsTable";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { canCoa } from "@/lib/accounts/permissions";
 import { SortTh, StatusBadge } from "../../components/AccountsUI";
@@ -22,7 +29,6 @@ import { SYSTEM_COA_NODES } from "../coa-seed-nodes";
 import { LedgerSheet } from "../chart-of-accounts/components/LedgerSheet";
 import {
   DEFAULT_LEDGER_FORM,
-  PRIMARY_HEAD_OPTIONS,
   defaultBalanceTypeForParent,
   formToLedger,
   generateLedgerCode,
@@ -32,14 +38,12 @@ import {
   type LedgerFormValues,
 } from "../chart-of-accounts/chart-of-accounts-data";
 import {
-  accountTypeMatchesPrimaryHead,
-  computeLedgerBalanceBreakdown,
-  computeLedgerCurrentBalance,
-  formatLedgerBalance,
+  computePeriodClosingBalance,
+  ledgerMovementMapForRange,
+} from "@/lib/accounts/ledger-transaction-date-filter";
+import {
   formatOpeningBalance,
-  getGroupFilterOptions,
-  ledgerUnderGroup,
-  primaryHeadLabelForLedger,
+  ledgerTypeDisplayLabel,
 } from "./ledgers-utils";
 
 const PAGE_SIZE = 15;
@@ -51,9 +55,7 @@ export default function LedgersPageClient() {
   const router = useRouter();
   const [coaRecords, setCoaRecords] = useState<ChartOfAccount[]>(INITIAL_COA);
   const [search, setSearch] = useState("");
-  const [primaryHeadFilter, setPrimaryHeadFilter] = useState("all");
-  const [groupFilter, setGroupFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const { applied, draft, setPreset, setDraftFrom, setDraftTo, apply } = useLedgerTransactionDateFilter();
   const [sortKey, setSortKey] = useState("accountName");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
@@ -77,9 +79,17 @@ export default function LedgersPageClient() {
 
   const ledgers = useMemo(() => getCoaLedgers(), [coaRecords]);
 
-  const groupOptions = useMemo(
-    () => getGroupFilterOptions(coaRecords, primaryHeadFilter),
-    [coaRecords, primaryHeadFilter],
+  const movementByLedger = useMemo(
+    () => ledgerMovementMapForRange(applied.from, applied.to),
+    [applied.from, applied.to, coaRecords],
+  );
+
+  const periodClosingFor = useCallback(
+    (ledger: ChartOfAccount) => {
+      const movement = movementByLedger.get(ledger.id) ?? { totalDebit: 0, totalCredit: 0 };
+      return computePeriodClosingBalance(ledger, movement.totalDebit, movement.totalCredit);
+    },
+    [movementByLedger],
   );
 
   const visible = useMemo(() => {
@@ -91,17 +101,8 @@ export default function LedgersPageClient() {
           x.accountName.toLowerCase().includes(q) ||
           x.accountCode.toLowerCase().includes(q) ||
           (x.alias && x.alias.toLowerCase().includes(q)) ||
-          primaryHeadLabelForLedger(coaRecords, x).toLowerCase().includes(q),
+          ledgerTypeDisplayLabel(x, coaRecords).toLowerCase().includes(q),
       );
-    }
-    if (primaryHeadFilter !== "all") {
-      r = r.filter((x) => accountTypeMatchesPrimaryHead(x, primaryHeadFilter));
-    }
-    if (groupFilter !== "all") {
-      r = r.filter((x) => ledgerUnderGroup(coaRecords, x, groupFilter));
-    }
-    if (statusFilter !== "all") {
-      r = r.filter((x) => x.status === statusFilter);
     }
     r.sort((a, b) => {
       let av: string | number;
@@ -109,9 +110,12 @@ export default function LedgersPageClient() {
       if (sortKey === "parentGroup") {
         av = a.parentAccountId ? parentGroupLabel(coaRecords, a.parentAccountId) : "";
         bv = b.parentAccountId ? parentGroupLabel(coaRecords, b.parentAccountId) : "";
+      } else if (sortKey === "ledgerType") {
+        av = ledgerTypeDisplayLabel(a, coaRecords);
+        bv = ledgerTypeDisplayLabel(b, coaRecords);
       } else if (sortKey === "currentBalance") {
-        av = computeLedgerCurrentBalance(a).amount;
-        bv = computeLedgerCurrentBalance(b).amount;
+        av = periodClosingFor(a).amount;
+        bv = periodClosingFor(b).amount;
       } else {
         av = (a as unknown as Record<string, unknown>)[sortKey] as string | number;
         bv = (b as unknown as Record<string, unknown>)[sortKey] as string | number;
@@ -123,7 +127,7 @@ export default function LedgersPageClient() {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return r;
-  }, [ledgers, coaRecords, search, primaryHeadFilter, groupFilter, statusFilter, sortKey, sortDir]);
+  }, [ledgers, coaRecords, search, sortKey, sortDir, periodClosingFor]);
 
   const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const paged = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -187,20 +191,20 @@ export default function LedgersPageClient() {
   };
 
   const exportCsv = () => {
-    const header = "Ledger Name,Code,Alias,Parent Group,Primary Head,Opening Balance,Current Balance,Status,GST,TDS\n";
+    const header = "Ledger Name,Code,Alias,Parent Group,Ledger Type,Opening Balance,Current Balance,Status,GST,TDS\n";
     const rows = visible
       .map((r) => {
         const group = r.parentAccountId ? parentGroupLabel(coaRecords, r.parentAccountId) : "";
-        const head = primaryHeadLabelForLedger(coaRecords, r);
-        const current = computeLedgerCurrentBalance(r);
+        const ledgerType = ledgerTypeDisplayLabel(r, coaRecords);
+        const closing = periodClosingFor(r);
         return [
           `"${r.accountName}"`,
           `"${r.accountCode}"`,
           `"${r.alias ?? ""}"`,
           `"${group}"`,
-          `"${head}"`,
+          `"${ledgerType}"`,
           `"${formatOpeningBalance(r)}"`,
-          `"${formatLedgerBalance(current)}"`,
+          `"${closing.amount} ${closing.balanceType}"`,
           r.status,
           r.gstApplicable ? "Yes" : "No",
           r.tdsApplicable ? "Yes" : "No",
@@ -217,75 +221,32 @@ export default function LedgersPageClient() {
   };
 
   const filterBar = (
-          <div className="flex flex-wrap gap-2">
-            <div className="relative flex-1 min-w-[200px] max-w-sm">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="h-9 pl-8 text-xs bg-white"
-                placeholder="Search ledger name, code, alias…"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-              />
-            </div>
-            <Select
-              value={primaryHeadFilter}
-              onValueChange={(v) => {
-                setPrimaryHeadFilter(v);
-                setGroupFilter("all");
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="h-9 w-[150px] text-xs bg-white">
-                <SelectValue placeholder="Primary Head" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="text-xs">All Primary Heads</SelectItem>
-                {PRIMARY_HEAD_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value} className="text-xs">
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={groupFilter}
-              onValueChange={(v) => {
-                setGroupFilter(v);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="h-9 w-[200px] text-xs bg-white">
-                <SelectValue placeholder="Group" />
-              </SelectTrigger>
-              <SelectContent className="max-h-[280px]">
-                <SelectItem value="all" className="text-xs">All Groups</SelectItem>
-                {groupOptions.map((g) => (
-                  <SelectItem key={g.id} value={String(g.id)} className="text-xs">
-                    {g.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={statusFilter}
-              onValueChange={(v) => {
-                setStatusFilter(v);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="h-9 w-[120px] text-xs bg-white">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="text-xs">All Status</SelectItem>
-                <SelectItem value="active" className="text-xs">Active</SelectItem>
-                <SelectItem value="inactive" className="text-xs">Inactive</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+    <div className="flex flex-wrap items-end gap-3">
+      <div className="relative flex-1 min-w-[200px] max-w-sm">
+        <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          className="h-9 pl-8 text-xs bg-white"
+          placeholder="Search ledger name, code, alias…"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+        />
+      </div>
+      <LedgerTransactionDateFilter
+        preset={draft.preset}
+        dateFrom={draft.from}
+        dateTo={draft.to}
+        onPresetChange={setPreset}
+        onDateFromChange={setDraftFrom}
+        onDateToChange={setDraftTo}
+        onApply={() => {
+          apply();
+          setPage(1);
+        }}
+      />
+    </div>
   );
 
   const paginationFooter = (
@@ -330,97 +291,100 @@ export default function LedgersPageClient() {
         layout="split"
         className="h-full min-h-0"
       >
-        <div className="flex-1 overflow-auto min-h-0">
-          <table className="w-full text-table min-w-[880px]">
-            <thead className="bg-muted/20 border-b border-border/60 sticky top-0 z-10">
-              <tr>
+        <AccountsTableScroll>
+          <AccountsTable minWidth={960}>
+            <AccountsTableHead>
+              <AccountsTableHeadRow>
+                <SortTh label="Ledger Code" colKey="accountCode" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                 <SortTh label="Ledger Name" colKey="accountName" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                <SortTh label="Ledger Type" colKey="ledgerType" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                 <SortTh label="Parent Group" colKey="parentGroup" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Primary Head
-                </th>
                 <SortTh label="Opening Balance" colKey="openingBalance" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
                 <SortTh label="Current Balance" colKey="currentBalance" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
-                <th className="px-4 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Status
-                </th>
-                {canEdit && (
-                  <th className="px-4 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground w-16">
-                    Edit
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
+                <AccountsTableHeadCell align="center">Status</AccountsTableHeadCell>
+                <AccountsTableHeadCell align="center" className="w-20">
+                  Action
+                </AccountsTableHeadCell>
+              </AccountsTableHeadRow>
+            </AccountsTableHead>
+            <AccountsTableBody>
               {paged.length === 0 ? (
-                <tr>
-                  <td colSpan={canEdit ? 7 : 6} className="px-4 py-16 text-center">
+                <AccountsTableRow>
+                  <AccountsTableCell colSpan={8} className="accounts-table-empty">
                     <p className="text-sm font-medium text-foreground">No ledgers found</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Adjust filters or add a ledger under a valid group.
+                      Adjust search or date range, or add a ledger under a valid group.
                     </p>
                     {canCreate && (
                       <Button size="sm" className="h-8 text-xs mt-3 bg-brand-600 text-white" onClick={openAdd}>
                         <Plus className="w-3.5 h-3.5 mr-1" /> Add Ledger
                       </Button>
                     )}
-                  </td>
-                </tr>
+                  </AccountsTableCell>
+                </AccountsTableRow>
               ) : (
                 paged.map((r) => {
-                  const current = computeLedgerCurrentBalance(r);
+                  const closing = periodClosingFor(r);
+                  const ledgerType = ledgerTypeDisplayLabel(r, coaRecords);
                   return (
-                    <tr
+                    <AccountsTableRow
                       key={r.id}
-                      className="border-b border-border/40 hover:bg-brand-50/40 cursor-pointer transition-colors"
+                      className="group"
                       onClick={() => router.push(`/accounts/masters/ledgers/${r.id}`)}
                     >
-                      <td className="px-4 py-3">
-                        <p className="text-sm font-medium text-foreground">{r.accountName}</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">
-                          {r.accountCode}
-                          {r.alias ? ` · ${r.alias}` : ""}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground max-w-[240px]">
+                      <AccountsTableCell className="align-top !h-auto !max-h-none py-3">
+                        <span className="font-mono text-xs font-semibold text-brand-700">{r.accountCode}</span>
+                      </AccountsTableCell>
+                      <AccountsTableCell className="align-top !h-auto !max-h-none py-3 min-w-[180px]">
+                        <p className="text-xs font-semibold text-foreground leading-snug">{r.accountName}</p>
+                        {r.alias ? (
+                          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{r.alias}</p>
+                        ) : null}
+                      </AccountsTableCell>
+                      <AccountsTableCell className="whitespace-nowrap">{ledgerType}</AccountsTableCell>
+                      <AccountsTableCell className="text-muted-foreground max-w-[200px] !h-auto !max-h-none py-3">
                         <span className="line-clamp-2">
                           {r.parentAccountId ? parentGroupLabel(coaRecords, r.parentAccountId) : "—"}
                         </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs font-medium text-foreground">
-                        {primaryHeadLabelForLedger(coaRecords, r)}
-                      </td>
-                      <td className="px-4 py-3.5 text-right">
-                        <MoneyAmount amount={r.openingBalance} side={r.balanceType} />
-                      </td>
-                      <td className="px-4 py-3.5 text-right">
-                        <MoneyAmount amount={current.amount} side={current.balanceType} />
-                      </td>
-                      <td className="px-4 py-3.5 text-center">
+                      </AccountsTableCell>
+                      <AccountsTableCell align="right">
+                        <MoneyAmount amount={r.openingBalance} side={r.balanceType} sideBadge />
+                      </AccountsTableCell>
+                      <AccountsTableCell align="right">
+                        <MoneyAmount amount={closing.amount} side={closing.balanceType} sideBadge />
+                      </AccountsTableCell>
+                      <AccountsTableCell align="center">
                         <StatusBadge status={r.status} />
-                      </td>
-                      {canEdit && (
-                        <td className="px-4 py-3.5 text-center">
+                      </AccountsTableCell>
+                      <AccountsTableCell align="center" onClick={(e) => e.stopPropagation()}>
+                        <div className="inline-flex items-center justify-center gap-0.5 opacity-70 group-hover:opacity-100">
                           <button
                             type="button"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 hover:bg-muted/40 text-muted-foreground"
-                            title="Edit ledger"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openEdit(r);
-                            }}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted text-muted-foreground"
+                            title="View ledger"
+                            onClick={() => router.push(`/accounts/masters/ledgers/${r.id}`)}
                           >
-                            <Pencil className="w-3.5 h-3.5" />
+                            <Eye className="w-3.5 h-3.5" />
                           </button>
-                        </td>
-                      )}
-                    </tr>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted text-muted-foreground"
+                              title="Edit ledger"
+                              onClick={() => openEdit(r)}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </AccountsTableCell>
+                    </AccountsTableRow>
                   );
                 })
               )}
-            </tbody>
-          </table>
-        </div>
+            </AccountsTableBody>
+          </AccountsTable>
+        </AccountsTableScroll>
       </AccountsPageShell>
 
       <LedgerSheet

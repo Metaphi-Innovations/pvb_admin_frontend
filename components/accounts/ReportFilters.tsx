@@ -17,7 +17,12 @@ import {
   resolveDateRangePreset,
   type DateRangePresetId,
 } from "@/lib/accounts/report-date-presets";
-import { VOUCHER_TYPE_LABELS, type VoucherTypeCode } from "@/app/(app)/accounts/masters/masters-data";
+import {
+  loadFinancialYears,
+  VOUCHER_TYPE_LABELS,
+  type VoucherTypeCode,
+} from "@/app/(app)/accounts/masters/masters-data";
+import { DAY_BOOK_VOUCHER_TYPE_OPTIONS } from "@/lib/accounts/day-book-data";
 import type { CollectionFollowUpStatus } from "@/lib/accounts/receivables-data";
 import { cn } from "@/lib/utils";
 
@@ -245,6 +250,60 @@ export function ReportLedgerFilter({
 }
 
 const DAY_BOOK_VOUCHER_TYPES = Object.entries(VOUCHER_TYPE_LABELS) as [VoucherTypeCode, string][];
+
+export function DayBookVoucherTypeFilter({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-1 min-w-[150px]">
+      <Label className={filterLabelClass}>Voucher Type</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[150px]")}>
+          <SelectValue placeholder="All types" />
+        </SelectTrigger>
+        <SelectContent>
+          {DAY_BOOK_VOUCHER_TYPE_OPTIONS.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+export function ReportFinancialYearFilter({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const years = loadFinancialYears();
+  return (
+    <div className="space-y-1 min-w-[130px]">
+      <Label className={filterLabelClass}>Financial Year</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[130px]")}>
+          <SelectValue placeholder="All years" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All years</SelectItem>
+          {years.map((fy) => (
+            <SelectItem key={fy.id} value={String(fy.id)}>
+              {fy.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
 
 export function ReportVoucherTypeFilter({
   value,

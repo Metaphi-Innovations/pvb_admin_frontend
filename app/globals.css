@@ -71,6 +71,18 @@
     background-color: #FFE4C4;
     color: #6B2D07;
   }
+
+  /* Hide number input spinners (debit/credit, qty, amount fields) */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
 }
 
 @layer components {
@@ -140,6 +152,88 @@
 
   .master-listing-td-sticky {
     @apply sticky right-0 z-10 bg-white shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border group-hover:bg-[#fbfaf7];
+  }
+
+  /* Accounts module — unified listing & report tables (Ledger, Day Book, Trial Balance, etc.) */
+  .accounts-table-scroll {
+    @apply flex-1 overflow-auto min-h-0;
+    isolation: isolate;
+  }
+
+  .accounts-table {
+    @apply w-full text-table border-separate border-spacing-0;
+  }
+
+  .accounts-table-head {
+    /* Sticky is applied per th — not on thead (avoids header/row overlap in scroll containers) */
+  }
+
+  .accounts-table-head-row {
+    @apply h-[50px];
+  }
+
+  .accounts-table-th {
+    @apply h-[50px] max-h-[50px] px-4 align-middle whitespace-nowrap;
+    @apply text-xs font-semibold text-foreground;
+    @apply bg-[hsl(var(--muted))] border-b border-border;
+    box-sizing: border-box;
+    vertical-align: middle;
+  }
+
+  .accounts-table-th-sticky {
+    @apply sticky top-0 z-20;
+    box-shadow: 0 1px 0 0 hsl(var(--border));
+  }
+
+  .accounts-table-th-sorted {
+    @apply bg-brand-50 text-brand-700;
+    box-shadow: 0 1px 0 0 hsl(var(--border)), inset 0 -1px 0 0 rgb(244 121 32 / 0.12);
+  }
+
+  .accounts-table-th-uppercase {
+    @apply text-[10px] uppercase tracking-wide text-muted-foreground;
+  }
+
+  .accounts-table-body {
+    @apply bg-white;
+  }
+
+  .accounts-table-row {
+    @apply h-[54px] border-b border-border/60 bg-white transition-colors hover:bg-muted/20;
+  }
+
+  .accounts-table-td {
+    @apply h-[54px] max-h-[54px] px-4 align-middle text-xs text-foreground;
+    box-sizing: border-box;
+    vertical-align: middle;
+  }
+
+  .accounts-table-empty {
+    @apply !h-auto !max-h-none py-16 text-center text-sm text-muted-foreground;
+  }
+
+  .accounts-table-foot {
+    @apply bg-muted/15 border-t border-border/60;
+  }
+
+  /* Legacy markup: thead/tr without component classes still get standard layout */
+  .accounts-table > thead > tr > th {
+    @apply h-[50px] max-h-[50px] px-4 align-middle whitespace-nowrap;
+    @apply text-xs font-semibold text-foreground bg-[hsl(var(--muted))] border-b border-border;
+    @apply sticky top-0 z-20;
+    box-sizing: border-box;
+    vertical-align: middle;
+    box-shadow: 0 1px 0 0 hsl(var(--border));
+  }
+
+  .accounts-table > tbody > tr {
+    @apply h-[54px] border-b border-border/60 bg-white transition-colors hover:bg-muted/20;
+  }
+
+  .accounts-table > tbody > tr > td {
+    @apply h-[54px] max-h-[54px] px-4 align-middle text-xs text-foreground;
+    box-sizing: border-box;
+    vertical-align: middle;
   }
 
   .input-base {

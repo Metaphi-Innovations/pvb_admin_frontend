@@ -174,8 +174,8 @@ export default function InvoicesPageClient() {
 
         <div className="page-shell overflow-hidden">
           <div className="overflow-x-auto max-h-[calc(100vh-300px)]">
-            <table className="w-full text-table min-w-[1680px]">
-              <thead className="sticky top-0 z-10 bg-white border-b border-border">
+            <table className="accounts-table w-full text-table min-w-[1680px]">
+              <thead className="border-b border-border">
                 <tr>
                   {[
                     "Invoice No.",

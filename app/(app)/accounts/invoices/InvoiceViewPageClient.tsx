@@ -192,7 +192,7 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
 
         <TabsContent value="items" className="m-0">
           <div className="bg-white rounded-lg border border-border/60 p-4 overflow-x-auto">
-            <table className="w-full text-xs min-w-[640px]">
+            <table className="accounts-table w-full text-xs min-w-[640px]">
               <thead className="border-b">
                 <tr>
                   {["Product", "Qty", "Unit", "Rate", "Tax%", "Amount"].map((h) => (

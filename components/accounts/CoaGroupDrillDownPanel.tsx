@@ -18,8 +18,8 @@ function PostingEntriesTable({ rows, emptyLabel }: { rows: CoaPostingRow[]; empt
     return <p className="text-sm text-muted-foreground py-6 text-center px-6">{emptyLabel}</p>;
   }
   return (
-    <table className="w-full text-sm">
-      <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
+    <table className="accounts-table w-full text-sm">
+      <thead className="border-b border-border/40">
         <tr>
           {["Date", "Voucher", "Reference", "Particulars", "Debit", "Credit"].map((h) => (
             <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
@@ -82,8 +82,8 @@ function LedgerBalanceTable({
     return <p className="text-sm text-muted-foreground py-6 text-center">No ledgers under this group yet.</p>;
   }
   return (
-    <table className="w-full text-sm">
-      <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
+    <table className="accounts-table w-full text-sm">
+      <thead className="border-b border-border/40">
         <tr>
           {["Ledger", "Balance"].map((h) => (
             <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
@@ -254,8 +254,8 @@ export function CoaGroupDrillDownPanel({
         }
       >
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
+          <table className="accounts-table w-full text-sm">
+            <thead className="border-b border-border/40">
               <tr>
                 {["Product", "Available Qty", "UOM", "CP", "Value"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
@@ -322,8 +322,8 @@ export function CoaGroupDrillDownPanel({
         }
       >
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
+          <table className="accounts-table w-full text-sm">
+            <thead className="border-b border-border/40">
               <tr>
                 {["Customer", "Outstanding", "Aging Days"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
@@ -378,8 +378,8 @@ export function CoaGroupDrillDownPanel({
             </>
           }
         >
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
+          <table className="accounts-table w-full text-sm">
+            <thead className="border-b border-border/40">
               <tr>
                 {["Supplier", "Outstanding", "Last Bill", "Due Date", "Aging"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
@@ -441,8 +441,8 @@ export function CoaGroupDrillDownPanel({
         }
       >
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
+          <table className="accounts-table w-full text-sm">
+            <thead className="border-b border-border/40">
               <tr>
                 {["Bank Name", "Account No", "Opening Balance", "Current Balance"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
@@ -701,8 +701,8 @@ export function CoaGroupDrillDownPanel({
         }
       >
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
+          <table className="accounts-table w-full text-sm">
+            <thead className="border-b border-border/40">
               <tr>
                 {["Deposit Name", "Amount", "Due Date"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
@@ -754,8 +754,8 @@ export function CoaGroupDrillDownPanel({
         }
       >
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
+          <table className="accounts-table w-full text-sm">
+            <thead className="border-b border-border/40">
               <tr>
                 {["Party", "Type", "Outstanding"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
@@ -835,8 +835,8 @@ export function CoaGroupDrillDownPanel({
         }
       >
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
+          <table className="accounts-table w-full text-sm">
+            <thead className="border-b border-border/40">
               <tr>
                 {["Expense", "Original Amount", "Balance Remaining"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
@@ -895,8 +895,8 @@ export function CoaGroupDrillDownPanel({
             {context.recentInvoices.length === 0 ? (
               <p className="text-sm text-muted-foreground">No invoices yet.</p>
             ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50/80 border-b">
+              <table className="accounts-table w-full text-sm">
+                <thead className="border-b">
                   <tr>
                     {["Date", "Invoice", "Amount"].map((h) => (
                       <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">
@@ -924,8 +924,8 @@ export function CoaGroupDrillDownPanel({
             {context.recentReceipts.length === 0 ? (
               <p className="text-sm text-muted-foreground">No receipts yet.</p>
             ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50/80 border-b">
+              <table className="accounts-table w-full text-sm">
+                <thead className="border-b">
                   <tr>
                     {["Date", "Voucher", "Amount"].map((h) => (
                       <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">
@@ -979,29 +979,10 @@ export function CoaGroupDrillDownPanel({
   if (isNamedAccountingGroup(context) && GENERIC_KINDS.has(context.kind)) {
     return (
       <div className="flex flex-col flex-1 min-h-0 border-t border-border/40 overflow-auto">
-        <DashboardShell
-          title={context.nodeName}
-          summary={
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {context.highlights.map((h) => (
-                <SummaryField
-                  key={h.label}
-                  label={h.label}
-                  value={typeof h.value === "number" && h.label.toLowerCase().includes("ledger") || h.label.includes("Count") || h.label.includes("Invoices") || h.label.includes("Bills") || h.label.includes("Ledgers") || h.label.includes("Vendors") || h.label.includes("Employees")
-                    ? h.value
-                    : formatMoney(h.value)}
-                />
-              ))}
-            </div>
-          }
-        >
-          <p className="px-4 py-2 text-xs text-muted-foreground border-b border-border/30">
-            Entry: {context.entryNote}
-          </p>
-        </DashboardShell>
         <CoaGroupAccountingFooter
           accounting={context.accounting}
           onSelectLedger={onSelectLedgerById}
+          showLedgerSearch
         />
       </div>
     );

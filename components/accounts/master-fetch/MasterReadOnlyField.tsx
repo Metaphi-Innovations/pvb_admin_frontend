@@ -1,5 +1,4 @@
 import { Label } from "@/components/ui/label";
-import { MasterFetchedBadge } from "./MasterFetchedBadge";
 
 export function MasterReadOnlyField({
   label,
@@ -14,10 +13,7 @@ export function MasterReadOnlyField({
 }) {
   return (
     <div className={className}>
-      <div className="flex items-center gap-1.5 mb-1">
-        <Label className="text-xs text-muted-foreground">{label}</Label>
-        <MasterFetchedBadge />
-      </div>
+      <Label className="text-xs text-muted-foreground mb-1 block">{label}</Label>
       <p
         className={`text-xs font-medium py-1.5 px-2.5 bg-muted/25 rounded-md border border-border/50 min-h-[32px] flex items-center ${mono ? "font-mono" : ""}`}
       >
@@ -38,10 +34,7 @@ export function MasterReadOnlyAddress({
 }) {
   return (
     <div className={`space-y-1 ${className ?? ""}`}>
-      <div className="flex items-center gap-1.5">
-        <Label className="text-xs text-muted-foreground">{label}</Label>
-        <MasterFetchedBadge />
-      </div>
+      <Label className="text-xs text-muted-foreground">{label}</Label>
       <p className="text-xs py-2 px-2.5 bg-muted/25 rounded-md border border-border/50 min-h-[48px] whitespace-pre-wrap">
         {value?.trim() ? value : "—"}
       </p>
