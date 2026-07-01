@@ -16,6 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { getGrnRecords } from "@/app/(app)/warehouse/grn/mock-data";
+import { computeQcListingKpis } from "./qc-listing-kpis";
+import { QcListingKpiRow } from "./components/QcListingKpiRow";
 
 export function QcListingLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -70,6 +72,8 @@ export function QcListingLayout({ children }: { children: React.ReactNode }) {
     "sample-return": sampleReturnCount,
   };
 
+  const qcListingKpis = useMemo(() => computeQcListingKpis(qcList), [qcList]);
+
   const destinationWarehouse = searchParams.get("destinationWarehouse") || "All";
 
   const handleWarehouseChange = (val: string) => {
@@ -110,6 +114,7 @@ export function QcListingLayout({ children }: { children: React.ReactNode }) {
       ]}
       activeTab={activeTab}
       onTabChange={(val) => router.push(`/warehouse/qc/${val}`)}
+      metrics={<QcListingKpiRow kpis={qcListingKpis} />}
     >
       <div className="space-y-4">
         {/* Tab Route Content */}
