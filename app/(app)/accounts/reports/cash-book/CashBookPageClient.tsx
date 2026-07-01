@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
+import { formatMoney, formatBalanceAmount, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 import {
   buildBookEntries,
@@ -74,7 +74,7 @@ export default function CashBookPageClient() {
     const body = entries
       .map(
         (r) =>
-          `${r.date},"${r.voucherNo}","${r.particulars.replace(/"/g, '""')}",${r.receipt},${r.payment},${r.runningBalance}`,
+          `${r.date},"${r.voucherNo}","${r.particulars.replace(/"/g, '""')}",${r.receipt},${r.payment},"${formatBalanceAmount(r.runningBalance, r.runningBalanceType)}"`,
       )
       .join("\n");
     const blob = new Blob([header + body], { type: "text/csv" });
@@ -175,7 +175,7 @@ export default function CashBookPageClient() {
                       {row.payment > 0 ? formatMoney(row.payment) : "—"}
                     </td>
                     <td className={cn("px-4 py-3 text-xs text-right font-medium", MONEY_AMOUNT_CLASS)}>
-                      {formatMoney(row.runningBalance)}
+                      {formatBalanceAmount(row.runningBalance, row.runningBalanceType)}
                     </td>
                   </tr>
                 ))

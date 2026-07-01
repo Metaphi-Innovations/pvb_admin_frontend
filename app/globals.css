@@ -154,10 +154,11 @@
     @apply sticky right-0 z-10 bg-white shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border group-hover:bg-[#fbfaf7];
   }
 
-  /* Accounts module — unified listing & report tables (Ledger, Day Book, Trial Balance, etc.) */
+  /* Accounts module — unified listing & report tables (Ledger, Day Book, Trial Balance, etc.)
+   * Sticky is applied per th — never on thead/tr (avoids header/first-row overlap in scroll containers).
+   * Row height lives on th/td only — never on tr. */
   .accounts-table-scroll {
     @apply flex-1 overflow-auto min-h-0;
-    isolation: isolate;
   }
 
   .accounts-table {
@@ -165,29 +166,40 @@
   }
 
   .accounts-table-head {
-    /* Sticky is applied per th — not on thead (avoids header/row overlap in scroll containers) */
+    @apply bg-muted;
   }
 
   .accounts-table-head-row {
-    @apply h-[50px];
+    /* Intentionally no height — fixed height on tr causes sticky th / first-row overlap */
   }
 
   .accounts-table-th {
-    @apply h-[50px] max-h-[50px] px-4 align-middle whitespace-nowrap;
-    @apply text-xs font-semibold text-foreground;
-    @apply bg-[hsl(var(--muted))] border-b border-border;
+    @apply px-4 whitespace-nowrap text-xs font-semibold text-foreground text-left;
+    @apply border-b border-border bg-muted;
+    height: 50px;
+    min-height: 50px;
+    padding-top: 0;
+    padding-bottom: 0;
     box-sizing: border-box;
     vertical-align: middle;
   }
 
+  .accounts-table-th-inner {
+    @apply flex h-full min-h-[50px] items-center;
+  }
+
   .accounts-table-th-sticky {
-    @apply sticky top-0 z-20;
+    @apply sticky top-0 z-30 bg-muted;
     box-shadow: 0 1px 0 0 hsl(var(--border));
   }
 
   .accounts-table-th-sorted {
     @apply bg-brand-50 text-brand-700;
     box-shadow: 0 1px 0 0 hsl(var(--border)), inset 0 -1px 0 0 rgb(244 121 32 / 0.12);
+  }
+
+  .accounts-table-th-sticky.accounts-table-th-sorted {
+    @apply bg-brand-50;
   }
 
   .accounts-table-th-uppercase {
@@ -199,17 +211,25 @@
   }
 
   .accounts-table-row {
-    @apply h-[54px] border-b border-border/60 bg-white transition-colors hover:bg-muted/20;
+    @apply border-b border-border/60 bg-white transition-colors hover:bg-muted/20;
   }
 
   .accounts-table-td {
-    @apply h-[54px] max-h-[54px] px-4 align-middle text-xs text-foreground;
+    @apply px-4 text-xs text-foreground;
+    height: 54px;
+    min-height: 54px;
+    padding-top: 0;
+    padding-bottom: 0;
     box-sizing: border-box;
     vertical-align: middle;
   }
 
+  .accounts-table-td-inner {
+    @apply flex h-full min-h-[54px] items-center;
+  }
+
   .accounts-table-empty {
-    @apply !h-auto !max-h-none py-16 text-center text-sm text-muted-foreground;
+    @apply !h-auto !min-h-0 py-16 text-center text-sm text-muted-foreground;
   }
 
   .accounts-table-foot {
@@ -218,20 +238,27 @@
 
   /* Legacy markup: thead/tr without component classes still get standard layout */
   .accounts-table > thead > tr > th {
-    @apply h-[50px] max-h-[50px] px-4 align-middle whitespace-nowrap;
-    @apply text-xs font-semibold text-foreground bg-[hsl(var(--muted))] border-b border-border;
-    @apply sticky top-0 z-20;
+    @apply px-4 whitespace-nowrap text-xs font-semibold text-foreground text-left;
+    @apply border-b border-border bg-muted sticky top-0 z-30;
+    height: 50px;
+    min-height: 50px;
+    padding-top: 0;
+    padding-bottom: 0;
     box-sizing: border-box;
     vertical-align: middle;
     box-shadow: 0 1px 0 0 hsl(var(--border));
   }
 
   .accounts-table > tbody > tr {
-    @apply h-[54px] border-b border-border/60 bg-white transition-colors hover:bg-muted/20;
+    @apply border-b border-border/60 bg-white transition-colors hover:bg-muted/20;
   }
 
   .accounts-table > tbody > tr > td {
-    @apply h-[54px] max-h-[54px] px-4 align-middle text-xs text-foreground;
+    @apply px-4 text-xs text-foreground;
+    height: 54px;
+    min-height: 54px;
+    padding-top: 0;
+    padding-bottom: 0;
     box-sizing: border-box;
     vertical-align: middle;
   }

@@ -23,7 +23,9 @@ import {
   type VoucherTypeCode,
 } from "@/app/(app)/accounts/masters/masters-data";
 import { DAY_BOOK_VOUCHER_TYPE_OPTIONS } from "@/lib/accounts/day-book-data";
+import { getActiveTDSMasters, getTdsSectionCode } from "@/app/(app)/masters/tds/tds-data";
 import type { CollectionFollowUpStatus } from "@/lib/accounts/receivables-data";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const filterLabelClass = "text-[10px] font-medium uppercase text-muted-foreground";
@@ -40,6 +42,42 @@ export function ReportFilterRow({
 }) {
   return (
     <div className={cn("flex flex-wrap items-end gap-3", className)}>{children}</div>
+  );
+}
+
+export function ReportSearchFilter({
+  value,
+  onChange,
+  placeholder = "Search…",
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  return (
+    <div className={cn("space-y-1 min-w-[180px] flex-1", className)}>
+      <Label className={filterLabelClass}>Search</Label>
+      <div className="relative">
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={cn(filterControlClass, "mt-0 pr-8")}
+        />
+        {value && (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            aria-label="Clear search"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -224,20 +262,23 @@ export function ReportLedgerFilter({
   value,
   onChange,
   ledgers,
+  required = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   ledgers: { id: number; name: string }[];
+  /** When true, hides the "All ledgers" option — ledger selection is mandatory. */
+  required?: boolean;
 }) {
   return (
     <div className="space-y-1 min-w-[180px]">
       <Label className={filterLabelClass}>Ledger</Label>
-      <Select value={value} onValueChange={onChange}>
+      <Select value={value || (required ? undefined : "all")} onValueChange={onChange}>
         <SelectTrigger className={cn(filterControlClass, "mt-0 w-[180px]")}>
-          <SelectValue placeholder="All ledgers" />
+          <SelectValue placeholder={required ? "Select ledger…" : "All ledgers"} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All ledgers</SelectItem>
+          {!required && <SelectItem value="all">All ledgers</SelectItem>}
           {ledgers.map((l) => (
             <SelectItem key={l.id} value={String(l.id)}>
               {l.name}
@@ -446,6 +487,63 @@ export function ReportProductFilter({
   );
 }
 
+export function ReportStateFilter({
+  value,
+  onChange,
+  states,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  states: string[];
+}) {
+  return (
+    <div className="space-y-1 min-w-[140px]">
+      <Label className={filterLabelClass}>State</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[140px]")}>
+          <SelectValue placeholder="All states" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All states</SelectItem>
+          {states.map((s) => (
+            <SelectItem key={s} value={s}>
+              {s}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+export function ReportViewByFilter({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div className="space-y-1 min-w-[150px]">
+      <Label className={filterLabelClass}>View By</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[150px]")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 const COLLECTION_STATUS_OPTIONS: { value: CollectionFollowUpStatus | "all"; label: string }[] = [
   { value: "all", label: "All statuses" },
   { value: "pending", label: "Pending" },
@@ -476,6 +574,113 @@ export function ReportCollectionStatusFilter({
               {o.label}
             </SelectItem>
           ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+export function ReportTdsSectionFilter({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const sections = React.useMemo(
+    () =>
+      getActiveTDSMasters().map((t) => ({
+        value: getTdsSectionCode(t),
+        label: `${getTdsSectionCode(t)} — ${t.sectionName}`,
+      })),
+    [],
+  );
+
+  return (
+    <div className="space-y-1 min-w-[160px]">
+      <Label className={filterLabelClass}>TDS Section</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[160px]")}>
+          <SelectValue placeholder="All sections" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all" className="text-xs">
+            All Sections
+          </SelectItem>
+          {sections.map((s) => (
+            <SelectItem key={s.value} value={s.value} className="text-xs">
+              {s.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+export function ReportTdsPartyTypeFilter({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-1 min-w-[140px]">
+      <Label className={filterLabelClass}>Party Type</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[140px]")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all" className="text-xs">
+            All Types
+          </SelectItem>
+          <SelectItem value="Supplier" className="text-xs">
+            Supplier
+          </SelectItem>
+          <SelectItem value="Customer" className="text-xs">
+            Customer
+          </SelectItem>
+          <SelectItem value="Contractor" className="text-xs">
+            Contractor
+          </SelectItem>
+          <SelectItem value="Professional" className="text-xs">
+            Professional
+          </SelectItem>
+          <SelectItem value="Employee" className="text-xs">
+            Employee
+          </SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+export function ReportTdsPaymentStatusFilter({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-1 min-w-[120px]">
+      <Label className={filterLabelClass}>Payment</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[120px]")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all" className="text-xs">
+            All
+          </SelectItem>
+          <SelectItem value="unpaid" className="text-xs">
+            Unpaid
+          </SelectItem>
+          <SelectItem value="paid" className="text-xs">
+            Paid
+          </SelectItem>
         </SelectContent>
       </Select>
     </div>

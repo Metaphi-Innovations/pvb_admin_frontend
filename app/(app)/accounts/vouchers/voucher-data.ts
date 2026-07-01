@@ -4,6 +4,12 @@ import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
 import type { RecordStatus } from "../data";
 import { loadChartOfAccounts, nextId } from "../data";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import type { AccountsDocumentWorkflow } from "@/lib/accounts/accounts-maker-checker";
+import {
+  canEditAccountsDocument,
+  resolveWorkflowStatus,
+} from "@/lib/accounts/accounts-maker-checker";
+import { attachWorkflowOnCreate } from "@/lib/accounts/accounts-workflow-persist";
 import {
   type VoucherTypeCode,
   loadFinancialYears,
@@ -38,6 +44,7 @@ export interface AccountingVoucher {
   totalDebit: number;
   totalCredit: number;
   status: RecordStatus;
+  workflow?: AccountsDocumentWorkflow;
   createdBy: string;
   updatedBy: string;
 }
@@ -330,6 +337,16 @@ export function createVoucher(type: VoucherTypeCode, partial: CreateVoucherInput
   };
   list.push(row);
   saveVouchers(list);
+  attachWorkflowOnCreate(
+    type === "journal"
+      ? "journal_entry"
+      : type === "receipt"
+        ? "receipt_voucher"
+        : type === "payment"
+          ? "payment_voucher"
+          : "journal_entry",
+    row.id,
+  );
   return row;
 }
 
@@ -414,8 +431,8 @@ export function validatePaymentVoucherForPost(input: SimpleCashVoucherInput): st
   return null;
 }
 
-export function canEditVoucher(_voucher: AccountingVoucher): boolean {
-  return true;
+export function canEditVoucher(voucher: AccountingVoucher): boolean {
+  return canEditAccountsDocument(voucher.workflow, voucher.status);
 }
 
 export function parseCashVoucherFromLines(

@@ -332,17 +332,17 @@ export default function LedgersPageClient() {
                       className="group"
                       onClick={() => router.push(`/accounts/masters/ledgers/${r.id}`)}
                     >
-                      <AccountsTableCell className="align-top !h-auto !max-h-none py-3">
-                        <span className="font-mono text-xs font-semibold text-brand-700">{r.accountCode}</span>
+                      <AccountsTableCell mono className="font-semibold text-brand-700">
+                        {r.accountCode}
                       </AccountsTableCell>
-                      <AccountsTableCell className="align-top !h-auto !max-h-none py-3 min-w-[180px]">
+                      <AccountsTableCell wrap className="min-w-[180px]">
                         <p className="text-xs font-semibold text-foreground leading-snug">{r.accountName}</p>
                         {r.alias ? (
                           <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{r.alias}</p>
                         ) : null}
                       </AccountsTableCell>
                       <AccountsTableCell className="whitespace-nowrap">{ledgerType}</AccountsTableCell>
-                      <AccountsTableCell className="text-muted-foreground max-w-[200px] !h-auto !max-h-none py-3">
+                      <AccountsTableCell wrap className="text-muted-foreground max-w-[200px]">
                         <span className="line-clamp-2">
                           {r.parentAccountId ? parentGroupLabel(coaRecords, r.parentAccountId) : "—"}
                         </span>

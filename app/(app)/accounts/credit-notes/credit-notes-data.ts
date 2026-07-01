@@ -1,4 +1,5 @@
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import type { AccountsDocumentWorkflow } from "@/lib/accounts/accounts-maker-checker";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import { getCustomersForTransactionDropdown } from "@/app/(app)/masters/customers/customer-data";
 import {
@@ -20,7 +21,7 @@ import {
 import { NEAR_EXPIRY_SETTLEMENT_STATUS_SETTLED } from "@/app/(app)/warehouse/dispatch/near-expiry-dispatch";
 
 export type CreditNoteAgainst = "sales_invoice" | "sales_order" | "general";
-export type NoteWorkflowStatus = "draft" | "pending_approval" | "approved" | "rejected" | "cancelled";
+export type NoteWorkflowStatus = "draft" | "pending_approval" | "sent_back" | "approved" | "rejected" | "cancelled";
 
 export type CreditReferenceType = "invoice" | "sales_order";
 
@@ -94,6 +95,7 @@ export interface CreditNoteRecord {
   reason: string;
   remarks: string;
   status: NoteWorkflowStatus;
+  workflow?: AccountsDocumentWorkflow;
   activity: NoteActivityEntry[];
   createdBy: string;
   updatedBy: string;

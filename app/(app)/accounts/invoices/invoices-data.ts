@@ -10,6 +10,7 @@ import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import { resolveSalesUnitPrice } from "@/lib/pricing/resolve-pricing";
 import type { SezSupplyType } from "@/lib/masters/gst-compliance";
 import type { PaymentMode } from "../expenses/expense-data";
+import { attachWorkflowOnCreate } from "@/lib/accounts/accounts-workflow-persist";
 import { maybePostSalesInvoice } from "@/lib/accounts/document-posting-bridge";
 import { findPostedSalesInvoiceVoucher } from "@/lib/accounts/sales-invoice-accounting";
 import { customerMasterToTransactionFields } from "@/lib/accounts/transaction-master-fetch";
@@ -19,6 +20,7 @@ import {
   NEAR_EXPIRY_SETTLEMENT_REQUIRED_LABEL,
 } from "@/app/(app)/warehouse/dispatch/near-expiry-dispatch";
 import { mergeNearExpiryDemoSalesInvoice } from "@/lib/accounts/near-expiry-scheme-invoice-demo";
+import type { AccountsDocumentWorkflow } from "@/lib/accounts/accounts-maker-checker";
 
 export const SCHEME_SETTLEMENT_SETTLED_LABEL = "Settled";
 
@@ -145,6 +147,8 @@ export interface InvoiceRecord {
 	salesOrderNo?: string;
 	soAdjustmentStatus?: SOAdjustmentStatus;
 	invoiceStatus: InvoiceStatus;
+	/** Maker-checker workflow from User Management approver mapping */
+	workflow?: AccountsDocumentWorkflow;
 	paymentStatus: InvoicePaymentStatus;
 	collections: InvoiceCollectionEntry[];
 	attachments: InvoiceAttachment[];
@@ -773,6 +777,7 @@ export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
 	};
 	const rec = normalizeInvoice(base);
 	saveInvoices([...all, rec]);
+	attachWorkflowOnCreate("sales_invoice", rec.id);
 	if (rec.invoiceStatus === "sent") {
 		maybePostSalesInvoice(rec);
 	}

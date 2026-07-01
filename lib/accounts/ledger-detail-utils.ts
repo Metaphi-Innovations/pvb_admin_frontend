@@ -16,6 +16,17 @@ import { computeVendorOutstanding } from "@/lib/accounts/payables-data";
 import { statementVoucherNo } from "@/lib/accounts/sales-invoice-accounting";
 
 import { resolveSourceDocumentLink } from "@/lib/accounts/ledger-source-resolver";
+import {
+  computeRunningBalances,
+  fromSignedBalance,
+  isLedgerMovementVoucherStatus,
+  openingSignedBalance,
+  signedBalanceAfterMovements,
+  sortChronological,
+  type BalanceAmount,
+} from "@/lib/accounts/running-balance";
+
+export { isDebitNatureLedger } from "@/lib/accounts/running-balance";
 
 export type LedgerTypeLabel =
   | "Customer"
@@ -113,6 +124,7 @@ export interface LedgerTransactionRow {
   particulars: string;
   debit: number;
   credit: number;
+  lineOrder?: number;
   href?: string;
   sourceHref?: string;
   sourceLabel?: string;
@@ -121,7 +133,7 @@ export interface LedgerTransactionRow {
 function voucherByIdMap(): Map<number, AccountingVoucher> {
   return new Map(
     loadVouchers()
-      .filter((v) => v.status === "posted" || v.status === "approved")
+      .filter((v) => isLedgerMovementVoucherStatus(v.status))
       .map((v) => [v.id, v]),
   );
 }
@@ -131,11 +143,14 @@ export function collectLedgerTransactions(ledgerId: number): LedgerTransactionRo
   const rows: LedgerTransactionRow[] = [];
 
   loadVouchers()
-    .filter((v) => v.status === "posted" || v.status === "approved")
+    .filter((v) => isLedgerMovementVoucherStatus(v.status))
     .forEach((v: AccountingVoucher) => {
       const source = resolveSourceDocumentLink(v);
-      v.lines.forEach((line) => {
+      v.lines.forEach((line, lineOrder) => {
         if (line.ledgerId !== ledgerId) return;
+        const debit = Number(line.debit) || 0;
+        const credit = Number(line.credit) || 0;
+        if (debit === 0 && credit === 0) return;
         rows.push({
           id: `v-${v.id}-${line.id}`,
           voucherId: v.id,
@@ -144,8 +159,9 @@ export function collectLedgerTransactions(ledgerId: number): LedgerTransactionRo
           voucherNo: statementVoucherNo(v),
           sourceModule: source.sourceModule,
           particulars: line.remarks || v.narration || line.ledgerName || "—",
-          debit: Number(line.debit) || 0,
-          credit: Number(line.credit) || 0,
+          debit,
+          credit,
+          lineOrder,
           href: source.href,
           sourceHref: source.href,
           sourceLabel: source.label,
@@ -153,7 +169,7 @@ export function collectLedgerTransactions(ledgerId: number): LedgerTransactionRo
       });
     });
 
-  return rows.sort((a, b) => b.date.localeCompare(a.date));
+  return sortChronological(rows).reverse();
 }
 
 export interface StatementRow {
@@ -172,64 +188,59 @@ export interface StatementRow {
   sourceLabel?: string;
 }
 
-export function isDebitNatureLedger(ledger: ChartOfAccount): boolean {
-  const balance = computeLedgerCurrentBalance(ledger);
-  if (balance.balanceType === "Debit") return true;
-  if (ledger.accountType === "Asset" || ledger.accountType === "Expense") return true;
-  const ledgerType = resolveLedgerType(ledger, loadChartOfAccounts());
-  return ledgerType === "Customer" || ledgerType === "Bank" || ledgerType === "Cash" || ledgerType === "Inventory";
+function openingStatementRow(opening: BalanceAmount): StatementRow {
+  return {
+    id: "opening",
+    date: "—",
+    voucherType: "Opening Balance",
+    voucherNo: "—",
+    sourceModule: "Opening Balance",
+    particulars: "Opening Balance",
+    debit: opening.balanceType === "Debit" ? opening.amount : 0,
+    credit: opening.balanceType === "Credit" ? opening.amount : 0,
+    runningBalance: opening.amount,
+    balanceType: opening.balanceType,
+  };
+}
+
+function transactionToStatementRow(
+  tx: LedgerTransactionRow,
+  running: BalanceAmount,
+): StatementRow {
+  return {
+    id: tx.id,
+    date: tx.date,
+    voucherType: tx.voucherType,
+    voucherNo: tx.voucherNo,
+    sourceModule: tx.sourceModule,
+    particulars: tx.particulars,
+    debit: tx.debit,
+    credit: tx.credit,
+    runningBalance: running.amount,
+    balanceType: running.balanceType,
+    href: tx.href,
+    sourceHref: tx.sourceHref,
+    sourceLabel: tx.sourceLabel,
+  };
 }
 
 export function buildLedgerStatement(
   ledger: ChartOfAccount,
   transactions: LedgerTransactionRow[],
 ): StatementRow[] {
-  const isDebitNature = isDebitNatureLedger(ledger);
-  const sorted = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
+  const opening: BalanceAmount = {
+    amount: ledger.openingBalance,
+    balanceType: ledger.balanceType,
+  };
+  const sorted = sortChronological(transactions);
+  const withBalances = computeRunningBalances(opening, sorted);
 
-  let running = ledger.openingBalance;
-  let runningType: "Debit" | "Credit" = ledger.balanceType;
-  const rows: StatementRow[] = [];
-
-  rows.push({
-    id: "opening",
-    date: "—",
-    voucherType: "Opening",
-    voucherNo: "—",
-    sourceModule: "Opening Balance",
-    particulars: "Opening Balance",
-    debit: ledger.balanceType === "Debit" ? ledger.openingBalance : 0,
-    credit: ledger.balanceType === "Credit" ? ledger.openingBalance : 0,
-    runningBalance: Math.abs(running),
-    balanceType: runningType,
-  });
-
-  for (const tx of sorted) {
-    if (isDebitNature) {
-      running += tx.debit - tx.credit;
-      runningType = running >= 0 ? "Debit" : "Credit";
-    } else {
-      running += tx.credit - tx.debit;
-      runningType = running >= 0 ? "Credit" : "Debit";
-    }
-    rows.push({
-      id: tx.id,
-      date: tx.date,
-      voucherType: tx.voucherType,
-      voucherNo: tx.voucherNo,
-      sourceModule: tx.sourceModule,
-      particulars: tx.particulars,
-      debit: tx.debit,
-      credit: tx.credit,
-      runningBalance: Math.abs(running),
-      balanceType: runningType,
-      href: tx.href,
-      sourceHref: tx.sourceHref,
-      sourceLabel: tx.sourceLabel,
-    });
-  }
-
-  return rows;
+  return [
+    openingStatementRow(opening),
+    ...withBalances.map(({ row, runningBalance, runningBalanceType }) =>
+      transactionToStatementRow(row, { amount: runningBalance, balanceType: runningBalanceType }),
+    ),
+  ];
 }
 
 export function buildLedgerStatementForDateRange(
@@ -238,65 +249,20 @@ export function buildLedgerStatementForDateRange(
   from: string,
   to: string,
 ): StatementRow[] {
-  const isDebitNature = isDebitNatureLedger(ledger);
-  const inRange = transactions
-    .filter((t) => t.date >= from && t.date <= to)
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const prior = sortChronological(transactions.filter((t) => t.date < from));
+  const periodOpening = fromSignedBalance(
+    signedBalanceAfterMovements(openingSignedBalance(ledger), prior),
+  );
 
-  let running = ledger.openingBalance;
-  let runningType: "Debit" | "Credit" = ledger.balanceType;
+  const inRange = sortChronological(transactions.filter((t) => t.date >= from && t.date <= to));
+  const withBalances = computeRunningBalances(periodOpening, inRange);
 
-  for (const tx of transactions.filter((t) => t.date < from).sort((a, b) => a.date.localeCompare(b.date))) {
-    if (isDebitNature) {
-      running += tx.debit - tx.credit;
-      runningType = running >= 0 ? "Debit" : "Credit";
-    } else {
-      running += tx.credit - tx.debit;
-      runningType = running >= 0 ? "Credit" : "Debit";
-    }
-  }
-
-  const rows: StatementRow[] = [];
-
-  rows.push({
-    id: "opening",
-    date: "—",
-    voucherType: "Opening",
-    voucherNo: "—",
-    sourceModule: "Opening Balance",
-    particulars: "Opening Balance",
-    debit: ledger.balanceType === "Debit" ? ledger.openingBalance : 0,
-    credit: ledger.balanceType === "Credit" ? ledger.openingBalance : 0,
-    runningBalance: Math.abs(ledger.openingBalance),
-    balanceType: ledger.balanceType,
-  });
-
-  for (const tx of inRange) {
-    if (isDebitNature) {
-      running += tx.debit - tx.credit;
-      runningType = running >= 0 ? "Debit" : "Credit";
-    } else {
-      running += tx.credit - tx.debit;
-      runningType = running >= 0 ? "Credit" : "Debit";
-    }
-    rows.push({
-      id: tx.id,
-      date: tx.date,
-      voucherType: tx.voucherType,
-      voucherNo: tx.voucherNo,
-      sourceModule: tx.sourceModule,
-      particulars: tx.particulars,
-      debit: tx.debit,
-      credit: tx.credit,
-      runningBalance: Math.abs(running),
-      balanceType: runningType,
-      href: tx.href,
-      sourceHref: tx.sourceHref,
-      sourceLabel: tx.sourceLabel,
-    });
-  }
-
-  return rows;
+  return [
+    openingStatementRow(periodOpening),
+    ...withBalances.map(({ row, runningBalance, runningBalanceType }) =>
+      transactionToStatementRow(row, { amount: runningBalance, balanceType: runningBalanceType }),
+    ),
+  ];
 }
 
 export function ledgerMovementTotals(transactions: LedgerTransactionRow[]): {

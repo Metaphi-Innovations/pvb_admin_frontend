@@ -3,12 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Calendar, CheckCircle, Pencil, XCircle } from "lucide-react";
+import { Calendar, Pencil } from "lucide-react";
 import { RecordDetailPage } from "@/components/record-detail";
-import { NoteWorkflowBadge } from "../components/NoteWorkflowBadge";
+import { AccountsVoucherStatusBadge } from "@/components/accounts/AccountsVoucherStatusBadge";
+import { AccountsDocumentWorkflowSection } from "@/components/accounts/AccountsDocumentWorkflowSection";
 import { CreditNoteCancelDialog } from "./components/CreditNoteCancelDialog";
 import {
-  approveCreditNote,
   canEditCreditNote,
   cancelCreditNote,
   getCreditNoteById,
@@ -17,6 +17,10 @@ import {
 import { CREDIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { creditNoteImpactResolved } from "@/lib/accounts/resolved-impact-previews";
+import {
+  canEditAccountsDocument,
+  resolveWorkflowStatus,
+} from "@/lib/accounts/accounts-maker-checker";
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -25,18 +29,6 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
       <p className="text-xs font-medium mt-0.5">{value ?? "—"}</p>
     </div>
   );
-}
-
-function workflowStatusLabel(status: string) {
-  return status.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function workflowStatusVariant(status: string): "active" | "inactive" | "draft" | "blocked" | "neutral" {
-  if (status === "draft") return "draft";
-  if (status === "pending_approval") return "neutral";
-  if (status === "approved" || status === "processed") return "active";
-  if (status === "cancelled") return "blocked";
-  return "neutral";
 }
 
 export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteId: number }) {
@@ -59,8 +51,8 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
 
   if (!record) return null;
 
-  const canEdit = canEditCreditNote(record);
-  const showApprovalActions = record.status === "draft" || record.status === "pending_approval";
+  const canEdit = canEditCreditNote(record) && canEditAccountsDocument(record.workflow, record.status);
+  const displayStatus = resolveWorkflowStatus(record.workflow, record.status);
 
   return (
     <RecordDetailPage
@@ -69,34 +61,12 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
       listLabel="Credit Notes"
       recordName={record.customerName}
       recordCode={record.creditNoteNo}
-      statusLabel={workflowStatusLabel(record.status)}
-      statusVariant={workflowStatusVariant(record.status)}
+      statusLabel={displayStatus.replaceAll("_", " ")}
+      statusVariant={
+        displayStatus === "posted" ? "active" : displayStatus === "draft" ? "draft" : "neutral"
+      }
       metaItems={[{ icon: Calendar, label: record.creditNoteDate }]}
       onEdit={canEdit ? () => router.push(`${CREDIT_NOTES_LIST_PATH}/${record.id}/edit`) : undefined}
-      headerActions={
-        showApprovalActions ? (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
-              onClick={() => {
-                approveCreditNote(record.id);
-                refresh();
-              }}
-            >
-              <CheckCircle className="w-3.5 h-3.5" /> Approve
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs text-red-600 gap-1"
-              onClick={() => setCancelOpen(true)}
-            >
-              <XCircle className="w-3.5 h-3.5" /> Cancel
-            </Button>
-          </div>
-        ) : undefined
-      }
       sidebar={{
         summary: [
           { label: "Original Amount", value: formatINR(record.originalAmount) },
@@ -137,7 +107,15 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
             grandTotal: record.currentCreditAmount,
           })}
         />
-        <NoteWorkflowBadge status={record.status} />
+        <AccountsVoucherStatusBadge workflow={record.workflow} legacyStatus={record.status} />
+
+        <AccountsDocumentWorkflowSection
+          category="credit_note"
+          documentId={record.id}
+          workflow={record.workflow}
+          legacyStatus={record.status}
+          onUpdated={refresh}
+        />
 
         <div className="rounded-lg border border-brand-200/50 bg-brand-50/20 p-3 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
           <DetailRow label="Customer" value={record.customerName} />

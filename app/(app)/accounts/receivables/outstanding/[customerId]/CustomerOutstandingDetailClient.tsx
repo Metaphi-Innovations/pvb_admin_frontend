@@ -1,16 +1,19 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   IndianRupee,
   ArrowLeft,
   MoreHorizontal,
+  Eye,
 } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { useTransactionDetailsDrawer } from "@/components/accounts/TransactionDetailsDrawer";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { getCustomerOutstandingDetail } from "@/lib/accounts/receivables-data";
+import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { MiniKPICard } from "@/components/ui/KPICard";
 import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
@@ -25,6 +28,7 @@ import {
 export default function CustomerOutstandingDetailClient() {
   const params = useParams();
   const customerId = Number(params.customerId);
+  const { openTransaction, drawer: transactionDrawer } = useTransactionDetailsDrawer();
   const detail = useMemo(
     () => (Number.isFinite(customerId) ? getCustomerOutstandingDetail(customerId) : null),
     [customerId],
@@ -49,6 +53,13 @@ export default function CustomerOutstandingDetailClient() {
 
   const { customer, ledgerId, invoices } = detail;
   const creditDays = customer.paymentTerms?.match(/(\d+)/)?.[1] ?? "30";
+
+  const openInvoice = useCallback(
+    (invoiceId: number) => {
+      openTransaction({ type: "sales_invoice", id: invoiceId });
+    },
+    [openTransaction],
+  );
 
   return (
     <AccountsPageShell
@@ -119,8 +130,23 @@ export default function CustomerOutstandingDetailClient() {
           </thead>
           <tbody>
             {invoices.map((inv) => (
-              <tr key={inv.invoiceId} className="border-b border-border/40 hover:bg-muted/20">
-                <td className="px-3 py-2.5 text-xs font-mono font-semibold">{inv.invoiceNo}</td>
+              <tr
+                key={inv.invoiceId}
+                className="border-b border-border/40 hover:bg-muted/20 cursor-pointer group"
+                onClick={() => openInvoice(inv.invoiceId)}
+              >
+                <td className="px-3 py-2.5 text-xs font-mono font-semibold">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openInvoice(inv.invoiceId);
+                    }}
+                    className="text-brand-700 hover:underline"
+                  >
+                    {inv.invoiceNo}
+                  </button>
+                </td>
                 <td className="px-3 py-2.5 text-xs">{inv.invoiceDate}</td>
                 <td className="px-3 py-2.5 text-xs">{inv.dueDate}</td>
                 <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.taxableValue)}</td>
@@ -132,6 +158,17 @@ export default function CustomerOutstandingDetailClient() {
                 <td className="px-3 py-2.5 text-xs text-center tabular-nums">{inv.outstanding > 0 ? inv.daysOverdue : "—"}</td>
                 <td className="px-3 py-2.5"><StatusBadge status={inv.status} /></td>
                 <td className="px-3 py-2.5 text-right">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openInvoice(inv.invoiceId);
+                    }}
+                    className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-0 group-hover:opacity-100"
+                    aria-label={`View ${inv.invoiceNo}`}
+                  >
+                    <Eye className="w-4 h-4 text-muted-foreground" />
+                  </button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
@@ -149,7 +186,7 @@ export default function CustomerOutstandingDetailClient() {
                         <Link href="/accounts/receivables/receipt-allocation">Allocate Receipt</Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
-                        <Link href={`/accounts/masters/ledgers/${ledgerId}`}>View Ledger</Link>
+                        <Link href={buildGeneralLedgerHref(ledgerId)}>View Ledger</Link>
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -159,6 +196,7 @@ export default function CustomerOutstandingDetailClient() {
           </tbody>
         </table>
       </div>
+      {transactionDrawer}
     </AccountsPageShell>
   );
 }

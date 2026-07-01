@@ -18,6 +18,10 @@ import {
 } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { roundMoney } from "@/lib/accounts/money-format";
+import {
+  isPostedForReports,
+  resolveWorkflowStatus,
+} from "@/lib/accounts/accounts-maker-checker";
 
 export type DayBookVoucherType =
   | "sales_invoice"
@@ -127,19 +131,26 @@ function resolveFinancialYearForDate(date: string): {
 
 function mapInvoiceStatus(inv: InvoiceRecord): DayBookStatus {
   if (inv.invoiceStatus === "cancelled") return "cancelled";
-  if (inv.invoiceStatus === "draft") return "draft";
+  if (!isPostedForReports(inv.workflow, inv.invoiceStatus)) {
+    const ws = resolveWorkflowStatus(inv.workflow, inv.invoiceStatus);
+    if (ws === "rejected") return "cancelled";
+    return "draft";
+  }
   return "posted";
 }
 
-function mapNoteStatus(status: string): DayBookStatus {
+function mapNoteStatus(status: string, workflow?: import("@/lib/accounts/accounts-maker-checker").AccountsDocumentWorkflow): DayBookStatus {
   if (status === "cancelled" || status === "rejected") return "cancelled";
-  if (status === "draft" || status === "pending_approval") return "draft";
+  if (!isPostedForReports(workflow, status)) return "draft";
   return "posted";
 }
 
-function mapVoucherStatus(status: string): DayBookStatus {
+function mapVoucherStatus(
+  status: string,
+  workflow?: import("@/lib/accounts/accounts-maker-checker").AccountsDocumentWorkflow,
+): DayBookStatus {
   if (status === "cancelled" || status === "rejected") return "cancelled";
-  if (status === "draft") return "draft";
+  if (!isPostedForReports(workflow, status)) return "draft";
   return "posted";
 }
 
@@ -206,7 +217,7 @@ function entryFromPurchaseInvoice(inv: PurchaseInvoiceRecord): DayBookEntry {
     debit,
     credit,
     createdBy: inv.createdBy,
-    status: "posted",
+    status: isPostedForReports(inv.workflow) ? "posted" : "draft",
     branch: "Head Office",
     financialYearId: fy.financialYearId,
     financialYearName: fy.financialYearName,
@@ -232,7 +243,7 @@ function entryFromCreditNote(note: CreditNoteRecord): DayBookEntry {
     debit,
     credit,
     createdBy: note.createdBy,
-    status: mapNoteStatus(note.status),
+    status: mapNoteStatus(note.status, note.workflow),
     branch: "Head Office",
     financialYearId: fy.financialYearId,
     financialYearName: fy.financialYearName,
@@ -258,7 +269,7 @@ function entryFromDebitNote(note: DebitNoteRecord): DayBookEntry {
     debit,
     credit,
     createdBy: note.createdBy,
-    status: mapNoteStatus(note.status),
+    status: mapNoteStatus(note.status, note.workflow),
     branch: "Head Office",
     financialYearId: fy.financialYearId,
     financialYearName: fy.financialYearName,
@@ -303,7 +314,7 @@ function entryFromVoucher(v: AccountingVoucher): DayBookEntry | null {
     debit,
     credit,
     createdBy: v.createdBy,
-    status: mapVoucherStatus(v.status),
+    status: mapVoucherStatus(v.status, v.workflow),
     branch: "Head Office",
     financialYearId: v.financialYearId ?? fy.financialYearId,
     financialYearName: v.financialYearName || fy.financialYearName,

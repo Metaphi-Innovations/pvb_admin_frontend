@@ -1,12 +1,28 @@
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import type { LedgerTransactionRow } from "@/lib/accounts/ledger-detail-utils";
-import { isDebitNatureLedger } from "@/lib/accounts/ledger-detail-utils";
 import type { CoaTransactionRow } from "@/lib/accounts/coa-accounting-view";
 import { loadVouchers } from "@/app/(app)/accounts/vouchers/voucher-data";
 import {
   resolveDateRangePreset,
   type DateRangePresetId,
 } from "@/lib/accounts/report-date-presets";
+import {
+  computeRunningBalances,
+  fromSignedBalance,
+  isLedgerMovementVoucherStatus,
+  openingSignedBalance,
+  signedBalanceAfterMovements,
+  sortChronological,
+  toSignedBalance,
+  type BalanceAmount,
+  type ChronologicalSortable,
+} from "@/lib/accounts/running-balance";
+
+type CoaMovementRow = Omit<
+  CoaTransactionRow,
+  "runningBalance" | "runningBalanceType" | "isOpeningRow"
+> &
+  ChronologicalSortable;
 
 export interface LedgerDateRange {
   from: string;
@@ -73,43 +89,15 @@ export function ledgerMovementTotalsForRange(
   );
 }
 
-function signedMovement(
-  debit: number,
-  credit: number,
-  balanceType: "Debit" | "Credit",
-): number {
-  return balanceType === "Debit" ? debit - credit : credit - debit;
-}
-
-function signedOpening(amount: number, balanceType: "Debit" | "Credit"): number {
-  return balanceType === "Debit" ? amount : -amount;
-}
-
-function toBalance(signed: number): { amount: number; balanceType: "Debit" | "Credit" } {
-  if (signed >= 0) return { amount: signed, balanceType: "Debit" };
-  return { amount: Math.abs(signed), balanceType: "Credit" };
-}
-
 /** Closing balance at period end from a known period opening and in-range movement. */
 export function computeClosingFromPeriodOpening(
-  periodOpening: { amount: number; balanceType: "Debit" | "Credit" },
+  periodOpening: BalanceAmount,
   totalDebit: number,
   totalCredit: number,
-  ledger: ChartOfAccount,
-): { amount: number; balanceType: "Debit" | "Credit" } {
-  const isDebitNature = isDebitNatureLedger(ledger);
-  let running = periodOpening.amount;
-  let runningType: "Debit" | "Credit" = periodOpening.balanceType;
-
-  if (isDebitNature) {
-    running += totalDebit - totalCredit;
-    runningType = running >= 0 ? "Debit" : "Credit";
-  } else {
-    running += totalCredit - totalDebit;
-    runningType = running >= 0 ? "Credit" : "Debit";
-  }
-
-  return { amount: Math.abs(running), balanceType: runningType };
+): BalanceAmount {
+  const signed =
+    toSignedBalance(periodOpening.amount, periodOpening.balanceType) + totalDebit - totalCredit;
+  return fromSignedBalance(signed);
 }
 
 /** Closing = ledger opening + net movement in the selected period (display only). */
@@ -117,59 +105,34 @@ export function computePeriodClosingBalance(
   ledger: ChartOfAccount,
   totalDebit: number,
   totalCredit: number,
-): { amount: number; balanceType: "Debit" | "Credit" } {
-  const signed =
-    signedOpening(ledger.openingBalance, ledger.balanceType) +
-    signedMovement(totalDebit, totalCredit, ledger.balanceType);
-  return toBalance(signed);
+): BalanceAmount {
+  const signed = openingSignedBalance(ledger) + totalDebit - totalCredit;
+  return fromSignedBalance(signed);
 }
 
 /** Balance at the start of the selected period (after all pre-period postings). */
 export function computePeriodOpeningBalance(
   ledger: ChartOfAccount,
-  allTransactions: Pick<CoaTransactionRow, "date" | "debit" | "credit">[],
+  allTransactions: CoaMovementRow[],
   from: string,
-): { amount: number; balanceType: "Debit" | "Credit" } {
-  const isDebitNature = isDebitNatureLedger(ledger);
-  let running = ledger.openingBalance;
-  let runningType: "Debit" | "Credit" = ledger.balanceType;
-
-  for (const tx of allTransactions
-    .filter((r) => r.date < from)
-    .sort((a, b) => a.date.localeCompare(b.date))) {
-    if (isDebitNature) {
-      running += tx.debit - tx.credit;
-      runningType = running >= 0 ? "Debit" : "Credit";
-    } else {
-      running += tx.credit - tx.debit;
-      runningType = running >= 0 ? "Credit" : "Debit";
-    }
-  }
-
-  return { amount: Math.abs(running), balanceType: runningType };
+): BalanceAmount {
+  const prior = sortChronological(allTransactions.filter((r) => r.date < from));
+  const signed = signedBalanceAfterMovements(openingSignedBalance(ledger), prior);
+  return fromSignedBalance(signed);
 }
 
 export function buildCoaTransactionsForDateRange(
   ledger: ChartOfAccount,
-  allTransactions: Omit<CoaTransactionRow, "runningBalance" | "runningBalanceType" | "isOpeningRow">[],
+  allTransactions: CoaMovementRow[],
   from: string,
   to: string,
-  periodOpening?: { amount: number; balanceType: "Debit" | "Credit" },
+  periodOpening?: BalanceAmount,
 ): CoaTransactionRow[] {
-  const isDebitNature = isDebitNatureLedger(ledger);
-  const opening =
-    periodOpening ?? computePeriodOpeningBalance(ledger, allTransactions, from);
-
-  const inRange = allTransactions
-    .filter((r) => r.date >= from && r.date <= to)
-    .sort((a, b) => {
-      const d = a.date.localeCompare(b.date);
-      if (d !== 0) return d;
-      return a.voucherNo.localeCompare(b.voucherNo);
-    });
-
-  let running = opening.amount;
-  let runningType: "Debit" | "Credit" = opening.balanceType;
+  const opening = periodOpening ?? computePeriodOpeningBalance(ledger, allTransactions, from);
+  const inRange = sortChronological(
+    allTransactions.filter((r) => r.date >= from && r.date <= to),
+  );
+  const withBalances = computeRunningBalances(opening, inRange);
 
   const rows: CoaTransactionRow[] = [
     {
@@ -177,7 +140,7 @@ export function buildCoaTransactionsForDateRange(
       voucherNo: "—",
       voucherType: "Opening Balance",
       referenceNo: "—",
-      narration: "Balance brought forward",
+      narration: "Opening Balance",
       debit: opening.balanceType === "Debit" ? opening.amount : 0,
       credit: opening.balanceType === "Credit" ? opening.amount : 0,
       runningBalance: opening.amount,
@@ -186,19 +149,12 @@ export function buildCoaTransactionsForDateRange(
     },
   ];
 
-  for (const row of inRange) {
-    if (isDebitNature) {
-      running += row.debit - row.credit;
-      runningType = running >= 0 ? "Debit" : "Credit";
-    } else {
-      running += row.credit - row.debit;
-      runningType = running >= 0 ? "Credit" : "Debit";
-    }
+  for (const { row, runningBalance, runningBalanceType } of withBalances) {
     rows.push({
       ...row,
-      runningBalance: Math.abs(running),
-      runningBalanceType: runningType,
-    });
+      runningBalance,
+      runningBalanceType,
+    } as CoaTransactionRow);
   }
 
   return rows;
@@ -212,7 +168,7 @@ export function ledgerMovementMapForRange(
   const map = new Map<number, { totalDebit: number; totalCredit: number }>();
 
   loadVouchers()
-    .filter((v) => (v.status === "posted" || v.status === "approved") && v.date >= from && v.date <= to)
+    .filter((v) => isLedgerMovementVoucherStatus(v.status) && v.date >= from && v.date <= to)
     .forEach((v) => {
       v.lines.forEach((line) => {
         if (!line.ledgerId) return;

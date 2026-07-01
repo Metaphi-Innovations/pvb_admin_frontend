@@ -17,9 +17,10 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
-import { AccountsTableScroll } from "@/components/accounts/AccountsTable";
+import { AccountsTableScroll, AccountsTable, AccountsTableHead, AccountsTableHeadRow, AccountsTableHeadCell, AccountsTableBody, AccountsTableRow, AccountsTableCell } from "@/components/accounts/AccountsTable";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { StatusBadge, SectionTabs } from "./AccountsUI";
+import { SectionTabs } from "./AccountsUI";
+import { AccountsVoucherStatusBadge } from "@/components/accounts/AccountsVoucherStatusBadge";
 import { cn } from "@/lib/utils";
 import { LedgerImpactPreview, type LedgerImpactLine } from "@/components/accounts/LedgerImpactPreview";
 
@@ -65,7 +66,7 @@ export interface TransactionListConfig<T> {
 
 function isDraftStatus(status: string): boolean {
   const s = status.toLowerCase();
-  return s === "draft" || s === "pending_approval";
+  return s === "draft" || s === "sent_back";
 }
 
 export function TransactionListPage<T>({ config }: { config: TransactionListConfig<T> }) {
@@ -90,10 +91,12 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
   const statusTabs = config.statusTabs ?? [
     { id: "all", label: "All" },
     { id: "draft", label: "Draft" },
-    { id: "approved", label: "Approved" },
+    { id: "pending_approval", label: "Pending Approval" },
+    { id: "sent_back", label: "Sent Back" },
     { id: "posted", label: "Posted" },
-    { id: "sent", label: "Sent" },
-    { id: "paid", label: "Paid" },
+    { id: "sent", label: "Posted" },
+    { id: "approved", label: "Posted" },
+    { id: "rejected", label: "Rejected" },
     { id: "cancelled", label: "Cancelled" },
   ];
 
@@ -128,14 +131,15 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
     return list;
   }, [allRows, statusTab, search, dateFrom, dateTo, branch]);
 
+  const rowCanEdit = (r: TransactionRow) =>
+    config.editHref &&
+    (config.canEdit ? config.canEdit(r) : isDraftStatus(r.status) || r.status.toLowerCase() === "sent_back");
+
   const rowCanPost = (r: TransactionRow) =>
-    config.onPost && (config.canPost ? config.canPost(r) : isDraftStatus(r.status));
+    config.onPost && (config.canPost ? config.canPost(r) : false);
 
   const rowCanDelete = (r: TransactionRow) =>
     config.onDelete && (config.canDelete ? config.canDelete(r) : isDraftStatus(r.status));
-
-  const rowCanEdit = (r: TransactionRow) =>
-    config.editHref && (config.canEdit ? config.canEdit(r) : isDraftStatus(r.status));
 
   const showGstColumns = allRows.some(
     (r) => r.taxableValue != null && r.gstAmount != null && r.invoiceTotal != null,
@@ -183,70 +187,68 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
         className="h-full min-h-0"
       >
         <AccountsTableScroll>
-          <table className="accounts-table w-full text-table">
-            <thead className="border-b border-border/60">
-              <tr>
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Number</th>
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Date</th>
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Party</th>
+          <AccountsTable>
+            <AccountsTableHead>
+              <AccountsTableHeadRow>
+                <AccountsTableHeadCell uppercase>Number</AccountsTableHeadCell>
+                <AccountsTableHeadCell uppercase>Date</AccountsTableHeadCell>
+                <AccountsTableHeadCell uppercase>Party</AccountsTableHeadCell>
                 {showGstColumns ? (
                   <>
-                    <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Taxable Value</th>
-                    <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">GST Amount</th>
-                    <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Invoice Total (Incl. GST)</th>
+                    <AccountsTableHeadCell align="right" uppercase>Taxable Value</AccountsTableHeadCell>
+                    <AccountsTableHeadCell align="right" uppercase>GST Amount</AccountsTableHeadCell>
+                    <AccountsTableHeadCell align="right" uppercase>Invoice Total (Incl. GST)</AccountsTableHeadCell>
                   </>
                 ) : (
-                  <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Amount</th>
+                  <AccountsTableHeadCell align="right" uppercase>Amount</AccountsTableHeadCell>
                 )}
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
+                <AccountsTableHeadCell uppercase>Status</AccountsTableHeadCell>
                 {showSchemeSettlementColumn && (
-                  <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Scheme Settlement
-                  </th>
+                  <AccountsTableHeadCell uppercase>Scheme Settlement</AccountsTableHeadCell>
                 )}
-                <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground min-w-[120px]">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+                <AccountsTableHeadCell align="right" uppercase className="min-w-[120px]">Actions</AccountsTableHeadCell>
+              </AccountsTableHeadRow>
+            </AccountsTableHead>
+            <AccountsTableBody>
               {!mounted ? (
-                <tr>
-                  <td colSpan={colSpan} className="px-4 py-16 text-center">
+                <AccountsTableRow>
+                  <AccountsTableCell colSpan={colSpan} className="accounts-table-empty">
                     <p className="text-xs text-muted-foreground">Loading records…</p>
-                  </td>
-                </tr>
+                  </AccountsTableCell>
+                </AccountsTableRow>
               ) : rows.length === 0 ? (
-                <tr>
-                  <td colSpan={colSpan} className="px-4 py-16 text-center">
+                <AccountsTableRow>
+                  <AccountsTableCell colSpan={colSpan} className="accounts-table-empty">
                     <p className="text-sm font-medium text-foreground">No records found</p>
                     <p className="text-xs text-muted-foreground mt-1">Adjust filters or create a new entry.</p>
-                  </td>
-                </tr>
+                  </AccountsTableCell>
+                </AccountsTableRow>
               ) : (
                 rows.map((r) => (
-                  <tr key={r.id} className="border-b border-border/40 hover:bg-muted/20">
-                    <td className="px-4 py-2.5 text-xs font-mono font-semibold">
+                  <AccountsTableRow key={r.id}>
+                    <AccountsTableCell mono className="font-semibold text-brand-700">
                       {r.viewHref ? (
                         <Link href={r.viewHref} className="text-brand-700 hover:underline">{r.number}</Link>
                       ) : (
                         r.number
                       )}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs">{r.date}</td>
-                    <td className="px-4 py-2.5 text-xs">{r.party}</td>
+                    </AccountsTableCell>
+                    <AccountsTableCell>{r.date}</AccountsTableCell>
+                    <AccountsTableCell>{r.party}</AccountsTableCell>
                     {showGstColumns ? (
                       <>
-                        <td className="px-4 py-2.5 text-xs text-right tabular-nums">{r.taxableValue}</td>
-                        <td className="px-4 py-2.5 text-xs text-right tabular-nums">{r.gstAmount}</td>
-                        <td className="px-4 py-2.5 text-xs text-right tabular-nums font-medium">{r.invoiceTotal}</td>
+                        <AccountsTableCell align="right" className="tabular-nums">{r.taxableValue}</AccountsTableCell>
+                        <AccountsTableCell align="right" className="tabular-nums">{r.gstAmount}</AccountsTableCell>
+                        <AccountsTableCell align="right" className="tabular-nums font-medium">{r.invoiceTotal}</AccountsTableCell>
                       </>
                     ) : (
-                      <td className="px-4 py-2.5 text-xs text-right tabular-nums">{r.amount}</td>
+                      <AccountsTableCell align="right" money>{r.amount}</AccountsTableCell>
                     )}
-                    <td className="px-4 py-2.5">
-                      <StatusBadge status={r.status} />
-                    </td>
+                    <AccountsTableCell>
+                      <AccountsVoucherStatusBadge legacyStatus={r.status} />
+                    </AccountsTableCell>
                     {showSchemeSettlementColumn && (
-                      <td className="px-4 py-2.5 text-xs">
+                      <AccountsTableCell>
                         {r.schemeSettlementLabel ? (
                           <span
                             className={cn(
@@ -261,9 +263,9 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
-                      </td>
+                      </AccountsTableCell>
                     )}
-                    <td className="px-4 py-2.5">
+                    <AccountsTableCell align="right">
                       <div className="flex items-center justify-end gap-0.5 flex-wrap">
                         <button
                           type="button"
@@ -315,12 +317,12 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                           </Button>
                         )}
                       </div>
-                    </td>
-                  </tr>
+                    </AccountsTableCell>
+                  </AccountsTableRow>
                 ))
               )}
-            </tbody>
-          </table>
+            </AccountsTableBody>
+          </AccountsTable>
         </AccountsTableScroll>
       </AccountsPageShell>
 
@@ -334,7 +336,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
             {viewRow && (
               <>
                 <div className="flex items-center gap-2">
-                  <StatusBadge status={viewRow.status} />
+                  <AccountsVoucherStatusBadge legacyStatus={viewRow.status} />
                 </div>
                 {(viewRow.viewFields ?? [
                   { label: "Date", value: viewRow.date },

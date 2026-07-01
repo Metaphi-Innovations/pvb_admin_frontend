@@ -50,6 +50,14 @@ import {
   type VoucherLedgerScope,
 } from "@/lib/accounts/voucher-quick-add-ledger";
 import { useClientMounted } from "@/lib/use-client-mounted";
+import { AccountsDocumentWorkflowSection } from "@/components/accounts/AccountsDocumentWorkflowSection";
+import type { AccountsVoucherCategory } from "@/lib/accounts/accounts-maker-checker";
+
+const VOUCHER_CATEGORY_MAP: Partial<Record<VoucherTypeCode, AccountsVoucherCategory>> = {
+  journal: "journal_entry",
+  receipt: "receipt_voucher",
+  payment: "payment_voucher",
+};
 
 const VOUCHER_NUMBER_LABELS: Partial<Record<VoucherTypeCode, string>> = {
   journal: "Journal#",
@@ -138,10 +146,6 @@ export function ZohoVoucherEntryForm({
   const mounted = useClientMounted();
   const label = VOUCHER_TYPE_LABELS[voucherType];
   const isEdit = voucherId != null;
-  const existingVoucher = useMemo(
-    () => (mounted && voucherId != null ? getVoucherById(voucherId) : undefined),
-    [voucherId, mounted],
-  );
   const financialYears = useMemo(() => (mounted ? loadFinancialYears() : []), [mounted]);
   const activeFy = useMemo(() => financialYears.find((fy) => fy.status === "active"), [financialYears]);
   const coaRecords = useCoaRecords();
@@ -152,7 +156,13 @@ export function ZohoVoucherEntryForm({
   const [narration, setNarration] = useState("");
   const [lines, setLines] = useState<VoucherLine[]>([EMPTY_LINE(), EMPTY_LINE()]);
   const [error, setError] = useState<string | null>(null);
+  const [workflowRefreshKey, setWorkflowRefreshKey] = useState(0);
   const hydratedKeyRef = useRef<string | number | null>(null);
+
+  const existingVoucher = useMemo(
+    () => (mounted && voucherId != null ? getVoucherById(voucherId) : undefined),
+    [voucherId, mounted, workflowRefreshKey],
+  );
 
   useEffect(() => {
     if (!mounted) return;
@@ -656,6 +666,18 @@ export function ZohoVoucherEntryForm({
                 <LedgerImpactPreview lines={impactLines} />
               </div>
             ))}
+
+          {readOnly && voucherId && VOUCHER_CATEGORY_MAP[voucherType] && (
+            <div className="mt-4 px-4 sm:px-6">
+              <AccountsDocumentWorkflowSection
+                category={VOUCHER_CATEGORY_MAP[voucherType]!}
+                documentId={voucherId}
+                workflow={existingVoucher?.workflow}
+                legacyStatus={existingVoucher?.status}
+                onUpdated={() => setWorkflowRefreshKey((k) => k + 1)}
+              />
+            </div>
+          )}
 
         </div>
       </div>

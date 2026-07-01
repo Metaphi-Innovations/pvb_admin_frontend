@@ -25,6 +25,14 @@ import {
   ReportVendorFilter,
   ReportBranchFilter,
 } from "@/components/accounts/ReportFilters";
+import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
+import {
+  AccountsRichTable,
+  AccountsTableScroll,
+  type AccountsRichColumnDef,
+} from "@/components/accounts/AccountsTable";
+
+type VendorOutstandingRow = ReturnType<typeof computeVendorOutstanding>[number];
 
 export default function VendorOutstandingClient() {
   const [asOnDate, setAsOnDate] = useState(defaultAsOnDate());
@@ -43,6 +51,95 @@ export default function VendorOutstandingClient() {
 
   const rows = useMemo(() => computeVendorOutstanding(asOnDate, filters), [asOnDate, filters]);
 
+  const columns = useMemo((): AccountsRichColumnDef<VendorOutstandingRow>[] => [
+    {
+      key: "vendorName",
+      label: "Supplier Name",
+      render: (r) => (
+        <Link href={buildGeneralLedgerHref(r.ledgerId)} className="text-brand-600 hover:underline font-medium">
+          {r.vendorName}
+        </Link>
+      ),
+    },
+    {
+      key: "vendorCode",
+      label: "Supplier Code",
+      render: (r) => <span className="font-mono text-muted-foreground">{r.vendorCode}</span>,
+    },
+    {
+      key: "gstin",
+      label: "GSTIN",
+      render: (r) => <span className="font-mono">{r.gstin}</span>,
+    },
+    { key: "territory", label: "Territory", render: (r) => r.territory },
+    {
+      key: "totalPurchaseValue",
+      label: "Total Purchase",
+      align: "right",
+      render: (r) => <span className="tabular-nums">{formatMoney(r.totalPurchaseValue)}</span>,
+    },
+    {
+      key: "paidAmount",
+      label: "Paid",
+      align: "right",
+      render: (r) => <span className="tabular-nums">{formatMoney(r.paidAmount)}</span>,
+    },
+    {
+      key: "debitNoteAdjusted",
+      label: "Debit Note Adj.",
+      align: "right",
+      render: (r) => <span className="tabular-nums">{formatMoney(r.debitNoteAdjusted)}</span>,
+    },
+    {
+      key: "outstanding",
+      label: "Outstanding",
+      align: "right",
+      render: (r) => <span className="tabular-nums font-semibold">{formatMoney(r.outstanding)}</span>,
+    },
+    {
+      key: "overdueAmount",
+      label: "Overdue",
+      align: "right",
+      render: (r) => <span className="tabular-nums text-red-600">{formatMoney(r.overdueAmount)}</span>,
+    },
+    { key: "lastPurchaseDate", label: "Last Purchase", render: (r) => r.lastPurchaseDate },
+    { key: "lastPaymentDate", label: "Last Payment", render: (r) => r.lastPaymentDate },
+    {
+      key: "status",
+      label: "Status",
+      render: (r) => <StatusBadge status={r.status} />,
+    },
+    {
+      key: "actions",
+      label: "",
+      align: "right",
+      uppercase: false,
+      render: (r) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+              <MoreHorizontal className="w-4 h-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem asChild>
+              <Link href={`/accounts/payables/outstanding/${r.vendorId}`}>View Supplier</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href={buildGeneralLedgerHref(r.ledgerId)}>View Supplier Ledger</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href={`/accounts/vouchers?tab=payment&vendor=${r.vendorId}`}>Make Payment</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/accounts/vouchers?tab=payment">Allocate Payment</Link>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ], []);
+
   return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Payables", "Supplier Outstanding")}
@@ -58,104 +155,15 @@ export default function VendorOutstandingClient() {
       layout="split"
       className="h-full min-h-0"
     >
-      <div className="flex-1 overflow-auto min-h-0">
-        <table className="accounts-table w-full text-table min-w-[1400px]">
-          <thead className="border-b">
-            <tr>
-              {[
-                "Supplier Name",
-                "Supplier Code",
-                "GSTIN",
-                "Territory",
-                "Total Purchase",
-                "Paid",
-                "Debit Note Adj.",
-                "Outstanding",
-                "Overdue",
-                "Last Purchase",
-                "Last Payment",
-                "Status",
-                "",
-              ].map((h) => (
-                <th
-                  key={h || "act"}
-                  className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap"
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.vendorId} className="border-b border-border/40 hover:bg-muted/20">
-                <td className="px-3 py-2.5 text-xs font-medium">
-                  <Link
-                    href={`/accounts/payables/outstanding/${r.vendorId}`}
-                    className="text-brand-600 hover:underline"
-                  >
-                    {r.vendorName}
-                  </Link>
-                </td>
-                <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">
-                  {r.vendorCode}
-                </td>
-                <td className="px-3 py-2.5 text-xs font-mono">{r.gstin}</td>
-                <td className="px-3 py-2.5 text-xs">{r.territory}</td>
-                <td className="px-3 py-2.5 text-xs text-right tabular-nums">
-                  {formatMoney(r.totalPurchaseValue)}
-                </td>
-                <td className="px-3 py-2.5 text-xs text-right tabular-nums">
-                  {formatMoney(r.paidAmount)}
-                </td>
-                <td className="px-3 py-2.5 text-xs text-right tabular-nums">
-                  {formatMoney(r.debitNoteAdjusted)}
-                </td>
-                <td className="px-3 py-2.5 text-xs text-right tabular-nums font-semibold">
-                  {formatMoney(r.outstanding)}
-                </td>
-                <td className="px-3 py-2.5 text-xs text-right tabular-nums text-red-600">
-                  {formatMoney(r.overdueAmount)}
-                </td>
-                <td className="px-3 py-2.5 text-xs">{r.lastPurchaseDate}</td>
-                <td className="px-3 py-2.5 text-xs">{r.lastPaymentDate}</td>
-                <td className="px-3 py-2.5">
-                  <StatusBadge status={r.status} />
-                </td>
-                <td className="px-3 py-2.5 text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
-                      <DropdownMenuItem asChild>
-                        <Link href={`/accounts/payables/outstanding/${r.vendorId}`}>
-                          View Supplier
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href={`/accounts/masters/ledgers/${r.ledgerId}`}>
-                          View Supplier Ledger
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href={`/accounts/vouchers?tab=payment&vendor=${r.vendorId}`}>
-                          Make Payment
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href="/accounts/vouchers?tab=payment">Allocate Payment</Link>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <AccountsTableScroll>
+        <AccountsRichTable
+          columns={columns}
+          rows={rows}
+          minWidth={1400}
+          getRowKey={(r) => r.vendorId}
+          emptyMessage="No supplier outstanding balances for the selected filters."
+        />
+      </AccountsTableScroll>
     </AccountsPageShell>
   );
 }

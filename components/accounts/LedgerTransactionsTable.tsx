@@ -48,7 +48,7 @@ export function LedgerTransactionsTable({
         </thead>
         <tbody>
           {rows.map((row, i) => {
-            const isOpening = row.voucherType === "Opening";
+            const isOpening = row.voucherType === "Opening Balance" || row.voucherType === "Opening";
             return (
               <tr key={`${row.id ?? row.voucherNo}-${i}`} className="border-b border-border/30 hover:bg-muted/10">
                 <td className="px-3 py-2.5 whitespace-nowrap">{row.date}</td>

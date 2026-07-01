@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   BookMarked,
   Download,
@@ -65,6 +65,8 @@ import {
 } from "@/lib/accounts/day-book-export";
 import { formatMoney, formatMoneyOrDash } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
+import { buildGeneralLedgerHref, resolveLedgerIdByName } from "@/lib/accounts/general-ledger-data";
+import { useTransactionDetailsDrawer } from "@/components/accounts/TransactionDetailsDrawer";
 
 const STATUS_CFG: Record<
   DayBookStatus,
@@ -92,7 +94,6 @@ function DayBookStatusPill({ status }: { status: DayBookStatus }) {
 }
 
 export default function DayBookPageClient() {
-  const router = useRouter();
   const today = todayIso();
   const defaultFrom = defaultDayBookDateFrom();
   const activeFyId = getActiveFinancialYearId();
@@ -185,9 +186,14 @@ export default function DayBookPageClient() {
     setPage(1);
   }, [search, dateFrom, dateTo, voucherType, branch, financialYearId, pageSize]);
 
-  const openEntry = (entry: DayBookEntry) => {
-    router.push(entry.viewHref);
-  };
+  const { openTransaction, drawer: transactionDrawer } = useTransactionDetailsDrawer();
+
+  const openEntry = useCallback(
+    (entry: DayBookEntry) => {
+      openTransaction({ type: "day_book", entry });
+    },
+    [openTransaction],
+  );
 
   const handleExportExcel = async () => {
     setExporting(true);
@@ -315,12 +321,8 @@ export default function DayBookPageClient() {
                   <SortTh label="Voucher No." colKey="voucherNo" sortKey={sortKey} sortDir={sortDir} onSort={onColumnSort} />
                   <SortTh label="Voucher Type" colKey="voucherType" sortKey={sortKey} sortDir={sortDir} onSort={onColumnSort} />
                   <SortTh label="Party / Ledger" colKey="partyLedger" sortKey={sortKey} sortDir={sortDir} onSort={onColumnSort} />
-                  <AccountsTableHeadCell uppercase className="min-w-[160px]">
-                    Narration
-                  </AccountsTableHeadCell>
                   <SortTh label="Debit" colKey="debit" sortKey={sortKey} sortDir={sortDir} onSort={onColumnSort} align="right" />
                   <SortTh label="Credit" colKey="credit" sortKey={sortKey} sortDir={sortDir} onSort={onColumnSort} align="right" />
-                  <SortTh label="Created By" colKey="createdBy" sortKey={sortKey} sortDir={sortDir} onSort={onColumnSort} />
                   <SortTh label="Status" colKey="status" sortKey={sortKey} sortDir={sortDir} onSort={onColumnSort} />
                   <AccountsTableHeadCell align="center" uppercase className="w-14">
                     Action
@@ -329,18 +331,36 @@ export default function DayBookPageClient() {
               </AccountsTableHead>
               <AccountsTableBody>
                 {paginated.map((row) => (
-                  <AccountsTableRow key={row.id} className="group" onClick={() => openEntry(row)}>
+                  <AccountsTableRow key={row.id} className="group cursor-pointer" onClick={() => openEntry(row)}>
                     <AccountsTableCell className="whitespace-nowrap">{formatDayBookDate(row.date)}</AccountsTableCell>
                     <AccountsTableCell className="text-muted-foreground tabular-nums whitespace-nowrap">{row.time}</AccountsTableCell>
                     <AccountsTableCell mono className="font-semibold text-brand-700 whitespace-nowrap">
-                      {row.voucherNo}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEntry(row);
+                        }}
+                        className="font-mono text-xs font-semibold text-brand-700 hover:underline"
+                      >
+                        {row.voucherNo}
+                      </button>
                     </AccountsTableCell>
                     <AccountsTableCell className="whitespace-nowrap">{row.voucherTypeLabel}</AccountsTableCell>
                     <AccountsTableCell className="max-w-[140px] truncate" title={row.partyLedger}>
-                      {row.partyLedger}
-                    </AccountsTableCell>
-                    <AccountsTableCell className="max-w-[200px] truncate text-muted-foreground" title={row.narration}>
-                      {row.narration}
+                      {(() => {
+                        const partyLedgerId = resolveLedgerIdByName(row.partyLedger);
+                        if (!partyLedgerId) return row.partyLedger;
+                        return (
+                          <Link
+                            href={buildGeneralLedgerHref(partyLedgerId)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-brand-700 hover:underline font-medium truncate block"
+                          >
+                            {row.partyLedger}
+                          </Link>
+                        );
+                      })()}
                     </AccountsTableCell>
                     <AccountsTableCell align="right" money className="whitespace-nowrap">
                       {formatMoneyOrDash(row.debit)}
@@ -348,7 +368,6 @@ export default function DayBookPageClient() {
                     <AccountsTableCell align="right" money className="whitespace-nowrap">
                       {formatMoneyOrDash(row.credit)}
                     </AccountsTableCell>
-                    <AccountsTableCell className="whitespace-nowrap">{row.createdBy}</AccountsTableCell>
                     <AccountsTableCell>
                       <DayBookStatusPill status={row.status} />
                     </AccountsTableCell>
@@ -385,6 +404,7 @@ export default function DayBookPageClient() {
           </div>
         )}
       </div>
+      {transactionDrawer}
     </AccountsPageShell>
   );
 }

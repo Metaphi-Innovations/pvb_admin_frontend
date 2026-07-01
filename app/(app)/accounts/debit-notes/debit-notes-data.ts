@@ -3,6 +3,7 @@ import {
   ACCOUNTS_INVOICE_ADMIN,
   ACCOUNTS_STANDALONE_ADJUSTMENT_ALLOWED,
 } from "@/lib/accounts/config";
+import type { AccountsDocumentWorkflow } from "@/lib/accounts/accounts-maker-checker";
 import { getActiveVendors, type Vendor } from "@/app/(app)/masters/vendors/vendor-data";
 import { loadPurchaseOrders } from "@/app/(app)/procurement/purchase-orders/po-data";
 import { maybePostDebitNote } from "@/lib/accounts/document-posting-bridge";
@@ -23,6 +24,7 @@ export type DebitReferenceType = DebitNoteAgainst;
 export type NoteWorkflowStatus =
   | "draft"
   | "pending_approval"
+  | "sent_back"
   | "approved"
   | "processed"
   | "rejected"
@@ -104,6 +106,7 @@ export interface DebitNoteRecord {
   remarks: string;
   attachments: DebitNoteAttachment[];
   status: NoteWorkflowStatus;
+  workflow?: AccountsDocumentWorkflow;
   activity: NoteActivityEntry[];
   createdBy: string;
   updatedBy: string;

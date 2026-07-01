@@ -83,6 +83,7 @@ export type CoaGroupContextKind =
   | "purchases"
   | "gst_payable"
   | "gst_output"
+  | "tds_payable"
   | "employee_costs"
   | "admin_expenses"
   | "customer_ledger"
@@ -311,6 +312,14 @@ export interface GstPayableGroupContext extends CoaGroupContextBase {
   postedEntries: CoaPostingRow[];
 }
 
+export interface TdsPayableGroupContext extends CoaGroupContextBase {
+  kind: "tds_payable";
+  totalTdsPayable: number;
+  sectionCount: number;
+  tdsLedgers: ChartOfAccount[];
+  postedEntries: CoaPostingRow[];
+}
+
 export interface ExpenseGroupContext extends CoaGroupContextBase {
   kind: "employee_costs" | "admin_expenses";
   totalExpense: number;
@@ -353,6 +362,7 @@ export type CoaGroupContext =
   | SalesGroupContext
   | PurchasesGroupContext
   | GstPayableGroupContext
+  | TdsPayableGroupContext
   | ExpenseGroupContext
   | CustomerLedgerContext
   | VendorLedgerContext
@@ -1120,6 +1130,21 @@ export function resolveCoaGroupContext(
       pendingVendorBills: listPendingVendorBills().length,
       purchaseLedgers,
       postedEntries: collectPostingRows(purchaseLedgerIds),
+    };
+  }
+
+  if (name === "TDS Payable") {
+    const tdsLedgers = collectDescendantLedgers(records, node.id);
+    const tdsLedgerIds = new Set(tdsLedgers.map((l) => l.id));
+    const total = sumLedgerBalances(tdsLedgers);
+    return {
+      kind: "tds_payable",
+      nodeId: node.id,
+      nodeName: name,
+      totalTdsPayable: total,
+      sectionCount: tdsLedgers.length,
+      tdsLedgers,
+      postedEntries: collectPostingRows(tdsLedgerIds),
     };
   }
 

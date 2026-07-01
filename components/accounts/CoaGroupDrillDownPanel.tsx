@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -138,7 +139,7 @@ function LedgerList({
           <button
             key={l.id}
             type="button"
-            onClick={() => (onSelect ? onSelect(l) : router.push(`/accounts/masters/ledgers/${l.id}`))}
+            onClick={() => (onSelect ? onSelect(l) : router.push(buildGeneralLedgerHref(l.id)))}
             className="w-full flex items-center justify-between gap-4 px-6 py-3 text-left hover:bg-orange-50/30 transition-colors"
           >
             <div className="min-w-0">
@@ -549,6 +550,44 @@ export function CoaGroupDrillDownPanel({
             <Button asChild size="sm" variant="outline" className="h-8 text-xs">
               <Link href="/accounts/transactions/purchase">Purchase Invoices</Link>
             </Button>
+          </TabsContent>
+        </Tabs>
+      </div>
+    );
+  }
+
+  if (context.kind === "tds_payable") {
+    return (
+      <div className="flex flex-col flex-1 min-h-0 border-t border-border/40">
+        <div className="flex-shrink-0 px-6 py-4 bg-brand-50/20 border-b border-border/40">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-800 mb-3">
+            TDS Payable
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
+            <SummaryField label="Total Balance" value={formatMoney(context.totalTdsPayable)} />
+            <SummaryField label="Sections" value={String(context.sectionCount)} />
+            <SummaryField label="Postings" value={String(context.postedEntries.length)} />
+          </div>
+          <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+            <Link href="/accounts/reports/tds-party-wise">TDS Party-wise Report</Link>
+          </Button>
+        </div>
+        <Tabs value={tab} onValueChange={setTab} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-shrink-0 px-6 border-b border-border/40">
+            <TabsList className="bg-transparent p-0 h-auto border-0 gap-4">
+              <TabsTrigger value="postings" className="text-sm data-[state=active]:text-orange-700">
+                TDS Postings
+              </TabsTrigger>
+              <TabsTrigger value="ledgers" className="text-sm data-[state=active]:text-orange-700">
+                Section Ledgers
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent value="postings" className="flex-1 overflow-auto m-0">
+            <PostingEntriesTable rows={context.postedEntries} emptyLabel="No TDS postings yet." />
+          </TabsContent>
+          <TabsContent value="ledgers" className="flex-1 overflow-auto m-0">
+            <LedgerList ledgers={context.tdsLedgers} onSelect={onSelectLedger} />
           </TabsContent>
         </Tabs>
       </div>

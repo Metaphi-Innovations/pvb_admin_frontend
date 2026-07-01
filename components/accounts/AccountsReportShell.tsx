@@ -36,6 +36,10 @@ export interface AccountsReportShellProps {
   rows: Record<string, string | number>[];
   filters?: React.ReactNode;
   emptyMessage?: string;
+  onRowClick?: (row: Record<string, string | number>, index: number) => void;
+  getRowKey?: (row: Record<string, string | number>, index: number) => string | number;
+  clickableColumnKeys?: string[];
+  rowActionFooter?: React.ReactNode;
 }
 
 export function AccountsReportShell({
@@ -47,6 +51,10 @@ export function AccountsReportShell({
   rows,
   filters,
   emptyMessage = "No data for selected filters.",
+  onRowClick,
+  getRowKey,
+  clickableColumnKeys,
+  rowActionFooter,
 }: AccountsReportShellProps) {
   const exportCsv = () => {
     const header = columns.map((c) => c.label).join(",") + "\n";
@@ -98,9 +106,13 @@ export function AccountsReportShell({
               mono: c.mono,
             }))}
             rows={rows}
+            onRowClick={onRowClick}
+            getRowKey={getRowKey}
+            clickableColumnKeys={clickableColumnKeys}
           />
         )}
       </AccountsTableScroll>
+      {rowActionFooter}
     </AccountsPageShell>
   );
 }

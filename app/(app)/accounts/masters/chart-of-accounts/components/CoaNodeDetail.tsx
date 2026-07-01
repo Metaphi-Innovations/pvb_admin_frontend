@@ -10,6 +10,10 @@ import {
   isPostableNode,
   isStructuralNode,
 } from "@/lib/accounts/coa-hierarchy";
+import {
+  buildTdsPartyWiseReportHref,
+  isTdsCoaNode,
+} from "@/lib/accounts/tds-coa-utils";
 import { CoaGroupDrillDownPanel } from "@/components/accounts/CoaGroupDrillDownPanel";
 import { resolveCoaAddLedgerPolicy } from "@/lib/accounts/coa-add-ledger-policy";
 import { resolveCoaGroupContext } from "@/lib/accounts/coa-group-drilldown";
@@ -58,8 +62,9 @@ export function CoaNodeDetail({
   }
 
   const isLedger = node.nodeLevel === "ledger";
+  const isTds = isTdsCoaNode(node, records);
   const isGrouping = isLedger && isGroupingLedger(node, records);
-  const isPosting = isLedger && isPostableNode(node, records);
+  const isPosting = isLedger && isPostableNode(node, records) && !isTds;
   const isMasterOwned = isLedger && isMasterLinkedLedger(node, records);
   const addPolicy = resolveCoaAddLedgerPolicy(node, records);
   const allowAddHere = canCreate && canAddLedgerUnder(node, records) && !addPolicy.blocked;
@@ -72,6 +77,31 @@ export function CoaNodeDetail({
     const ledger = records.find((r) => r.id === ledgerId);
     if (ledger) onSelect(ledger);
   };
+
+  if (isTds) {
+    const reportHref = buildTdsPartyWiseReportHref(node, records);
+    return (
+      <div className="flex flex-1 min-h-0 flex-col">
+        <div className="flex-shrink-0 px-3 py-2 border-b border-border/30 bg-white/50">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-foreground truncate">{node.accountName}</h2>
+              <p className="text-[11px] text-muted-foreground mt-0.5">TDS liability account</p>
+            </div>
+            <Button asChild size="sm" className="h-7 text-xs px-2 bg-brand-600 text-white gap-1">
+              <Link href={reportHref}>View TDS Party-wise Report</Link>
+            </Button>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-6">
+          <p className="text-xs text-muted-foreground text-center max-w-sm">
+            TDS transaction details are available in the Party-wise Report. Chart of Accounts shows
+            balances only.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (isPosting) {
     return (

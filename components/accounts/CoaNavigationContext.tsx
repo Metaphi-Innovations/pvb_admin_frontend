@@ -19,12 +19,16 @@ import {
   loadChartOfAccounts,
 } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
+import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import { backfillCoaMasterLinks } from "@/lib/accounts/coa-master-link";
 import { isPostableNode } from "@/lib/accounts/coa-hierarchy";
+import {
+  buildTdsPartyWiseReportHref,
+  isTdsCoaNode,
+} from "@/lib/accounts/tds-coa-utils";
+import { ensureTdsSectionLedgers } from "@/lib/accounts/tds-section-ledgers";
 import { backfillErpPartyLedgers } from "@/lib/accounts/erp-accounting-mapping";
 import { subscribeCoaChanged } from "@/lib/accounts/coa-events";
-
-const GENERAL_LEDGER_HREF = "/accounts/reports/ledger";
 
 const FULL_COA_SEED: ChartOfAccount[] = [...SYSTEM_COA_NODES];
 
@@ -77,6 +81,7 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
     mountedRef.current = true;
     backfillErpPartyLedgers();
     backfillCoaMasterLinks();
+    ensureTdsSectionLedgers();
     const loaded = readCoaRecords();
     setRecords(loaded);
     setExpandedIds(defaultExpandedIds(loaded));
@@ -96,8 +101,12 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
 
   const selectNode = useCallback(
     (node: ChartOfAccount) => {
+      if (isTdsCoaNode(node, records)) {
+        router.push(buildTdsPartyWiseReportHref(node, records));
+        return;
+      }
       if (node.nodeLevel === "ledger" && isPostableNode(node, records)) {
-        router.push(`${GENERAL_LEDGER_HREF}?ledger=${node.id}`);
+        router.push(buildGeneralLedgerHref(node.id));
         return;
       }
       setSelectedId(node.id);
