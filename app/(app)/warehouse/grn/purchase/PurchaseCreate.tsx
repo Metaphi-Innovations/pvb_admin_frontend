@@ -14,14 +14,14 @@ import {
   mockExtractInvoiceDataFromFiles,
   buildGrnBatchesFromOcr,
   getEffectiveReceiptQty,
-} from "../mock-data";
-import { GrnItem, GrnBatch, GrnRecord, GrnOcrExtractedInvoice, GrnSupplierInvoice } from "../types";
+} from "../shared/mock-data";
+import { GrnItem, GrnBatch, GrnRecord, GrnOcrExtractedInvoice, GrnSupplierInvoice } from "../shared/types";
 import { onGrnCreated } from "@/lib/warehouse/inventory-movement";
 import { cn } from "@/lib/utils";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { Field, TextField } from "@/components/ui/FormFields";
 import { FormContainer } from "@/components/layout/FormContainer";
-import { BatchDetailsReadOnlyTable } from "../components/BatchDetailsReadOnlyTable";
+import { BatchDetailsReadOnlyTable } from "../shared/components/BatchDetailsReadOnlyTable";
 
 interface UploadedInvoice {
   id: string;
@@ -87,7 +87,7 @@ function SectionCard({
   );
 }
 
-export default function GenerateGrnPage() {
+export function PurchaseCreate() {
   const router = useRouter();
 
   const [grnNo, setGrnNo] = useState("");
@@ -104,6 +104,7 @@ export default function GenerateGrnPage() {
   const [itemWarnings, setItemWarnings] = useState<Record<string, string>>({});
   const [batchProductWarnings, setBatchProductWarnings] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
+
   useEffect(() => {
     const existing = getGrnRecords();
     const nextNum = existing.length + 1;
@@ -366,14 +367,12 @@ export default function GenerateGrnPage() {
       onBack={() => router.push("/warehouse/grn")}
       onCancel={() => router.push("/warehouse/grn")}
       actions={
-        <>
-          <Button
-            className="h-9 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white rounded-lg gap-1.5"
-            onClick={handleSubmit}
-          >
-            <Send className="w-3.5 h-3.5" /> Submit GRN
-          </Button>
-        </>
+        <Button
+          className="h-9 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white rounded-lg gap-1.5"
+          onClick={handleSubmit}
+        >
+          <Send className="w-3.5 h-3.5" /> Submit GRN
+        </Button>
       }
     >
       {formError && (
@@ -574,7 +573,6 @@ export default function GenerateGrnPage() {
             ))}
           </ul>
         )}
-
       </SectionCard>
 
       {batches.length > 0 && (

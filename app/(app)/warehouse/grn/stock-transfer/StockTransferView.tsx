@@ -3,13 +3,12 @@
 import React, { useEffect, useState } from "react";
 import { RecordDetailPage } from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
-import { Calendar, Building, Landmark, Receipt, AlertCircle, ClipboardCheck, FileText, CheckCircle2, Clock } from "lucide-react";
+import { Calendar, Building, AlertCircle, ClipboardCheck, FileText, CheckCircle2, Clock, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { getGrnById } from "../../mock-data";
-import { GrnRecord } from "../../types";
+import { getGrnById } from "../shared/mock-data";
+import { GrnRecord } from "../shared/types";
 import { getQcByGrnNo } from "@/app/(app)/warehouse/qc/mock-data";
-import { getGrnDocumentStatus } from "@/lib/warehouse/document-status";
-import { BatchDetailsReadOnlyTable } from "../../components/BatchDetailsReadOnlyTable";
+import { BatchDetailsReadOnlyTable } from "../shared/components/BatchDetailsReadOnlyTable";
 import { cn } from "@/lib/utils";
 
 const STATUS_CONFIG = {
@@ -45,16 +44,16 @@ function DocumentStatusRow({
   );
 }
 
-export default function ViewGrnPage({ params }: { params: { id: string } }) {
+export function StockTransferView({ id }: { id: string }) {
   const router = useRouter();
   const [grn, setGrn] = useState<GrnRecord | null>(null);
 
   useEffect(() => {
-    const record = getGrnById(params.id);
+    const record = getGrnById(id);
     if (record) {
       setGrn(record);
     }
-  }, [params.id]);
+  }, [id]);
 
   if (!grn) {
     return (
@@ -82,9 +81,8 @@ export default function ViewGrnPage({ params }: { params: { id: string } }) {
     label: "Unknown",
     variant: "neutral" as const,
   };
-  const docStatus = getGrnDocumentStatus(grn);
   const totalReceived = grn.items.reduce((sum, it) => sum + it.receivedQty, 0);
-  const totalOrdered = grn.items.reduce((sum, it) => sum + it.orderedQty, 0);
+  const totalOrdered = grn.items.reduce((sum, it) => sum + (it.orderedQty || 0), 0);
   const linkedQc = getQcByGrnNo(grn.grnNo);
   const canStartQc = grn.status === "pending_qc" && linkedQc?.status === "pending";
   const qcInspectHref = linkedQc
@@ -96,12 +94,12 @@ export default function ViewGrnPage({ params }: { params: { id: string } }) {
       listHref="/warehouse/grn"
       listLabel="GRN"
       recordName={grn.grnNo}
-      recordCode={grn.poNumber}
+      recordCode={grn.stockTransferNo || "Stock Transfer"}
       statusLabel={statusCfg.label}
       statusVariant={statusCfg.variant}
       metaItems={[
-        { icon: Landmark, label: grn.vendorName },
-        { icon: Building, label: grn.warehouse },
+        { icon: Send, label: `From: ${grn.fromWarehouse || "—"}` },
+        { icon: Building, label: `To: ${grn.toWarehouse || grn.warehouse || "—"}` },
         { icon: Calendar, label: grn.grnDate },
       ]}
       secondaryAction={
@@ -114,11 +112,12 @@ export default function ViewGrnPage({ params }: { params: { id: string } }) {
       }
       sidebar={{
         summary: [
-          { label: "PO Number", value: grn.poNumber, highlight: true },
-          { label: "Supplier", value: grn.vendorName },
-          { label: "Delivery Challan", value: grn.deliveryChallan ?? "—" },
+          { label: "Transfer No.", value: grn.stockTransferNo || "—", highlight: true },
+          { label: "From Warehouse", value: grn.fromWarehouse || "—" },
+          { label: "Destination", value: grn.toWarehouse || grn.warehouse || "—" },
+          { label: "Dispatch Date", value: grn.dispatchDate || "—" },
           { label: "Items", value: grn.items.length },
-          { label: "Total Ordered", value: totalOrdered },
+          { label: "Total Dispatched", value: totalOrdered },
           { label: "Total Received", value: totalReceived },
           { label: "Batches", value: grn.batches.length },
         ],
@@ -135,49 +134,39 @@ export default function ViewGrnPage({ params }: { params: { id: string } }) {
       }}
     >
       <div className="w-full space-y-6">
-        {/* Document Status — read-only visibility */}
+        {/* Document Status */}
         <div className="bg-white rounded-xl border border-border p-4 shadow-sm space-y-3">
           <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-2">
             <FileText className="w-4 h-4 text-brand-600" />
-            Document Status
+            Transfer Status
           </h2>
           <p className="text-[11px] text-muted-foreground">
-            Read-only tracking for warehouse operations. Procurement matching is handled separately.
+            Read-only tracking for stock transfer receipt and quality control verification.
           </p>
           <div className="rounded-lg border border-border bg-muted/10 px-3">
             <DocumentStatusRow
-              label="Purchase Order"
-              value={docStatus.purchaseOrder.label}
-              done={docStatus.purchaseOrder.value === "linked"}
+              label="Stock Transfer Dispatched"
+              value="Dispatched"
+              done={true}
             />
             <DocumentStatusRow
-              label="Delivery Challan"
-              value={docStatus.deliveryChallan.label}
-              done={docStatus.deliveryChallan.value === "uploaded"}
-            />
-            <DocumentStatusRow
-              label="Supplier Invoice"
-              value={docStatus.supplierInvoice.label}
-              done={docStatus.supplierInvoice.value === "uploaded"}
-            />
-            <DocumentStatusRow
-              label="OCR Extraction"
-              value={docStatus.ocrExtraction.label}
-              done={docStatus.ocrExtraction.value === "completed"}
+              label="Physical Receipt"
+              value={grn.receiptStatus === "received" ? "Fully Received" : "Partially Received"}
+              done={grn.receiptStatus === "received"}
             />
             <DocumentStatusRow
               label="QC Status"
-              value={docStatus.qcStatus.label}
-              done={docStatus.qcStatus.value === "completed"}
+              value={grn.status === "qc_completed" ? "QC Completed" : "Pending QC"}
+              done={grn.status === "qc_completed"}
             />
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
-            { label: "PO Number", val: grn.poNumber, icon: Receipt },
-            { label: "Supplier", val: grn.vendorName, icon: Landmark },
-            { label: "Warehouse", val: grn.warehouse, icon: Building },
+            { label: "Transfer No.", val: grn.stockTransferNo || "—", icon: Send },
+            { label: "From Warehouse", val: grn.fromWarehouse || "—", icon: Building },
+            { label: "Destination", val: grn.toWarehouse || grn.warehouse || "—", icon: Building },
             { label: "GRN Date", val: grn.grnDate, icon: Calendar },
           ].map((card, idx) => {
             const Icon = card.icon;
@@ -198,30 +187,26 @@ export default function ViewGrnPage({ params }: { params: { id: string } }) {
         </div>
 
         <div className="bg-white rounded-xl border border-border p-4 shadow-sm space-y-4">
-          <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">
-            Order Items Summary
-          </h2>
-          <div className="border border-border rounded-lg overflow-hidden">
-            <table className="w-full">
+          <h3 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">Items Received</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-muted/40 border-b border-border">
-                  <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground">Product</th>
-                  <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground w-28">SKU</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-28">Ordered</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-28">Prev. Received</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-28">Pending</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-28">Current Received</th>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Product</th>
+                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">SKU</th>
+                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">Dispatched</th>
+                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">Received</th>
+                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Unit</th>
                 </tr>
               </thead>
-              <tbody>
-                {grn.items.map((it) => (
-                  <tr key={`${it.productId}-${it.poNumber}`} className="border-b border-border/50">
-                    <td className="px-4 py-2 text-xs font-bold text-foreground">{it.productName}</td>
-                    <td className="px-4 py-2 text-xs font-mono text-muted-foreground">{it.productCode}</td>
-                    <td className="px-4 py-2 text-xs text-center font-medium text-muted-foreground">{it.orderedQty}</td>
-                    <td className="px-4 py-2 text-xs text-center text-muted-foreground">{it.alreadyReceivedQty ?? 0}</td>
-                    <td className="px-4 py-2 text-xs text-center font-medium text-amber-700">{it.pendingQty ?? 0}</td>
-                    <td className="px-4 py-2 text-xs text-center font-bold text-brand-700 bg-brand-50/20">{it.receivedQty}</td>
+              <tbody className="divide-y divide-border/60">
+                {grn.items.map((item, idx) => (
+                  <tr key={idx} className="hover:bg-muted/10">
+                    <td className="p-2 text-xs font-semibold text-foreground">{item.productName}</td>
+                    <td className="p-2 text-xs font-mono text-muted-foreground">{item.productCode}</td>
+                    <td className="p-2 text-xs text-right tabular-nums">{(item.orderedQty || 0).toLocaleString()}</td>
+                    <td className="p-2 text-xs font-semibold text-right tabular-nums text-brand-600">{item.receivedQty.toLocaleString()}</td>
+                    <td className="p-2 text-xs text-muted-foreground">{item.unit || "Unit"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -230,25 +215,16 @@ export default function ViewGrnPage({ params }: { params: { id: string } }) {
         </div>
 
         {grn.batches.length > 0 && (
-          <div className="bg-white rounded-xl border border-border p-4 shadow-sm space-y-3">
-            <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">
-              Batch Details
-            </h2>
-            <p className="text-[11px] text-muted-foreground">
-              Read-only — batch and invoice line details extracted from supplier invoice via OCR.
-            </p>
-            <BatchDetailsReadOnlyTable
-              batches={grn.batches}
-              invoiceMeta={
-                grn.ocrExtractedInvoices?.[0]
-                  ? {
-                      invoiceNumber: grn.ocrExtractedInvoices[0].invoiceNumber,
-                      supplierName: grn.ocrExtractedInvoices[0].supplierName,
-                      invoiceDate: grn.ocrExtractedInvoices[0].invoiceDate,
-                    }
-                  : undefined
-              }
-            />
+          <div className="bg-white rounded-xl border border-border p-4 shadow-sm space-y-4">
+            <h3 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">Batch Details</h3>
+            <BatchDetailsReadOnlyTable batches={grn.batches} />
+          </div>
+        )}
+
+        {grn.receiptRemarks && (
+          <div className="bg-white rounded-xl border border-border p-4 shadow-sm space-y-2">
+            <h3 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">Receipt Remarks</h3>
+            <p className="text-xs text-muted-foreground bg-muted/30 rounded-lg p-3 border border-border/50">{grn.receiptRemarks}</p>
           </div>
         )}
       </div>

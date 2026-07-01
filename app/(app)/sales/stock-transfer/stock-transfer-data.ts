@@ -268,6 +268,75 @@ function buildSeedTransfers(): StockTransfer[] {
       createdDate: "2024-02-10",
       updatedBy: "Admin",
       updatedDate: "2024-02-10"
+    },
+    {
+      id: 3,
+      transferNumber: "ST-2024-003",
+      transferDate: "2024-03-01",
+      deliveryDate: "2024-03-08",
+      sourceWarehouseId: wh2.id,
+      sourceWarehouseName: wh2.warehouseName,
+      sourceWarehouseCode: wh2.warehouseCode,
+      targetWarehouseId: wh1.id,
+      targetWarehouseName: wh1.warehouseName,
+      targetWarehouseCode: wh1.warehouseCode,
+      status: "in_transit",
+      dispatchNumber: "DSP-003",
+      lineItems: [
+        {
+          ...buildLine(p1.id, p1.code, p1.name, p1.stock, 44, p1.sellingPrice, p1.gstRate),
+          packedQty: 44,
+          batchNumber: "BCH-ST-001",
+          mfgDate: "2024-01-01",
+          expiryDate: "2026-01-01"
+        },
+        {
+          ...buildLine(p2.id, p2.code, p2.name, p2.stock, 12, p2.sellingPrice, p2.gstRate),
+          packedQty: 12,
+          batchNumber: "BCH-ST-002",
+          mfgDate: "2024-02-01",
+          expiryDate: "2026-02-01"
+        }
+      ],
+      additionalExpenses: [],
+      totalAmount: (p1.sellingPrice * 44 + p2.sellingPrice * 12) * 1.05,
+      totalItems: 2,
+      totalQuantity: 56,
+      createdBy: "Admin",
+      createdDate: "2024-03-01",
+      updatedBy: "Admin",
+      updatedDate: "2024-03-01"
+    },
+    {
+      id: 4,
+      transferNumber: "ST-2024-004",
+      transferDate: "2024-04-10",
+      deliveryDate: "2024-04-15",
+      sourceWarehouseId: wh2.id,
+      sourceWarehouseName: wh2.warehouseName,
+      sourceWarehouseCode: wh2.warehouseCode,
+      targetWarehouseId: wh1.id,
+      targetWarehouseName: wh1.warehouseName,
+      targetWarehouseCode: wh1.warehouseCode,
+      status: "grn_pending",
+      dispatchNumber: "DSP-004",
+      lineItems: [
+        {
+          ...buildLine(p2.id, p2.code, p2.name, p2.stock, 50, p2.sellingPrice, p2.gstRate),
+          packedQty: 50,
+          batchNumber: "BCH-ST-004",
+          mfgDate: "2024-03-01",
+          expiryDate: "2026-03-01"
+        }
+      ],
+      additionalExpenses: [],
+      totalAmount: (p2.sellingPrice * 50) * 1.05,
+      totalItems: 1,
+      totalQuantity: 50,
+      createdBy: "Admin",
+      createdDate: "2024-04-10",
+      updatedBy: "Admin",
+      updatedDate: "2024-04-10"
     }
   ];
 }
@@ -315,7 +384,12 @@ export function loadTransfers(): StockTransfer[] {
       return seeds.map(hydrateTransferLineItems);
     }
     const parsed = JSON.parse(raw);
-    const data = parsed.data || buildSeedTransfers();
+    let data = parsed.data || buildSeedTransfers();
+    if (!data.some((t: any) => t.id === 3) || !data.some((t: any) => t.id === 4)) {
+      const missing = buildSeedTransfers().filter(t => !data.some((d: any) => d.id === t.id));
+      data = [...data, ...missing];
+      persistTransfers(data);
+    }
     return data.map(hydrateTransferLineItems);
   } catch {
     return buildSeedTransfers().map(hydrateTransferLineItems);

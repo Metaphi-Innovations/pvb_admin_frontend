@@ -1,15 +1,20 @@
 import type { GrnRecord, GrnStatus } from "@/app/(app)/warehouse/grn/types";
 import type { QcRecord } from "@/app/(app)/warehouse/qc/types";
 
-export type GrnSourceFilter = "purchase" | "stock_transfer";
+export type GrnSourceFilter = "purchase" | "stock_transfer" | "sales_return" | "sample_return";
 
 export function getGrnSourceType(grn: GrnRecord): GrnSourceFilter {
-  return grn.sourceType === "stock_transfer" ? "stock_transfer" : "purchase";
+  if (grn.sourceType === "stock_transfer") return "stock_transfer";
+  if (grn.sourceType === "sales_return") return "sales_return";
+  if (grn.sourceType === "sample_return") return "sample_return";
+  return "purchase";
 }
 
 export function getQcSourceType(qc: QcRecord): GrnSourceFilter {
-  if (qc.sourceType === "stock_transfer") return "stock_transfer";
+  if (qc.sourceType) return qc.sourceType as GrnSourceFilter;
   if (qc.stockTransferNo?.startsWith("ST-")) return "stock_transfer";
+  if (qc.grnNo?.startsWith("GRN-SR-")) return "sales_return";
+  if (qc.grnNo?.startsWith("GRN-SMP-")) return "sample_return";
   return "purchase";
 }
 

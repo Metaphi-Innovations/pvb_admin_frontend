@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,10 +23,8 @@ function lineKey(productCode: string, batchNumber: string) {
   return `${productCode}::${batchNumber}`;
 }
 
-export default function ReceiveStockTransferPage() {
+export function StockTransferReceive({ transferId }: { transferId: number }) {
   const router = useRouter();
-  const params = useParams();
-  const transferId = Number(params.transferId);
 
   const transfer = useMemo(() => {
     const t = getTransferById(transferId);

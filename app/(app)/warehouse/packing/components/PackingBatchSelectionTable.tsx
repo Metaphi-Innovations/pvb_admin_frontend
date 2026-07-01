@@ -1,13 +1,12 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { AlertTriangle, Sparkles } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { masterToday } from "@/lib/masters/common";
 import { formatBatchExpiryDate } from "../../dispatch/near-expiry-dispatch";
 import {
-  buildFefoRecommendedSelections,
   getFefoRecommendedBatchNumbers,
   getMaxBatchPackingQty,
   getPackingBatchInventoryRows,
@@ -43,6 +42,7 @@ interface PackingBatchSelectionTableProps {
   requiredQty: number;
   selections: Record<string, number>;
   onSelectionsChange: (selections: Record<string, number>) => void;
+  caseSize?: number;
 }
 
 export function PackingBatchSelectionTable({
@@ -52,37 +52,13 @@ export function PackingBatchSelectionTable({
   requiredQty,
   selections,
   onSelectionsChange,
+  caseSize = 10,
 }: PackingBatchSelectionTableProps) {
-  const rows = useMemo(
-    () => getPackingBatchInventoryRows(productName, warehouse, masterToday(), sku),
-    [productName, warehouse, sku],
-  );
-
-  const fefoRecommended = useMemo(
-    () => getFefoRecommendedBatchNumbers(rows, requiredQty),
-    [rows, requiredQty],
-  );
-
-  const handleToggleRow = (row: PackingBatchInventoryRow, checked: boolean) => {
-    if (!row.isSelectable) return;
-
-    const next = { ...selections };
-    if (!checked) {
-      delete next[row.batchNumber];
-      onSelectionsChange(next);
-      return;
-    }
-
-    const maxQty = getMaxBatchPackingQty(
-      row.batchNumber,
-      next,
-      requiredQty,
-      row.availableQty,
-    );
-    if (maxQty <= 0) return;
-    next[row.batchNumber] = maxQty;
-    onSelectionsChange(next);
-  };
+  const rows = useMemo(() => {
+    const all = getPackingBatchInventoryRows(productName, warehouse, masterToday(), sku);
+    const fefo = getFefoRecommendedBatchNumbers(all, requiredQty);
+    return all.filter((r) => fefo.has(r.batchNumber));
+  }, [productName, warehouse, sku, requiredQty]);
 
   const handleQtyChange = (row: PackingBatchInventoryRow, value: string) => {
     if (!row.isSelectable) return;
@@ -105,31 +81,24 @@ export function PackingBatchSelectionTable({
     onSelectionsChange(next);
   };
 
-  const applyFefoRecommendation = () => {
-    onSelectionsChange(buildFefoRecommendedSelections(rows, requiredQty));
+  const formatCaseLoose = (qty: number) => {
+    if (!qty || qty <= 0) return null;
+    const cases = Math.floor(qty / caseSize);
+    const loose = qty % caseSize;
+    if (cases === 0) return `${loose} Ls`;
+    if (loose === 0) return `${cases} Cs`;
+    return `${cases} Cs, ${loose} Ls`;
   };
 
   if (requiredQty <= 0 || rows.length === 0) return null;
 
   return (
     <div className="space-y-2">
-      <div className="flex justify-end px-1">
-        <button
-          type="button"
-          onClick={applyFefoRecommendation}
-          className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md border border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors"
-        >
-          <Sparkles className="w-3 h-3" />
-          Apply FEFO
-        </button>
-      </div>
-
-      <div className="overflow-x-auto rounded-lg border border-border/70">
-        <table className="w-full min-w-[880px] border-collapse text-left">
+      <div className="overflow-x-auto rounded-lg border border-border/70 mt-2">
+        <table className="w-full min-w-[800px] border-collapse text-left">
           <thead>
             <tr className="border-b border-border bg-muted/40">
               {[
-                "Select",
                 "Batch No.",
                 "SKU",
                 "Mfg Date",
@@ -160,7 +129,6 @@ export function PackingBatchSelectionTable({
               const isSelected = rowQty > 0;
               const isExpired = row.status === "Expired";
               const isNearExpiry = row.status === "Near Expiry";
-              const isFefo = fefoRecommended.has(row.batchNumber);
               const statusCfg = STATUS_CFG[row.status];
               const maxPackingQty = getMaxBatchPackingQty(
                 row.batchNumber,
@@ -168,7 +136,6 @@ export function PackingBatchSelectionTable({
                 requiredQty,
                 row.availableQty,
               );
-              const canSelect = row.isSelectable && (isSelected || maxPackingQty > 0);
 
               return (
                 <tr
@@ -177,19 +144,9 @@ export function PackingBatchSelectionTable({
                     "border-b border-border/60 transition-colors",
                     isExpired && "bg-red-50/90",
                     !isExpired && isSelected && "bg-brand-50/40",
-                    !isExpired && isFefo && !isSelected && "bg-brand-50/20",
+                    !isExpired && !isSelected && "bg-brand-50/20",
                   )}
                 >
-                  <td className="px-3 py-2">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 rounded accent-brand-600 disabled:opacity-40"
-                      checked={isSelected}
-                      disabled={!canSelect}
-                      onChange={(e) => handleToggleRow(row, e.target.checked)}
-                      aria-label={`Select batch ${row.batchNumber}`}
-                    />
-                  </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1.5">
                       <span
@@ -200,11 +157,6 @@ export function PackingBatchSelectionTable({
                       >
                         {row.batchNumber}
                       </span>
-                      {isFefo && !isExpired && (
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-brand-100 text-brand-700 border border-brand-200">
-                          FEFO
-                        </span>
-                      )}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-xs font-mono font-semibold text-brand-700">
@@ -216,26 +168,71 @@ export function PackingBatchSelectionTable({
                   <td className="px-3 py-2 text-xs text-muted-foreground">
                     {formatBatchExpiryDate(row.expiryDate)}
                   </td>
-                  <td className="px-3 py-2 text-xs font-mono font-bold text-right tabular-nums">
-                    {row.availableQty}
+                  <td className="px-3 py-2 text-right">
+                    <div className="flex flex-col items-end">
+                      <span className="text-xs font-mono font-bold tabular-nums text-foreground">
+                        {row.availableQty}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-medium whitespace-nowrap">
+                        {formatCaseLoose(row.availableQty) || "0 Ls"}
+                      </span>
+                    </div>
                   </td>
-                  <td className="px-3 py-2 text-xs font-semibold text-right tabular-nums text-foreground">
-                    {requiredQty}
+                  <td className="px-3 py-2 text-right">
+                    <div className="flex flex-col items-end">
+                      <span className="text-xs font-semibold tabular-nums text-foreground">
+                        {requiredQty}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-medium whitespace-nowrap">
+                        {formatCaseLoose(requiredQty) || "0 Ls"}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-3 py-2">
-                    <Input
-                      type="number"
-                      min={0}
-                      max={maxPackingQty}
-                      disabled={!row.isSelectable}
-                      value={!isSelected && rowQty === 0 ? "" : rowQty}
-                      onChange={(e) => handleQtyChange(row, e.target.value)}
-                      className={cn(
-                        "h-8 w-20 ml-auto text-xs font-bold text-right tabular-nums",
-                        isExpired && "bg-red-50/50 border-red-200 text-red-400 cursor-not-allowed",
-                        !row.isSelectable && "cursor-not-allowed",
-                      )}
-                    />
+                    <div className="flex items-center justify-end gap-1.5">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <Input
+                          type="number"
+                          min={0}
+                          disabled={!row.isSelectable}
+                          value={!isSelected && rowQty === 0 ? "" : Math.floor(rowQty / caseSize)}
+                          onChange={(e) => {
+                            const newCases = parseInt(e.target.value || "0", 10);
+                            const currentLoose = rowQty % caseSize;
+                            handleQtyChange(row, String((Number.isNaN(newCases) ? 0 : newCases) * caseSize + currentLoose));
+                          }}
+                          placeholder="0"
+                          className={cn(
+                            "h-8 w-14 text-xs font-bold text-center tabular-nums",
+                            isExpired && "bg-red-50/50 border-red-200 text-red-400 cursor-not-allowed",
+                            !row.isSelectable && "cursor-not-allowed",
+                          )}
+                        />
+                        <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Cases</span>
+                      </div>
+                      <span className="text-muted-foreground/50 text-xs font-bold mb-4">+</span>
+                      <div className="flex flex-col items-center gap-0.5">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={caseSize - 1}
+                          disabled={!row.isSelectable}
+                          value={!isSelected && rowQty === 0 ? "" : rowQty % caseSize}
+                          onChange={(e) => {
+                            const newLoose = parseInt(e.target.value || "0", 10);
+                            const currentCases = Math.floor(rowQty / caseSize);
+                            handleQtyChange(row, String(currentCases * caseSize + (Number.isNaN(newLoose) ? 0 : newLoose)));
+                          }}
+                          placeholder="0"
+                          className={cn(
+                            "h-8 w-12 text-xs font-bold text-center tabular-nums",
+                            isExpired && "bg-red-50/50 border-red-200 text-red-400 cursor-not-allowed",
+                            !row.isSelectable && "cursor-not-allowed",
+                          )}
+                        />
+                        <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Loose</span>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-3 py-2">
                     <span
