@@ -115,8 +115,8 @@ export default function PurchasePageClient() {
 
         <div className="page-shell overflow-hidden">
           <div className="overflow-x-auto max-h-[calc(100vh-280px)]">
-            <table className="w-full text-table min-w-[1200px]">
-              <thead className="sticky top-0 z-10 bg-white border-b">
+            <table className="accounts-table w-full text-table min-w-[1200px]">
+              <thead className="border-b">
                 <tr>
                   {[
                     "Purchase No.",

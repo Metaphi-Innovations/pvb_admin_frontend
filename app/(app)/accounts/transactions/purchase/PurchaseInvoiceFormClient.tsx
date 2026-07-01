@@ -228,7 +228,7 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
         </Section>
 
         <Section title="Line Items">
-          <table className="w-full text-xs">
+          <table className="accounts-table w-full text-xs">
             <thead>
               <tr className="border-b border-border/60">
                 <th className="text-left py-2 text-[10px] font-semibold uppercase text-muted-foreground">Product</th>

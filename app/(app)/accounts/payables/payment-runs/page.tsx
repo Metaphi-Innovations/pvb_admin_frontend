@@ -51,8 +51,8 @@ export default function PaymentRunsPage() {
       layout="split"
     >
       <div className="flex-1 overflow-auto min-h-0">
-        <table className="w-full text-table">
-          <thead className="bg-muted/20 border-b border-border/60 sticky top-0">
+        <table className="accounts-table w-full text-table">
+          <thead className="border-b border-border/60">
             <tr>
               <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">Run No.</th>
               <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">Date</th>

@@ -190,12 +190,14 @@ export default function EditTDSPage() {
             </div>
 
             <div className="sm:col-span-2 space-y-1">
-              <Label className="text-xs font-medium">Description</Label>
-              <Textarea
-                value={form.description}
-                onChange={(e) => set("description", e.target.value)}
-                rows={3}
-                className="text-xs min-h-[72px] resize-none"
+              <Label className="text-xs font-medium">Threshold Limit (₹)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.thresholdAmount}
+                onChange={(e) => set("thresholdAmount", e.target.value)}
+                className="h-8 text-xs"
+                placeholder="Annual threshold — optional"
               />
             </div>
 

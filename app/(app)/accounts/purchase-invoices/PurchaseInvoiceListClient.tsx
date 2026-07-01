@@ -191,8 +191,8 @@ export default function PurchaseInvoiceListClient() {
             />
           ) : (
             <div className="rounded-lg border border-border/60 overflow-hidden bg-white">
-              <table className="w-full text-xs">
-                <thead className="bg-muted/40 border-b border-border/60">
+              <table className="accounts-table w-full text-xs">
+                <thead className="border-b border-border/60">
                   <tr>
                     <Th>Invoice No</Th>
                     <Th>Supplier Invoice</Th>
@@ -295,8 +295,8 @@ export default function PurchaseInvoiceListClient() {
                   {pendingGrns.length} GRN{pendingGrns.length > 1 ? "s" : ""} received but invoice not yet created
                 </span>
               </div>
-              <table className="w-full text-xs">
-                <thead className="bg-muted/40 border-b border-border/60">
+              <table className="accounts-table w-full text-xs">
+                <thead className="border-b border-border/60">
                   <tr>
                     <Th>GRN No</Th>
                     <Th>PO Number</Th>

@@ -21,8 +21,8 @@ export function LedgerTransactionsTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-xs min-w-[960px]">
-        <thead className="bg-muted/20 border-b border-border/60 sticky top-0 z-10">
+      <table className="accounts-table w-full text-xs min-w-[960px]">
+        <thead className="border-b border-border/60">
           <tr>
             {[
               "Date",
@@ -48,7 +48,7 @@ export function LedgerTransactionsTable({
         </thead>
         <tbody>
           {rows.map((row, i) => {
-            const isOpening = row.voucherType === "Opening";
+            const isOpening = row.voucherType === "Opening Balance" || row.voucherType === "Opening";
             return (
               <tr key={`${row.id ?? row.voucherNo}-${i}`} className="border-b border-border/30 hover:bg-muted/10">
                 <td className="px-3 py-2.5 whitespace-nowrap">{row.date}</td>

@@ -45,7 +45,7 @@ function findExpenseLedger(namePart: string) {
   return (
     loadChartOfAccounts().find(
       (r) =>
-        (r.nodeLevel === "ledger" || r.nodeLevel === "sub_ledger") &&
+        r.nodeLevel === "ledger" &&
         r.accountType === "Expense" &&
         r.accountName.toLowerCase().includes(namePart.toLowerCase()),
     ) ?? null
@@ -56,7 +56,7 @@ function findCustomerLedger(namePart: string) {
   return (
     loadChartOfAccounts().find(
       (r) =>
-        (r.nodeLevel === "ledger" || r.nodeLevel === "sub_ledger") &&
+        r.nodeLevel === "ledger" &&
         r.accountName.toLowerCase().includes(namePart.toLowerCase()) &&
         r.accountType === "Asset",
     ) ?? null
@@ -67,7 +67,7 @@ function findVendorLedger(namePart: string) {
   return (
     loadChartOfAccounts().find(
       (r) =>
-        (r.nodeLevel === "ledger" || r.nodeLevel === "sub_ledger") &&
+        r.nodeLevel === "ledger" &&
         r.accountName.toLowerCase().includes(namePart.toLowerCase()) &&
         r.accountType === "Liability",
     ) ?? null

@@ -192,8 +192,8 @@ export default function CollectionTrackingClient() {
       className="h-full min-h-0"
     >
       <div className="flex-1 overflow-auto min-h-0">
-        <table className="w-full text-table min-w-[1300px]">
-          <thead className="bg-muted/20 border-b sticky top-0 z-10">
+        <table className="accounts-table w-full text-table min-w-[1300px]">
+          <thead className="border-b">
             <tr>
               {["Follow-up No", "Customer", "Outstanding", "Invoice", "Due Date", "Follow-up Date", "Assigned To", "Promise Date", "Promise Amt", "Status", "Remarks", ""].map((h) => (
                 <th key={h || "act"} className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap">{h}</th>

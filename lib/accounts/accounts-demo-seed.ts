@@ -942,7 +942,7 @@ const DEMO_PURCHASE_INVOICES: Array<{
 function findSubGroupId(name: string): number | null {
   const records = loadChartOfAccounts();
   const node = records.find(
-    (r) => r.nodeLevel === "sub_group" && r.accountName.toLowerCase() === name.toLowerCase(),
+    (r) => r.nodeLevel === "account_group" && r.accountName.toLowerCase() === name.toLowerCase(),
   );
   return node?.id ?? null;
 }
@@ -950,7 +950,7 @@ function findSubGroupId(name: string): number | null {
 function findLedgerByName(name: string): ChartOfAccount | undefined {
   return loadChartOfAccounts().find(
     (r) =>
-      (r.nodeLevel === "ledger" || r.nodeLevel === "sub_ledger") &&
+      r.nodeLevel === "ledger" &&
       r.accountName.toLowerCase() === name.toLowerCase(),
   );
 }

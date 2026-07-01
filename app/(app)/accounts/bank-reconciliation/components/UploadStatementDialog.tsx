@@ -25,16 +25,21 @@ export function UploadStatementDialog({
   onOpenChange,
   onSuccess,
   preset,
+  defaultBankAccountId,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onSuccess: (statementId: number) => void;
   preset?: BankStatement | null;
+  /** Pre-select bank without locking fields (manual reconciliation upload). */
+  defaultBankAccountId?: number;
 }) {
   const accounts = loadBankAccounts();
   const currentYear = new Date().getFullYear();
 
-  const [bankAccountId, setBankAccountId] = useState(String(preset?.bankAccountId ?? accounts[0]?.id ?? ""));
+  const [bankAccountId, setBankAccountId] = useState(
+    String(preset?.bankAccountId ?? defaultBankAccountId ?? accounts[0]?.id ?? ""),
+  );
   const [month, setMonth] = useState(String(preset?.month ?? new Date().getMonth() + 1));
   const [year, setYear] = useState(String(preset?.year ?? currentYear));
   const [statementName, setStatementName] = useState(preset?.statementName ?? "");
@@ -50,8 +55,10 @@ export function UploadStatementDialog({
       setMonth(String(preset.month));
       setYear(String(preset.year));
       setStatementName(preset.statementName);
+    } else if (defaultBankAccountId) {
+      setBankAccountId(String(defaultBankAccountId));
     }
-  }, [open, preset]);
+  }, [open, preset, defaultBankAccountId]);
 
   const reset = () => {
     setError("");

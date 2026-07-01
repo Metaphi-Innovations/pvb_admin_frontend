@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Eye, Pencil, Search } from "lucide-react";
+import { useClientMounted } from "@/lib/use-client-mounted";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { SortTh, StatusBadge } from "../../components/AccountsUI";
-import { getVouchersByType, type VoucherTypeCode } from "../voucher-data";
+import { canEditVoucher, getVouchersByType, type VoucherTypeCode } from "../voucher-data";
 
 interface VoucherListClientProps {
   voucherType: VoucherTypeCode;
@@ -15,11 +17,17 @@ interface VoucherListClientProps {
 
 export function VoucherListClient({ voucherType, embedded }: VoucherListClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const listRefreshKey = searchParams.get("t");
+  const mounted = useClientMounted();
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  const records = useMemo(() => getVouchersByType(voucherType), [voucherType]);
+  const records = useMemo(
+    () => (mounted ? getVouchersByType(voucherType) : []),
+    [voucherType, mounted, listRefreshKey],
+  );
 
   const visible = useMemo(() => {
     let r = [...records];
@@ -65,8 +73,8 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
 
       <div className="flex-1 overflow-auto p-4">
         <div className="bg-white border border-border/60 rounded-lg overflow-hidden">
-          <table className="w-full text-table min-w-[800px]">
-            <thead className="bg-muted/20 border-b border-border/60">
+          <table className="accounts-table w-full text-table min-w-[900px]">
+            <thead className="border-b border-border/60">
               <tr>
                 <SortTh label="Date" colKey="date" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                 <SortTh label="Voucher No." colKey="voucherNumber" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
@@ -74,24 +82,34 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
                 <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Narration</th>
                 <SortTh label="Amount" colKey="totalDebit" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
                 <th className="px-3 py-2 text-center text-[10px] font-semibold uppercase text-muted-foreground">Status</th>
+                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-muted-foreground min-w-[120px]">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {visible.length === 0 ? (
+              {!mounted ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-12 text-center text-xs text-muted-foreground">
+                  <td colSpan={7} className="px-3 py-12 text-center text-xs text-muted-foreground">
+                    Loading vouchers…
+                  </td>
+                </tr>
+              ) : visible.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-3 py-12 text-center text-xs text-muted-foreground">
                     No vouchers yet. Create your first entry.
                   </td>
                 </tr>
               ) : (
                 visible.map((v) => (
-                  <tr
-                    key={v.id}
-                    className="border-b border-border/40 hover:bg-brand-50/30 cursor-pointer"
-                    onClick={() => router.push(`/accounts/vouchers/view/${v.id}`)}
-                  >
+                  <tr key={v.id} className="border-b border-border/40 hover:bg-brand-50/30">
                     <td className="px-3 py-2 text-xs">{v.date}</td>
-                    <td className="px-3 py-2 text-xs font-medium">{v.voucherNumber}</td>
+                    <td className="px-3 py-2 text-xs font-medium">
+                      <Link
+                        href={`/accounts/vouchers/view/${v.id}`}
+                        className="text-brand-700 hover:underline font-mono"
+                      >
+                        {v.voucherNumber}
+                      </Link>
+                    </td>
                     <td className="px-3 py-2 text-xs text-muted-foreground">{v.referenceNo || "—"}</td>
                     <td className="px-3 py-2 text-xs max-w-[200px] truncate">{v.narration || "—"}</td>
                     <td className="px-3 py-2.5 text-right">
@@ -99,6 +117,28 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
                     </td>
                     <td className="px-3 py-2 text-center">
                       <StatusBadge status={v.status} />
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="flex items-center justify-end gap-0.5">
+                        <button
+                          type="button"
+                          title="View"
+                          className="p-1.5 hover:bg-muted rounded-md transition-colors"
+                          onClick={() => router.push(`/accounts/vouchers/view/${v.id}`)}
+                        >
+                          <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                        </button>
+                        {canEditVoucher(v) && (
+                          <button
+                            type="button"
+                            title="Edit"
+                            className="p-1.5 hover:bg-muted rounded-md transition-colors"
+                            onClick={() => router.push(`/accounts/vouchers/edit/${v.id}`)}
+                          >
+                            <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))

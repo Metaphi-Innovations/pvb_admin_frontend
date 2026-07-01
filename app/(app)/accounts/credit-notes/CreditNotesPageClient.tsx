@@ -76,7 +76,7 @@ export default function CreditNotesPageClient() {
                 onClick={handleExport}
               >
                 <FileSpreadsheet className="w-3.5 h-3.5" />
-                {exporting ? "Exporting…" : "Export Excel"}
+                {exporting ? "Exporting…" : "Export"}
               </Button>
               <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5" asChild>
                 <Link href={`${CREDIT_NOTES_LIST_PATH}/new`}>
@@ -98,8 +98,8 @@ export default function CreditNotesPageClient() {
 
         <div className="page-shell overflow-hidden">
           <div className="overflow-x-auto max-h-[calc(100vh-300px)]">
-            <table className="w-full text-table min-w-[1280px]">
-              <thead className="sticky top-0 z-10 bg-white border-b border-border">
+            <table className="accounts-table w-full text-table min-w-[1280px]">
+              <thead className="border-b border-border">
                 <tr>
                   {[
                     "Credit Note No.",
@@ -146,33 +146,38 @@ export default function CreditNotesPageClient() {
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.createdBy}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.updatedBy}</td>
                       <td className="px-2.5 py-2 sticky right-0 bg-white">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              type="button"
-                              className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted"
+                        <div className="flex items-center justify-end gap-0.5">
+                          <Link
+                            href={`${CREDIT_NOTES_LIST_PATH}/${r.id}`}
+                            title="View"
+                            className="p-1.5 hover:bg-muted rounded-md transition-colors"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                          </Link>
+                          {getCreditNoteRowActions(r).includes("edit") && (
+                            <Link
+                              href={`${CREDIT_NOTES_LIST_PATH}/${r.id}/edit`}
+                              title="Edit"
+                              className="p-1.5 hover:bg-muted rounded-md transition-colors"
                             >
-                              <MoreVertical className="w-3.5 h-3.5" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-40">
-                            {getCreditNoteRowActions(r).map((a) => {
-                              if (a === "view")
-                                return (
-                                  <DropdownMenuItem key="view" asChild>
-                                    <Link href={`${CREDIT_NOTES_LIST_PATH}/${r.id}`} className="text-xs gap-2">
-                                      <Eye className="w-3.5 h-3.5" /> View
-                                    </Link>
-                                  </DropdownMenuItem>
-                                );
-                              if (a === "edit")
-                                return (
-                                  <DropdownMenuItem key="edit" asChild>
-                                    <Link href={`${CREDIT_NOTES_LIST_PATH}/${r.id}/edit`} className="text-xs gap-2">
-                                      <Pencil className="w-3.5 h-3.5" /> Edit
-                                    </Link>
-                                  </DropdownMenuItem>
-                                );
+                              <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                            </Link>
+                          )}
+                          {getCreditNoteRowActions(r).some((a) => a !== "view" && a !== "edit") && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  title="More actions"
+                                  className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted"
+                                >
+                                  <MoreVertical className="w-3.5 h-3.5" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-40">
+                                {getCreditNoteRowActions(r)
+                                  .filter((a) => a !== "view" && a !== "edit")
+                                  .map((a) => {
                               if (a === "cancel")
                                 return (
                                   <DropdownMenuItem
@@ -185,8 +190,10 @@ export default function CreditNotesPageClient() {
                                 );
                               return null;
                             })}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))

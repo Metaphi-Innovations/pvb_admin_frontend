@@ -17,8 +17,12 @@ import {
   buildBatchRegisterColumns,
   formatBatchStockValue,
   CP_MISSING_MSG,
-  EnterpriseTable,
 } from "@/components/inventory/batch-register-columns";
+import {
+  AccountsRichTable,
+  AccountsTableScroll,
+  type AccountsRichColumnDef,
+} from "@/components/accounts/AccountsTable";
 import {
   ReportFilterRow,
   ReportAsOnDateFilter,
@@ -100,7 +104,17 @@ export default function StockValuationPageClient() {
     });
   }, [clientReady, asOnDate, warehouse, product]);
 
-  const columns = useMemo(() => buildBatchRegisterColumns(), []);
+  const columns = useMemo((): AccountsRichColumnDef<BatchRegisterRow>[] => {
+    return buildBatchRegisterColumns().map((col) => ({
+      key: col.key,
+      label: col.label,
+      align: col.align,
+      render: (row) =>
+        col.render
+          ? col.render(row[col.key as keyof BatchRegisterRow], row)
+          : String(row[col.key as keyof BatchRegisterRow] ?? "—"),
+    }));
+  }, []);
 
   if (!clientReady) {
     return (
@@ -134,18 +148,15 @@ export default function StockValuationPageClient() {
       layout="split"
       className="h-full min-h-0"
     >
-      <div className="flex-1 overflow-auto min-h-0 p-4">
-        <EnterpriseTable
-          data={rows}
+      <AccountsTableScroll className="p-4">
+        <AccountsRichTable
           columns={columns}
-          perPage={25}
-          hideToolbar
-          showSelection={false}
-          showRowActions={false}
-          showBulkActions={false}
+          rows={rows}
+          minWidth={1200}
           getRowKey={(row) => `${row.sku}-${row.batchNo}-${row.warehouse}`}
+          emptyMessage="No stock valuation data for the selected filters."
         />
-      </div>
+      </AccountsTableScroll>
     </AccountsPageShell>
   );
 }

@@ -30,6 +30,7 @@ import {
   normalizeDebitLine,
   previewToDebitForm,
   updateDebitNote,
+  approveDebitNote,
   type DebitNoteAgainst,
   type DebitNoteAttachment,
   type DebitNoteLine,
@@ -307,18 +308,20 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
     status,
   });
 
-  const submit = (status: NoteWorkflowStatus) => {
+  const postNote = () => {
     setError(null);
     try {
       if (isEdit && debitNoteId != null) {
-        updateDebitNote(debitNoteId, buildInput(status));
+        updateDebitNote(debitNoteId, buildInput("draft"));
+        approveDebitNote(debitNoteId);
         router.push(`${DEBIT_NOTES_LIST_PATH}/${debitNoteId}`);
       } else {
-        const rec = createDebitNote(buildInput(status));
+        const rec = createDebitNote(buildInput("draft"));
+        approveDebitNote(rec.id);
         router.push(`${DEBIT_NOTES_LIST_PATH}/${rec.id}`);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save.");
+      setError(e instanceof Error ? e.message : "Could not post debit note.");
     }
   };
 
@@ -332,8 +335,8 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.push(DEBIT_NOTES_LIST_PATH)}>
             Cancel
           </Button>
-          <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={() => submit("pending_approval")}>
-            Save & Submit
+          <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={postNote}>
+            Post Debit Note
           </Button>
         </div>
       }
@@ -480,7 +483,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
               </p>
               <div className="overflow-x-auto border rounded-lg">
                 <table className="w-full text-xs min-w-[1000px]">
-                  <thead className="bg-muted/30 border-b">
+                  <thead className="border-b">
                     <tr>
                       {["Product", "Inv Qty", "Return Qty", "UOM", "Rate", "GST %", "Debit Amt", "Line Remarks", ""].map((h) => (
                         <th key={h || "x"} className="px-2 py-1.5 text-left text-[10px] uppercase text-muted-foreground font-semibold whitespace-nowrap">{h}</th>

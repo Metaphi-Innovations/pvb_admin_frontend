@@ -369,6 +369,7 @@ export const ACCOUNTS_REPORTS_NAV: AccountsNavLink[] = [
   { label: "General Ledger", href: "/accounts/reports/ledger", icon: BookOpen },
   { label: "Day Book", href: "/accounts/reports/day-book", icon: BookMarked },
   { label: "GST Summary", href: "/accounts/reports/gst", icon: Layers },
+  { label: "TDS Party-wise", href: "/accounts/reports/tds-party-wise", icon: FileText },
   { label: "Sales Register", href: "/accounts/reports/sales-register", icon: Receipt },
   { label: "Purchase Register", href: "/accounts/reports/purchase-register", icon: Receipt },
   { label: "Stock Valuation", href: "/accounts/reports/stock-valuation", icon: BarChart3 },

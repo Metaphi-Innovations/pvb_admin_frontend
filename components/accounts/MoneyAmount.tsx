@@ -6,6 +6,7 @@ import {
   MONEY_AMOUNT_CLASS,
   MONEY_CELL_CLASS,
   type BalanceSide,
+  balanceSideLabel,
   formatMoney,
   formatMoneyOrDash,
   formatMoneyWithSide,
@@ -17,12 +18,36 @@ interface MoneyAmountProps {
   className?: string;
   /** When true, zero renders as — */
   dashIfZero?: boolean;
+  /** Render Dr/Cr as a compact badge after the amount */
+  sideBadge?: boolean;
 }
 
 /** Inline monetary amount: ₹ 8,50,000.00 Dr */
-export function MoneyAmount({ amount, side, className, dashIfZero }: MoneyAmountProps) {
+export function MoneyAmount({
+  amount,
+  side,
+  className,
+  dashIfZero,
+  sideBadge,
+}: MoneyAmountProps) {
   if (dashIfZero && !amount) {
     return <span className={cn(MONEY_AMOUNT_CLASS, "text-muted-foreground", className)}>—</span>;
+  }
+  if (side && sideBadge) {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center justify-end gap-1.5",
+          MONEY_AMOUNT_CLASS,
+          className,
+        )}
+      >
+        <span className="tabular-nums">{formatMoney(amount)}</span>
+        <span className="text-[10px] font-semibold leading-none px-1 py-0.5 rounded bg-muted text-muted-foreground">
+          {balanceSideLabel(side)}
+        </span>
+      </span>
+    );
   }
   const text = side ? formatMoneyWithSide(amount, side) : formatMoney(amount);
   return <span className={cn(MONEY_AMOUNT_CLASS, className)}>{text}</span>;

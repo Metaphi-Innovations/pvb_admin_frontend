@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronsUpDown } from "lucide-react";
 import { StatusBadge as SharedStatusBadge } from "@/components/ui/StatusBadge";
 import type { StatusKey } from "@/lib/tokens";
+import { AccountsTableHeadCell } from "@/components/accounts/AccountsTable";
 
 export function SortTh({
   label,
@@ -23,15 +24,12 @@ export function SortTh({
 }) {
   const active = sortKey === colKey;
   return (
-    <th
+    <AccountsTableHeadCell
       onClick={() => onSort(colKey)}
-      className={cn(
-        "px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground cursor-pointer whitespace-nowrap",
-        align === "right" && "text-right",
-        align === "center" && "text-center",
-        align === "left" && "text-left",
-        active && "text-brand-700",
-      )}
+      align={align}
+      sorted={active}
+      uppercase
+      className="cursor-pointer select-none"
     >
       <span className="inline-flex items-center gap-1">
         {label}
@@ -41,7 +39,7 @@ export function SortTh({
           <ChevronsUpDown className="w-3 h-3 opacity-40" />
         )}
       </span>
-    </th>
+    </AccountsTableHeadCell>
   );
 }
 

@@ -66,8 +66,8 @@ export default function CustomerAgeingClient() {
       className="h-full min-h-0"
     >
       <div className="flex-1 overflow-auto min-h-0">
-        <table className="w-full text-table min-w-[1100px]">
-          <thead className="bg-muted/20 border-b sticky top-0 z-10">
+        <table className="accounts-table w-full text-table min-w-[1100px]">
+          <thead className="border-b">
             <tr>
               {["Customer", "Current / Not Due", "0–30 Days", "31–60 Days", "61–90 Days", "90+ Days", "Total", "Oldest Invoice", ""].map((h) => (
                 <th key={h || "act"} className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap">{h}</th>
@@ -101,8 +101,8 @@ export default function CustomerAgeingClient() {
                 {expandedCustomerId === r.customerId && (
                   <tr className="bg-muted/10">
                     <td colSpan={9} className="px-4 py-3">
-                      <table className="w-full text-table border border-border/60 rounded-lg overflow-hidden bg-white">
-                        <thead className="bg-muted/30">
+                      <table className="accounts-table w-full text-table border border-border/60 rounded-lg overflow-hidden bg-white">
+                        <thead>
                           <tr>
                             {["Invoice No", "Invoice Date", "Due Date", "Amount", "Paid", "Outstanding", "Ageing Bucket", "Days Overdue"].map((h) => (
                               <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">{h}</th>

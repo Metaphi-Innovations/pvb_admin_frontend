@@ -501,8 +501,8 @@ export function BankTransactionsClient() {
             </div>
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0 z-10">
+          <table className="accounts-table w-full text-sm">
+            <thead className="border-b border-border/40">
               <tr>
                 {["Date", "Narration", "Reference No", "Debit", "Credit", "Balance", "Ledger", "Status", ""].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold uppercase text-muted-foreground whitespace-nowrap">

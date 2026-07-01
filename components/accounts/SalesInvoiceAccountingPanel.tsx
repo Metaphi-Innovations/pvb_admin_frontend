@@ -112,7 +112,7 @@ export function SalesInvoiceAccountingPanel({
               Posted Ledger Entries
             </p>
             <div className="overflow-x-auto rounded-md border border-border/50">
-              <table className="w-full text-xs min-w-[520px]">
+              <table className="accounts-table w-full text-xs min-w-[520px]">
                 <thead>
                   <tr className="border-b border-border/60 bg-muted/20">
                     <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Account</th>

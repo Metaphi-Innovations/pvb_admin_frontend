@@ -61,8 +61,8 @@ export default function ReceiptAllocationClient() {
       className="h-full min-h-0"
     >
       <div className="flex-1 overflow-auto min-h-0">
-        <table className="w-full text-table min-w-[1100px]">
-          <thead className="bg-muted/20 border-b sticky top-0 z-10">
+        <table className="accounts-table w-full text-table min-w-[1100px]">
+          <thead className="border-b">
             <tr>
               {["Receipt No", "Date", "Customer", "Receipt Amt", "Allocated", "Unallocated", "Bank / Cash", "Reference", "Status", ""].map((h) => (
                 <th key={h || "act"} className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap">{h}</th>

@@ -38,7 +38,6 @@ import { maybePostPurchaseInvoice } from "@/lib/accounts/document-posting-bridge
 import type { GrnRecord } from "@/app/(app)/warehouse/grn/types";
 import { VendorMasterPanel } from "@/components/accounts/master-fetch/VendorMasterPanel";
 import { TransactionProductSelect } from "@/components/accounts/master-fetch/TransactionProductSelect";
-import { MasterFetchedBadge } from "@/components/accounts/master-fetch/MasterFetchedBadge";
 import {
   findProductByName,
   getProductsForPurchaseTransaction,
@@ -645,12 +644,9 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
 
         {/* Line Items */}
         <Section title="Item Details">
-          <div className="flex items-center gap-2 mb-2">
-            <MasterFetchedBadge />
-            <span className="text-[11px] text-muted-foreground">
-              Products from Product Master — HSN and GST auto-fill; edit qty, rate, and discount only.
-            </span>
-          </div>
+          <p className="text-[11px] text-muted-foreground mb-2">
+            Products from Product Master — HSN and GST auto-fill; edit qty, rate, and discount only.
+          </p>
           <div className="overflow-x-auto">
             <table className="w-full text-xs min-w-[800px]">
               <thead>
