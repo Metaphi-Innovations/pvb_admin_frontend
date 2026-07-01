@@ -4,12 +4,12 @@ import { Package } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
-import { formatReturnAmount } from "../sales-return-data";
-import { calcReturnLineAmount } from "../sales-return-utils";
+import { formatReturnAmount } from "../sample-return-data";
+import { calcReturnLineAmount } from "../sample-return-utils";
 import { ProductItemDetailsSection } from "@/components/procurement/ProductItemDetailsSection";
 import type { PRLineItem } from "@/app/(app)/procurement/purchase-requests/pr-data";
 
-interface SalesReturnProductFormProps {
+interface SampleReturnProductFormProps {
   dispatch: DispatchRecord;
   checkedProducts: Record<string, boolean>;
   returnQuantities: Record<string, string>;
@@ -31,7 +31,7 @@ interface SalesReturnProductFormProps {
   onProductRemarksChange: (sku: string, val: string) => void;
 }
 
-export function SalesReturnProductForm({
+export function SampleReturnProductForm({
   dispatch,
   checkedProducts,
   returnQuantities,
@@ -50,7 +50,7 @@ export function SalesReturnProductForm({
   onUpdateItem,
   productRemarks,
   onProductRemarksChange,
-}: SalesReturnProductFormProps) {
+}: SampleReturnProductFormProps) {
   let selectedCount = 0;
   let totalQty = 0;
   let totalAmount = 0;
@@ -116,8 +116,8 @@ export function SalesReturnProductForm({
           onRemoveItem={onRemoveItem}
           onUpdateItem={onUpdateItem}
           noBorder={true}
-          title="Dispatched Products"
-          description="Select dispatched products and enter return quantity"
+          title="Sample Products"
+          description="Select dispatched sample products and enter return quantity"
           addButtonLabel="Add Item"
           showCasePieceBreakdown={true}
           piecesPerCase={10}
@@ -134,7 +134,7 @@ export function SalesReturnProductForm({
           {selectedCount} product(s) selected · {totalQty} total return qty
         </p>
         <div className="text-right">
-          <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Sales Return Amount</p>
+          <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Sample Return Value</p>
           <p className="text-base font-bold text-red-600">{formatReturnAmount(totalAmount)}</p>
         </div>
       </div>
@@ -152,7 +152,7 @@ export function SalesReturnProductForm({
   );
 }
 
-export function getSalesReturnFormSummary(
+export function getSampleReturnFormSummary(
   dispatch: DispatchRecord,
   checkedProducts: Record<string, boolean>,
   returnQuantities: Record<string, string>,

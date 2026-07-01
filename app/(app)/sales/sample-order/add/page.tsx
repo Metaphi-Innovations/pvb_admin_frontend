@@ -38,7 +38,7 @@ export default function AddSalesOrderPage() {
 		salesManId: null,
 		remarks: "",
 		status: "confirmed",
-		lineItems: [createEmptyLineItem()],
+		lineItems: [],
 		warehouseId: null,
 		warehouseName: "",
 	});

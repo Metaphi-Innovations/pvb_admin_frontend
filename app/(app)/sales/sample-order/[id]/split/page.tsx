@@ -59,7 +59,7 @@ export default function SplitSalesOrderPage() {
       salesManId: hydrated.salesManId,
       remarks: hydrated.remarks ?? "",
       status: hydrated.status === "draft" ? "draft" : "confirmed",
-      lineItems: [createEmptyLineItem()],
+      lineItems: [],
       warehouseId: hydrated.warehouseId ?? null,
       warehouseName: hydrated.warehouseName ?? "",
     });

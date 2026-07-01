@@ -2,7 +2,7 @@ import type { DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
 import { hydrateOrderLineItems, loadOrders } from "./orders-data";
 import { getDispatchRecords } from "@/app/(app)/warehouse/dispatch/mock-data";
 
-export function isSalesOrderDispatch(d: DispatchRecord): boolean {
+export function isSampleOrderDispatch(d: DispatchRecord): boolean {
   const type =
     d.source_type ||
     (d.sourceDocumentType === "Sample Order"
@@ -10,20 +10,20 @@ export function isSalesOrderDispatch(d: DispatchRecord): boolean {
       : d.sourceDocumentType === "Stock Transfer"
         ? "stock_transfer"
         : "sales_order");
-  return type === "sales_order";
+  return type === "sample_order";
 }
 
-export function getSalesOrderNo(d: DispatchRecord): string {
+export function getSampleOrderNo(d: DispatchRecord): string {
   return d.salesOrderNumber || d.source_document_no || "";
 }
 
-export function getDeliveredSalesOrderDispatches(): DispatchRecord[] {
+export function getDeliveredSampleOrderDispatches(): DispatchRecord[] {
   return getDispatchRecords().filter(
-    (d) => isSalesOrderDispatch(d) && d.deliveryStatus === "Delivered",
+    (d) => isSampleOrderDispatch(d) && d.deliveryStatus === "Delivered",
   );
 }
 
-export function enrichDispatchForReturn(dispatch: DispatchRecord): DispatchRecord {
+export function enrichDispatchForSampleReturn(dispatch: DispatchRecord): DispatchRecord {
   const soNo = dispatch.salesOrderNumber || dispatch.source_document_no || "";
   const order = loadOrders().find((o) => o.soNumber === soNo);
   const lineItems = order ? hydrateOrderLineItems(order).lineItems : [];
@@ -36,7 +36,7 @@ export function enrichDispatchForReturn(dispatch: DispatchRecord): DispatchRecor
       );
       return {
         ...p,
-        unitRate: p.unitRate ?? line?.finalRate ?? line?.unitPrice ?? 0,
+        unitRate: p.unitRate ?? line?.unitPrice ?? 0,
         batchNo: p.batchNo,
       };
     }),
