@@ -8,29 +8,29 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { getDispatchRecords, saveDispatchRecords } from "@/app/(app)/warehouse/dispatch/mock-data";
-import { DispatchDetailsPanel } from "../../components/DispatchDetailsPanel";
+import { DispatchDetailsPanel } from "../../../orders/components/DispatchDetailsPanel";
 import {
-  SalesReturnProductForm,
-  getSalesReturnFormSummary,
-} from "../../components/SalesReturnProductForm";
+  SampleReturnProductForm,
+  getSampleReturnFormSummary,
+} from "../../components/SampleReturnProductForm";
 import {
-  getSalesReturnRecords,
-  saveSalesReturnRecords,
-} from "../../sales-return-data";
+  getSampleReturnRecords,
+  saveSampleReturnRecords,
+} from "../../sample-return-data";
 import {
-  enrichDispatchForReturn,
+  enrichDispatchForSampleReturn,
   calcReturnLineAmount,
-  getDeliveredSalesOrderDispatches,
-  getSalesOrderNo,
-} from "../../sales-return-utils";
+  getDeliveredSampleOrderDispatches,
+  getSampleOrderNo,
+} from "../../sample-return-utils";
 import type { DispatchRecord, DispatchProduct } from "@/app/(app)/warehouse/dispatch/types";
 import type { PRLineItem } from "@/app/(app)/procurement/purchase-requests/pr-data";
 
-export default function NewSalesReturnPage() {
+export default function NewSampleReturnPage() {
   const router = useRouter();
   const [selectedSalesOrderNo, setSelectedSalesOrderNo] = useState("");
   const [selectedDispatchId, setSelectedDispatchId] = useState("");
-  const [dispatch, setDispatch] = useState<ReturnType<typeof enrichDispatchForReturn> | null>(null);
+  const [dispatch, setDispatch] = useState<ReturnType<typeof enrichDispatchForSampleReturn> | null>(null);
   const [checkedProducts, setCheckedProducts] = useState<Record<string, boolean>>({});
   const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({});
   const [productRemarks, setProductRemarks] = useState<Record<string, string>>({});
@@ -40,12 +40,12 @@ export default function NewSalesReturnPage() {
   const [returnRemarks, setReturnRemarks] = useState("");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
-  const deliveredDispatches = useMemo(() => getDeliveredSalesOrderDispatches(), []);
+  const deliveredDispatches = useMemo(() => getDeliveredSampleOrderDispatches(), []);
 
   const salesOrderOptions = useMemo(() => {
     const seen = new Map<string, string>();
     for (const d of deliveredDispatches) {
-      const soNo = getSalesOrderNo(d);
+      const soNo = getSampleOrderNo(d);
       if (!soNo || seen.has(soNo)) continue;
       seen.set(soNo, d.customer || d.customer_name || "");
     }
@@ -60,7 +60,7 @@ export default function NewSalesReturnPage() {
   const dispatchOptions = useMemo(() => {
     if (!selectedSalesOrderNo) return [];
     return deliveredDispatches
-      .filter((d: DispatchRecord) => getSalesOrderNo(d) === selectedSalesOrderNo)
+      .filter((d: DispatchRecord) => getSampleOrderNo(d) === selectedSalesOrderNo)
       .map((d: DispatchRecord) => ({
         value: d.id,
         label: `${d.dispatchNumber || d.dispatch_no}${d.customer || d.customer_name ? ` — ${d.customer || d.customer_name}` : ""}`,
@@ -73,8 +73,8 @@ export default function NewSalesReturnPage() {
       return;
     }
     const record = deliveredDispatches.find((d: DispatchRecord) => d.id === selectedDispatchId);
-    if (record && getSalesOrderNo(record) === selectedSalesOrderNo) {
-      setDispatch(enrichDispatchForReturn(record));
+    if (record && getSampleOrderNo(record) === selectedSalesOrderNo) {
+      setDispatch(enrichDispatchForSampleReturn(record));
       setCheckedProducts({});
       setReturnQuantities({});
       setProductRemarks({});
@@ -92,7 +92,7 @@ export default function NewSalesReturnPage() {
   }, [toast]);
 
   const summary = dispatch
-    ? getSalesReturnFormSummary(dispatch, checkedProducts, returnQuantities)
+    ? getSampleReturnFormSummary(dispatch, checkedProducts, returnQuantities)
     : { totalQty: 0, totalAmount: 0, selectedCount: 0 };
 
   const handleDispatchedProductChange = (val: string[]) => {
@@ -169,7 +169,7 @@ export default function NewSalesReturnPage() {
     }
   };
 
-  const listHref = "/sales/orders?tab=sales_return";
+  const listHref = "/sales/sample-order?tab=sales_return";
 
   const handleSave = () => {
     if (!dispatch) return;
@@ -212,23 +212,24 @@ export default function NewSalesReturnPage() {
     }
 
     const totalAmount = productsToReturn.reduce((sum: number, p) => sum + p.lineAmount, 0);
-    const existingReturns = getSalesReturnRecords();
-    const returnNumber = `RET-2026-${String(existingReturns.length + 1).padStart(3, "0")}`;
+    const existingReturns = getSampleReturnRecords();
+    const returnNumber = `SR-2026-${String(existingReturns.length + 1).padStart(3, "0")}`;
 
     const newReturn = {
       id: `ret-${Date.now()}`,
       returnNumber,
       dispatchNumber: dispatch.dispatchNumber,
-      salesOrderNumber: dispatch.salesOrderNumber,
-      customer: dispatch.customer,
+      salesOrderNumber: dispatch.salesOrderNumber || dispatch.source_document_no || "",
+      customer: dispatch.customer || dispatch.customer_name || "",
       returnDate: new Date().toISOString().split("T")[0],
       warehouse: dispatch.warehouse,
       products: productsToReturn,
       totalAmount,
       remarks: returnRemarks,
+      status: "pending" as const,
     };
 
-    saveSalesReturnRecords([...existingReturns, newReturn]);
+    saveSampleReturnRecords([...existingReturns, newReturn]);
 
     const allDispatches = getDispatchRecords();
     const dIdx = allDispatches.findIndex((d) => d.id === dispatch.id);
@@ -237,14 +238,14 @@ export default function NewSalesReturnPage() {
       saveDispatchRecords(allDispatches);
     }
 
-    setToast({ msg: `Sales return ${returnNumber} saved successfully.`, type: "success" });
+    setToast({ msg: `Sample return ${returnNumber} saved successfully.`, type: "success" });
     setTimeout(() => router.push(listHref), 800);
   };
 
   return (
     <FormContainer
-      title="Process Sales Return"
-      description="Sales → Orders → Sales Return → New"
+      title="Process Sample Return"
+      description="Sales → Sample Orders → Sample Return → New"
       onBack={() => router.push(listHref)}
       onCancel={() => router.push(listHref)}
       cancelLabel="Discard"
@@ -267,7 +268,7 @@ export default function NewSalesReturnPage() {
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Sales Order No *</p>
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Sample Order No *</p>
               <AutocompleteSelect
                 options={salesOrderOptions}
                 value={selectedSalesOrderNo}
@@ -275,8 +276,8 @@ export default function NewSalesReturnPage() {
                   setSelectedSalesOrderNo(soNo);
                   setSelectedDispatchId("");
                 }}
-                placeholder={salesOrderOptions.length ? "Select sales order…" : "No delivered sales orders available"}
-                searchPlaceholder="Search sales order or customer…"
+                placeholder={salesOrderOptions.length ? "Select sample order…" : "No delivered sample orders available"}
+                searchPlaceholder="Search sample order or recipient…"
                 className="h-9 w-full text-xs"
                 disabled={salesOrderOptions.length === 0}
               />
@@ -289,7 +290,7 @@ export default function NewSalesReturnPage() {
                 onChange={setSelectedDispatchId}
                 placeholder={
                   !selectedSalesOrderNo
-                    ? "Select sales order first"
+                    ? "Select sample order first"
                     : dispatchOptions.length
                       ? "Select dispatch…"
                       : "No delivered dispatches for this order"
@@ -305,7 +306,7 @@ export default function NewSalesReturnPage() {
         {dispatch ? (
           <>
             <DispatchDetailsPanel dispatch={dispatch} />
-            <SalesReturnProductForm
+            <SampleReturnProductForm
               dispatch={dispatch}
               checkedProducts={checkedProducts}
               returnQuantities={returnQuantities}
@@ -336,7 +337,7 @@ export default function NewSalesReturnPage() {
         ) : (
           <div className="bg-muted/20 border border-dashed border-border rounded-xl p-8 text-center">
             <p className="text-sm text-muted-foreground">
-              Select a sales order and dispatch above to view details and process the return.
+              Select a sample order and dispatch above to view details and process the return.
             </p>
           </div>
         )}

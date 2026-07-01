@@ -47,6 +47,7 @@ import ProductSchemeOfferDialog, {
 	type ProductSchemeOfferDialogMode,
 } from "./ProductSchemeOfferDialog";
 import { Tag } from "lucide-react";
+import { ProductItemDetailsSection } from "@/components/procurement/ProductItemDetailsSection";
 
 interface ProductLinesEditorProps {
 	lines: SalesOrderLineItem[];
@@ -78,10 +79,14 @@ const TAX_CELL_AMT =
 function ProductSelect({
 	products,
 	value,
+	selectedValues = [],
+	alreadyAddedProductIds = [],
 	onSelectMultiple,
 }: {
 	products: ProductCatalogItem[];
 	value: number | null;
+	selectedValues?: number[];
+	alreadyAddedProductIds?: number[];
 	onSelectMultiple: (selectedProducts: ProductCatalogItem[]) => void;
 }) {
 	const [open, setOpen] = useState(false);
@@ -91,13 +96,12 @@ function ProductSelect({
 	const handleOpenChange = (isOpen: boolean) => {
 		setOpen(isOpen);
 		if (isOpen) {
-			setCheckedIds(value ? [value] : []);
+			setCheckedIds(selectedValues.length > 0 ? selectedValues : (value ? [value] : []));
 		} else {
 			setSearch("");
 		}
 	};
 
-	const selected = products.find((p) => p.id === value);
 	const filtered = products.filter(
 		(p) =>
 			p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -117,6 +121,16 @@ function ProductSelect({
 		onSelectMultiple(selectedProds);
 	};
 
+	const hasSelection = selectedValues.length > 0 || value !== null;
+	const getTriggerLabel = () => {
+		if (selectedValues.length > 1) {
+			return `${selectedValues.length} products selected`;
+		}
+		const activeId = selectedValues.length === 1 ? selectedValues[0] : value;
+		const selected = products.find((p) => p.id === activeId);
+		return selected ? `${selected.code} — ${selected.name}` : "Select product…";
+	};
+
 	return (
 		<Popover open={open} onOpenChange={handleOpenChange}>
 			<PopoverTrigger asChild>
@@ -126,12 +140,10 @@ function ProductSelect({
 				>
 					<span
 						className={
-							selected ? "text-foreground truncate" : "text-muted-foreground"
+							hasSelection ? "text-foreground truncate" : "text-muted-foreground"
 						}
 					>
-						{selected
-							? `${selected.code} — ${selected.name}`
-							: "Select product…"}
+						{getTriggerLabel()}
 					</span>
 					<ChevronsUpDown className='w-3.5 h-3.5 text-muted-foreground flex-shrink-0' />
 				</button>
@@ -157,13 +169,18 @@ function ProductSelect({
 							<button
 								type='button'
 								onClick={() => {
-									const allSelected = checkedIds.length === filtered.length;
-									setCheckedIds(allSelected ? [] : filtered.map((p) => p.id));
+									const availableProducts = filtered.filter((p) => !alreadyAddedProductIds.includes(p.id));
+									const allSelected = availableProducts.every((p) => checkedIds.includes(p.id));
+									if (allSelected) {
+										setCheckedIds(checkedIds.filter((id) => !availableProducts.map((x) => x.id).includes(id)));
+									} else {
+										setCheckedIds([...new Set([...checkedIds, ...availableProducts.map((x) => x.id)])]);
+									}
 								}}
 								className='w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-semibold text-brand-600 hover:bg-muted/60 rounded-md text-left'
 							>
 								<Checkbox
-									checked={checkedIds.length === filtered.length}
+									checked={filtered.filter((p) => !alreadyAddedProductIds.includes(p.id)).every((p) => checkedIds.includes(p.id))}
 									className='w-3.5 h-3.5 flex-shrink-0'
 								/>
 								Select All
@@ -173,27 +190,37 @@ function ProductSelect({
 					)}
 					{filtered.map((p) => {
 						const isChecked = checkedIds.includes(p.id);
+						const isAlreadyAdded = alreadyAddedProductIds.includes(p.id);
 						return (
 							<button
 								key={p.id}
 								type='button'
+								disabled={isAlreadyAdded}
 								onClick={() => toggleProduct(p.id)}
 								className={cn(
 									"w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-muted/60",
 									isChecked && "bg-brand-50",
+									isAlreadyAdded && "opacity-50 cursor-not-allowed bg-muted/10",
 								)}
 							>
 								<Checkbox
-									checked={isChecked}
+									checked={isChecked || isAlreadyAdded}
+									disabled={isAlreadyAdded}
 									className='w-3.5 h-3.5 flex-shrink-0 pointer-events-none'
 								/>
 								<span className='font-mono text-brand-700 flex-shrink-0'>
 									{p.code}
 								</span>
 								<span className='flex-1 truncate'>{p.name}</span>
-								<span className='text-[10px] text-muted-foreground'>
-									Stock: {p.stock}
-								</span>
+								{isAlreadyAdded ? (
+									<span className='text-[10px] text-brand-600 font-semibold bg-brand-50 px-1.5 py-0.5 rounded'>
+										Added
+									</span>
+								) : (
+									<span className='text-[10px] text-muted-foreground'>
+										Stock: {p.stock}
+									</span>
+								)}
 							</button>
 						);
 					})}
@@ -440,6 +467,15 @@ export default function ProductLinesEditor({
 		const lineIndex = lines.findIndex((l) => l.id === lineId);
 		if (lineIndex === -1) return;
 
+		// Check for duplicate products
+		for (const prod of selectedProducts) {
+			const exists = lines.some((l) => l.id !== lineId && l.productId === prod.id);
+			if (exists) {
+				setLocalError(`Product "${prod.name}" is already added to this order.`);
+				return;
+			}
+		}
+
 		const newLines = [...lines];
 
 		const p1 = selectedProducts[0];
@@ -464,6 +500,51 @@ export default function ProductLinesEditor({
 		onChange(newLines);
 	};
 
+	const [topSelectedProds, setTopSelectedProds] = useState<ProductCatalogItem[]>([]);
+	const [topInputQty, setTopInputQty] = useState<string>("1");
+
+	const handleAddProductFromTop = () => {
+		if (topSelectedProds.length === 0) {
+			setLocalError("Please select a product.");
+			return;
+		}
+		const qty = Number(topInputQty) || 0;
+		if (qty <= 0) {
+			setLocalError("Quantity must be greater than zero.");
+			return;
+		}
+
+		// Check for duplicate products
+		for (const prod of topSelectedProds) {
+			const exists = lines.some((l) => l.productId === prod.id);
+			if (exists) {
+				setLocalError(`Product "${prod.name}" is already added to this order.`);
+				return;
+			}
+		}
+
+		const newLines = [...lines];
+
+		for (const prod of topSelectedProds) {
+			let newLine = createEmptyLineItem();
+			newLine.productId = prod.id;
+			newLine.quantity = qty;
+			newLine = applySchemePricingToLine(newLine, prod, pricingContext, {
+				zeroGst,
+				supplyType: taxSupplyType,
+			});
+			newLines.push(newLine);
+		}
+
+		onChange(newLines);
+		setTopSelectedProds([]);
+		setTopInputQty("1");
+		setLocalError(null);
+	};
+
+	const totalQuantity = lines.reduce((sum, line) => sum + (line.quantity || 0), 0);
+	const totalAmount = lines.reduce((sum, line) => sum + (line.lineTotal || 0), 0);
+
 	return (
 		<div className='space-y-2'>
 			<ProductSchemeOfferDialog
@@ -481,332 +562,349 @@ export default function ProductLinesEditor({
 				onClose={() => setSchemeDialog(null)}
 				onApply={handleApplyScheme}
 			/>
-			<div className='flex flex-col items-end gap-1'>
-				{localError && (
-					<span className='text-xs text-red-500 font-medium flex items-center gap-1'>
-						<AlertCircle className='w-3.5 h-3.5 flex-shrink-0' /> {localError}
-					</span>
-				)}
-				<Button
-					type='button'
-					variant='outline'
-					size='sm'
-					className='h-7 text-xs gap-1'
-					onClick={addLine}
-				>
-					<Plus className='w-3 h-3' /> Add Product
-				</Button>
-			</div>
 
-			{lines.length === 0 ? (
-				<div className='border border-dashed border-border rounded-lg py-6 text-center'>
-					<p className='text-xs text-muted-foreground'>
-						No products — click Add Product
-					</p>
-				</div>
-			) : (
-				<div className='border border-border rounded-xl bg-white shadow-sm overflow-hidden'>
-					<div className='overflow-x-auto'>
-						<table className='w-full min-w-[1180px]'>
-							<thead>
-								<tr className='bg-muted/40 border-b border-border/60'>
-									{[
-										{ h: "Product", rowSpan: 2, className: "min-w-[180px]" },
-										{ h: "Stock", rowSpan: 2, className: "w-16" },
-										{ h: "Qty", rowSpan: 2, className: "w-16" },
-										{ h: "DP", rowSpan: 2, className: "min-w-[80px]" },
-										{ h: "Offer", rowSpan: 2, className: "min-w-[130px]" },
-										{ h: "Disc. Amt", rowSpan: 2, className: "min-w-[80px]" },
-										{ h: "Final Rate", rowSpan: 2, className: "min-w-[80px]" },
-									].map(({ h, rowSpan, className }) => (
-										<th
-											key={h}
-											rowSpan={rowSpan}
-											className={cn(
-												"px-2 py-2 text-left text-xs font-semibold text-foreground whitespace-nowrap align-middle",
-												className,
-											)}
-										>
-											{h}
-										</th>
-									))}
-									<th
-										colSpan={taxSupplyType === "intra" ? 4 : 2}
-										className='px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-foreground border-b border-border/60'
+			<ProductItemDetailsSection
+				mode="sales-order"
+				title="Products"
+				description="Manage products, quantities, schemes, and taxes for this order."
+				items={lines}
+				totalQuantity={totalQuantity}
+				totalAmount={totalAmount}
+				showTotalsInHeader={true}
+				quantity={topInputQty}
+				onQuantityChange={setTopInputQty}
+				onAddItem={handleAddProductFromTop}
+				customSelectorArea={
+					<ProductSelect
+						products={products}
+						value={null}
+						selectedValues={topSelectedProds.map((p) => p.id)}
+						alreadyAddedProductIds={lines.map((l) => l.productId).filter((id): id is number => id !== null)}
+						onSelectMultiple={(selected) => setTopSelectedProds(selected)}
+					/>
+				}
+				customTableHead={
+					<>
+						<tr className='bg-muted/40 border-b border-border/60'>
+							{[
+								{ h: "Product", rowSpan: 2, className: "min-w-[180px]" },
+								{ h: "Stock", rowSpan: 2, className: "w-16" },
+								{ h: "Qty", rowSpan: 2, className: "w-16" },
+								{ h: "DP", rowSpan: 2, className: "min-w-[80px]" },
+								{ h: "Offer", rowSpan: 2, className: "min-w-[130px]" },
+								{ h: "Disc. Amt", rowSpan: 2, className: "min-w-[80px]" },
+								{ h: "Final Rate", rowSpan: 2, className: "min-w-[80px]" },
+							].map(({ h, rowSpan, className }) => (
+								<th
+									key={h}
+									rowSpan={rowSpan}
+									className={cn(
+										"px-2 py-2 text-left text-xs font-semibold text-foreground whitespace-nowrap align-middle",
+										className,
+									)}
+								>
+									{h}
+								</th>
+							))}
+							<th
+								colSpan={taxSupplyType === "intra" ? 4 : 2}
+								className='px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-foreground border-b border-border/60'
+							>
+								{taxSupplyType === "intra" ? "Tax — CGST + SGST" : "Tax — IGST"}
+							</th>
+							{[
+								{ h: "Line Total", rowSpan: 2, className: "min-w-[90px]" },
+								{ h: "", rowSpan: 2, className: "w-16" },
+							].map(({ h, rowSpan, className }) => (
+								<th
+									key={h || "actions"}
+									rowSpan={rowSpan}
+									className={cn(
+										"px-2 py-2 text-left text-xs font-semibold text-foreground whitespace-nowrap align-middle",
+										className,
+									)}
+								>
+									{h}
+								</th>
+							))}
+						</tr>
+						<tr className='bg-muted/40 border-b border-border/60'>
+							{(taxSupplyType === "intra"
+								? ["CGST %", "CGST Amt", "SGST %", "SGST Amt"]
+								: ["IGST %", "IGST Amt"]
+							).map((h) => (
+								<th key={h} className={TAX_HEAD}>
+									{h}
+								</th>
+							))}
+						</tr>
+					</>
+				}
+				customTableBody={
+					lines.map((line) => {
+						const isEditing = editingId === line.id;
+						const product = line.productId
+							? getProductById(line.productId)
+							: undefined;
+						const hasScheme = isProductDiscountSchemeApplied(line);
+						const eligibleSchemes = hasScheme ? [] : getLineEligibleSchemes(line);
+						const hasEligibleScheme = eligibleSchemes.length > 0;
+						const taxBreakdown =
+							line.productId && product
+								? computeLineTaxBreakdown(
+										line,
+										product.gstRate,
+										taxSupplyType,
+										zeroGst,
+									)
+								: null;
+						return (
+							<tr
+								key={line.id}
+								className='border-b border-border/60 hover:bg-muted/10'
+							>
+								<td className='px-2 py-1.5 min-w-[180px]'>
+									<div
+										className={cn(
+											localError &&
+												!line.productId &&
+												"rounded-lg border border-red-400 p-0.5 animate-pulse bg-red-50/20",
+										)}
 									>
-										{taxSupplyType === "intra" ? "Tax — CGST + SGST" : "Tax — IGST"}
-									</th>
-									{[
-										{ h: "Line Total", rowSpan: 2, className: "min-w-[90px]" },
-										{ h: "", rowSpan: 2, className: "w-16" },
-									].map(({ h, rowSpan, className }) => (
-										<th
-											key={h || "actions"}
-											rowSpan={rowSpan}
+										<ProductSelect
+											products={products}
+											value={line.productId}
+											selectedValues={line.productId ? [line.productId] : []}
+											alreadyAddedProductIds={lines
+												.filter((l) => l.id !== line.id)
+												.map((l) => l.productId)
+												.filter((id): id is number => id !== null)}
+											onSelectMultiple={(selectedProds) =>
+												handleProductSelectMultiple(
+													line.id,
+													selectedProds,
+												)
+											}
+										/>
+									</div>
+								</td>
+								<td className='px-2 py-1.5'>
+									<span
+										className={cn(
+											"text-xs font-medium tabular-nums",
+											line.availableStock === 0
+												? "text-amber-600"
+												: "text-foreground",
+										)}
+									>
+										{line.productId != null ? line.availableStock : "—"}
+									</span>
+								</td>
+								<td className='px-2 py-1.5 w-16'>
+									{isEditing ? (
+										<Input
+											type='number'
+											min={0}
+											value={line.quantity || ""}
+											onChange={(e) =>
+												updateLine(line.id, {
+													quantity: Number(e.target.value) || 0,
+												})
+											}
 											className={cn(
-												"px-2 py-2 text-left text-xs font-semibold text-foreground whitespace-nowrap align-middle",
-												className,
+												"h-7 text-xs",
+												localError &&
+													line.quantity <= 0 &&
+													"border-red-400 focus-visible:ring-red-400 bg-red-50/10",
+											)}
+										/>
+									) : (
+										<span
+											className={cn(
+												"text-xs",
+												localError &&
+													line.quantity <= 0 &&
+													"text-red-500 font-semibold",
 											)}
 										>
-											{h}
-										</th>
-									))}
-								</tr>
-								<tr className='bg-muted/40 border-b border-border/60'>
-									{(taxSupplyType === "intra"
-										? ["CGST %", "CGST Amt", "SGST %", "SGST Amt"]
-										: ["IGST %", "IGST Amt"]
-									).map((h) => (
-										<th key={h} className={TAX_HEAD}>
-											{h}
-										</th>
-									))}
-								</tr>
-							</thead>
-							<tbody>
-								{lines.map((line) => {
-									const isEditing = editingId === line.id;
-									const product = line.productId
-										? getProductById(line.productId)
-										: undefined;
-									const hasScheme = isProductDiscountSchemeApplied(line);
-									const eligibleSchemes = hasScheme ? [] : getLineEligibleSchemes(line);
-									const hasEligibleScheme = eligibleSchemes.length > 0;
-									const taxBreakdown =
-										line.productId && product
-											? computeLineTaxBreakdown(
-													line,
-													product.gstRate,
-													taxSupplyType,
-													zeroGst,
-												)
-											: null;
-									return (
-										<tr
-											key={line.id}
-											className='border-b border-border/60 hover:bg-muted/10'
-										>
-											<td className='px-2 py-1.5 min-w-[180px]'>
-												<div
-													className={cn(
-														localError &&
-															!line.productId &&
-															"rounded-lg border border-red-400 p-0.5 animate-pulse bg-red-50/20",
-													)}
-												>
-													<ProductSelect
-														products={products}
-														value={line.productId}
-														onSelectMultiple={(selectedProds) =>
-															handleProductSelectMultiple(
-																line.id,
-																selectedProds,
-															)
-														}
-													/>
-												</div>
-											</td>
-											<td className='px-2 py-1.5'>
-												<span
-													className={cn(
-														"text-xs font-medium tabular-nums",
-														line.availableStock === 0
-															? "text-amber-600"
-															: "text-foreground",
-													)}
-												>
-													{line.productId != null ? line.availableStock : "—"}
+											{line.quantity}
+										</span>
+									)}
+								</td>
+								<td className='px-2 py-1.5'>
+									<span className='text-xs tabular-nums whitespace-nowrap'>
+										{line.productId
+											? formatSchemeRupee(line.dealerPrice)
+											: "—"}
+									</span>
+								</td>
+								<td className='px-2 py-1.5'>
+									{line.productId ? (
+										hasScheme ? (
+											<div className='flex flex-col gap-0.5 max-w-[140px]'>
+												<Badge className='w-fit px-1.5 py-0 text-[10px] font-semibold bg-emerald-600 hover:bg-emerald-600'>
+													Applied
+												</Badge>
+												<span className='text-[10px] font-mono text-brand-700 truncate'>
+													{line.appliedSchemeCode ?? line.schemeCode}
 												</span>
-											</td>
-											<td className='px-2 py-1.5 w-16'>
-												{isEditing ? (
-													<Input
-														type='number'
-														min={0}
-														value={line.quantity || ""}
-														onChange={(e) =>
-															updateLine(line.id, {
-																quantity: Number(e.target.value) || 0,
-															})
-														}
-														className={cn(
-															"h-7 text-xs",
-															localError &&
-																line.quantity <= 0 &&
-																"border-red-400 focus-visible:ring-red-400 bg-red-50/10",
-														)}
-													/>
-												) : (
-													<span
-														className={cn(
-															"text-xs",
-															localError &&
-																line.quantity <= 0 &&
-																"text-red-500 font-semibold",
-														)}
-													>
-														{line.quantity}
+												<span className='text-[10px] text-emerald-700 tabular-nums'>
+													{formatSchemeRupee(line.schemeDiscountAmount)} off
+												</span>
+												<button
+													type='button'
+													onClick={() => handleRemoveScheme(line)}
+													className='text-[10px] font-medium text-red-600 hover:text-red-700 hover:underline text-left w-fit'
+												>
+													Remove scheme
+												</button>
+											</div>
+										) : hasEligibleScheme ? (
+											<div className='flex flex-col gap-0.5 max-w-[140px]'>
+												<button
+													type='button'
+													onClick={() => openSchemeDialog(line)}
+													className='inline-flex items-center gap-1 w-fit max-w-full rounded-full border border-dashed border-brand-400 bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-700 hover:bg-brand-100 transition-colors truncate'
+													title={formatSchemeOfferLabel(eligibleSchemes[0])}
+												>
+													<Tag className='w-3 h-3 shrink-0' />
+													<span className='truncate'>
+														{formatSchemeOfferLabel(eligibleSchemes[0])}
+													</span>
+												</button>
+												{eligibleSchemes.length > 1 && (
+													<span className='text-[9px] text-muted-foreground pl-0.5'>
+														+{eligibleSchemes.length - 1} more scheme
+														{eligibleSchemes.length > 2 ? "s" : ""}
 													</span>
 												)}
+											</div>
+										) : (
+											<button
+												type='button'
+												onClick={() => openSchemeDialog(line)}
+												className='text-[10px] font-medium text-muted-foreground hover:text-brand-700 transition-colors'
+											>
+												No Scheme
+											</button>
+										)
+									) : (
+										"—"
+									)}
+								</td>
+								<td className='px-2 py-1.5'>
+									<span className='text-xs tabular-nums whitespace-nowrap'>
+										{line.productId && hasScheme
+											? formatSchemeRupee(line.schemeDiscountAmount)
+											: "—"}
+									</span>
+								</td>
+								<td className='px-2 py-1.5'>
+									<span className='text-xs font-medium tabular-nums whitespace-nowrap'>
+										{line.productId ? formatSchemeRupee(line.finalRate) : "—"}
+									</span>
+								</td>
+								{line.productId && product && taxBreakdown ? (
+									taxSupplyType === "intra" ? (
+										<>
+											<td className={cn(TAX_CELL, "min-w-[72px] text-muted-foreground")}>
+												{taxBreakdown.cgstRate}%
 											</td>
-											<td className='px-2 py-1.5'>
-												<span className='text-xs tabular-nums whitespace-nowrap'>
-													{line.productId
-														? formatSchemeRupee(line.dealerPrice)
-														: "—"}
-												</span>
+											<td className={cn(TAX_CELL_AMT, "min-w-[80px]")}>
+												{formatRupee(line.cgstAmount ?? 0)}
 											</td>
-											<td className='px-2 py-1.5'>
-												{line.productId ? (
-													hasScheme ? (
-														<div className='flex flex-col gap-0.5 max-w-[140px]'>
-															<Badge className='w-fit px-1.5 py-0 text-[10px] font-semibold bg-emerald-600 hover:bg-emerald-600'>
-																Applied
-															</Badge>
-															<span className='text-[10px] font-mono text-brand-700 truncate'>
-																{line.appliedSchemeCode ?? line.schemeCode}
-															</span>
-															<span className='text-[10px] text-emerald-700 tabular-nums'>
-																{formatSchemeRupee(line.schemeDiscountAmount)} off
-															</span>
-															<button
-																type='button'
-																onClick={() => handleRemoveScheme(line)}
-																className='text-[10px] font-medium text-red-600 hover:text-red-700 hover:underline text-left w-fit'
-															>
-																Remove scheme
-															</button>
-														</div>
-													) : hasEligibleScheme ? (
-														<div className='flex flex-col gap-0.5 max-w-[140px]'>
-															<button
-																type='button'
-																onClick={() => openSchemeDialog(line)}
-																className='inline-flex items-center gap-1 w-fit max-w-full rounded-full border border-dashed border-brand-400 bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-700 hover:bg-brand-100 transition-colors truncate'
-																title={formatSchemeOfferLabel(eligibleSchemes[0])}
-															>
-																<Tag className='w-3 h-3 shrink-0' />
-																<span className='truncate'>
-																	{formatSchemeOfferLabel(eligibleSchemes[0])}
-																</span>
-															</button>
-															{eligibleSchemes.length > 1 && (
-																<span className='text-[9px] text-muted-foreground pl-0.5'>
-																	+{eligibleSchemes.length - 1} more scheme
-																	{eligibleSchemes.length > 2 ? "s" : ""}
-																</span>
-															)}
-														</div>
-													) : (
-														<button
-															type='button'
-															onClick={() => openSchemeDialog(line)}
-															className='text-[10px] font-medium text-muted-foreground hover:text-brand-700 transition-colors'
-														>
-															No Scheme
-														</button>
-													)
-												) : (
-													"—"
+											<td className={cn(TAX_CELL, "min-w-[72px] text-muted-foreground")}>
+												{taxBreakdown.sgstRate}%
+											</td>
+											<td className={cn(TAX_CELL_AMT, "min-w-[80px]")}>
+												{formatRupee(line.sgstAmount ?? 0)}
+											</td>
+										</>
+									) : (
+										<>
+											<td className={cn(TAX_CELL, "min-w-[72px] text-muted-foreground")}>
+												{taxBreakdown.igstRate}%
+											</td>
+											<td className={cn(TAX_CELL_AMT, "min-w-[80px]")}>
+												{formatRupee(line.igstAmount ?? 0)}
+											</td>
+										</>
+									)
+								) : taxSupplyType === "intra" ? (
+									<>
+										<EmptyTaxCell />
+										<EmptyTaxCell />
+										<EmptyTaxCell />
+										<EmptyTaxCell />
+									</>
+								) : (
+									<>
+										<EmptyTaxCell />
+										<EmptyTaxCell />
+									</>
+								)}
+								<td className='px-2 py-1.5'>
+									<span className='text-xs font-semibold text-foreground tabular-nums'>
+										{formatRupee(line.lineTotal)}
+									</span>
+								</td>
+								<td className='px-2 py-1.5'>
+									<div className='flex items-center gap-0.5 justify-end'>
+										<button
+											type='button'
+											onClick={() =>
+												setEditingId(isEditing ? null : line.id)
+											}
+											className='p-1.5 hover:bg-muted rounded-md transition-colors'
+											title={isEditing ? "Done editing" : "Edit row"}
+										>
+											<Pencil
+												className={cn(
+													"w-3.5 h-3.5",
+													isEditing
+														? "text-brand-600"
+														: "text-muted-foreground",
 												)}
-											</td>
-											<td className='px-2 py-1.5'>
-												<span className='text-xs tabular-nums whitespace-nowrap'>
-													{line.productId && hasScheme
-														? formatSchemeRupee(line.schemeDiscountAmount)
-														: "—"}
-												</span>
-											</td>
-											<td className='px-2 py-1.5'>
-												<span className='text-xs font-medium tabular-nums whitespace-nowrap'>
-													{line.productId ? formatSchemeRupee(line.finalRate) : "—"}
-												</span>
-											</td>
-											{line.productId && product && taxBreakdown ? (
-												taxSupplyType === "intra" ? (
-													<>
-														<td className={cn(TAX_CELL, "min-w-[72px] text-muted-foreground")}>
-															{taxBreakdown.cgstRate}%
-														</td>
-														<td className={cn(TAX_CELL_AMT, "min-w-[80px]")}>
-															{formatRupee(line.cgstAmount ?? 0)}
-														</td>
-														<td className={cn(TAX_CELL, "min-w-[72px] text-muted-foreground")}>
-															{taxBreakdown.sgstRate}%
-														</td>
-														<td className={cn(TAX_CELL_AMT, "min-w-[80px]")}>
-															{formatRupee(line.sgstAmount ?? 0)}
-														</td>
-													</>
-												) : (
-													<>
-														<td className={cn(TAX_CELL, "min-w-[72px] text-muted-foreground")}>
-															{taxBreakdown.igstRate}%
-														</td>
-														<td className={cn(TAX_CELL_AMT, "min-w-[80px]")}>
-															{formatRupee(line.igstAmount ?? 0)}
-														</td>
-													</>
-												)
-											) : taxSupplyType === "intra" ? (
-												<>
-													<EmptyTaxCell />
-													<EmptyTaxCell />
-													<EmptyTaxCell />
-													<EmptyTaxCell />
-												</>
-											) : (
-												<>
-													<EmptyTaxCell />
-													<EmptyTaxCell />
-												</>
-											)}
-											<td className='px-2 py-1.5'>
-												<span className='text-xs font-semibold text-foreground tabular-nums'>
-													{formatRupee(line.lineTotal)}
-												</span>
-											</td>
-											<td className='px-2 py-1.5'>
-												<div className='flex items-center gap-0.5 justify-end'>
-													<button
-														type='button'
-														onClick={() =>
-															setEditingId(isEditing ? null : line.id)
-														}
-														className='p-1.5 hover:bg-muted rounded-md transition-colors'
-														title={isEditing ? "Done editing" : "Edit row"}
-													>
-														<Pencil
-															className={cn(
-																"w-3.5 h-3.5",
-																isEditing
-																	? "text-brand-600"
-																	: "text-muted-foreground",
-															)}
-														/>
-													</button>
-													<button
-														type='button'
-														onClick={() => removeLine(line.id)}
-														className='p-1.5 hover:bg-red-50 rounded-md transition-colors'
-														title='Remove row'
-													>
-														<Trash2 className='w-3.5 h-3.5 text-red-500' />
-													</button>
-												</div>
-											</td>
-										</tr>
-									);
-								})}
-							</tbody>
-						</table>
+											/>
+										</button>
+										<button
+											type='button'
+											onClick={() => removeLine(line.id)}
+											className='p-1.5 hover:bg-red-50 rounded-md transition-colors'
+											title='Remove row'
+										>
+											<Trash2 className='w-3.5 h-3.5 text-red-500' />
+										</button>
+									</div>
+								</td>
+							</tr>
+						);
+					})
+				}
+				customTableFooter={
+					<div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-muted/20 px-4 py-2.5">
+						<p className="text-[11px] text-muted-foreground">
+							<span className="font-medium text-foreground">{lines.length}</span> product(s) selected
+						</p>
+						<div className="flex flex-wrap items-center gap-3">
+							<p className="text-[11px] text-muted-foreground">
+								Total quantity:{" "}
+								<span className="font-medium text-foreground tabular-nums">{totalQuantity}</span>
+							</p>
+							<p className="text-[11px] text-muted-foreground">
+								Total amount:{" "}
+								<span className="font-medium text-foreground tabular-nums font-mono">
+									{formatRupee(totalAmount)}
+								</span>
+							</p>
+						</div>
 					</div>
-				</div>
-			)}
+				}
+			/>
 
-			{error && (
-				<p className='text-xs text-red-500 flex items-center gap-1'>
-					<AlertCircle className='w-3.5 h-3.5 flex-shrink-0' /> {error}
+			{localError && (
+				<p className='text-xs text-red-500 flex items-center gap-1 mt-1'>
+					<AlertCircle className='w-3.5 h-3.5 flex-shrink-0' /> {localError}
 				</p>
 			)}
 		</div>
