@@ -3,11 +3,16 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Calendar, CheckCircle, Download, Eye, Pencil, PlayCircle } from "lucide-react";
+import { Calendar, Download, Eye, Pencil, PlayCircle } from "lucide-react";
 import { RecordDetailPage } from "@/components/record-detail";
-import { NoteWorkflowBadge } from "../components/NoteWorkflowBadge";
+import { AccountsVoucherStatusBadge } from "@/components/accounts/AccountsVoucherStatusBadge";
+import { AccountsDocumentWorkflowSection } from "@/components/accounts/AccountsDocumentWorkflowSection";
 import {
-  approveDebitNote,
+  canEditAccountsDocument,
+  resolveWorkflowStatus,
+} from "@/lib/accounts/accounts-maker-checker";
+import {
+  canEditDebitNote,
   getDebitNoteById,
   processDebitNote,
   REFERENCE_TYPE_LABELS,
@@ -26,18 +31,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-medium mt-0.5">{value || "—"}</p>
     </div>
   );
-}
-
-function workflowStatusLabel(status: string) {
-  return status.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function workflowStatusVariant(status: string): "active" | "inactive" | "draft" | "blocked" | "neutral" {
-  if (status === "draft") return "draft";
-  if (status === "pending_approval") return "neutral";
-  if (status === "approved" || status === "processed") return "active";
-  if (status === "cancelled") return "blocked";
-  return "neutral";
 }
 
 export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: number }) {
@@ -59,7 +52,8 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
 
   if (!record) return null;
 
-  const canEdit = record.status === "draft" || record.status === "pending_approval";
+  const canEdit = canEditDebitNote(record) && canEditAccountsDocument(record.workflow, record.status);
+  const displayStatus = resolveWorkflowStatus(record.workflow, record.status);
 
   return (
     <RecordDetailPage
@@ -68,8 +62,8 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
       listLabel="Debit Notes"
       recordName={record.vendorName}
       recordCode={record.debitNoteNo}
-      statusLabel={workflowStatusLabel(record.status)}
-      statusVariant={workflowStatusVariant(record.status)}
+      statusLabel={displayStatus.replaceAll("_", " ")}
+      statusVariant={displayStatus === "posted" ? "active" : displayStatus === "draft" ? "draft" : "neutral"}
       metaItems={[
         { icon: Calendar, label: record.debitNoteDate },
         { label: REFERENCE_TYPE_LABELS[record.againstType] },
@@ -80,19 +74,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
           <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => downloadDebitNotePdf(record)}>
             <Download className="w-3.5 h-3.5" /> Download PDF
           </Button>
-          {(record.status === "draft" || record.status === "pending_approval") && (
-            <Button
-              size="sm"
-              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
-              onClick={() => {
-                approveDebitNote(record.id);
-                refresh();
-              }}
-            >
-              <CheckCircle className="w-3.5 h-3.5" /> Approve
-            </Button>
-          )}
-          {record.status === "approved" && (
+          {displayStatus === "posted" && record.status === "approved" && (
             <Button
               size="sm"
               className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1"
@@ -153,7 +135,15 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
             grandTotal: record.currentDebitAmount,
           })}
         />
-        <NoteWorkflowBadge status={record.status} />
+        <AccountsVoucherStatusBadge workflow={record.workflow} legacyStatus={record.status} />
+
+        <AccountsDocumentWorkflowSection
+          category="debit_note"
+          documentId={record.id}
+          workflow={record.workflow}
+          legacyStatus={record.status}
+          onUpdated={refresh}
+        />
 
         <div className="rounded-lg border border-border/60 bg-white p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
           <DetailRow label="Supplier" value={record.vendorName} />
@@ -171,7 +161,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
         {record.againstType !== "standalone_adjustment" && record.lineItems.length > 0 && (
           <div className="bg-white rounded-lg border border-border/60 p-4 overflow-x-auto">
             <h2 className="text-sm font-semibold mb-3">Line Items</h2>
-            <table className="w-full text-xs min-w-[720px]">
+            <table className="accounts-table w-full text-xs min-w-[720px]">
               <thead className="border-b">
                 <tr>
                   {["Product", "Inv Qty", "Return Qty", "UOM", "Rate", "GST %", "Debit Amount"].map((h) => (

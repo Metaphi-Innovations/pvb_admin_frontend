@@ -29,8 +29,8 @@ export default function PendingVendorBillsClient() {
         {pending.length === 0 ? (
           <div className="py-16 text-center text-sm text-muted-foreground">No GRN-completed receipts pending supplier bill.</div>
         ) : (
-          <table className="w-full text-table min-w-[800px]">
-            <thead className="bg-muted/20 border-b sticky top-0">
+          <table className="accounts-table w-full text-table min-w-[800px]">
+            <thead className="border-b">
               <tr>
                 {["GRN No.", "PO Number", "Supplier", "GRN Date", "Items", "Status", ""].map((h) => (
                   <th key={h || "act"} className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">

@@ -12,14 +12,12 @@ import { SalesOrderRecord } from "../../types";
 import { buildDispatchNearExpiryEntries } from "../../../dispatch/near-expiry-dispatch";
 import { PackingAllocationSummaryDialog } from "../../components/PackingAllocationSummaryDialog";
 import { PackingProductLinesSection } from "../../components/PackingProductLinesSection";
-import { FefoOverrideConfirmDialog } from "../../components/FefoOverrideConfirmDialog";
 import {
   buildBatchAllocationMap,
   buildFefoRecommendedSelections,
   buildPackingSummaryLines,
   getPackingBatchInventoryRows,
   getSelectedPackingQty,
-  hasAnyFefoViolation,
   isBatchAllocationComplete,
   validateBatchSelectionsForPacking,
   validateSelectedPackingLines,
@@ -45,7 +43,6 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
   const [batchErrors, setBatchErrors] = useState<Record<string, string>>({});
   const [availableStock, setAvailableStock] = useState<Record<string, number>>({});
 
-  const [fefoConfirmOpen, setFefoConfirmOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [summaryLines, setSummaryLines] = useState<PackingSummaryLine[]>([]);
   const [createdPackingNo, setCreatedPackingNo] = useState("");
@@ -199,13 +196,6 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
     );
     setBatchErrors(batchValidation.batchErrors);
     if (!batchValidation.valid) {
-      return;
-    }
-
-    if (
-      hasAnyFefoViolation(order.products, selectedSkus, packingQty, batchSelections, warehouseName)
-    ) {
-      setFefoConfirmOpen(true);
       return;
     }
 
@@ -443,8 +433,19 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
             onQtyChange={handleQtyChange}
             onBatchSelectionsChange={(sku, selections) => {
               setBatchSelections((prev) => ({ ...prev, [sku]: selections }));
+              
+              const totalAllocated = Object.values(selections).reduce((a, b) => a + b, 0);
+              setPackingQty((prev) => ({ ...prev, [sku]: totalAllocated }));
+              
               if (batchErrors[sku]) {
                 setBatchErrors((prev) => {
+                  const next = { ...prev };
+                  delete next[sku];
+                  return next;
+                });
+              }
+              if (validationErrors[sku]) {
+                setValidationErrors((prev) => {
                   const next = { ...prev };
                   delete next[sku];
                   return next;
@@ -454,12 +455,6 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
           />
         </div>
       </FormContainer>
-
-      <FefoOverrideConfirmDialog
-        open={fefoConfirmOpen}
-        onClose={() => setFefoConfirmOpen(false)}
-        onConfirm={finalizePacking}
-      />
 
       <PackingAllocationSummaryDialog
         open={summaryOpen}
@@ -474,3 +469,4 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
     </>
   );
 }
+

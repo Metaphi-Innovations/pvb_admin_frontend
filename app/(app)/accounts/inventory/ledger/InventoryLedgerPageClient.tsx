@@ -34,8 +34,8 @@ export default function InventoryLedgerPageClient() {
       layout="standard"
     >
       <div className="rounded-xl border border-border/50 bg-white shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/20 border-b border-border/60">
+        <table className="accounts-table w-full text-sm">
+          <thead className="border-b border-border/60">
             <tr>
               {["Ledger Code", "Ledger Name", "Type", "Opening Balance", "Current Balance", "Status"].map((h) => (
                 <th

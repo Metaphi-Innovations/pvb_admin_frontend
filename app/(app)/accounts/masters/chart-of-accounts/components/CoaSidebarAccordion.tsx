@@ -4,10 +4,11 @@ import React, { useMemo } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChartOfAccount } from "../../../data";
-import { getDirectChildren, getSearchVisibleIds } from "../chart-of-accounts-data";
+import { getDirectChildren, getSearchVisibleIds, hasChildLedgers } from "../chart-of-accounts-data";
 import {
   VISUAL_ICON,
   VISUAL_ICON_CLASS,
+  ledgerRowExpandable,
   resolveCoaVisualLevel,
   type CoaVisualLevel,
 } from "./coa-tree-visual";
@@ -88,7 +89,7 @@ function NavRow({
   );
 }
 
-function StructuralChildren({
+function TreeChildren({
   parentId,
   records,
   selectedId,
@@ -114,56 +115,10 @@ function StructuralChildren({
   return (
     <>
       {children.map((child) => {
-        if (child.nodeLevel === "ledger") {
-          return (
-            <NavRow
-              key={child.id}
-              node={child}
-              records={records}
-              selectedId={selectedId}
-              indent={baseIndent}
-              onSelect={onSelect}
-            />
-          );
-        }
-
+        const expandable =
+          child.nodeLevel !== "ledger" || ledgerRowExpandable(child, records);
         const isExpanded = expandedIds.has(child.id);
         const childHasChildren = hasChildren(records, child.id);
-        const subChildren = getDirectChildren(records, child.id);
-        const onlyLedgers =
-          child.nodeLevel === "sub_group" &&
-          subChildren.length > 0 &&
-          subChildren.every((c) => c.nodeLevel === "ledger");
-
-        if (onlyLedgers) {
-          return (
-            <div key={child.id}>
-              <NavRow
-                node={child}
-                records={records}
-                selectedId={selectedId}
-                indent={baseIndent}
-                onSelect={onSelect}
-                onToggle={onToggle}
-                expanded={isExpanded}
-                showChevron={childHasChildren}
-              />
-              {isExpanded &&
-                subChildren.map((ledger) =>
-                  visibleIds && !visibleIds.has(ledger.id) ? null : (
-                    <NavRow
-                      key={ledger.id}
-                      node={ledger}
-                      records={records}
-                      selectedId={selectedId}
-                      indent={baseIndent + INDENT}
-                      onSelect={onSelect}
-                    />
-                  ),
-                )}
-            </div>
-          );
-        }
 
         return (
           <div key={child.id}>
@@ -173,12 +128,12 @@ function StructuralChildren({
               selectedId={selectedId}
               indent={baseIndent}
               onSelect={onSelect}
-              onToggle={onToggle}
+              onToggle={expandable ? onToggle : undefined}
               expanded={isExpanded}
-              showChevron={childHasChildren}
+              showChevron={expandable && childHasChildren}
             />
-            {isExpanded && (
-              <StructuralChildren
+            {expandable && isExpanded && childHasChildren && (
+              <TreeChildren
                 parentId={child.id}
                 records={records}
                 selectedId={selectedId}
@@ -289,7 +244,7 @@ export function CoaSidebarAccordion({
 
             {isHeadExpanded && headHasChildren && (
               <div className="border-t border-border/30 px-0.5 pb-1 pt-0.5">
-                <StructuralChildren
+                <TreeChildren
                   parentId={head.id}
                   records={records}
                   selectedId={selectedId}

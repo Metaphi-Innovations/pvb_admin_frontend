@@ -162,7 +162,7 @@ function findSubGroup(records: ChartOfAccount[], nameIncludes: string): ChartOfA
   const q = nameIncludes.toLowerCase();
   return (
     records.find(
-      (r) => r.nodeLevel === "sub_group" && r.accountName.toLowerCase().includes(q),
+      (r) => r.nodeLevel === "account_group" && r.accountName.toLowerCase().includes(q),
     ) ?? null
   );
 }

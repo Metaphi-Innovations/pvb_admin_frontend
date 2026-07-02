@@ -7,9 +7,10 @@ import type { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/c
 import { Eye } from "lucide-react";
 import {
   type SalesReturnRecord,
-  getSalesReturnRecords,
+  formatProductReturnQuantity,
   formatReturnAmount,
   getReturnTotalAmount,
+  getSalesReturnRecords,
 } from "../sales-return-data";
 
 export function SalesReturnTab({ onCountChange }: { onCountChange?: (count: number) => void }) {
@@ -34,24 +35,24 @@ export function SalesReturnTab({ onCountChange }: { onCountChange?: (count: numb
   const returnProcessed = useMemo(() => {
     let result = [...salesReturns];
     Object.keys(returnFilters).forEach((key) => {
-      const val = returnFilters[key];
-      if (!val) return;
+      const value = returnFilters[key];
+      if (!value) return;
       if (key === "search") {
-        const q = (val as string).toLowerCase();
+        const query = (value as string).toLowerCase();
         result = result.filter(
-          (r) =>
-            r.returnNumber.toLowerCase().includes(q) ||
-            r.dispatchNumber.toLowerCase().includes(q) ||
-            r.salesOrderNumber.toLowerCase().includes(q) ||
-            r.customer.toLowerCase().includes(q),
+          (record) =>
+            record.returnNumber.toLowerCase().includes(query) ||
+            record.dispatchNumber.toLowerCase().includes(query) ||
+            record.salesOrderNumber.toLowerCase().includes(query) ||
+            record.customer.toLowerCase().includes(query),
         );
       }
     });
     if (returnSort.key && returnSort.direction !== "none") {
-      result.sort((a, b) => {
-        const valA = String(a[returnSort.key as keyof SalesReturnRecord] || "");
-        const valB = String(b[returnSort.key as keyof SalesReturnRecord] || "");
-        return returnSort.direction === "asc" ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      result.sort((left, right) => {
+        const leftValue = String(left[returnSort.key as keyof SalesReturnRecord] || "");
+        const rightValue = String(right[returnSort.key as keyof SalesReturnRecord] || "");
+        return returnSort.direction === "asc" ? leftValue.localeCompare(rightValue) : rightValue.localeCompare(leftValue);
       });
     }
     return result;
@@ -68,21 +69,21 @@ export function SalesReturnTab({ onCountChange }: { onCountChange?: (count: numb
       header: "Return No",
       sortable: true,
       width: "135px",
-      render: (val) => <span className="font-mono text-xs font-semibold text-brand-700">{val}</span>,
+      render: (value) => <span className="font-mono text-xs font-semibold text-brand-700">{value}</span>,
     },
     {
       key: "dispatchNumber",
       header: "Dispatch No",
       sortable: true,
       width: "135px",
-      render: (val) => <span className="font-mono text-xs">{val}</span>,
+      render: (value) => <span className="font-mono text-xs">{value}</span>,
     },
     {
       key: "salesOrderNumber",
       header: "Sales Order No",
       sortable: true,
       width: "140px",
-      render: (val) => <span className="font-mono text-xs">{val}</span>,
+      render: (value) => <span className="font-mono text-xs">{value}</span>,
     },
     { key: "customer", header: "Customer", sortable: true, width: "160px" },
     { key: "returnDate", header: "Return Date", sortable: true, width: "120px" },
@@ -91,22 +92,19 @@ export function SalesReturnTab({ onCountChange }: { onCountChange?: (count: numb
       header: "Return Amount",
       sortable: true,
       width: "130px",
-      render: (_val, row) => (
-        <span className="text-xs font-semibold text-foreground">{formatReturnAmount(getReturnTotalAmount(row))}</span>
-      ),
+      render: (_value, row) => <span className="text-xs font-semibold text-foreground">{formatReturnAmount(getReturnTotalAmount(row))}</span>,
     },
     {
       key: "products",
       header: "Returned Products",
-      width: "250px",
-      render: (_val, row) => (
+      width: "280px",
+      render: (_value, row) => (
         <div className="space-y-0.5 text-xs">
-          {row.products.map((p, idx) => (
-            <div key={idx} className="text-foreground font-medium">
-              {p.product}{" "}
-              <span className="text-muted-foreground font-semibold">
-                ({p.returnQty} / {p.dispatchQty})
-              </span>
+          {row.products.map((product, index) => (
+            <div key={`${product.sku}-${product.batchNo || index}`} className="font-medium text-foreground">
+              {product.product}
+              <span className="font-semibold text-muted-foreground"> ({formatProductReturnQuantity(product)})</span>
+              {product.batchNo ? <span className="ml-1 text-[11px] text-muted-foreground">{product.batchNo}</span> : null}
             </div>
           ))}
         </div>

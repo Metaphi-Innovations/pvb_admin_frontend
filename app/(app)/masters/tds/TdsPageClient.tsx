@@ -40,6 +40,7 @@ import {
   formatApplicableToLabels,
 } from "./tds-data";
 import { TdsRateInput } from "./TdsRateInput";
+import { ensureTdsSectionLedgers } from "@/lib/accounts/tds-section-ledgers";
 import { MasterFormGrid, MasterField, compactInput } from "@/components/masters/MasterModule";
 import { MasterListingSheets } from "@/components/masters/MasterListingSheets";
 import { MasterDrawerSection } from "@/components/masters/MasterRecordDrawer";
@@ -209,6 +210,18 @@ export default function TdsPageClient() {
       render: (_val, row) => (
         <span className="text-xs font-semibold text-foreground">
           {formatTdsRateDisplay(row.tdsRate)}
+        </span>
+      ),
+    },
+    {
+      key: "thresholdAmount",
+      header: "Threshold",
+      width: "110px",
+      render: (_val, row) => (
+        <span className="text-xs text-muted-foreground">
+          {row.thresholdAmount != null
+            ? `₹${row.thresholdAmount.toLocaleString("en-IN")}`
+            : "—"}
         </span>
       ),
     },
@@ -387,6 +400,7 @@ export default function TdsPageClient() {
     }
 
     saveTDSMasters(updatedList);
+    ensureTdsSectionLedgers();
     setRecords(updatedList);
     closeSheet();
   };
@@ -625,18 +639,16 @@ export default function TdsPageClient() {
                 />
               </MasterField>
 
-              <MasterField
-                label="Description"
-                className="sm:col-span-2"
-              >
-                <Textarea
-                  className="text-xs min-h-[72px] resize-none"
-                  value={form.description}
+              <MasterField label="Threshold Limit (₹)" className="sm:col-span-2">
+                <Input
+                  className={compactInput()}
+                  type="number"
+                  min={0}
+                  value={form.thresholdAmount}
                   onChange={(e) =>
-                    setForm((prev) => ({ ...prev, description: e.target.value }))
+                    setForm((prev) => ({ ...prev, thresholdAmount: e.target.value }))
                   }
-                  placeholder="Optional description"
-                  rows={3}
+                  placeholder="Annual threshold — optional"
                 />
               </MasterField>
             </MasterFormGrid>

@@ -9,7 +9,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { PartyAddressOption } from "@/lib/accounts/transaction-master-fetch";
-import { MasterFetchedBadge } from "./MasterFetchedBadge";
 
 export function PartyBranchAddressSelector({
   billToOptions,
@@ -33,10 +32,7 @@ export function PartyBranchAddressSelector({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
       <div className="space-y-1">
-        <div className="flex items-center gap-1.5">
-          <Label className="text-xs">Bill To</Label>
-          <MasterFetchedBadge />
-        </div>
+        <Label className="text-xs">Bill To</Label>
         <Select
           value={billToId}
           disabled={disabled || billToOptions.length <= 1}
@@ -58,10 +54,7 @@ export function PartyBranchAddressSelector({
         </Select>
       </div>
       <div className="space-y-1">
-        <div className="flex items-center gap-1.5">
-          <Label className="text-xs">Ship To</Label>
-          <MasterFetchedBadge />
-        </div>
+        <Label className="text-xs">Ship To</Label>
         <Select
           value={shipToId}
           disabled={disabled || shipToOptions.length <= 1}

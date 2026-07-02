@@ -515,6 +515,8 @@ export default function DistributorPage() {
           onFilterChange={setFilters}
           actions={actions}
           emptyMessage="distributors"
+          onAdd={() => router.push("/database/distributor/new")}
+          addLabel="Add Distributor"
           onExport={() => {}}
           searchPlaceholder="Search firm, contact, mobile, district, state, company…"
           currentFilters={filters}

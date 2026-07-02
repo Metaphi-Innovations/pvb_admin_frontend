@@ -43,6 +43,7 @@ export function enrichDispatchForReturn(dispatch: DispatchRecord): DispatchRecor
   };
 }
 
-export function calcReturnLineAmount(returnQty: number, unitRate: number): number {
-  return Math.round(returnQty * unitRate * 100) / 100;
+export function calcReturnLineAmount(returnQtyPieces: number, unitRateCase: number): number {
+  const returnQtyCases = returnQtyPieces / 10;
+  return Math.round(returnQtyCases * unitRateCase * 100) / 100;
 }

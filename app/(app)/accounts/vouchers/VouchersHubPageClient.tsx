@@ -50,7 +50,7 @@ export default function VouchersHubPageClient() {
   };
 
   const closeNew = useCallback(() => {
-    router.push(`/accounts/vouchers?tab=${voucherTypeToUrl(activeTab)}`);
+    router.push(`/accounts/vouchers?tab=${voucherTypeToUrl(activeTab)}&t=${Date.now()}`);
   }, [activeTab, router]);
 
   const label = VOUCHER_TYPE_LABELS[activeTab];

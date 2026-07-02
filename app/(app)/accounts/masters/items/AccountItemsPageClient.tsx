@@ -78,8 +78,8 @@ export default function AccountItemsPageClient() {
       layout="split"
     >
       <div className="overflow-auto flex-1">
-        <table className="w-full text-xs min-w-[900px]">
-          <thead className="bg-muted/20 border-b border-border/60 sticky top-0">
+        <table className="accounts-table w-full text-xs min-w-[900px]">
+          <thead className="border-b border-border/60">
             <tr>
               {["Item", "SKU", "Category", "HSN", "GST", "Unit", "Opening Qty", "Opening Value", "Valuation", "Status"].map(
                 (h) => (

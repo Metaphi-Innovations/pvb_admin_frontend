@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { IndianRupee, ArrowLeft, MoreHorizontal } from "lucide-react";
+import { IndianRupee, ArrowLeft, MoreHorizontal, Eye } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { useTransactionDetailsDrawer } from "@/components/accounts/TransactionDetailsDrawer";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { getVendorOutstandingDetail } from "@/lib/accounts/payables-data";
 import { getVendorPayablesMeta } from "@/lib/accounts/payables-data";
+import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { MiniKPICard } from "@/components/ui/KPICard";
 import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
@@ -23,6 +25,7 @@ import { formatCreditPeriod } from "@/app/(app)/masters/vendors/vendor-data";
 export default function VendorOutstandingDetailClient() {
   const params = useParams();
   const vendorId = Number(params.vendorId);
+  const { openTransaction, drawer: transactionDrawer } = useTransactionDetailsDrawer();
   const detail = useMemo(
     () => (Number.isFinite(vendorId) ? getVendorOutstandingDetail(vendorId, "2026-06-20") : null),
     [vendorId],
@@ -50,6 +53,13 @@ export default function VendorOutstandingDetailClient() {
 
   const { vendor, ledgerId, bills } = detail;
   const meta = getVendorPayablesMeta(vendor.id);
+
+  const openBill = useCallback(
+    (billId: number) => {
+      openTransaction({ type: "purchase_invoice", id: billId });
+    },
+    [openTransaction],
+  );
 
   return (
     <AccountsPageShell
@@ -102,8 +112,8 @@ export default function VendorOutstandingDetailClient() {
       </div>
 
       <div className="flex-1 overflow-auto min-h-0">
-        <table className="w-full text-table min-w-[1100px]">
-          <thead className="bg-muted/20 border-b sticky top-0 z-10">
+        <table className="accounts-table w-full text-table min-w-[1100px]">
+          <thead className="border-b">
             <tr>
               {[
                 "Purchase Bill No",
@@ -128,14 +138,22 @@ export default function VendorOutstandingDetailClient() {
           </thead>
           <tbody>
             {bills.map((bill) => (
-              <tr key={bill.billId} className="border-b border-border/40 hover:bg-muted/20">
+              <tr
+                key={bill.billId}
+                className="border-b border-border/40 hover:bg-muted/20 cursor-pointer group"
+                onClick={() => openBill(bill.billId)}
+              >
                 <td className="px-3 py-2.5 text-xs font-mono font-semibold">
-                  <Link
-                    href={`/accounts/purchase-invoices/${bill.billId}`}
-                    className="text-brand-600 hover:underline"
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openBill(bill.billId);
+                    }}
+                    className="text-brand-700 hover:underline"
                   >
                     {bill.billNo}
-                  </Link>
+                  </button>
                 </td>
                 <td className="px-3 py-2.5 text-xs">{bill.billDate}</td>
                 <td className="px-3 py-2.5 text-xs">{bill.dueDate}</td>
@@ -158,6 +176,17 @@ export default function VendorOutstandingDetailClient() {
                   <StatusBadge status={bill.status} />
                 </td>
                 <td className="px-3 py-2.5 text-right">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openBill(bill.billId);
+                    }}
+                    className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-0 group-hover:opacity-100 inline-flex"
+                    aria-label={`View ${bill.billNo}`}
+                  >
+                    <Eye className="w-4 h-4 text-muted-foreground" />
+                  </button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
@@ -176,7 +205,7 @@ export default function VendorOutstandingDetailClient() {
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
-                        <Link href={`/accounts/masters/ledgers/${ledgerId}`}>View Ledger</Link>
+                        <Link href={buildGeneralLedgerHref(ledgerId)}>View Ledger</Link>
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -186,6 +215,7 @@ export default function VendorOutstandingDetailClient() {
           </tbody>
         </table>
       </div>
+      {transactionDrawer}
     </AccountsPageShell>
   );
 }

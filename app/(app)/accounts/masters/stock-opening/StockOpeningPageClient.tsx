@@ -123,8 +123,8 @@ export default function StockOpeningPageClient() {
           </div>
         </div>
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-xs min-w-[720px]">
-            <thead className="bg-muted/20 border-b sticky top-0">
+          <table className="accounts-table w-full text-xs min-w-[720px]">
+            <thead className="border-b">
               <tr>
                 {["Item", "Warehouse", "Qty", "Rate", "Value", "Batch", "Expiry", "FY"].map((h) => (
                   <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground uppercase text-[10px]">{h}</th>

@@ -214,8 +214,8 @@ export default function ReconciliationEntriesPageClient({
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Left — transactions */}
         <div className="flex-1 min-w-0 overflow-auto border-r border-border/40">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-slate-50 border-b border-border/60">
+          <table className="accounts-table w-full text-sm">
+            <thead className="bg-slate-50 border-b border-border/60">
               <tr>
                 <th className="w-8 px-2 py-2">
                   <Checkbox

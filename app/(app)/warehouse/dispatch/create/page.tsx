@@ -5,60 +5,15 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import { Truck, Building, Package, CheckSquare, Check, Sparkles } from "lucide-react";
+import { Truck, Building, Package, CheckSquare, Check, Sparkles, User, Phone, Mail, MapPin } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getPackedOrdersByWarehouse, saveDispatch, generateDispatchNumber } from "../services";
 import { getPackingRecordById } from "../../packing/services";
 import { PackingRecord } from "../../packing/types";
 import { DispatchProduct, DispatchRecord } from "../types";
-import { WAREHOUSE_OPTIONS, DELIVERY_STATUS_OPTIONS } from "../constants";
-import {
-  batchSelectionsToAllocations,
-  buildDispatchNearExpiryEntries,
-  defaultSingleBatchSelection,
-  distributeFefoBatchSelections,
-} from "../near-expiry-dispatch";
-import {
-  BatchAllocationSection,
-} from "../components/BatchAllocationSection";
+import { buildDispatchNearExpiryEntries } from "../near-expiry-dispatch";
 import { NearExpirySchemeInfoPanel } from "../components/NearExpirySchemeInfoPanel";
-
-function rowKey(orderId: string, sku: string) {
-  return `${orderId}::${sku}`;
-}
-
-function selectionsFromPackingBatches(
-  productName: string,
-  warehouse: string,
-  dispatchQty: number,
-  packingBatches: { batchNumber: string; expiryDate: string; allocatedQty: number }[],
-): Record<string, number> {
-  if (!packingBatches.length) {
-    return defaultSingleBatchSelection(productName, warehouse, dispatchQty);
-  }
-  if (packingBatches.length === 1) {
-    const batch = packingBatches[0];
-    return {
-      [batch.batchNumber]: Math.min(dispatchQty, batch.allocatedQty),
-    };
-  }
-  const selections: Record<string, number> = {};
-  let remaining = dispatchQty;
-  for (const batch of packingBatches) {
-    if (remaining <= 0) break;
-    const take = Math.min(remaining, batch.allocatedQty);
-    if (take <= 0) continue;
-    selections[batch.batchNumber] = take;
-    remaining -= take;
-  }
-  if (remaining > 0) {
-    const extra = distributeFefoBatchSelections(productName, warehouse, remaining);
-    for (const [batchNumber, qty] of Object.entries(extra)) {
-      selections[batchNumber] = (selections[batchNumber] ?? 0) + qty;
-    }
-  }
-  return selections;
-}
+import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
 
 export default function CreateDispatchPage() {
   const router = useRouter();
@@ -70,14 +25,34 @@ export default function CreateDispatchPage() {
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [driverName, setDriverName] = useState("");
   const [transporterName, setTransporterName] = useState("");
-  const [deliveryStatus, setDeliveryStatus] = useState("Pending Dispatch");
-  const [selectedWarehouse, setSelectedWarehouse] = useState("All");
-
-  const [packedOrders, setPackedOrders] = useState<PackingRecord[]>([]);
+  
+  const [selectedSalesOrderNo, setSelectedSalesOrderNo] = useState("All");
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
-  const [dispatchQtyMap, setDispatchQtyMap] = useState<Record<string, number>>({});
-  const [batchSelections, setBatchSelections] = useState<Record<string, Record<string, number>>>({});
-  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+
+  // We fetch all packings globally here so we can build a list of unique Sales Orders
+  const allPackings = useMemo(() => getPackedOrdersByWarehouse("All"), []);
+
+  const uniqueSalesOrders = useMemo(() => {
+    const map = new Map<string, { label: string; warehouse: string; customer: string }>();
+    allPackings.forEach(p => {
+      if (!map.has(p.salesOrderNo)) {
+        const customer = p.sourceDocumentType === "Stock Transfer"
+            ? p.targetWarehouse || p.customer.replace("Transfer to ", "")
+            : p.customer;
+        map.set(p.salesOrderNo, {
+          label: p.salesOrderNo,
+          warehouse: p.warehouse || p.sourceWarehouse || "Central Warehouse",
+          customer: customer,
+        });
+      }
+    });
+    return Array.from(map.entries()).map(([value, data]) => ({
+      value,
+      label: `${value} (${data.customer})`,
+      warehouse: data.warehouse,
+      customer: data.customer
+    }));
+  }, [allPackings]);
 
   useEffect(() => {
     setPackingNo(generateDispatchNumber());
@@ -87,76 +62,50 @@ export default function CreateDispatchPage() {
     if (packingId) {
       const record = getPackingRecordById(packingId);
       if (record) {
-        setSelectedWarehouse(record.warehouse || record.sourceWarehouse || "All");
+        setSelectedSalesOrderNo(record.salesOrderNo);
       }
     }
   }, [packingId]);
 
-  useEffect(() => {
-    const orders = getPackedOrdersByWarehouse(selectedWarehouse);
-    setPackedOrders(orders);
+  const selectedSOData = uniqueSalesOrders.find(so => so.value === selectedSalesOrderNo);
+  const autoWarehouse = selectedSOData?.warehouse || "";
+  const customerNameStr = selectedSOData?.customer || "";
 
-    if (packingId) {
-      const target = orders.find((o) => o.id === packingId);
-      if (target) {
-        setSelectedOrderIds(new Set([target.id]));
-        const newQtyMap: Record<string, number> = {};
-        const newSelections: Record<string, Record<string, number>> = {};
-        const warehouse = target.warehouse || target.sourceWarehouse || selectedWarehouse;
-        target.products.forEach((p) => {
-          const key = rowKey(target.id, p.sku);
-          newQtyMap[key] = p.packedQty;
-          newSelections[key] = selectionsFromPackingBatches(
-            p.product,
-            warehouse === "All" ? "Central Warehouse" : warehouse,
-            p.packedQty,
-            p.batchAllocations ?? [],
-          );
-        });
-        setDispatchQtyMap(newQtyMap);
-        setBatchSelections(newSelections);
-      }
+  const packedOrders = useMemo(() => {
+    if (selectedSalesOrderNo === "All") return [];
+    return allPackings.filter(p => p.salesOrderNo === selectedSalesOrderNo);
+  }, [selectedSalesOrderNo, allPackings]);
+
+  // Auto-select packings when changing SO
+  useEffect(() => {
+    if (selectedSalesOrderNo !== "All") {
+      setSelectedOrderIds(new Set(packedOrders.map(p => p.id)));
     } else {
       setSelectedOrderIds(new Set());
-      setDispatchQtyMap({});
-      setBatchSelections({});
     }
-  }, [selectedWarehouse, packingId]);
+  }, [selectedSalesOrderNo, packedOrders]);
+
+  const customerDetails = useMemo(() => {
+    const customers = loadCustomers();
+    const found = customers.find(c => c.customerName.trim().toLowerCase() === customerNameStr.trim().toLowerCase());
+    if (found) return found;
+
+    // Fallback for mock data names not in customer-data.ts
+    return {
+      mobile: "9876543210",
+      email: "contact@" + customerNameStr.replace(/[^a-zA-Z]/g, "").toLowerCase() + ".com",
+      address: "123 Business Park",
+      districtName: "Pune Region",
+      stateName: "Maharashtra",
+      pincode: "411001",
+    };
+  }, [customerNameStr]);
 
   const toggleOrderSelection = (order: PackingRecord) => {
     setSelectedOrderIds((prev) => {
       const next = new Set(prev);
-      const warehouse = order.warehouse || order.sourceWarehouse || selectedWarehouse;
-      const resolvedWarehouse = warehouse === "All" ? "Central Warehouse" : warehouse;
-
-      if (next.has(order.id)) {
-        next.delete(order.id);
-        const newQtyMap = { ...dispatchQtyMap };
-        const newSelections = { ...batchSelections };
-        order.products.forEach((p) => {
-          const key = rowKey(order.id, p.sku);
-          delete newQtyMap[key];
-          delete newSelections[key];
-        });
-        setDispatchQtyMap(newQtyMap);
-        setBatchSelections(newSelections);
-      } else {
-        next.add(order.id);
-        const newQtyMap = { ...dispatchQtyMap };
-        const newSelections = { ...batchSelections };
-        order.products.forEach((p) => {
-          const key = rowKey(order.id, p.sku);
-          newQtyMap[key] = p.packedQty;
-          newSelections[key] = selectionsFromPackingBatches(
-            p.product,
-            resolvedWarehouse,
-            p.packedQty,
-            p.batchAllocations ?? [],
-          );
-        });
-        setDispatchQtyMap(newQtyMap);
-        setBatchSelections(newSelections);
-      }
+      if (next.has(order.id)) next.delete(order.id);
+      else next.add(order.id);
       return next;
     });
   };
@@ -175,13 +124,14 @@ export default function CreateDispatchPage() {
       packedQty: number;
       customerName: string;
       warehouse: string;
+      batchAllocations: { batchNumber: string; expiryDate: string; allocatedQty: number }[];
     }[] = [];
     selectedOrders.forEach((order) => {
       const customerName =
         order.sourceDocumentType === "Stock Transfer"
           ? order.targetWarehouse || order.customer.replace("Transfer to ", "")
           : order.customer;
-      const warehouse = order.warehouse || order.sourceWarehouse || selectedWarehouse;
+      const warehouse = order.warehouse || order.sourceWarehouse || autoWarehouse;
       order.products.forEach((p) => {
         rows.push({
           orderId: order.id,
@@ -191,30 +141,16 @@ export default function CreateDispatchPage() {
           packedQty: p.packedQty,
           customerName,
           warehouse: warehouse === "All" ? "Central Warehouse" : warehouse,
+          batchAllocations: p.batchAllocations ?? [],
         });
       });
     });
     return rows;
-  }, [selectedOrders, selectedWarehouse]);
-
-  const dispatchContextRows = useMemo(() => {
-    return productRows
-      .map((row) => {
-        const key = rowKey(row.orderId, row.sku);
-        const dispatchQty = dispatchQtyMap[key] ?? row.packedQty;
-        const batchAllocations = batchSelectionsToAllocations(
-          row.product,
-          row.warehouse,
-          batchSelections[key] ?? {},
-        );
-        return { ...row, key, dispatchQty, batchAllocations };
-      })
-      .filter((row) => row.dispatchQty > 0);
-  }, [productRows, dispatchQtyMap, batchSelections]);
+  }, [selectedOrders, autoWarehouse]);
 
   const nearExpirySchemeEntries = useMemo(() => {
     const entries: ReturnType<typeof buildDispatchNearExpiryEntries> = [];
-    dispatchContextRows.forEach((row) => {
+    productRows.forEach((row) => {
       if (!row.batchAllocations.length) return;
       entries.push(
         ...buildDispatchNearExpiryEntries({
@@ -222,78 +158,45 @@ export default function CreateDispatchPage() {
           sku: row.sku,
           warehouse: row.warehouse,
           customerName: row.customerName,
-          quantity: row.dispatchQty,
+          quantity: row.packedQty,
           batchAllocations: row.batchAllocations,
         }),
       );
     });
     return entries;
-  }, [dispatchContextRows]);
-
-  const batchAllocationErrors = dispatchContextRows.some((row) => {
-    const selected = Object.values(batchSelections[row.key] ?? {}).reduce((sum, n) => sum + n, 0);
-    return selected !== row.dispatchQty;
-  });
-
-  const handleQtyChange = (
-    key: string,
-    val: string,
-    maxPacked: number,
-    productName: string,
-    warehouse: string,
-    packingBatches: { batchNumber: string; allocatedQty: number }[],
-  ) => {
-    const num = parseInt(val, 10);
-    const qty = Number.isNaN(num) ? 0 : num;
-    setDispatchQtyMap((prev) => ({ ...prev, [key]: qty }));
-    setBatchSelections((prev) => ({
-      ...prev,
-      [key]: selectionsFromPackingBatches(
-        productName,
-        warehouse,
-        qty,
-        packingBatches.map((b) => ({ ...b, expiryDate: "" })),
-      ),
-    }));
-
-    let err = "";
-    if (qty < 0) err = "Cannot be negative";
-    else if (qty > maxPacked) err = `Cannot exceed packed qty of ${maxPacked}`;
-    setValidationErrors((prev) => ({ ...prev, [key]: err }));
-  };
+  }, [productRows]);
 
   const isStockTransfer = useMemo(
     () => selectedOrders.some((o) => o.sourceDocumentType === "Stock Transfer" || o.id.startsWith("st-")),
     [selectedOrders],
   );
 
-  const hasErrors = Object.values(validationErrors).some((e) => e !== "");
-  const totalDispatchQty = Object.values(dispatchQtyMap).reduce((a, b) => a + b, 0);
+  const totalDispatchQty = productRows.reduce((a, b) => a + b.packedQty, 0);
   const isNearExpiryDemo =
     selectedOrders.some((o) => o.id === "pk-ne-demo") || packingId === "pk-ne-demo";
 
   const handleSubmit = (isDraft: boolean) => {
-    if (hasErrors || batchAllocationErrors || (!isDraft && totalDispatchQty <= 0)) {
-      alert("Please fix errors, match batch selections, and dispatch at least 1 item.");
+    if ((!isDraft && totalDispatchQty <= 0)) {
+      alert("Please select at least 1 packed order to dispatch.");
       return;
     }
 
-    const schemeEntriesByRowKey: Record<string, typeof nearExpirySchemeEntries> = {};
-    dispatchContextRows.forEach((row) => {
+    const schemeEntriesBySKU: Record<string, typeof nearExpirySchemeEntries> = {};
+    productRows.forEach((row) => {
       const rowEntries = nearExpirySchemeEntries.filter(
         (entry) => entry.sku === row.sku && entry.product === row.product,
       );
-      if (rowEntries.length) schemeEntriesByRowKey[row.key] = rowEntries;
+      if (rowEntries.length) schemeEntriesBySKU[`${row.orderId}::${row.sku}`] = rowEntries;
     });
 
-    const dispatchProducts: DispatchProduct[] = dispatchContextRows.map((row) => {
+    const dispatchProducts: DispatchProduct[] = productRows.map((row) => {
       const primaryBatch = row.batchAllocations[0];
-      const schemeEntries = schemeEntriesByRowKey[row.key] ?? [];
+      const schemeEntries = schemeEntriesBySKU[`${row.orderId}::${row.sku}`] ?? [];
       return {
         product: row.product,
         sku: row.sku,
         packedQty: row.packedQty,
-        dispatchQty: row.dispatchQty,
+        dispatchQty: row.packedQty, // 100% of packed quantity goes directly to dispatch
         batchNo: primaryBatch?.batchNumber,
         batchExpiryDate: primaryBatch?.expiryDate,
         batchAllocations: row.batchAllocations,
@@ -323,8 +226,8 @@ export default function CreateDispatchPage() {
       driverName,
       transporterName,
       dispatchDate,
-      deliveryStatus: isDraft ? "Pending Dispatch" : (deliveryStatus as DispatchRecord["deliveryStatus"]),
-      warehouse: selectedWarehouse === "All" ? "Central Warehouse" : selectedWarehouse,
+      deliveryStatus: isDraft ? "Pending Dispatch" : "Pending Dispatch",
+      warehouse: autoWarehouse,
       products: dispatchProducts,
       packingNumbers: selectedOrders.map((o) => o.packingNo),
       nearExpirySchemes: nearExpirySchemeEntries.length ? nearExpirySchemeEntries : undefined,
@@ -345,7 +248,7 @@ export default function CreateDispatchPage() {
         : "",
       total_items: dispatchProducts.length,
       total_quantity: dispatchProducts.reduce((acc, p) => acc + p.dispatchQty, 0),
-      dispatch_status: isDraft ? "Pending Dispatch" : deliveryStatus,
+      dispatch_status: "Pending Dispatch",
     };
 
     saveDispatch(record);
@@ -355,7 +258,7 @@ export default function CreateDispatchPage() {
   return (
     <FormContainer
       title="Create Dispatch"
-      description="Record a new outbound shipment dispatch session"
+      description="Record a new outbound shipment dispatch session from packed orders"
       onBack={() => router.push("/warehouse/dispatch")}
       onCancel={() => router.push("/warehouse/dispatch")}
       cancelLabel="Cancel"
@@ -363,7 +266,7 @@ export default function CreateDispatchPage() {
         <div className="flex gap-2">
           <Button
             size="sm"
-            disabled={hasErrors || batchAllocationErrors || totalDispatchQty <= 0 || !vehicleNumber || !driverName}
+            disabled={totalDispatchQty <= 0 || !vehicleNumber || !driverName}
             onClick={() => handleSubmit(false)}
             className="h-9 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
           >
@@ -396,47 +299,28 @@ export default function CreateDispatchPage() {
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Dispatch Number</p>
               <Input value={packingNo} disabled className="h-8 text-xs bg-slate-50 font-mono font-bold mt-1.5" />
             </div>
-            {selectedOrders.length > 0 && (
-              <>
-                <div>
-                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                    {isStockTransfer ? "Stock Transfer No" : "Sales Order No"}
-                  </p>
-                  <Input
-                    value={selectedOrders.map((o) => o.salesOrderNo).join(", ")}
-                    disabled
-                    className="h-8 text-xs bg-slate-50 font-mono mt-1.5"
-                  />
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                    {isStockTransfer ? "Target Warehouse" : "Customer"}
-                  </p>
-                  <Input
-                    value={
-                      isStockTransfer
-                        ? selectedOrders
-                            .map((o) => o.targetWarehouse || o.customer.replace("Transfer to ", ""))
-                            .join(", ")
-                        : selectedOrders.map((o) => o.customer).join(", ")
-                    }
-                    disabled
-                    className="h-8 text-xs bg-slate-50 mt-1.5"
-                  />
-                </div>
-              </>
-            )}
+            
             <div>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Warehouse</p>
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Sales Order / Stock Transfer</p>
               <AutocompleteSelect
-                options={[{ value: "All", label: "All Warehouses" }, ...WAREHOUSE_OPTIONS]}
-                value={selectedWarehouse}
-                onChange={setSelectedWarehouse}
-                placeholder="Select warehouse"
-                searchPlaceholder="Search warehouse..."
+                options={[{ value: "All", label: "Select Sales Order..." }, ...uniqueSalesOrders]}
+                value={selectedSalesOrderNo}
+                onChange={setSelectedSalesOrderNo}
+                placeholder="Select Sales Order"
+                searchPlaceholder="Search order..."
                 className="h-8 text-xs mt-1.5 rounded-lg border-border bg-white"
               />
             </div>
+
+            <div>
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Warehouse (Auto-filled)</p>
+              <Input 
+                value={autoWarehouse || "—"} 
+                disabled 
+                className="h-8 text-xs bg-slate-50 font-semibold mt-1.5" 
+              />
+            </div>
+            
             <div>
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Dispatch Date *</p>
               <Input
@@ -473,27 +357,69 @@ export default function CreateDispatchPage() {
                 placeholder="Enter transporter"
               />
             </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Delivery Status</p>
-              <AutocompleteSelect
-                options={DELIVERY_STATUS_OPTIONS}
-                value={deliveryStatus}
-                onChange={setDeliveryStatus}
-                placeholder="Select status"
-                searchPlaceholder="Search status..."
-                className="h-8 text-xs mt-1.5 rounded-lg border-border bg-white"
-              />
-            </div>
           </div>
         </div>
+
+        {/* Dynamic Customer / Destination Details */}
+        {selectedSalesOrderNo !== "All" && (
+          <div className="rounded-xl border border-border bg-slate-50/50 overflow-hidden mt-6">
+            <div className="bg-slate-100/80 border-b border-border px-4 py-2 flex items-center justify-between">
+              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <User className="w-4 h-4 text-brand-600" />
+                {isStockTransfer ? "Destination Details" : "Customer Details"}
+              </h3>
+            </div>
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                  {isStockTransfer ? "Target Warehouse" : "Name"}
+                </p>
+                <p className="text-sm font-bold text-foreground">
+                  {customerNameStr || "—"}
+                </p>
+              </div>
+              
+              {!isStockTransfer && (
+                <>
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                      Contact
+                    </p>
+                    <div className="flex flex-col gap-1 text-xs text-slate-700">
+                      <span className="flex items-center gap-1.5"><Phone className="w-3 h-3 text-slate-400" /> {customerDetails?.mobile || "—"}</span>
+                      <span className="flex items-center gap-1.5"><Mail className="w-3 h-3 text-slate-400" /> {customerDetails?.email || "—"}</span>
+                    </div>
+                  </div>
+                  <div className="lg:col-span-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                      Address
+                    </p>
+                    <div className="flex items-start gap-1.5 text-xs text-slate-700">
+                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                      <span>
+                        {customerDetails?.address ? (
+                          <>{customerDetails.address}, {customerDetails.districtName}, {customerDetails.stateName} - {customerDetails.pincode}</>
+                        ) : "—"}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="border-t border-border/80 pt-6 mt-6 space-y-4">
           <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
             <CheckSquare className="w-4 h-4 text-brand-600" /> Select Packed Orders
           </h2>
-          {packedOrders.length === 0 ? (
+          {selectedSalesOrderNo === "All" ? (
+             <p className="text-xs text-muted-foreground py-4 text-center">
+              Please select a Sales Order from above to view available packings.
+             </p>
+          ) : packedOrders.length === 0 ? (
             <p className="text-xs text-muted-foreground py-4 text-center">
-              No packed orders available for the selected warehouse.
+              No packed orders available for this Sales Order.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -502,8 +428,8 @@ export default function CreateDispatchPage() {
                   <tr className="border-b border-border bg-slate-50/60">
                     <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider w-10">Select</th>
                     <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Packing No</th>
-                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Sales Order / ST No</th>
-                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Customer / Target Warehouse</th>
+                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Date Packed</th>
+                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Total Items</th>
                     <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Total Qty</th>
                   </tr>
                 </thead>
@@ -531,12 +457,8 @@ export default function CreateDispatchPage() {
                           <span className="ml-1.5 text-[10px] font-bold text-orange-700">NE Demo</span>
                         )}
                       </td>
-                      <td className="py-3 px-3 text-xs font-mono font-bold text-slate-600">{order.salesOrderNo}</td>
-                      <td className="py-3 px-3 text-xs font-bold">
-                        {order.sourceDocumentType === "Stock Transfer"
-                          ? order.targetWarehouse || order.customer.replace("Transfer to ", "")
-                          : order.customer}
-                      </td>
+                      <td className="py-3 px-3 text-xs font-medium text-slate-600">{order.packingDate}</td>
+                      <td className="py-3 px-3 text-xs font-bold text-center">{order.totalItems}</td>
                       <td className="py-3 px-3 text-xs font-bold text-center">{order.packedQuantity}</td>
                     </tr>
                   ))}
@@ -549,88 +471,58 @@ export default function CreateDispatchPage() {
         {productRows.length > 0 && (
           <div className="border-t border-border/80 pt-6 mt-6 space-y-4">
             <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
-              <Package className="w-4 h-4 text-brand-600" /> Product Dispatch Grid
+              <Package className="w-4 h-4 text-brand-600" /> Read-Only Dispatch Product Details
             </h2>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-border bg-slate-50/60">
+                  <tr className="border-b border-border bg-slate-50/80">
                     <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Product</th>
-                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Packing No</th>
                     <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">SKU</th>
-                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Packed Qty</th>
-                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider w-[160px]">Dispatch Qty *</th>
+                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Packing No</th>
+                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Batch Allocation</th>
+                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-right">Dispatch Qty</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-border/60">
                   {productRows.map((row) => {
-                    const key = rowKey(row.orderId, row.sku);
-                    const currentQty = dispatchQtyMap[key] ?? row.packedQty;
-                    const err = validationErrors[key];
-                    const packingOrder = selectedOrders.find((o) => o.id === row.orderId);
-                    const packedProduct = packingOrder?.products.find((p) => p.sku === row.sku);
-                    const packingBatches = (packedProduct?.batchAllocations ?? []).map((b) => ({
-                      batchNumber: b.batchNumber,
-                      allocatedQty: b.allocatedQty,
-                    }));
-
+                    const key = `${row.orderId}::${row.sku}`;
                     return (
-                      <tr key={key} className="border-b border-border/60 hover:bg-slate-50/40">
+                      <tr key={key} className="hover:bg-slate-50/40">
                         <td className="py-3 px-3 text-xs font-bold">{row.product}</td>
-                        <td className="py-3 px-3 text-xs font-mono text-muted-foreground">{row.packingNo}</td>
                         <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{row.sku}</td>
-                        <td className="py-3 px-3 text-xs font-bold text-center">{row.packedQty}</td>
+                        <td className="py-3 px-3 text-xs font-mono text-muted-foreground">{row.packingNo}</td>
                         <td className="py-2 px-3">
-                          <div className="space-y-1">
-                            <Input
-                              type="number"
-                              value={currentQty}
-                              onChange={(e) =>
-                                handleQtyChange(
-                                  key,
-                                  e.target.value,
-                                  row.packedQty,
-                                  row.product,
-                                  row.warehouse,
-                                  packingBatches,
-                                )
-                              }
-                              className={`h-8 text-xs font-bold text-right px-3 ${
-                                err ? "border-red-400 focus:ring-red-500" : ""
-                              }`}
-                            />
-                            {err && <p className="text-[10px] text-red-500 font-semibold">{err}</p>}
-                          </div>
+                          {row.batchAllocations.length === 0 ? (
+                            <span className="text-xs text-muted-foreground italic">No batch</span>
+                          ) : (
+                            <div className="flex flex-col gap-1">
+                              {row.batchAllocations.map(b => (
+                                <div key={b.batchNumber} className="flex items-center gap-2">
+                                  <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[10px] font-mono font-semibold border border-slate-200">
+                                    {b.batchNumber}
+                                  </span>
+                                  <span className="text-xs text-slate-600 font-medium">Qty: {b.allocatedQty}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </td>
+                        <td className="py-3 px-3 text-xs font-bold text-right text-brand-700">{row.packedQty}</td>
                       </tr>
                     );
                   })}
+                  <tr className="bg-slate-50">
+                    <td colSpan={4} className="py-3 px-4 text-xs font-bold text-right uppercase tracking-wider text-slate-500">
+                      Total Dispatch Quantity
+                    </td>
+                    <td className="py-3 px-3 text-sm font-bold text-right text-brand-700">
+                      {totalDispatchQty}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
-
-        {dispatchContextRows.length > 0 && (
-          <div className="border-t border-border/80 pt-6 mt-6 space-y-3">
-            <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">
-              Batch Allocation by Product
-            </h2>
-            {dispatchContextRows.map((row) => (
-              <BatchAllocationSection
-                key={row.key}
-                productName={row.product}
-                sku={row.sku}
-                requiredQty={row.dispatchQty}
-                warehouse={row.warehouse}
-                customerName={row.customerName}
-                selections={batchSelections[row.key] ?? {}}
-                onSelectionsChange={(next) =>
-                  setBatchSelections((prev) => ({ ...prev, [row.key]: next }))
-                }
-                qtyLabel="Dispatch Qty"
-              />
-            ))}
           </div>
         )}
 

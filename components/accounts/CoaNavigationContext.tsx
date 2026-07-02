@@ -15,11 +15,20 @@ import { SYSTEM_COA_NODES } from "@/app/(app)/accounts/masters/coa-seed-nodes";
 import {
   getAllExpandableIds,
   getSearchVisibleIds,
+  hasChildLedgers,
   loadChartOfAccounts,
 } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
+import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import { backfillCoaMasterLinks } from "@/lib/accounts/coa-master-link";
+import { isPostableNode } from "@/lib/accounts/coa-hierarchy";
+import {
+  buildTdsPartyWiseReportHref,
+  isTdsCoaNode,
+} from "@/lib/accounts/tds-coa-utils";
+import { ensureTdsSectionLedgers } from "@/lib/accounts/tds-section-ledgers";
 import { backfillErpPartyLedgers } from "@/lib/accounts/erp-accounting-mapping";
+import { subscribeCoaChanged } from "@/lib/accounts/coa-events";
 
 const FULL_COA_SEED: ChartOfAccount[] = [...SYSTEM_COA_NODES];
 
@@ -72,10 +81,18 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
     mountedRef.current = true;
     backfillErpPartyLedgers();
     backfillCoaMasterLinks();
+    ensureTdsSectionLedgers();
     const loaded = readCoaRecords();
     setRecords(loaded);
     setExpandedIds(defaultExpandedIds(loaded));
   }, []);
+
+  const refreshRecords = useCallback(() => {
+    const loaded = readCoaRecords();
+    setRecords(loaded);
+  }, []);
+
+  useEffect(() => subscribeCoaChanged(refreshRecords), [refreshRecords]);
 
   const selectedNode = useMemo(
     () => (selectedId != null ? records.find((r) => r.id === selectedId) ?? null : null),
@@ -84,8 +101,16 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
 
   const selectNode = useCallback(
     (node: ChartOfAccount) => {
+      if (isTdsCoaNode(node, records)) {
+        router.push(buildTdsPartyWiseReportHref(node, records));
+        return;
+      }
+      if (node.nodeLevel === "ledger" && isPostableNode(node, records)) {
+        router.push(buildGeneralLedgerHref(node.id));
+        return;
+      }
       setSelectedId(node.id);
-      if (node.nodeLevel !== "ledger") {
+      if (node.nodeLevel !== "ledger" || hasChildLedgers(records, node.id)) {
         setExpandedIds((prev) => new Set([...prev, node.id]));
       }
       const href = `${CHART_OF_ACCOUNTS_HREF}?node=${node.id}`;
@@ -95,7 +120,7 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
         router.push(href);
       }
     },
-    [pathname, router],
+    [pathname, router, records],
   );
 
   useEffect(() => {
@@ -150,11 +175,6 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
       new Set(records.filter((r) => r.nodeLevel === "primary_head").map((r) => r.id)),
     );
   }, [records]);
-
-  const refreshRecords = useCallback(() => {
-    const loaded = readCoaRecords();
-    setRecords(loaded);
-  }, []);
 
   const value = useMemo(
     () => ({

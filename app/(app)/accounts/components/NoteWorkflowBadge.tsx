@@ -6,8 +6,10 @@ import type { StatusKey } from "@/lib/tokens";
 const MAP: Record<string, { status: StatusKey; label: string }> = {
   draft: { status: "draft", label: "Draft" },
   pending_approval: { status: "pending", label: "Pending Approval" },
-  approved: { status: "approved", label: "Approved" },
-  processed: { status: "active", label: "Processed" },
+  sent_back: { status: "pending", label: "Sent Back" },
+  approved: { status: "approved", label: "Posted" },
+  processed: { status: "active", label: "Posted" },
+  posted: { status: "approved", label: "Posted" },
   rejected: { status: "rejected", label: "Rejected" },
   cancelled: { status: "closed", label: "Cancelled" },
 };

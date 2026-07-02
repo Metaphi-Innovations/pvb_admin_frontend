@@ -328,4 +328,70 @@ export function getPackingListById(id: number): PackingList | undefined {
   return loadPackingLists().find(l => l.id === id);
 }
 
+export function buildAllCartonAllocationsForProduct(
+  productId: number,
+  orderedBaseQty: number,
+  warehouseCode: string
+): { allocations: CartonAllocation[]; hasPackingConfig: boolean; packingUnit: string; baseUnit: string; unitsPerPackingUnit: number } {
+  const suggestion = suggestFefoCartonAllocations(productId, orderedBaseQty, warehouseCode);
+  const allCartons = getCartonsForProductInWarehouse(productId, warehouseCode)
+    .sort((a, b) => {
+      const exp = a.expiryDate.localeCompare(b.expiryDate);
+      if (exp !== 0) return exp;
+      return a.batchNumber.localeCompare(b.batchNumber);
+    });
+
+  const config = getProductPackingConfig(productId);
+  const unitsPerPackingUnit = config?.unitsPerPackingUnit ?? 1;
+
+  const allocations = allCartons.map(carton => {
+    const suggested = suggestion.allocations.find(a => a.cartonId === carton.id);
+    return {
+      cartonId: carton.id,
+      batchNumber: carton.batchNumber,
+      expiryDate: carton.expiryDate,
+      cartonNumber: carton.cartonNumber,
+      packingUnit: carton.packingUnit,
+      baseUnit: carton.baseUnit,
+      unitsPerPackingUnit: carton.unitsPerPackingUnit,
+      availablePackingQty: carton.availablePackingQty,
+      availableBaseQty: carton.availableBaseQty,
+      suggestedPackingQty: suggested ? suggested.suggestedPackingQty : 0,
+      suggestedBaseQty: suggested ? suggested.suggestedBaseQty : 0,
+      allocatedPackingQty: suggested ? suggested.allocatedPackingQty : 0,
+      allocatedBaseQty: suggested ? suggested.allocatedBaseQty : 0,
+    };
+  });
+
+  return {
+    allocations,
+    hasPackingConfig: suggestion.hasPackingConfig,
+    packingUnit: suggestion.packingUnit,
+    baseUnit: suggestion.baseUnit,
+    unitsPerPackingUnit
+  };
+}
+
+export function buildAllPackingListLines(order: SalesOrder, warehouseCode: string): PackingListLine[] {
+  const hydrated = hydrateOrderLineItems(order);
+  return hydrated.lineItems
+    .filter((l): l is SalesOrderLineItem & { productId: number } => l.productId != null && l.quantity > 0)
+    .map(line => {
+      const allAllocations = buildAllCartonAllocationsForProduct(line.productId, line.quantity, warehouseCode);
+      return {
+        lineItemId: line.id,
+        productId: line.productId,
+        productCode: line.productCode,
+        productName: line.productName,
+        packingUnit: allAllocations.packingUnit,
+        baseUnit: allAllocations.baseUnit,
+        unitsPerPackingUnit: allAllocations.unitsPerPackingUnit,
+        orderedBaseQty: line.quantity,
+        hasPackingConfig: allAllocations.hasPackingConfig,
+        allocations: allAllocations.allocations,
+      };
+    });
+}
+
+
 

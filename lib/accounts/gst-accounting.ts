@@ -65,7 +65,7 @@ export function ensureGstAccountingLedgers(): void {
   if (typeof window === "undefined") return;
   const records = loadChartOfAccounts();
   const subGroup = records.find(
-    (r) => r.nodeLevel === "sub_group" && r.accountName === GST_DUTIES_SUBGROUP,
+    (r) => r.nodeLevel === "account_group" && r.accountName === GST_DUTIES_SUBGROUP,
   );
   if (!subGroup) return;
 
