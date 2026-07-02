@@ -214,25 +214,27 @@ function normalizeReturn(record: PurchaseReturn & {
   return recalcPurchaseReturn(migrated);
 }
 
-const SEED = RAW_SEED.map(normalizeReturn);
+function getSeed() {
+  return RAW_SEED.map(normalizeReturn);
+}
 
 export function loadPurchaseReturns(): PurchaseReturn[] {
-  if (typeof window === "undefined") return SEED.map(normalizeReturn);
+  if (typeof window === "undefined") return getSeed();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      const seeded = SEED.map(normalizeReturn);
+      const seeded = getSeed();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
       return seeded;
     }
     const stored = JSON.parse(raw) as PurchaseReturn[];
     const byId = new Map(stored.map((r) => [r.id, r]));
-    for (const seed of SEED) {
+    for (const seed of getSeed()) {
       if (!byId.has(seed.id)) byId.set(seed.id, seed);
     }
     return Array.from(byId.values()).map(normalizeReturn);
   } catch {
-    return SEED.map(normalizeReturn);
+    return getSeed();
   }
 }
 
