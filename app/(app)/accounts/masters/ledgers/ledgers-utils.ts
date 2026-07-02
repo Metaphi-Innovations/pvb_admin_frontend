@@ -1,4 +1,8 @@
 import { formatBalanceAmount } from "@/lib/accounts/money-format";
+import {
+  resolveLedgerType,
+  type LedgerTypeLabel,
+} from "@/lib/accounts/ledger-detail-utils";
 import type { ChartOfAccount } from "../../data";
 import { loadVouchers } from "../../vouchers/voucher-data";
 import {
@@ -124,4 +128,32 @@ export function formatLedgerBalance(balance: LedgerBalance): string {
 
 export function formatOpeningBalance(ledger: ChartOfAccount): string {
   return formatBalanceAmount(ledger.openingBalance, ledger.balanceType);
+}
+
+const LEDGER_TYPE_DISPLAY: Record<LedgerTypeLabel, string> = {
+  Customer: "Customer",
+  Vendor: "Vendor",
+  Bank: "Bank",
+  Cash: "Cash",
+  Expense: "Expense",
+  Income: "Income",
+  GST: "GST",
+  "Employee Payable": "Employee",
+  Loan: "Liability",
+  "Fixed Asset": "Fixed Asset",
+  Inventory: "Others",
+  Sales: "Others",
+  Purchase: "Others",
+  General: "Others",
+};
+
+/** User-facing ledger classification for listing screens */
+export function ledgerTypeDisplayLabel(
+  ledger: ChartOfAccount,
+  records: ChartOfAccount[],
+): string {
+  const path = getAncestorPath(records, ledger.id);
+  const pathNames = path.map((p) => p.accountName.toLowerCase()).join(" ");
+  if (pathNames.includes("tds")) return "TDS";
+  return LEDGER_TYPE_DISPLAY[resolveLedgerType(ledger, records)] ?? "Others";
 }

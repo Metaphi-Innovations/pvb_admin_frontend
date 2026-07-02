@@ -14,7 +14,6 @@ import {
 import { SearchableSelect } from "@/app/(app)/accounts/credit-notes/components/SearchableSelect";
 import { MasterReadOnlyField, MasterReadOnlyAddress } from "./MasterReadOnlyField";
 import { PartyBranchAddressSelector } from "./PartyBranchAddressSelector";
-import { MasterFetchedBadge } from "./MasterFetchedBadge";
 
 export interface VendorMasterPanelProps {
   vendors: Vendor[];
@@ -45,7 +44,7 @@ export function VendorMasterPanel({
   shippingAddress,
   disabled,
   allowSelect = true,
-  title = "Vendor",
+  title = "Supplier",
 }: VendorMasterPanelProps) {
   const options = useMemo(
     () =>
@@ -64,16 +63,13 @@ export function VendorMasterPanel({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] text-muted-foreground">
-          {title} data is loaded from{" "}
-          <Link href="/masters/vendors" className="text-brand-700 hover:underline">
-            Vendor Master
-          </Link>
-          . Edit master records there — not on this form.
-        </p>
-        <MasterFetchedBadge />
-      </div>
+      <p className="text-[11px] text-muted-foreground">
+        {title} data is loaded from{" "}
+        <Link href="/masters/vendors" className="text-brand-700 hover:underline">
+          Supplier Master
+        </Link>
+        . Edit master records there — not on this form.
+      </p>
 
       {allowSelect ? (
         <div className="max-w-md">
@@ -92,8 +88,8 @@ export function VendorMasterPanel({
       {fields && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            <MasterReadOnlyField label="Vendor Name" value={fields.vendorName} className="sm:col-span-2" />
-            <MasterReadOnlyField label="Vendor Code" value={fields.vendorCode} mono />
+            <MasterReadOnlyField label="Supplier Name" value={fields.vendorName} className="sm:col-span-2" />
+            <MasterReadOnlyField label="Supplier Code" value={fields.vendorCode} mono />
             <MasterReadOnlyField label="Trade Payables Ledger" value={fields.payableLedger} />
             <MasterReadOnlyField label="GSTIN" value={fields.vendorGst} mono />
             <MasterReadOnlyField label="PAN" value={fields.pan} mono />

@@ -25,6 +25,10 @@ import {
   loadDistributors,
 } from "../../../database/distributor/distributor-data";
 import {
+  computeDistributorAssessment,
+  formatCategoryLabel,
+} from "@/lib/distributor/distributor-scoring";
+import {
   type Farmer,
   SEED as FARMER_SEED,
 } from "../../../database/farmer/farmer-data";
@@ -323,7 +327,7 @@ export default function EventViewPage() {
             district: distributor.district || "-",
             state: distributor.state || "-",
             source: "Distributor Listing",
-            detail: distributor.distributorCategory || "-",
+            detail: formatCategoryLabel(computeDistributorAssessment(distributor).category),
           };
         })
         .filter(

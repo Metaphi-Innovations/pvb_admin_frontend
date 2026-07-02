@@ -159,7 +159,7 @@ export const PAYABLES_DEMO_VENDORS: Array<{
   },
 ];
 
-/** 12 purchase bills — 4 unpaid, 4 partial, 2 paid, 2 overdue */
+/** 25 purchase bills — mix of paid, pending, partial, and overdue */
 export const PAYABLES_DEMO_BILLS: Array<{
   id: number;
   invoiceNo: string;
@@ -324,6 +324,175 @@ export const PAYABLES_DEMO_BILLS: Array<{
     amountDebited: 10000,
     vendorInvoiceNo: "CHF/26/INV-089",
     productName: "Chambal MOP 50kg",
+  },
+  // Rallis — additional overdue bill
+  {
+    id: 113,
+    invoiceNo: "PUR-2026-113",
+    vendorId: 1,
+    invoiceDate: "2026-01-20",
+    dueDate: "2026-02-19",
+    grandTotal: 85000,
+    amountPaid: 0,
+    amountDebited: 0,
+    vendorInvoiceNo: "RAL/26/INV-298",
+    productName: "Rallis Pesticide Combo",
+  },
+  // Coromandel — partial
+  {
+    id: 114,
+    invoiceNo: "PUR-2026-114",
+    vendorId: 2,
+    invoiceDate: "2026-04-10",
+    dueDate: "2026-05-25",
+    grandTotal: 195000,
+    amountPaid: 95000,
+    amountDebited: 0,
+    vendorInvoiceNo: "COR/INV/2026/102",
+    productName: "Gromor SSP 50kg",
+  },
+  // UPL — partial overdue
+  {
+    id: 115,
+    invoiceNo: "PUR-2026-115",
+    vendorId: 3,
+    invoiceDate: "2026-03-05",
+    dueDate: "2026-04-04",
+    grandTotal: 168000,
+    amountPaid: 68000,
+    amountDebited: 0,
+    vendorInvoiceNo: "UPL/26/INV-2188",
+    productName: "UPL Zeba Soil Conditioner",
+  },
+  // Bayer — partial
+  {
+    id: 116,
+    invoiceNo: "PUR-2026-116",
+    vendorId: 4,
+    invoiceDate: "2026-04-18",
+    dueDate: "2026-05-18",
+    grandTotal: 142500,
+    amountPaid: 42500,
+    amountDebited: 0,
+    vendorInvoiceNo: "BAY/INV/26/378",
+    productName: "Bayer Luna Experience",
+  },
+  // IFFCO — unpaid
+  {
+    id: 117,
+    invoiceNo: "PUR-2026-117",
+    vendorId: 5,
+    invoiceDate: "2026-05-12",
+    dueDate: "2026-07-11",
+    grandTotal: 245000,
+    amountPaid: 0,
+    amountDebited: 0,
+    vendorInvoiceNo: "IFFCO/26/INV-978",
+    productName: "IFFCO NPK 20:20:0",
+  },
+  // Chambal — overdue unpaid
+  {
+    id: 118,
+    invoiceNo: "PUR-2026-118",
+    vendorId: 6,
+    invoiceDate: "2026-01-28",
+    dueDate: "2026-02-27",
+    grandTotal: 98000,
+    amountPaid: 0,
+    amountDebited: 0,
+    vendorInvoiceNo: "CHF/26/INV-065",
+    productName: "Chambal DAP 50kg",
+  },
+  // Deepak — partial
+  {
+    id: 119,
+    invoiceNo: "PUR-2026-119",
+    vendorId: 7,
+    invoiceDate: "2026-05-08",
+    dueDate: "2026-06-07",
+    grandTotal: 132000,
+    amountPaid: 52000,
+    amountDebited: 0,
+    vendorInvoiceNo: "DFP/26/INV-091",
+    productName: "Deepak CAN 25kg",
+  },
+  // Syngenta — partial overdue
+  {
+    id: 120,
+    invoiceNo: "PUR-2026-120",
+    vendorId: 8,
+    invoiceDate: "2026-02-08",
+    dueDate: "2026-03-10",
+    grandTotal: 176000,
+    amountPaid: 56000,
+    amountDebited: 0,
+    vendorInvoiceNo: "SYN/26/INV-178",
+    productName: "Syngenta Ampligo",
+  },
+  // Rallis — pending
+  {
+    id: 121,
+    invoiceNo: "PUR-2026-121",
+    vendorId: 1,
+    invoiceDate: "2026-06-01",
+    dueDate: "2026-07-01",
+    grandTotal: 112000,
+    amountPaid: 0,
+    amountDebited: 0,
+    vendorInvoiceNo: "RAL/26/INV-601",
+    productName: "Rallis Bio Fertilizer",
+  },
+  // Coromandel — overdue
+  {
+    id: 122,
+    invoiceNo: "PUR-2026-122",
+    vendorId: 2,
+    invoiceDate: "2026-02-25",
+    dueDate: "2026-04-11",
+    grandTotal: 158000,
+    amountPaid: 0,
+    amountDebited: 0,
+    vendorInvoiceNo: "COR/INV/2026/055",
+    productName: "Gromor Zinc Sulphate",
+  },
+  // UPL — paid
+  {
+    id: 123,
+    invoiceNo: "PUR-2026-123",
+    vendorId: 3,
+    invoiceDate: "2026-05-15",
+    dueDate: "2026-06-14",
+    grandTotal: 89000,
+    amountPaid: 89000,
+    amountDebited: 0,
+    vendorInvoiceNo: "UPL/26/INV-2290",
+    productName: "UPL Proclaim",
+  },
+  // Bayer — overdue
+  {
+    id: 124,
+    invoiceNo: "PUR-2026-124",
+    vendorId: 4,
+    invoiceDate: "2026-01-15",
+    dueDate: "2026-02-14",
+    grandTotal: 128000,
+    amountPaid: 28000,
+    amountDebited: 0,
+    vendorInvoiceNo: "BAY/INV/26/155",
+    productName: "Bayer Alion Herbicide",
+  },
+  // IFFCO — partial long overdue
+  {
+    id: 125,
+    invoiceNo: "PUR-2026-125",
+    vendorId: 5,
+    invoiceDate: "2025-12-10",
+    dueDate: "2026-02-08",
+    grandTotal: 215000,
+    amountPaid: 65000,
+    amountDebited: 0,
+    vendorInvoiceNo: "IFFCO/25/INV-812",
+    productName: "IFFCO Muriate of Potash",
   },
 ];
 
@@ -494,7 +663,7 @@ function seedVendorPayment(
   const voucher = createVoucher("payment", {
     date,
     referenceNo,
-    narration: `Vendor payment — ${vendorName} (${billNo})`,
+    narration: `Supplier payment — ${vendorName} (${billNo})`,
     status: "posted",
     lines: [
       {
@@ -645,7 +814,7 @@ function postVendorCreditNoteVoucher(note: VendorCreditNoteRecord): void {
   createVoucher("journal", {
     date: note.creditNoteDate,
     referenceNo: note.creditNoteNo,
-    narration: `Vendor credit note — ${note.vendorName} (${note.reason})`,
+    narration: `Supplier credit note — ${note.vendorName} (${note.reason})`,
     status: "posted",
     lines: [
       {
@@ -702,7 +871,7 @@ export function seedPayablesDemoData(
   const vendors = loadVendors();
   const purchases = PAYABLES_DEMO_BILLS.map((spec) => {
     const vendor = vendors.find((v) => v.id === spec.vendorId);
-    return buildPurchaseBill(spec, vendor?.vendorName ?? "Vendor", vendor?.gstNumber ?? "");
+    return buildPurchaseBill(spec, vendor?.vendorName ?? "Supplier", vendor?.gstNumber ?? "");
   });
   savePurchaseInvoices(purchases);
 
@@ -729,6 +898,9 @@ export function seedPayablesDemoData(
   const pv5 = seedVendorPayment("IFFCO", 50000, "2026-05-28", "NEFT-IFF-002", "PUR-2026-107", "PV-2026-005");
   const pv6 = seedVendorPayment("Coromandel International", 95000, "2026-06-10", "NEFT-COR-001", "PUR-2026-103", "PV-2026-006");
 
+  const pv7 = seedVendorPayment("Chambal Fertilisers", 65000, "2026-05-20", "NEFT-CHF-001", "PUR-2026-108", "PV-2026-007");
+  const pv8 = seedVendorPayment("Coromandel International", 95000, "2026-06-15", "NEFT-COR-002", "PUR-2026-114", "PV-2026-008");
+
   const vid = resolveVoucherId ?? ((no: string) => loadVouchers().find((v) => v.voucherNumber === no)?.id);
 
   seedPaymentAllocations([
@@ -740,6 +912,22 @@ export function seedPayablesDemoData(
       voucherId: vid("PV-2026-005") ?? pv5,
       lines: [{ billId: 107, billNo: "PUR-2026-107", amount: 30000 }],
     },
+    { voucherId: vid("PV-2026-007") ?? pv7, lines: [{ billId: 108, billNo: "PUR-2026-108", amount: 65000 }] },
+    {
+      voucherId: vid("PV-2026-008") ?? pv8,
+      lines: [{ billId: 114, billNo: "PUR-2026-114", amount: 45000 }],
+    },
     // PV-2026-006 — pending allocation (no entry)
   ]);
+}
+
+const PAYABLES_PAGE_SEED_VERSION = "2026-payables-v2";
+const PAYABLES_PAGE_SEED_KEY = "ds_payables_page_seed_version";
+
+/** Re-seed payables demo when page data version changes (payables module only). */
+export function ensurePayablesDemoOnPageLoad(): void {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(PAYABLES_PAGE_SEED_KEY) === PAYABLES_PAGE_SEED_VERSION) return;
+  seedPayablesDemoData();
+  localStorage.setItem(PAYABLES_PAGE_SEED_KEY, PAYABLES_PAGE_SEED_VERSION);
 }

@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { AccountsFilterDateRangeSection } from "@/components/accounts/AccountsListingFilter";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -129,23 +129,13 @@ export function ReconciliationHistoryClient() {
             </Select>
           </div>
 
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground uppercase">Start Date</Label>
-            <Input
-              type="date"
-              className="h-8 text-xs"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground uppercase">End Date</Label>
-            <Input
-              type="date"
-              className="h-8 text-xs"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+          <div className="space-y-1 sm:col-span-2">
+            <AccountsFilterDateRangeSection
+              dateFrom={startDate}
+              dateTo={endDate}
+              onDateFromChange={setStartDate}
+              onDateToChange={setEndDate}
+              size="default"
             />
           </div>
         </div>
@@ -164,8 +154,8 @@ export function ReconciliationHistoryClient() {
             </div>
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0 z-10">
+          <table className="accounts-table w-full text-sm">
+            <thead className="border-b border-border/40">
               <tr>
                 {[
                   "Date",

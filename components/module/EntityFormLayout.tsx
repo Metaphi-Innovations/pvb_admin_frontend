@@ -30,7 +30,7 @@ export function EntityFormLayout({
 }) {
   return (
     <div className={cn("min-h-full", className)}>
-      <div className="border-b border-border/60 bg-white/95 backdrop-blur-sm px-5 py-3 sticky top-0 z-20">
+      <div className="border-b border-border bg-white px-5 py-3 sticky top-0 z-20 shadow-sm">
         {breadcrumbs && breadcrumbs.length > 0 && (
           <nav className="flex items-center gap-1 mb-2 flex-wrap">
             {breadcrumbs.map((crumb, idx) => (
@@ -62,7 +62,7 @@ export function EntityFormLayout({
       <div className="page-container max-w-5xl">{children}</div>
 
       {footer && (
-        <div className="sticky bottom-0 border-t border-border/60 bg-white/95 backdrop-blur-sm px-5 py-3 flex items-center justify-end gap-2">
+        <div className="sticky bottom-0 border-t border-border bg-white px-5 py-3 flex items-center justify-end gap-2 shadow-sm">
           {footer}
         </div>
       )}

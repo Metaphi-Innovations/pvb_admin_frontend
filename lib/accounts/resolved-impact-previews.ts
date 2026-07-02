@@ -123,7 +123,7 @@ export function purchaseInvoiceImpactResolved(input: {
     { ledger: purchaseLedger, debit: input.taxable, note: "Inventory / Purchase Dr" },
   ];
   appendGstLines(lines, gst, "purchase");
-  lines.push({ ledger: vendorLedger, credit: input.grandTotal, note: "Vendor Cr — Sundry Creditor" });
+  lines.push({ ledger: vendorLedger, credit: input.grandTotal, note: "Supplier Cr — Sundry Creditor" });
   return lines;
 }
 
@@ -184,7 +184,7 @@ export function debitNoteImpactResolved(input: {
   const purchaseReturn = ledgerLabel("purchase_inventory", "General", "Purchase Return");
 
   const lines: LedgerImpactLine[] = [
-    { ledger: vendorLedger, debit: input.grandTotal, note: "Vendor Dr — reduces payable" },
+    { ledger: vendorLedger, debit: input.grandTotal, note: "Supplier Dr — reduces payable" },
     { ledger: purchaseReturn, credit: input.taxable, note: "Purchase / Inventory Cr — return" },
   ];
   appendGstLines(lines, gst, "debit_note");

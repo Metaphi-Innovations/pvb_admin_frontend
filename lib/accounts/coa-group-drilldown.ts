@@ -83,6 +83,7 @@ export type CoaGroupContextKind =
   | "purchases"
   | "gst_payable"
   | "gst_output"
+  | "tds_payable"
   | "employee_costs"
   | "admin_expenses"
   | "customer_ledger"
@@ -311,6 +312,14 @@ export interface GstPayableGroupContext extends CoaGroupContextBase {
   postedEntries: CoaPostingRow[];
 }
 
+export interface TdsPayableGroupContext extends CoaGroupContextBase {
+  kind: "tds_payable";
+  totalTdsPayable: number;
+  sectionCount: number;
+  tdsLedgers: ChartOfAccount[];
+  postedEntries: CoaPostingRow[];
+}
+
 export interface ExpenseGroupContext extends CoaGroupContextBase {
   kind: "employee_costs" | "admin_expenses";
   totalExpense: number;
@@ -353,6 +362,7 @@ export type CoaGroupContext =
   | SalesGroupContext
   | PurchasesGroupContext
   | GstPayableGroupContext
+  | TdsPayableGroupContext
   | ExpenseGroupContext
   | CustomerLedgerContext
   | VendorLedgerContext
@@ -448,7 +458,7 @@ function classifyDepositType(name: string): "Security" | "Rental" | "Other" {
 function classifyAdvanceType(name: string): string {
   const n = name.toLowerCase();
   if (n.includes("staff") || n.includes("employee")) return "Employee Advance";
-  if (n.includes("vendor")) return "Vendor Advance";
+  if (n.includes("vendor")) return "Supplier Advance";
   return "Other Advance";
 }
 
@@ -472,7 +482,7 @@ function matchCustomerMasterHref(ledgerId: number, ledgerName: string): string |
 const ENTRY_NOTES: Record<string, string> = {
   "Capital Account": "Journal Voucher · Profit transfer · Drawings entry · Year-end closing",
   "Loans / Borrowings": "Loan receipt voucher · Payment voucher · Journal voucher · Interest accrual",
-  "Trade Payables / Sundry Creditors": "Purchase Bill · Payment Voucher · Debit Note · Vendor Credit Note",
+  "Trade Payables / Sundry Creditors": "Purchase Bill · Payment Voucher · Debit Note · Supplier Credit Note",
   "Duties & Taxes Payable": "Sales Invoice · Purchase Bill · Payment Voucher · Journal Voucher",
   "GST Payable": "Sales Invoice · Purchase Bill · Credit Note · Debit Note · GST Payment Voucher",
   "Salary Payable": "Payroll · Payment Voucher · Journal Voucher",
@@ -628,7 +638,7 @@ function buildGroupHighlights(
       return [
         { label: "Current Month Purchases", value: monthPurchases },
         { label: "YTD Purchases", value: bills.reduce((s, b) => s + (b.grandTotal ?? 0), 0) },
-        { label: "Vendor-wise Bills", value: bills.length },
+        { label: "Supplier-wise Bills", value: bills.length },
         { label: "Ledger Balance", value: total },
       ];
     }
@@ -757,7 +767,7 @@ export function resolveCoaGroupContext(
   const path = getAncestorPath(records, node.id);
   const primaryHead = path.find((p) => p.nodeLevel === "primary_head")?.accountName;
 
-  if (node.nodeLevel === "ledger" || node.nodeLevel === "sub_ledger") {
+  if (node.nodeLevel === "ledger") {
     const ledgerPath = path.map((p) => p.accountName.toLowerCase()).join(" ");
     if (ledgerPath.includes("trade receivables") || ledgerPath.includes("sundry debtors")) {
       const outstanding = ledgerOutstanding(node);
@@ -1027,7 +1037,7 @@ export function resolveCoaGroupContext(
     const outstandingRows = rows.map((r) => {
       const type = classifyAdvanceType(r.name);
       if (type === "Employee Advance") employeeAdvances += r.balance;
-      else if (type === "Vendor Advance") vendorAdvances += r.balance;
+      else if (type === "Supplier Advance") vendorAdvances += r.balance;
       else otherAdvances += r.balance;
       return { id: r.id, party: r.name, type, outstanding: r.balance };
     });
@@ -1120,6 +1130,21 @@ export function resolveCoaGroupContext(
       pendingVendorBills: listPendingVendorBills().length,
       purchaseLedgers,
       postedEntries: collectPostingRows(purchaseLedgerIds),
+    };
+  }
+
+  if (name === "TDS Payable") {
+    const tdsLedgers = collectDescendantLedgers(records, node.id);
+    const tdsLedgerIds = new Set(tdsLedgers.map((l) => l.id));
+    const total = sumLedgerBalances(tdsLedgers);
+    return {
+      kind: "tds_payable",
+      nodeId: node.id,
+      nodeName: name,
+      totalTdsPayable: total,
+      sectionCount: tdsLedgers.length,
+      tdsLedgers,
+      postedEntries: collectPostingRows(tdsLedgerIds),
     };
   }
 

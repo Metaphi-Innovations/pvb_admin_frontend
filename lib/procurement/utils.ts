@@ -11,10 +11,14 @@ export function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+export type PODiscountType = "percentage" | "flat";
+
 export interface LineTaxInput {
   orderedQty: number;
   unitPrice: number;
+  discountType?: PODiscountType;
   discountPct: number;
+  discountFlatAmount?: number;
   cgstPct: number;
   sgstPct: number;
   igstPct: number;
@@ -33,7 +37,10 @@ export interface LineTaxResult {
 
 export function calcLineAmounts(input: LineTaxInput): LineTaxResult {
   const grossAmount = round2(input.orderedQty * input.unitPrice);
-  const discountAmount = round2(grossAmount * (input.discountPct / 100));
+  const discountAmount =
+    input.discountType === "flat"
+      ? round2(Math.min(Number(input.discountFlatAmount) || 0, grossAmount))
+      : round2(grossAmount * ((Number(input.discountPct) || 0) / 100));
   const taxableValue = round2(grossAmount - discountAmount);
   const cgstAmount = round2(taxableValue * (input.cgstPct / 100));
   const sgstAmount = round2(taxableValue * (input.sgstPct / 100));
@@ -125,4 +132,41 @@ export function amountInWords(amount: number): string {
 
 export function nextId<T extends { id: number }>(list: T[]): number {
   return list.length ? Math.max(...list.map((x) => x.id)) + 1 : 1;
+}
+
+export type TaxSupplyType = "intra" | "inter";
+
+export function resolveTaxSupplyType(
+  sourceState: string,
+  destinationState: string,
+): TaxSupplyType {
+  if (!sourceState.trim() || !destinationState.trim()) return "intra";
+  return sourceState.trim().toLowerCase() === destinationState.trim().toLowerCase()
+    ? "intra"
+    : "inter";
+}
+
+/** Split combined GST % into CGST+SGST (intra) or IGST (inter). */
+export function applyTaxSupplyToRates(
+  totalGstPct: number,
+  supplyType: TaxSupplyType,
+): { cgstPct: number; sgstPct: number; igstPct: number } {
+  if (supplyType === "intra") {
+    const half = totalGstPct / 2;
+    return { cgstPct: half, sgstPct: half, igstPct: 0 };
+  }
+  return { cgstPct: 0, sgstPct: 0, igstPct: totalGstPct };
+}
+
+export function lineNeedsTaxSupplyUpdate(
+  cgstPct: number,
+  sgstPct: number,
+  igstPct: number,
+  supplyType: TaxSupplyType,
+): boolean {
+  const total = cgstPct + sgstPct + igstPct;
+  if (supplyType === "intra") {
+    return igstPct > 0 || (total > 0 && Math.abs(cgstPct - sgstPct) > 0.001);
+  }
+  return cgstPct > 0 || sgstPct > 0;
 }

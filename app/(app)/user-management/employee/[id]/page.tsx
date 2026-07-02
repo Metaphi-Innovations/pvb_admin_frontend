@@ -48,7 +48,9 @@ import { loadGeoNodes } from "@/app/(app)/masters/geography/geo-data";
 import {
   type StructuredAddress,
   formatStructuredAddress,
-} from "@/lib/address/types";
+  structuredAddressFromLegacyIds,
+  structuredAddressFromLegacyLocality,
+} from "@/lib/address";
 import {
   type Employee,
   loadEmployees,
@@ -70,42 +72,82 @@ import {
 function displayAddress(
   structured: StructuredAddress,
   legacy?: string,
-  nodes?: ReturnType<typeof loadGeoNodes>,
 ): string {
-  const geo = nodes ?? (typeof window !== "undefined" ? loadGeoNodes() : []);
-  const formatted = formatStructuredAddress(structured, geo);
+  const formatted = formatStructuredAddress(structured);
   if (formatted.trim()) return formatted;
   return legacy?.trim() || "—";
 }
 
 function empCurrentAddr(emp: Employee): StructuredAddress {
-  return {
-    line1: emp.currentAddressLine1 || "",
-    line2: emp.currentAddressLine2 || "",
-    stateId: emp.currentStateId ?? null,
-    cityId: emp.currentCityId ?? null,
-    pincodeId: emp.currentPincodeId ?? null,
-  };
+  if (emp.currentPincode || emp.currentState || emp.currentCity || emp.currentTown || emp.currentCityTownLocality) {
+    return structuredAddressFromLegacyLocality({
+      line1: emp.currentAddressLine1 || "",
+      line2: emp.currentAddressLine2 || "",
+      pincode: emp.currentPincode || "",
+      city: emp.currentCity,
+      town: emp.currentTown,
+      cityTownLocality: emp.currentCityTownLocality,
+      district: emp.currentDistrict || "",
+      state: emp.currentState || "",
+    });
+  }
+  const nodes = typeof window !== "undefined" ? loadGeoNodes() : [];
+  return structuredAddressFromLegacyIds(
+    emp.currentAddressLine1 || "",
+    emp.currentAddressLine2 || "",
+    emp.currentStateId,
+    emp.currentCityId,
+    emp.currentPincodeId,
+    nodes,
+  );
 }
 
 function empPermanentAddr(emp: Employee): StructuredAddress {
-  return {
-    line1: emp.permanentAddressLine1 || "",
-    line2: emp.permanentAddressLine2 || "",
-    stateId: emp.permanentStateId ?? null,
-    cityId: emp.permanentCityId ?? null,
-    pincodeId: emp.permanentPincodeId ?? null,
-  };
+  if (emp.permanentPincode || emp.permanentState || emp.permanentCity || emp.permanentTown || emp.permanentCityTownLocality) {
+    return structuredAddressFromLegacyLocality({
+      line1: emp.permanentAddressLine1 || "",
+      line2: emp.permanentAddressLine2 || "",
+      pincode: emp.permanentPincode || "",
+      city: emp.permanentCity,
+      town: emp.permanentTown,
+      cityTownLocality: emp.permanentCityTownLocality,
+      district: emp.permanentDistrict || "",
+      state: emp.permanentState || "",
+    });
+  }
+  const nodes = typeof window !== "undefined" ? loadGeoNodes() : [];
+  return structuredAddressFromLegacyIds(
+    emp.permanentAddressLine1 || "",
+    emp.permanentAddressLine2 || "",
+    emp.permanentStateId,
+    emp.permanentCityId,
+    emp.permanentPincodeId,
+    nodes,
+  );
 }
 
 function empEmergencyAddr(emp: Employee): StructuredAddress {
-  return {
-    line1: emp.emergencyAddressLine1 || "",
-    line2: emp.emergencyAddressLine2 || "",
-    stateId: emp.emergencyStateId ?? null,
-    cityId: emp.emergencyCityId ?? null,
-    pincodeId: emp.emergencyPincodeId ?? null,
-  };
+  if (emp.emergencyPincode || emp.emergencyState || emp.emergencyCity || emp.emergencyTown || emp.emergencyCityTownLocality) {
+    return structuredAddressFromLegacyLocality({
+      line1: emp.emergencyAddressLine1 || "",
+      line2: emp.emergencyAddressLine2 || "",
+      pincode: emp.emergencyPincode || "",
+      city: emp.emergencyCity,
+      town: emp.emergencyTown,
+      cityTownLocality: emp.emergencyCityTownLocality,
+      district: emp.emergencyDistrict || "",
+      state: emp.emergencyState || "",
+    });
+  }
+  const nodes = typeof window !== "undefined" ? loadGeoNodes() : [];
+  return structuredAddressFromLegacyIds(
+    emp.emergencyAddressLine1 || "",
+    emp.emergencyAddressLine2 || "",
+    emp.emergencyStateId,
+    emp.emergencyCityId,
+    emp.emergencyPincodeId,
+    nodes,
+  );
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -546,8 +588,6 @@ export default function EmployeeDetailPage() {
     errors: {},
   });
 
-  const geoNodes = useMemo(() => (typeof window !== "undefined" ? loadGeoNodes() : []), [employee]);
-
   useEffect(() => {
     const employees = loadEmployees();
     const emp = employees.find((e) => e.id === employeeId);
@@ -648,12 +688,11 @@ export default function EmployeeDetailPage() {
   ];
 
   const designation = employee.designation || employee.role;
-  const currentAddress = displayAddress(empCurrentAddr(employee), employee.currentAddress || employee.address, geoNodes);
-  const permanentAddress = displayAddress(empPermanentAddr(employee), employee.permanentAddress, geoNodes);
+  const currentAddress = displayAddress(empCurrentAddr(employee), employee.currentAddress || employee.address);
+  const permanentAddress = displayAddress(empPermanentAddr(employee), employee.permanentAddress);
   const emergencyAddress = displayAddress(
     empEmergencyAddr(employee),
     employee.emergencyContactAddress,
-    geoNodes,
   );
 
   const geoRows =
@@ -826,7 +865,6 @@ export default function EmployeeDetailPage() {
           <EmployeeDocumentsSection
             readOnly
             documents={employee.documents || []}
-            employee={employee}
           />
         );
 

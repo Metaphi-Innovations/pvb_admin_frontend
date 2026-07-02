@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Trash2 } from "lucide-react";
@@ -103,7 +104,7 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
   const grandTotal = subtotal + totalGst;
 
   const impactLines = purchaseInvoiceImpactResolved({
-    vendorName: vendor?.vendorName ?? "Vendor",
+    vendorName: vendor?.vendorName ?? "Supplier",
     taxable: subtotal,
     taxAmount: totalGst,
     grandTotal,
@@ -137,7 +138,7 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
   const doSave = (post: boolean) => {
     setError("");
     if (!vendorId) return setError("Select a vendor.");
-    if (!vendorInvoiceNo.trim()) return setError("Enter vendor invoice number.");
+    if (!vendorInvoiceNo.trim()) return setError("Enter supplier invoice number.");
     if (lines.some((l) => !l.productName)) return setError("All lines need a product name.");
     if (grandTotal <= 0) return setError("Total must be greater than zero.");
     setSaving(true);
@@ -188,16 +189,16 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 font-medium">{error}</div>
         )}
 
-        <Section title="Vendor Info">
+        <Section title="Supplier Info">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <Label className="text-xs">Vendor *</Label>
+              <Label className="text-xs">Supplier *</Label>
               <select
                 className="mt-1 h-8 w-full rounded-md border border-border bg-white px-2.5 text-xs"
                 value={vendorId}
                 onChange={(e) => setVendorId(e.target.value)}
               >
-                <option value="">Select vendor...</option>
+                <option value="">Select supplier...</option>
                 {vendors.map((v) => (
                   <option key={v.id} value={v.id}>{v.vendorName}</option>
                 ))}
@@ -221,14 +222,14 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
               <Input type="date" className="h-8 text-xs mt-1" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">Vendor Invoice No *</Label>
+              <Label className="text-xs">Supplier Invoice No *</Label>
               <Input className="h-8 text-xs mt-1" value={vendorInvoiceNo} onChange={(e) => setVendorInvoiceNo(e.target.value)} placeholder="e.g. GF-4521" />
             </div>
           </div>
         </Section>
 
         <Section title="Line Items">
-          <table className="w-full text-xs">
+          <table className="accounts-table w-full text-xs">
             <thead>
               <tr className="border-b border-border/60">
                 <th className="text-left py-2 text-[10px] font-semibold uppercase text-muted-foreground">Product</th>
@@ -264,7 +265,7 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
                     </select>
                   </td>
                   <td className="py-1.5"><Input type="number" className="h-8 text-xs text-right" value={line.qty} onChange={(e) => updateLine(idx, { qty: Number(e.target.value) || 0 })} /></td>
-                  <td className="py-1.5"><Input type="number" className="h-8 text-xs text-right" value={line.rate} onChange={(e) => updateLine(idx, { rate: Number(e.target.value) || 0 })} /></td>
+                  <td className="py-1.5"><AccountsMoneyInput className="h-8 text-xs text-right" value={line.rate} onChange={(v) => updateLine(idx, { rate: v })} /></td>
                   <td className="py-1.5"><Input type="number" className="h-8 text-xs text-right" value={line.gstPct} onChange={(e) => updateLine(idx, { gstPct: Number(e.target.value) || 0 })} /></td>
                   <td className="py-1.5 text-right tabular-nums">{formatMoney(line.taxableAmt)}</td>
                   <td className="py-1.5 text-right tabular-nums">{formatMoney(line.gstAmt)}</td>
@@ -311,9 +312,6 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
         <div className="flex items-center gap-3 pt-2 pb-6">
           <Button variant="outline" size="sm" className="h-9 text-xs" onClick={() => router.push("/accounts/transactions/purchase")}>
             Cancel
-          </Button>
-          <Button variant="outline" size="sm" className="h-9 text-xs" disabled={saving} onClick={() => doSave(false)}>
-            Save Draft
           </Button>
           <Button size="sm" className="h-9 text-xs bg-brand-600 text-white" disabled={saving} onClick={() => doSave(true)}>
             Post Invoice

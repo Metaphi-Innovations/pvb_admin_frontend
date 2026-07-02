@@ -232,7 +232,7 @@ export function QcPassedListing({ qcPassedForWarehouse }: QcPassedListingProps) 
         onSortChange={setSort}
         onFilterChange={setFilters}
         actions={actions}
-        emptyMessage="QC Passed stock records"
+        emptyMessage=""
         searchPlaceholder="Search QC Passed..."
       />
     </div>

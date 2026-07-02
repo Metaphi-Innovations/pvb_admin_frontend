@@ -79,6 +79,10 @@ export default function WarehouseDetailPage() {
          },
        ];
 
+  const primaryContact = contacts.find((c) => c.isPrimary) ?? contacts[0];
+  const designation =
+    primaryContact?.designation?.trim() || warehouse.manager || "—";
+
   const tabs = [{ value: "overview", label: "Overview" }];
 
   const kpis = [
@@ -86,8 +90,8 @@ export default function WarehouseDetailPage() {
       icon: Warehouse,
       iconBg: "#EEF3FB",
       iconColor: "#0C3F8A",
-      value: warehouse.warehouseType,
-      label: "Type",
+      value: warehouse.operatedBy,
+      label: "Operated By",
     },
     {
       icon: MapPin,
@@ -100,8 +104,8 @@ export default function WarehouseDetailPage() {
       icon: User,
       iconBg: "#FFFBEB",
       iconColor: "#D97706",
-      value: warehouse.manager || "—",
-      label: "Manager",
+      value: designation,
+      label: "Designation",
     },
   ];
 
@@ -112,8 +116,6 @@ export default function WarehouseDetailPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <RecordSectionCard title="Basic Details" icon={Warehouse} accent="blue">
           <RecordKvRow label="Warehouse Name" value={warehouse.warehouseName} highlight />
-          <RecordKvRow label="Warehouse Code" value={warehouse.warehouseCode} mono copy />
-          <RecordKvRow label="Warehouse Type" value={warehouse.warehouseType} />
           <RecordKvRow label="Operated By" value={warehouse.operatedBy} />
           {warehouse.operatedBy === "C&F Agent" && (
             <RecordKvRow label="C&F Agent" value={warehouse.customerType} />
@@ -138,6 +140,12 @@ export default function WarehouseDetailPage() {
                 value={c.contactPerson || "—"}
                 highlight
               />
+              {(c.designation || warehouse.manager) && (
+                <RecordKvRow
+                  label="Designation"
+                  value={c.designation || (c.isPrimary ? warehouse.manager : "—") || "—"}
+                />
+              )}
               <RecordKvRow
                 label="Mobile"
                 value={c.mobileNumber}
@@ -145,31 +153,87 @@ export default function WarehouseDetailPage() {
                 link
                 href={c.mobileNumber ? `tel:${c.mobileNumber}` : undefined}
               />
+              {c.alternateContact && (
+                <RecordKvRow
+                  label="Alternate Contact"
+                  value={c.alternateContact}
+                  mono
+                  link
+                  href={`tel:${c.alternateContact}`}
+                />
+              )}
               <RecordKvRow
                 label="Email"
                 value={c.emailAddress || "—"}
                 link={!!c.emailAddress}
                 href={c.emailAddress ? `mailto:${c.emailAddress}` : undefined}
-                isLast={idx === contacts.length - 1 && !warehouse.gstApplicable}
+                isLast={idx === contacts.length - 1}
               />
             </React.Fragment>
           ))}
-          <RecordKvRow label="GST Applicable" value={warehouse.gstApplicable ? "Yes" : "No"} />
-          {warehouse.gstApplicable && (
-            <RecordKvRow label="GST Number" value={warehouse.gstNumber} mono copy isLast />
-          )}
         </RecordSectionCard>
 
         <RecordSectionCard title="Address Details" icon={MapPin} accent="purple">
-          <RecordKvRow label="Address" value={warehouse.address} />
-          <RecordKvRow label="State" value={warehouse.state} />
-          <RecordKvRow label="District" value={warehouse.district} />
-          <RecordKvRow label="City" value={warehouse.city} />
-          <RecordKvRow label="Pin Code" value={warehouse.pincode} mono isLast />
+          <RecordKvRow label="Address Line 1" value={warehouse.address || "—"} />
+          {warehouse.addressLine2 ? (
+            <RecordKvRow label="Address Line 2" value={warehouse.addressLine2} />
+          ) : null}
+          <RecordKvRow label="Pin Code" value={warehouse.pincode} mono />
+          <RecordKvRow label="District" value={warehouse.district || "—"} />
+          <RecordKvRow label="City" value={warehouse.city || "—"} />
+          <RecordKvRow label="Town" value={warehouse.town || "—"} />
+          <RecordKvRow label="State" value={warehouse.state || "—"} isLast />
         </RecordSectionCard>
 
-        <RecordSectionCard title="Warehouse Manager" icon={User} accent="orange">
-          <RecordKvRow label="Manager Name" value={warehouse.manager} isLast />
+        <RecordSectionCard title="GST & Tax Details" icon={FileText} accent="orange">
+          <RecordKvRow
+            label="GST Applicable"
+            value={warehouse.gstApplicable ? "Yes" : "No"}
+            isLast={!warehouse.gstApplicable}
+          />
+          {warehouse.gstApplicable && (
+            <>
+              <RecordKvRow
+                label="Registration Type"
+                value={warehouse.gstRegistrationType || "—"}
+              />
+              <RecordKvRow label="GSTIN" value={warehouse.gstNumber} mono copy />
+              <RecordKvRow
+                label="Registered Legal Name"
+                value={warehouse.registeredLegalName || "—"}
+              />
+              <RecordKvRow
+                label="Registered GST Address"
+                value={warehouse.registeredAddress || "—"}
+                isLast
+              />
+            </>
+          )}
+        </RecordSectionCard>
+
+        <RecordSectionCard title="Bank Details" icon={FileText} accent="blue">
+          <RecordKvRow
+            label="Account Holder Name"
+            value={warehouse.accountHolderName || "—"}
+          />
+          <RecordKvRow label="Bank Name" value={warehouse.bankName || "—"} />
+          <RecordKvRow label="Branch Name" value={warehouse.branch || "—"} />
+          <RecordKvRow
+            label="Account Number"
+            value={warehouse.accountNumber || "—"}
+            mono
+          />
+          <RecordKvRow
+            label="IFSC Code"
+            value={warehouse.ifscCode || "—"}
+            mono
+          />
+          <RecordKvRow
+            label="SWIFT Code"
+            value={warehouse.swiftCode || "—"}
+            mono
+            isLast
+          />
         </RecordSectionCard>
 
         <div className="lg:col-span-2">
@@ -242,7 +306,6 @@ export default function WarehouseDetailPage() {
       listHref="/masters/warehouse"
       listLabel="Warehouses"
       recordName={warehouse.warehouseName}
-      recordCode={warehouse.warehouseCode}
       statusLabel={STATUS_LABEL[warehouse.status]}
       statusVariant={STATUS_VARIANT[warehouse.status]}
       metaItems={[
@@ -274,9 +337,8 @@ export default function WarehouseDetailPage() {
           },
         ],
         summary: [
-          { label: "Type", value: warehouse.warehouseType, highlight: true },
-          { label: "Operated By", value: warehouse.operatedBy },
-          { label: "Manager", value: warehouse.manager || "—" },
+          { label: "Operated By", value: warehouse.operatedBy, highlight: true },
+          { label: "Designation", value: designation },
           { label: "City", value: warehouse.city || "—" },
           { label: "Created", value: warehouse.createdDate },
           { label: "Updated", value: warehouse.updatedDate },

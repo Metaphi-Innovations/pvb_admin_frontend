@@ -145,8 +145,8 @@ export function TransactionPage({
 
         <div className="bg-white border border-border/60 rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-sm">
-              <thead className="bg-muted/20 border-b border-border/60">
+            <table className="accounts-table w-full min-w-[980px] text-sm">
+              <thead className="border-b border-border/60">
                 <tr>
                   <SortTh label={`${title} No.`} colKey="number" sortKey={sortKey} sortDir={sortDir} onSort={(k) => { setSortKey(k); setSortDir(sortDir === "asc" ? "desc" : "asc"); }} />
                   <SortTh label="Date" colKey="date" sortKey={sortKey} sortDir={sortDir} onSort={(k) => { setSortKey(k); setSortDir(sortDir === "asc" ? "desc" : "asc"); }} />

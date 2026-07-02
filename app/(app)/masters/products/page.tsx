@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { cn } from "@/lib/utils";
 import {
@@ -12,14 +12,21 @@ import {
   Package,
   XCircle,
 } from "lucide-react";
-import { type Product, type ProductStatus, loadProducts, saveProducts } from "./product-data";
+import {
+  type Product,
+  type ProductStatus,
+  getProductCode,
+  loadActiveCategoryOptions,
+  loadActiveSupplierOptions,
+  loadProducts,
+  saveProducts,
+} from "./product-data";
 import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
-import { getStandardMrp } from "@/lib/pricing/resolve-pricing";
 
 import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { ListingUserCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
+import { ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
 function KpiCard({
   label,
@@ -49,6 +56,7 @@ function KpiCard({
 
 export default function ProductsPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const [records, setRecords] = useState<Product[]>([]);
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortState>({ key: "productName", direction: "asc" });
@@ -58,7 +66,16 @@ export default function ProductsPage() {
 
   useEffect(() => {
     setRecords(loadProducts());
-  }, []);
+  }, [pathname]);
+
+  const supplierFilterOptions = useMemo(
+    () => loadActiveSupplierOptions().map((o) => ({ label: o.label, value: o.value })),
+    [],
+  );
+  const categoryFilterOptions = useMemo(
+    () => loadActiveCategoryOptions().map((o) => ({ label: o.label, value: o.value })),
+    [],
+  );
 
   const updateStatus = (productId: number, status: ProductStatus) => {
     const today = new Date().toISOString().slice(0, 10);
@@ -73,77 +90,106 @@ export default function ProductsPage() {
 
   const columns: ColumnConfig<Product>[] = [
     {
-      key: "productName",
-      header: "Product Name",
+      key: "productCode",
+      header: "Product Code",
       sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "220px",
-      render: (val, row) => (
-        <Link href={`/masters/products/${row.id}`} className="block group/name">
-          <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">{row.productName}</p>
-        </Link>
+      width: "120px",
+      render: (_val, row) => (
+        <span className="font-mono text-xs">{getProductCode(row)}</span>
       ),
     },
     {
-      key: "scientificName",
-      header: "Scientific Name",
+      key: "productName",
+      header: "Product Name",
       sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "160px",
-      render: (val, row) => row.scientificName || "—",
+      width: "180px",
+      render: (_val, row) => (
+        <Link href={`/masters/products/${row.id}`} className="block group/name">
+          <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">
+            {row.productName}
+          </p>
+        </Link>
+      ),
     },
     {
       key: "sku",
       header: "SKU",
       sortable: true,
+      width: "120px",
+      render: (_val, row) => (
+        <span className="font-mono text-xs">{row.sku || "—"}</span>
+      ),
+    },
+    {
+      key: "supplierCode",
+      header: "Supplier Code",
+      sortable: true,
+      width: "110px",
+      render: (_val, row) => (
+        <span className="font-mono text-xs">{row.supplierCode || "—"}</span>
+      ),
+    },
+    {
+      key: "supplier",
+      header: "Supplier Name",
+      sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: supplierFilterOptions,
       width: "140px",
-      render: (val, row) => <span className="font-mono text-xs">{row.sku}</span>,
+      render: (_val, row) => (
+        <span className="text-xs">{row.supplier || "—"}</span>
+      ),
+    },
+    {
+      key: "hsnCode",
+      header: "HSN Code",
+      sortable: true,
+      width: "90px",
+      render: (_val, row) => (
+        <span className="font-mono text-xs">{row.hsnCode || "—"}</span>
+      ),
+    },
+    {
+      key: "category",
+      header: "Category",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: categoryFilterOptions,
+      width: "110px",
+      render: (_val, row) => row.category || "—",
+    },
+    {
+      key: "packSize",
+      header: "Pack Size",
+      sortable: true,
+      width: "90px",
+      render: (_val, row) => {
+        const size = row.packSize ?? row.unitSize;
+        return size !== undefined && size !== null ? String(size) : "—";
+      },
     },
     {
       key: "baseUnit",
       header: "Base Unit",
       sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "110px",
-      render: (val, row) => row.baseUnit || "—",
+      width: "90px",
+      render: (_val, row) => row.baseUnit || "—",
     },
     {
-      key: "packagingUnit",
-      header: "Packaging Unit",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "130px",
-      render: (val, row) => row.packagingUnit || "—",
-    },
-    {
-      key: "conversionQuantity",
-      header: "Conversion Qty",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "130px",
-      render: (val, row) => row.conversionQuantity ?? "—",
-    },
-    {
-      key: "standardMrp",
+      key: "mrp",
       header: "MRP",
       sortable: true,
-      width: "120px",
+      width: "100px",
       align: "right",
-      render: (_val, row) => {
-        const mrp = getStandardMrp(row.id);
-        return (
-          <span className="font-semibold text-xs tabular-nums">
-            {mrp > 0 ? formatIndianRupeeDisplay(mrp) : "—"}
-          </span>
-        );
-      },
+      render: (_val, row) => (
+        <span className="font-semibold text-xs tabular-nums">
+          {row.mrp !== undefined && row.mrp > 0
+            ? formatIndianRupeeDisplay(row.mrp)
+            : "—"}
+        </span>
+      ),
     },
     {
       key: "status",
@@ -155,30 +201,12 @@ export default function ProductsPage() {
         { label: "Active", value: "active" },
         { label: "Inactive", value: "inactive" },
       ],
-      width: "110px",
-      render: (val, row) => (
+      width: "100px",
+      render: (_val, row) => (
         <ListingStatusToggle
           active={isActiveStatus(row.status)}
           onChange={() => updateStatus(row.id, isActiveStatus(row.status) ? "inactive" : "active")}
         />
-      ),
-    },
-    {
-      key: "createdBy",
-      header: "Created By",
-      sortable: true,
-      width: "150px",
-      render: (_val, row) => (
-        <ListingUserCell name={row.createdBy} date={row.createdDate} />
-      ),
-    },
-    {
-      key: "updatedBy",
-      header: "Updated By",
-      sortable: true,
-      width: "150px",
-      render: (_val, row) => (
-        <ListingUserCell name={row.updatedBy} date={row.updatedDate} />
       ),
     },
   ];
@@ -201,26 +229,31 @@ export default function ProductsPage() {
   const filtered = useMemo(() => {
     let result = [...records];
 
-    // Search filter
     if (filters.search) {
       const q = String(filters.search).trim().toLowerCase();
       result = result.filter(
         (item) =>
+          getProductCode(item).toLowerCase().includes(q) ||
           item.productName.toLowerCase().includes(q) ||
-          (item.scientificName || "").toLowerCase().includes(q) ||
-          item.sku.toLowerCase().includes(q)
+          (item.supplier || "").toLowerCase().includes(q) ||
+          (item.supplierCode || "").toLowerCase().includes(q) ||
+          item.sku.toLowerCase().includes(q) ||
+          (item.hsnCode || "").toLowerCase().includes(q),
       );
     }
 
-    // Apply column filters
     result = applyFilters(result, filters);
 
-    // Sorting
     if (sort.key && sort.direction !== "none") {
       result.sort((a, b) => {
-        if (sort.key === "standardMrp") {
-          const av = getStandardMrp(a.id);
-          const bv = getStandardMrp(b.id);
+        if (sort.key === "mrp") {
+          const av = a.mrp ?? 0;
+          const bv = b.mrp ?? 0;
+          return sort.direction === "asc" ? av - bv : bv - av;
+        }
+        if (sort.key === "packSize") {
+          const av = a.packSize ?? a.unitSize ?? 0;
+          const bv = b.packSize ?? b.unitSize ?? 0;
           return sort.direction === "asc" ? av - bv : bv - av;
         }
         const av = String(a[sort.key as keyof Product] ?? "").toLowerCase();
@@ -243,37 +276,43 @@ export default function ProductsPage() {
 
   const handleExport = () => {
     const headers = [
+      "Product Code",
       "Product Name",
-      "Scientific Name",
       "SKU",
+      "Supplier Code",
+      "Supplier Name",
+      "HSN Code",
+      "Category",
+      "Pack Size",
       "Base Unit",
-      "Packaging Unit",
-      "Conversion Qty",
       "MRP",
       "Status",
-      "Created By",
-      "Updated By",
     ];
 
     const rows = filtered.map((item) => [
+      getProductCode(item),
       item.productName,
-      item.scientificName || "",
-      item.sku,
+      item.sku || "",
+      item.supplierCode || "",
+      item.supplier || "",
+      item.hsnCode || "",
+      item.category || "",
+      item.packSize ?? item.unitSize ?? "",
       item.baseUnit || "",
-      item.packagingUnit || "",
-      item.conversionQuantity !== undefined ? item.conversionQuantity : "",
-      getStandardMrp(item.id) || "",
+      item.mrp ?? "",
       item.status,
-      item.createdBy,
-      item.updatedBy,
     ]);
 
     const csvString = [
       headers.join(","),
-      ...rows.map(row => row.map(val => {
-        const str = String(val ?? "").replace(/"/g, '""');
-        return `"${str}"`;
-      }).join(","))
+      ...rows.map((row) =>
+        row
+          .map((val) => {
+            const str = String(val ?? "").replace(/"/g, '""');
+            return `"${str}"`;
+          })
+          .join(","),
+      ),
     ].join("\n");
 
     const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
@@ -299,7 +338,9 @@ export default function ProductsPage() {
       <div className="space-y-5">
         <div>
           <h1 className="text-xl font-bold text-foreground">Product Master</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Manage product catalogue, compliance, and pricing</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Manage product catalogue, suppliers, and packaging
+          </p>
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -323,7 +364,7 @@ export default function ProductsPage() {
           addLabel="Add Product"
           onExport={handleExport}
           emptyMessage="products"
-          searchPlaceholder="Search product name, scientific name, SKU..."
+          searchPlaceholder="Search product code, name, supplier, SKU, HSN..."
           currentFilters={filters}
           currentSort={sort}
         />

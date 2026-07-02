@@ -32,13 +32,13 @@ export interface TDSForm {
   sectionCode: string;
   sectionName: string;
   tdsRate: string;
-  description: string;
   applicableTo: string[];
+  thresholdAmount: string;
   status: MasterStatus;
 }
 
 export const TDS_APPLICABLE_TO_OPTIONS = [
-  { value: "vendor", label: "Vendor" },
+  { value: "vendor", label: "Supplier" },
   { value: "customer", label: "Customer" },
   { value: "contractor", label: "Contractor" },
   { value: "professional", label: "Professional" },
@@ -53,8 +53,8 @@ export const DEFAULT_TDS_FORM: TDSForm = {
   sectionCode: "",
   sectionName: "",
   tdsRate: "",
-  description: "",
   applicableTo: [],
+  thresholdAmount: "",
   status: "active",
 };
 
@@ -141,6 +141,19 @@ export const TDS_SEED: TDSMaster[] = [
     createdDate: "2024-02-05",
     updatedBy: MASTER_CURRENT_USER,
     updatedDate: "2024-02-05",
+  },
+  {
+    id: 7,
+    sectionCode: "194H",
+    sectionName: "Commission or Brokerage",
+    tdsRate: "5",
+    applicableTo: ["commission", "vendor"],
+    thresholdAmount: 15000,
+    status: "active",
+    createdBy: MASTER_CURRENT_USER,
+    createdDate: "2024-02-08",
+    updatedBy: MASTER_CURRENT_USER,
+    updatedDate: "2024-02-08",
   },
 ];
 
@@ -267,8 +280,9 @@ export function tdsToForm(record: TDSMaster): TDSForm {
     sectionCode: getTdsSectionCode(record),
     sectionName: record.sectionName,
     tdsRate: record.tdsRate,
-    description: record.description ?? "",
     applicableTo: [...record.applicableTo],
+    thresholdAmount:
+      record.thresholdAmount != null ? String(record.thresholdAmount) : "",
     status: record.status,
   };
 }
@@ -279,14 +293,18 @@ export function formToTds(
   existing?: TDSMaster,
 ): TDSMaster {
   const now = masterToday();
+  const threshold = form.thresholdAmount.trim()
+    ? Number(form.thresholdAmount)
+    : undefined;
   return {
     id,
     sectionCode: form.sectionCode.trim().toUpperCase(),
     sectionName: form.sectionName.trim(),
     tdsRate: normalizeRate(form.tdsRate),
-    description: form.description.trim() || undefined,
+    description: existing?.description,
     applicableTo: form.applicableTo,
-    thresholdAmount: existing?.thresholdAmount,
+    thresholdAmount:
+      threshold != null && !Number.isNaN(threshold) ? threshold : undefined,
     status: form.status,
     createdBy: existing?.createdBy ?? MASTER_CURRENT_USER,
     createdDate: existing?.createdDate ?? now,

@@ -17,6 +17,7 @@ import {
 } from "../../components/CustomerForm";
 import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
 import { hasCustomerPermission } from "../../customer-permissions";
+import { buildCreditAuditEntriesOnSave } from "@/lib/masters/customer-credit";
 
 interface ToastState {
   msg: string;
@@ -75,10 +76,7 @@ export default function EditCustomerPage() {
     const e = validateCustomerForm(form);
     setErrors(e);
     if (Object.keys(e).length > 0) {
-      const hasProductErrors = Object.keys(e).some((key) => key.startsWith("product_"));
-      const msg = hasProductErrors
-        ? "Please complete product details before saving."
-        : e.requiredDocuments || "Please fix the errors before saving.";
+      const msg = e.requiredDocuments || "Please fix the errors before saving.";
       setToast({ msg, type: "error" });
       setTimeout(() => setToast(null), 3200);
       return;
@@ -91,6 +89,7 @@ export default function EditCustomerPage() {
     const today = todayStr();
     const updated = formValuesToCustomer(form, {
       ...existing,
+      creditAuditLog: buildCreditAuditEntriesOnSave({ form, existing }),
       lastStatusChange:
         existing.status !== form.status ? today : existing.lastStatusChange,
       statusHistory:

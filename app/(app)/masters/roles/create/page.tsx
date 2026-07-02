@@ -383,10 +383,6 @@ export default function CreateRolePage() {
             onClick={() => router.push("/masters/roles")}>
             Cancel
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs"
-            onClick={() => handleSave(true)}>
-            Save as Draft
-          </Button>
           <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
             onClick={() => handleSave(false)}>
             <Save className="w-3.5 h-3.5" /> Save &amp; Publish
@@ -633,10 +629,6 @@ export default function CreateRolePage() {
                   <Button size="sm" className="w-full h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
                     onClick={() => handleSave(false)}>
                     <Save className="w-3.5 h-3.5" /> Save &amp; Publish
-                  </Button>
-                  <Button variant="outline" size="sm" className="w-full h-8 text-xs"
-                    onClick={() => handleSave(true)}>
-                    Save as Draft
                   </Button>
                   <Button variant="outline" size="sm" className="w-full h-8 text-xs text-muted-foreground"
                     onClick={() => router.push("/masters/roles")}>

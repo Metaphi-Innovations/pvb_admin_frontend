@@ -4,19 +4,38 @@ import {
   getRejectedStockRecords,
   getGrnPendingStockRecords,
 } from "../mock-data";
-import { getStockStatus } from "@/lib/accounts/inventory-accounting-data";
+import { getStockStatus, isActiveUsableInventory } from "@/lib/accounts/inventory-accounting-data";
+import { masterToday } from "@/lib/masters/common";
 
-const TODAY_STR = "2026-06-02";
-
-export function evaluateStockStatus(record: QcPassedStockRecord): string {
-  return getStockStatus(record.expiryDate, TODAY_STR);
+export function isSellableStockBatch(
+  record: Pick<QcPassedStockRecord, "availableQuantity" | "expiryDate">,
+  asOn = masterToday(),
+): boolean {
+  return isActiveUsableInventory(record.availableQuantity, record.expiryDate, asOn);
 }
 
-export function getQcPassedStockList(): QcPassedStockRecord[] {
+/** QC-passed stock eligible for sales, packing, and dispatch (excludes expired batches). */
+export function getSellableQcPassedStockRecords(asOn = masterToday()): QcPassedStockRecord[] {
+  return getQcPassedStockRecords().filter((r) => isSellableStockBatch(r, asOn));
+}
+
+export function evaluateStockStatus(record: QcPassedStockRecord, asOn = masterToday()): string {
+  return getStockStatus(record.expiryDate, asOn);
+}
+
+export function getQcPassedStockList(asOn = masterToday()): QcPassedStockRecord[] {
   const records = getQcPassedStockRecords();
   return records.map((r) => ({
     ...r,
-    status: evaluateStockStatus(r),
+    status: evaluateStockStatus(r, asOn),
+  }));
+}
+
+/** Operational stock list — expired batches excluded from sales/packing/dispatch flows. */
+export function getSellableQcPassedStockList(asOn = masterToday()): QcPassedStockRecord[] {
+  return getSellableQcPassedStockRecords(asOn).map((r) => ({
+    ...r,
+    status: evaluateStockStatus(r, asOn),
   }));
 }
 

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -35,10 +36,9 @@ import {
   type PurchaseInvoiceLine,
 } from "./purchase-invoices-data";
 import { maybePostPurchaseInvoice } from "@/lib/accounts/document-posting-bridge";
-import type { GrnRecord } from "@/app/(app)/warehouse/grnqc/grn/types";
+import type { GrnRecord } from "@/app/(app)/warehouse/grn/types";
 import { VendorMasterPanel } from "@/components/accounts/master-fetch/VendorMasterPanel";
 import { TransactionProductSelect } from "@/components/accounts/master-fetch/TransactionProductSelect";
-import { MasterFetchedBadge } from "@/components/accounts/master-fetch/MasterFetchedBadge";
 import {
   findProductByName,
   getProductsForPurchaseTransaction,
@@ -187,7 +187,7 @@ function ModeSelector({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => v
               <p className="text-xs text-muted-foreground mt-0.5">
                 {m === "grn"
                   ? "Auto-populate from received GRN. Preferred method."
-                  : "Enter vendor invoice details manually without a GRN."}
+                  : "Enter supplier invoice details manually without a GRN."}
               </p>
             </div>
             {m === "grn" && (
@@ -424,7 +424,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
   const doSave = (post: boolean) => {
     setError("");
     if (!vendorId) return setError("Select a vendor.");
-    if (!vendorInvoiceNo.trim()) return setError("Enter vendor invoice number.");
+    if (!vendorInvoiceNo.trim()) return setError("Enter supplier invoice number.");
     if (lines.some((l) => !l.productName.trim())) return setError("All line items need a product from master.");
     if (grandTotal <= 0) return setError("Total must be greater than zero.");
 
@@ -569,8 +569,8 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
           </Section>
         )}
 
-        {/* Vendor Info */}
-        <Section title="Vendor Info">
+        {/* Supplier Info */}
+        <Section title="Supplier Info">
           <VendorMasterPanel
             vendors={vendors}
             vendorId={vendorId}
@@ -605,7 +605,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
               />
             </div>
             <div>
-              <Label className="text-xs">Vendor Invoice No *</Label>
+              <Label className="text-xs">Supplier Invoice No *</Label>
               <Input
                 className="h-8 text-xs mt-1"
                 value={vendorInvoiceNo}
@@ -645,12 +645,9 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
 
         {/* Line Items */}
         <Section title="Item Details">
-          <div className="flex items-center gap-2 mb-2">
-            <MasterFetchedBadge />
-            <span className="text-[11px] text-muted-foreground">
-              Products from Product Master — HSN and GST auto-fill; edit qty, rate, and discount only.
-            </span>
-          </div>
+          <p className="text-[11px] text-muted-foreground mb-2">
+            Products from Product Master — HSN and GST auto-fill; edit qty, rate, and discount only.
+          </p>
           <div className="overflow-x-auto">
             <table className="w-full text-xs min-w-[800px]">
               <thead>
@@ -681,7 +678,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                           )
                         }
                         disabled={!vendorId}
-                        placeholder={vendorId ? "Select product…" : "Select vendor first"}
+                        placeholder={vendorId ? "Select product…" : "Select supplier first"}
                       />
                     </td>
                     <td className="py-1.5 pr-2">
@@ -708,11 +705,10 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                       />
                     </td>
                     <td className="py-1.5 pr-2">
-                      <Input
-                        type="number"
+                      <AccountsMoneyInput
                         className="h-7 text-xs text-right"
                         value={line.rate}
-                        onChange={(e) => updateLine(idx, { rate: Number(e.target.value) || 0 })}
+                        onChange={(v) => updateLine(idx, { rate: v })}
                       />
                     </td>
                     <td className="py-1.5 pr-2">
@@ -800,7 +796,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
         <LedgerImpactPreview
           title="Accounting Impact Preview"
           lines={purchaseInvoiceImpactResolved({
-            vendorName: vendorFields?.vendorName ?? "Vendor",
+            vendorName: vendorFields?.vendorName ?? "Supplier",
             taxable: subtotal,
             taxAmount: totalGst,
             grandTotal: finalTotal,
@@ -817,17 +813,6 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
           >
             Cancel
           </Button>
-          {mode !== "grn" && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 text-xs"
-              disabled={saving}
-              onClick={() => doSave(false)}
-            >
-              Save Draft
-            </Button>
-          )}
           <Button
             size="sm"
             className="h-9 text-xs bg-brand-600 text-white gap-1.5"

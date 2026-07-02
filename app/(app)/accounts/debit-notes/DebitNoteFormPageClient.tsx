@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -30,6 +31,7 @@ import {
   normalizeDebitLine,
   previewToDebitForm,
   updateDebitNote,
+  approveDebitNote,
   type DebitNoteAgainst,
   type DebitNoteAttachment,
   type DebitNoteLine,
@@ -307,18 +309,20 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
     status,
   });
 
-  const submit = (status: NoteWorkflowStatus) => {
+  const postNote = () => {
     setError(null);
     try {
       if (isEdit && debitNoteId != null) {
-        updateDebitNote(debitNoteId, buildInput(status));
+        updateDebitNote(debitNoteId, buildInput("draft"));
+        approveDebitNote(debitNoteId);
         router.push(`${DEBIT_NOTES_LIST_PATH}/${debitNoteId}`);
       } else {
-        const rec = createDebitNote(buildInput(status));
+        const rec = createDebitNote(buildInput("draft"));
+        approveDebitNote(rec.id);
         router.push(`${DEBIT_NOTES_LIST_PATH}/${rec.id}`);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save.");
+      setError(e instanceof Error ? e.message : "Could not post debit note.");
     }
   };
 
@@ -332,11 +336,8 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.push(DEBIT_NOTES_LIST_PATH)}>
             Cancel
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => submit("draft")}>
-            Save as Draft
-          </Button>
-          <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={() => submit("pending_approval")}>
-            Save & Submit
+          <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={postNote}>
+            Post Debit Note
           </Button>
         </div>
       }
@@ -427,7 +428,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
                 rows={
                   referencePreview.referenceType === "purchase_invoice"
                     ? [
-                        { label: "Vendor", value: referencePreview.vendorName },
+                        { label: "Supplier", value: referencePreview.vendorName },
                         { label: "Invoice Date", value: referencePreview.documentDate },
                         { label: "PI No.", value: referencePreview.sourceInvoiceNo },
                         { label: "PO No.", value: referencePreview.sourcePoNo },
@@ -438,7 +439,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
                         { label: "Already Debited", value: formatINR(referencePreview.alreadyAdjustedAmount) },
                       ]
                     : [
-                        { label: "Vendor", value: referencePreview.vendorName },
+                        { label: "Supplier", value: referencePreview.vendorName },
                         { label: "PO Date", value: referencePreview.documentDate },
                         { label: "PO No.", value: referencePreview.sourcePoNo },
                         { label: "PI No.", value: referencePreview.sourceInvoiceNo },
@@ -454,7 +455,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div className="space-y-1">
                   <Label className="text-xs">Debit Amount *</Label>
-                  <Input type="number" className="h-8 text-xs" value={standaloneAmount} onChange={(e) => setStandaloneAmount(e.target.value)} />
+                  <AccountsMoneyInput className="h-8 text-xs" value={standaloneAmount} onChange={(v) => setStandaloneAmount(String(v))} />
                 </div>
               </div>
             )}
@@ -483,7 +484,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
               </p>
               <div className="overflow-x-auto border rounded-lg">
                 <table className="w-full text-xs min-w-[1000px]">
-                  <thead className="bg-muted/30 border-b">
+                  <thead className="border-b">
                     <tr>
                       {["Product", "Inv Qty", "Return Qty", "UOM", "Rate", "GST %", "Debit Amt", "Line Remarks", ""].map((h) => (
                         <th key={h || "x"} className="px-2 py-1.5 text-left text-[10px] uppercase text-muted-foreground font-semibold whitespace-nowrap">{h}</th>
@@ -497,7 +498,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
                         <td className="p-1.5"><Input className="h-7 w-14 text-xs bg-muted/10" readOnly value={l.invoiceQty || ""} /></td>
                         <td className="p-1.5"><Input type="number" className="h-7 w-16 text-xs" value={l.returnQty || ""} onChange={(e) => updateLine(l.id, { returnQty: parseFloat(e.target.value) || 0 })} /></td>
                         <td className="p-1.5"><Input className="h-7 w-12 text-xs bg-muted/10" readOnly value={l.uom} /></td>
-                        <td className="p-1.5"><Input type="number" className="h-7 w-16 text-xs" value={l.unitPrice || ""} onChange={(e) => updateLine(l.id, { unitPrice: parseFloat(e.target.value) || 0 })} /></td>
+                        <td className="p-1.5"><AccountsMoneyInput className="h-7 w-16 text-xs" value={l.unitPrice || ""} onChange={(v) => updateLine(l.id, { unitPrice: v })} /></td>
                         <td className="p-1.5"><Input type="number" className="h-7 w-12 text-xs" value={l.taxPct || ""} onChange={(e) => updateLine(l.id, { taxPct: parseFloat(e.target.value) || 0 })} /></td>
                         <td className="p-1.5"><Input type="number" className="h-7 w-20 text-xs bg-muted/10" readOnly value={l.debitAmount > 0 ? l.debitAmount : ""} /></td>
                         <td className="p-1.5"><Input className="h-7 text-xs min-w-[80px]" value={l.lineRemarks} onChange={(e) => updateLine(l.id, { lineRemarks: e.target.value })} /></td>
@@ -576,7 +577,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
           </div>
           <LedgerImpactPreview
             lines={debitNoteImpactResolved({
-              vendorName: vendors.find((v) => String(v.id) === vendorId)?.vendorName ?? "Vendor",
+              vendorName: vendors.find((v) => String(v.id) === vendorId)?.vendorName ?? "Supplier",
               taxable:
                 referenceType === "standalone_adjustment"
                   ? totalDebit - lineTotals.gstAmount

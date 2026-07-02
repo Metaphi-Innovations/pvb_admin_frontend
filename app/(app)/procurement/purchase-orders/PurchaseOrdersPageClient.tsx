@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListing } from "@/components/listing/MasterListing";
@@ -10,13 +10,12 @@ import { ColumnConfig, FilterState, SortState } from "@/components/listing/types
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Plus,
-  MoreHorizontal,
+  MoreVertical,
   Eye,
   Edit2,
   Send,
@@ -55,6 +54,7 @@ import { ThreeWayMatchListingCell } from "./components/ThreeWayMatchSection";
 import { getPOFollowUpSummary } from "./po-followup-data";
 import { ShortClosePOModal } from "./components/ShortClosePOModal";
 import { AddFollowUpModal } from "./components/AddFollowUpModal";
+import { POActionConfirmModal, type POActionConfirmType } from "./components/POActionConfirmModal";
 import { FollowUpListingCell } from "./components/VendorFollowUpPanel";
 import { InvoiceListingCell } from "./components/POVendorInvoiceSection";
 import { UploadVendorInvoiceDialog } from "./components/UploadVendorInvoiceDialog";
@@ -63,15 +63,19 @@ import { canUploadPOInvoice } from "./po-invoice-utils";
 import { exportPOListingCsv } from "./po-export-utils";
 import { computePOListingKpis } from "@/lib/procurement/listing-kpis";
 import { POListingKpiRow } from "../components/listing/ListingKpiRows";
+import { CreatePurchaseReturnAction } from "../purchase-returns/components/CreatePurchaseReturnAction";
+import { loadPurchaseReturns } from "../purchase-returns/purchase-return-data";
+import { purchaseReturnRoutes } from "../purchase-returns/purchase-return-utils";
+import { PurchaseReturnListing } from "./components/PurchaseReturnListing";
 
-type TabId = "all" | "draft" | "pending_approval" | "approved" | "rejected";
+type TabId = "all" | "draft" | "pending_approval" | "rejected" | "po_return";
 
 const TABS: { value: TabId; label: string }[] = [
-  { value: "all", label: "All" },
+  { value: "all", label: "PO" },
   { value: "draft", label: "Draft" },
-  { value: "pending_approval", label: "Pending Approval" },
-  { value: "approved", label: "Approved" },
+  { value: "pending_approval", label: "Approval" },
   { value: "rejected", label: "Rejected" },
+  { value: "po_return", label: "Purchase Return" },
 ];
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string; label: string }> = {
@@ -100,8 +104,17 @@ function StatusPill({ status }: { status: string }) {
 
 export default function PurchaseOrdersPageClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [records, setRecords] = useState<PurchaseOrder[]>(() => loadPurchaseOrders());
   const [tab, setTab] = useState<TabId>("all");
+
+  React.useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t && ["all", "draft", "pending_approval", "rejected", "po_return"].includes(t)) {
+      setTab(t as TabId);
+    }
+  }, [searchParams]);
+
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [approvalTarget, setApprovalTarget] = useState<PurchaseOrder | null>(null);
   const [approvalAction, setApprovalAction] = useState<"approve" | "reject">("approve");
@@ -115,6 +128,9 @@ export default function PurchaseOrdersPageClient() {
   const [uploadTarget, setUploadTarget] = useState<PurchaseOrder | null>(null);
   const [uploadReplace, setUploadReplace] = useState(false);
   const [invoiceRev, setInvoiceRev] = useState(0);
+  const [actionConfirmOpen, setActionConfirmOpen] = useState(false);
+  const [actionConfirmType, setActionConfirmType] = useState<POActionConfirmType>("close");
+  const [actionConfirmTarget, setActionConfirmTarget] = useState<PurchaseOrder | null>(null);
 
   // MasterListing States
   const [filters, setFilters] = useState<FilterState>({});
@@ -137,15 +153,16 @@ export default function PurchaseOrdersPageClient() {
 
   const tabCounts = useMemo(() => {
     const c: Partial<Record<TabId, number>> = { all: records.length };
-    (["draft", "pending_approval", "approved", "rejected"] as TabId[]).forEach((s) => {
+    (["draft", "pending_approval", "rejected"] as TabId[]).forEach((s) => {
       if (s !== "all") c[s] = records.filter((r) => r.status === s).length;
     });
+    c["po_return"] = loadPurchaseReturns().length;
     return c;
   }, [records]);
 
   const filtered = useMemo(() => {
     let r = [...records];
-    if (tab !== "all") r = r.filter((x) => x.status === tab);
+    if (tab !== "all" && tab !== "po_return") r = r.filter((x) => x.status === tab);
 
     // MasterListing Filters
     Object.keys(filters).forEach((key) => {
@@ -209,7 +226,7 @@ export default function PurchaseOrdersPageClient() {
     refresh();
     setInvoiceRev((r) => r + 1);
     setUploadTarget(null);
-    setToast({ msg: "Vendor invoice saved.", type: "success" });
+    setToast({ msg: "Supplier invoice saved.", type: "success" });
   };
 
   const columns: ColumnConfig<PurchaseOrder>[] = [
@@ -219,16 +236,22 @@ export default function PurchaseOrdersPageClient() {
       sortable: true,
       render: (val, row) => (
         <div>
-          <p className="font-semibold text-brand-700 text-xs">
-            <HighlightText text={row.poNumber} query={(filters.search as string) || ""} />
-          </p>
+          <button
+            type="button"
+            onClick={() => router.push(`/procurement/purchase-orders/${row.id}`)}
+            className="text-left"
+          >
+            <p className="font-semibold text-brand-700 text-xs hover:underline">
+              <HighlightText text={row.poNumber} query={(filters.search as string) || ""} />
+            </p>
+          </button>
           <p className="text-[11px] text-muted-foreground">{formatListingDate(row.poDate)}</p>
         </div>
       ),
     },
     {
       key: "supplierName",
-      header: "Vendor",
+      header: "Supplier",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
@@ -336,60 +359,116 @@ export default function PurchaseOrdersPageClient() {
       render: (val, row) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="p-1.5 hover:bg-muted rounded-md transition-colors">
-              <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+            <button className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-100">
+              <MoreVertical className="w-4 h-4 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48 z-[400]">
-            <DropdownMenuItem onClick={() => router.push(`/procurement/purchase-orders/${row.id}`)} className="cursor-pointer">
-              <Eye className="w-3.5 h-3.5 mr-2" /> View
-            </DropdownMenuItem>
+          <DropdownMenuContent align="end" className="w-48 z-[200]">
+            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
+              Actions
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <button
+              type="button"
+              onClick={() => router.push(`/procurement/purchase-orders/${row.id}`)}
+              className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+            >
+              <Eye className="w-3.5 h-3.5" /> View
+            </button>
             {["draft", "rejected"].includes(row.status) && (
-              <DropdownMenuItem onClick={() => router.push(`/procurement/purchase-orders/${row.id}/edit`)} className="cursor-pointer">
-                <Edit2 className="w-3.5 h-3.5 mr-2" /> Edit
-              </DropdownMenuItem>
+              <button
+                type="button"
+                onClick={() => router.push(`/procurement/purchase-orders/${row.id}/edit`)}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+              >
+                <Edit2 className="w-3.5 h-3.5" /> Edit
+              </button>
             )}
             {row.status === "draft" && (
-              <DropdownMenuItem onClick={() => { updateOne(submitPO(row)); setToast({ msg: "PO submitted.", type: "success" }); }} className="cursor-pointer">
-                <Send className="w-3.5 h-3.5 mr-2" /> Submit
-              </DropdownMenuItem>
+              <button
+                type="button"
+                onClick={() => { updateOne(submitPO(row)); setToast({ msg: "PO submitted.", type: "success" }); }}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+              >
+                <Send className="w-3.5 h-3.5" /> Submit
+              </button>
             )}
             {row.status === "pending_approval" && (
               <>
-                <DropdownMenuItem onClick={() => { setApprovalTarget(row); setApprovalAction("approve"); setApprovalOpen(true); }} className="cursor-pointer">
-                  <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> Approve
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => { setApprovalTarget(row); setApprovalAction("reject"); setApprovalOpen(true); }} className="cursor-pointer">
-                  <XCircle className="w-3.5 h-3.5 mr-2" /> Reject
-                </DropdownMenuItem>
+                <button
+                  type="button"
+                  onClick={() => { setApprovalTarget(row); setApprovalAction("approve"); setApprovalOpen(true); }}
+                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Approve
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setApprovalTarget(row); setApprovalAction("reject"); setApprovalOpen(true); }}
+                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+                >
+                  <XCircle className="w-3.5 h-3.5" /> Reject
+                </button>
               </>
             )}
             {canUploadPOInvoice(row) && (
-              <DropdownMenuItem onClick={() => openUpload(row, row.status === "invoice_uploaded")} className="cursor-pointer">
-                <Upload className="w-3.5 h-3.5 mr-2" /> Upload Invoice
-              </DropdownMenuItem>
+              <button
+                type="button"
+                onClick={() => openUpload(row, row.status === "invoice_uploaded")}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+              >
+                <Upload className="w-3.5 h-3.5" /> Upload Invoice
+              </button>
             )}
             {canAddPOFollowUp(row) && (
-              <DropdownMenuItem onClick={() => { setFollowUpTarget(row); setFollowUpOpen(true); }} className="cursor-pointer">
-                <MessageSquare className="w-3.5 h-3.5 mr-2" /> Add Follow-up
-              </DropdownMenuItem>
+              <button
+                type="button"
+                onClick={() => { setFollowUpTarget(row); setFollowUpOpen(true); }}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+              >
+                <MessageSquare className="w-3.5 h-3.5" /> Add Follow-up
+              </button>
             )}
             {canShortClosePO(row) && (
-              <DropdownMenuItem onClick={() => { setShortCloseTarget(row); setShortCloseOpen(true); }} className="cursor-pointer">
-                <Scissors className="w-3.5 h-3.5 mr-2" /> Short Close PO
-              </DropdownMenuItem>
+              <button
+                type="button"
+                onClick={() => { setShortCloseTarget(row); setShortCloseOpen(true); }}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+              >
+                <Scissors className="w-3.5 h-3.5" /> Short Close PO
+              </button>
             )}
+            <CreatePurchaseReturnAction
+              po={row}
+              onCreate={() => router.push(purchaseReturnRoutes.new(row.id))}
+            />
             {["approved", "invoice_uploaded"].includes(row.status) && (
-              <DropdownMenuItem onClick={() => { updateOne(closePO(row)); setToast({ msg: "PO closed.", type: "success" }); }} className="cursor-pointer">
+              <button
+                type="button"
+                onClick={() => {
+                  setActionConfirmTarget(row);
+                  setActionConfirmType("close");
+                  setActionConfirmOpen(true);
+                }}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+              >
                 Close PO
-              </DropdownMenuItem>
+              </button>
             )}
             {!["closed", "cancelled", "short_closed"].includes(row.status) && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-red-600 cursor-pointer" onClick={() => { updateOne(cancelPO(row)); setToast({ msg: "PO cancelled.", type: "success" }); }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActionConfirmTarget(row);
+                    setActionConfirmType("cancel");
+                    setActionConfirmOpen(true);
+                  }}
+                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 transition-colors rounded-sm"
+                >
                   Cancel PO
-                </DropdownMenuItem>
+                </button>
               </>
             )}
           </DropdownMenuContent>
@@ -407,29 +486,36 @@ export default function PurchaseOrdersPageClient() {
         label: `${t.label}${tabCounts[t.value] != null ? ` (${tabCounts[t.value]})` : ""}`,
       }))}
       activeTab={tab}
-      onTabChange={(id) => setTab(id as TabId)}
-      metrics={<POListingKpiRow kpis={poListingKpis} />}
+      onTabChange={(id) => {
+        setTab(id as TabId);
+        router.replace(`/procurement/purchase-orders?tab=${id}`);
+      }}
+      metrics={tab === "po_return" ? undefined : <POListingKpiRow kpis={poListingKpis} />}
     >
-      <div>
+      {tab === "po_return" ? (
+        <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading…</div>}>
+          <PurchaseReturnListing />
+        </Suspense>
+      ) : (
         <MasterListing<PurchaseOrder>
-          columns={columns}
-          data={paginated}
-          totalRecords={filtered.length}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-          onSortChange={setSort}
-          onFilterChange={setFilters}
-          onAdd={() => router.push("/procurement/purchase-orders/new")}
-          addLabel="Create PO"
-          emptyMessage="purchase orders"
-          searchPlaceholder="Search PO no., PR no., supplier…"
-          onExport={() => exportPOListingCsv(filtered)}
-          currentFilters={filters}
-          currentSort={sort}
-        />
-      </div>
+            columns={columns}
+            data={paginated}
+            totalRecords={filtered.length}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            onSortChange={setSort}
+            onFilterChange={setFilters}
+            onAdd={() => router.push("/procurement/purchase-orders/new")}
+            addLabel="Create PO"
+            emptyMessage="purchase orders"
+            searchPlaceholder="Search PO no., PR no., supplier…"
+            onExport={() => exportPOListingCsv(filtered)}
+            currentFilters={filters}
+            currentSort={sort}
+          />
+      )}
 
       {uploadTarget && (
         <UploadVendorInvoiceDialog
@@ -455,9 +541,9 @@ export default function PurchaseOrdersPageClient() {
           if (!followUpTarget) return;
           const { updatedPo } = addPOFollowUp(followUpTarget, input);
           updateOne(updatedPo);
-          setFollowUpTarget(null);
+          setFollowUpTarget(updatedPo);
           setFollowUpRev((r) => r + 1);
-          setToast({ msg: "Follow-up added.", type: "success" });
+          setToast({ msg: "Follow-up saved.", type: "success" });
         }}
       />
 
@@ -485,6 +571,30 @@ export default function PurchaseOrdersPageClient() {
           setToast({ msg: approvalAction === "approve" ? "PO approved." : "PO rejected.", type: "success" });
         }}
       />
+
+      <POActionConfirmModal
+        open={actionConfirmOpen}
+        onOpenChange={(open) => {
+          setActionConfirmOpen(open);
+          if (!open) setActionConfirmTarget(null);
+        }}
+        po={actionConfirmTarget}
+        action={actionConfirmType}
+        onConfirm={() => {
+          if (!actionConfirmTarget) return;
+          const updated =
+            actionConfirmType === "close"
+              ? closePO(actionConfirmTarget)
+              : cancelPO(actionConfirmTarget);
+          updateOne(updated);
+          setActionConfirmTarget(null);
+          setToast({
+            msg: actionConfirmType === "close" ? "PO closed." : "PO cancelled.",
+            type: "success",
+          });
+        }}
+      />
+
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </ListingContainer>
   );

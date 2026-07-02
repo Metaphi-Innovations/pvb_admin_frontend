@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Download, Eye, Trash2, Upload } from "lucide-react";
@@ -99,7 +100,7 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
     reader.onload = () => {
       setAttachment({
         id: newPurchaseAttachmentId(),
-        documentName: "Vendor Invoice",
+        documentName: "Supplier Invoice",
         fileName: file.name,
         dataUrl: reader.result as string,
         uploadedAt: new Date().toISOString(),
@@ -152,7 +153,7 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pb-8 items-start">
         <div className="lg:col-span-2 max-w-[720px] space-y-4">
         <p className="text-[11px] text-muted-foreground">
-          Use for exceptional cases only. Normal flow: upload vendor invoice on a PO in Procurement.
+          Use for exceptional cases only. Normal flow: upload supplier invoice on a PO in Procurement.
         </p>
 
         <Section title="Purchase Details">
@@ -167,33 +168,33 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
             </div>
           </div>
           <SearchableSelect
-            label="Vendor"
+            label="Supplier"
             value={vendorId}
             onChange={setVendorId}
             options={vendorOptions}
-            placeholder="Select vendor…"
+            placeholder="Select supplier…"
             required
           />
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs">Vendor Invoice No. *</Label>
+              <Label className="text-xs">Supplier Invoice No. *</Label>
               <Input className="h-8 text-xs" value={vendorInvoiceNo} onChange={(e) => setVendorInvoiceNo(e.target.value)} />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Vendor Invoice Date *</Label>
+              <Label className="text-xs">Supplier Invoice Date *</Label>
               <Input type="date" className="h-8 text-xs" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Invoice Amount *</Label>
-              <Input type="number" className="h-8 text-xs" value={invoiceAmount} onChange={(e) => onAmountChange("invoice", e.target.value)} />
+              <AccountsMoneyInput className="h-8 text-xs" value={invoiceAmount} onChange={(v) => onAmountChange("invoice", String(v))} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Tax Amount *</Label>
-              <Input type="number" className="h-8 text-xs" value={taxAmount} onChange={(e) => onAmountChange("tax", e.target.value)} />
+              <AccountsMoneyInput className="h-8 text-xs" value={taxAmount} onChange={(v) => onAmountChange("tax", String(v))} />
             </div>
             <div className="space-y-1 col-span-2">
               <Label className="text-xs">Total Amount *</Label>
-              <Input type="number" className="h-8 text-xs" value={totalAmount} onChange={(e) => onAmountChange("total", e.target.value)} />
+              <AccountsMoneyInput className="h-8 text-xs" value={totalAmount} onChange={(v) => onAmountChange("total", String(v))} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">PO Reference</Label>
@@ -246,7 +247,7 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
         <div className="lg:sticky lg:top-20 space-y-4">
           <LedgerImpactPreview
             lines={purchaseInvoiceImpactResolved({
-              vendorName: vendorOptions.find((v) => v.value === vendorId)?.label ?? "Vendor",
+              vendorName: vendorOptions.find((v) => v.value === vendorId)?.label ?? "Supplier",
               taxable: parseFloat(invoiceAmount) || 0,
               taxAmount: parseFloat(taxAmount) || 0,
               grandTotal: parseFloat(totalAmount) || 0,

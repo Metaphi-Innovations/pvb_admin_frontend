@@ -3,12 +3,13 @@ import {
   EXPECTED_SYSTEM_NODE_COUNT,
   SYSTEM_COA_NODES,
 } from "./masters/coa-seed-nodes";
+import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
 
 export type RecordStatus = "draft" | "approved" | "rejected" | "posted";
 
 export type AccountType = "Asset" | "Liability" | "Income" | "Expense" | "Equity";
 
-export type CoaNodeLevel = "primary_head" | "account_group" | "sub_group" | "ledger" | "sub_ledger";
+export type CoaNodeLevel = "primary_head" | "account_group" | "ledger";
 
 export type ErpUsageModule =
   | "procurement"
@@ -88,7 +89,7 @@ export interface AccountTxn {
   updatedBy: string;
 }
 
-const COA_KEY = "ds_accounts_coa_v9";
+const COA_KEY = "ds_accounts_coa_v10";
 const COA_META_KEY = "ds_accounts_coa_meta";
 const LEDGER_KEY = "ds_accounts_ledgers";
 const TXN_KEY = "ds_accounts_txns";
@@ -99,6 +100,7 @@ const LEGACY_COA_KEYS = [
   "ds_accounts_coa_v6",
   "ds_accounts_coa_v7",
   "ds_accounts_coa_v8",
+  "ds_accounts_coa_v9",
 ];
 
 const COA_SEED: ChartOfAccount[] = [...SYSTEM_COA_NODES];
@@ -144,24 +146,66 @@ function normalizeLedger(r: ChartOfAccount): ChartOfAccount {
 }
 
 function isRemovedSeedLedger(record: ChartOfAccount): boolean {
-  if (record.nodeLevel !== "ledger" && record.nodeLevel !== "sub_ledger") return false;
+  if (record.nodeLevel !== "ledger") return false;
   if (REMOVED_SEED_LEDGER_IDS.has(record.id)) return true;
   return REMOVED_SEED_LEDGER_NAMES.has(record.accountName.trim().toLowerCase());
 }
 
-/** Leaf sub-group or leaf account group — valid parent for user-created ledgers */
-function canParentHoldLedger(parent: ChartOfAccount, systemNodes: ChartOfAccount[]): boolean {
-  if (parent.nodeLevel === "sub_group") {
-    return !systemNodes.some(
-      (r) => r.parentAccountId === parent.id && r.nodeLevel === "sub_group",
-    );
-  }
+function hasChildAccountGroups(nodes: ChartOfAccount[], parentId: number): boolean {
+  return nodes.some((r) => r.parentAccountId === parentId && r.nodeLevel === "account_group");
+}
+
+function hasChildLedgers(nodes: ChartOfAccount[], parentId: number): boolean {
+  return nodes.some((r) => r.parentAccountId === parentId && r.nodeLevel === "ledger");
+}
+
+/** Leaf standard group or grouping ledger — valid parent for user-created ledgers */
+function canParentHoldLedger(parent: ChartOfAccount, allNodes: ChartOfAccount[]): boolean {
   if (parent.nodeLevel === "account_group") {
-    return !systemNodes.some(
-      (r) => r.parentAccountId === parent.id && r.nodeLevel === "sub_group",
-    );
+    return !hasChildAccountGroups(allNodes, parent.id);
+  }
+  if (parent.nodeLevel === "ledger") {
+    return hasChildLedgers(allNodes, parent.id);
   }
   return false;
+}
+
+function migrateLegacyNodeLevel(level: string): CoaNodeLevel {
+  if (level === "sub_group") return "account_group";
+  if (level === "sub_ledger") return "ledger";
+  return level as CoaNodeLevel;
+}
+
+function normalizeStructuralNode(
+  r: ChartOfAccount,
+  parent: ChartOfAccount,
+): ChartOfAccount {
+  return {
+    ...r,
+    alias: r.alias ?? "",
+    parentAccountId: parent.id,
+    parentAccount: parent.accountName,
+    openingBalance: 0,
+    balanceType: parent.balanceType ?? "Debit",
+    gstApplicable: false,
+    tdsApplicable: false,
+    costCenterApplicable: false,
+    bankAccountFlag: false,
+    isSystem: false,
+  };
+}
+
+function isManualSubGroupLedger(record: ChartOfAccount, allNodes: ChartOfAccount[]): boolean {
+  if (record.nodeLevel !== "ledger") return false;
+  if (record.isSystemGenerated || record.erpSourceModule) return false;
+  return allNodes.some(
+    (c) => c.parentAccountId === record.id && c.nodeLevel === "ledger",
+  );
+}
+
+function shouldKeepUserLedger(record: ChartOfAccount, allNodes: ChartOfAccount[]): boolean {
+  if (record.isSystemGenerated || record.erpSourceModule) return true;
+  return !isManualSubGroupLedger(record, allNodes);
 }
 
 function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
@@ -175,44 +219,64 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
   const systemById = new Map(mergedSystem.map((n) => [n.id, n]));
   const systemByCode = new Map(mergedSystem.map((n) => [n.accountCode, n]));
 
-  const userLedgers = stored
-    .filter(
-      (r) =>
-        (r.nodeLevel === "ledger" || r.nodeLevel === "sub_ledger") &&
-        !r.isSystem &&
-        !isRemovedSeedLedger(r),
-    )
-    .map((r) => {
-      let parent: ChartOfAccount | undefined;
-      if (r.parentAccountId != null) {
-        parent = systemById.get(r.parentAccountId);
-        if (!parent) {
-          const oldParent = stored.find((s) => s.id === r.parentAccountId);
-          if (oldParent) parent = systemByCode.get(oldParent.accountCode);
-        }
+  const migratedStored = stored.map((r) => ({
+    ...r,
+    nodeLevel: migrateLegacyNodeLevel(r.nodeLevel),
+  }));
+
+  const rawUserLedgers = migratedStored.filter(
+    (r) =>
+      r.nodeLevel === "ledger" &&
+      !r.isSystem &&
+      !isRemovedSeedLedger(r) &&
+      shouldKeepUserLedger(r, migratedStored),
+  );
+
+  const userLedgers: ChartOfAccount[] = [];
+  const ledgerById = new Map<number, ChartOfAccount>();
+  let remaining = [...rawUserLedgers];
+
+  function resolveParent(r: ChartOfAccount): ChartOfAccount | undefined {
+    if (r.parentAccountId == null) return undefined;
+    const fromSystem = systemById.get(r.parentAccountId);
+    if (fromSystem) return fromSystem;
+    const fromLedger = ledgerById.get(r.parentAccountId);
+    if (fromLedger) return fromLedger;
+    const oldParent = migratedStored.find((s) => s.id === r.parentAccountId);
+    if (!oldParent) return undefined;
+    return systemByCode.get(oldParent.accountCode) ?? ledgerById.get(oldParent.id);
+  }
+
+  while (remaining.length > 0) {
+    const next: ChartOfAccount[] = [];
+    for (const r of remaining) {
+      const parent = resolveParent(r);
+      if (!parent) {
+        next.push(r);
+        continue;
       }
-      if (!parent) return null;
-      if (r.nodeLevel === "sub_ledger") {
-        const ledgerParent = systemById.get(r.parentAccountId!) ?? stored.find((s) => s.id === r.parentAccountId);
-        if (!ledgerParent || ledgerParent.nodeLevel !== "ledger") return null;
-        return normalizeLedger({
-          ...r,
-          parentAccountId: ledgerParent.id,
-          parentAccount: ledgerParent.accountName,
-          openingBalance: r.openingBalance ?? 0,
-          isSystem: false,
-        });
+      if (parent.nodeLevel === "account_group" && hasChildAccountGroups(mergedSystem, parent.id)) {
+        next.push(r);
+        continue;
       }
-      if (!canParentHoldLedger(parent, mergedSystem)) return null;
-      return normalizeLedger({
+      if (parent.nodeLevel !== "account_group" && parent.nodeLevel !== "ledger") {
+        next.push(r);
+        continue;
+      }
+      const normalized = normalizeLedger({
         ...r,
+        nodeLevel: "ledger",
         parentAccountId: parent.id,
         parentAccount: parent.accountName,
         openingBalance: r.openingBalance ?? 0,
         isSystem: false,
       });
-    })
-    .filter((r): r is ChartOfAccount => r != null);
+      userLedgers.push(normalized);
+      ledgerById.set(normalized.id, normalized);
+    }
+    if (next.length === remaining.length) break;
+    remaining = next;
+  }
 
   return [...mergedSystem, ...userLedgers];
 }
@@ -286,10 +350,11 @@ export const loadChartOfAccounts = (): ChartOfAccount[] => {
   }
 
   const raw = getOrSeed(COA_KEY, COA_SEED);
-  const source = coaStorageNeedsReset(raw) ? [] : raw;
+  const needsReset = coaStorageNeedsReset(raw);
+  const source = needsReset ? [] : raw;
   const merged = ensureCoaSystemStructure(source.length ? source : COA_SEED);
 
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && (needsReset || merged.length !== raw.length)) {
     save(COA_KEY, merged);
     writeCoaMeta();
   }
@@ -301,26 +366,26 @@ export const saveChartOfAccounts = (list: ChartOfAccount[]) => {
   const cleaned = ensureCoaSystemStructure(list);
   save(COA_KEY, cleaned);
   writeCoaMeta();
+  dispatchCoaChanged();
 };
 export const getSystemCoaNodes = () => SYSTEM_COA_NODES;
 
 export function getCoaLedgers(): ChartOfAccount[] {
-  return loadChartOfAccounts().filter(
-    (r) => r.nodeLevel === "ledger" || r.nodeLevel === "sub_ledger",
-  );
+  return loadChartOfAccounts().filter((r) => r.nodeLevel === "ledger");
 }
 
-/** Leaf posting accounts: sub-ledgers, or ledgers without child sub-ledgers */
+/** Posting ledgers: active ledgers with no child ledgers (grouping ledgers are excluded) */
 export function getPostableCoaAccounts(records?: ChartOfAccount[]): ChartOfAccount[] {
   const list = records ?? loadChartOfAccounts();
-  const subLedgers = list.filter((r) => r.nodeLevel === "sub_ledger" && r.status === "active");
-  const ledgersWithChildren = new Set(
-    subLedgers.map((s) => s.parentAccountId).filter((id): id is number => id != null),
+  const groupingLedgerIds = new Set<number>();
+  for (const r of list) {
+    if (r.nodeLevel === "ledger" && r.parentAccountId != null) {
+      groupingLedgerIds.add(r.parentAccountId);
+    }
+  }
+  return list.filter(
+    (r) => r.nodeLevel === "ledger" && r.status === "active" && !groupingLedgerIds.has(r.id),
   );
-  const leafLedgers = list.filter(
-    (r) => r.nodeLevel === "ledger" && r.status === "active" && !ledgersWithChildren.has(r.id),
-  );
-  return [...leafLedgers, ...subLedgers];
 }
 
 /** @deprecated Use getCoaLedgers() — ledgers live in Chart of Accounts hierarchy */

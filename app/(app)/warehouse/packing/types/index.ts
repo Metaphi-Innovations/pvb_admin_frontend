@@ -1,3 +1,9 @@
+export interface PackedBatchAllocation {
+  batchNumber: string;
+  expiryDate: string;
+  allocatedQty: number;
+}
+
 export interface SalesOrderProduct {
   product: string;
   sku: string;
@@ -19,6 +25,12 @@ export interface SalesOrderRecord {
   status: "Ready For Packing" | "Partially Packed" | "Packing In Progress";
   warehouse: string;
   products: SalesOrderProduct[];
+  sourceDocumentType?: "Sales Order" | "Stock Transfer" | "Sample Order" | "Purchase Return";
+  sourceDocumentNo?: string;
+  sourceWarehouse?: string;
+  targetWarehouse?: string;
+  createdDate?: string;
+  packingListNo?: string;
 }
 
 export interface PackedProduct {
@@ -26,6 +38,34 @@ export interface PackedProduct {
   sku: string;
   orderedQty: number;
   packedQty: number;
+  batchAllocations?: PackedBatchAllocation[];
+  nearExpirySchemeEligible?: boolean;
+}
+
+export interface PackingNearExpirySchemeEntry {
+  schemeId: number;
+  schemeCode: string;
+  schemeName: string;
+  schemeType: "Near Expiry";
+  product: string;
+  productId: string;
+  sku: string;
+  batchNumber: string;
+  batchExpiryDate: string;
+  remainingExpiryDays: number;
+  dispatchQuantity: number;
+  benefitType: string;
+  benefitValue: number;
+  estimatedBenefitAmount: number;
+  schemeStatus: "Active";
+  settlementMethod: string;
+  settlementStatus: "Pending";
+  /** @deprecated Use settlementMethod */
+  settlement?: string;
+  /** @deprecated Use settlementStatus */
+  status?: string;
+  pendingSettlement: true;
+  dealerPrice?: number;
 }
 
 export interface PackingRecord {
@@ -40,6 +80,13 @@ export interface PackingRecord {
   status: "Packed" | "Dispatched" | "Cancelled";
   warehouse: string;
   products: PackedProduct[];
+  nearExpirySchemes?: PackingNearExpirySchemeEntry[];
+  sourceDocumentType?: "Sales Order" | "Stock Transfer" | "Sample Order" | "Purchase Return";
+  sourceDocumentNo?: string;
+  sourceWarehouse?: string;
+  targetWarehouse?: string;
+  createdDate?: string;
+  packingListNo?: string;
 }
 
 export type PackingRecordUnion =

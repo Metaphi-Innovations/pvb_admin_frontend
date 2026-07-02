@@ -70,8 +70,8 @@ export default function BankGroupAccountsClient({ bankGroupId }: { bankGroupId: 
       layout="split"
     >
       <div className="flex-1 overflow-auto">
-        <table className="w-full text-xs">
-          <thead className="bg-muted/20 border-b sticky top-0">
+        <table className="accounts-table w-full text-xs">
+          <thead className="border-b">
             <tr>
               {["Account", "Account No.", "IFSC", "Branch", "Balance", "Recon", "Status"].map((h) => (
                 <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">{h}</th>

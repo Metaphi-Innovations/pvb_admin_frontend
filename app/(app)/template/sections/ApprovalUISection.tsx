@@ -132,7 +132,7 @@ const APPROVALS: Approval[] = [
     urgency: "high",
     levelLabel: "Level 2 of 3",
     details: [
-      { label: "Vendor",         value: "Krishak Agro Suppliers" },
+      { label: "Supplier",         value: "Krishak Agro Suppliers" },
       { label: "Delivery Date",  value: "28 Jan 2024" },
       { label: "Warehouse",      value: "Central Warehouse, Nashik" },
       { label: "Payment Terms",  value: "Net 30 days" },

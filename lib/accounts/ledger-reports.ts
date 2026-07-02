@@ -81,7 +81,7 @@ export function computeTrialBalanceRows(
         ledger: ledger.accountName,
         primaryHead: hierarchy.primaryHead?.accountName ?? "—",
         accountGroup: hierarchy.accountGroup?.accountName ?? "—",
-        subGroup: hierarchy.subGroup?.accountName ?? "—",
+        subGroup: hierarchy.standardGroup?.accountName ?? "—",
         opening: ledger.openingBalance,
         openingBalanceType: ledger.balanceType,
         debit: movement.debit,
@@ -98,9 +98,9 @@ export function computeLedgerReportRows(
   return getCoaLedgers()
     .map((ledger) => {
       const hierarchy = resolveHierarchyPath(records, ledger.id);
-      const groupPath = [hierarchy.accountGroup, hierarchy.subGroup]
-        .filter(Boolean)
-        .map((n) => n!.accountName)
+      const groupPath = hierarchy.path
+        .filter((n) => n.nodeLevel === "account_group")
+        .map((n) => n.accountName)
         .join(" › ");
       return {
         ledgerId: ledger.id,

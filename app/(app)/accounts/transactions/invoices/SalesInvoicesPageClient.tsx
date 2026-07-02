@@ -6,6 +6,7 @@ import {
   markInvoiceSent,
   saveInvoices,
   getInvoiceAmountBreakup,
+  getInvoiceSchemeSettlementLabel,
 } from "@/app/(app)/accounts/invoices/invoices-data";
 import { salesInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { formatMoney } from "@/lib/accounts/money-format";
@@ -17,6 +18,7 @@ export default function SalesInvoicesPageClient() {
         section: "Transactions",
         title: "Sales Invoices",
         description: "Create and post sales tax invoices with ledger impact.",
+        showSchemeSettlementColumn: true,
         loadData: loadInvoices,
         newHref: "/accounts/transactions/invoices/new",
         editHref: (id) => `/accounts/transactions/invoices/${id}/edit`,
@@ -40,6 +42,7 @@ export default function SalesInvoicesPageClient() {
             gstAmount: formatMoney(gstAmount),
             invoiceTotal: formatMoney(invoiceTotal),
             status: inv.invoiceStatus,
+            schemeSettlementLabel: getInvoiceSchemeSettlementLabel(inv),
             viewHref: `/accounts/transactions/invoices/${inv.id}`,
             viewFields: [
               { label: "Taxable Value", value: formatMoney(taxableValue) },

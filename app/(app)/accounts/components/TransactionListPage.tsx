@@ -1,11 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
+import {
+  AccountsDeleteAction,
+  AccountsEditAction,
+  AccountsTableActionCell,
+  AccountsViewAction,
+  accountsActionColClass,
+} from "@/components/accounts/AccountsTableActions";
+import { useClientMounted } from "@/lib/use-client-mounted";
 import {
   Sheet,
   SheetBody,
@@ -16,8 +24,12 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsTable, AccountsTableHead, AccountsTableHeadRow, AccountsTableHeadCell, AccountsTableBody, AccountsTableRow, AccountsTableCell } from "@/components/accounts/AccountsTable";
+import { AccountsTablePagination, AccountsTableToolbar, AccountsTableListing } from "@/components/accounts/AccountsTableListing";
+import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { StatusBadge, SectionTabs } from "./AccountsUI";
+import { SectionTabs } from "./AccountsUI";
+import { AccountsVoucherStatusBadge } from "@/components/accounts/AccountsVoucherStatusBadge";
 import { cn } from "@/lib/utils";
 import { LedgerImpactPreview, type LedgerImpactLine } from "@/components/accounts/LedgerImpactPreview";
 
@@ -33,6 +45,8 @@ export interface TransactionRow {
   invoiceTotal?: string;
   status: string;
   branch?: string;
+  /** Sales invoice scheme settlement badge: Settlement Required | Settled | undefined (show —) */
+  schemeSettlementLabel?: string | null;
   viewHref?: string;
   viewFields?: { label: string; value: string }[];
   impactLines?: LedgerImpactLine[];
@@ -55,15 +69,18 @@ export interface TransactionListConfig<T> {
   canPost?: (row: TransactionRow) => boolean;
   canDelete?: (row: TransactionRow) => boolean;
   canEdit?: (row: TransactionRow) => boolean;
+  /** Show Scheme Settlement column (Sales Invoices). */
+  showSchemeSettlementColumn?: boolean;
 }
 
 function isDraftStatus(status: string): boolean {
   const s = status.toLowerCase();
-  return s === "draft" || s === "pending_approval";
+  return s === "draft" || s === "sent_back";
 }
 
 export function TransactionListPage<T>({ config }: { config: TransactionListConfig<T> }) {
   const router = useRouter();
+  const mounted = useClientMounted();
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -71,11 +88,13 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
   const [statusTab, setStatusTab] = useState("all");
   const [viewRow, setViewRow] = useState<TransactionRow | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const allRows = useMemo(
-    () => config.loadData().map(config.getRow),
+    () => (mounted ? config.loadData().map(config.getRow) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [config, refreshKey],
+    [config, refreshKey, mounted],
   );
 
   const bump = () => setRefreshKey((k) => k + 1);
@@ -83,10 +102,12 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
   const statusTabs = config.statusTabs ?? [
     { id: "all", label: "All" },
     { id: "draft", label: "Draft" },
-    { id: "approved", label: "Approved" },
+    { id: "pending_approval", label: "Pending Approval" },
+    { id: "sent_back", label: "Sent Back" },
     { id: "posted", label: "Posted" },
-    { id: "sent", label: "Sent" },
-    { id: "paid", label: "Paid" },
+    { id: "sent", label: "Posted" },
+    { id: "approved", label: "Posted" },
+    { id: "rejected", label: "Rejected" },
     { id: "cancelled", label: "Cancelled" },
   ];
 
@@ -121,19 +142,50 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
     return list;
   }, [allRows, statusTab, search, dateFrom, dateTo, branch]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [statusTab, search, dateFrom, dateTo, branch, pageSize]);
+
+  const pagedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return rows.slice(start, start + pageSize);
+  }, [rows, page, pageSize]);
+
+  const rowCanEdit = (r: TransactionRow) =>
+    config.editHref &&
+    (config.canEdit ? config.canEdit(r) : isDraftStatus(r.status) || r.status.toLowerCase() === "sent_back");
+
   const rowCanPost = (r: TransactionRow) =>
-    config.onPost && (config.canPost ? config.canPost(r) : isDraftStatus(r.status));
+    config.onPost && (config.canPost ? config.canPost(r) : false);
 
   const rowCanDelete = (r: TransactionRow) =>
     config.onDelete && (config.canDelete ? config.canDelete(r) : isDraftStatus(r.status));
 
-  const rowCanEdit = (r: TransactionRow) =>
-    config.editHref && (config.canEdit ? config.canEdit(r) : isDraftStatus(r.status));
-
   const showGstColumns = allRows.some(
     (r) => r.taxableValue != null && r.gstAmount != null && r.invoiceTotal != null,
   );
-  const colSpan = showGstColumns ? 8 : 6;
+  const showSchemeSettlementColumn = config.showSchemeSettlementColumn ?? false;
+  const colSpan = (showGstColumns ? 8 : 6) + (showSchemeSettlementColumn ? 1 : 0);
+
+  const exportCsv = () => {
+    const headers = showGstColumns
+      ? ["Number", "Date", "Party", "Taxable Value", "GST Amount", "Invoice Total", "Status"]
+      : ["Number", "Date", "Party", "Amount", "Status"];
+    const lines = rows.map((r) => {
+      const base = [r.number, r.date, r.party];
+      const amounts = showGstColumns
+        ? [r.taxableValue ?? "", r.gstAmount ?? "", r.invoiceTotal ?? r.amount]
+        : [r.amount];
+      return [...base, ...amounts, r.status].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",");
+    });
+    const blob = new Blob([[headers.join(","), ...lines].join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${config.title.toLowerCase().replace(/\s+/g, "-")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <>
@@ -152,99 +204,140 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
             </Button>
           ) : undefined
         }
-        filters={
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="relative flex-1 min-w-[200px] max-w-sm">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                <Input
-                  className="h-8 text-xs pl-8"
-                  placeholder="Search number, party..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+        toolbar={
+          <AccountsTableToolbar
+            placement="page-header"
+            search={{
+              value: search,
+              onChange: setSearch,
+              placeholder: "Search number, party…",
+            }}
+            filters={
+              <>
+                <AccountsListingDateFilter
+                  dateFrom={dateFrom}
+                  dateTo={dateTo}
+                  onDateFromChange={setDateFrom}
+                  onDateToChange={setDateTo}
                 />
-              </div>
-              <Input type="date" className="h-8 text-xs w-36" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-              <Input type="date" className="h-8 text-xs w-36" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-              <Input className="h-8 text-xs w-28" placeholder="Branch" value={branch} onChange={(e) => setBranch(e.target.value)} />
-            </div>
-            <SectionTabs tabs={statusTabs} active={statusTab} onChange={setStatusTab} counts={tabCounts} />
-          </div>
+                <Input className="h-8 text-xs w-28" placeholder="Branch" value={branch} onChange={(e) => setBranch(e.target.value)} />
+              </>
+            }
+            onExcel={exportCsv}
+            onPdf={exportCsv}
+            exportDisabled={rows.length === 0}
+          />
+        }
+        filters={
+          <SectionTabs tabs={statusTabs} active={statusTab} onChange={setStatusTab} counts={tabCounts} compact />
         }
         layout="split"
         className="h-full min-h-0"
       >
-        <div className="flex-1 overflow-auto min-h-0">
-          <table className="w-full text-table">
-            <thead className="bg-muted/20 border-b border-border/60 sticky top-0 z-10">
-              <tr>
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Number</th>
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Date</th>
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Party</th>
+        <AccountsTableListing
+          footer={
+            mounted && rows.length > 0 ? (
+              <AccountsTablePagination
+                page={page}
+                pageSize={pageSize}
+                totalRecords={rows.length}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+              />
+            ) : null
+          }
+        >
+        <AccountsTable>
+            <AccountsTableHead>
+              <AccountsTableHeadRow>
+                <AccountsTableHeadCell uppercase>Number</AccountsTableHeadCell>
+                <AccountsTableHeadCell uppercase>Date</AccountsTableHeadCell>
+                <AccountsTableHeadCell uppercase className="accounts-col-wide">Party</AccountsTableHeadCell>
                 {showGstColumns ? (
                   <>
-                    <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Taxable Value</th>
-                    <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">GST Amount</th>
-                    <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Invoice Total (Incl. GST)</th>
+                    <AccountsTableHeadCell align="right" uppercase>Taxable Value</AccountsTableHeadCell>
+                    <AccountsTableHeadCell align="right" uppercase>GST Amount</AccountsTableHeadCell>
+                    <AccountsTableHeadCell align="right" uppercase>Invoice Total (Incl. GST)</AccountsTableHeadCell>
                   </>
                 ) : (
-                  <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Amount</th>
+                  <AccountsTableHeadCell align="right" uppercase>Amount</AccountsTableHeadCell>
                 )}
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
-                <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground min-w-[200px]">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={colSpan} className="px-4 py-16 text-center">
-                    <p className="text-sm font-medium text-foreground">No records found</p>
-                    <p className="text-xs text-muted-foreground mt-1">Adjust filters or create a new entry.</p>
-                  </td>
-                </tr>
+                <AccountsTableHeadCell uppercase className="accounts-col-status">Status</AccountsTableHeadCell>
+                {showSchemeSettlementColumn && (
+                  <AccountsTableHeadCell uppercase>Scheme Settlement</AccountsTableHeadCell>
+                )}
+                <AccountsTableHeadCell align="right" uppercase className={accountsActionColClass("multi")}>Actions</AccountsTableHeadCell>
+              </AccountsTableHeadRow>
+            </AccountsTableHead>
+            <AccountsTableBody>
+              {!mounted ? (
+                <AccountsTableRow>
+                  <AccountsTableCell colSpan={colSpan} className="accounts-table-empty">
+                    <p className="text-xs text-muted-foreground">Loading records…</p>
+                  </AccountsTableCell>
+                </AccountsTableRow>
+              ) : rows.length === 0 ? (
+                <AccountsTableRow>
+                  <AccountsTableCell colSpan={colSpan} className="accounts-table-empty">
+                    No records found.
+                  </AccountsTableCell>
+                </AccountsTableRow>
               ) : (
-                rows.map((r) => (
-                  <tr key={r.id} className="border-b border-border/40 hover:bg-muted/20">
-                    <td className="px-4 py-2.5 text-xs font-mono font-semibold">
+                pagedRows.map((r) => (
+                  <AccountsTableRow key={r.id}>
+                    <AccountsTableCell mono className="font-semibold text-brand-700">
                       {r.viewHref ? (
                         <Link href={r.viewHref} className="text-brand-700 hover:underline">{r.number}</Link>
                       ) : (
                         r.number
                       )}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs">{r.date}</td>
-                    <td className="px-4 py-2.5 text-xs">{r.party}</td>
+                    </AccountsTableCell>
+                    <AccountsTableCell>{r.date}</AccountsTableCell>
+                    <AccountsTableCell>{r.party}</AccountsTableCell>
                     {showGstColumns ? (
                       <>
-                        <td className="px-4 py-2.5 text-xs text-right tabular-nums">{r.taxableValue}</td>
-                        <td className="px-4 py-2.5 text-xs text-right tabular-nums">{r.gstAmount}</td>
-                        <td className="px-4 py-2.5 text-xs text-right tabular-nums font-medium">{r.invoiceTotal}</td>
+                        <AccountsTableCell align="right" className="tabular-nums">{r.taxableValue}</AccountsTableCell>
+                        <AccountsTableCell align="right" className="tabular-nums">{r.gstAmount}</AccountsTableCell>
+                        <AccountsTableCell align="right" className="tabular-nums font-medium">{r.invoiceTotal}</AccountsTableCell>
                       </>
                     ) : (
-                      <td className="px-4 py-2.5 text-xs text-right tabular-nums">{r.amount}</td>
+                      <AccountsTableCell align="right" money>{r.amount}</AccountsTableCell>
                     )}
-                    <td className="px-4 py-2.5">
-                      <StatusBadge status={r.status} />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center justify-end gap-1 flex-wrap">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-[11px]"
-                          onClick={() => setViewRow(r)}
-                        >
-                          View
-                        </Button>
-                        {rowCanEdit(r) && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-[11px]"
-                            onClick={() => router.push(config.editHref!(r.id))}
+                    <AccountsTableCell>
+                      <AccountsVoucherStatusBadge legacyStatus={r.status} />
+                    </AccountsTableCell>
+                    {showSchemeSettlementColumn && (
+                      <AccountsTableCell>
+                        {r.schemeSettlementLabel ? (
+                          <span
+                            className={cn(
+                              "inline-flex h-5 items-center rounded-md border px-1.5 text-[10px] font-semibold whitespace-nowrap",
+                              r.schemeSettlementLabel === "Settled"
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                : "border-amber-200 bg-amber-50 text-amber-800",
+                            )}
                           >
-                            Edit
-                          </Button>
+                            {r.schemeSettlementLabel}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </AccountsTableCell>
+                    )}
+                    <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
+                      <AccountsTableActionCell>
+                        <AccountsViewAction
+                          title="View"
+                          onClick={() => {
+                            if (r.viewHref) router.push(r.viewHref);
+                            else setViewRow(r);
+                          }}
+                        />
+                        {rowCanEdit(r) && (
+                          <AccountsEditAction
+                            title="Edit"
+                            onClick={() => router.push(config.editHref!(r.id))}
+                          />
                         )}
                         {rowCanPost(r) && (
                           <Button
@@ -260,28 +353,24 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                           </Button>
                         )}
                         {rowCanDelete(r) && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-[11px] text-destructive"
+                          <AccountsDeleteAction
+                            title="Delete"
                             onClick={() => {
                               if (window.confirm(`Delete ${r.number}?`)) {
                                 config.onDelete!(r.id);
                                 bump();
                               }
                             }}
-                          >
-                            Delete
-                          </Button>
+                          />
                         )}
-                      </div>
-                    </td>
-                  </tr>
+                      </AccountsTableActionCell>
+                    </AccountsTableCell>
+                  </AccountsTableRow>
                 ))
               )}
-            </tbody>
-          </table>
-        </div>
+            </AccountsTableBody>
+          </AccountsTable>
+        </AccountsTableListing>
       </AccountsPageShell>
 
       <Sheet open={!!viewRow} onOpenChange={(o) => !o && setViewRow(null)}>
@@ -294,7 +383,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
             {viewRow && (
               <>
                 <div className="flex items-center gap-2">
-                  <StatusBadge status={viewRow.status} />
+                  <AccountsVoucherStatusBadge legacyStatus={viewRow.status} />
                 </div>
                 {(viewRow.viewFields ?? [
                   { label: "Date", value: viewRow.date },
@@ -350,10 +439,10 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs"
+                className="h-8 text-xs gap-1.5"
                 onClick={() => router.push(config.editHref!(viewRow.id))}
               >
-                Edit
+                <Pencil className="w-3.5 h-3.5" /> Edit
               </Button>
             )}
             {viewRow && rowCanPost(viewRow) && (

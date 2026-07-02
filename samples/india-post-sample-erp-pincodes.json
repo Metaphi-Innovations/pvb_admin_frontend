@@ -1,0 +1,19 @@
+{
+  "generatedAt": "2026-06-23T10:40:15.252Z",
+  "sourceFile": "india-post-sample.csv",
+  "recordCount": 2,
+  "records": [
+    {
+      "pincode": "400001",
+      "state": "Maharashtra",
+      "district": "Mumbai",
+      "town": "Mumbai GPO"
+    },
+    {
+      "pincode": "411001",
+      "state": "Maharashtra",
+      "district": "Pune",
+      "town": "Pune City"
+    }
+  ]
+}

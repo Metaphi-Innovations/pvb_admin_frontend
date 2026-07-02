@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,19 @@ import {
 } from "../components/CustomerForm";
 import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
 import { hasCustomerPermission } from "../customer-permissions";
+import { buildCreditAuditEntriesOnSave } from "@/lib/masters/customer-credit";
+import {
+  buildCustomerPrefillFromDistributor,
+  CONVERT_DISTRIBUTOR_STORAGE_KEY,
+} from "@/lib/distributor/distributor-conversion";
+import {
+  getDistributorById,
+  updateDistributorConversion,
+} from "@/app/(app)/database/distributor/distributor-data";
+import {
+  computeDistributorAssessment,
+  formatCategoryLabel,
+} from "@/lib/distributor/distributor-scoring";
 
 interface ToastState {
   msg: string;
@@ -52,15 +65,45 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 
 export default function NewCustomerPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [form, setForm] = useState<CustomerFormValues>(DEFAULT_CUSTOMER_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [customerCode, setCustomerCode] = useState("");
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [sourceDistributorId, setSourceDistributorId] = useState<number | null>(null);
+  const [distributorAssessmentLabel, setDistributorAssessmentLabel] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     setAllowed(hasCustomerPermission("create"));
   }, []);
+
+  useEffect(() => {
+    const fromQuery = Number.parseInt(searchParams.get("fromDistributor") ?? "", 10);
+    const fromSession =
+      typeof window !== "undefined"
+        ? Number.parseInt(
+            window.sessionStorage.getItem(CONVERT_DISTRIBUTOR_STORAGE_KEY) ?? "",
+            10,
+          )
+        : Number.NaN;
+
+    const distributorId = Number.isNaN(fromQuery) ? fromSession : fromQuery;
+    if (Number.isNaN(distributorId)) return;
+
+    const distributor = getDistributorById(distributorId);
+    if (!distributor) return;
+
+    setSourceDistributorId(distributorId);
+    setForm(buildCustomerPrefillFromDistributor(distributor));
+
+    const assessment = computeDistributorAssessment(distributor);
+    setDistributorAssessmentLabel(
+      `${formatCategoryLabel(assessment.category)} · Score ${assessment.weightedScore} · Credit auto-filled`,
+    );
+  }, [searchParams]);
 
   useEffect(() => {
     if (!form.customerType) {
@@ -91,10 +134,7 @@ export default function NewCustomerPage() {
     }
     setErrors(e);
     if (Object.keys(e).length > 0) {
-      const hasProductErrors = Object.keys(e).some((key) => key.startsWith("product_"));
-      const msg = hasProductErrors
-        ? "Please complete product details before saving."
-        : e.requiredDocuments || "Please fix the errors before saving.";
+      const msg = e.requiredDocuments || "Please fix the errors before saving.";
       setToast({ msg, type: "error" });
       setTimeout(() => setToast(null), 3200);
       return;
@@ -126,10 +166,21 @@ export default function NewCustomerPage() {
             reason: asDraft ? "Saved as draft" : "Customer created",
           },
         ],
+        creditAuditLog: buildCreditAuditEntriesOnSave({ form, existing: null }),
       },
     );
 
     saveCustomers([...list, record]);
+    if (sourceDistributorId !== null) {
+      updateDistributorConversion(
+        sourceDistributorId,
+        record.id,
+        asDraft || status === "draft" ? "draft_customer" : "customer_completed",
+      );
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(CONVERT_DISTRIBUTOR_STORAGE_KEY);
+      }
+    }
     if (!asDraft && status !== "draft") {
       ensureCustomerLedgerFromMaster(record);
     }
@@ -179,15 +230,24 @@ export default function NewCustomerPage() {
           <Button variant="ghost" size="sm" onClick={() => router.back()}>
             Discard
           </Button>
-          <Button variant="outline" size="sm" onClick={() => persist(true)}>
-            Save Draft
-          </Button>
           <Button variant="default" size="sm" onClick={() => persist(false)}>
             <Save className="w-4 h-4" /> Save
           </Button>
         </div>
       }
     >
+      {distributorAssessmentLabel && (
+        <div className="mb-4 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2.5">
+          <p className="text-xs font-semibold text-brand-800">
+            Converting from Distributor Database
+          </p>
+          <p className="text-[11px] text-brand-700">{distributorAssessmentLabel}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Category, credit limit, and credit period are carried forward from ERP scoring.
+          </p>
+        </div>
+      )}
+
       <CustomerForm
         form={form}
         onChange={setForm}

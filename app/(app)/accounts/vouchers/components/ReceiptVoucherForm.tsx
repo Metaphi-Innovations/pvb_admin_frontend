@@ -1,18 +1,32 @@
 "use client";
 
-import { ZohoVoucherEntryForm } from "@/components/accounts/ZohoVoucherEntryForm";
+import { VoucherDualEntryForm } from "@/components/accounts/VoucherDualEntryForm";
 
 interface ReceiptVoucherFormProps {
   onDone?: () => void;
+  voucherId?: number;
+  readOnly?: boolean;
+  onEdit?: () => void;
 }
 
-export function ReceiptVoucherForm({ onDone }: ReceiptVoucherFormProps) {
+export function ReceiptVoucherForm({
+  onDone,
+  voucherId,
+  readOnly = false,
+  onEdit,
+}: ReceiptVoucherFormProps) {
+  const cancelHref = voucherId
+    ? `/accounts/vouchers/view/${voucherId}`
+    : "/accounts/vouchers?tab=receipt";
+
   return (
-    <ZohoVoucherEntryForm
+    <VoucherDualEntryForm
       voucherType="receipt"
-      cancelHref="/accounts/vouchers?tab=receipt"
+      cancelHref={cancelHref}
+      voucherId={voucherId}
+      readOnly={readOnly}
+      onEdit={onEdit}
       onDone={() => onDone?.()}
-      breadcrumbSection="Transactions"
     />
   );
 }

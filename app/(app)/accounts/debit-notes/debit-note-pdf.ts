@@ -37,7 +37,7 @@ export function downloadDebitNotePdf(record: DebitNoteRecord): void {
 </style></head><body>
   <h1>Debit Note</h1>
   <p class="muted">${rec.debitNoteNo} · ${rec.debitNoteDate}</p>
-  <p><strong>Vendor:</strong> ${escapeHtml(rec.vendorName)}</p>
+  <p><strong>Supplier:</strong> ${escapeHtml(rec.vendorName)}</p>
   <p class="muted">Reference: ${REFERENCE_TYPE_LABELS[rec.againstType]}
   ${rec.sourceInvoiceNo ? ` · PI: ${escapeHtml(rec.sourceInvoiceNo)}` : ""}
   ${rec.sourcePoNo ? ` · PO: ${escapeHtml(rec.sourcePoNo)}` : ""}</p>

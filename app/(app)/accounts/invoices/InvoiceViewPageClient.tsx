@@ -23,7 +23,11 @@ import { downloadInvoicePdf } from "./invoice-pdf";
 import { formatINR, INVOICES_LIST_PATH, INVOICE_AMOUNT_LABELS } from "./invoice-utils";
 import { getInvoiceAmountBreakup } from "./invoices-data";
 import { SalesInvoiceAccountingPanel } from "@/components/accounts/SalesInvoiceAccountingPanel";
+import { AccountsDocumentWorkflowSection } from "@/components/accounts/AccountsDocumentWorkflowSection";
+import { AccountsVoucherStatusBadge } from "@/components/accounts/AccountsVoucherStatusBadge";
+import { resolveWorkflowStatus } from "@/lib/accounts/accounts-maker-checker";
 import { loadCreditNotes } from "@/app/(app)/accounts/credit-notes/credit-notes-data";
+import { InvoiceSchemeSettlementPanel } from "./components/InvoiceSchemeSettlementPanel";
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -162,9 +166,16 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
 
         <TabsContent value="overview" className="space-y-4 m-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <InvoiceStatusBadge status={record.invoiceStatus} />
+            <AccountsVoucherStatusBadge workflow={record.workflow} legacyStatus={record.invoiceStatus} />
             <InvoicePaymentStatusBadge status={record.paymentStatus} />
           </div>
+          <AccountsDocumentWorkflowSection
+            category="sales_invoice"
+            documentId={record.id}
+            workflow={record.workflow}
+            legacyStatus={record.invoiceStatus}
+            onUpdated={refresh}
+          />
           <div className="bg-white rounded-lg border border-border/60 p-4">
             <h2 className="text-sm font-semibold mb-3">Customer Details</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -181,11 +192,17 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
               <DetailRow label={INVOICE_AMOUNT_LABELS.invoiceTotal} value={formatINR(invoiceTotal)} />
             </div>
           </div>
+          {record.nearExpirySchemeSettlements && record.nearExpirySchemeSettlements.length > 0 && (
+            <InvoiceSchemeSettlementPanel
+              entries={record.nearExpirySchemeSettlements}
+              variant="detail"
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="items" className="m-0">
           <div className="bg-white rounded-lg border border-border/60 p-4 overflow-x-auto">
-            <table className="w-full text-xs min-w-[640px]">
+            <table className="accounts-table w-full text-xs min-w-[640px]">
               <thead className="border-b">
                 <tr>
                   {["Product", "Qty", "Unit", "Rate", "Tax%", "Amount"].map((h) => (

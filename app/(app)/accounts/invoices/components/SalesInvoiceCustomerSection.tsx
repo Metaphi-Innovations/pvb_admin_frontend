@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import {
   customerMasterToTransactionFields,
+  resolveShipToGstin,
   type CustomerTransactionFields,
 } from "@/lib/accounts/transaction-master-fetch";
 import type { Customer } from "@/app/(app)/masters/customers/customer-data";
@@ -55,6 +56,8 @@ function AddressField({ label, value }: { label: string; value?: string }) {
   );
 }
 
+const SHIP_TO_GSTIN_UNAVAILABLE = "No GSTIN Available";
+
 export interface SalesInvoiceCustomerSectionProps {
   customers: Customer[];
   customerId: string;
@@ -91,6 +94,12 @@ export function SalesInvoiceCustomerSection({
       })),
     [customers],
   );
+
+  const shipToGstin = useMemo(() => {
+    if (!fields) return SHIP_TO_GSTIN_UNAVAILABLE;
+    const gstin = resolveShipToGstin(fields, shipToId);
+    return gstin || SHIP_TO_GSTIN_UNAVAILABLE;
+  }, [fields, shipToId]);
 
   const handleSelect = (id: string) => {
     const c = customers.find((x) => x.id === Number(id));
@@ -135,60 +144,72 @@ export function SalesInvoiceCustomerSection({
           {(fields.billToOptions.length > 0 || fields.shipToOptions.length > 0) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {fields.billToOptions.length > 0 && (
-                <div className="space-y-1">
-                  <Label className="text-xs">Bill To</Label>
-                  <Select
-                    value={billToId}
-                    disabled={disabled}
-                    onValueChange={(id) => {
-                      const opt = fields.billToOptions.find((o) => o.id === id);
-                      onBillToChange(id, opt?.formatted ?? "");
-                    }}
-                  >
-                    <SelectTrigger className="h-9 text-xs">
-                      <SelectValue placeholder="Select billing location…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {fields.billToOptions.map((o) => (
-                        <SelectItem key={o.id} value={o.id} className="text-xs">
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Bill To</Label>
+                    <Select
+                      value={billToId}
+                      disabled={disabled}
+                      onValueChange={(id) => {
+                        const opt = fields.billToOptions.find((o) => o.id === id);
+                        onBillToChange(id, opt?.formatted ?? "");
+                      }}
+                    >
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue placeholder="Select billing location…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fields.billToOptions.map((o) => (
+                          <SelectItem key={o.id} value={o.id} className="text-xs">
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <AddressField label="Billing Address" value={billingAddress} />
                 </div>
               )}
               {fields.shipToOptions.length > 0 && (
-                <div className="space-y-1">
-                  <Label className="text-xs">Ship To</Label>
-                  <Select
-                    value={shipToId}
-                    disabled={disabled}
-                    onValueChange={(id) => {
-                      const opt = fields.shipToOptions.find((o) => o.id === id);
-                      onShipToChange(id, opt?.formatted ?? "");
-                    }}
-                  >
-                    <SelectTrigger className="h-9 text-xs">
-                      <SelectValue placeholder="Select delivery location…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {fields.shipToOptions.map((o) => (
-                        <SelectItem key={o.id} value={o.id} className="text-xs">
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Ship To</Label>
+                    <Select
+                      value={shipToId}
+                      disabled={disabled}
+                      onValueChange={(id) => {
+                        const opt = fields.shipToOptions.find((o) => o.id === id);
+                        onShipToChange(id, opt?.formatted ?? "");
+                      }}
+                    >
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue placeholder="Select delivery location…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fields.shipToOptions.map((o) => (
+                          <SelectItem key={o.id} value={o.id} className="text-xs">
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <AddressField label="Shipping Address" value={shippingAddress} />
+                  <DetailField label="GST Number (GSTIN)" value={shipToGstin} mono />
                 </div>
               )}
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <AddressField label="Billing Address" value={billingAddress} />
-            <AddressField label="Shipping Address" value={shippingAddress} />
-          </div>
+          {fields.billToOptions.length === 0 && fields.shipToOptions.length === 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <AddressField label="Billing Address" value={billingAddress} />
+              <div className="space-y-3">
+                <AddressField label="Shipping Address" value={shippingAddress} />
+                <DetailField label="GST Number (GSTIN)" value={shipToGstin} mono />
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

@@ -1,9 +1,17 @@
 "use client";
 
 import React from "react";
-import { ProcCardSection } from "../../design/proc-design";
 import type { PurchaseOrder } from "../po-data";
 import { getPOQtySummary, shortCloseReasonLabel } from "../po-qty";
+
+function SectionHead({ label, sub }: { label: string; sub?: string }) {
+  return (
+    <div className="mb-2.5 mt-0.5">
+      <p className="text-xs font-bold uppercase tracking-wider text-foreground">{label}</p>
+      {sub && <p className="mt-0.5 text-[11px] text-muted-foreground">{sub}</p>}
+    </div>
+  );
+}
 
 export function POQtySummaryCard({ po }: { po: PurchaseOrder }) {
   const q = getPOQtySummary(po);
@@ -15,18 +23,19 @@ export function POQtySummaryCard({ po }: { po: PurchaseOrder }) {
   ];
 
   return (
-    <ProcCardSection accent="green" title="PO Quantity Summary">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[13px]">
+    <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
+      <SectionHead label="PO Quantity Summary" sub="Order fulfillment and receipt status." />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {rows.map((r) => (
-          <div key={r.label} className="rounded-[9px] border border-[#DDE3EF] px-3 py-2.5 bg-[#FAFBFE]">
-            <p className="text-[11px] text-[#6B80A0] mb-0.5">{r.label}</p>
-            <p className={`font-bold tabular-nums ${r.highlight ? "text-brand-700" : "text-[#0A1628]"}`}>
+          <div key={r.label} className="rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+            <p className="mb-0.5 text-[11px] text-muted-foreground">{r.label}</p>
+            <p className={`text-sm font-bold tabular-nums ${r.highlight ? "text-brand-700" : "text-foreground"}`}>
               {r.value}
             </p>
           </div>
         ))}
       </div>
-    </ProcCardSection>
+    </div>
   );
 }
 
@@ -46,24 +55,25 @@ export function POClosureInformation({ po }: { po: PurchaseOrder }) {
   const timeline = po.activity.find((a) => a.action === "PO Short Closed");
 
   return (
-    <ProcCardSection accent="amber" title="Closure Information">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-[13px]">
+    <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
+      <SectionHead label="Closure Information" sub="Short close details and audit trail." />
+      <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 text-xs">
         {fields.map((f) => (
           <div key={f.label}>
-            <p className="text-[11px] font-semibold text-[#6B80A0] mb-0.5">{f.label}</p>
-            <p className="text-[#0A1628] whitespace-pre-wrap">{f.value}</p>
+            <p className="mb-0.5 text-[11px] font-medium text-muted-foreground">{f.label}</p>
+            <p className="whitespace-pre-wrap text-foreground">{f.value}</p>
           </div>
         ))}
       </div>
       {timeline && (
-        <div className="mt-4 pt-3 border-t border-[#DDE3EF]">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-[#6B80A0] mb-2">Activity</p>
-          <div className="flex gap-2.5 text-[12px]">
-            <span className="w-2 h-2 rounded-full bg-brand-500 mt-1.5 shrink-0" />
+        <div className="mt-4 border-t border-border/60 pt-3">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Activity</p>
+          <div className="flex gap-2.5 text-xs">
+            <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-600" />
             <div>
-              <p className="font-semibold text-[#0A1628]">{timeline.action}</p>
-              <p className="text-[#6B80A0] mt-0.5 whitespace-pre-wrap">{timeline.note}</p>
-              <p className="text-[#9AAAC5] mt-1">
+              <p className="font-semibold text-foreground">{timeline.action}</p>
+              <p className="mt-0.5 whitespace-pre-wrap text-muted-foreground">{timeline.note}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
                 {timeline.by} · {timeline.date}
                 {sc.shortClosedTime ? ` ${sc.shortClosedTime}` : ""}
               </p>
@@ -71,6 +81,6 @@ export function POClosureInformation({ po }: { po: PurchaseOrder }) {
           </div>
         </div>
       )}
-    </ProcCardSection>
+    </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useRef, useState } from "react";
-import { Download, Eye, Package, Plus, Trash2, Upload } from "lucide-react";
+import { Download, Eye, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,17 +11,15 @@ import { cn } from "@/lib/utils";
 import { CURRENT_USER, DEPARTMENT_OPTIONS, PR_PRIORITY_OPTIONS } from "@/lib/procurement/config";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import {
-  calcTotalQtyBase,
+  calcPackingToBaseQty,
   enrichProductForProcurement,
-  PACKAGING_UOM_OPTIONS,
   type PackagingUom,
 } from "@/lib/procurement/procurement-line-utils";
 import { stateSelectOptions, warehouseSelectOptions } from "@/lib/procurement/warehouse-filter";
 import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
-import { formatCurrency } from "@/lib/procurement/utils";
-import { ProductInfoStrip } from "@/components/procurement/ProductInfoStrip";
-import type { PRAttachment, PRLineItem, PurchaseRequest } from "../pr-data";
+import { enrichPRLineItem, type PRAttachment, type PRLineItem, type PurchaseRequest } from "../pr-data";
 import type { PRPriority } from "@/lib/procurement/config";
+import { ProductItemDetailsSection } from "@/components/procurement/ProductItemDetailsSection";
 
 export interface PRFormValues {
   prDate: string;
@@ -50,7 +48,7 @@ export function prToFormValues(pr: PurchaseRequest): PRFormValues {
     requiredByDate: pr.requiredByDate,
     purpose: pr.purpose,
     remarks: pr.remarks,
-    lines: pr.lines.map((l) => ({ ...l })),
+    lines: pr.lines.map((l) => enrichPRLineItem({ ...l })),
     attachments: [...pr.attachments],
   };
 }
@@ -71,7 +69,9 @@ export function emptyPRLine(): PRLineItem {
     totalQtyBase: 1,
     segment: "",
     category: "",
+    hsnCode: "",
     mrp: 0,
+    ratePerSku: 0,
     uom: "Unit",
     remarks: "",
   };
@@ -94,8 +94,8 @@ export const DEFAULT_PR_FORM: PRFormValues = {
 
 function SectionHead({ label, sub, required }: { label: string; sub?: string; required?: boolean }) {
   return (
-    <div className="mb-2.5 mt-0.5">
-      <p className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center">
+    <div className="mb-1.5 pb-1.5 border-b border-border">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center">
         {label}
         {required && <span className="text-red-500 ml-1">*</span>}
       </p>
@@ -105,12 +105,38 @@ function SectionHead({ label, sub, required }: { label: string; sub?: string; re
 }
 
 const inputCls = "h-8 rounded-lg text-xs";
+const readOnlyCls = cn(inputCls, "bg-muted/30 text-foreground");
 
-function lineFromProduct(productId: number, qty: number): PRLineItem | null {
+function ReadOnlyField({ value }: { value: string }) {
+  return (
+    <Input
+      value={value || "—"}
+      readOnly
+      className={readOnlyCls}
+    />
+  );
+}
+
+function formatDisplayDate(iso: string): string {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-");
+  if (!y || !m || !d) return iso;
+  return `${d}-${m}-${y}`;
+}
+
+function packagingUnitToRequestUom(packagingUnit: string): PackagingUom {
+  const norm = packagingUnit.toLowerCase();
+  if (norm.includes("case")) return "Case";
+  if (norm.includes("box")) return "Box";
+  if (norm.includes("carton")) return "Carton";
+  return "Unit";
+}
+
+function lineFromProduct(productId: number, packingQty: number, remarks = ""): PRLineItem | null {
   const info = enrichProductForProcurement(productId);
   if (!info) return null;
-  const requestUom: PackagingUom = "Unit";
-  const requestedQty = qty;
+  const requestedQty = packingQty;
+  const requestUom = packagingUnitToRequestUom(info.packagingUnit);
   return {
     ...emptyPRLine(),
     productId: info.productId,
@@ -123,12 +149,14 @@ function lineFromProduct(productId: number, qty: number): PRLineItem | null {
     conversionQty: info.conversionQty,
     requestUom,
     requestedQty,
-    totalQtyBase: calcTotalQtyBase(requestUom, requestedQty, info.conversionQty),
+    totalQtyBase: calcPackingToBaseQty(requestedQty, info.conversionQty),
     segment: info.segment,
     category: info.category,
+    hsnCode: info.hsnCode,
     mrp: info.mrp,
+    ratePerSku: info.ratePerSku,
     uom: requestUom,
-    remarks: "",
+    remarks,
   };
 }
 
@@ -145,9 +173,6 @@ export function PurchaseRequestForm({
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const masterProducts = loadProducts().filter((p) => p.status === "active");
-  const [quickProductIds, setQuickProductIds] = useState<string[]>([]);
-  const [quickQty, setQuickQty] = useState("1");
-  const [expandedLineUid, setExpandedLineUid] = useState<string | null>(null);
 
   const stateOptions = useMemo(() => stateSelectOptions(), []);
   const warehouseOptions = useMemo(
@@ -158,79 +183,46 @@ export function PurchaseRequestForm({
   const set = <K extends keyof PRFormValues>(k: K, v: PRFormValues[K]) =>
     onChange({ ...form, [k]: v });
 
-  const updateLine = (uid: string, patch: Partial<PRLineItem>) => {
-    onChange({
-      ...form,
-      lines: form.lines.map((l) => {
-        if (l.uid !== uid) return l;
-        const next = { ...l, ...patch };
-        next.totalQtyBase = calcTotalQtyBase(next.requestUom, next.requestedQty, next.conversionQty);
-        next.uom = next.requestUom;
-        return next;
-      }),
-    });
-  };
-
-  const addProductLine = (productId: number, qty: number) => {
-    const line = lineFromProduct(productId, qty);
-    if (!line) return;
-    const existing = form.lines.find((l) => l.productId === productId);
-    if (existing) {
-      updateLine(existing.uid, { requestedQty: existing.requestedQty + qty });
-      return;
-    }
-    onChange({ ...form, lines: [...form.lines, { ...line, uid: emptyPRLine().uid }] });
-  };
-
-  const quickAdd = () => {
-    if (quickProductIds.length === 0) return;
-    const qty = Number(quickQty) || 1;
+  const onAddItem = (productIds: string[], qty: number, remarks: string) => {
     let nextLines = [...form.lines];
-    for (const idStr of Array.from(new Set(quickProductIds))) {
+    for (const idStr of Array.from(new Set(productIds))) {
       const productId = Number(idStr);
-      const line = lineFromProduct(productId, qty);
+      const line = lineFromProduct(productId, qty, remarks);
       if (!line) continue;
       const idx = nextLines.findIndex((l) => l.productId === productId);
       if (idx >= 0) {
         const existing = nextLines[idx];
+        const nextPackingQty = existing.requestedQty + qty;
         nextLines[idx] = {
           ...existing,
-          requestedQty: existing.requestedQty + qty,
-          totalQtyBase: calcTotalQtyBase(
-            existing.requestUom,
-            existing.requestedQty + qty,
-            existing.conversionQty,
-          ),
+          requestedQty: nextPackingQty,
+          totalQtyBase: calcPackingToBaseQty(nextPackingQty, existing.conversionQty),
+          remarks: remarks || existing.remarks,
         };
       } else {
         nextLines.push({ ...line, uid: emptyPRLine().uid });
       }
     }
     onChange({ ...form, lines: nextLines });
-    setQuickProductIds([]);
-    setQuickQty("1");
   };
 
-  const onFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const onRemoveItem = (uid: string) => {
+    onChange({ ...form, lines: form.lines.filter((l) => l.uid !== uid) });
+  };
+
+  const onUpdateItem = (uid: string, patch: Partial<PRLineItem>) => {
     onChange({
       ...form,
-      attachments: [
-        ...form.attachments,
-        {
-          uid: `att-${Date.now()}`,
-          name: file.name,
-          size: `${Math.max(1, Math.round(file.size / 1024))} KB`,
-          uploadedAt: new Date().toISOString().slice(0, 10),
-          uploadedBy: CURRENT_USER,
-        },
-      ],
+      lines: form.lines.map((l) => {
+        if (l.uid !== uid) return l;
+        const next = { ...l, ...patch };
+        next.totalQtyBase = calcPackingToBaseQty(next.requestedQty, next.conversionQty);
+        next.uom = next.requestUom;
+        return next;
+      }),
     });
-    e.target.value = "";
   };
 
-  const filledLines = form.lines.filter((l) => l.productId > 0);
   const productOptions = masterProducts.map((p) => ({
     value: String(p.id),
     label: `${p.productName} (${p.sku || p.productId})`,
@@ -254,12 +246,36 @@ export function PurchaseRequestForm({
     });
   };
 
+  const onFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    onChange({
+      ...form,
+      attachments: [
+        ...form.attachments,
+        {
+          uid: `att-${Date.now()}`,
+          name: file.name,
+          size: `${Math.max(1, Math.round(file.size / 1024))} KB`,
+          uploadedAt: new Date().toISOString().slice(0, 10),
+          uploadedBy: CURRENT_USER,
+        },
+      ],
+    });
+    e.target.value = "";
+  };
+
+  const departmentLabel =
+    DEPARTMENT_OPTIONS.find((d) => d.value === form.department)?.label ?? form.department;
+  const priorityLabel =
+    PR_PRIORITY_OPTIONS.find((p) => p.value === form.priority)?.label ?? form.priority;
+
   return (
-    <div className="rounded-xl border border-border bg-white p-5 shadow-sm">
-      <div className="space-y-5">
+    <div className={cn("rounded-xl border border-border bg-white p-4 shadow-sm", readOnly && "w-full")}>
+      <div className="space-y-3">
         <div>
           <SectionHead label="Request Details" sub="Core purchase request information and required timeline." />
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-1">
               <Label className="text-xs font-medium">PR No.</Label>
               <Input
@@ -270,13 +286,16 @@ export function PurchaseRequestForm({
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">PR Date</Label>
-              <Input
-                type="date"
-                disabled={readOnly}
-                value={form.prDate}
-                onChange={(e) => set("prDate", e.target.value)}
-                className={inputCls}
-              />
+              {readOnly ? (
+                <ReadOnlyField value={formatDisplayDate(form.prDate)} />
+              ) : (
+                <Input
+                  type="date"
+                  value={form.prDate}
+                  onChange={(e) => set("prDate", e.target.value)}
+                  className={inputCls}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">Requested By</Label>
@@ -288,253 +307,148 @@ export function PurchaseRequestForm({
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">Department</Label>
-              <AutocompleteSelect
-                options={DEPARTMENT_OPTIONS.map((d) => ({ value: d.value, label: d.label }))}
-                value={form.department}
-                onChange={(v) => set("department", String(v))}
-                disabled={readOnly}
-                placeholder="Select department"
-                className={inputCls}
-              />
+              {readOnly ? (
+                <ReadOnlyField value={departmentLabel} />
+              ) : (
+                <AutocompleteSelect
+                  options={DEPARTMENT_OPTIONS.map((d) => ({ value: d.value, label: d.label }))}
+                  value={form.department}
+                  onChange={(v) => set("department", String(v))}
+                  placeholder="Select department"
+                  className={inputCls}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">Priority</Label>
-              <AutocompleteSelect
-                options={PR_PRIORITY_OPTIONS.map((p) => ({ value: p.value, label: p.label }))}
-                value={form.priority}
-                onChange={(v) => set("priority", v as PRPriority)}
-                disabled={readOnly}
-                placeholder="Select priority"
-                className={inputCls}
-              />
+              {readOnly ? (
+                <ReadOnlyField value={priorityLabel} />
+              ) : (
+                <AutocompleteSelect
+                  options={PR_PRIORITY_OPTIONS.map((p) => ({ value: p.value, label: p.label }))}
+                  value={form.priority}
+                  onChange={(v) => set("priority", v as PRPriority)}
+                  placeholder="Select priority"
+                  className={inputCls}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">State</Label>
-              <AutocompleteSelect
-                options={stateOptions}
-                value={form.state}
-                onChange={(v) => onStateChange(String(v))}
-                disabled={readOnly}
-                placeholder="Select state"
-                className={inputCls}
-              />
+              {readOnly ? (
+                <ReadOnlyField value={form.state} />
+              ) : (
+                <AutocompleteSelect
+                  options={stateOptions}
+                  value={form.state}
+                  onChange={(v) => onStateChange(String(v))}
+                  placeholder="Select state"
+                  className={inputCls}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">Warehouse</Label>
-              <AutocompleteSelect
-                options={warehouseOptions}
-                value={form.warehouseId ? String(form.warehouseId) : ""}
-                onChange={(v) => onWarehouseChange(String(v))}
-                disabled={readOnly || !form.state}
-                placeholder={form.state ? "Select warehouse" : "Select state first"}
-                className={inputCls}
-              />
+              {readOnly ? (
+                <ReadOnlyField value={form.warehouseName} />
+              ) : (
+                <AutocompleteSelect
+                  options={warehouseOptions}
+                  value={form.warehouseId ? String(form.warehouseId) : ""}
+                  onChange={(v) => onWarehouseChange(String(v))}
+                  disabled={!form.state}
+                  placeholder={form.state ? "Select warehouse" : "Select state first"}
+                  className={inputCls}
+                />
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">Required By Date</Label>
-              <Input
-                type="date"
-                disabled={readOnly}
-                value={form.requiredByDate}
-                onChange={(e) => set("requiredByDate", e.target.value)}
-                className={inputCls}
-              />
+              {readOnly ? (
+                <ReadOnlyField value={formatDisplayDate(form.requiredByDate)} />
+              ) : (
+                <Input
+                  type="date"
+                  value={form.requiredByDate}
+                  onChange={(e) => set("requiredByDate", e.target.value)}
+                  className={inputCls}
+                />
+              )}
             </div>
           </div>
-          <div className="mt-3 space-y-1">
+          <div className="mt-2 space-y-1">
             <Label className="text-xs font-medium">Purpose / Justification</Label>
             <Textarea
               rows={2}
-              disabled={readOnly}
+              readOnly={readOnly}
               value={form.purpose}
               onChange={(e) => set("purpose", e.target.value)}
               placeholder="Business justification for this purchase request..."
-              className="min-h-[60px] rounded-lg text-xs"
+              className={cn(
+                "min-h-[60px] rounded-lg text-xs",
+                readOnly && "bg-muted/30 resize-none",
+              )}
             />
           </div>
         </div>
 
-        <div className="border-t border-border/60 pt-4">
-          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-            <SectionHead label="Product / Item Details" sub="Add products with packaging UOM and base qty conversion." />
-            <span className="inline-flex h-6 items-center rounded-full bg-brand-50 px-2.5 text-[11px] font-semibold text-brand-700">
-              {filledLines.length} item{filledLines.length === 1 ? "" : "s"}
-            </span>
-          </div>
+        <ProductItemDetailsSection
+          mode="purchase_request"
+          products={productOptions}
+          items={form.lines}
+          onAddItem={onAddItem}
+          onRemoveItem={onRemoveItem}
+          onUpdateItem={onUpdateItem}
+          readOnly={readOnly}
+        />
 
-          {!readOnly && (
-            <div className="mb-3 rounded-lg border border-border bg-muted/20 p-3">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_96px_auto]">
-                <div className="space-y-1">
-                  <Label className="text-xs font-medium">Product</Label>
-                  <AutocompleteSelect
-                    options={productOptions}
-                    value={quickProductIds}
-                    onChange={(val) => setQuickProductIds(Array.isArray(val) ? val.map(String) : [])}
-                    multiple
-                    placeholder="Search or select products..."
-                    searchPlaceholder="Search product..."
-                    className="h-8 rounded-lg text-xs"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs font-medium">Qty</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={quickQty}
-                    onChange={(e) => setQuickQty(e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-                <div className="flex items-end">
-                  <Button
-                    type="button"
-                    onClick={quickAdd}
-                    disabled={quickProductIds.length === 0}
-                    className="h-8 gap-1.5 rounded-lg bg-brand-600 px-3 text-xs font-semibold text-white hover:bg-brand-700"
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Add Item
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {filledLines.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border bg-muted/10 px-4 py-10 text-center">
-              <Package className="mx-auto mb-2 h-10 w-10 text-muted-foreground/70" />
-              <p className="text-sm font-semibold text-foreground">No items added yet</p>
-              <p className="mt-1 text-xs text-muted-foreground">Add a product to start building this request.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filledLines.map((line, idx) => {
-                const info = enrichProductForProcurement(line.productId);
-                const isExpanded = expandedLineUid === line.uid;
-                return (
-                  <div key={line.uid} className="rounded-lg border border-border bg-white p-3">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <p className="text-xs font-semibold text-foreground">
-                        {idx + 1}. {line.productName}
-                        <span className="ml-2 font-mono text-[10px] text-muted-foreground">{line.sku}</span>
-                      </p>
-                      {!readOnly && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600"
-                          onClick={() =>
-                            onChange({ ...form, lines: form.lines.filter((l) => l.uid !== line.uid) })
-                          }
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] text-muted-foreground">Request UOM</Label>
-                        <AutocompleteSelect
-                          options={PACKAGING_UOM_OPTIONS}
-                          value={line.requestUom}
-                          onChange={(v) => updateLine(line.uid, { requestUom: v as PackagingUom })}
-                          disabled={readOnly}
-                          className={inputCls}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] text-muted-foreground">Requested Qty</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          disabled={readOnly}
-                          value={line.requestedQty}
-                          onChange={(e) =>
-                            updateLine(line.uid, { requestedQty: Number(e.target.value) || 0 })
-                          }
-                          className={inputCls}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] text-muted-foreground">Total Qty (Base)</Label>
-                        <Input
-                          readOnly
-                          value={`${line.totalQtyBase} ${line.baseUnit}`}
-                          className={cn(inputCls, "bg-muted/30 font-medium")}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] text-muted-foreground">Conversion</Label>
-                        <Input
-                          readOnly
-                          value={`1 ${line.packagingUnit} = ${line.conversionQty} ${line.baseUnit}`}
-                          className={cn(inputCls, "bg-muted/30 text-[10px]")}
-                        />
-                      </div>
-                      <div className="space-y-1 md:col-span-2">
-                        <Label className="text-[10px] text-muted-foreground">Line Remarks</Label>
-                        <Input
-                          disabled={readOnly}
-                          value={line.remarks}
-                          onChange={(e) => updateLine(line.uid, { remarks: e.target.value })}
-                          placeholder="Optional"
-                          className={inputCls}
-                        />
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="mt-2 text-[10px] font-semibold text-brand-600"
-                      onClick={() => setExpandedLineUid(isExpanded ? null : line.uid)}
-                    >
-                      {isExpanded ? "Hide" : "Show"} product info · MRP {formatCurrency(line.mrp)}
-                    </button>
-                    {isExpanded && <ProductInfoStrip info={info} />}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="border-t border-border/60 pt-4">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-            <div className="lg:col-span-6">
-              <SectionHead label="Remarks" sub="Additional notes for reviewers and approvers." />
+        <div className="border-t border-border/60 pt-3">
+          <SectionHead
+            label="Remarks & Attachments"
+            sub={readOnly ? undefined : "Additional notes and supporting documents."}
+          />
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <div>
+              {!readOnly && (
+                <p className="mb-1.5 text-xs font-medium text-foreground">Remarks</p>
+              )}
               <Textarea
                 rows={4}
-                disabled={readOnly}
+                readOnly={readOnly}
                 value={form.remarks}
                 onChange={(e) => set("remarks", e.target.value)}
                 placeholder="Optional remarks..."
-                className="min-h-[90px] rounded-lg text-xs"
+                className={cn(
+                  "min-h-[90px] rounded-lg text-xs",
+                  readOnly && "bg-muted/30 resize-none",
+                )}
               />
             </div>
-            <div className="lg:col-span-6">
-              <div className="rounded-xl border border-border bg-white p-3.5">
-                <div className="mb-2.5 flex items-center justify-between gap-2">
-                  <SectionHead label="Attachments" sub="Upload supporting documents if needed." />
-                  {!readOnly && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 gap-1.5 rounded-lg text-[11px] font-semibold"
-                      onClick={() => fileRef.current?.click()}
-                    >
-                      <Upload className="h-3.5 w-3.5" /> Add File
-                    </Button>
-                  )}
+            <div className="rounded-xl border border-border bg-muted/10 p-2.5">
+              {!readOnly && (
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-foreground">Attachments</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 rounded-lg text-[11px] font-semibold"
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <Upload className="h-3.5 w-3.5" /> Add File
+                  </Button>
                 </div>
-                {!readOnly && <input ref={fileRef} type="file" className="hidden" onChange={onFilePick} />}
+              )}
+              {readOnly && (
+                <p className="mb-2 text-xs font-medium text-foreground">Attachments</p>
+              )}
+              {!readOnly && <input ref={fileRef} type="file" className="hidden" onChange={onFilePick} />}
                 {form.attachments.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+                  <p className="rounded-lg border border-dashed border-border px-3 py-3 text-center text-xs text-muted-foreground">
                     No attachments
                   </p>
                 ) : (
-                  <ul className="space-y-2">
+                  <ul className="space-y-1.5">
                     {form.attachments.map((a) => (
                       <li
                         key={a.uid}
@@ -562,7 +476,6 @@ export function PurchaseRequestForm({
                     ))}
                   </ul>
                 )}
-              </div>
             </div>
           </div>
         </div>

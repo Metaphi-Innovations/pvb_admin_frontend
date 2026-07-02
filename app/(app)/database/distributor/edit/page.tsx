@@ -3,47 +3,33 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { FormContainer } from "@/components/layout/FormContainer";
-import { cn } from "@/lib/utils";
-import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+import {
+  DistributorForm,
+  DistributorFormValues,
+  DistributorFormErrors,
+} from "../components/DistributorForm";
 import {
   loadDistributors,
   saveDistributors,
   type Distributor,
   VIEW_DISTRIBUTOR_STORAGE_KEY,
 } from "../distributor-data";
-
-type DistributorFormValues = {
-  firmName: string;
-  contactPersonName: string;
-  yearsInBusiness: string;
-  address: string;
-  gender: Distributor["gender"];
-  phoneNumber: string;
-  village: string;
-  town: string;
-  city: string;
-  district: string;
-  state: string;
-  pincode: string;
-  companiesDealingIn: string;
-  latLong: string;
-  annualTurnover: string;
-  annualBusinessPotential: string;
-  farmerNetwork: string;
-  distributorCategory: string;
-};
-
-type DistributorFormErrors = Partial<Record<keyof DistributorFormValues, string>>;
+import {
+  parseMonetaryValueInCrores,
+  parseMonetaryValueInLakhs,
+} from "@/lib/distributor/distributor-scoring";
 
 function toFormValues(distributor: Distributor): DistributorFormValues {
+  const planLakhs = parseMonetaryValueInLakhs(distributor.annualBusinessPotential);
+  const turnoverCrores = parseMonetaryValueInCrores(distributor.annualTurnover);
+
   return {
     firmName: distributor.firmName,
     contactPersonName: distributor.contactPersonName,
     yearsInBusiness: String(distributor.yearsInBusiness),
     address: distributor.address,
+    addressLine2: distributor.addressLine2 || "",
     gender: distributor.gender,
     phoneNumber: distributor.phoneNumber,
     village: distributor.village,
@@ -53,35 +39,9 @@ function toFormValues(distributor: Distributor): DistributorFormValues {
     state: distributor.state,
     pincode: distributor.pincode,
     companiesDealingIn: distributor.companiesDealingIn,
-    latLong: distributor.latLong,
-    annualTurnover: distributor.annualTurnover,
-    annualBusinessPotential: distributor.annualBusinessPotential,
+    annualTurnover: turnoverCrores > 0 ? String(turnoverCrores) : "",
+    annualBusinessPotential: planLakhs > 0 ? String(planLakhs) : "",
     farmerNetwork: distributor.farmerNetwork,
-    distributorCategory: distributor.distributorCategory,
-  };
-}
-
-function toDistributor(id: number, form: DistributorFormValues): Distributor {
-  return {
-    id,
-    firmName: form.firmName.trim(),
-    contactPersonName: form.contactPersonName.trim(),
-    yearsInBusiness: Number.parseInt(form.yearsInBusiness, 10),
-    address: form.address.trim(),
-    gender: form.gender,
-    phoneNumber: form.phoneNumber.trim(),
-    village: form.village.trim(),
-    town: form.town.trim(),
-    city: form.city.trim(),
-    district: form.district.trim(),
-    state: form.state.trim(),
-    pincode: form.pincode.trim(),
-    companiesDealingIn: form.companiesDealingIn.trim(),
-    latLong: form.latLong.trim(),
-    annualTurnover: form.annualTurnover.trim(),
-    annualBusinessPotential: form.annualBusinessPotential.trim(),
-    farmerNetwork: form.farmerNetwork.trim(),
-    distributorCategory: form.distributorCategory.trim(),
   };
 }
 
@@ -92,100 +52,54 @@ function validateForm(form: DistributorFormValues): DistributorFormErrors {
   if (!form.contactPersonName.trim()) {
     errors.contactPersonName = "Contact person name is required.";
   }
-  if (!form.phoneNumber.trim()) errors.phoneNumber = "Phone number is required.";
+  if (!form.phoneNumber.trim()) {
+    errors.phoneNumber = "Mobile number is required.";
+  } else if (!/^\d{10}$/.test(form.phoneNumber.trim())) {
+    errors.phoneNumber = "Mobile number must be exactly 10 digits.";
+  }
+
+  const years = Number.parseInt(form.yearsInBusiness, 10);
+  if (!form.yearsInBusiness.trim()) {
+    errors.yearsInBusiness = "Years in business is required.";
+  } else if (Number.isNaN(years) || years < 0) {
+    errors.yearsInBusiness = "Years in business must be a valid number.";
+  }
+
+  if (!form.address.trim()) errors.address = "Address Line 1 is required.";
+  if (!form.pincode.trim()) {
+    errors.pincode = "Pincode is required.";
+  } else if (!/^\d{6}$/.test(form.pincode.trim())) {
+    errors.pincode = "Pincode must be exactly 6 digits.";
+  }
+
   if (!form.state.trim()) errors.state = "State is required.";
   if (!form.district.trim()) errors.district = "District is required.";
   if (!form.city.trim()) errors.city = "City is required.";
+  if (!form.town.trim()) errors.town = "City/Town is required.";
   if (!form.village.trim()) errors.village = "Village is required.";
-
-  const yearsInBusiness = Number.parseInt(form.yearsInBusiness, 10);
-  if (!form.yearsInBusiness.trim()) {
-    errors.yearsInBusiness = "Years in business is required.";
-  } else if (Number.isNaN(yearsInBusiness) || yearsInBusiness < 0) {
-    errors.yearsInBusiness = "Enter a valid number.";
+  
+  if (!form.companiesDealingIn.trim()) {
+    errors.companiesDealingIn = "At least one brand must be selected/entered.";
   }
+
+  const turnover = Number.parseFloat(form.annualTurnover);
+  if (!form.annualTurnover.trim()) {
+    errors.annualTurnover = "Annual turnover is required.";
+  } else if (Number.isNaN(turnover) || turnover < 0) {
+    errors.annualTurnover = "Enter a valid positive turnover in Cr.";
+  }
+
+  const plan = Number.parseFloat(form.annualBusinessPotential);
+  if (!form.annualBusinessPotential.trim()) {
+    errors.annualBusinessPotential = "Annual business plan is required.";
+  } else if (Number.isNaN(plan) || plan < 0) {
+    errors.annualBusinessPotential = "Enter a valid positive business plan in Lakhs.";
+  }
+
+  if (!form.farmerNetwork.trim()) errors.farmerNetwork = "Farmer network size is required.";
 
   return errors;
 }
-
-function Toast({
-  message,
-  type,
-  onDismiss,
-}: {
-  message: string;
-  type: "success" | "error";
-  onDismiss: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "fixed right-5 top-5 z-[100] rounded-xl px-4 py-3 text-sm font-medium text-white shadow-xl",
-        type === "success" ? "bg-emerald-600" : "bg-red-600",
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <span>{message}</span>
-        <button
-          type="button"
-          onClick={onDismiss}
-          className="text-white/80 transition hover:text-white"
-          aria-label="Dismiss message"
-        >
-          x
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function SectionDivider({
-  title,
-  subtitle,
-}: {
-  title: string;
-  subtitle: string;
-}) {
-  return (
-    <div className="mb-3 flex items-baseline justify-between gap-2 border-b border-border/40 pb-2">
-      <p className="text-xs font-semibold text-foreground">{title}</p>
-      <p className="text-[11px] text-muted-foreground">{subtitle}</p>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  required,
-  error,
-  children,
-  className,
-}: {
-  label: string;
-  required?: boolean;
-  error?: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn("space-y-1", className)}>
-      <label className="text-xs font-medium text-foreground">
-        {label}
-        {required && <span className="ml-0.5 text-red-500">*</span>}
-      </label>
-      {children}
-      {error && <p className="text-[11px] text-red-600">{error}</p>}
-    </div>
-  );
-}
-
-const fieldClass =
-  "h-9 rounded-lg border-border/70 bg-white text-sm shadow-none focus-visible:ring-1 focus-visible:ring-brand-500/30 placeholder:text-muted-foreground/50";
-const selectClass = cn(
-  fieldClass,
-  "w-full border px-3 text-sm outline-none transition-colors",
-  "focus:ring-1 focus:ring-brand-500/30",
-);
 
 export default function DistributorEditPage() {
   const router = useRouter();
@@ -195,9 +109,7 @@ export default function DistributorEditPage() {
   const [currentDistributorId, setCurrentDistributorId] = useState<number | null>(null);
   const [form, setForm] = useState<DistributorFormValues | null>(null);
   const [errors, setErrors] = useState<DistributorFormErrors>({});
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(
-    null,
-  );
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     const distributorList = loadDistributors();
@@ -241,11 +153,7 @@ export default function DistributorEditPage() {
     [currentDistributorId, distributors],
   );
 
-  const setField = <K extends keyof DistributorFormValues>(
-    key: K,
-    value: DistributorFormValues[K],
-  ) => {
-    setForm((current) => (current ? { ...current, [key]: value } : current));
+  const clearError = (key: keyof DistributorFormValues) => {
     setErrors((current) => {
       if (!current[key]) return current;
       const nextErrors = { ...current };
@@ -259,7 +167,7 @@ export default function DistributorEditPage() {
   };
 
   const handleSave = () => {
-    if (!form || currentDistributorId === null) {
+    if (!form || currentDistributorId === null || !currentDistributor) {
       return;
     }
 
@@ -267,29 +175,46 @@ export default function DistributorEditPage() {
     setErrors(validationErrors);
 
     if (Object.keys(validationErrors).length > 0) {
-      setToast({ message: "Please fix the highlighted fields.", type: "error" });
       return;
     }
 
-    const updatedDistributor = toDistributor(currentDistributorId, form);
+    setIsSaving(true);
+
+    const planLakhs = Number.parseFloat(form.annualBusinessPotential) || 0;
+    const planCroresStr = planLakhs > 0 ? `₹${(planLakhs / 100).toFixed(2)} Cr` : "—";
+    const turnoverVal = Number.parseFloat(form.annualTurnover) || 0;
+    const turnoverStr = turnoverVal > 0 ? `₹${turnoverVal.toFixed(2)} Cr` : "—";
+
+    const updatedDistributor: Distributor = {
+      ...currentDistributor,
+      firmName: form.firmName.trim(),
+      contactPersonName: form.contactPersonName.trim(),
+      gender: form.gender,
+      phoneNumber: form.phoneNumber.trim(),
+      yearsInBusiness: Number.parseInt(form.yearsInBusiness, 10),
+      address: form.address.trim(),
+      addressLine2: form.addressLine2.trim() || undefined,
+      pincode: form.pincode.trim(),
+      state: form.state.trim(),
+      district: form.district.trim(),
+      city: form.city.trim(),
+      town: form.town.trim(),
+      village: form.village.trim(),
+      companiesDealingIn: form.companiesDealingIn.trim(),
+      annualTurnover: turnoverStr,
+      annualBusinessPotential: planCroresStr,
+      farmerNetwork: form.farmerNetwork.trim(),
+    };
+
     const updatedDistributors = distributors.map((distributor) =>
       distributor.id === currentDistributorId ? updatedDistributor : distributor,
     );
 
     saveDistributors(updatedDistributors);
-    setDistributors(updatedDistributors);
-    setToast({ message: "Distributor updated successfully.", type: "success" });
-
-    if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(
-        VIEW_DISTRIBUTOR_STORAGE_KEY,
-        String(currentDistributorId),
-      );
-    }
-
-    window.setTimeout(() => {
+    
+    setTimeout(() => {
       router.push("/database/distributor");
-    }, 700);
+    }, 500);
   };
 
   if (!form || !currentDistributor) {
@@ -300,237 +225,33 @@ export default function DistributorEditPage() {
     <FormContainer
       title="Edit Distributor"
       description="Database / Distributor / Edit"
-      onBack={() => router.push("/database/distributor")}
+      onBack={handleCancel}
       actions={
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
             className="h-9 rounded-lg text-xs font-semibold"
             onClick={handleCancel}
+            disabled={isSaving}
           >
             Cancel
           </Button>
           <Button
             className="h-9 rounded-lg bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700"
             onClick={handleSave}
+            disabled={isSaving}
           >
-            Update Distributor
+            {isSaving ? "Saving..." : "Update Distributor"}
           </Button>
         </div>
       }
     >
-      <div className="space-y-6">
-        <section>
-          <SectionDivider
-            title="Distributor Details"
-            subtitle="Primary contact and profile information"
-          />
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-            <Field label="Firm Name" required error={errors.firmName}>
-              <Input
-                value={form.firmName}
-                onChange={(event) => setField("firmName", event.target.value)}
-                className={cn(fieldClass, errors.firmName && "border-red-400")}
-                placeholder="Enter firm name"
-              />
-            </Field>
-            <Field
-              label="Contact Person Name"
-              required
-              error={errors.contactPersonName}
-            >
-              <Input
-                value={form.contactPersonName}
-                onChange={(event) =>
-                  setField("contactPersonName", event.target.value)
-                }
-                className={cn(
-                  fieldClass,
-                  errors.contactPersonName && "border-red-400",
-                )}
-                placeholder="Enter contact person name"
-              />
-            </Field>
-            <Field label="Gender">
-              <AutocompleteSelect
-                options={["Male", "Female", "Other"].map((g) => ({ value: g, label: g }))}
-                value={form.gender}
-                onChange={(v) => setField("gender", v as Distributor["gender"])}
-                placeholder="Select gender…"
-                className="h-9 text-sm"
-              />
-            </Field>
-            <Field label="Phone Number" required error={errors.phoneNumber}>
-              <Input
-                value={form.phoneNumber}
-                onChange={(event) => setField("phoneNumber", event.target.value)}
-                className={cn(fieldClass, errors.phoneNumber && "border-red-400")}
-                placeholder="Enter phone number"
-              />
-            </Field>
-            <Field
-              label="Years in Business"
-              required
-              error={errors.yearsInBusiness}
-              className="lg:col-span-1"
-            >
-              <Input
-                type="number"
-                min="0"
-                value={form.yearsInBusiness}
-                onChange={(event) =>
-                  setField("yearsInBusiness", event.target.value)
-                }
-                className={cn(
-                  fieldClass,
-                  errors.yearsInBusiness && "border-red-400",
-                )}
-                placeholder="0"
-              />
-            </Field>
-          </div>
-        </section>
-
-        <section>
-          <SectionDivider
-            title="Location Details"
-            subtitle="Address hierarchy and geo information"
-          />
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-            <Field label="Address" className="lg:col-span-2">
-              <Textarea
-                value={form.address}
-                onChange={(event) => setField("address", event.target.value)}
-                className="min-h-[96px] rounded-lg border-border/70 bg-white text-sm shadow-none focus-visible:ring-1 focus-visible:ring-brand-500/30 placeholder:text-muted-foreground/50"
-                placeholder="Enter address"
-              />
-            </Field>
-            <Field label="Village" required error={errors.village}>
-              <Input
-                value={form.village}
-                onChange={(event) => setField("village", event.target.value)}
-                className={cn(fieldClass, errors.village && "border-red-400")}
-                placeholder="Enter village"
-              />
-            </Field>
-            <Field label="Town">
-              <Input
-                value={form.town}
-                onChange={(event) => setField("town", event.target.value)}
-                className={fieldClass}
-                placeholder="Enter town"
-              />
-            </Field>
-            <Field label="City" required error={errors.city}>
-              <Input
-                value={form.city}
-                onChange={(event) => setField("city", event.target.value)}
-                className={cn(fieldClass, errors.city && "border-red-400")}
-                placeholder="Enter city"
-              />
-            </Field>
-            <Field label="District" required error={errors.district}>
-              <Input
-                value={form.district}
-                onChange={(event) => setField("district", event.target.value)}
-                className={cn(fieldClass, errors.district && "border-red-400")}
-                placeholder="Enter district"
-              />
-            </Field>
-            <Field label="State" required error={errors.state}>
-              <Input
-                value={form.state}
-                onChange={(event) => setField("state", event.target.value)}
-                className={cn(fieldClass, errors.state && "border-red-400")}
-                placeholder="Enter state"
-              />
-            </Field>
-            <Field label="Pincode">
-              <Input
-                value={form.pincode}
-                onChange={(event) => setField("pincode", event.target.value)}
-                className={fieldClass}
-                placeholder="Enter pincode"
-              />
-            </Field>
-            <Field label="Lat-long">
-              <Input
-                value={form.latLong}
-                onChange={(event) => setField("latLong", event.target.value)}
-                className={fieldClass}
-                placeholder="Enter coordinates"
-              />
-            </Field>
-          </div>
-        </section>
-
-        <section>
-          <SectionDivider
-            title="Business Details"
-            subtitle="Commercial profile and channel capacity"
-          />
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-            <Field label="Companies He Is Dealing In" className="lg:col-span-2">
-              <Textarea
-                value={form.companiesDealingIn}
-                onChange={(event) =>
-                  setField("companiesDealingIn", event.target.value)
-                }
-                className="min-h-[96px] rounded-lg border-border/70 bg-white text-sm shadow-none focus-visible:ring-1 focus-visible:ring-brand-500/30 placeholder:text-muted-foreground/50"
-                placeholder="Enter company names"
-              />
-            </Field>
-            <Field label="Annual Turnover">
-              <Input
-                value={form.annualTurnover}
-                onChange={(event) =>
-                  setField("annualTurnover", event.target.value)
-                }
-                className={fieldClass}
-                placeholder="Enter annual turnover"
-              />
-            </Field>
-            <Field label="Annual Business He Can Do for Us">
-              <Input
-                value={form.annualBusinessPotential}
-                onChange={(event) =>
-                  setField("annualBusinessPotential", event.target.value)
-                }
-                className={fieldClass}
-                placeholder="Enter business potential"
-              />
-            </Field>
-            <Field label="Farmer Network">
-              <Input
-                value={form.farmerNetwork}
-                onChange={(event) =>
-                  setField("farmerNetwork", event.target.value)
-                }
-                className={fieldClass}
-                placeholder="Enter farmer network"
-              />
-            </Field>
-            <Field label="Distributor Category">
-              <Input
-                value={form.distributorCategory}
-                onChange={(event) =>
-                  setField("distributorCategory", event.target.value)
-                }
-                className={fieldClass}
-                placeholder="Enter distributor category"
-              />
-            </Field>
-          </div>
-        </section>
-      </div>
-
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onDismiss={() => setToast(null)}
-        />
-      )}
+      <DistributorForm
+        form={form}
+        onChange={setForm}
+        errors={errors}
+        clearError={clearError}
+      />
     </FormContainer>
   );
 }

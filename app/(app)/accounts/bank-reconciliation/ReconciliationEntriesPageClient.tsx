@@ -19,6 +19,7 @@ import { CategorizeEntryPanel } from "./components/CategorizeEntryPanel";
 import { MatchEntryModal } from "./components/MatchEntryModal";
 import { MatchStatusBadge } from "./components/MatchStatusBadge";
 import { formatINR, monthYearLabel, RECONCILIATION_LIST_PATH } from "./reconciliation-utils";
+import { cn } from "@/lib/utils";
 
 function formatDisplayDate(iso: string): string {
   const d = new Date(iso);
@@ -210,32 +211,36 @@ export default function ReconciliationEntriesPageClient({
         </span>
       </div>
 
-      {/* Zoho split: list + categorize panel */}
+      {/* Zoho split: full-width list + categorize panel when a row is selected */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* Left — transactions */}
-        <div className="flex-1 min-w-0 overflow-auto border-r border-border/40">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-slate-50 border-b border-border/60">
+        <div
+          className={cn(
+            "min-w-0 overflow-auto",
+            panelEntries.length > 0 ? "flex-1 border-r border-border/40" : "w-full",
+          )}
+        >
+          <table className="accounts-table w-full text-sm min-w-full">
+            <thead className="bg-slate-50 border-b border-border/60 sticky top-0 z-[1]">
               <tr>
-                <th className="w-8 px-2 py-2">
+                <th className="w-10 px-3 py-2.5">
                   <Checkbox
                     checked={entries.length > 0 && selectedIds.size === entries.length}
                     onCheckedChange={toggleSelectAll}
                   />
                 </th>
-                <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap">
+                <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap w-[110px]">
                   Date
                 </th>
-                <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground min-w-[240px]">
+                <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground min-w-[min(100%,320px)]">
                   Statement Details
                 </th>
-                <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap">
+                <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap w-[130px]">
                   Deposits
                 </th>
-                <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap">
+                <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap w-[130px]">
                   Withdrawals
                 </th>
-                <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">
+                <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground w-[140px]">
                   Status
                 </th>
               </tr>
@@ -267,19 +272,19 @@ export default function ReconciliationEntriesPageClient({
                           onCheckedChange={() => toggleSelect(e.id)}
                         />
                       </td>
-                      <td className="px-2 py-2 text-xs text-muted-foreground whitespace-nowrap align-top">
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap align-top">
                         {formatDisplayDate(e.transactionDate)}
                       </td>
-                      <td className="px-2 py-2 align-top max-w-[360px]">
+                      <td className="px-3 py-2.5 align-top">
                         <StatementDetailsCell entry={e} />
                       </td>
-                      <td className="px-2 py-2 text-xs text-right tabular-nums align-top font-medium text-green-600">
+                      <td className="px-3 py-2.5 text-xs text-right tabular-nums align-top font-medium text-green-600">
                         {e.credit > 0 ? formatINR(e.credit) : "—"}
                       </td>
-                      <td className="px-2 py-2 text-xs text-right tabular-nums align-top font-medium text-red-600">
+                      <td className="px-3 py-2.5 text-xs text-right tabular-nums align-top font-medium text-red-600">
                         {e.debit > 0 ? formatINR(e.debit) : "—"}
                       </td>
-                      <td className="px-2 py-2 align-top">
+                      <td className="px-3 py-2.5 align-top">
                         <MatchStatusBadge status={e.matchStatus} />
                       </td>
                     </tr>
@@ -290,10 +295,11 @@ export default function ReconciliationEntriesPageClient({
           </table>
         </div>
 
-        {/* Right — categorize panel (always visible) */}
-        <div className="w-[380px] shrink-0 flex flex-col min-h-0 bg-white hidden lg:flex">
-          <CategorizeEntryPanel entries={panelEntries} onUpdated={syncAfterSave} />
-        </div>
+        {panelEntries.length > 0 && (
+          <div className="w-[min(380px,34vw)] shrink-0 flex flex-col min-h-0 bg-white hidden lg:flex border-l border-border/40">
+            <CategorizeEntryPanel entries={panelEntries} onUpdated={syncAfterSave} />
+          </div>
+        )}
       </div>
 
       {/* Mobile categorize sheet */}

@@ -10,11 +10,41 @@ import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import { resolveSalesUnitPrice } from "@/lib/pricing/resolve-pricing";
 import type { SezSupplyType } from "@/lib/masters/gst-compliance";
 import type { PaymentMode } from "../expenses/expense-data";
+import { attachWorkflowOnCreate } from "@/lib/accounts/accounts-workflow-persist";
+import {
+	calcAdditionalExpensesTotals,
+	deriveLegacyChargeFields,
+	resolveInvoiceAdditionalExpenses,
+	type InvoiceAdditionalExpense,
+} from "./invoice-additional-expenses";
 import { maybePostSalesInvoice } from "@/lib/accounts/document-posting-bridge";
 import { findPostedSalesInvoiceVoucher } from "@/lib/accounts/sales-invoice-accounting";
 import { customerMasterToTransactionFields } from "@/lib/accounts/transaction-master-fetch";
 import { validateProductForSalesInvoice } from "@/lib/accounts/erp-accounting-mapping";
 import { backfillInvoiceCustomerLedgerLinks } from "@/lib/accounts/invoice-ledger-match";
+import {
+  NEAR_EXPIRY_SETTLEMENT_REQUIRED_LABEL,
+} from "@/app/(app)/warehouse/dispatch/near-expiry-dispatch";
+import { mergeNearExpiryDemoSalesInvoice } from "@/lib/accounts/near-expiry-scheme-invoice-demo";
+import type { AccountsDocumentWorkflow } from "@/lib/accounts/accounts-maker-checker";
+
+export const SCHEME_SETTLEMENT_SETTLED_LABEL = "Settled";
+
+export function isSchemeSettlementPending(status: string | undefined): boolean {
+  if (!status) return true;
+  const normalized = status.trim().toLowerCase();
+  return normalized !== "settled" && normalized !== "completed" && normalized !== "closed";
+}
+
+/** Listing badge: Settlement Required | Settled | null (no scheme). */
+export function getInvoiceSchemeSettlementLabel(
+  invoice: Pick<InvoiceRecord, "nearExpirySchemeSettlements">,
+): string | null {
+  const entries = invoice.nearExpirySchemeSettlements;
+  if (!entries?.length) return null;
+  const hasPending = entries.some((entry) => isSchemeSettlementPending(entry.settlementStatus));
+  return hasPending ? NEAR_EXPIRY_SETTLEMENT_REQUIRED_LABEL : SCHEME_SETTLEMENT_SETTLED_LABEL;
+}
 
 export type InvoiceStatus = "draft" | "sent" | "cancelled";
 export type InvoicePaymentStatus = "unpaid" | "partially_paid" | "paid";
@@ -23,6 +53,33 @@ export type InvoiceCreditStatus =
 	| "partially_credited"
 	| "fully_credited";
 export type SOAdjustmentStatus = "open" | "partially_returned" | "closed";
+
+/** Near Expiry scheme settlement carried from dispatch — informational only; does not affect invoice totals. */
+export interface InvoiceNearExpirySchemeSettlement {
+	schemeId: number;
+	schemeCode: string;
+	schemeName: string;
+	schemeType: "Near Expiry";
+	schemeStatus: string;
+	product: string;
+	productId: string;
+	batchNumber: string;
+	batchExpiryDate: string;
+	remainingExpiryDays: number;
+	benefitType: string;
+	benefitValue: number;
+	estimatedBenefitAmount: number;
+	settlementMethod: string;
+	settlementStatus: string;
+	invoiceNo?: string;
+	customerName?: string;
+	salesOrderNo?: string;
+	settlementDocumentType?: "credit_note" | "journal_voucher";
+	settlementDocumentNo?: string;
+	settlementDate?: string;
+	settlementAmount?: number;
+	settledBy?: string;
+}
 
 export interface InvoiceLineItem {
 	id: string;
@@ -96,6 +153,8 @@ export interface InvoiceRecord {
 	salesOrderNo?: string;
 	soAdjustmentStatus?: SOAdjustmentStatus;
 	invoiceStatus: InvoiceStatus;
+	/** Maker-checker workflow from User Management approver mapping */
+	workflow?: AccountsDocumentWorkflow;
 	paymentStatus: InvoicePaymentStatus;
 	collections: InvoiceCollectionEntry[];
 	attachments: InvoiceAttachment[];
@@ -123,6 +182,7 @@ export interface InvoiceRecord {
 	internalRemarks?: string;
 	shippingCharges?: number;
 	otherCharges?: number;
+	additionalExpenses?: InvoiceAdditionalExpense[];
 	roundOff?: number;
 	adjustment?: number;
 	tdsTcs?: number;
@@ -130,6 +190,8 @@ export interface InvoiceRecord {
 	updatedBy: string;
 	createdAt: string;
 	updatedAt: string;
+	/** Pending Near Expiry scheme settlements — informational; no impact on invoice totals. */
+	nearExpirySchemeSettlements?: InvoiceNearExpirySchemeSettlement[];
 }
 
 const STORAGE_KEY = "ds_accounts_invoices_v1";
@@ -234,14 +296,30 @@ export function normalizeInvoice(rec: InvoiceRecord): InvoiceRecord {
 			creditedAmount: l.creditedAmount ?? 0,
 		}),
 	);
-	const totals = calculateInvoiceTotals(lines);
+	const lineTotals = calculateInvoiceTotals(lines);
+	const additionalExpenses = resolveInvoiceAdditionalExpenses(
+		rec.additionalExpenses,
+		rec.shippingCharges,
+		rec.otherCharges,
+	);
+	const expenseTotals = calcAdditionalExpensesTotals(additionalExpenses);
+	const legacyCharges = deriveLegacyChargeFields(additionalExpenses);
+
+	const subtotal = Math.round((lineTotals.subtotal + expenseTotals.taxableAmount) * 100) / 100;
+	const discountTotal = lineTotals.discountTotal;
+	const taxAmount =
+		Math.round((lineTotals.taxAmount + expenseTotals.gstAmount) * 100) / 100;
 	const chargeDelta =
-		(rec.shippingCharges ?? 0) +
-		(rec.otherCharges ?? 0) +
-		(rec.roundOff ?? 0) -
-		(rec.adjustment ?? 0) +
-		(rec.tdsTcs ?? 0);
-	const grandTotal = Math.round((totals.grandTotal + chargeDelta) * 100) / 100;
+		(rec.roundOff ?? 0) - (rec.adjustment ?? 0) + (rec.tdsTcs ?? 0);
+	const grandTotal = Math.round(
+		(lineTotals.subtotal -
+			lineTotals.discountTotal +
+			lineTotals.taxAmount +
+			expenseTotals.taxableAmount +
+			expenseTotals.gstAmount +
+			chargeDelta) *
+			100,
+	) / 100;
 	const amountReceived = rec.collections.reduce((s, c) => s + c.amount, 0);
 	const balanceAmount = Math.max(
 		0,
@@ -264,7 +342,12 @@ export function normalizeInvoice(rec: InvoiceRecord): InvoiceRecord {
 	return {
 		...rec,
 		lineItems: lines,
-		...totals,
+		additionalExpenses,
+		shippingCharges: legacyCharges.shippingCharges,
+		otherCharges: legacyCharges.otherCharges,
+		subtotal,
+		discountTotal,
+		taxAmount,
 		grandTotal,
 		amountReceived: Math.round(amountReceived * 100) / 100,
 		balanceAmount,
@@ -503,7 +586,7 @@ export function loadInvoices(): InvoiceRecord[] {
 	try {
 		const raw = localStorage.getItem(STORAGE_KEY);
 		const list: InvoiceRecord[] = raw ? JSON.parse(raw) : SEED;
-		const normalized = list.map(normalizeInvoice);
+		const normalized = mergeNearExpiryDemoSalesInvoice(list.map(normalizeInvoice));
 		const { invoices: linked, changed } = backfillInvoiceCustomerLedgerLinks(normalized);
 		if (changed || !raw) {
 			localStorage.setItem(STORAGE_KEY, JSON.stringify(linked));
@@ -662,12 +745,14 @@ export type InvoiceFormInput = {
 	internalRemarks?: string;
 	shippingCharges?: number;
 	otherCharges?: number;
+	additionalExpenses?: InvoiceAdditionalExpense[];
 	roundOff?: number;
 	adjustment?: number;
 	tdsTcs?: number;
 	lineItems: InvoiceLineItem[];
 	attachments: InvoiceAttachment[];
 	invoiceStatus: InvoiceStatus;
+	nearExpirySchemeSettlements?: InvoiceNearExpirySchemeSettlement[];
 };
 
 export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
@@ -681,10 +766,20 @@ export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
 	}
 	const all = loadInvoices();
 	const id = all.length ? Math.max(...all.map((r) => r.id)) + 1 : 1;
+	const invoiceNo = nextInvoiceNo(all);
+	const nearExpirySchemeSettlements = input.nearExpirySchemeSettlements?.length
+		? input.nearExpirySchemeSettlements.map((entry) => ({
+				...entry,
+				invoiceNo,
+				customerName: input.customerName.trim(),
+				salesOrderNo: entry.salesOrderNo ?? input.salesOrderNo ?? "",
+			}))
+		: undefined;
 	const base: InvoiceRecord = {
 		id,
-		invoiceNo: nextInvoiceNo(all),
+		invoiceNo,
 		...input,
+		nearExpirySchemeSettlements,
 		subtotal: 0,
 		discountTotal: 0,
 		taxAmount: 0,
@@ -711,6 +806,7 @@ export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
 	};
 	const rec = normalizeInvoice(base);
 	saveInvoices([...all, rec]);
+	attachWorkflowOnCreate("sales_invoice", rec.id);
 	if (rec.invoiceStatus === "sent") {
 		maybePostSalesInvoice(rec);
 	}

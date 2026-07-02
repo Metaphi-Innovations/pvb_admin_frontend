@@ -159,7 +159,7 @@ export function WarehouseWiseListing({ warehouseRecords, selectedWarehouse, relo
         actions={actions}
         onAdd={() => router.push(`/warehouse/reorder-level/create?warehouse=${encodeURIComponent(selectedWarehouse)}`)}
         addLabel="Set Reorder Level"
-        emptyMessage="reorder level configurations"
+        emptyMessage=""
         searchPlaceholder="Search product or SKU..."
       />
 

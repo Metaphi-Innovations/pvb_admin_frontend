@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -88,10 +89,10 @@ export function LedgerTypeFields({ meta, readOnly, mode, onChange }: LedgerTypeF
           )}
           {type === "Vendor" && (
             <>
-              <p className="font-medium">Create from Vendor Master</p>
-              <p>Vendor ledgers are auto-created under Trade Payables when you save a vendor.</p>
+              <p className="font-medium">Create from Supplier Master</p>
+              <p>Supplier ledgers are auto-created under Trade Payables when you save a vendor.</p>
               <Link href="/masters/vendors/new" className="text-brand-600 hover:underline font-medium">
-                Go to Vendor Master →
+                Go to Supplier Master →
               </Link>
             </>
           )}
@@ -118,7 +119,7 @@ export function LedgerTypeFields({ meta, readOnly, mode, onChange }: LedgerTypeF
             </Field>
           )}
           {type === "Vendor" && (
-            <Field label="Vendor Code">
+            <Field label="Supplier Code">
               <Input className="h-8 text-xs" disabled={readOnly} value={meta.vendorCode} onChange={(e) => set({ vendorCode: e.target.value })} />
             </Field>
           )}
@@ -133,7 +134,7 @@ export function LedgerTypeFields({ meta, readOnly, mode, onChange }: LedgerTypeF
           {type === "Customer" && (
             <div className="grid grid-cols-2 gap-2">
               <Field label="Credit Limit">
-                <Input className="h-8 text-xs" type="number" disabled={readOnly} value={meta.creditLimit} onChange={(e) => set({ creditLimit: e.target.value })} />
+                <AccountsMoneyInput className="h-8 text-xs" disabled={readOnly} value={meta.creditLimit} onChange={(v) => set({ creditLimit: String(v) })} />
               </Field>
               <Field label="Credit Days">
                 <Input className="h-8 text-xs" type="number" disabled={readOnly} value={meta.creditDays} onChange={(e) => set({ creditDays: e.target.value })} />

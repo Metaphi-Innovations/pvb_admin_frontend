@@ -8,6 +8,13 @@ import {
 import { statementVoucherNo } from "@/lib/accounts/sales-invoice-accounting";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 import { loadBankAccountMasters } from "@/lib/accounts/bank-accounts-data";
+import {
+  applyMovement,
+  fromSignedBalance,
+  isLedgerMovementVoucherStatus,
+  openingSignedBalance,
+  sortChronological,
+} from "@/lib/accounts/running-balance";
 
 export const BANK_BOOK_VOUCHER_TYPES = [
   "Receipt Voucher",
@@ -15,7 +22,7 @@ export const BANK_BOOK_VOUCHER_TYPES = [
   "Contra Voucher",
   "Journal Voucher",
   "Sales Collection",
-  "Vendor Payment",
+  "Supplier Payment",
   "Fund Transfer",
   "Bank Charges",
   "Interest Credit",
@@ -34,6 +41,7 @@ export interface BookEntryRow {
   receipt: number;
   payment: number;
   runningBalance: number;
+  runningBalanceType: "Debit" | "Credit";
   ledgerId: number;
   ledgerName: string;
   branch?: string;
@@ -55,8 +63,8 @@ export interface BookFilterParams {
   branch?: string;
 }
 
-function signedMovement(debit: number, credit: number, balanceType: "Debit" | "Credit"): number {
-  return balanceType === "Debit" ? debit - credit : credit - debit;
+function signedMovement(debit: number, credit: number): number {
+  return debit - credit;
 }
 
 export function resolveBankBookVoucherTypeLabel(v: AccountingVoucher): BankBookVoucherTypeLabel {
@@ -74,7 +82,7 @@ export function resolveBankBookVoucherTypeLabel(v: AccountingVoucher): BankBookV
   }
   if (v.voucherType === "payment") {
     if (narration.includes("vendor") || narration.includes("supplier") || narration.includes("payable")) {
-      return "Vendor Payment";
+      return "Supplier Payment";
     }
     return "Payment Voucher";
   }
@@ -105,10 +113,10 @@ export function buildBookEntries(
     ? new Set(filters.ledgerIds)
     : new Set(ledgers.map((l) => l.id));
 
-  const raw: Omit<BookEntryRow, "runningBalance">[] = [];
+  const raw: (Omit<BookEntryRow, "runningBalance" | "runningBalanceType"> & { lineOrder: number })[] = [];
 
   loadVouchers()
-    .filter((v) => v.status === "posted" || v.status === "approved")
+    .filter((v) => isLedgerMovementVoucherStatus(v.status))
     .forEach((v) => {
       if (filters.dateFrom && v.date < filters.dateFrom) return;
       if (filters.dateTo && v.date > filters.dateTo) return;
@@ -116,7 +124,7 @@ export function buildBookEntries(
       const label = resolveBankBookVoucherTypeLabel(v);
       if (filters.voucherTypeLabel && label !== filters.voucherTypeLabel) return;
 
-      v.lines.forEach((line, idx) => {
+      v.lines.forEach((line, lineOrder) => {
         if (!line.ledgerId || !allowedIds.has(line.ledgerId)) return;
         const ledger = ledgerMap.get(line.ledgerId);
         if (!ledger) return;
@@ -128,8 +136,10 @@ export function buildBookEntries(
         const credit = Number(line.credit) || 0;
         if (debit === 0 && credit === 0) return;
 
-        const row: Omit<BookEntryRow, "runningBalance"> = {
-          rowKey: `${v.id}-${line.id ?? idx}`,
+        const row: Omit<BookEntryRow, "runningBalance" | "runningBalanceType"> & {
+          lineOrder: number;
+        } = {
+          rowKey: `${v.id}-${line.id ?? lineOrder}`,
           voucherId: v.id,
           date: v.date,
           voucherNo: statementVoucherNo(v),
@@ -141,31 +151,34 @@ export function buildBookEntries(
           ledgerId: ledger.id,
           ledgerName: ledger.accountName,
           branch,
+          lineOrder,
         };
 
-        if (filters.search?.trim() && !matchesSearch({ ...row, runningBalance: 0 }, filters.search.trim().toLowerCase())) {
+        if (filters.search?.trim() && !matchesSearch({ ...row, runningBalance: 0, runningBalanceType: "Debit" }, filters.search.trim().toLowerCase())) {
           return;
         }
         raw.push(row);
       });
     });
 
-  raw.sort((a, b) => {
-    const d = a.date.localeCompare(b.date);
-    if (d !== 0) return d;
-    return a.voucherNo.localeCompare(b.voucherNo);
-  });
+  const sorted = sortChronological(raw);
 
-  const openingByLedger = new Map<number, number>();
+  const runningByLedger = new Map<number, number>();
   for (const l of ledgers) {
-    if (allowedIds.has(l.id)) openingByLedger.set(l.id, l.openingBalance);
+    if (allowedIds.has(l.id)) runningByLedger.set(l.id, openingSignedBalance(l));
   }
 
-  let running = [...openingByLedger.values()].reduce((s, v) => s + v, 0);
-  return raw.map((row) => {
-    const ledger = ledgerMap.get(row.ledgerId)!;
-    running += signedMovement(row.receipt, row.payment, ledger.balanceType);
-    return { ...row, runningBalance: running };
+  return sorted.map((row) => {
+    const { lineOrder: _lineOrder, ...entry } = row;
+    const prior = runningByLedger.get(entry.ledgerId) ?? 0;
+    const signed = applyMovement(prior, entry.receipt, entry.payment);
+    runningByLedger.set(entry.ledgerId, signed);
+    const bal = fromSignedBalance(signed);
+    return {
+      ...entry,
+      runningBalance: bal.amount,
+      runningBalanceType: bal.balanceType,
+    };
   });
 }
 
@@ -179,7 +192,6 @@ export function computeBookSummary(
     : new Set(ledgers.map((l) => l.id));
 
   const scopedLedgers = ledgers.filter((l) => allowedIds.has(l.id));
-  const openingBalance = scopedLedgers.reduce((s, l) => s + l.openingBalance, 0);
 
   let totalReceipts = 0;
   let totalPayments = 0;
@@ -191,17 +203,21 @@ export function computeBookSummary(
   const netMovement = scopedLedgers.reduce((s, l) => {
     const ledgerEntries = entries.filter((e) => e.ledgerId === l.id);
     const movement = ledgerEntries.reduce(
-      (m, e) => m + signedMovement(e.receipt, e.payment, l.balanceType),
+      (m, e) => m + signedMovement(e.receipt, e.payment),
       0,
     );
     return s + movement;
   }, 0);
 
+  const openingSigned = scopedLedgers.reduce((s, l) => s + openingSignedBalance(l), 0);
+  const closingSigned = openingSigned + netMovement;
+  const closingBal = fromSignedBalance(closingSigned);
+
   return {
-    openingBalance,
+    openingBalance: scopedLedgers.reduce((s, l) => s + l.openingBalance, 0),
     totalReceipts,
     totalPayments,
-    closingBalance: openingBalance + netMovement,
+    closingBalance: closingBal.amount,
   };
 }
 
@@ -222,7 +238,7 @@ export function listBankAccountFilterOptions(): { id: number; label: string }[] 
     .filter((m) => m.status === "active")
     .map((m) => ({
       id: m.coaLedgerId,
-      label: `${m.accountNickname} (${m.accountNumber})`,
+      label: `${m.bankName} — ${m.accountType} (${m.accountNumber})`,
     }));
 }
 

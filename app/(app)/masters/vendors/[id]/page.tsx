@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
   RecordDetailPage,
@@ -14,6 +15,7 @@ import {
   Landmark,
   Mail,
   MapPin,
+  Package,
   Phone,
   User,
 } from "lucide-react";
@@ -22,6 +24,7 @@ import {
   getVendorById,
   type Vendor,
 } from "../vendor-data";
+import { loadProductsForSupplier } from "../../products/product-data";
 import { getGstCategoryLabel, deriveGstRegistered } from "@/lib/masters/gst-compliance";
 import { getActiveTDSMasters, formatTdsSummary } from "../../tds/tds-data";
 import { ErpPartyAccountingCard } from "@/components/masters/ErpPartyAccountingCard";
@@ -68,11 +71,12 @@ export default function ViewVendorPage() {
     vendor.gstCategory,
   );
   const accountingSummary = getVendorAccountingSummary(vendor);
+  const mappedProducts = loadProductsForSupplier(vendor.vendorName, vendor.vendorCode);
 
   return (
     <RecordDetailPage
       listHref="/masters/vendors"
-      listLabel="Vendors"
+      listLabel="Suppliers"
       recordName={vendor.vendorName}
       statusLabel={vendor.status === "active" ? "Active" : "Inactive"}
       statusVariant={vendor.status}
@@ -97,7 +101,7 @@ export default function ViewVendorPage() {
           iconBg: "#EEF3FB",
           iconColor: "#0C3F8A",
           value: vendor.vendorType || "—",
-          label: "Vendor Type",
+          label: "Supplier Type",
         },
         {
           icon: FileText,
@@ -110,25 +114,32 @@ export default function ViewVendorPage() {
           icon: Clock,
           iconBg: "#FFFBEB",
           iconColor: "#D97706",
-          value: formatPaymentTerms(vendor.paymentTerms),
+          value: formatPaymentTerms(vendor),
           label: "Payment Terms",
+        },
+        {
+          icon: Package,
+          iconBg: "#E8F4FD",
+          iconColor: "#1554B4",
+          value: String(mappedProducts.length),
+          label: "Mapped Products",
         },
       ]}
       onEdit={() => router.push(`/masters/vendors/${id}/edit`)}
       sidebar={{
         quickActions: [
           {
-            label: "Edit Vendor",
+            label: "Edit Supplier",
             onClick: () => router.push(`/masters/vendors/${id}/edit`),
             variant: "primary",
           },
         ],
         summary: [
-          { label: "Vendor Code", value: vendor.vendorCode || "—", highlight: true },
-          { label: "Vendor Type", value: vendor.vendorType || "—" },
+          { label: "Supplier Code", value: vendor.vendorCode || "—", highlight: true },
+          { label: "Supplier Type", value: vendor.vendorType || "—" },
           { label: "GST", value: vendor.gstNumber || "—" },
           { label: "PAN", value: vendor.panNumber || "—" },
-          { label: "Payment Terms", value: formatPaymentTerms(vendor.paymentTerms) },
+          { label: "Payment Terms", value: formatPaymentTerms(vendor) },
           { label: "Created", value: vendor.createdDate },
           { label: "Updated", value: vendor.updatedDate },
         ],
@@ -138,14 +149,14 @@ export default function ViewVendorPage() {
         <ErpPartyAccountingCard
           title="Accounting Integration"
           summary={accountingSummary}
-          partyLabel="Vendor"
+          partyLabel="Supplier"
         />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <RecordSectionCard title="Vendor Information" icon={Building2} accent="blue">
-          <RecordKvRow label="Vendor Code" value={vendor.vendorCode || "—"} mono highlight />
-          <RecordKvRow label="Vendor Name" value={vendor.vendorName} highlight />
-          <RecordKvRow label="Vendor Type" value={vendor.vendorType || "—"} />
-          <RecordKvRow label="Payment Terms" value={formatPaymentTerms(vendor.paymentTerms)} />
+        <RecordSectionCard title="Supplier Information" icon={Building2} accent="blue">
+          <RecordKvRow label="Supplier Code" value={vendor.vendorCode || "—"} mono highlight />
+          <RecordKvRow label="Supplier Name" value={vendor.vendorName} highlight />
+          <RecordKvRow label="Supplier Type" value={vendor.vendorType || "—"} />
+          <RecordKvRow label="Payment Terms" value={formatPaymentTerms(vendor)} />
           <RecordKvRow label="Contact Person" value={vendor.contactPerson || "—"} />
           <RecordKvRow
             label="Mobile Number"
@@ -169,9 +180,12 @@ export default function ViewVendorPage() {
             <RecordKvRow label="Address Line 2" value={vendor.billingAddress.line2} />
           )}
           <RecordKvRow label="Pincode" value={vendor.billingAddress.pincode || "—"} mono />
+          <RecordKvRow label="City" value={vendor.billingAddress.city || "—"} />
+          {vendor.billingAddress.town ? (
+            <RecordKvRow label="Town" value={vendor.billingAddress.town} />
+          ) : null}
           <RecordKvRow label="Country" value={vendor.billingAddress.country || "—"} />
-          <RecordKvRow label="State" value={vendor.billingAddress.state || "—"} />
-          <RecordKvRow label="City" value={vendor.billingAddress.city || "—"} isLast />
+          <RecordKvRow label="State" value={vendor.billingAddress.state || "—"} isLast />
         </RecordSectionCard>
 
         <RecordSectionCard title="Tax & Registration" icon={FileText} accent="orange">
@@ -209,7 +223,14 @@ export default function ViewVendorPage() {
           <RecordKvRow label="Bank Name" value={vendor.bankName || "—"} />
           <RecordKvRow label="Branch" value={vendor.branch || "—"} />
           <RecordKvRow label="Account Number" value={vendor.accountNumber || "—"} mono copy />
-          <RecordKvRow label="IFSC Code" value={vendor.ifscCode || "—"} mono copy isLast />
+          <RecordKvRow label="IFSC Code" value={vendor.ifscCode || "—"} mono copy />
+          <RecordKvRow
+            label="SWIFT Code"
+            value={vendor.swiftCode || "—"}
+            mono
+            copy
+            isLast
+          />
         </RecordSectionCard>
 
         <RecordSectionCard title="Audit" icon={Clock} accent="orange">
@@ -222,6 +243,58 @@ export default function ViewVendorPage() {
             value={vendor.status === "active" ? "Active" : "Inactive"}
             isLast
           />
+        </RecordSectionCard>
+
+        <RecordSectionCard
+          title="Mapped Products"
+          icon={Package}
+          accent="blue"
+          className="lg:col-span-2"
+        >
+          {mappedProducts.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">
+              No products linked to this supplier. Assign a supplier in Product Master.
+            </p>
+          ) : (
+            <div className="overflow-hidden border border-border rounded-lg">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-muted/40 border-b border-border">
+                      <th className="px-3 py-2 text-left font-semibold text-foreground">Product Code</th>
+                      <th className="px-3 py-2 text-left font-semibold text-foreground">Product Name</th>
+                      <th className="px-3 py-2 text-left font-semibold text-foreground">SKU</th>
+                      <th className="px-3 py-2 text-left font-semibold text-foreground">Category</th>
+                      <th className="px-3 py-2 text-left font-semibold text-foreground">HSN</th>
+                      <th className="px-3 py-2 text-left font-semibold text-foreground">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mappedProducts.map((product) => (
+                      <tr
+                        key={product.id}
+                        className="border-b border-border/60 last:border-0 hover:bg-muted/20"
+                      >
+                        <td className="px-3 py-2">
+                          <Link
+                            href={`/masters/products/${product.id}`}
+                            className="font-mono font-semibold text-brand-700 hover:underline"
+                          >
+                            {product.productCode}
+                          </Link>
+                        </td>
+                        <td className="px-3 py-2 font-medium text-foreground">{product.productName}</td>
+                        <td className="px-3 py-2 font-mono text-muted-foreground">{product.sku || "—"}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{product.category || "—"}</td>
+                        <td className="px-3 py-2 font-mono text-muted-foreground">{product.hsnCode || "—"}</td>
+                        <td className="px-3 py-2 capitalize text-muted-foreground">{product.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </RecordSectionCard>
       </div>
       </div>

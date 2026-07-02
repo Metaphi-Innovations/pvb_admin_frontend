@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -502,7 +503,7 @@ export function CategorizeEntryPanel({
           {needsVendor && category === "vendor_payment" && (
             <>
               <SearchableSelect
-                label="Vendor"
+                label="Supplier"
                 value={vendorId}
                 onChange={(v) => {
                   setVendorId(v);
@@ -510,7 +511,7 @@ export function CategorizeEntryPanel({
                   setAdjustments([]);
                 }}
                 options={vendors}
-                placeholder="Select vendor"
+                placeholder="Select supplier"
                 required
               />
               {vendorId && (
@@ -545,11 +546,11 @@ export function CategorizeEntryPanel({
 
           {needsVendor && category === "expense" && (
             <SearchableSelect
-              label="Vendor (optional)"
+              label="Supplier (optional)"
               value={vendorId}
               onChange={setVendorId}
               options={vendors}
-              placeholder="Select vendor"
+              placeholder="Select supplier"
             />
           )}
 
@@ -579,12 +580,12 @@ export function CategorizeEntryPanel({
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Amount</Label>
-              <Input
-                type="number"
+              <AccountsMoneyInput
+                compact={false}
                 className="h-9 text-xs tabular-nums"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                readOnly={!batchMode}
+                onChange={(v) => setAmount(String(v))}
+                disabled={!batchMode}
               />
             </div>
           </div>

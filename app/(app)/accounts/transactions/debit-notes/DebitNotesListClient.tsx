@@ -1,7 +1,7 @@
 "use client";
 
 import { TransactionListPage } from "@/app/(app)/accounts/components/TransactionListPage";
-import { loadDebitNotes, approveDebitNote, saveDebitNotes } from "@/app/(app)/accounts/debit-notes/debit-notes-data";
+import { loadDebitNotes, approveDebitNote, saveDebitNotes, canEditDebitNote } from "@/app/(app)/accounts/debit-notes/debit-notes-data";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { debitNoteImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 
@@ -11,10 +11,14 @@ export default function DebitNotesListClient() {
       config={{
         section: "Transactions",
         title: "Debit Notes",
-        description: "Purchase debit notes — reduces vendor payable.",
+        description: "Purchase debit notes — reduces supplier payable.",
         loadData: loadDebitNotes,
         newHref: "/accounts/transactions/debit-notes/new",
         editHref: (id) => `/accounts/transactions/debit-notes/${id}/edit`,
+        canEdit: (row) => {
+          const rec = loadDebitNotes().find((dn) => dn.id === Number(row.id));
+          return rec ? canEditDebitNote(rec) : false;
+        },
         onPost: (id) => approveDebitNote(Number(id)),
         onDelete: (id) => {
           saveDebitNotes(loadDebitNotes().filter((dn) => dn.id !== Number(id)));
