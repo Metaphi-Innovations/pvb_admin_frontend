@@ -26,7 +26,7 @@ import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import { formatBalanceAmount, formatMoney } from "@/lib/accounts/money-format";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
-import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
+import { ensureGeneralLedgerDemoOnPageLoad } from "@/lib/accounts/general-ledger-demo-seed";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import {
@@ -44,31 +44,25 @@ const filterControlClass = "h-8 text-xs";
 const PLACEHOLDER_FROM = "2026-04-01";
 const PLACEHOLDER_TO = "2026-06-30";
 
+function defaultGeneralLedgerDateRange(fy: { startDate: string; endDate: string }): {
+  from: string;
+  to: string;
+} {
+  const today = new Date().toISOString().slice(0, 10);
+  if (fy.endDate < PLACEHOLDER_FROM && today >= PLACEHOLDER_FROM) {
+    return { from: PLACEHOLDER_FROM, to: PLACEHOLDER_TO };
+  }
+  const to = fy.endDate > PLACEHOLDER_TO ? PLACEHOLDER_TO : fy.endDate;
+  return { from: fy.startDate, to: today < to ? today : to };
+}
+
 function resolveLedgerFromUrl(urlLedgerId: string): string {
-  const ledgers = getGeneralLedgerLedgers();
   if (!urlLedgerId) return "";
-
+  const ledgers = getGeneralLedgerLedgers();
   if (ledgers.some((l) => l.id === urlLedgerId)) return urlLedgerId;
-
-  const numericId = Number(urlLedgerId);
-  if (!Number.isFinite(numericId)) return "";
-
-  const coaLedger = loadChartOfAccounts().find(
-    (r) => r.id === numericId && r.nodeLevel === "ledger",
-  );
-  if (!coaLedger) return "";
-
-  const exact = ledgers.find(
-    (l) => l.name.toLowerCase() === coaLedger.accountName.toLowerCase(),
-  );
-  if (exact) return exact.id;
-
-  const partial = ledgers.find((l) => {
-    const a = coaLedger.accountName.toLowerCase();
-    const b = l.name.toLowerCase();
-    return a.includes(b) || b.includes(a);
-  });
-  return partial?.id ?? "";
+  const numericId = String(Number(urlLedgerId));
+  if (numericId !== "NaN" && ledgers.some((l) => l.id === numericId)) return numericId;
+  return "";
 }
 
 function GeneralLedgerPageContent() {
@@ -86,8 +80,17 @@ function GeneralLedgerPageContent() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
+  const [dataTick, setDataTick] = useState(0);
 
-  const ledgers = useMemo(() => getGeneralLedgerLedgers(), []);
+  const ledgers = useMemo(
+    () => (mounted ? getGeneralLedgerLedgers() : []),
+    [mounted, dataTick],
+  );
+
+  useEffect(() => {
+    ensureGeneralLedgerDemoOnPageLoad();
+    setDataTick((t) => t + 1);
+  }, []);
 
   useEffect(() => {
     const activeFyId = getActiveFinancialYearId();
@@ -96,8 +99,9 @@ function GeneralLedgerPageContent() {
 
     if (activeFy) {
       setFinancialYearId(String(activeFy.id));
-      setDateFrom(activeFy.startDate);
-      setDateTo(activeFy.endDate > "2026-06-30" ? "2026-06-30" : activeFy.endDate);
+      const { from, to } = defaultGeneralLedgerDateRange(activeFy);
+      setDateFrom(from);
+      setDateTo(to);
     } else {
       setDateFrom(PLACEHOLDER_FROM);
       setDateTo(PLACEHOLDER_TO);
@@ -116,8 +120,9 @@ function GeneralLedgerPageContent() {
     if (financialYearId === "all") return;
     const fy = loadFinancialYears().find((y) => String(y.id) === financialYearId);
     if (!fy) return;
-    setDateFrom(fy.startDate);
-    setDateTo(fy.endDate);
+    const { from, to } = defaultGeneralLedgerDateRange(fy);
+    setDateFrom(from);
+    setDateTo(to);
   }, [financialYearId]);
 
   const handleLedgerChange = useCallback(
@@ -141,7 +146,7 @@ function GeneralLedgerPageContent() {
       voucherType,
       search,
     });
-  }, [mounted, ledgerId, dateFrom, dateTo, voucherType, search, datesReady]);
+  }, [mounted, ledgerId, dateFrom, dateTo, voucherType, search, datesReady, dataTick]);
 
   const openingRow = statement?.displayRows[0] ?? null;
   const closingRow = statement ? statement.displayRows[statement.displayRows.length - 1] : null;
@@ -268,7 +273,7 @@ function GeneralLedgerPageContent() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Voucher no., particular, narration, amount…"
+                placeholder="Voucher no., party, GSTIN, narration, reference…"
                 className={cn(filterControlClass, "mt-0 pr-8")}
                 disabled={!ledgerId}
               />

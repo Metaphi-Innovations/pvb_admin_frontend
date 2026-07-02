@@ -33,6 +33,8 @@ export interface PartyAddressOption {
   pincode: string;
   /** Formatted single-line address */
   formatted: string;
+  /** GSTIN mapped to this ship-to / bill-to location */
+  gstin?: string;
 }
 
 export interface CustomerTransactionFields {
@@ -127,10 +129,17 @@ function branchToBillOption(customerName: string, branch: CustomerBranch, idx: n
   };
 }
 
-function branchToShipOption(customerName: string, branch: CustomerBranch, idx: number): PartyAddressOption {
+function branchToShipOption(
+  customerName: string,
+  branch: CustomerBranch,
+  idx: number,
+  customerGstin: string,
+): PartyAddressOption {
   const shipCity = branch.shippingAddress.city || branch.branchName;
   const label = `${customerName} - ${shipCity} (${branch.branchName})`;
   const formatted = formatBranchAddress(branch.shippingAddress);
+  const branchGstin = branch.shippingAddress.gstin?.trim().toUpperCase();
+  const gstin = branchGstin || customerGstin || undefined;
   return {
     id: `ship-${idx}`,
     label,
@@ -139,6 +148,7 @@ function branchToShipOption(customerName: string, branch: CustomerBranch, idx: n
     state: branch.shippingAddress.state,
     pincode: branch.shippingAddress.pincode,
     formatted,
+    gstin,
   };
 }
 
@@ -157,10 +167,12 @@ function buildCustomerBranchOptions(c: Customer): {
   shipTo: PartyAddressOption[];
 } {
   const name = c.customerName;
+  const customerGstin =
+    c.gstApplicable && c.gstin?.trim() ? c.gstin.trim().toUpperCase() : "";
   if (c.branches?.length) {
     return {
       billTo: c.branches.map((b, i) => branchToBillOption(name, b, i)),
-      shipTo: c.branches.map((b, i) => branchToShipOption(name, b, i)),
+      shipTo: c.branches.map((b, i) => branchToShipOption(name, b, i, customerGstin)),
     };
   }
   const fallback = customerFallbackAddress(c);
@@ -181,6 +193,7 @@ function buildCustomerBranchOptions(c: Customer): {
     state: c.stateName || "",
     pincode: c.pincode || "",
     formatted: fallback,
+    gstin: customerGstin || undefined,
   };
   return { billTo: [single], shipTo: [ship] };
 }
@@ -271,6 +284,13 @@ export function resolveShipToAddress(
   shipToId: string,
 ): string {
   return fields.shipToOptions.find((o) => o.id === shipToId)?.formatted ?? fields.shippingAddress;
+}
+
+export function resolveShipToGstin(
+  fields: CustomerTransactionFields,
+  shipToId: string,
+): string {
+  return fields.shipToOptions.find((o) => o.id === shipToId)?.gstin?.trim() ?? "";
 }
 
 // ── Vendor ────────────────────────────────────────────────────────────────────

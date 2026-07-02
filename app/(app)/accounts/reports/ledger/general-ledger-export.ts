@@ -1,6 +1,7 @@
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
-import { formatMoney, formatMoneyOrDash, formatMoneyWithSide } from "@/lib/accounts/money-format";
+import { formatMoney, formatMoneyWithSide } from "@/lib/accounts/money-format";
 import type { GeneralLedgerDisplayRow, GeneralLedgerSummary } from "./general-ledger-data";
+import { formatGeneralLedgerOptionalMoney } from "./GeneralLedgerTable";
 
 const COMPANY_NAME = "Dharitri Sutra Agri Solutions Pvt Ltd";
 const REPORT_NAME = "General Ledger";
@@ -22,6 +23,28 @@ function balanceLabel(row: GeneralLedgerDisplayRow): string {
   return formatMoneyWithSide(row.runningBalance, row.runningBalanceType);
 }
 
+function exportRowFields(r: GeneralLedgerDisplayRow) {
+  const isSummary = r.kind === "opening" || r.kind === "closing";
+  return {
+    Date: r.date,
+    "Voucher No.": isSummary ? "—" : r.voucherNo,
+    "Voucher Type": isSummary ? "—" : r.voucherType,
+    "Party Name": isSummary ? "—" : r.partyName,
+    GSTIN: isSummary ? "—" : r.gstin,
+    PAN: isSummary ? "—" : r.pan,
+    "Expense Head": isSummary ? "—" : r.expenseHead,
+    "Particulars / Narration": r.particularsNarration,
+    "Debit (₹)": r.debit || "",
+    "Credit (₹)": r.credit || "",
+    "Bank / Cash": isSummary ? "—" : r.bankCash,
+    "TDS Section": isSummary ? "—" : r.tdsSection,
+    "TDS Amount": isSummary ? "—" : formatGeneralLedgerOptionalMoney(r.tdsAmount),
+    "GST Amount": isSummary ? "—" : formatGeneralLedgerOptionalMoney(r.gstAmount),
+    "Reference No.": isSummary ? "—" : r.referenceNo,
+    "Running Balance": balanceLabel(r),
+  };
+}
+
 export async function exportGeneralLedgerToExcel(
   rows: GeneralLedgerDisplayRow[],
   summary: GeneralLedgerSummary,
@@ -29,16 +52,7 @@ export async function exportGeneralLedgerToExcel(
 ): Promise<void> {
   const XLSX = await import("xlsx");
 
-  const dataRows = rows.map((r) => ({
-    Date: r.date,
-    "Voucher No.": r.kind === "opening" || r.kind === "closing" ? r.particular : r.voucherNo,
-    "Voucher Type": r.voucherType,
-    Particular: r.kind === "transaction" ? r.particular : r.particular,
-    Narration: r.narration,
-    "Debit (₹)": r.debit || "",
-    "Credit (₹)": r.credit || "",
-    "Running Balance": balanceLabel(r),
-  }));
+  const dataRows = rows.map((r) => exportRowFields(r));
 
   const sheet = XLSX.utils.json_to_sheet(dataRows);
   const wb = XLSX.utils.book_new();
@@ -72,18 +86,28 @@ export function exportGeneralLedgerToPdf(
   meta: GeneralLedgerExportMeta,
 ): void {
   const tableRows = rows
-    .map(
-      (r) => `
+    .map((r) => {
+      const f = exportRowFields(r);
+      return `
     <tr class="${r.kind !== "transaction" ? "summary-row" : ""}">
-      <td>${r.date}</td>
-      <td>${r.kind === "transaction" ? r.voucherNo : "—"}</td>
-      <td>${r.voucherType}</td>
-      <td>${r.particular}</td>
-      <td class="num">${formatMoneyOrDash(r.debit)}</td>
-      <td class="num">${formatMoneyOrDash(r.credit)}</td>
-      <td class="num">${balanceLabel(r)}</td>
-    </tr>`,
-    )
+      <td>${f.Date}</td>
+      <td>${f["Voucher No."]}</td>
+      <td>${f["Voucher Type"]}</td>
+      <td>${f["Party Name"]}</td>
+      <td class="mono">${f.GSTIN}</td>
+      <td class="mono">${f.PAN}</td>
+      <td>${f["Expense Head"]}</td>
+      <td>${f["Particulars / Narration"]}</td>
+      <td class="num">${f["Debit (₹)"] || "—"}</td>
+      <td class="num">${f["Credit (₹)"] || "—"}</td>
+      <td>${f["Bank / Cash"]}</td>
+      <td>${f["TDS Section"]}</td>
+      <td class="num">${f["TDS Amount"]}</td>
+      <td class="num">${f["GST Amount"]}</td>
+      <td class="mono">${f["Reference No."]}</td>
+      <td class="num">${f["Running Balance"]}</td>
+    </tr>`;
+    })
     .join("");
 
   const html = `<!DOCTYPE html>
@@ -92,13 +116,14 @@ export function exportGeneralLedgerToPdf(
   <meta charset="utf-8" />
   <title>General Ledger — ${summary.ledgerName}</title>
   <style>
-    body { font-family: system-ui, sans-serif; font-size: 11px; padding: 24px; color: #111; }
+    body { font-family: system-ui, sans-serif; font-size: 9px; padding: 16px; color: #111; }
     h1 { font-size: 16px; margin: 0 0 4px; color: #1A3A96; }
     .meta { color: #555; margin-bottom: 16px; font-size: 10px; line-height: 1.5; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
-    th { background: #f5f5f5; font-size: 10px; text-transform: uppercase; position: sticky; top: 0; }
+    th, td { border: 1px solid #ddd; padding: 4px 6px; text-align: left; }
+    th { background: #f5f5f5; font-size: 8px; text-transform: uppercase; position: sticky; top: 0; }
     .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .mono { font-family: ui-monospace, monospace; font-size: 8px; }
     .summary-row td { font-weight: 600; background: #fafafa; }
   </style>
 </head>
@@ -118,9 +143,18 @@ export function exportGeneralLedgerToPdf(
         <th>Date</th>
         <th>Voucher No.</th>
         <th>Voucher Type</th>
-        <th>Particular</th>
+        <th>Party Name</th>
+        <th>GSTIN</th>
+        <th>PAN</th>
+        <th>Expense Head</th>
+        <th>Particulars / Narration</th>
         <th>Debit (₹)</th>
         <th>Credit (₹)</th>
+        <th>Bank / Cash</th>
+        <th>TDS Section</th>
+        <th>TDS Amount</th>
+        <th>GST Amount</th>
+        <th>Reference No.</th>
         <th>Running Balance</th>
       </tr>
     </thead>

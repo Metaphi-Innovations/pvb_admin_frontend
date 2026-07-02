@@ -174,7 +174,7 @@ export function ensureNearExpiryPendingDemoCustomer(): Customer | undefined {
 
 /** Returns the demo dispatch when it is still pending invoice generation. */
 export function getNearExpiryPendingDemoDispatch(): DispatchRecord | undefined {
-  if (typeof window === "undefined") return NEAR_EXPIRY_PENDING_DEMO_DISPATCH;
+  if (typeof window === "undefined") return undefined;
   if (isDemoDispatchInvoiced()) return undefined;
   ensureNearExpiryPendingDemoCustomer();
   return NEAR_EXPIRY_PENDING_DEMO_DISPATCH;

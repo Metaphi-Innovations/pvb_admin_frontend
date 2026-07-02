@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, FileText, Receipt } from "lucide-react";
+import { ArrowLeft, Receipt } from "lucide-react";
+import {
+  AccountsTableActionCell,
+  AccountsViewAction,
+  accountsActionColClass,
+} from "@/components/accounts/AccountsTableActions";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
@@ -189,17 +194,14 @@ export default function CustomerOutstandingDetailClient() {
                       <span className="tabular-nums font-semibold">{formatMoney(inv.outstanding)}</span>
                     </AccountsTableCell>
                     <AccountsTableCell>{formatReportDate(inv.dueDate)}</AccountsTableCell>
-                    <AccountsTableCell align="right">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100">
-                        <Link
+                    <AccountsTableCell align="right" className={accountsActionColClass("single")}>
+                      <AccountsTableActionCell variant="single">
+                        <AccountsViewAction
+                          title="View invoice"
                           href={`/accounts/transactions/invoices/${inv.invoiceId}`}
                           onClick={(e) => e.stopPropagation()}
-                        >
-                          <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px] gap-1">
-                            <FileText className="w-3.5 h-3.5" /> View
-                          </Button>
-                        </Link>
-                      </div>
+                        />
+                      </AccountsTableActionCell>
                     </AccountsTableCell>
                   </AccountsTableRow>
                 ))

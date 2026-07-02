@@ -12,10 +12,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Eye, Pencil, Plus, Search } from "lucide-react";
+import {
+  AccountsEditAction,
+  AccountsTableActionCell,
+  AccountsViewAction,
+  accountsActionColClass,
+} from "@/components/accounts/AccountsTableActions";
+import { Plus, Search } from "lucide-react";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { accountsBreadcrumb, JOURNAL_VOUCHER_HREF } from "@/lib/accounts/accounts-nav";
 import { SortTh, StatusBadge } from "../../components/AccountsUI";
 import { getJournalVouchers, canEditVoucher } from "../voucher-data";
@@ -39,6 +46,8 @@ export default function JournalListPageClient() {
   const mounted = useClientMounted();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [sortKey, setSortKey] = useState("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
@@ -61,6 +70,8 @@ export default function JournalListPageClient() {
     if (statusFilter !== "all") {
       r = r.filter((v) => v.status === statusFilter);
     }
+    if (dateFrom) r = r.filter((v) => v.date >= dateFrom);
+    if (dateTo) r = r.filter((v) => v.date <= dateTo);
     r.sort((a, b) => {
       const av = (a as unknown as Record<string, unknown>)[sortKey];
       const bv = (b as unknown as Record<string, unknown>)[sortKey];
@@ -71,13 +82,13 @@ export default function JournalListPageClient() {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return r;
-  }, [records, search, statusFilter, sortKey, sortDir]);
+  }, [records, search, statusFilter, dateFrom, dateTo, sortKey, sortDir]);
 
   const paged = visible.slice((page - 1) * pageSize, page * pageSize);
 
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, pageSize]);
+  }, [search, statusFilter, dateFrom, dateTo, pageSize]);
 
   const handleSort = (k: string) => {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -141,6 +152,12 @@ export default function JournalListPageClient() {
           <SelectItem value="approved" className="text-xs">Approved</SelectItem>
         </SelectContent>
       </Select>
+      <AccountsListingDateFilter
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onDateFromChange={setDateFrom}
+        onDateToChange={setDateTo}
+      />
     </div>
   );
 
@@ -178,7 +195,7 @@ export default function JournalListPageClient() {
               <SortTh label="Total Amount" colKey="totalDebit" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
               <AccountsTableHeadCell align="center" uppercase className="accounts-col-status">Status</AccountsTableHeadCell>
               <SortTh label="Created By" colKey="createdBy" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <AccountsTableHeadCell align="right" uppercase className="w-20">Actions</AccountsTableHeadCell>
+              <AccountsTableHeadCell align="right" uppercase className={accountsActionColClass("multi")}>Actions</AccountsTableHeadCell>
             </AccountsTableHeadRow>
           </AccountsTableHead>
           <AccountsTableBody>
@@ -214,27 +231,19 @@ export default function JournalListPageClient() {
                     <StatusBadge status={v.status} />
                   </AccountsTableCell>
                   <AccountsTableCell className="text-muted-foreground">{v.createdBy}</AccountsTableCell>
-                  <AccountsTableCell align="right">
-                    <div className="flex items-center justify-end gap-0.5">
-                      <button
-                        type="button"
+                  <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
+                    <AccountsTableActionCell>
+                      <AccountsViewAction
                         title="View"
-                        className="p-1 hover:bg-muted rounded transition-colors opacity-0 group-hover:opacity-100"
                         onClick={() => router.push(`/accounts/vouchers/view/${v.id}`)}
-                      >
-                        <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                      </button>
+                      />
                       {canEditVoucher(v) && (
-                        <button
-                          type="button"
+                        <AccountsEditAction
                           title="Edit"
-                          className="p-1 hover:bg-muted rounded transition-colors opacity-0 group-hover:opacity-100"
                           onClick={() => router.push(`/accounts/vouchers/edit/${v.id}`)}
-                        >
-                          <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                        </button>
+                        />
                       )}
-                    </div>
+                    </AccountsTableActionCell>
                   </AccountsTableCell>
                 </AccountsTableRow>
               ))

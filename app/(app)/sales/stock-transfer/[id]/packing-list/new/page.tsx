@@ -6,61 +6,58 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  AlertCircle, Check, ChevronsUpDown, Package, Save,
+  AlertCircle, Package, Save,
   ChevronDown, ChevronUp, ArrowLeft
 } from "lucide-react";
 import {
-  type SalesOrder,
-  attachPackingListToOrder,
-  hydrateOrderLineItems,
-  getOrderById,
-} from "../../../orders-data";
+  type StockTransfer,
+  getTransferById,
+  attachPackingListToTransfer,
+} from "../../../stock-transfer-data";
 import {
   type PackingList,
   type PackingListLine,
-  getActiveWarehousesForPacking,
-  buildAllPackingListLines,
+  buildPackingListLines,
   createPackingList,
   savePackingList,
   validatePackingListLines,
   CartonAllocation,
   InventoryType,
-} from "../../../packing-list-data";
+} from "../../../../orders/packing-list-data";
 
-export default function NewPackingListPage() {
+export default function TransferNewPackingListPage() {
   const params = useParams();
   const router = useRouter();
-  const orderId = Number(params.id);
+  const transferId = Number(params.id);
 
-  const [order, setOrder] = useState<SalesOrder | null>(null);
+  const [transfer, setTransfer] = useState<StockTransfer | null>(null);
   const [warehouseId, setWarehouseId] = useState<number | null>(null);
   const [warehouseCode, setWarehouseCode] = useState("");
   const [warehouseName, setWarehouseName] = useState("");
   const [lines, setLines] = useState<PackingListLine[]>([]);
   const [error, setError] = useState("");
-  const [whOpen, setWhOpen] = useState(false);
   const [checkedAllocations, setCheckedAllocations] = useState<Record<string, boolean>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 
-  const warehouses = getActiveWarehousesForPacking();
-
   useEffect(() => {
-    const o = getOrderById(orderId);
-    if (o) {
-      setOrder(hydrateOrderLineItems(o));
+    const t = getTransferById(transferId);
+    if (t) {
+      setTransfer(t);
+      setWarehouseId(t.sourceWarehouseId);
+      setWarehouseCode(t.sourceWarehouseCode);
+      setWarehouseName(t.sourceWarehouseName);
     }
-  }, [orderId]);
+  }, [transferId]);
 
   useEffect(() => {
-    if (!order || !warehouseCode) {
+    if (!transfer || !warehouseCode) {
       setLines([]);
       setCheckedAllocations({});
       setExpandedSections({});
       return;
     }
-    const allLines = buildAllPackingListLines(order, warehouseCode);
+    const allLines = buildPackingListLines(transfer as any, warehouseCode);
     setLines(allLines);
 
     const initialChecked: Record<string, boolean> = {};
@@ -76,17 +73,9 @@ export default function NewPackingListPage() {
     setCheckedAllocations(initialChecked);
     setExpandedSections(initialExpanded);
     setError("");
-  }, [order, warehouseCode]);
+  }, [transfer, warehouseCode]);
 
-  if (!order) return <div className="p-8">Order not found.</div>;
-
-  const selectWarehouse = (id: number, code: string, name: string) => {
-    setWarehouseId(id);
-    setWarehouseCode(code);
-    setWarehouseName(name);
-    setWhOpen(false);
-    setError("");
-  };
+  if (!transfer) return <div className="p-8">Stock Transfer not found.</div>;
 
   const toggleCheckbox = (lineItemId: string, cartonId: string, alloc: CartonAllocation) => {
     const key = `${lineItemId}-${cartonId}`;
@@ -201,15 +190,19 @@ export default function NewPackingListPage() {
       return;
     }
 
-    const list = createPackingList(order, finalLines, warehouseId, warehouseCode, warehouseName);
+    const fakeOrder = {
+      id: transfer.id,
+      soNumber: transfer.transferNumber,
+      customerName: `Transfer to ${transfer.targetWarehouseName}`,
+    };
+
+    const list = createPackingList(fakeOrder as any, finalLines, warehouseId, warehouseCode, warehouseName);
     savePackingList(list);
 
-    const attachResult = attachPackingListToOrder(
-      order.id,
+    const attachResult = attachPackingListToTransfer(
+      transfer.id,
       list.id,
       list.packingListNumber,
-      warehouseId,
-      warehouseName,
       list.status,
     );
     if ("error" in attachResult) {
@@ -217,7 +210,7 @@ export default function NewPackingListPage() {
       return;
     }
 
-    router.push(`/sales/orders`);
+    router.push(`/sales/stock-transfer`);
   };
 
   const formatInventoryType = (type: InventoryType) => {
@@ -232,7 +225,7 @@ export default function NewPackingListPage() {
   return (
     <div className="p-6 w-full space-y-6 pb-24">
       <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" onClick={() => router.push(`/sales/orders`)}>
+        <Button variant="outline" size="icon" onClick={() => router.push(`/sales/stock-transfer`)}>
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <div>
@@ -240,57 +233,31 @@ export default function NewPackingListPage() {
             <Package className="w-5 h-5 text-brand-600" />
             Generate Packing List
           </h1>
-          <p className="text-sm text-muted-foreground">Sales Order: {order.soNumber}</p>
+          <p className="text-sm text-muted-foreground">Stock Transfer: {transfer.transferNumber}</p>
         </div>
       </div>
 
       <div className="bg-white border rounded-xl p-4 space-y-4">
-        <div className="flex flex-wrap gap-4">
-          <div className="space-y-1.5 flex-1 min-w-[250px]">
-            <Label className="text-sm font-medium">
-              Warehouse <span className="text-red-500">*</span>
-            </Label>
-            <Popover open={whOpen} onOpenChange={setWhOpen}>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className={cn(
-                    "w-full h-10 px-3 text-sm text-left border rounded-lg bg-background flex items-center justify-between hover:bg-muted/30",
-                    !warehouseId && error === "Warehouse is required" ? "border-red-400" : "border-border",
-                  )}
-                >
-                  <span className={warehouseId ? "text-foreground" : "text-muted-foreground"}>
-                    {warehouseId ? `${warehouseCode} — ${warehouseName}` : "Select warehouse…"}
-                  </span>
-                  <ChevronsUpDown className="w-4 h-4 text-muted-foreground" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[--radix-popover-trigger-width] p-1 max-h-[200px] overflow-y-auto">
-                {warehouses.map(wh => (
-                  <button
-                    key={wh.id}
-                    type="button"
-                    onClick={() => selectWarehouse(wh.id, wh.warehouseCode, wh.warehouseName)}
-                    className={cn(
-                      "w-full flex items-center gap-2 px-3 py-2 text-sm text-left rounded-lg hover:bg-muted/60",
-                      warehouseId === wh.id && "bg-brand-50",
-                    )}
-                  >
-                    <span className="font-mono text-brand-700 flex-shrink-0">{wh.warehouseCode}</span>
-                    <span className="flex-1 truncate">{wh.warehouseName}</span>
-                    {warehouseId === wh.id && <Check className="w-4 h-4 text-brand-600" />}
-                  </button>
-                ))}
-              </PopoverContent>
-            </Popover>
+        <div className="space-y-1">
+          <Label className="text-xs font-medium">
+            Source Warehouse
+          </Label>
+          <div className="h-8 px-2.5 text-xs border border-border rounded-lg bg-muted/40 flex items-center font-medium w-fit">
+            {warehouseCode} — {warehouseName}
           </div>
-
         </div>
 
-        {warehouseCode && lines.map(line => {
+        {lines.map(line => {
           const visibleAllocations = line.allocations;
 
-          if (visibleAllocations.length === 0) return null;
+          if (visibleAllocations.length === 0) {
+            return (
+              <div key={line.lineItemId} className="border border-red-200 rounded-xl overflow-hidden shadow-sm bg-red-50 p-4 mt-4">
+                <p className="text-sm font-semibold text-red-700">{line.productName}</p>
+                <p className="text-[11px] text-red-500 font-semibold py-1">No batch cartons available in source warehouse</p>
+              </div>
+            );
+          }
 
           const allocated = line.allocations.reduce((sum, a) => {
             const isChecked = !!checkedAllocations[`${line.lineItemId}-${a.cartonId}`];
@@ -302,7 +269,7 @@ export default function NewPackingListPage() {
           const selectedCount = line.allocations.filter(a => !!checkedAllocations[`${line.lineItemId}-${a.cartonId}`]).length;
 
           return (
-            <div key={line.lineItemId} className="border border-border rounded-xl overflow-hidden shadow-sm">
+            <div key={line.lineItemId} className="border border-border rounded-xl overflow-hidden shadow-sm mt-4">
               <button
                 type="button"
                 onClick={() => setExpandedSections(prev => ({ ...prev, [line.lineItemId]: !isExpanded }))}
@@ -315,7 +282,7 @@ export default function NewPackingListPage() {
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right text-sm">
-                      <span className="text-muted-foreground">Ordered: </span>
+                      <span className="text-muted-foreground">Required: </span>
                       <span className="font-semibold">{line.orderedBaseQty} {line.baseUnit}</span>
                       <span className="mx-3 text-muted-foreground">|</span>
                       <span className="text-muted-foreground">Allocated: </span>
@@ -423,7 +390,7 @@ export default function NewPackingListPage() {
         )}
 
         <div className="pt-4 flex items-center justify-end gap-3">
-          <Button variant="outline" onClick={() => router.push(`/sales/orders`)}>
+          <Button variant="outline" onClick={() => router.push(`/sales/stock-transfer`)}>
             Cancel
           </Button>
           <Button

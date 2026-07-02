@@ -5,7 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Eye, Pencil, Plus, Search } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
+import {
+  AccountsDeleteAction,
+  AccountsEditAction,
+  AccountsTableActionCell,
+  AccountsViewAction,
+  accountsActionColClass,
+} from "@/components/accounts/AccountsTableActions";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import {
   Sheet,
@@ -17,8 +24,9 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
-import { AccountsTableScroll, AccountsTable, AccountsTableHead, AccountsTableHeadRow, AccountsTableHeadCell, AccountsTableBody, AccountsTableRow, AccountsTableCell } from "@/components/accounts/AccountsTable";
-import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
+import { AccountsTable, AccountsTableHead, AccountsTableHeadRow, AccountsTableHeadCell, AccountsTableBody, AccountsTableRow, AccountsTableCell } from "@/components/accounts/AccountsTable";
+import { AccountsTablePagination, AccountsTableToolbar, AccountsTableListing } from "@/components/accounts/AccountsTableListing";
+import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { SectionTabs } from "./AccountsUI";
 import { AccountsVoucherStatusBadge } from "@/components/accounts/AccountsVoucherStatusBadge";
@@ -159,6 +167,26 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
   const showSchemeSettlementColumn = config.showSchemeSettlementColumn ?? false;
   const colSpan = (showGstColumns ? 8 : 6) + (showSchemeSettlementColumn ? 1 : 0);
 
+  const exportCsv = () => {
+    const headers = showGstColumns
+      ? ["Number", "Date", "Party", "Taxable Value", "GST Amount", "Invoice Total", "Status"]
+      : ["Number", "Date", "Party", "Amount", "Status"];
+    const lines = rows.map((r) => {
+      const base = [r.number, r.date, r.party];
+      const amounts = showGstColumns
+        ? [r.taxableValue ?? "", r.gstAmount ?? "", r.invoiceTotal ?? r.amount]
+        : [r.amount];
+      return [...base, ...amounts, r.status].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",");
+    });
+    const blob = new Blob([[headers.join(","), ...lines].join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${config.title.toLowerCase().replace(/\s+/g, "-")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <>
       <AccountsPageShell
@@ -176,31 +204,50 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
             </Button>
           ) : undefined
         }
-        filters={
-          <div className="space-y-1.5">
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="relative flex-1 min-w-[160px] max-w-xs">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                <Input
-                  className="h-7 text-xs pl-7"
-                  placeholder="Search number, party..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+        toolbar={
+          <AccountsTableToolbar
+            placement="page-header"
+            search={{
+              value: search,
+              onChange: setSearch,
+              placeholder: "Search number, party…",
+            }}
+            filters={
+              <>
+                <AccountsListingDateFilter
+                  dateFrom={dateFrom}
+                  dateTo={dateTo}
+                  onDateFromChange={setDateFrom}
+                  onDateToChange={setDateTo}
                 />
-              </div>
-              <Input type="date" className="h-7 text-xs w-32" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-              <Input type="date" className="h-7 text-xs w-32" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-              <Input className="h-7 text-xs w-24" placeholder="Branch" value={branch} onChange={(e) => setBranch(e.target.value)} />
-            </div>
-            <SectionTabs tabs={statusTabs} active={statusTab} onChange={setStatusTab} counts={tabCounts} compact />
-          </div>
+                <Input className="h-8 text-xs w-28" placeholder="Branch" value={branch} onChange={(e) => setBranch(e.target.value)} />
+              </>
+            }
+            onExcel={exportCsv}
+            onPdf={exportCsv}
+            exportDisabled={rows.length === 0}
+          />
+        }
+        filters={
+          <SectionTabs tabs={statusTabs} active={statusTab} onChange={setStatusTab} counts={tabCounts} compact />
         }
         layout="split"
         className="h-full min-h-0"
       >
-        <div className="flex flex-col flex-1 min-h-0">
-        <AccountsTableScroll>
-          <AccountsTable>
+        <AccountsTableListing
+          footer={
+            mounted && rows.length > 0 ? (
+              <AccountsTablePagination
+                page={page}
+                pageSize={pageSize}
+                totalRecords={rows.length}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+              />
+            ) : null
+          }
+        >
+        <AccountsTable>
             <AccountsTableHead>
               <AccountsTableHeadRow>
                 <AccountsTableHeadCell uppercase>Number</AccountsTableHeadCell>
@@ -219,7 +266,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                 {showSchemeSettlementColumn && (
                   <AccountsTableHeadCell uppercase>Scheme Settlement</AccountsTableHeadCell>
                 )}
-                <AccountsTableHeadCell align="right" uppercase className="accounts-col-actions min-w-[100px]">Actions</AccountsTableHeadCell>
+                <AccountsTableHeadCell align="right" uppercase className={accountsActionColClass("multi")}>Actions</AccountsTableHeadCell>
               </AccountsTableHeadRow>
             </AccountsTableHead>
             <AccountsTableBody>
@@ -277,28 +324,20 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                         )}
                       </AccountsTableCell>
                     )}
-                    <AccountsTableCell align="right">
-                      <div className="flex items-center justify-end gap-0.5 flex-wrap">
-                        <button
-                          type="button"
+                    <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
+                      <AccountsTableActionCell>
+                        <AccountsViewAction
                           title="View"
-                          className="p-1.5 hover:bg-muted rounded-md transition-colors"
                           onClick={() => {
                             if (r.viewHref) router.push(r.viewHref);
                             else setViewRow(r);
                           }}
-                        >
-                          <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                        </button>
+                        />
                         {rowCanEdit(r) && (
-                          <button
-                            type="button"
+                          <AccountsEditAction
                             title="Edit"
-                            className="p-1.5 hover:bg-muted rounded-md transition-colors"
                             onClick={() => router.push(config.editHref!(r.id))}
-                          >
-                            <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                          </button>
+                          />
                         )}
                         {rowCanPost(r) && (
                           <Button
@@ -314,38 +353,24 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                           </Button>
                         )}
                         {rowCanDelete(r) && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-[11px] text-destructive"
+                          <AccountsDeleteAction
+                            title="Delete"
                             onClick={() => {
                               if (window.confirm(`Delete ${r.number}?`)) {
                                 config.onDelete!(r.id);
                                 bump();
                               }
                             }}
-                          >
-                            Delete
-                          </Button>
+                          />
                         )}
-                      </div>
+                      </AccountsTableActionCell>
                     </AccountsTableCell>
                   </AccountsTableRow>
                 ))
               )}
             </AccountsTableBody>
           </AccountsTable>
-        </AccountsTableScroll>
-        {mounted && rows.length > 0 && (
-          <AccountsTablePagination
-            page={page}
-            pageSize={pageSize}
-            totalRecords={rows.length}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-          />
-        )}
-        </div>
+        </AccountsTableListing>
       </AccountsPageShell>
 
       <Sheet open={!!viewRow} onOpenChange={(o) => !o && setViewRow(null)}>

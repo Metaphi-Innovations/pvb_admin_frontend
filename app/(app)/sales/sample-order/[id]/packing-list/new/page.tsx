@@ -43,7 +43,6 @@ export default function NewSampleOrderPackingListPage() {
   const [whOpen, setWhOpen] = useState(false);
   const [checkedAllocations, setCheckedAllocations] = useState<Record<string, boolean>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
-  const [inventoryTypeFilter, setInventoryTypeFilter] = useState<InventoryType | "all">("all");
 
   const warehouses = getActiveWarehousesForPacking();
 
@@ -110,7 +109,7 @@ export default function NewSampleOrderPackingListPage() {
 
           const pending = Math.max(0, line.orderedBaseQty - totalAlreadyAllocated);
           const autoFillBase = Math.min(a.availableBaseQty, pending);
-          const autoFillPacking = autoFillBase / a.unitsPerPackingUnit;
+          const autoFillPacking = Math.floor(autoFillBase / a.unitsPerPackingUnit);
 
           return {
             ...a,
@@ -128,18 +127,12 @@ export default function NewSampleOrderPackingListPage() {
   const updateAllocation = (
     lineItemId: string,
     cartonId: string,
-    field: "packing" | "base",
+    field: "cases" | "loose",
     value: string,
   ) => {
-    const numValue = parseFloat(value) || 0;
+    const numValue = parseInt(value, 10) || 0;
     const key = `${lineItemId}-${cartonId}`;
     
-    if (numValue > 0) {
-      setCheckedAllocations(prev => ({ ...prev, [key]: true }));
-    } else {
-      setCheckedAllocations(prev => ({ ...prev, [key]: false }));
-    }
-
     setLines(prev =>
       prev.map(line => {
         if (line.lineItemId !== lineItemId) return line;
@@ -147,14 +140,20 @@ export default function NewSampleOrderPackingListPage() {
           ...line,
           allocations: line.allocations.map(alloc => {
             if (alloc.cartonId !== cartonId) return alloc;
-            if (field === "packing") {
-              const packing = Math.max(0, Math.min(alloc.availablePackingQty, numValue));
-              const base = Math.min(alloc.availableBaseQty, packing * alloc.unitsPerPackingUnit);
-              return { ...alloc, allocatedPackingQty: packing, allocatedBaseQty: base };
+            
+            let c = alloc.allocatedPackingQty;
+            let p = alloc.allocatedBaseQty - (c * alloc.unitsPerPackingUnit);
+
+            if (field === "cases") {
+              c = numValue;
+            } else {
+              p = numValue;
             }
-            const base = Math.max(0, Math.min(alloc.availableBaseQty, numValue));
-            const packing = Math.min(alloc.availablePackingQty, base / alloc.unitsPerPackingUnit);
-            return { ...alloc, allocatedBaseQty: base, allocatedPackingQty: packing };
+
+            const totalBase = (c * alloc.unitsPerPackingUnit) + p;
+            setCheckedAllocations(prevChecks => ({ ...prevChecks, [key]: totalBase > 0 }));
+
+            return { ...alloc, allocatedPackingQty: c, allocatedBaseQty: totalBase };
           }),
         };
       }),
@@ -218,7 +217,7 @@ export default function NewSampleOrderPackingListPage() {
       return;
     }
 
-    router.push(`/sales/sample-order/${order.id}`);
+    router.push(`/sales/sample-order`);
   };
 
   const formatInventoryType = (type: InventoryType) => {
@@ -231,9 +230,9 @@ export default function NewSampleOrderPackingListPage() {
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6 pb-24">
+    <div className="p-6 w-full space-y-6 pb-24">
       <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" onClick={() => router.push(`/sales/sample-order/${order.id}`)}>
+        <Button variant="outline" size="icon" onClick={() => router.push(`/sales/sample-order`)}>
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <div>
@@ -286,27 +285,10 @@ export default function NewSampleOrderPackingListPage() {
             </Popover>
           </div>
 
-          {warehouseCode && (
-            <div className="space-y-1.5 flex-1 min-w-[250px]">
-              <Label className="text-sm font-medium">Inventory Type Filter</Label>
-              <select
-                className="w-full h-10 px-3 text-sm border rounded-lg bg-background hover:bg-muted/30"
-                value={inventoryTypeFilter}
-                onChange={(e) => setInventoryTypeFilter(e.target.value as any)}
-              >
-                <option value="all">All Inventories</option>
-                <option value="original">Original Inventory</option>
-                <option value="sales_return">Sales Return Inventory</option>
-                <option value="sample_return">Sample Return Inventory</option>
-              </select>
-            </div>
-          )}
         </div>
 
         {warehouseCode && lines.map(line => {
-          const visibleAllocations = line.allocations.filter(
-            a => inventoryTypeFilter === "all" || a.inventoryType === inventoryTypeFilter
-          );
+          const visibleAllocations = line.allocations;
 
           if (visibleAllocations.length === 0) return null;
 
@@ -363,10 +345,11 @@ export default function NewSampleOrderPackingListPage() {
                         <th className="px-3 py-2.5 text-left text-xs font-semibold">Inventory Type</th>
                         <th className="px-3 py-2.5 text-left text-xs font-semibold">Batch</th>
                         <th className="px-3 py-2.5 text-left text-xs font-semibold">Box/Carton</th>
-                        <th className="px-3 py-2.5 text-right text-xs font-semibold w-24">Avail Pkg</th>
-                        <th className="px-3 py-2.5 text-right text-xs font-semibold w-24">Alloc Pkg ({line.packingUnit})</th>
-                        <th className="px-3 py-2.5 text-right text-xs font-semibold w-24">Avail Base</th>
-                        <th className="px-3 py-2.5 text-right text-xs font-semibold w-24">Alloc Base ({line.baseUnit})</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold w-16">Avail Cases</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold w-16">Avail Loose</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold w-24">Cases</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold w-24">Loose ({line.baseUnit})</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold w-20">Total</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -394,29 +377,32 @@ export default function NewSampleOrderPackingListPage() {
                             </td>
                             <td className="px-3 py-2.5 text-xs font-mono text-brand-700">{alloc.batchNumber}</td>
                             <td className="px-3 py-2.5 text-xs font-mono">{alloc.cartonNumber}</td>
-                            <td className="px-3 py-2.5 text-xs text-right tabular-nums text-muted-foreground">{alloc.availablePackingQty}</td>
+                            <td className="px-3 py-2.5 text-xs text-left tabular-nums text-muted-foreground">{Math.floor(alloc.availableBaseQty / alloc.unitsPerPackingUnit)}</td>
+                            <td className="px-3 py-2.5 text-xs text-left tabular-nums text-muted-foreground">{alloc.availableBaseQty % alloc.unitsPerPackingUnit}</td>
                             <td className="px-3 py-2.5">
                               <Input
                                 type="number"
                                 min="0"
-                                max={alloc.availablePackingQty}
-                                value={isChecked ? alloc.allocatedPackingQty : ""}
-                                onChange={(e) => updateAllocation(line.lineItemId, alloc.cartonId, "packing", e.target.value)}
-                                className="h-7 text-xs text-right px-2"
+                                value={isChecked && alloc.allocatedPackingQty > 0 ? alloc.allocatedPackingQty : (isChecked ? 0 : "")}
+                                onChange={(e) => updateAllocation(line.lineItemId, alloc.cartonId, "cases", e.target.value)}
+                                className={cn("h-7 text-xs px-2 w-full", isChecked && "bg-white")}
                                 placeholder="0"
+                                disabled={!isChecked}
                               />
                             </td>
-                            <td className="px-3 py-2.5 text-xs text-right tabular-nums text-muted-foreground">{alloc.availableBaseQty}</td>
                             <td className="px-3 py-2.5">
                               <Input
                                 type="number"
                                 min="0"
-                                max={alloc.availableBaseQty}
-                                value={isChecked ? alloc.allocatedBaseQty : ""}
-                                onChange={(e) => updateAllocation(line.lineItemId, alloc.cartonId, "base", e.target.value)}
-                                className="h-7 text-xs text-right px-2"
+                                value={isChecked ? alloc.allocatedBaseQty - (alloc.allocatedPackingQty * alloc.unitsPerPackingUnit) : (isChecked ? 0 : "")}
+                                onChange={(e) => updateAllocation(line.lineItemId, alloc.cartonId, "loose", e.target.value)}
+                                className={cn("h-7 text-xs px-2 w-full", isChecked && "bg-white")}
                                 placeholder="0"
+                                disabled={!isChecked}
                               />
+                            </td>
+                            <td className="px-3 py-2.5 text-xs font-semibold tabular-nums text-muted-foreground">
+                              {isChecked ? alloc.allocatedBaseQty : 0}
                             </td>
                           </tr>
                         );
@@ -437,7 +423,7 @@ export default function NewSampleOrderPackingListPage() {
         )}
 
         <div className="pt-4 flex items-center justify-end gap-3">
-          <Button variant="outline" onClick={() => router.push(`/sales/sample-order/${order.id}`)}>
+          <Button variant="outline" onClick={() => router.push(`/sales/sample-order`)}>
             Cancel
           </Button>
           <Button

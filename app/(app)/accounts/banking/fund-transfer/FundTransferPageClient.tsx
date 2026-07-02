@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, Plus } from "lucide-react";
+import {
+  AccountsViewAction,
+  accountsActionColClass,
+} from "@/components/accounts/AccountsTableActions";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -226,6 +230,15 @@ export default function FundTransferPageClient() {
           <Plus className="w-3.5 h-3.5" /> New Transfer
         </Button>
       }
+      toolbar={
+        <AccountsTableToolbar
+          placement="page-header"
+          search={{ value: search, onChange: setSearch, placeholder: "Transfer no., reference, account…" }}
+          onExcel={handleExportExcel}
+          onPdf={handleExportPdf}
+          exportDisabled={exporting || sorted.length === 0}
+        />
+      }
       filters={
         <ReportFilterRow>
           <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
@@ -289,14 +302,6 @@ export default function FundTransferPageClient() {
       className="h-full min-h-0"
     >
       <AccountsTableListing
-        toolbar={
-          <AccountsTableToolbar
-            search={{ value: search, onChange: setSearch, placeholder: "Transfer no., reference, account…" }}
-            onExcel={handleExportExcel}
-            onPdf={handleExportPdf}
-            exportDisabled={exporting || sorted.length === 0}
-          />
-        }
         footer={
           sorted.length > 0 ? (
             <AccountsTablePagination
@@ -350,15 +355,11 @@ export default function FundTransferPageClient() {
                   <AccountsTableCell>
                     <StatusBadge status={r.status} />
                   </AccountsTableCell>
-                  <AccountsTableCell className="accounts-col-actions">
-                    <button
-                      type="button"
+                  <AccountsTableCell className={accountsActionColClass("single")}>
+                    <AccountsViewAction
                       title="View transfer"
-                      className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-0 group-hover:opacity-100"
                       onClick={() => router.push(`/accounts/banking/fund-transfer/${r.id}`)}
-                    >
-                      <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                    </button>
+                    />
                   </AccountsTableCell>
                 </AccountsTableRow>
               ))
