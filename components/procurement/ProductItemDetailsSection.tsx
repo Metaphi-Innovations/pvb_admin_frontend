@@ -53,6 +53,7 @@ interface ProductItemDetailsSectionProps {
   // Custom slots and overrides
   customSelectorArea?: React.ReactNode;
   customBatchSelectorArea?: React.ReactNode;
+  customQuantityArea?: React.ReactNode;
   customTableHead?: React.ReactNode;
   customTableBody?: React.ReactNode;
   customTableFooter?: React.ReactNode;
@@ -113,6 +114,7 @@ export function ProductItemDetailsSection({
   validateQuantityAsPieces = false,
   customSelectorArea,
   customBatchSelectorArea,
+  customQuantityArea,
   customTableHead,
   customTableBody,
   customTableFooter,
@@ -263,26 +265,28 @@ export function ProductItemDetailsSection({
 
       {mode === "stock-transfer" ? (
         <div className="mb-3 rounded-lg border border-border bg-muted/20 p-3">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1.5fr)_96px_auto]">
-            <div className="space-y-1">
+          <div className="flex flex-col md:flex-row flex-wrap gap-3">
+            <div className="space-y-1 flex-1 min-w-[200px]">
               <Label className="text-xs font-medium">Product</Label>
               {customSelectorArea}
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1 flex-1 min-w-[200px]">
               <Label className="text-xs font-medium">Batch No.</Label>
               {customBatchSelectorArea}
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">Transfer Qty</Label>
-              <Input
-                type="number"
-                min={1}
-                value={quantity || ""}
-                onChange={(e) => onQuantityChange && onQuantityChange(e.target.value)}
-                className="h-8 rounded-lg text-xs bg-white border-border"
-                disabled={disabled}
-              />
-            </div>
+            {customQuantityArea ? customQuantityArea : (
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Transfer Qty</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={quantity || ""}
+                  onChange={(e) => onQuantityChange && onQuantityChange(e.target.value)}
+                  className="h-8 rounded-lg text-xs bg-white border-border"
+                  disabled={disabled}
+                />
+              </div>
+            )}
             <div className="flex items-end">
               <Button
                 type="button"
@@ -297,23 +301,25 @@ export function ProductItemDetailsSection({
         </div>
       ) : mode === "sales-order" ? (
         <div className="mb-3 rounded-lg border border-border bg-muted/20 p-3">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_96px_auto]">
-            <div className="space-y-1">
+          <div className="flex flex-col md:flex-row flex-wrap gap-3">
+            <div className="space-y-1 flex-1 min-w-[200px]">
               <Label className="text-xs font-medium">Product</Label>
               {customSelectorArea}
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">Qty</Label>
-              <Input
-                type="number"
-                min={1}
-                value={quantity || "1"}
-                onChange={(e) => onQuantityChange && onQuantityChange(e.target.value)}
-                className="h-8 rounded-lg text-xs bg-white border-border"
-                disabled={disabled}
-              />
-            </div>
-            <div className="flex items-end">
+            {customQuantityArea ? customQuantityArea : (
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Qty</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={quantity || "1"}
+                  onChange={(e) => onQuantityChange && onQuantityChange(e.target.value)}
+                  className="h-8 rounded-lg text-xs bg-white border-border"
+                  disabled={disabled}
+                />
+              </div>
+            )}
+            <div className="flex items-end shrink-0">
               <Button
                 type="button"
                 onClick={() => onAddItem && onAddItem([], 0, "")}

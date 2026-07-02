@@ -117,6 +117,10 @@ export default function NewSalesReturnPage() {
     }));
   };
 
+  const handleQuantityTypeChange = (batchKey: string, type: "Case" | "Piece") => {
+    updateEntry(batchKey, { quantityType: type, returnLooseQty: type === "Case" ? "" : (returnEntries[batchKey]?.returnLooseQty || "") });
+  };
+
   const handleCaseQtyChange = (batchKey: string, value: string) => {
     updateEntry(batchKey, { returnCaseQty: sanitizeNumericInput(value) });
   };
@@ -136,6 +140,7 @@ export default function NewSalesReturnPage() {
         return {
           ...current,
           [batchKey]: {
+            ...existing,
             returnCaseQty: String(Math.floor(totalPieces / PIECES_PER_CASE)),
             returnLooseQty: String(totalPieces % PIECES_PER_CASE),
           },
@@ -256,6 +261,7 @@ export default function NewSalesReturnPage() {
               returnEntries={returnEntries}
               returnRemarks={returnRemarks}
               summary={summary}
+              onQuantityTypeChange={handleQuantityTypeChange}
               onCaseQtyChange={handleCaseQtyChange}
               onLooseQtyChange={handleLooseQtyChange}
               onRemarksChange={setReturnRemarks}

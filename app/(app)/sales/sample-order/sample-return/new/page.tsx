@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { RotateCcw, CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, RotateCcw, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
@@ -10,33 +10,40 @@ import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { getDispatchRecords, saveDispatchRecords } from "@/app/(app)/warehouse/dispatch/mock-data";
 import { DispatchDetailsPanel } from "../../../orders/components/DispatchDetailsPanel";
 import {
-  SampleReturnProductForm,
-  getSampleReturnFormSummary,
-} from "../../components/SampleReturnProductForm";
+  buildSalesReturnPackingGroups,
+  flattenSelectedBatchReturns,
+  getSalesReturnFormSummary,
+  SalesReturnProductForm,
+  type BatchReturnInput,
+} from "../../../orders/components/SalesReturnProductForm";
 import {
   getSampleReturnRecords,
   saveSampleReturnRecords,
 } from "../../sample-return-data";
 import {
   enrichDispatchForSampleReturn,
-  calcReturnLineAmount,
   getDeliveredSampleOrderDispatches,
   getSampleOrderNo,
 } from "../../sample-return-utils";
-import type { DispatchRecord, DispatchProduct } from "@/app/(app)/warehouse/dispatch/types";
-import type { PRLineItem } from "@/app/(app)/procurement/purchase-requests/pr-data";
+import { PIECES_PER_CASE } from "../../../orders/sales-return-data";
+import type { DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
+
+function sanitizeNumericInput(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+function parseQty(value?: string): number {
+  if (!value) return 0;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
 
 export default function NewSampleReturnPage() {
   const router = useRouter();
   const [selectedSalesOrderNo, setSelectedSalesOrderNo] = useState("");
   const [selectedDispatchId, setSelectedDispatchId] = useState("");
   const [dispatch, setDispatch] = useState<ReturnType<typeof enrichDispatchForSampleReturn> | null>(null);
-  const [checkedProducts, setCheckedProducts] = useState<Record<string, boolean>>({});
-  const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({});
-  const [productRemarks, setProductRemarks] = useState<Record<string, string>>({});
-  const [selectedDispatchedProductId, setSelectedDispatchedProductId] = useState<string[]>([]);
-  const [returnQuantity, setReturnQuantity] = useState("1");
-  const [returnProductRemarks, setReturnProductRemarks] = useState("");
+  const [returnEntries, setReturnEntries] = useState<Record<string, BatchReturnInput>>({});
   const [returnRemarks, setReturnRemarks] = useState("");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
@@ -44,26 +51,26 @@ export default function NewSampleReturnPage() {
 
   const salesOrderOptions = useMemo(() => {
     const seen = new Map<string, string>();
-    for (const d of deliveredDispatches) {
-      const soNo = getSampleOrderNo(d);
+    for (const item of deliveredDispatches) {
+      const soNo = getSampleOrderNo(item);
       if (!soNo || seen.has(soNo)) continue;
-      seen.set(soNo, d.customer || d.customer_name || "");
+      seen.set(soNo, item.customer || item.customer_name || "");
     }
     return Array.from(seen.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([left], [right]) => left.localeCompare(right))
       .map(([soNo, customer]) => ({
         value: soNo,
-        label: customer ? `${soNo} — ${customer}` : soNo,
+        label: customer ? `${soNo} - ${customer}` : soNo,
       }));
   }, [deliveredDispatches]);
 
   const dispatchOptions = useMemo(() => {
     if (!selectedSalesOrderNo) return [];
     return deliveredDispatches
-      .filter((d: DispatchRecord) => getSampleOrderNo(d) === selectedSalesOrderNo)
-      .map((d: DispatchRecord) => ({
-        value: d.id,
-        label: `${d.dispatchNumber || d.dispatch_no}${d.customer || d.customer_name ? ` — ${d.customer || d.customer_name}` : ""}`,
+      .filter((item: DispatchRecord) => getSampleOrderNo(item) === selectedSalesOrderNo)
+      .map((item: DispatchRecord) => ({
+        value: item.id,
+        label: `${item.dispatchNumber || item.dispatch_no}${item.customer || item.customer_name ? ` - ${item.customer || item.customer_name}` : ""}`,
       }));
   }, [deliveredDispatches, selectedSalesOrderNo]);
 
@@ -72,159 +79,121 @@ export default function NewSampleReturnPage() {
       setDispatch(null);
       return;
     }
-    const record = deliveredDispatches.find((d: DispatchRecord) => d.id === selectedDispatchId);
+
+    const record = deliveredDispatches.find((item: DispatchRecord) => item.id === selectedDispatchId);
     if (record && getSampleOrderNo(record) === selectedSalesOrderNo) {
       setDispatch(enrichDispatchForSampleReturn(record));
-      setCheckedProducts({});
-      setReturnQuantities({});
-      setProductRemarks({});
-      setSelectedDispatchedProductId([]);
-      setReturnQuantity("1");
-      setReturnProductRemarks("");
+      setReturnEntries({});
       setReturnRemarks("");
     }
-  }, [selectedDispatchId, selectedSalesOrderNo, deliveredDispatches]);
+  }, [deliveredDispatches, selectedDispatchId, selectedSalesOrderNo]);
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3200);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setToast(null), 3200);
+    return () => clearTimeout(timer);
   }, [toast]);
 
-  const summary = dispatch
-    ? getSampleReturnFormSummary(dispatch, checkedProducts, returnQuantities)
-    : { totalQty: 0, totalAmount: 0, selectedCount: 0 };
+  const packingGroups = useMemo(
+    () => (dispatch ? buildSalesReturnPackingGroups(dispatch) : []),
+    [dispatch],
+  );
 
-  const handleDispatchedProductChange = (val: string[]) => {
-    setSelectedDispatchedProductId(val);
-  };
-
-  const handleReturnQuantityChangeQuickAdd = (val: string) => {
-    setReturnQuantity(val);
-  };
-
-  const handleReturnProductRemarksChangeQuickAdd = (val: string) => {
-    setReturnProductRemarks(val);
-  };
-
-  const handleAddReturnProduct = (productIds: string[], qty: number, remarks: string) => {
-    if (!dispatch) return;
-    for (const sku of productIds) {
-      const p = dispatch.products.find((x) => x.sku === sku);
-      if (!p) continue;
-      if (qty <= 0) {
-        setToast({ msg: "Unit Qty must be greater than 0.", type: "error" });
-        return;
-      }
-      if (qty > p.dispatchQty * 10) {
-        setToast({
-          msg: `Unit Qty cannot exceed ${p.dispatchQty * 10} pieces.`,
-          type: "error",
-        });
-        return;
-      }
-      setCheckedProducts((prev) => ({ ...prev, [sku]: true }));
-      setReturnQuantities((prev) => ({ ...prev, [sku]: String(qty) }));
-      setProductRemarks((prev) => ({ ...prev, [sku]: remarks || "" }));
-    }
-    setSelectedDispatchedProductId([]);
-    setReturnQuantity("1");
-    setReturnProductRemarks("");
-  };
-
-  const handleRemoveReturnProduct = (uid: string) => {
-    setCheckedProducts((prev) => ({ ...prev, [uid]: false }));
-    setReturnQuantities((prev) => {
-      const next = { ...prev };
-      delete next[uid];
-      return next;
-    });
-    setProductRemarks((prev) => {
-      const next = { ...prev };
-      delete next[uid];
-      return next;
-    });
-  };
-
-  const handleUpdateReturnProduct = (uid: string, patch: Partial<PRLineItem>) => {
-    if (patch.requestedQty !== undefined) {
-      const qty = patch.requestedQty;
-      const p = dispatch?.products.find((x) => x.sku === uid);
-      if (!p) return;
-      if (qty <= 0) {
-        setToast({ msg: "Unit Qty must be greater than 0.", type: "error" });
-        return;
-      }
-      if (qty > p.dispatchQty * 10) {
-        setToast({
-          msg: `Unit Qty cannot exceed ${p.dispatchQty * 10} pieces.`,
-          type: "error",
-        });
-        return;
-      }
-      setReturnQuantities((prev) => ({ ...prev, [uid]: String(qty) }));
-    }
-    if (patch.remarks !== undefined) {
-      setProductRemarks((prev) => ({ ...prev, [uid]: patch.remarks || "" }));
-    }
-  };
+  const summary = useMemo(
+    () => getSalesReturnFormSummary(packingGroups, returnEntries),
+    [packingGroups, returnEntries],
+  );
 
   const listHref = "/sales/sample-order?tab=sales_return";
+
+  const updateEntry = (batchKey: string, patch: Partial<BatchReturnInput>) => {
+    setReturnEntries((current) => ({
+      ...current,
+      [batchKey]: {
+        returnCaseQty: current[batchKey]?.returnCaseQty ?? "",
+        returnLooseQty: current[batchKey]?.returnLooseQty ?? "",
+        ...patch,
+      },
+    }));
+  };
+
+  const handleQuantityTypeChange = (batchKey: string, type: "Case" | "Piece") => {
+    updateEntry(batchKey, { quantityType: type, returnLooseQty: type === "Case" ? "" : (returnEntries[batchKey]?.returnLooseQty || "") });
+  };
+
+  const handleCaseQtyChange = (batchKey: string, value: string) => {
+    updateEntry(batchKey, { returnCaseQty: sanitizeNumericInput(value) });
+  };
+
+  const handleLooseQtyChange = (batchKey: string, value: string) => {
+    const sanitized = sanitizeNumericInput(value);
+    setReturnEntries((current) => {
+      const existing = current[batchKey] ?? { returnCaseQty: "", returnLooseQty: "" };
+      if (!sanitized) {
+        return { ...current, [batchKey]: { ...existing, returnLooseQty: "" } };
+      }
+
+      const looseQty = parseQty(sanitized);
+      const caseQty = parseQty(existing.returnCaseQty);
+      if (looseQty >= PIECES_PER_CASE) {
+        const totalPieces = caseQty * PIECES_PER_CASE + looseQty;
+        return {
+          ...current,
+          [batchKey]: {
+            ...existing,
+            returnCaseQty: String(Math.floor(totalPieces / PIECES_PER_CASE)),
+            returnLooseQty: String(totalPieces % PIECES_PER_CASE),
+          },
+        };
+      }
+
+      return {
+        ...current,
+        [batchKey]: {
+          ...existing,
+          returnLooseQty: sanitized,
+        },
+      };
+    });
+  };
 
   const handleSave = () => {
     if (!dispatch) return;
 
-    const productsToReturn = dispatch.products
-      .filter((p: DispatchProduct) => checkedProducts[p.sku])
-      .map((p: DispatchProduct) => {
-        const returnQty = parseFloat(returnQuantities[p.sku]) || 0;
-        const unitRate = p.unitRate ?? 0;
-        return {
-          product: p.product,
-          sku: p.sku,
-          packedQty: p.packedQty,
-          dispatchQty: p.dispatchQty,
-          returnQty,
-          unitRate,
-          batchNo: p.batchNo,
-          lineAmount: calcReturnLineAmount(returnQty, unitRate),
-          remarks: productRemarks[p.sku] || "",
-        };
-      });
-
-    if (productsToReturn.length === 0) {
-      setToast({ msg: "Please select at least one product to return.", type: "error" });
+    if (summary.invalidBatchCount > 0) {
+      setToast({ msg: "Please fix batch quantity validation errors before saving.", type: "error" });
       return;
     }
 
-    for (const p of productsToReturn) {
-      if (p.returnQty <= 0) {
-        setToast({ msg: `Please enter a valid return quantity for ${p.product}.`, type: "error" });
-        return;
-      }
-      if (p.returnQty > p.dispatchQty * 10) {
-        setToast({
-          msg: `Unit Qty cannot exceed ${p.dispatchQty * 10} pieces.`,
-          type: "error",
-        });
-        return;
-      }
+    const flatReturns = flattenSelectedBatchReturns(packingGroups, returnEntries);
+    if (flatReturns.length === 0) {
+      setToast({ msg: "Please enter at least one batch return quantity.", type: "error" });
+      return;
     }
+    
+    const productsToReturn = flatReturns.map(r => ({
+       product: r.productName,
+       sku: r.sku,
+       packedQty: r.packedQty ?? 0,
+       dispatchQty: r.dispatchQty ?? 0,
+       returnQty: r.returnTotalPieces,
+       unitRate: r.unitRate ?? 0,
+       batchNo: r.batchNo,
+       lineAmount: r.lineAmount ?? 0,
+    }));
 
-    const totalAmount = productsToReturn.reduce((sum: number, p) => sum + p.lineAmount, 0);
     const existingReturns = getSampleReturnRecords();
-    const returnNumber = `SR-2026-${String(existingReturns.length + 1).padStart(3, "0")}`;
-
+    const returnNumber = `S-RET-${new Date().getFullYear()}-${String(existingReturns.length + 1).padStart(3, "0")}`;
     const newReturn = {
-      id: `ret-${Date.now()}`,
+      id: `sret-${Date.now()}`,
       returnNumber,
-      dispatchNumber: dispatch.dispatchNumber,
+      dispatchNumber: dispatch.dispatchNumber || dispatch.dispatch_no || "",
       salesOrderNumber: dispatch.salesOrderNumber || dispatch.source_document_no || "",
       customer: dispatch.customer || dispatch.customer_name || "",
       returnDate: new Date().toISOString().split("T")[0],
-      warehouse: dispatch.warehouse,
+      warehouse: dispatch.warehouse || dispatch.source_warehouse_name || "",
       products: productsToReturn,
-      totalAmount,
+      totalAmount: summary.totalAmount,
       remarks: returnRemarks,
       status: "pending" as const,
     };
@@ -232,9 +201,9 @@ export default function NewSampleReturnPage() {
     saveSampleReturnRecords([...existingReturns, newReturn]);
 
     const allDispatches = getDispatchRecords();
-    const dIdx = allDispatches.findIndex((d) => d.id === dispatch.id);
-    if (dIdx !== -1) {
-      allDispatches[dIdx].deliveryStatus = "Returned";
+    const dispatchIndex = allDispatches.findIndex((item) => item.id === dispatch.id);
+    if (dispatchIndex !== -1) {
+      allDispatches[dispatchIndex].deliveryStatus = "Returned";
       saveDispatchRecords(allDispatches);
     }
 
@@ -245,7 +214,7 @@ export default function NewSampleReturnPage() {
   return (
     <FormContainer
       title="Process Sample Return"
-      description="Sales → Sample Orders → Sample Return → New"
+      description="Sales -> Sample Orders -> Sample Return -> New"
       onBack={() => router.push(listHref)}
       onCancel={() => router.push(listHref)}
       cancelLabel="Discard"
@@ -253,22 +222,20 @@ export default function NewSampleReturnPage() {
       actions={
         <Button
           size="sm"
-          className="h-8 text-xs gap-1.5 bg-red-600 hover:bg-red-700 text-white"
+          className="h-8 gap-1.5 bg-red-600 text-xs text-white hover:bg-red-700"
           onClick={handleSave}
-          disabled={!dispatch || summary.selectedCount === 0 || summary.totalAmount <= 0}
+          disabled={!dispatch || summary.selectedBatchCount === 0 || summary.invalidBatchCount > 0}
         >
-          <RotateCcw className="w-3.5 h-3.5" /> Save Return
+          <RotateCcw className="h-3.5 w-3.5" /> Save Return
         </Button>
       }
     >
       <div className="space-y-4">
-        <div className="bg-white rounded-xl border border-border p-4 shadow-sm space-y-3">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            Select Delivered Dispatch
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="space-y-3 rounded-xl border border-border bg-white p-4 shadow-sm">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Select Delivered Dispatch</p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="space-y-1.5">
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Sample Order No *</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sample Order No *</p>
               <AutocompleteSelect
                 options={salesOrderOptions}
                 value={selectedSalesOrderNo}
@@ -276,26 +243,20 @@ export default function NewSampleReturnPage() {
                   setSelectedSalesOrderNo(soNo);
                   setSelectedDispatchId("");
                 }}
-                placeholder={salesOrderOptions.length ? "Select sample order…" : "No delivered sample orders available"}
-                searchPlaceholder="Search sample order or recipient…"
+                placeholder={salesOrderOptions.length ? "Select sample order..." : "No delivered sample orders available"}
+                searchPlaceholder="Search sample order or customer..."
                 className="h-9 w-full text-xs"
                 disabled={salesOrderOptions.length === 0}
               />
             </div>
             <div className="space-y-1.5">
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Dispatch *</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Dispatch *</p>
               <AutocompleteSelect
                 options={dispatchOptions}
                 value={selectedDispatchId}
                 onChange={setSelectedDispatchId}
-                placeholder={
-                  !selectedSalesOrderNo
-                    ? "Select sample order first"
-                    : dispatchOptions.length
-                      ? "Select dispatch…"
-                      : "No delivered dispatches for this order"
-                }
-                searchPlaceholder="Search dispatch number…"
+                placeholder={!selectedSalesOrderNo ? "Select sample order first" : dispatchOptions.length ? "Select dispatch..." : "No delivered dispatches for this order"}
+                searchPlaceholder="Search dispatch number..."
                 className="h-9 w-full text-xs"
                 disabled={!selectedSalesOrderNo || dispatchOptions.length === 0}
               />
@@ -306,54 +267,36 @@ export default function NewSampleReturnPage() {
         {dispatch ? (
           <>
             <DispatchDetailsPanel dispatch={dispatch} />
-            <SampleReturnProductForm
-              dispatch={dispatch}
-              checkedProducts={checkedProducts}
-              returnQuantities={returnQuantities}
+            <SalesReturnProductForm
+              key={dispatch.id}
+              packingGroups={packingGroups}
+              returnEntries={returnEntries}
               returnRemarks={returnRemarks}
-              onCheckedChange={(sku: string, checked: boolean, defaultQty: number) => {
-                setCheckedProducts((prev) => ({ ...prev, [sku]: checked }));
-                if (checked && !returnQuantities[sku]) {
-                  setReturnQuantities((prev) => ({ ...prev, [sku]: String(defaultQty) }));
-                }
-              }}
-              onQuantityChange={(sku: string, value: string) => {
-                setReturnQuantities((prev) => ({ ...prev, [sku]: value }));
-              }}
+              summary={summary}
+              onQuantityTypeChange={handleQuantityTypeChange}
+              onCaseQtyChange={handleCaseQtyChange}
+              onLooseQtyChange={handleLooseQtyChange}
               onRemarksChange={setReturnRemarks}
-              selectedDispatchedProductId={selectedDispatchedProductId}
-              returnQuantity={returnQuantity}
-              returnProductRemarks={returnProductRemarks}
-              onProductChange={handleDispatchedProductChange}
-              onQuantityChangeQuickAdd={handleReturnQuantityChangeQuickAdd}
-              onRemarksChangeQuickAdd={handleReturnProductRemarksChangeQuickAdd}
-              onAddItem={handleAddReturnProduct}
-              onRemoveItem={handleRemoveReturnProduct}
-              onUpdateItem={handleUpdateReturnProduct}
-              productRemarks={productRemarks}
-              onProductRemarksChange={(sku, val) => setProductRemarks((prev) => ({ ...prev, [sku]: val }))}
             />
           </>
         ) : (
-          <div className="bg-muted/20 border border-dashed border-border rounded-xl p-8 text-center">
-            <p className="text-sm text-muted-foreground">
-              Select a sample order and dispatch above to view details and process the return.
-            </p>
+          <div className="rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center">
+            <p className="text-sm text-muted-foreground">Select a sample order and dispatch to view products.</p>
           </div>
         )}
       </div>
 
-      {toast && (
+      {toast ? (
         <div
           className={cn(
-            "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+            "fixed bottom-5 right-5 z-[100] flex items-center gap-2.5 rounded-xl px-4 py-3 text-sm font-medium text-white shadow-xl",
             toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
           )}
         >
-          {toast.type === "success" ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+          {toast.type === "success" ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
           {toast.msg}
         </div>
-      )}
+      ) : null}
     </FormContainer>
   );
 }
