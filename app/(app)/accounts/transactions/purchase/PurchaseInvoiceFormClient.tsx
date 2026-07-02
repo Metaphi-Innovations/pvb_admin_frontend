@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Trash2 } from "lucide-react";
@@ -264,7 +265,7 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
                     </select>
                   </td>
                   <td className="py-1.5"><Input type="number" className="h-8 text-xs text-right" value={line.qty} onChange={(e) => updateLine(idx, { qty: Number(e.target.value) || 0 })} /></td>
-                  <td className="py-1.5"><Input type="number" className="h-8 text-xs text-right" value={line.rate} onChange={(e) => updateLine(idx, { rate: Number(e.target.value) || 0 })} /></td>
+                  <td className="py-1.5"><AccountsMoneyInput className="h-8 text-xs text-right" value={line.rate} onChange={(v) => updateLine(idx, { rate: v })} /></td>
                   <td className="py-1.5"><Input type="number" className="h-8 text-xs text-right" value={line.gstPct} onChange={(e) => updateLine(idx, { gstPct: Number(e.target.value) || 0 })} /></td>
                   <td className="py-1.5 text-right tabular-nums">{formatMoney(line.taxableAmt)}</td>
                   <td className="py-1.5 text-right tabular-nums">{formatMoney(line.gstAmt)}</td>

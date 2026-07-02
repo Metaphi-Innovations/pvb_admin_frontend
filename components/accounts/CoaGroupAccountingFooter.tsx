@@ -109,7 +109,7 @@ export function CoaGroupAccountingFooter({
       )}
 
       <div className="flex-1 min-h-0">
-        <p className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground bg-slate-50/50 sticky top-0">
+        <p className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground bg-white border-b border-border sticky top-0 z-10 shadow-sm">
           Recent Transactions
         </p>
         <CoaAccountingTransactionsTable rows={accounting.recentTransactions} showRunningBalance={false} />

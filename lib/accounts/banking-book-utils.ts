@@ -238,7 +238,7 @@ export function listBankAccountFilterOptions(): { id: number; label: string }[] 
     .filter((m) => m.status === "active")
     .map((m) => ({
       id: m.coaLedgerId,
-      label: `${m.accountNickname} (${m.accountNumber})`,
+      label: `${m.bankName} — ${m.accountType} (${m.accountNumber})`,
     }));
 }
 

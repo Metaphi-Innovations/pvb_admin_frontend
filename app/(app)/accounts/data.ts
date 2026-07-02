@@ -195,6 +195,19 @@ function normalizeStructuralNode(
   };
 }
 
+function isManualSubGroupLedger(record: ChartOfAccount, allNodes: ChartOfAccount[]): boolean {
+  if (record.nodeLevel !== "ledger") return false;
+  if (record.isSystemGenerated || record.erpSourceModule) return false;
+  return allNodes.some(
+    (c) => c.parentAccountId === record.id && c.nodeLevel === "ledger",
+  );
+}
+
+function shouldKeepUserLedger(record: ChartOfAccount, allNodes: ChartOfAccount[]): boolean {
+  if (record.isSystemGenerated || record.erpSourceModule) return true;
+  return !isManualSubGroupLedger(record, allNodes);
+}
+
 function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
   const mergedSystem = SYSTEM_COA_NODES.map((sys) => ({
     ...sys,
@@ -212,7 +225,11 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
   }));
 
   const rawUserLedgers = migratedStored.filter(
-    (r) => r.nodeLevel === "ledger" && !r.isSystem && !isRemovedSeedLedger(r),
+    (r) =>
+      r.nodeLevel === "ledger" &&
+      !r.isSystem &&
+      !isRemovedSeedLedger(r) &&
+      shouldKeepUserLedger(r, migratedStored),
   );
 
   const userLedgers: ChartOfAccount[] = [];
@@ -333,10 +350,11 @@ export const loadChartOfAccounts = (): ChartOfAccount[] => {
   }
 
   const raw = getOrSeed(COA_KEY, COA_SEED);
-  const source = coaStorageNeedsReset(raw) ? [] : raw;
+  const needsReset = coaStorageNeedsReset(raw);
+  const source = needsReset ? [] : raw;
   const merged = ensureCoaSystemStructure(source.length ? source : COA_SEED);
 
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && (needsReset || merged.length !== raw.length)) {
     save(COA_KEY, merged);
     writeCoaMeta();
   }

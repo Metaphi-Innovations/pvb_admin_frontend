@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Upload, Eye, CheckCircle2, AlertCircle } from "lucide-react";
+import { AlertCircle, Save, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
+import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
+import {
+  ReportFilterRow,
+  ReportFinancialYearFilter,
+  ReportFromToDateFilter,
+  ReportSearchFilter,
+} from "@/components/accounts/ReportFilters";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import { formatMoney, formatMoneyOrDash, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 import {
@@ -23,25 +32,40 @@ import {
   listBankAccountFilterOptions,
 } from "@/lib/accounts/banking-book-utils";
 import { ensureBankingDemoOnPageLoad } from "@/lib/accounts/banking-demo-seed";
+import { ensureManualReconDemoSeed } from "@/lib/accounts/manual-bank-reconciliation-demo-seed";
+import { exportManualReconciliationToExcel } from "@/lib/accounts/manual-bank-reconciliation-export";
 import {
   buildManualReconGrid,
+  buildStatementPreviewRows,
+  deriveReconStatus,
   filterManualReconRows,
+  formatAccountsDate,
+  getBankStatementBalance,
   resolveBankMasterId,
-  updatePendingBankProcessingDate,
+  saveManualReconciliation,
+  validateBankProcessingDate,
   type ManualReconGridRow,
 } from "@/lib/accounts/manual-bank-reconciliation-data";
+import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
+import { useClientMounted } from "@/lib/use-client-mounted";
 import { UploadStatementDialog } from "./components/UploadStatementDialog";
-import { ReconcileEntrySheet } from "./components/ReconcileEntrySheet";
 import { ReconEntryStatusBadge } from "./components/ReconEntryStatusBadge";
+
+const PLACEHOLDER_FROM = "2026-04-01";
+const PLACEHOLDER_TO = "2026-06-30";
 
 function SummaryCard({
   label,
   value,
   accent,
+  editable,
+  onValueChange,
 }: {
   label: string;
   value: string;
   accent?: "amber" | "emerald" | "brand" | "navy";
+  editable?: boolean;
+  onValueChange?: (raw: string) => void;
 }) {
   const accentClass =
     accent === "amber"
@@ -60,28 +84,45 @@ function SummaryCard({
       )}
     >
       <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">{label}</p>
-      <p className={cn("text-lg font-bold mt-1", MONEY_AMOUNT_CLASS)}>{value}</p>
+      {editable && onValueChange ? (
+        <Input
+          type="number"
+          step="0.01"
+          className={cn("h-8 text-sm mt-1 text-right", MONEY_AMOUNT_CLASS)}
+          value={value}
+          onChange={(e) => onValueChange(e.target.value)}
+        />
+      ) : (
+        <p className={cn("text-lg font-bold mt-1", MONEY_AMOUNT_CLASS)}>{value}</p>
+      )}
     </div>
   );
 }
 
 export default function ManualBankReconciliationPageClient() {
+  const mounted = useClientMounted();
   const [refreshKey, setRefreshKey] = useState(0);
   const [bankLedgerId, setBankLedgerId] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "reconciled">("pending");
-  const [partyFilter, setPartyFilter] = useState("");
-  const [voucherFilter, setVoucherFilter] = useState("");
+  const [financialYearId, setFinancialYearId] = useState("all");
+  const [dateFrom, setDateFrom] = useState(PLACEHOLDER_FROM);
+  const [dateTo, setDateTo] = useState(PLACEHOLDER_TO);
+  const [datesReady, setDatesReady] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "reconciled">("all");
+  const [search, setSearch] = useState("");
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [activeRow, setActiveRow] = useState<ManualReconGridRow | null>(null);
-  const [sheetMode, setSheetMode] = useState<"reconcile" | "view">("reconcile");
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [draftDates, setDraftDates] = useState<Record<string, string>>({});
+  const [bankBalanceDraft, setBankBalanceDraft] = useState<string>("");
+  const [dirty, setDirty] = useState(false);
   const [inlineError, setInlineError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
   useEffect(() => {
     ensureBankingDemoOnPageLoad();
+    ensureManualReconDemoSeed();
     setRefreshKey((k) => k + 1);
   }, []);
 
@@ -90,6 +131,30 @@ export default function ManualBankReconciliationPageClient() {
     const t = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(t);
   }, [toast]);
+
+  useEffect(() => {
+    const activeFyId = getActiveFinancialYearId();
+    const years = loadFinancialYears();
+    const activeFy = years.find((fy) => fy.id === activeFyId) ?? years.find((fy) => fy.status === "active");
+
+    if (activeFy) {
+      setFinancialYearId(String(activeFy.id));
+      setDateFrom(activeFy.startDate);
+      setDateTo(activeFy.endDate > PLACEHOLDER_TO ? PLACEHOLDER_TO : activeFy.endDate);
+    } else {
+      setDateFrom(PLACEHOLDER_FROM);
+      setDateTo(PLACEHOLDER_TO);
+    }
+    setDatesReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (financialYearId === "all") return;
+    const fy = loadFinancialYears().find((y) => String(y.id) === financialYearId);
+    if (!fy) return;
+    setDateFrom(fy.startDate);
+    setDateTo(fy.endDate);
+  }, [financialYearId]);
 
   const bankOptions = useMemo(() => {
     void refreshKey;
@@ -120,9 +185,9 @@ export default function ManualBankReconciliationPageClient() {
   );
 
   const bookEntries = useMemo(() => {
-    if (!coaLedgerId) return [];
+    if (!coaLedgerId || !datesReady) return [];
     return buildBookEntries(ledgers, bookFilters);
-  }, [ledgers, bookFilters, coaLedgerId]);
+  }, [ledgers, bookFilters, coaLedgerId, datesReady]);
 
   const bookSummary = useMemo(() => {
     if (!coaLedgerId) {
@@ -131,7 +196,7 @@ export default function ManualBankReconciliationPageClient() {
     return computeBookSummary(ledgers, bookEntries, bookFilters);
   }, [ledgers, bookEntries, bookFilters, coaLedgerId]);
 
-  const { rows: gridRows, summary } = useMemo(() => {
+  const { rows: gridRows, summary: savedSummary } = useMemo(() => {
     void refreshKey;
     if (!coaLedgerId) {
       return {
@@ -148,63 +213,159 @@ export default function ManualBankReconciliationPageClient() {
     return buildManualReconGrid(bookEntries, coaLedgerId, bookSummary.closingBalance);
   }, [bookEntries, coaLedgerId, bookSummary.closingBalance, refreshKey]);
 
-  const visibleRows = useMemo(
-    () =>
-      filterManualReconRows(gridRows, {
-        dateFrom: dateFrom || undefined,
-        dateTo: dateTo || undefined,
-        status: statusFilter,
-        partyName: partyFilter || undefined,
-        voucherNo: voucherFilter || undefined,
-      }),
-    [gridRows, dateFrom, dateTo, statusFilter, partyFilter, voucherFilter],
+  useEffect(() => {
+    const next: Record<string, string> = {};
+    for (const row of gridRows) {
+      next[row.rowKey] = row.bankProcessingDate;
+    }
+    setDraftDates(next);
+    setDirty(false);
+    if (bankMasterId) {
+      setBankBalanceDraft(String(getBankStatementBalance(bankMasterId)));
+    } else {
+      setBankBalanceDraft("");
+    }
+  }, [gridRows, bankMasterId, bankLedgerId]);
+
+  const visibleRows = useMemo(() => {
+    const withDraftStatus = gridRows.map((row) => {
+      const bankProcessingDate = draftDates[row.rowKey] ?? row.bankProcessingDate;
+      return {
+        ...row,
+        bankProcessingDate,
+        status: deriveReconStatus(bankProcessingDate),
+      };
+    });
+    return filterManualReconRows(withDraftStatus, {
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+      status: statusFilter,
+      search: search || undefined,
+    });
+  }, [gridRows, draftDates, dateFrom, dateTo, statusFilter, search]);
+
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return visibleRows.slice(start, start + pageSize);
+  }, [visibleRows, page, pageSize]);
+
+  const statementPreview = useMemo(() => {
+    if (!bankMasterId) return [];
+    void refreshKey;
+    return buildStatementPreviewRows(bankMasterId);
+  }, [bankMasterId, refreshKey]);
+
+  const bankBalanceValue = bankBalanceDraft ? Number(bankBalanceDraft) : savedSummary.balanceAsPerBank;
+  const summary = useMemo(
+    () => ({
+      balanceAsPerBooks: savedSummary.balanceAsPerBooks,
+      balanceAsPerBank: Number.isFinite(bankBalanceValue) ? bankBalanceValue : savedSummary.balanceAsPerBank,
+      difference: savedSummary.balanceAsPerBooks - (Number.isFinite(bankBalanceValue) ? bankBalanceValue : savedSummary.balanceAsPerBank),
+      pendingCount: visibleRows.filter((r) => deriveReconStatus(draftDates[r.rowKey] ?? "") === "pending").length,
+      reconciledCount: visibleRows.filter((r) => deriveReconStatus(draftDates[r.rowKey] ?? "") === "reconciled").length,
+    }),
+    [savedSummary, bankBalanceValue, visibleRows, draftDates],
   );
+
+  const financialYearLabel = useMemo(() => {
+    if (financialYearId === "all") return "All years";
+    return loadFinancialYears().find((fy) => String(fy.id) === financialYearId)?.name ?? "—";
+  }, [financialYearId]);
+
+  const selectedBankLabel =
+    bankOptions.find((o) => String(o.id) === bankLedgerId)?.label ?? "—";
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
-  const openReconcile = (row: ManualReconGridRow) => {
-    setActiveRow(row);
-    setSheetMode("reconcile");
-    setSheetOpen(true);
-  };
-
-  const openView = (row: ManualReconGridRow) => {
-    setActiveRow(row);
-    setSheetMode("view");
-    setSheetOpen(true);
-  };
-
-  const handleInlineDateChange = (row: ManualReconGridRow, value: string) => {
-    if (!value) return;
+  const handleDateChange = (row: ManualReconGridRow, value: string) => {
     setInlineError(null);
-    const result = updatePendingBankProcessingDate(row.rowKey, value);
+    if (value) {
+      const error = validateBankProcessingDate(row.entryDate, value);
+      if (error) {
+        setInlineError(`${row.voucherNo}: ${error}`);
+        return;
+      }
+    }
+    setDraftDates((prev) => ({ ...prev, [row.rowKey]: value }));
+    setDirty(true);
+  };
+
+  const handleSave = async () => {
+    if (!coaLedgerId) {
+      setToast({ msg: "Please select a bank account.", type: "error" });
+      return;
+    }
+    setSaving(true);
+    setInlineError(null);
+    const rowDates = gridRows.map((row) => ({
+      rowKey: row.rowKey,
+      bankProcessingDate: draftDates[row.rowKey] ?? "",
+    }));
+    const balanceNum = Number(bankBalanceDraft);
+    const result = saveManualReconciliation({
+      coaLedgerId,
+      closingBookBalance: bookSummary.closingBalance,
+      rowDates,
+      bankStatementBalance: Number.isFinite(balanceNum) ? balanceNum : undefined,
+    });
+    setSaving(false);
     if (!result.ok) {
       setInlineError(result.error);
       setToast({ msg: result.error, type: "error" });
       return;
     }
+    setDirty(false);
     refresh();
+    setToast({ msg: "Reconciliation saved successfully", type: "success" });
   };
 
-  const uploadPreset = bankMasterId
-    ? {
-        bankAccountId: bankMasterId,
-        month: new Date().getMonth() + 1,
-        year: new Date().getFullYear(),
-        statementName: "",
-      }
-    : null;
+  const handleExport = async () => {
+    if (!coaLedgerId) return;
+    setExporting(true);
+    try {
+      const exportRows = visibleRows.map((row) => ({
+        ...row,
+        bankProcessingDate: draftDates[row.rowKey] ?? row.bankProcessingDate,
+        status: deriveReconStatus(draftDates[row.rowKey] ?? ""),
+      }));
+      await exportManualReconciliationToExcel(exportRows, summary, {
+        bankAccount: selectedBankLabel,
+        dateFrom,
+        dateTo,
+        financialYear: financialYearLabel,
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  useEffect(() => {
+    setPage(1);
+  }, [bankLedgerId, dateFrom, dateTo, financialYearId, statusFilter, search, pageSize]);
 
   const headerActions = (
-    <Button
-      size="sm"
-      className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-      disabled={!bankMasterId}
-      onClick={() => setUploadOpen(true)}
-    >
-      <Upload className="w-3.5 h-3.5" />
-      Upload Statement
-    </Button>
+    <div className="flex items-center gap-2">
+      <AccountsExportMenu onExcel={handleExport} disabled={!coaLedgerId || exporting} />
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-8 text-xs gap-1.5"
+        disabled={!bankMasterId}
+        onClick={() => setUploadOpen(true)}
+      >
+        <Upload className="w-3.5 h-3.5" />
+        Upload Statement
+      </Button>
+      <Button
+        size="sm"
+        className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+        disabled={!coaLedgerId || saving || !dirty}
+        onClick={() => void handleSave()}
+      >
+        <Save className="w-3.5 h-3.5" />
+        {saving ? "Saving…" : "Save"}
+      </Button>
+    </div>
   );
 
   return (
@@ -212,31 +373,47 @@ export default function ManualBankReconciliationPageClient() {
       <AccountsPageShell
         breadcrumbs={accountsBreadcrumb("Banking", "Bank Reconciliation")}
         title="Bank Reconciliation"
-        description="Upload bank statements and manually reconcile book entries against bank processing dates."
+        description="Upload bank statements and manually reconcile book entries using bank processing dates."
         actions={headerActions}
         layout="split"
         className="h-full min-h-0"
       >
         <div className="flex flex-col flex-1 min-h-0">
-          <div className="flex-shrink-0 p-4 border-b border-border/60 bg-muted/5 space-y-3">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="flex-shrink-0 sticky top-0 z-10 bg-white border-b border-border shadow-sm space-y-3 p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <SummaryCard label="Balance as per Books" value={formatMoney(summary.balanceAsPerBooks)} accent="brand" />
-              <SummaryCard label="Balance as per Bank Statement" value={formatMoney(summary.balanceAsPerBank)} accent="navy" />
+              <SummaryCard
+                label="Balance as per Bank Statement"
+                value={bankBalanceDraft}
+                accent="navy"
+                editable
+                onValueChange={(v) => {
+                  setBankBalanceDraft(v);
+                  setDirty(true);
+                }}
+              />
               <SummaryCard
                 label="Difference"
                 value={formatMoney(summary.difference)}
                 accent={Math.abs(summary.difference) > 0.01 ? "amber" : "emerald"}
               />
-              <SummaryCard label="Pending Transactions" value={String(summary.pendingCount)} accent="amber" />
-              <SummaryCard label="Reconciled Transactions" value={String(summary.reconciledCount)} accent="emerald" />
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
-              <div className="space-y-1">
-                <Label className="text-[10px] font-medium uppercase text-muted-foreground">Bank Account</Label>
+            <ReportFilterRow>
+              <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
+              <ReportFromToDateFilter
+                dateFrom={dateFrom}
+                dateTo={dateTo}
+                onDateFromChange={setDateFrom}
+                onDateToChange={setDateTo}
+              />
+              <div className="space-y-1 min-w-[180px]">
+                <Label className="text-[10px] font-medium uppercase text-muted-foreground leading-none">
+                  Bank Account <span className="text-red-500">*</span>
+                </Label>
                 <Select value={bankLedgerId} onValueChange={setBankLedgerId}>
-                  <SelectTrigger className="h-8 text-xs bg-white">
-                    <SelectValue placeholder="Select bank" />
+                  <SelectTrigger className="h-8 text-xs bg-white mt-0.5">
+                    <SelectValue placeholder="Select bank account" />
                   </SelectTrigger>
                   <SelectContent>
                     {bankOptions.map((o) => (
@@ -247,28 +424,10 @@ export default function ManualBankReconciliationPageClient() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] font-medium uppercase text-muted-foreground">Date From</Label>
-                <Input
-                  type="date"
-                  className="h-8 text-xs"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] font-medium uppercase text-muted-foreground">Date To</Label>
-                <Input
-                  type="date"
-                  className="h-8 text-xs"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] font-medium uppercase text-muted-foreground">Status</Label>
+              <div className="space-y-1 min-w-[120px]">
+                <Label className="text-[10px] font-medium uppercase text-muted-foreground leading-none">Status</Label>
                 <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
-                  <SelectTrigger className="h-8 text-xs bg-white">
+                  <SelectTrigger className="h-8 text-xs bg-white mt-0.5">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -278,25 +437,12 @@ export default function ManualBankReconciliationPageClient() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] font-medium uppercase text-muted-foreground">Party Name</Label>
-                <Input
-                  className="h-8 text-xs"
-                  placeholder="Filter party…"
-                  value={partyFilter}
-                  onChange={(e) => setPartyFilter(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] font-medium uppercase text-muted-foreground">Voucher No.</Label>
-                <Input
-                  className="h-8 text-xs"
-                  placeholder="Filter voucher…"
-                  value={voucherFilter}
-                  onChange={(e) => setVoucherFilter(e.target.value)}
-                />
-              </div>
-            </div>
+              <ReportSearchFilter
+                value={search}
+                onChange={setSearch}
+                placeholder="Search party, voucher…"
+              />
+            </ReportFilterRow>
 
             {inlineError && (
               <p className="text-xs text-red-600 flex items-center gap-1">
@@ -306,118 +452,169 @@ export default function ManualBankReconciliationPageClient() {
             )}
           </div>
 
-          <div className="flex-1 overflow-auto min-h-0">
-            {!coaLedgerId ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <p className="text-sm text-muted-foreground">Select a bank account to begin reconciliation.</p>
-              </div>
-            ) : visibleRows.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <p className="text-sm text-muted-foreground">No book entries match the current filters.</p>
-              </div>
-            ) : (
-              <div className="p-4">
-                <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="accounts-table w-full text-table min-w-[1100px]">
-                      <thead>
-                        <tr className="bg-muted/40 border-b border-border">
-                          {[
-                            "Entry Date (Books)",
-                            "Voucher No.",
-                            "Party Name",
-                            "Voucher Type",
-                            "Debit Amount",
-                            "Credit Amount",
-                            "Bank Processing Date",
-                            "Status",
-                            "Action",
-                          ].map((h) => (
-                            <th
-                              key={h}
-                              className="px-4 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap"
-                            >
-                              {h}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {visibleRows.map((row) => (
-                          <tr
-                            key={row.rowKey}
-                            className={cn(
-                              "border-b border-border/60 hover:bg-muted/20 transition-colors group",
-                              row.isSuggested && row.status === "pending" && "bg-navy-50/30",
-                            )}
-                          >
-                            <td className="px-4 py-2 text-xs whitespace-nowrap">{row.entryDate}</td>
-                            <td className="px-4 py-2 text-xs font-mono font-semibold text-brand-700 whitespace-nowrap">
-                              {row.voucherNo}
-                            </td>
-                            <td className="px-4 py-2 text-xs max-w-[200px] truncate" title={row.partyName}>
-                              {row.partyName}
-                            </td>
-                            <td className="px-4 py-2 text-xs whitespace-nowrap">{row.voucherTypeLabel}</td>
-                            <td className="px-4 py-2 text-xs text-right tabular-nums">{formatMoneyOrDash(row.debitAmount)}</td>
-                            <td className="px-4 py-2 text-xs text-right tabular-nums">{formatMoneyOrDash(row.creditAmount)}</td>
-                            <td className="px-4 py-2 text-xs whitespace-nowrap">
-                              {row.status === "pending" ? (
-                                <Input
-                                  type="date"
-                                  className={cn(
-                                    "h-8 w-[140px] text-xs",
-                                    row.isSuggested && "border-navy-300 bg-navy-50/50",
-                                  )}
-                                  value={row.bankProcessingDate}
-                                  min={row.entryDate}
-                                  onChange={(e) => handleInlineDateChange(row, e.target.value)}
-                                />
-                              ) : (
-                                <span className="text-foreground">{row.bankProcessingDate}</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-2 text-xs">
-                              <ReconEntryStatusBadge status={row.status} suggested={row.isSuggested} />
-                            </td>
-                            <td className="px-4 py-2 text-xs whitespace-nowrap">
-                              {row.status === "pending" ? (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 text-[11px] gap-1"
-                                  onClick={() => openReconcile(row)}
-                                >
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  Reconcile
-                                </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 text-[11px] gap-1"
-                                  onClick={() => openView(row)}
-                                >
-                                  <Eye className="w-3 h-3" />
-                                  View
-                                </Button>
-                              )}
-                            </td>
+          <div className="flex flex-1 min-h-0 overflow-hidden">
+            <div className="flex-1 flex flex-col min-h-0 min-w-0">
+              {!mounted || !coaLedgerId ? (
+                <div className="flex flex-col items-center justify-center flex-1 py-16 text-center">
+                  <p className="text-sm text-muted-foreground">Select a bank account to begin reconciliation.</p>
+                </div>
+              ) : visibleRows.length === 0 ? (
+                <div className="flex flex-col items-center justify-center flex-1 py-16 text-center">
+                  <p className="text-sm text-muted-foreground">No book entries match the current filters.</p>
+                </div>
+              ) : (
+                <div className="flex flex-col flex-1 min-h-0 p-4">
+                  <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
+                    <div className="overflow-auto flex-1 min-h-0">
+                      <table className="accounts-table w-full text-table min-w-[900px]">
+                        <thead className="sticky top-0 z-[1] bg-muted/40">
+                          <tr className="border-b border-border">
+                            {[
+                              "Entry Date as per Books",
+                              "Party Name",
+                              "Voucher Type",
+                              "Debit Amount",
+                              "Credit Amount",
+                              "Bank Processing Date",
+                              "Status",
+                            ].map((h) => (
+                              <th
+                                key={h}
+                                className={cn(
+                                  "px-4 py-2.5 text-xs font-semibold text-foreground whitespace-nowrap",
+                                  h.includes("Amount") ? "text-right" : "text-left",
+                                )}
+                              >
+                                {h}
+                              </th>
+                            ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-muted/20">
-                    <p className="text-[11px] text-muted-foreground">
-                      Showing <span className="font-medium text-foreground">{visibleRows.length}</span> of{" "}
-                      <span className="font-medium text-foreground">{gridRows.length}</span> book entries
-                    </p>
+                        </thead>
+                        <tbody>
+                          {paginatedRows.map((row) => {
+                            const draftDate = draftDates[row.rowKey] ?? "";
+                            const displayStatus = deriveReconStatus(draftDate);
+                            return (
+                              <tr
+                                key={row.rowKey}
+                                className="border-b border-border/60 hover:bg-muted/20 transition-colors"
+                              >
+                                <td className="px-4 py-2 text-xs whitespace-nowrap">
+                                  {formatAccountsDate(row.entryDate)}
+                                </td>
+                                <td className="px-4 py-2 text-xs max-w-[220px] truncate" title={row.partyName}>
+                                  {row.partyName}
+                                </td>
+                                <td className="px-4 py-2 text-xs whitespace-nowrap">{row.voucherTypeLabel}</td>
+                                <td className="px-4 py-2 text-xs text-right tabular-nums">
+                                  {formatMoneyOrDash(row.debitAmount)}
+                                </td>
+                                <td className="px-4 py-2 text-xs text-right tabular-nums">
+                                  {formatMoneyOrDash(row.creditAmount)}
+                                </td>
+                                <td className="px-4 py-2 text-xs whitespace-nowrap">
+                                  <Input
+                                    type="date"
+                                    className="h-8 w-[140px] text-xs"
+                                    value={draftDate}
+                                    max={new Date().toISOString().slice(0, 10)}
+                                    min={row.entryDate}
+                                    onChange={(e) => handleDateChange(row, e.target.value)}
+                                  />
+                                </td>
+                                <td className="px-4 py-2 text-xs">
+                                  <ReconEntryStatusBadge status={displayStatus} />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <AccountsTablePagination
+                      page={page}
+                      pageSize={pageSize}
+                      totalRecords={visibleRows.length}
+                      onPageChange={setPage}
+                      onPageSizeChange={setPageSize}
+                      recordLabel="entries"
+                    />
                   </div>
                 </div>
-              </div>
+              )}
+            </div>
+
+            {statementPreview.length > 0 && (
+              <aside className="w-[340px] flex-shrink-0 border-l border-border bg-muted/10 flex flex-col min-h-0 hidden lg:flex">
+                <div className="flex-shrink-0 px-4 py-3 border-b border-border bg-white">
+                  <p className="text-xs font-semibold text-foreground">Bank Statement Preview</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Reference only — compare and enter bank processing dates manually.
+                  </p>
+                </div>
+                <div className="flex-1 overflow-auto min-h-0">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-muted/40 border-b border-border">
+                      <tr>
+                        {["Statement Date", "Description", "Debit", "Credit", "Balance"].map((h) => (
+                          <th
+                            key={h}
+                            className={cn(
+                              "px-3 py-2 font-semibold text-foreground whitespace-nowrap",
+                              h === "Description" ? "text-left" : h === "Statement Date" ? "text-left" : "text-right",
+                            )}
+                          >
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {statementPreview.map((row) => (
+                        <tr key={row.id} className="border-b border-border/60 hover:bg-muted/20">
+                          <td className="px-3 py-2 whitespace-nowrap">{formatAccountsDate(row.statementDate)}</td>
+                          <td className="px-3 py-2 max-w-[120px] truncate" title={row.description}>
+                            {row.description}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">{formatMoneyOrDash(row.debitAmount)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{formatMoneyOrDash(row.creditAmount)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{formatMoney(row.balance)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </aside>
             )}
           </div>
+
+          {statementPreview.length > 0 && (
+            <div className="lg:hidden flex-shrink-0 border-t border-border bg-white p-4 max-h-[240px] overflow-auto">
+              <p className="text-xs font-semibold text-foreground mb-2">Bank Statement Preview</p>
+              <table className="w-full text-xs min-w-[600px]">
+                <thead>
+                  <tr className="border-b border-border">
+                    {["Date", "Description", "Debit", "Credit", "Balance"].map((h) => (
+                      <th key={h} className="px-2 py-1.5 font-semibold text-left">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {statementPreview.map((row) => (
+                    <tr key={row.id} className="border-b border-border/60">
+                      <td className="px-2 py-1.5">{formatAccountsDate(row.statementDate)}</td>
+                      <td className="px-2 py-1.5 truncate max-w-[140px]">{row.description}</td>
+                      <td className="px-2 py-1.5 text-right">{formatMoneyOrDash(row.debitAmount)}</td>
+                      <td className="px-2 py-1.5 text-right">{formatMoneyOrDash(row.creditAmount)}</td>
+                      <td className="px-2 py-1.5 text-right">{formatMoney(row.balance)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </AccountsPageShell>
 
@@ -428,17 +625,6 @@ export default function ManualBankReconciliationPageClient() {
         onSuccess={() => {
           refresh();
           setToast({ msg: "Bank statement imported successfully", type: "success" });
-        }}
-      />
-
-      <ReconcileEntrySheet
-        row={activeRow}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-        mode={sheetMode}
-        onSuccess={() => {
-          refresh();
-          setToast({ msg: "Entry marked as reconciled", type: "success" });
         }}
       />
 

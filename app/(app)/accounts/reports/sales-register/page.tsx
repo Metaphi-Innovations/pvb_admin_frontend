@@ -1,7 +1,5 @@
-"use client";
-
-import { RegisterReportClient } from "@/components/accounts/RegisterReportClient";
+import SalesRegisterPageClient from "./SalesRegisterPageClient";
 
 export default function SalesRegisterPage() {
-  return <RegisterReportClient mode="sales" />;
+  return <SalesRegisterPageClient />;
 }

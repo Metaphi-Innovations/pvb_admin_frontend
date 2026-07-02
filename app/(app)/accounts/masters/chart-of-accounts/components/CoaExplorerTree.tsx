@@ -5,17 +5,22 @@ import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronRight, Lock } from "lucide-react";
 import type { ChartOfAccount } from "../../../data";
 import {
+  canAddLedgerUnder,
   countLedgersUnder,
   getDirectChildren,
   getSearchVisibleIds,
 } from "../chart-of-accounts-data";
+import { CoaAddLedgerHoverAction } from "./CoaAddLedgerHoverAction";
 import { CoaLevelBadge } from "./CoaLevelBadge";
 import {
+  COA_TREE_ICON_SIZE_CLASS,
   GUIDE_WIDTH_PX,
-  LEVEL_ROW_CLASS,
   LEVEL_SELECTED_ROW_CLASS,
   VISUAL_ICON,
-  VISUAL_ICON_CLASS,
+  VISUAL_ROW_CLASS,
+  coaNodeShowsExpandChevron,
+  coaSidebarIndentPx,
+  coaTreeIconClass,
   resolveCoaVisualLevel,
 } from "./coa-tree-visual";
 
@@ -65,9 +70,12 @@ interface TreeNodeProps {
   selectedId: number | null;
   visibleIds: Set<number> | null;
   variant: "panel" | "sidebar";
+  canCreate?: boolean;
+  highlightedLedgerId?: number | null;
   onToggle: (id: number) => void;
   onSelect: (node: ChartOfAccount) => void;
   onLedgerOpen?: (node: ChartOfAccount) => void;
+  onAddLedger?: (parentGroupId: number) => void;
 }
 
 function TreeNode({
@@ -80,9 +88,12 @@ function TreeNode({
   selectedId,
   visibleIds,
   variant,
+  canCreate = false,
+  highlightedLedgerId = null,
   onToggle,
   onSelect,
   onLedgerOpen,
+  onAddLedger,
 }: TreeNodeProps) {
   const isSidebar = variant === "sidebar";
   const children = getDirectChildren(records, node.id);
@@ -95,6 +106,9 @@ function TreeNode({
   const isSystemLocked = node.isSystem && node.nodeLevel !== "ledger";
   const ledgerCount = !isLedger ? countLedgersUnder(records, node.id) : 0;
   const isPrimaryHead = node.nodeLevel === "primary_head";
+  const showExpandChevron = coaNodeShowsExpandChevron(node, records, hasChildren);
+  const allowAdd = canCreate && onAddLedger != null && canAddLedgerUnder(node, records);
+  const isHighlighted = highlightedLedgerId === node.id;
 
   if (visibleIds && !visibleIds.has(node.id)) return null;
 
@@ -108,56 +122,63 @@ function TreeNode({
       <div
         className={cn(
           "group flex items-stretch rounded-md transition-all duration-150",
-          isSidebar ? "pr-0.5 mx-0" : "pr-2 mx-1",
+          isSidebar ? "mx-0.5" : "pr-2 mx-1",
           isSelected
             ? cn(
-                isSidebar ? "bg-brand-50/80" : "bg-brand-50/90 ring-1 ring-brand-200/90",
-                isPrimaryHead && "border-l-2 border-orange-500",
-                !isPrimaryHead && isLedger && "border-l-2 border-emerald-500",
-                !isPrimaryHead && !isLedger && "border-l-2 border-brand-600",
+                isSidebar
+                  ? "bg-brand-50/90 border-l-2 border-brand-500"
+                  : "bg-brand-50/90 ring-1 ring-brand-200/90",
+                !isSidebar && isPrimaryHead && "border-l-2 border-orange-500",
+                !isSidebar && !isPrimaryHead && isLedger && "border-l-2 border-emerald-500",
+                !isSidebar && !isPrimaryHead && !isLedger && "border-l-2 border-brand-600",
               )
             : cn(
-                "border-l-2 border-transparent hover:bg-slate-50/90",
-                isPrimaryHead && "hover:border-l-orange-300",
+                "border-l-2 border-transparent",
+                isSidebar ? "hover:bg-muted/30" : "hover:bg-slate-50/90",
+                !isSidebar && isPrimaryHead && "hover:border-l-orange-300",
               ),
+          isHighlighted && "bg-brand-50/80 ring-1 ring-brand-300/70",
         )}
         style={{
-          minHeight: isSidebar ? (isPrimaryHead ? 30 : 28) : undefined,
+          minHeight: isSidebar ? 30 : undefined,
+          paddingLeft: isSidebar ? coaSidebarIndentPx(depth) : undefined,
         }}
       >
-        <TreeGuides
-          depth={depth}
-          ancestorHasNext={ancestorHasNext}
-          isLastSibling={isLastSibling}
-        />
+        {!isSidebar && (
+          <TreeGuides
+            depth={depth}
+            ancestorHasNext={ancestorHasNext}
+            isLastSibling={isLastSibling}
+          />
+        )}
 
         <div
           className={cn(
-            "flex gap-0.5 flex-1 min-w-0 pl-1",
-            isSidebar ? "items-center" : "items-start",
+            "flex gap-0.5 flex-1 min-w-0",
+            isSidebar ? "items-center pl-0" : "items-start pl-1",
           )}
         >
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              if (hasChildren) onToggle(node.id);
+              if (showExpandChevron) onToggle(node.id);
             }}
             className={cn(
               "flex items-center justify-center flex-shrink-0 rounded transition-colors",
-              isSidebar ? "w-5 h-5" : "w-6 h-6",
-              hasChildren
-                ? "text-slate-500 hover:bg-white hover:text-brand-700"
-                : "opacity-0 pointer-events-none",
+              isSidebar ? "w-4 h-4" : "w-6 h-6",
+              showExpandChevron
+                ? "text-muted-foreground hover:text-brand-700"
+                : "w-4 opacity-0 pointer-events-none",
             )}
-            tabIndex={hasChildren ? 0 : -1}
-            aria-label={hasChildren ? (isExpanded ? "Collapse" : "Expand") : undefined}
+            tabIndex={showExpandChevron ? 0 : -1}
+            aria-label={showExpandChevron ? (isExpanded ? "Collapse" : "Expand") : undefined}
           >
-            {hasChildren &&
+            {showExpandChevron &&
               (isExpanded ? (
-                <ChevronDown className="w-3.5 h-3.5" />
+                <ChevronDown className="w-4 h-4" strokeWidth={1.75} />
               ) : (
-                <ChevronRight className="w-3.5 h-3.5" />
+                <ChevronRight className="w-4 h-4" strokeWidth={1.75} />
               ))}
           </button>
 
@@ -165,35 +186,28 @@ function TreeNode({
             type="button"
             onClick={handleClick}
             className={cn(
-              "flex flex-1 min-w-0 text-left",
-              isSidebar
-                ? "items-start gap-1.5 py-1 pr-1"
-                : "items-start gap-2 py-1.5 pr-2",
+              "flex flex-1 min-w-0 text-left items-center",
+              isSidebar ? "gap-1.5 py-1 pr-1" : "items-start gap-2 py-1.5 pr-2",
             )}
           >
             <Icon
               className={cn(
                 "flex-shrink-0",
+                COA_TREE_ICON_SIZE_CLASS,
                 !isSidebar && "mt-0.5",
-                isSidebar
-                  ? isPrimaryHead
-                    ? "w-3.5 h-3.5"
-                    : "w-3 h-3"
-                  : isPrimaryHead
-                    ? "w-[18px] h-[18px]"
-                    : "w-4 h-4",
-                VISUAL_ICON_CLASS[visualLevel],
-                isPrimaryHead && !isSelected && "text-orange-600",
+                coaTreeIconClass(visualLevel, isSelected),
               )}
+              strokeWidth={1.75}
             />
             <span
               className={cn(
-                "flex-1 min-w-0 whitespace-normal break-words leading-snug",
-                isSidebar && "text-[11px]",
+                "flex-1 min-w-0 whitespace-normal break-words",
+                isSidebar ? "text-xs leading-[1.35]" : "leading-snug",
                 isSelected
-                  ? LEVEL_SELECTED_ROW_CLASS[node.nodeLevel]
-                  : LEVEL_ROW_CLASS[node.nodeLevel],
-                isSidebar && isSelected && "font-semibold",
+                  ? cn(LEVEL_SELECTED_ROW_CLASS[node.nodeLevel], visualLevel === "sub_group" && "text-xs")
+                  : VISUAL_ROW_CLASS[visualLevel],
+                isSidebar && isSelected && "font-semibold text-brand-800",
+                isSidebar && !isSelected && isPrimaryHead && "font-semibold text-foreground",
               )}
             >
               {node.accountName}
@@ -210,6 +224,13 @@ function TreeNode({
               <CoaLevelBadge level={visualLevel} size="sm" className="flex-shrink-0 mt-0.5" />
             )}
           </button>
+
+          {allowAdd && (
+            <CoaAddLedgerHoverAction
+              onClick={() => onAddLedger!(node.id)}
+              className={cn("mr-1", isSidebar ? "self-center" : "mt-1.5")}
+            />
+          )}
         </div>
       </div>
 
@@ -227,9 +248,12 @@ function TreeNode({
               selectedId={selectedId}
               visibleIds={visibleIds}
               variant={variant}
+              canCreate={canCreate}
+              highlightedLedgerId={highlightedLedgerId}
               onToggle={onToggle}
               onSelect={onSelect}
               onLedgerOpen={onLedgerOpen}
+              onAddLedger={onAddLedger}
             />
           ))}
         </div>
@@ -244,9 +268,12 @@ interface CoaExplorerTreeProps {
   selectedId: number | null;
   expandedIds: Set<number>;
   search: string;
+  canCreate?: boolean;
+  highlightedLedgerId?: number | null;
   onSelect: (node: ChartOfAccount) => void;
   onToggle: (id: number) => void;
   onLedgerOpen?: (node: ChartOfAccount) => void;
+  onAddLedger?: (parentGroupId: number) => void;
 }
 
 export function CoaExplorerTree({
@@ -255,9 +282,12 @@ export function CoaExplorerTree({
   selectedId,
   expandedIds,
   search,
+  canCreate = false,
+  highlightedLedgerId = null,
   onSelect,
   onToggle,
   onLedgerOpen,
+  onAddLedger,
 }: CoaExplorerTreeProps) {
   const roots = useMemo(
     () =>
@@ -301,9 +331,12 @@ export function CoaExplorerTree({
               selectedId={selectedId}
               visibleIds={visibleIds}
               variant={variant}
+              canCreate={canCreate}
+              highlightedLedgerId={highlightedLedgerId}
               onToggle={onToggle}
               onSelect={onSelect}
               onLedgerOpen={onLedgerOpen}
+              onAddLedger={onAddLedger}
             />
           ))
         )}

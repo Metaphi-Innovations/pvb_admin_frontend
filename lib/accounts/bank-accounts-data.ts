@@ -57,21 +57,24 @@ export interface BankGroupSummary {
   unreconciledCount: number;
 }
 
-export interface CreateBankAccountInput {
+export interface UpdateBankAccountInput {
   bankName: string;
-  bankGroupCoaId?: number | null;
   accountNickname: string;
   accountNumber: string;
   ifsc: string;
   branchName: string;
   accountType: BankAccountType;
   openingBalance: number;
-  openingBalanceDate?: string;
   balanceType?: "Debit" | "Credit";
   reconciliationEnabled: boolean;
   defaultForReceipts: boolean;
   defaultForPayments: boolean;
   status?: "active" | "inactive";
+}
+
+export interface CreateBankAccountInput extends UpdateBankAccountInput {
+  bankGroupCoaId?: number | null;
+  openingBalanceDate?: string;
 }
 
 const STORAGE_KEY = "ds_accounts_bank_accounts_v2";
@@ -358,6 +361,95 @@ export function createBankAccountWithLedger(input: CreateBankAccountInput): Bank
   return row;
 }
 
+export function updateBankAccount(id: number, input: UpdateBankAccountInput): BankAccountMaster {
+  if (!input.accountNumber.trim()) {
+    throw new Error("Account number is required.");
+  }
+  if (!input.ifsc.trim()) {
+    throw new Error("IFSC code is required.");
+  }
+  if (isDuplicateAccountNumber(input.accountNumber, id)) {
+    throw new Error("An account with this account number already exists.");
+  }
+
+  const masters = loadBankAccountMasters();
+  const index = masters.findIndex((m) => m.id === id);
+  if (index < 0) throw new Error("Bank account not found.");
+
+  const existing = masters[index];
+  let records = loadChartOfAccounts();
+  let bankGroup = records.find((r) => r.id === existing.bankGroupCoaId);
+
+  if (input.bankName.trim() && bankGroup && bankGroup.accountName !== input.bankName.trim()) {
+    bankGroup = findOrCreateBankGroup(input.bankName.trim());
+    records = loadChartOfAccounts();
+    bankGroup = records.find((r) => r.id === bankGroup!.id) ?? bankGroup;
+  }
+
+  if (!bankGroup?.bankGroupFlag) {
+    throw new Error("Bank group not found for this account.");
+  }
+
+  if (input.defaultForReceipts) {
+    masters.forEach((m) => {
+      m.defaultForReceipts = false;
+    });
+  }
+  if (input.defaultForPayments) {
+    masters.forEach((m) => {
+      m.defaultForPayments = false;
+    });
+  }
+
+  const updated: BankAccountMaster = {
+    ...existing,
+    bankGroupCoaId: bankGroup.id,
+    bankName: bankGroup.accountName,
+    accountNickname: input.accountNickname.trim(),
+    accountNumber: input.accountNumber.trim(),
+    ifsc: input.ifsc.trim().toUpperCase(),
+    branchName: input.branchName.trim(),
+    accountType: input.accountType,
+    openingBalance: input.openingBalance,
+    balanceType: input.balanceType ?? "Debit",
+    reconciliationEnabled: input.reconciliationEnabled,
+    defaultForReceipts: input.defaultForReceipts,
+    defaultForPayments: input.defaultForPayments,
+    status: input.status ?? existing.status,
+    updatedBy: ACCOUNTS_CURRENT_USER,
+  };
+
+  masters[index] = updated;
+  saveBankAccountMasters(masters);
+
+  const ledgerName = ledgerDisplayName(updated.accountNickname, updated.accountNumber);
+  saveChartOfAccounts(
+    loadChartOfAccounts().map((r) =>
+      r.id === existing.coaLedgerId
+        ? {
+            ...r,
+            parentAccountId: bankGroup!.id,
+            accountName: ledgerName,
+            openingBalance: input.openingBalance,
+            balanceType: input.balanceType ?? "Debit",
+            status: input.status ?? r.status,
+          }
+        : r,
+    ),
+  );
+
+  upsertErpPartyLink({
+    ledgerId: existing.coaLedgerId,
+    erpSourceModule: "bank_master",
+    erpSourceId: updated.id,
+    partyCode: updated.accountNumber || `BANK-${updated.id}`,
+    partyName: formatBankAccountMaster(updated),
+  });
+
+  syncBankLedgerDisplayNames();
+  return updated;
+}
+
 export function computeBankGroupSummaries(): BankGroupSummary[] {
   const records = loadChartOfAccounts();
   const masters = loadBankAccountMasters();
@@ -420,6 +512,7 @@ export function ensureDemoBankCoaStructure(): void {
       accountType: spec.accountType,
       openingBalance: spec.openingBalance,
       openingBalanceDate: spec.openingBalanceDate,
+      balanceType: spec.balanceType ?? "Debit",
       reconciliationEnabled: true,
       defaultForReceipts: spec.defaultForReceipts,
       defaultForPayments: spec.defaultForPayments,

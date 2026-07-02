@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CheckCircle2 } from "lucide-react";
@@ -112,17 +113,13 @@ export function ExpenseApprovalModal({
 
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Approved Amount (editable)</Label>
-            <Input
-              type="number"
-              min={0}
-              max={claimed}
-              step="0.01"
+            <AccountsMoneyInput
+              className="h-8 text-xs font-semibold"
               value={approvedInput}
-              onChange={(e) => {
-                setApprovedInput(e.target.value);
+              onChange={(v) => {
+                setApprovedInput(String(v));
                 setError(null);
               }}
-              className="h-8 text-xs font-semibold"
             />
             <p className="text-[10px] text-muted-foreground">
               Claimed: {formatINR(claimed)}
