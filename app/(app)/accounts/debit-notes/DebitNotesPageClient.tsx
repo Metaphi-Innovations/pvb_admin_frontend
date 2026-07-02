@@ -5,15 +5,22 @@ import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ModuleFiltersBar } from "@/components/module/ModuleFiltersBar";
+import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AccountsEditAction,
+  AccountsMoreActions,
+  AccountsTableActionCell,
+  AccountsViewAction,
+  accountsActionColClass,
+} from "@/components/accounts/AccountsTableActions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CheckCircle, Download, Eye, FileSpreadsheet, MoreVertical, Pencil, PlayCircle, Plus, XCircle } from "lucide-react";
+import { CheckCircle, Download, FileSpreadsheet, PlayCircle, Plus, XCircle } from "lucide-react";
 import { SectionTabs } from "../components/AccountsUI";
 import { NoteWorkflowBadge } from "../components/NoteWorkflowBadge";
 import { DebitNoteCancelDialog } from "./components/DebitNoteCancelDialog";
@@ -32,6 +39,7 @@ import {
 import { exportDebitNotesToExcel } from "./debit-notes-export";
 import { downloadDebitNotePdf } from "./debit-note-pdf";
 import { DEBIT_NOTES_BREADCRUMB, DEBIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
+import { cn } from "@/lib/utils";
 
 const TABS = [
   { id: "all", label: "All" },
@@ -138,8 +146,12 @@ export default function DebitNotesPageClient() {
             </SelectContent>
           </Select>
           <InputFilter placeholder="Reference no." value={referenceNo} onChange={setReferenceNo} />
-          <InputFilter type="date" value={dateFrom} onChange={setDateFrom} className="w-[130px]" />
-          <InputFilter type="date" value={dateTo} onChange={setDateTo} className="w-[130px]" />
+          <AccountsListingDateFilter
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="h-8 w-[120px] text-xs bg-white"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
@@ -203,35 +215,17 @@ export default function DebitNotesPageClient() {
                       <td className="px-2.5 py-2"><NoteWorkflowBadge status={r.status} /></td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.createdBy}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.updatedBy}</td>
-                      <td className="px-2.5 py-2 sticky right-0 bg-white">
-                        <div className="flex items-center justify-end gap-0.5">
-                          <Link
-                            href={`${DEBIT_NOTES_LIST_PATH}/${r.id}`}
-                            title="View"
-                            className="p-1.5 hover:bg-muted rounded-md transition-colors"
-                          >
-                            <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                          </Link>
+                      <td className={cn("px-2.5 py-2 sticky right-0 bg-white", accountsActionColClass("multi"))}>
+                        <AccountsTableActionCell>
+                          <AccountsViewAction href={`${DEBIT_NOTES_LIST_PATH}/${r.id}`} />
                           {getDebitNoteRowActions(r).includes("edit") && (
-                            <Link
-                              href={`${DEBIT_NOTES_LIST_PATH}/${r.id}/edit`}
-                              title="Edit"
-                              className="p-1.5 hover:bg-muted rounded-md transition-colors"
-                            >
-                              <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                            </Link>
+                            <AccountsEditAction href={`${DEBIT_NOTES_LIST_PATH}/${r.id}/edit`} />
                           )}
                           {getDebitNoteRowActions(r).some((a) => a !== "view" && a !== "edit") && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button type="button" title="More actions" className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted">
-                                  <MoreVertical className="w-3.5 h-3.5" />
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-44">
-                                {getDebitNoteRowActions(r)
-                                  .filter((a) => a !== "view" && a !== "edit")
-                                  .map((a) => {
+                            <AccountsMoreActions contentClassName="w-44">
+                              {getDebitNoteRowActions(r)
+                                .filter((a) => a !== "view" && a !== "edit")
+                                .map((a) => {
                               if (a === "approve")
                                 return (
                                   <DropdownMenuItem
@@ -272,10 +266,9 @@ export default function DebitNotesPageClient() {
                                 );
                               return null;
                             })}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            </AccountsMoreActions>
                           )}
-                        </div>
+                        </AccountsTableActionCell>
                       </td>
                     </tr>
                   ))

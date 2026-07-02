@@ -122,7 +122,6 @@ function BankBookTableRow({ row }: { row: BankBookDisplayRow }) {
   return (
     <AccountsTableRow
       className={cn(
-        "accounts-table-row-compact",
         isOpening && "bg-muted/20 font-medium",
       )}
     >

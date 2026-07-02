@@ -2,10 +2,16 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { CoaAccountingTransactionsTable } from "@/components/accounts/CoaAccountingTransactionsTable";
 import { CoaListingToolbar } from "./components/CoaListingToolbar";
 import { useCoaNavigation } from "@/components/accounts/CoaNavigationContext";
+import { buildLedgerAccountingSummary } from "@/lib/accounts/coa-accounting-view";
+import { isPostingLedger } from "@/lib/accounts/coa-hierarchy";
 import { canCoa } from "@/lib/accounts/permissions";
-import { resolveDateRangePreset, type DateRangePresetId } from "@/lib/accounts/report-date-presets";
+import { defaultLedgerDateRangeState } from "@/lib/accounts/ledger-transaction-date-filter";
+import { type DateRangePresetId } from "@/lib/accounts/report-date-presets";
+import { isTdsCoaNode } from "@/lib/accounts/tds-coa-utils";
+import { useFY } from "@/lib/fy-store";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { nextId } from "../../data";
 import type { ChartOfAccount } from "../../data";
@@ -30,11 +36,11 @@ import { CoaListingSummaryBar } from "./components/CoaListingSummaryBar";
 import { CoaPathBreadcrumb } from "./components/CoaPathBreadcrumb";
 import { LedgerSheet } from "./components/LedgerSheet";
 
-const PLACEHOLDER_DATE = "2025-04-01";
 const HIGHLIGHT_MS = 4000;
 
 export default function ChartOfAccountsPageClient() {
   const mounted = useClientMounted();
+  const { selectedFY } = useFY();
   const {
     records,
     setRecords,
@@ -49,9 +55,9 @@ export default function ChartOfAccountsPageClient() {
   } = useCoaNavigation();
 
   const [showRoot, setShowRoot] = useState(false);
-  const [preset, setPreset] = useState<DateRangePresetId>("this_month");
-  const [dateFrom, setDateFrom] = useState(PLACEHOLDER_DATE);
-  const [dateTo, setDateTo] = useState(PLACEHOLDER_DATE);
+  const [preset, setPreset] = useState<DateRangePresetId>("custom");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [datesReady, setDatesReady] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -72,11 +78,12 @@ export default function ChartOfAccountsPageClient() {
   }, [refreshRecords]);
 
   useEffect(() => {
-    const { from, to } = resolveDateRangePreset("this_month");
+    const { from, to, preset: initialPreset } = defaultLedgerDateRangeState(selectedFY.id);
+    setPreset(initialPreset);
     setDateFrom(from);
     setDateTo(to);
     setDatesReady(true);
-  }, []);
+  }, [selectedFY.id]);
 
   useEffect(() => {
     if (selectedNode) setShowRoot(false);
@@ -88,6 +95,22 @@ export default function ChartOfAccountsPageClient() {
     return () => window.clearTimeout(timer);
   }, [highlightedLedgerId, setHighlightedLedgerId]);
 
+  const isSearchMode = Boolean(search.trim());
+
+  const isLedgerTransactionView = Boolean(
+    !isSearchMode &&
+      !showRoot &&
+      selectedNode &&
+      selectedNode.nodeLevel === "ledger" &&
+      isPostingLedger(selectedNode, records) &&
+      !isTdsCoaNode(selectedNode, records),
+  );
+
+  const ledgerAccounting = useMemo(() => {
+    if (!isLedgerTransactionView || !selectedNode || !datesReady) return null;
+    return buildLedgerAccountingSummary(selectedNode, records, dateFrom, dateTo);
+  }, [isLedgerTransactionView, selectedNode, records, dateFrom, dateTo, datesReady]);
+
   const rows = useMemo(
     () =>
       datesReady
@@ -96,21 +119,42 @@ export default function ChartOfAccountsPageClient() {
     [records, tableParentId, dateFrom, dateTo, search, datesReady],
   );
 
-  const summary = useMemo(
-    () =>
-      datesReady
-        ? computeCoaListingSummary(
-            records,
-            rows,
-            selectedNode,
-            showRoot,
-            dateFrom,
-            dateTo,
-            Boolean(search.trim()),
-          )
-        : null,
-    [records, rows, selectedNode, showRoot, dateFrom, dateTo, search, datesReady],
-  );
+  const summary = useMemo(() => {
+    if (!datesReady) return null;
+
+    if (ledgerAccounting) {
+      const transactionCount = ledgerAccounting.transactions.filter((row) => !row.isOpeningRow).length;
+      return {
+        totalAccounts: transactionCount,
+        openingAmount: ledgerAccounting.openingBalance,
+        openingSide: ledgerAccounting.openingBalanceType,
+        periodDebit: ledgerAccounting.totalDebit,
+        periodCredit: ledgerAccounting.totalCredit,
+        closingAmount: ledgerAccounting.currentBalance,
+        closingSide: ledgerAccounting.balanceType,
+      };
+    }
+
+    return computeCoaListingSummary(
+      records,
+      rows,
+      selectedNode,
+      showRoot,
+      dateFrom,
+      dateTo,
+      Boolean(search.trim()),
+    );
+  }, [
+    records,
+    rows,
+    selectedNode,
+    showRoot,
+    dateFrom,
+    dateTo,
+    search,
+    datesReady,
+    ledgerAccounting,
+  ]);
 
   const exportMeta = useMemo(() => ({ dateFrom, dateTo }), [dateFrom, dateTo]);
 
@@ -201,7 +245,7 @@ export default function ChartOfAccountsPageClient() {
   };
 
   const handleExcelExport = async () => {
-    if (!mounted || rows.length === 0) return;
+    if (!mounted || isLedgerTransactionView || rows.length === 0) return;
     setExporting(true);
     try {
       await exportCoaListingToExcel(rows, exportMeta);
@@ -211,7 +255,7 @@ export default function ChartOfAccountsPageClient() {
   };
 
   const handlePdfExport = () => {
-    if (!mounted || rows.length === 0) return;
+    if (!mounted || isLedgerTransactionView || rows.length === 0) return;
     exportCoaListingToPdf(rows, exportMeta);
   };
 
@@ -245,7 +289,7 @@ export default function ChartOfAccountsPageClient() {
             onDateToChange={setDateTo}
             onExcel={handleExcelExport}
             onPdf={handlePdfExport}
-            exportDisabled={exporting || rows.length === 0}
+            exportDisabled={exporting || isLedgerTransactionView || rows.length === 0}
             canCreate={canCreate}
             onNewLedger={handleNewLedger}
           />
@@ -261,32 +305,74 @@ export default function ChartOfAccountsPageClient() {
             }}
           />
 
-          {summary && <CoaListingSummaryBar summary={summary} />}
-
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <CoaListingTable
-              rows={rows}
-              records={records}
-              canCreate={canCreate}
-              highlightedLedgerId={highlightedLedgerId}
-              onDrillInto={handleDrillInto}
-              onAddLedger={openAddLedger}
-              emptyMessage={
-                search.trim()
-                  ? "No accounts match your search at this level."
-                  : "No accounts at this level."
-              }
+          {summary && (
+            <CoaListingSummaryBar
+              summary={summary}
+              totalLabel={isLedgerTransactionView ? "Transactions" : undefined}
             />
+          )}
+
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            {isLedgerTransactionView && selectedNode && ledgerAccounting ? (
+              <CoaAccountingTransactionsTable
+                rows={ledgerAccounting.transactions}
+                variant="ledger-detail"
+                footer={{
+                  totalDebit: ledgerAccounting.totalDebit,
+                  totalCredit: ledgerAccounting.totalCredit,
+                  closingBalance: ledgerAccounting.currentBalance,
+                  closingBalanceType: ledgerAccounting.balanceType,
+                }}
+                emptyLabel="No posted transactions for this ledger in the selected period."
+              />
+            ) : (
+              <CoaListingTable
+                rows={rows}
+                records={records}
+                canCreate={canCreate}
+                highlightedLedgerId={highlightedLedgerId}
+                isSearchMode={isSearchMode}
+                onDrillInto={handleDrillInto}
+                onAddLedger={openAddLedger}
+                emptyMessage={
+                  isSearchMode
+                    ? "No accounts match your search."
+                    : "No accounts at this level."
+                }
+              />
+            )}
           </div>
 
           <div className="flex-shrink-0 px-4 py-2 border-t border-border bg-muted/20">
             <p className="text-[11px] text-muted-foreground">
-              Showing <span className="font-medium text-foreground">{rows.length}</span> accounts
-              {selectedNode && !showRoot && (
+              {isLedgerTransactionView && selectedNode ? (
                 <>
-                  {" "}
-                  under{" "}
+                  Showing{" "}
+                  <span className="font-medium text-foreground">
+                    {ledgerAccounting?.transactions.filter((row) => !row.isOpeningRow).length ?? 0}
+                  </span>{" "}
+                  transactions for{" "}
                   <span className="font-medium text-foreground">{selectedNode.accountName}</span>
+                </>
+              ) : (
+                <>
+                  Showing <span className="font-medium text-foreground">{rows.length}</span>{" "}
+                  {isSearchMode ? (
+                    <>matching accounts for &ldquo;{search.trim()}&rdquo;</>
+                  ) : (
+                    <>
+                      accounts
+                      {selectedNode && !showRoot && (
+                        <>
+                          {" "}
+                          under{" "}
+                          <span className="font-medium text-foreground">
+                            {selectedNode.accountName}
+                          </span>
+                        </>
+                      )}
+                    </>
+                  )}
                 </>
               )}
             </p>

@@ -66,7 +66,6 @@ function SupplierLedgerTableRow({ row }: { row: SupplierLedgerDisplayRow }) {
   return (
     <AccountsTableRow
       className={cn(
-        "accounts-table-row-compact",
         isSummary && "bg-muted/20 font-medium",
         row.kind === "closing" && "bg-brand-50/40 border-t-2 border-brand-200",
       )}

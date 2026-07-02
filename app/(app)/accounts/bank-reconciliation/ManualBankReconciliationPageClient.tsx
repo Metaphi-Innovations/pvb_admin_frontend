@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, Save, Upload } from "lucide-react";
+import { AlertCircle, ChevronDown, ChevronUp, Save, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -118,6 +118,7 @@ export default function ManualBankReconciliationPageClient() {
   const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [statementPreviewOpen, setStatementPreviewOpen] = useState(true);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
   useEffect(() => {
@@ -452,169 +453,176 @@ export default function ManualBankReconciliationPageClient() {
             )}
           </div>
 
-          <div className="flex flex-1 min-h-0 overflow-hidden">
-            <div className="flex-1 flex flex-col min-h-0 min-w-0">
+          <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
+            <div className="flex flex-col flex-1 min-h-[320px] min-w-0 p-4">
               {!mounted || !coaLedgerId ? (
-                <div className="flex flex-col items-center justify-center flex-1 py-16 text-center">
+                <div className="flex flex-col items-center justify-center flex-1 py-16 text-center rounded-xl border border-border/60 bg-muted/10">
                   <p className="text-sm text-muted-foreground">Select a bank account to begin reconciliation.</p>
                 </div>
               ) : visibleRows.length === 0 ? (
-                <div className="flex flex-col items-center justify-center flex-1 py-16 text-center">
+                <div className="flex flex-col items-center justify-center flex-1 py-16 text-center rounded-xl border border-border/60 bg-muted/10">
                   <p className="text-sm text-muted-foreground">No book entries match the current filters.</p>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Adjust the date range or bank account, or compare against the bank statement below.
+                  </p>
                 </div>
               ) : (
-                <div className="flex flex-col flex-1 min-h-0 p-4">
-                  <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
-                    <div className="overflow-auto flex-1 min-h-0">
-                      <table className="accounts-table w-full text-table min-w-[900px]">
-                        <thead className="sticky top-0 z-[1] bg-muted/40">
-                          <tr className="border-b border-border">
-                            {[
-                              "Entry Date as per Books",
-                              "Party Name",
-                              "Voucher Type",
-                              "Debit Amount",
-                              "Credit Amount",
-                              "Bank Processing Date",
-                              "Status",
-                            ].map((h) => (
-                              <th
-                                key={h}
-                                className={cn(
-                                  "px-4 py-2.5 text-xs font-semibold text-foreground whitespace-nowrap",
-                                  h.includes("Amount") ? "text-right" : "text-left",
-                                )}
-                              >
-                                {h}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {paginatedRows.map((row) => {
-                            const draftDate = draftDates[row.rowKey] ?? "";
-                            const displayStatus = deriveReconStatus(draftDate);
-                            return (
-                              <tr
-                                key={row.rowKey}
-                                className="border-b border-border/60 hover:bg-muted/20 transition-colors"
-                              >
-                                <td className="px-4 py-2 text-xs whitespace-nowrap">
-                                  {formatAccountsDate(row.entryDate)}
-                                </td>
-                                <td className="px-4 py-2 text-xs max-w-[220px] truncate" title={row.partyName}>
-                                  {row.partyName}
-                                </td>
-                                <td className="px-4 py-2 text-xs whitespace-nowrap">{row.voucherTypeLabel}</td>
-                                <td className="px-4 py-2 text-xs text-right tabular-nums">
-                                  {formatMoneyOrDash(row.debitAmount)}
-                                </td>
-                                <td className="px-4 py-2 text-xs text-right tabular-nums">
-                                  {formatMoneyOrDash(row.creditAmount)}
-                                </td>
-                                <td className="px-4 py-2 text-xs whitespace-nowrap">
-                                  <Input
-                                    type="date"
-                                    className="h-8 w-[140px] text-xs"
-                                    value={draftDate}
-                                    max={new Date().toISOString().slice(0, 10)}
-                                    min={row.entryDate}
-                                    onChange={(e) => handleDateChange(row, e.target.value)}
-                                  />
-                                </td>
-                                <td className="px-4 py-2 text-xs">
-                                  <ReconEntryStatusBadge status={displayStatus} />
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                    <AccountsTablePagination
-                      page={page}
-                      pageSize={pageSize}
-                      totalRecords={visibleRows.length}
-                      onPageChange={setPage}
-                      onPageSizeChange={setPageSize}
-                      recordLabel="entries"
-                    />
+                <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden flex flex-col flex-1 min-h-0 w-full">
+                  <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0">
+                    <table className="accounts-table w-full text-table min-w-full">
+                      <thead className="sticky top-0 z-[1] bg-muted/40">
+                        <tr className="border-b border-border">
+                          {[
+                            { label: "Entry Date as per Books", align: "left" as const, className: "w-[140px]" },
+                            { label: "Party Name", align: "left" as const, className: "min-w-[200px]" },
+                            { label: "Voucher Type", align: "left" as const, className: "w-[120px]" },
+                            { label: "Debit Amount", align: "right" as const, className: "w-[120px]" },
+                            { label: "Credit Amount", align: "right" as const, className: "w-[120px]" },
+                            { label: "Bank Processing Date", align: "left" as const, className: "w-[160px]" },
+                            { label: "Status", align: "left" as const, className: "w-[120px]" },
+                          ].map((col) => (
+                            <th
+                              key={col.label}
+                              className={cn(
+                                "text-xs font-semibold text-foreground whitespace-nowrap",
+                                col.align === "right" ? "text-right" : "text-left",
+                                col.className,
+                              )}
+                            >
+                              {col.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedRows.map((row) => {
+                          const draftDate = draftDates[row.rowKey] ?? "";
+                          const displayStatus = deriveReconStatus(draftDate);
+                          return (
+                            <tr
+                              key={row.rowKey}
+                              className="border-b border-border/60 hover:bg-muted/20 transition-colors"
+                            >
+                              <td className="text-xs whitespace-nowrap">
+                                {formatAccountsDate(row.entryDate)}
+                              </td>
+                              <td className="text-xs" title={row.partyName}>
+                                <span className="line-clamp-2">{row.partyName}</span>
+                              </td>
+                              <td className="text-xs whitespace-nowrap">{row.voucherTypeLabel}</td>
+                              <td className="text-xs text-right tabular-nums">
+                                {formatMoneyOrDash(row.debitAmount)}
+                              </td>
+                              <td className="text-xs text-right tabular-nums">
+                                {formatMoneyOrDash(row.creditAmount)}
+                              </td>
+                              <td className="text-xs whitespace-nowrap">
+                                <Input
+                                  type="date"
+                                  className="h-8 w-full max-w-[148px] text-xs"
+                                  value={draftDate}
+                                  max={new Date().toISOString().slice(0, 10)}
+                                  min={row.entryDate}
+                                  onChange={(e) => handleDateChange(row, e.target.value)}
+                                />
+                              </td>
+                              <td className="text-xs">
+                                <ReconEntryStatusBadge status={displayStatus} />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
+                  <AccountsTablePagination
+                    page={page}
+                    pageSize={pageSize}
+                    totalRecords={visibleRows.length}
+                    onPageChange={setPage}
+                    onPageSizeChange={setPageSize}
+                    recordLabel="entries"
+                  />
                 </div>
               )}
             </div>
 
             {statementPreview.length > 0 && (
-              <aside className="w-[340px] flex-shrink-0 border-l border-border bg-muted/10 flex flex-col min-h-0 hidden lg:flex">
-                <div className="flex-shrink-0 px-4 py-3 border-b border-border bg-white">
-                  <p className="text-xs font-semibold text-foreground">Bank Statement Preview</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Reference only — compare and enter bank processing dates manually.
-                  </p>
-                </div>
-                <div className="flex-1 overflow-auto min-h-0">
-                  <table className="w-full text-xs">
-                    <thead className="sticky top-0 bg-muted/40 border-b border-border">
-                      <tr>
-                        {["Statement Date", "Description", "Debit", "Credit", "Balance"].map((h) => (
-                          <th
-                            key={h}
-                            className={cn(
-                              "px-3 py-2 font-semibold text-foreground whitespace-nowrap",
-                              h === "Description" ? "text-left" : h === "Statement Date" ? "text-left" : "text-right",
-                            )}
-                          >
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {statementPreview.map((row) => (
-                        <tr key={row.id} className="border-b border-border/60 hover:bg-muted/20">
-                          <td className="px-3 py-2 whitespace-nowrap">{formatAccountsDate(row.statementDate)}</td>
-                          <td className="px-3 py-2 max-w-[120px] truncate" title={row.description}>
-                            {row.description}
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums">{formatMoneyOrDash(row.debitAmount)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{formatMoneyOrDash(row.creditAmount)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{formatMoney(row.balance)}</td>
+              <div className="flex-shrink-0 border-t border-border bg-white">
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/20 transition-colors border-b border-border/60"
+                  onClick={() => setStatementPreviewOpen((o) => !o)}
+                >
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">Bank Statement Preview</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Reference only — compare and enter bank processing dates manually.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[11px] text-muted-foreground tabular-nums">
+                      {statementPreview.length} lines
+                    </span>
+                    {statementPreviewOpen ? (
+                      <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </div>
+                </button>
+                {statementPreviewOpen && (
+                  <div className="overflow-x-auto max-h-[min(42vh,420px)] overflow-y-auto">
+                    <table className="accounts-table w-full text-xs min-w-[960px]">
+                      <thead className="sticky top-0 z-[1] bg-muted/40 border-b border-border">
+                        <tr>
+                          {[
+                            { label: "Statement Date", align: "left" as const, className: "w-[120px]" },
+                            { label: "Description", align: "left" as const, className: "min-w-[320px]" },
+                            { label: "Debit", align: "right" as const, className: "w-[120px]" },
+                            { label: "Credit", align: "right" as const, className: "w-[120px]" },
+                            { label: "Balance", align: "right" as const, className: "w-[130px]" },
+                          ].map((col) => (
+                            <th
+                              key={col.label}
+                              className={cn(
+                                "font-semibold text-foreground whitespace-nowrap",
+                                col.align === "right" ? "text-right" : "text-left",
+                                col.className,
+                              )}
+                            >
+                              {col.label}
+                            </th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </aside>
+                      </thead>
+                      <tbody>
+                        {statementPreview.map((row) => (
+                          <tr key={row.id} className="border-b border-border/60 hover:bg-muted/20">
+                            <td className="whitespace-nowrap">
+                              {formatAccountsDate(row.statementDate)}
+                            </td>
+                            <td className="whitespace-normal break-words leading-relaxed">
+                              {row.description}
+                            </td>
+                            <td className="text-right tabular-nums font-medium text-red-600">
+                              {formatMoneyOrDash(row.debitAmount)}
+                            </td>
+                            <td className="text-right tabular-nums font-medium text-emerald-600">
+                              {formatMoneyOrDash(row.creditAmount)}
+                            </td>
+                            <td className="text-right tabular-nums font-medium">
+                              {formatMoney(row.balance)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             )}
           </div>
-
-          {statementPreview.length > 0 && (
-            <div className="lg:hidden flex-shrink-0 border-t border-border bg-white p-4 max-h-[240px] overflow-auto">
-              <p className="text-xs font-semibold text-foreground mb-2">Bank Statement Preview</p>
-              <table className="w-full text-xs min-w-[600px]">
-                <thead>
-                  <tr className="border-b border-border">
-                    {["Date", "Description", "Debit", "Credit", "Balance"].map((h) => (
-                      <th key={h} className="px-2 py-1.5 font-semibold text-left">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {statementPreview.map((row) => (
-                    <tr key={row.id} className="border-b border-border/60">
-                      <td className="px-2 py-1.5">{formatAccountsDate(row.statementDate)}</td>
-                      <td className="px-2 py-1.5 truncate max-w-[140px]">{row.description}</td>
-                      <td className="px-2 py-1.5 text-right">{formatMoneyOrDash(row.debitAmount)}</td>
-                      <td className="px-2 py-1.5 text-right">{formatMoneyOrDash(row.creditAmount)}</td>
-                      <td className="px-2 py-1.5 text-right">{formatMoney(row.balance)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
       </AccountsPageShell>
 

@@ -37,11 +37,13 @@ import {
   normalizeVoucherLineAmounts,
   updateVoucher,
   validateVoucherEntryForPost,
+  validateVoucherForPost,
   voucherAmountDifference,
   VOUCHER_TYPE_LABELS,
   type VoucherLine,
   type VoucherTypeCode,
   type AccountingVoucher,
+  type VoucherEntryMode,
 } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { findLedgerById } from "@/lib/accounts/coa-hierarchy";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
@@ -122,6 +124,11 @@ export interface ZohoVoucherEntryFormProps {
   voucherId?: number;
   titleOverride?: string;
   onEdit?: () => void;
+  /** Require balanced double-entry (min 2 lines) before post */
+  strictPostValidation?: boolean;
+  entryMode?: VoucherEntryMode;
+  entryModeControl?: React.ReactNode;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function ZohoVoucherEntryForm({
@@ -143,6 +150,10 @@ export function ZohoVoucherEntryForm({
   voucherId,
   titleOverride,
   onEdit,
+  strictPostValidation = false,
+  entryMode = "double",
+  entryModeControl,
+  onDirtyChange,
 }: ZohoVoucherEntryFormProps) {
   const mounted = useClientMounted();
   const label = VOUCHER_TYPE_LABELS[voucherType];
@@ -197,6 +208,24 @@ export function ZohoVoucherEntryForm({
       setLines(controlledLines);
     }
   }, [controlledLines]);
+
+  const requiresStrictPost = strictPostValidation || voucherType === "journal";
+
+  useEffect(() => {
+    if (!onDirtyChange || readOnly) return;
+    const dirty =
+      Boolean(referenceNo.trim()) ||
+      Boolean(narration.trim()) ||
+      lines.some(
+        (l) =>
+          l.ledgerId != null ||
+          Boolean(l.ledgerName?.trim()) ||
+          (Number(l.debit) || 0) > 0 ||
+          (Number(l.credit) || 0) > 0 ||
+          Boolean(l.remarks?.trim()),
+      );
+    onDirtyChange(dirty);
+  }, [referenceNo, narration, lines, onDirtyChange, readOnly]);
 
   const previewNumber = useMemo(
     () =>
@@ -287,7 +316,9 @@ export function ZohoVoucherEntryForm({
 
     const postedLines = compactPostedVoucherLines(lines);
     const enrichedLines = applyAutoPartyToLines(postedLines, coaRecords);
-    const err = validateVoucherEntryForPost({ date, lines: enrichedLines });
+    const err = requiresStrictPost
+      ? validateVoucherForPost({ date, narration, lines: enrichedLines })
+      : validateVoucherEntryForPost({ date, lines: enrichedLines });
     if (err) {
       setError(err);
       return;
@@ -301,6 +332,7 @@ export function ZohoVoucherEntryForm({
       narration,
       lines: enrichedLines,
       status: "posted" as const,
+      entryMode: voucherType === "journal" ? ("double" as const) : entryMode,
     };
     const voucher =
       isEdit && voucherId != null
@@ -324,6 +356,8 @@ export function ZohoVoucherEntryForm({
     validateBeforePost,
     voucherId,
     voucherType,
+    requiresStrictPost,
+    entryMode,
   ]);
 
   const handleCancel = () => {
@@ -418,6 +452,8 @@ export function ZohoVoucherEntryForm({
 
         <div className="px-4 sm:px-6 py-5 border-b border-border/60">
           <div className="max-w-3xl space-y-3">
+            {entryModeControl && <div>{entryModeControl}</div>}
+
             <FormRow label="Date" required>
               <Input
                 className="h-9 text-sm rounded-lg bg-white max-w-md"
@@ -509,7 +545,7 @@ export function ZohoVoucherEntryForm({
                       Account / Ledger
                     </th>
                     <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                      Description
+                      Remarks
                     </th>
                     <th className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-wide text-muted-foreground w-[120px]">
                       Debit

@@ -11,6 +11,9 @@ import {
 } from "../voucher-data";
 import { voucherTypeToUrl } from "../voucher-routes";
 import { VoucherEntryClient } from "./VoucherEntryClient";
+import { ReceiptVoucherForm } from "./ReceiptVoucherForm";
+import { PaymentVoucherForm } from "./PaymentVoucherForm";
+import { ContraVoucherForm } from "./ContraVoucherForm";
 
 interface VoucherViewClientProps {
   voucherId: number;
@@ -47,12 +50,9 @@ export function VoucherViewClient({ voucherId }: VoucherViewClientProps) {
 
   if (voucher.voucherType === "receipt") {
     return (
-      <VoucherEntryClient
-        voucherType="receipt"
+      <ReceiptVoucherForm
         voucherId={voucherId}
         readOnly
-        titleOverride={`View ${VOUCHER_TYPE_LABELS.receipt}`}
-        cancelHref={listHref}
         onDone={handleBack}
         onEdit={editAction}
       />
@@ -61,12 +61,20 @@ export function VoucherViewClient({ voucherId }: VoucherViewClientProps) {
 
   if (voucher.voucherType === "payment") {
     return (
-      <VoucherEntryClient
-        voucherType="payment"
+      <PaymentVoucherForm
         voucherId={voucherId}
         readOnly
-        titleOverride={`View ${VOUCHER_TYPE_LABELS.payment}`}
-        cancelHref={listHref}
+        onDone={handleBack}
+        onEdit={editAction}
+      />
+    );
+  }
+
+  if (voucher.voucherType === "contra") {
+    return (
+      <ContraVoucherForm
+        voucherId={voucherId}
+        readOnly
         onDone={handleBack}
         onEdit={editAction}
       />

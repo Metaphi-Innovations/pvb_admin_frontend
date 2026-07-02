@@ -476,6 +476,68 @@ export function nodeMatchesSearch(
   );
 }
 
+/** All COA nodes that match the search query (global, same dataset as tree search). */
+export function getSearchMatchingNodes(
+  records: ChartOfAccount[],
+  query: string,
+): ChartOfAccount[] {
+  const q = query.trim();
+  if (!q) return [];
+
+  return records
+    .filter((n) => nodeMatchesSearch(records, n, q))
+    .sort((a, b) => {
+      const pathA = getAncestorPath(records, a.id)
+        .map((n) => n.accountCode)
+        .join("/");
+      const pathB = getAncestorPath(records, b.id)
+        .map((n) => n.accountCode)
+        .join("/");
+      const cmp = pathA.localeCompare(pathB);
+      if (cmp !== 0) return cmp;
+      return a.accountName.localeCompare(b.accountName);
+    });
+}
+
+/** Parent node to focus in the tree when search results span a branch. */
+export function resolveSearchFocusNode(
+  records: ChartOfAccount[],
+  matching: ChartOfAccount[],
+): ChartOfAccount | null {
+  if (matching.length === 0) return null;
+
+  const ledgers = matching.filter((n) => n.nodeLevel === "ledger");
+  if (ledgers.length > 0) {
+    const parentIds = new Set(
+      ledgers.map((l) => l.parentAccountId).filter((id): id is number => id != null),
+    );
+    if (parentIds.size === 1) {
+      const parentId = [...parentIds][0]!;
+      return records.find((r) => r.id === parentId) ?? ledgers[0];
+    }
+    const first = ledgers[0];
+    const parent = first.parentAccountId
+      ? records.find((r) => r.id === first.parentAccountId)
+      : null;
+    return parent ?? first;
+  }
+
+  return matching.reduce((deepest, node) => {
+    const depth = getAncestorPath(records, node.id).length;
+    const deepestDepth = deepest ? getAncestorPath(records, deepest.id).length : 0;
+    return depth >= deepestDepth ? node : deepest;
+  }, matching[0]);
+}
+
+export function formatCoaHierarchyPath(
+  records: ChartOfAccount[],
+  nodeId: number,
+): string {
+  return getAncestorPath(records, nodeId)
+    .map((n) => n.accountName)
+    .join(" → ");
+}
+
 export function getSearchVisibleIds(
   records: ChartOfAccount[],
   query: string,
@@ -483,7 +545,7 @@ export function getSearchVisibleIds(
   const visible = new Set<number>();
   if (!query.trim()) return visible;
 
-  const matching = records.filter((n) => nodeMatchesSearch(records, n, query));
+  const matching = getSearchMatchingNodes(records, query);
   for (const node of matching) {
     getAncestorPath(records, node.id).forEach((a) => visible.add(a.id));
     const collectDesc = (id: number) => {
