@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils";
 import {
   formatBalanceAmount,
-  formatMoneyOrDash,
+  formatMoney,
 } from "@/lib/accounts/money-format";
 import type { CoaListingSummary } from "../coa-listing-data";
 
@@ -31,7 +31,13 @@ function SummaryCell({
   );
 }
 
-export function CoaListingSummaryBar({ summary }: { summary: CoaListingSummary }) {
+export function CoaListingSummaryBar({
+  summary,
+  totalLabel = "Total Accounts / Ledgers",
+}: {
+  summary: CoaListingSummary;
+  totalLabel?: string;
+}) {
   const opening =
     summary.openingAmount > 0
       ? formatBalanceAmount(summary.openingAmount, summary.openingSide)
@@ -43,10 +49,10 @@ export function CoaListingSummaryBar({ summary }: { summary: CoaListingSummary }
 
   return (
     <div className="flex-shrink-0 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 px-2 py-1.5 border-b border-border/60 bg-muted/10">
-      <SummaryCell label="Total Accounts / Ledgers" value={String(summary.totalAccounts)} />
+      <SummaryCell label={totalLabel} value={String(summary.totalAccounts)} />
       <SummaryCell label="Opening Balance" value={opening} />
-      <SummaryCell label="Total Debit" value={formatMoneyOrDash(summary.periodDebit)} />
-      <SummaryCell label="Total Credit" value={formatMoneyOrDash(summary.periodCredit)} />
+      <SummaryCell label="Total Debit" value={formatMoney(summary.periodDebit)} />
+      <SummaryCell label="Total Credit" value={formatMoney(summary.periodCredit)} />
       <SummaryCell label="Closing Balance" value={closing} />
     </div>
   );

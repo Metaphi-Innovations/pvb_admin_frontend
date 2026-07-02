@@ -1,8 +1,8 @@
 "use client";
 
-import { Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MoneyAmount, MoneyCell } from "@/components/accounts/MoneyAmount";
+import { AccountsViewAction, accountsActionColClass } from "@/components/accounts/AccountsTableActions";
 import type { GeneralLedgerRow } from "@/lib/accounts/general-ledger-data";
 import {
   AccountsTable,
@@ -74,7 +74,7 @@ export function GeneralLedgerTransactionsTable({
         <AccountsTableHead>
           <AccountsTableHeadRow>
             {COLUMNS.map((col) => (
-              <AccountsTableHeadCell key={col.key} align={col.align} className={col.key === "action" ? "w-10" : undefined}>
+              <AccountsTableHeadCell key={col.key} align={col.align} className={col.key === "action" ? accountsActionColClass("single") : undefined}>
                 {col.label}
               </AccountsTableHeadCell>
             ))}
@@ -85,7 +85,7 @@ export function GeneralLedgerTransactionsTable({
             <AccountsTableRow
               key={`${row.voucherNo}-${row.date}-${i}`}
               className={cn(
-                "accounts-table-row-compact group",
+                "group",
                 row.isOpeningRow && "bg-muted/20 font-medium",
                 onRowClick && !row.isOpeningRow && "cursor-pointer",
               )}
@@ -111,19 +111,15 @@ export function GeneralLedgerTransactionsTable({
                   className="text-xs justify-end"
                 />
               </AccountsTableCell>
-              <AccountsTableCell align="center" className="py-2">
+              <AccountsTableCell align="center" className={cn("py-2", accountsActionColClass("single"))}>
                 {onRowClick && !row.isOpeningRow && (
-                  <button
-                    type="button"
+                  <AccountsViewAction
+                    title={`View ${row.voucherNo}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       onRowClick(row);
                     }}
-                    className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-0 group-hover:opacity-100"
-                    aria-label={`View ${row.voucherNo}`}
-                  >
-                    <Eye className="w-4 h-4 text-muted-foreground" />
-                  </button>
+                  />
                 )}
               </AccountsTableCell>
             </AccountsTableRow>

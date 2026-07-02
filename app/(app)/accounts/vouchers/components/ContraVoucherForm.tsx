@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ZohoVoucherEntryForm } from "@/components/accounts/ZohoVoucherEntryForm";
+import { VoucherDualEntryForm } from "@/components/accounts/VoucherDualEntryForm";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 import { useCoaRecords } from "@/lib/accounts/use-coa-records";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
@@ -18,9 +18,16 @@ type ContraType = "cash_to_bank" | "bank_to_cash" | "bank_to_bank";
 interface ContraVoucherFormProps {
   onDone?: () => void;
   voucherId?: number;
+  readOnly?: boolean;
+  onEdit?: () => void;
 }
 
-export function ContraVoucherForm({ onDone, voucherId }: ContraVoucherFormProps) {
+export function ContraVoucherForm({
+  onDone,
+  voucherId,
+  readOnly = false,
+  onEdit,
+}: ContraVoucherFormProps) {
   const [contraType, setContraType] = useState<ContraType>("cash_to_bank");
 
   const coaRecords = useCoaRecords();
@@ -50,11 +57,15 @@ export function ContraVoucherForm({ onDone, voucherId }: ContraVoucherFormProps)
     return (ledger: ChartOfAccount) => allowed.has(ledger.id);
   }, [contraType, bankLedgers, cashLedgers]);
 
-  const extraHeader = (
+  const contraExtraHeader = (
     <div className="grid grid-cols-1 sm:grid-cols-[minmax(140px,200px)_1fr] gap-1.5 sm:gap-4 sm:items-start">
       <label className="text-xs font-medium text-foreground sm:pt-2.5">Contra Type</label>
       <div className="max-w-md space-y-1">
-        <Select value={contraType} onValueChange={(v) => setContraType(v as ContraType)}>
+        <Select
+          value={contraType}
+          onValueChange={(v) => setContraType(v as ContraType)}
+          disabled={readOnly}
+        >
           <SelectTrigger className="h-9 text-sm bg-white rounded-lg">
             <SelectValue />
           </SelectTrigger>
@@ -76,16 +87,15 @@ export function ContraVoucherForm({ onDone, voucherId }: ContraVoucherFormProps)
     : "/accounts/vouchers?tab=contra";
 
   return (
-    <ZohoVoucherEntryForm
-      key={voucherId ?? contraType}
+    <VoucherDualEntryForm
       voucherType="contra"
       cancelHref={cancelHref}
       voucherId={voucherId}
+      readOnly={readOnly}
+      onEdit={onEdit}
       onDone={() => onDone?.()}
-      breadcrumbSection="Transactions"
-      extraHeader={extraHeader}
-      ledgerFilter={ledgerFilter}
-      quickAddScope="bank_cash"
+      contraExtraHeader={contraExtraHeader}
+      contraLedgerFilter={ledgerFilter}
     />
   );
 }

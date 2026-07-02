@@ -3,7 +3,12 @@
 import React, { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Eye, Pencil } from "lucide-react";
+import {
+  AccountsEditAction,
+  AccountsTableActionCell,
+  AccountsViewAction,
+  accountsActionColClass,
+} from "@/components/accounts/AccountsTableActions";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { SortTh, StatusBadge } from "../../components/AccountsUI";
@@ -17,10 +22,8 @@ import {
   AccountsTableHeadRow,
   AccountsTableRow,
 } from "@/components/accounts/AccountsTable";
-import {
-  AccountsTableListing,
-  AccountsTableToolbar,
-} from "@/components/accounts/AccountsTableListing";
+import { AccountsTableListing, AccountsTableToolbar } from "@/components/accounts/AccountsTableListing";
+import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 
 interface VoucherListClientProps {
   voucherType: VoucherTypeCode;
@@ -33,6 +36,8 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
   const listRefreshKey = searchParams.get("t");
   const mounted = useClientMounted();
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [sortKey, setSortKey] = useState("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -52,6 +57,8 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
           v.referenceNo.toLowerCase().includes(q),
       );
     }
+    if (dateFrom) r = r.filter((v) => v.date >= dateFrom);
+    if (dateTo) r = r.filter((v) => v.date <= dateTo);
     r.sort((a, b) => {
       const av = (a as unknown as Record<string, unknown>)[sortKey];
       const bv = (b as unknown as Record<string, unknown>)[sortKey];
@@ -59,7 +66,7 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
       return sortDir === "asc" ? cmp : -cmp;
     });
     return r;
-  }, [records, search, sortKey, sortDir]);
+  }, [records, search, dateFrom, dateTo, sortKey, sortDir]);
 
   const handleSort = (k: string) => {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -79,6 +86,14 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
               onChange: setSearch,
               placeholder: "Search voucher no., narration…",
             }}
+            filters={
+              <AccountsListingDateFilter
+                dateFrom={dateFrom}
+                dateTo={dateTo}
+                onDateFromChange={setDateFrom}
+                onDateToChange={setDateTo}
+              />
+            }
           />
         }
       >
@@ -91,7 +106,7 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
               <AccountsTableHeadCell uppercase className="accounts-col-narration">Narration</AccountsTableHeadCell>
               <SortTh label="Amount" colKey="totalDebit" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
               <AccountsTableHeadCell align="center" uppercase className="accounts-col-status">Status</AccountsTableHeadCell>
-              <AccountsTableHeadCell align="right" uppercase className="w-20">Actions</AccountsTableHeadCell>
+              <AccountsTableHeadCell align="right" uppercase className={accountsActionColClass("multi")}>Actions</AccountsTableHeadCell>
             </AccountsTableHeadRow>
           </AccountsTableHead>
           <AccountsTableBody>
@@ -109,7 +124,7 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
               </AccountsTableRow>
             ) : (
               visible.map((v) => (
-                <AccountsTableRow key={v.id} className="group">
+                <AccountsTableRow key={v.id}>
                   <AccountsTableCell className="tabular-nums">{v.date}</AccountsTableCell>
                   <AccountsTableCell mono>
                     <Link
@@ -127,27 +142,19 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
                   <AccountsTableCell align="center">
                     <StatusBadge status={v.status} />
                   </AccountsTableCell>
-                  <AccountsTableCell align="right">
-                    <div className="flex items-center justify-end gap-0.5">
-                      <button
-                        type="button"
+                  <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
+                    <AccountsTableActionCell>
+                      <AccountsViewAction
                         title="View"
-                        className="p-1 hover:bg-muted rounded transition-colors opacity-0 group-hover:opacity-100"
                         onClick={() => router.push(`/accounts/vouchers/view/${v.id}`)}
-                      >
-                        <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                      </button>
+                      />
                       {canEditVoucher(v) && (
-                        <button
-                          type="button"
+                        <AccountsEditAction
                           title="Edit"
-                          className="p-1 hover:bg-muted rounded transition-colors opacity-0 group-hover:opacity-100"
                           onClick={() => router.push(`/accounts/vouchers/edit/${v.id}`)}
-                        >
-                          <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                        </button>
+                        />
                       )}
-                    </div>
+                    </AccountsTableActionCell>
                   </AccountsTableCell>
                 </AccountsTableRow>
               ))

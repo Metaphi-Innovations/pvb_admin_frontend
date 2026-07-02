@@ -1,11 +1,9 @@
 import type { ChartOfAccount } from "../../data";
 
 import {
-
+  formatCoaHierarchyPath,
   getDirectChildren,
-
-  nodeMatchesSearch,
-
+  getSearchMatchingNodes,
 } from "./chart-of-accounts-data";
 
 import { ledgerHasChildLedgers } from "@/lib/accounts/coa-hierarchy";
@@ -23,9 +21,9 @@ import { fromSignedBalance, openingSignedBalance, toSignedBalance } from "@/lib/
 
 
 export interface CoaListingRow {
-
   node: ChartOfAccount;
-
+  parentGroupName: string;
+  hierarchyPath: string;
   openingAmount: number;
 
   openingSide: "Debit" | "Credit";
@@ -273,64 +271,57 @@ export function computeCoaListingSummary(
 
  */
 
-export function buildCoaListingRows(
-
+function listingMetaForNode(
   records: ChartOfAccount[],
+  node: ChartOfAccount,
+): Pick<CoaListingRow, "parentGroupName" | "hierarchyPath"> {
+  const parent = node.parentAccountId
+    ? records.find((r) => r.id === node.parentAccountId)
+    : null;
+  return {
+    parentGroupName: parent?.accountName ?? "",
+    hierarchyPath: formatCoaHierarchyPath(records, node.id),
+  };
+}
 
+export function buildCoaListingRows(
+  records: ChartOfAccount[],
   parentNodeId: number | null,
-
   dateFrom: string,
-
   dateTo: string,
-
   options: { search?: string } = {},
-
 ): CoaListingRow[] {
-
   const search = options.search?.trim() ?? "";
-
   const movementMap = ledgerMovementMapForRange(dateFrom, dateTo);
 
-
+  if (search) {
+    return getSearchMatchingNodes(records, search).map((node) => {
+      const childCount = getDirectChildren(records, node.id).length;
+      return {
+        node,
+        ...listingMetaForNode(records, node),
+        ...balancesForNode(records, node, movementMap),
+        hasChildren: childCount > 0,
+      };
+    });
+  }
 
   const children =
-
     parentNodeId == null
-
       ? records
-
           .filter((r) => r.nodeLevel === "primary_head")
-
           .sort((a, b) => a.accountCode.localeCompare(b.accountCode))
-
       : getDirectChildren(records, parentNodeId);
 
-
-
-  const filtered = search
-
-    ? children.filter((node) => nodeMatchesSearch(records, node, search))
-
-    : children;
-
-
-
-  return filtered.map((node) => {
-
+  return children.map((node) => {
     const childCount = getDirectChildren(records, node.id).length;
-
     return {
-
       node,
-
+      ...listingMetaForNode(records, node),
       ...balancesForNode(records, node, movementMap),
-
       hasChildren: childCount > 0,
-
     };
-
   });
-
 }
 
 

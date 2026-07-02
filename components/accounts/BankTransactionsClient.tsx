@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Search, X, Check, FileText, Calendar, Ban } from "lucide-react";
+import { AccountsFilterDateRangeSection } from "@/components/accounts/AccountsListingFilter";
 import { cn } from "@/lib/utils";
 import {
   loadBankTransactions,
@@ -443,23 +444,13 @@ export function BankTransactionsClient() {
             </Select>
           </div>
 
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground uppercase">Start Date</Label>
-            <Input
-              type="date"
-              className="h-8 text-xs"
-              value={filters.startDate || ""}
-              onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground uppercase">End Date</Label>
-            <Input
-              type="date"
-              className="h-8 text-xs"
-              value={filters.endDate || ""}
-              onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+          <div className="space-y-1 sm:col-span-2">
+            <AccountsFilterDateRangeSection
+              dateFrom={filters.startDate || ""}
+              dateTo={filters.endDate || ""}
+              onDateFromChange={(value) => setFilters({ ...filters, startDate: value })}
+              onDateToChange={(value) => setFilters({ ...filters, endDate: value })}
+              size="default"
             />
           </div>
 

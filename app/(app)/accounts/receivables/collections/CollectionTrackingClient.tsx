@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, MoreHorizontal, History } from "lucide-react";
+import { Plus, History } from "lucide-react";
+import { AccountsMoreActions } from "@/components/accounts/AccountsTableActions";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
@@ -38,10 +39,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   ReportFilterRow,
@@ -434,30 +433,23 @@ export default function CollectionTrackingClient() {
                         </span>
                       </AccountsTableCell>
                       <AccountsTableCell align="right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-52">
-                            <DropdownMenuItem onClick={() => openEdit(r)}>Update Status</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => openHistory(r)}>
-                              <History className="w-3.5 h-3.5 mr-2" /> View History
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => quickStatus(r, "promise_to_pay")}>
-                              Mark Promise To Pay
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => quickStatus(r, "closed")}>
-                              Mark Closed
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <Link href={`/accounts/receivables/outstanding/${r.customerId}`}>
-                                View Customer Outstanding
-                              </Link>
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <AccountsMoreActions contentClassName="w-52">
+                          <DropdownMenuItem onClick={() => openEdit(r)}>Update Status</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openHistory(r)}>
+                            <History className="w-3.5 h-3.5 mr-2" /> View History
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => quickStatus(r, "promise_to_pay")}>
+                            Mark Promise To Pay
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => quickStatus(r, "closed")}>
+                            Mark Closed
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href={`/accounts/receivables/outstanding/${r.customerId}`}>
+                              View Customer Outstanding
+                            </Link>
+                          </DropdownMenuItem>
+                        </AccountsMoreActions>
                       </AccountsTableCell>
                     </AccountsTableRow>
                   );

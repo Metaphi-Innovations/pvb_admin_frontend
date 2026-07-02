@@ -7,8 +7,6 @@ import {
   FileText,
   Plus,
   Truck,
-  Eye,
-  Pencil,
   FileMinus,
   FilePlus,
   CheckCircle2,
@@ -19,12 +17,21 @@ import {
   Calendar,
   Building2,
 } from "lucide-react";
+import {
+  AccountsEditAction,
+  AccountsTableActionCell,
+  AccountsViewAction,
+  accountsActionColClass,
+  ACCOUNTS_ACTION_BTN_CLASS,
+} from "@/components/accounts/AccountsTableActions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { cn } from "@/lib/utils";
 import {
   loadPurchaseInvoices,
   getGrnsPendingInvoice,
@@ -69,21 +76,28 @@ export default function PurchaseInvoiceListClient() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("invoices");
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const invoices = useMemo(() => loadPurchaseInvoices(), []);
   const pendingGrns = useMemo(() => getGrnsPendingInvoice(), []);
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return invoices;
-    const q = search.toLowerCase();
-    return invoices.filter(
-      (i) =>
-        i.invoiceNo.toLowerCase().includes(q) ||
-        i.vendorInvoiceNo.toLowerCase().includes(q) ||
-        i.vendorName.toLowerCase().includes(q) ||
-        i.grnNo.toLowerCase().includes(q),
-    );
-  }, [invoices, search]);
+    let list = invoices;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (i) =>
+          i.invoiceNo.toLowerCase().includes(q) ||
+          i.vendorInvoiceNo.toLowerCase().includes(q) ||
+          i.vendorName.toLowerCase().includes(q) ||
+          i.grnNo.toLowerCase().includes(q),
+      );
+    }
+    if (dateFrom) list = list.filter((i) => i.invoiceDate >= dateFrom);
+    if (dateTo) list = list.filter((i) => i.invoiceDate <= dateTo);
+    return list;
+  }, [invoices, search, dateFrom, dateTo]);
 
   const outstanding = invoices.reduce(
     (s, i) => s + Math.max(0, i.grandTotal - i.amountPaid),
@@ -163,13 +177,21 @@ export default function PurchaseInvoiceListClient() {
       {/* All Invoices tab */}
       {tab === "invoices" && (
         <div className="space-y-3">
-          <div className="relative max-w-xs">
-            <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input
-              className="h-8 text-xs pl-8"
-              placeholder="Search invoice, supplier, GRN..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative max-w-xs flex-1 min-w-[200px]">
+              <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                className="h-8 text-xs pl-8"
+                placeholder="Search invoice, supplier, GRN..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <AccountsListingDateFilter
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onDateFromChange={setDateFrom}
+              onDateToChange={setDateTo}
             />
           </div>
 
@@ -204,7 +226,7 @@ export default function PurchaseInvoiceListClient() {
                     <Th className="text-right">Paid</Th>
                     <Th className="text-right">Outstanding</Th>
                     <Th>Status</Th>
-                    <Th>Actions</Th>
+                    <Th className={accountsActionColClass("multi")}>Actions</Th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/30">
@@ -247,26 +269,20 @@ export default function PurchaseInvoiceListClient() {
                         <td className="px-3 py-2.5">
                           <PaymentBadge inv={inv} />
                         </td>
-                        <td className="px-3 py-2.5">
-                          <div className="flex items-center gap-1">
-                            <Link href={`/accounts/purchase-invoices/${inv.id}`}>
-                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground">
-                                <Eye className="w-3.5 h-3.5" />
-                              </Button>
-                            </Link>
+                        <td className={cn("px-3 py-2.5", accountsActionColClass("multi"))}>
+                          <AccountsTableActionCell>
+                            <AccountsViewAction href={`/accounts/purchase-invoices/${inv.id}`} />
                             {inv.source === "manual_entry" && (
-                              <Link href={`/accounts/purchase-invoices/${inv.id}/edit`}>
-                                <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-blue-600">
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </Button>
-                              </Link>
+                              <AccountsEditAction href={`/accounts/purchase-invoices/${inv.id}/edit`} />
                             )}
-                            <Link href={`/accounts/debit-notes/new?purchaseInvoiceId=${inv.id}`}>
-                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-amber-600" title="Debit Note">
-                                <FileMinus className="w-3.5 h-3.5" />
-                              </Button>
+                            <Link
+                              href={`/accounts/debit-notes/new?purchaseInvoiceId=${inv.id}`}
+                              title="Debit Note"
+                              className={ACCOUNTS_ACTION_BTN_CLASS}
+                            >
+                              <FileMinus className="w-3.5 h-3.5 text-muted-foreground" />
                             </Link>
-                          </div>
+                          </AccountsTableActionCell>
                         </td>
                       </tr>
                     );

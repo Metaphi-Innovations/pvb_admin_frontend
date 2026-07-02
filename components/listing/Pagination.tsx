@@ -83,11 +83,11 @@ export function Pagination({
     <div
       className={cn(
         "flex-shrink-0 border-t border-border bg-muted/20 flex items-center flex-wrap gap-x-2 gap-y-1",
-        isCompact ? "px-2 py-0.5 justify-between" : "px-2.5 py-1 justify-between",
+        isCompact ? "px-4 py-2.5 justify-between" : "px-4 py-2.5 justify-between",
       )}
     >
       <div className={cn("flex items-center flex-wrap", isCompact ? "gap-2" : "gap-3")}>
-        <p className="text-[10px] text-muted-foreground whitespace-nowrap">
+        <p className="text-xs text-muted-foreground whitespace-nowrap">
           {totalRecords === 0 ? (
             <>Showing <span className="font-medium text-foreground">0</span> {recordLabel}</>
           ) : (

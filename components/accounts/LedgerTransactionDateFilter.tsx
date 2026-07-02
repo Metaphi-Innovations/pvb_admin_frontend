@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Check, ChevronsUpDown, Download, FileDown, FileSpreadsheet, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AccountsFilterDateRangeSection } from "@/components/accounts/AccountsListingFilter";
 import {
   DATE_RANGE_PRESET_OPTIONS,
   type DateRangePresetId,
@@ -165,22 +166,13 @@ export function LedgerTransactionDateFilter({
       </Popover>
 
       {preset === "custom" && (
-        <>
-          <Input
-            type="date"
-            className={cn(filterControlClass, "w-36")}
-            value={dateFrom}
-            onChange={(e) => onDateFromChange(e.target.value)}
-            aria-label="From date"
-          />
-          <Input
-            type="date"
-            className={cn(filterControlClass, "w-36")}
-            value={dateTo}
-            onChange={(e) => onDateToChange(e.target.value)}
-            aria-label="To date"
-          />
-        </>
+        <AccountsFilterDateRangeSection
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onDateFromChange={onDateFromChange}
+          onDateToChange={onDateToChange}
+          size="default"
+        />
       )}
 
       {showApply && (

@@ -111,7 +111,7 @@ function CashBookTableRow({ row }: { row: CashBookDisplayRow }) {
   const isOpening = row.kind === "opening";
 
   return (
-    <AccountsTableRow className={cn("accounts-table-row-compact", isOpening && "bg-muted/20 font-medium")}>
+    <AccountsTableRow className={cn(isOpening && "bg-muted/20 font-medium")}>
       <AccountsTableCell className="whitespace-nowrap py-2">{row.date}</AccountsTableCell>
       <AccountsTableCell className="whitespace-nowrap py-2">
         {row.voucherNo === "—" ? (

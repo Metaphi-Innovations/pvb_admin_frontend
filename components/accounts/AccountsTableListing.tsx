@@ -3,7 +3,6 @@
 import React from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { AccountsTableScroll } from "@/components/accounts/AccountsTable";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
@@ -13,7 +12,7 @@ import { Pagination } from "@/components/listing/Pagination";
 export const ACCOUNTS_DEFAULT_PAGE_SIZE = 25;
 export const ACCOUNTS_PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 
-/* ── Compact toolbar: search · filter · columns · export ── */
+/* ── Toolbar: search · filter · export (top-right on listing pages) ── */
 
 export interface AccountsTableToolbarSearch {
   value: string;
@@ -30,6 +29,8 @@ export interface AccountsTableToolbarProps {
   exportDisabled?: boolean;
   actions?: React.ReactNode;
   className?: string;
+  /** page-header = standalone row above table card; in-card = inside table card header */
+  placement?: "page-header" | "in-card";
 }
 
 export function AccountsTableToolbar({
@@ -41,30 +42,32 @@ export function AccountsTableToolbar({
   exportDisabled,
   actions,
   className,
+  placement = "in-card",
 }: AccountsTableToolbarProps) {
   const hasExport = Boolean(onExcel || onPdf);
+  const isPageHeader = placement === "page-header";
 
   return (
     <div
       className={cn(
-        "flex-shrink-0 flex items-center justify-end gap-1.5 px-2 py-1 border-b border-border/60 bg-white",
+        "flex flex-wrap items-center gap-2",
+        isPageHeader ? "justify-end" : "justify-end px-5 py-2.5 border-b border-border/60 bg-white",
         className,
       )}
     >
       {search && (
-        <div className="relative w-full max-w-[200px] mr-auto">
-          <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        <div className={cn("relative", isPageHeader ? "w-full max-w-[220px] sm:w-[220px]" : "w-full max-w-[220px]")}>
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
             value={search.value}
             onChange={(e) => search.onChange(e.target.value)}
             placeholder={search.placeholder ?? "Search…"}
-            className="h-7 pl-7 pr-2 text-xs rounded-md border-border bg-white"
+            className="h-8 pl-8 pr-3 text-xs rounded-lg border-border bg-white"
           />
         </div>
       )}
 
       {filters}
-
       {columns}
 
       {hasExport && (
@@ -80,7 +83,7 @@ export function AccountsTableToolbar({
   );
 }
 
-/* ── Compact pagination footer (bottom-right aligned) ── */
+/* ── Pagination footer ── */
 
 export interface AccountsTablePaginationProps {
   page: number;
@@ -107,12 +110,12 @@ export function AccountsTablePagination({
       onPageChange={onPageChange}
       onPageSizeChange={onPageSizeChange}
       recordLabel={recordLabel}
-      variant="compact"
+      variant="full"
     />
   );
 }
 
-/* ── Listing wrapper: summary · toolbar · scroll · footer ── */
+/* ── Table card: toolbar · scroll · footer ── */
 
 export interface AccountsTableListingProps {
   summary?: React.ReactNode;
@@ -130,7 +133,7 @@ export function AccountsTableListing({
   className,
 }: AccountsTableListingProps) {
   return (
-    <div className={cn("flex flex-col flex-1 min-h-0", className)}>
+    <div className={cn("accounts-listing-card", className)}>
       {summary}
       {toolbar}
       <AccountsTableScroll>{children}</AccountsTableScroll>

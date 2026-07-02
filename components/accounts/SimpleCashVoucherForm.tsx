@@ -34,7 +34,26 @@ import {
   canEditVoucher,
 } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { findLedgerById } from "@/lib/accounts/coa-hierarchy";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { PaymentMode } from "@/app/(app)/accounts/expenses/expense-data";
+
 import { useClientMounted } from "@/lib/use-client-mounted";
+
+const PAYMENT_MODES: PaymentMode[] = [
+  "Cash",
+  "UPI",
+  "Bank Transfer",
+  "Cheque",
+  "NEFT",
+  "RTGS",
+  "Card",
+];
 
 type CashVoucherMode = "receipt" | "payment";
 
@@ -49,6 +68,8 @@ interface SimpleCashVoucherFormProps {
   fullWidth?: boolean;
   /** Allow partial ledger entry; post validation only on Post Voucher. */
   flexibleEntry?: boolean;
+  entryModeControl?: React.ReactNode;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 const CONFIG: Record<
@@ -60,15 +81,15 @@ const CONFIG: Record<
     description: string;
   }
 > = {
-  receipt: {
-    partyLabel: "Received From / Party Ledger",
-    bankLabel: "Deposit To / Bank or Cash Ledger",
+  receipt:   {
+    partyLabel: "Received From",
+    bankLabel: "Deposit To / Bank Account",
     partyScope: "receipt_credit",
     description: "Record money received. Debit bank/cash and credit party automatically on post.",
   },
   payment: {
-    partyLabel: "Paid To / Party or Expense Ledger",
-    bankLabel: "Paid From / Bank or Cash Ledger",
+    partyLabel: "Paid To",
+    bankLabel: "Paid From / Bank Account",
     partyScope: "payment_debit",
     description: "Record money paid out. Debit party/expense and credit bank/cash automatically on post.",
   },
@@ -83,6 +104,8 @@ export function SimpleCashVoucherForm({
   onEdit,
   fullWidth = false,
   flexibleEntry = false,
+  entryModeControl,
+  onDirtyChange,
 }: SimpleCashVoucherFormProps) {
   const mounted = useClientMounted();
   const cfg = CONFIG[mode];
@@ -104,6 +127,7 @@ export function SimpleCashVoucherForm({
   const [amount, setAmount] = useState("");
   const [partyLedger, setPartyLedger] = useState<ChartOfAccount | null>(null);
   const [bankCashLedger, setBankCashLedger] = useState<ChartOfAccount | null>(null);
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>("Bank Transfer");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -118,6 +142,7 @@ export function SimpleCashVoucherForm({
     setBankCashLedger(
       parsed?.bankCashLedgerId ? findLedgerById(parsed.bankCashLedgerId) ?? null : null,
     );
+    setPaymentMode((existing?.paymentMode as PaymentMode) ?? "Bank Transfer");
   }, [mounted, existing, parsed]);
 
   const voucherNumber = mounted
@@ -198,6 +223,25 @@ export function SimpleCashVoucherForm({
     [coaRecords],
   );
 
+  useEffect(() => {
+    if (!onDirtyChange || readOnly) return;
+    const dirty =
+      Boolean(referenceNo.trim()) ||
+      Boolean(narration.trim()) ||
+      numericAmount > 0 ||
+      partyLedger != null ||
+      bankCashLedger != null;
+    onDirtyChange(dirty);
+  }, [
+    referenceNo,
+    narration,
+    numericAmount,
+    partyLedger,
+    bankCashLedger,
+    onDirtyChange,
+    readOnly,
+  ]);
+
   const buildLines = () => {
     const raw =
       mode === "receipt"
@@ -213,6 +257,8 @@ export function SimpleCashVoucherForm({
       narration,
       lines: buildLines(),
       status,
+      entryMode: "simple" as const,
+      paymentMode,
     };
     if (isEdit && voucherId != null) {
       updateVoucher(voucherId, payload);
@@ -327,6 +373,8 @@ export function SimpleCashVoucherForm({
       )}
 
       <div className="border border-border rounded-xl bg-white shadow-sm p-4 space-y-4 w-full">
+        {entryModeControl && <div className="pb-1">{entryModeControl}</div>}
+
         <div className={headerGridClass}>
           <div className="space-y-1">
             <Label className="text-xs font-medium">Date</Label>
@@ -401,6 +449,28 @@ export function SimpleCashVoucherForm({
             quickAddScope="bank_cash"
             disabled={readOnly}
           />
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">
+              Payment Mode {!readOnly && <span className="text-red-500">*</span>}
+            </Label>
+            <Select
+              value={paymentMode}
+              onValueChange={(v) => setPaymentMode(v as PaymentMode)}
+              disabled={readOnly}
+            >
+              <SelectTrigger className="h-9 text-sm bg-white rounded-lg">
+                <SelectValue placeholder="Select payment mode…" />
+              </SelectTrigger>
+              <SelectContent>
+                {PAYMENT_MODES.map((pm) => (
+                  <SelectItem key={pm} value={pm} className="text-xs">
+                    {pm}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">
