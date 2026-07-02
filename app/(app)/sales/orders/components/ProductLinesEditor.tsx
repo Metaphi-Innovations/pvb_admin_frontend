@@ -1,23 +1,20 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-	Popover,
-	PopoverContent,
-	PopoverTrigger,
-} from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import {
 	Plus,
-	Search,
 	Check,
-	ChevronsUpDown,
 	Trash2,
 	Pencil,
 	AlertCircle,
+	Package,
+	X,
+	Tag,
 } from "lucide-react";
 import {
 	type SalesOrderLineItem,
@@ -27,7 +24,6 @@ import {
 	applySchemePricingToLine,
 	applyManualSchemeToLine,
 	removeAppliedSchemeFromLine,
-	recalculateLineItem,
 	applyLineTaxFields,
 	computeLineTaxBreakdown,
 	getProductById,
@@ -46,7 +42,6 @@ import { Badge } from "@/components/ui/badge";
 import ProductSchemeOfferDialog, {
 	type ProductSchemeOfferDialogMode,
 } from "./ProductSchemeOfferDialog";
-import { Tag } from "lucide-react";
 
 interface ProductLinesEditorProps {
 	lines: SalesOrderLineItem[];
@@ -61,9 +56,16 @@ interface ProductLinesEditorProps {
 	taxSupplyType?: TaxSupplyType;
 }
 
+interface InlineEditDraft {
+	productId: string;
+	quantity: string;
+}
+
+const inputCls = "h-8 rounded-lg text-xs";
+
 function EmptyTaxCell() {
 	return (
-		<td className='px-2 py-1.5 min-w-[72px] text-xs text-muted-foreground'>
+		<td className="px-2 py-1.5 min-w-[72px] text-xs text-muted-foreground">
 			—
 		</td>
 	);
@@ -74,151 +76,6 @@ const TAX_HEAD =
 const TAX_CELL = "px-2 py-1.5 text-xs tabular-nums";
 const TAX_CELL_AMT =
 	"px-2 py-1.5 text-xs font-medium tabular-nums whitespace-nowrap text-foreground";
-
-function ProductSelect({
-	products,
-	value,
-	onSelectMultiple,
-}: {
-	products: ProductCatalogItem[];
-	value: number | null;
-	onSelectMultiple: (selectedProducts: ProductCatalogItem[]) => void;
-}) {
-	const [open, setOpen] = useState(false);
-	const [search, setSearch] = useState("");
-	const [checkedIds, setCheckedIds] = useState<number[]>([]);
-
-	const handleOpenChange = (isOpen: boolean) => {
-		setOpen(isOpen);
-		if (isOpen) {
-			setCheckedIds(value ? [value] : []);
-		} else {
-			setSearch("");
-		}
-	};
-
-	const selected = products.find((p) => p.id === value);
-	const filtered = products.filter(
-		(p) =>
-			p.name.toLowerCase().includes(search.toLowerCase()) ||
-			p.code.toLowerCase().includes(search.toLowerCase()),
-	);
-
-	const toggleProduct = (id: number) => {
-		setCheckedIds((prev) =>
-			prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-		);
-	};
-
-	const handleDone = () => {
-		setOpen(false);
-		setSearch("");
-		const selectedProds = products.filter((p) => checkedIds.includes(p.id));
-		onSelectMultiple(selectedProds);
-	};
-
-	return (
-		<Popover open={open} onOpenChange={handleOpenChange}>
-			<PopoverTrigger asChild>
-				<button
-					type='button'
-					className='w-full h-7 px-2 text-xs text-left border border-border rounded-lg bg-background flex items-center justify-between hover:bg-muted/30'
-				>
-					<span
-						className={
-							selected ? "text-foreground truncate" : "text-muted-foreground"
-						}
-					>
-						{selected
-							? `${selected.code} — ${selected.name}`
-							: "Select product…"}
-					</span>
-					<ChevronsUpDown className='w-3.5 h-3.5 text-muted-foreground flex-shrink-0' />
-				</button>
-			</PopoverTrigger>
-			<PopoverContent
-				className='w-[--radix-popover-trigger-width] p-0'
-				align='start'
-			>
-				<div className='p-2 border-b border-border'>
-					<div className='relative'>
-						<Search className='w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none' />
-						<Input
-							placeholder='Search product…'
-							value={search}
-							onChange={(e) => setSearch(e.target.value)}
-							className='h-8 text-xs pl-8'
-						/>
-					</div>
-				</div>
-				<div className='max-h-[200px] overflow-y-auto py-1'>
-					{filtered.length > 0 && (
-						<>
-							<button
-								type='button'
-								onClick={() => {
-									const allSelected = checkedIds.length === filtered.length;
-									setCheckedIds(allSelected ? [] : filtered.map((p) => p.id));
-								}}
-								className='w-full flex items-center gap-2 px-3 py-1.5 text-[11px] font-semibold text-brand-600 hover:bg-muted/60 rounded-md text-left'
-							>
-								<Checkbox
-									checked={checkedIds.length === filtered.length}
-									className='w-3.5 h-3.5 flex-shrink-0'
-								/>
-								Select All
-							</button>
-							<div className='border-t border-border my-1' />
-						</>
-					)}
-					{filtered.map((p) => {
-						const isChecked = checkedIds.includes(p.id);
-						return (
-							<button
-								key={p.id}
-								type='button'
-								onClick={() => toggleProduct(p.id)}
-								className={cn(
-									"w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-muted/60",
-									isChecked && "bg-brand-50",
-								)}
-							>
-								<Checkbox
-									checked={isChecked}
-									className='w-3.5 h-3.5 flex-shrink-0 pointer-events-none'
-								/>
-								<span className='font-mono text-brand-700 flex-shrink-0'>
-									{p.code}
-								</span>
-								<span className='flex-1 truncate'>{p.name}</span>
-								<span className='text-[10px] text-muted-foreground'>
-									Stock: {p.stock}
-								</span>
-							</button>
-						);
-					})}
-					{filtered.length === 0 && (
-						<p className='px-3 py-3 text-xs text-muted-foreground text-center'>
-							No products found
-						</p>
-					)}
-				</div>
-				<div className='border-t border-border p-1.5 flex items-center justify-between bg-muted/20'>
-					<span className='text-[10px] text-muted-foreground'>
-						{checkedIds.length} selected
-					</span>
-					<button
-						type='button'
-						onClick={handleDone}
-						className='text-xs text-brand-600 hover:text-brand-700 font-semibold px-2 py-0.5 rounded border border-brand-200 bg-white'
-					>
-						Done
-					</button>
-				</div>
-			</PopoverContent>
-		</Popover>
-	);
-}
 
 function formatRupee(value: number): string {
 	return `₹${value.toLocaleString("en-IN", {
@@ -236,8 +93,11 @@ export default function ProductLinesEditor({
 	pricingContext = null,
 	taxSupplyType = "intra",
 }: ProductLinesEditorProps) {
-	const [editingId, setEditingId] = useState<string | null>(null);
-	const [localError, setLocalError] = useState<string | null>(null);
+	const [quickProductIds, setQuickProductIds] = useState<string[]>([]);
+	const [quickQty, setQuickQty] = useState("1");
+	const [inlineEditId, setInlineEditId] = useState<string | null>(null);
+	const [inlineEditDraft, setInlineEditDraft] = useState<InlineEditDraft | null>(null);
+	const [inlineEditError, setInlineEditError] = useState<string | null>(null);
 	const [schemeDialog, setSchemeDialog] = useState<{
 		lineId: string;
 		mode: ProductSchemeOfferDialogMode;
@@ -254,6 +114,25 @@ export default function ProductLinesEditor({
 		: "";
 
 	const taxOptionsKey = `${taxSupplyType}|${zeroGst}`;
+
+	const productOptions = useMemo(
+		() =>
+			products.map((p) => ({
+				value: String(p.id),
+				label: `${p.name} (${p.code})`,
+				sublabel: `Stock: ${p.stock}`,
+			})),
+		[products],
+	);
+
+	const filledLines = lines.filter((l) => l.productId != null);
+	const totalQty = filledLines.reduce((sum, l) => sum + (l.quantity || 0), 0);
+	const totalAmount = filledLines.reduce((sum, l) => sum + (l.lineTotal || 0), 0);
+
+	const previewProductId = Number(quickProductIds[0]);
+	const previewProduct = previewProductId
+		? products.find((p) => p.id === previewProductId)
+		: null;
 
 	useEffect(() => {
 		if (!pricingContext?.stateName || !pricingContext.customerMasterType) return;
@@ -302,6 +181,23 @@ export default function ProductLinesEditor({
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- recalc when tax supply type or LUT toggles
 	}, [taxOptionsKey]);
 
+	const taxOptions = { zeroGst, supplyType: taxSupplyType };
+
+	const lineFromProduct = (
+		productId: number,
+		quantity: number,
+		existingId?: string,
+	): SalesOrderLineItem | null => {
+		const product = getProductById(productId) ?? products.find((p) => p.id === productId);
+		if (!product) return null;
+		let line = createEmptyLineItem();
+		if (existingId) line.id = existingId;
+		line.productId = productId;
+		line.quantity = quantity;
+		line = applySchemePricingToLine(line, product, pricingContext, taxOptions);
+		return line;
+	};
+
 	const getLineEligibleSchemes = (
 		line: SalesOrderLineItem,
 	): EligibleProductDiscountSchemeOffer[] => {
@@ -346,7 +242,7 @@ export default function ProductLinesEditor({
 			line,
 			schemeDialog.selectedOffer,
 			product,
-			{ zeroGst, supplyType: taxSupplyType },
+			taxOptions,
 		);
 		onChange(lines.map((entry) => (entry.id === line.id ? updated : entry)));
 	};
@@ -355,117 +251,110 @@ export default function ProductLinesEditor({
 		if (!line.productId) return;
 		const product = getProductById(line.productId);
 		if (!product) return;
-		const updated = removeAppliedSchemeFromLine(line, product, {
-			zeroGst,
-			supplyType: taxSupplyType,
-		});
+		const updated = removeAppliedSchemeFromLine(line, product, taxOptions);
 		onChange(lines.map((entry) => (entry.id === line.id ? updated : entry)));
 	};
 
-	const updateLine = (id: string, patch: Partial<SalesOrderLineItem>) => {
-		setLocalError(null);
-		onChange(
-			lines.map((line) => {
-				if (line.id !== id) return line;
-				let next = { ...line, ...patch };
-
-				if (patch.productId !== undefined && patch.productId !== null) {
-					const product = getProductById(patch.productId);
-					if (product) {
-						next = applySchemePricingToLine(next, product, pricingContext, {
-							zeroGst,
-							supplyType: taxSupplyType,
-						});
-					}
-				} else if (patch.quantity !== undefined) {
-					const product = next.productId
-						? getProductById(next.productId)
-						: undefined;
-					if (product) {
-						next = applyLineTaxFields(
-							next,
-							product.gstRate,
-							taxSupplyType,
-							zeroGst,
-						);
-					} else {
-						next = recalculateLineItem(next);
-					}
-				} else if (
-					patch.gstAmount !== undefined ||
-					patch.cgstAmount !== undefined ||
-					patch.sgstAmount !== undefined ||
-					patch.igstAmount !== undefined
-				) {
-					next = recalculateLineItem(next);
-				}
-				return next;
-			}),
-		);
+	const clearQuickFields = () => {
+		setQuickProductIds([]);
+		setQuickQty("1");
 	};
 
-	const addLine = () => {
-		if (lines.length > 0) {
-			const lastLine = lines[lines.length - 1];
-			if (
-				!lastLine.productId ||
-				lastLine.quantity <= 0 ||
-				lastLine.unitPrice < 0
-			) {
-				setLocalError(
-					"Please complete the current product row before adding another.",
+	const cancelInlineEdit = () => {
+		setInlineEditId(null);
+		setInlineEditDraft(null);
+		setInlineEditError(null);
+	};
+
+	const quickAdd = () => {
+		if (quickProductIds.length === 0) return;
+		const qty = Number(quickQty) || 1;
+		let nextLines = lines.filter((l) => l.productId != null);
+
+		for (const idStr of Array.from(new Set(quickProductIds))) {
+			const productId = Number(idStr);
+			const idx = nextLines.findIndex((l) => l.productId === productId);
+			if (idx >= 0) {
+				const existing = nextLines[idx];
+				const product = getProductById(productId);
+				if (!product) continue;
+				const nextQty = existing.quantity + qty;
+				let updated = { ...existing, quantity: nextQty };
+				updated = applyLineTaxFields(
+					updated,
+					product.gstRate,
+					taxSupplyType,
+					zeroGst,
 				);
-				return;
+				nextLines[idx] = updated;
+			} else {
+				const line = lineFromProduct(productId, qty);
+				if (!line) continue;
+				nextLines.push(line);
 			}
 		}
-		setLocalError(null);
-		const newLine = createEmptyLineItem();
-		onChange([...lines, newLine]);
-		setEditingId(newLine.id);
+
+		onChange(nextLines);
+		clearQuickFields();
+	};
+
+	const startInlineEdit = (line: SalesOrderLineItem) => {
+		setInlineEditId(line.id);
+		setInlineEditDraft({
+			productId: String(line.productId ?? ""),
+			quantity: String(line.quantity),
+		});
+		setInlineEditError(null);
+	};
+
+	const saveInlineEdit = () => {
+		if (!inlineEditId || !inlineEditDraft) return;
+		const quantity = Number(inlineEditDraft.quantity);
+		if (!quantity || quantity <= 0) {
+			setInlineEditError("Quantity is required and must be greater than 0");
+			return;
+		}
+		const productId = Number(inlineEditDraft.productId);
+		if (!productId) {
+			setInlineEditError("Product is required");
+			return;
+		}
+
+		const existing = lines.find((l) => l.id === inlineEditId);
+		if (!existing) return;
+
+		const product = getProductById(productId) ?? products.find((p) => p.id === productId);
+		if (!product) return;
+
+		let updated: SalesOrderLineItem;
+		if (existing.productId !== productId) {
+			updated = lineFromProduct(productId, quantity, existing.id) ?? existing;
+		} else {
+			updated = { ...existing, quantity };
+			updated = applyLineTaxFields(
+				updated,
+				product.gstRate,
+				taxSupplyType,
+				zeroGst,
+			);
+		}
+
+		const nextLines = lines
+			.filter((l) => l.productId != null || l.id === inlineEditId)
+			.map((l) => (l.id === inlineEditId ? updated : l))
+			.filter((l) => l.productId != null);
+
+		onChange(nextLines);
+		cancelInlineEdit();
 	};
 
 	const removeLine = (id: string) => {
-		setLocalError(null);
 		onChange(lines.filter((l) => l.id !== id));
-		if (editingId === id) setEditingId(null);
-	};
-
-	const handleProductSelectMultiple = (
-		lineId: string,
-		selectedProducts: ProductCatalogItem[],
-	) => {
-		setLocalError(null);
-		if (selectedProducts.length === 0) return;
-
-		const lineIndex = lines.findIndex((l) => l.id === lineId);
-		if (lineIndex === -1) return;
-
-		const newLines = [...lines];
-
-		const p1 = selectedProducts[0];
-		newLines[lineIndex] = applySchemePricingToLine(
-			newLines[lineIndex],
-			p1,
-			pricingContext,
-			{ zeroGst, supplyType: taxSupplyType },
-		);
-
-		for (let i = 1; i < selectedProducts.length; i++) {
-			const p = selectedProducts[i];
-			let newLine = createEmptyLineItem();
-			newLine.productId = p.id;
-			newLine = applySchemePricingToLine(newLine, p, pricingContext, {
-				zeroGst,
-				supplyType: taxSupplyType,
-			});
-			newLines.push(newLine);
-		}
-
-		onChange(newLines);
+		if (inlineEditId === id) cancelInlineEdit();
 	};
 
 	return (
-		<div className='space-y-2'>
+		<div className="space-y-2">
 			<ProductSchemeOfferDialog
 				open={schemeDialog != null}
 				mode={schemeDialog?.mode ?? "no-scheme"}
@@ -481,35 +370,106 @@ export default function ProductLinesEditor({
 				onClose={() => setSchemeDialog(null)}
 				onApply={handleApplyScheme}
 			/>
-			<div className='flex flex-col items-end gap-1'>
-				{localError && (
-					<span className='text-xs text-red-500 font-medium flex items-center gap-1'>
-						<AlertCircle className='w-3.5 h-3.5 flex-shrink-0' /> {localError}
+
+			<div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+				<p className="text-[11px] text-muted-foreground">
+					Select products above the table, then edit quantity or schemes per row.
+				</p>
+				<div className="flex flex-wrap items-center gap-2">
+					<span className="inline-flex h-6 items-center rounded-full bg-brand-50 px-2.5 text-[11px] font-semibold text-brand-700">
+						{filledLines.length} item{filledLines.length === 1 ? "" : "s"}
 					</span>
-				)}
-				<Button
-					type='button'
-					variant='outline'
-					size='sm'
-					className='h-7 text-xs gap-1'
-					onClick={addLine}
-				>
-					<Plus className='w-3 h-3' /> Add Product
-				</Button>
+					{filledLines.length > 0 && (
+						<>
+							<span className="inline-flex h-6 items-center rounded-full bg-muted px-2.5 text-[11px] font-semibold text-muted-foreground">
+								{totalQty} qty
+							</span>
+							<span className="inline-flex h-6 items-center rounded-full bg-muted px-2.5 text-[11px] font-semibold text-muted-foreground">
+								{formatRupee(totalAmount)}
+							</span>
+						</>
+					)}
+				</div>
 			</div>
 
-			{lines.length === 0 ? (
-				<div className='border border-dashed border-border rounded-lg py-6 text-center'>
-					<p className='text-xs text-muted-foreground'>
-						No products — click Add Product
+			<div className="rounded-lg border border-border bg-muted/20 p-3">
+				<div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_96px_auto]">
+					<div className="space-y-1">
+						<Label className="text-xs font-medium">Product</Label>
+						<AutocompleteSelect
+							options={productOptions}
+							value={quickProductIds}
+							onChange={(val) =>
+								setQuickProductIds(Array.isArray(val) ? val.map(String) : [])
+							}
+							multiple
+							placeholder="Search or select products..."
+							searchPlaceholder="Search product..."
+							className={inputCls}
+							disabled={!!inlineEditId}
+						/>
+					</div>
+					<div className="space-y-1">
+						<Label className="text-xs font-medium">Quantity</Label>
+						<Input
+							type="number"
+							min={1}
+							value={quickQty}
+							onChange={(e) => setQuickQty(e.target.value)}
+							className={inputCls}
+							disabled={!!inlineEditId}
+						/>
+					</div>
+					<div className="flex items-end">
+						<Button
+							type="button"
+							onClick={quickAdd}
+							disabled={quickProductIds.length === 0 || !!inlineEditId}
+							className="h-8 gap-1.5 rounded-lg bg-brand-600 px-3 text-xs font-semibold text-white hover:bg-brand-700"
+						>
+							<Plus className="h-3.5 w-3.5" /> Add Item
+						</Button>
+					</div>
+				</div>
+				{previewProduct && (
+					<div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-border/60 bg-white px-3 py-2 text-[11px]">
+						<span>
+							<span className="text-muted-foreground">Code: </span>
+							<span className="font-mono font-semibold text-brand-700">
+								{previewProduct.code}
+							</span>
+						</span>
+						<span>
+							<span className="text-muted-foreground">Available stock: </span>
+							<span
+								className={cn(
+									"font-semibold tabular-nums",
+									previewProduct.stock === 0
+										? "text-amber-600"
+										: "text-foreground",
+								)}
+							>
+								{previewProduct.stock}
+							</span>
+						</span>
+					</div>
+				)}
+			</div>
+
+			{filledLines.length === 0 ? (
+				<div className="rounded-lg border border-dashed border-border bg-muted/10 px-4 py-10 text-center">
+					<Package className="mx-auto mb-2 h-10 w-10 text-muted-foreground/70" />
+					<p className="text-sm font-semibold text-foreground">No products added yet</p>
+					<p className="mt-1 text-xs text-muted-foreground">
+						Search and add products using the bar above.
 					</p>
 				</div>
 			) : (
-				<div className='border border-border rounded-xl bg-white shadow-sm overflow-hidden'>
-					<div className='overflow-x-auto'>
-						<table className='w-full min-w-[1180px]'>
+				<div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
+					<div className="overflow-x-auto">
+						<table className="w-full min-w-[1180px]">
 							<thead>
-								<tr className='bg-muted/40 border-b border-border/60'>
+								<tr className="bg-muted/40 border-b border-border/60">
 									{[
 										{ h: "Product", rowSpan: 2, className: "min-w-[180px]" },
 										{ h: "Stock", rowSpan: 2, className: "w-16" },
@@ -532,16 +492,16 @@ export default function ProductLinesEditor({
 									))}
 									<th
 										colSpan={taxSupplyType === "intra" ? 4 : 2}
-										className='px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-foreground border-b border-border/60'
+										className="px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-foreground border-b border-border/60"
 									>
 										{taxSupplyType === "intra" ? "Tax — CGST + SGST" : "Tax — IGST"}
 									</th>
 									{[
 										{ h: "Line Total", rowSpan: 2, className: "min-w-[90px]" },
-										{ h: "", rowSpan: 2, className: "w-16" },
+										{ h: "Actions", rowSpan: 2, className: "w-16" },
 									].map(({ h, rowSpan, className }) => (
 										<th
-											key={h || "actions"}
+											key={h}
 											rowSpan={rowSpan}
 											className={cn(
 												"px-2 py-2 text-left text-xs font-semibold text-foreground whitespace-nowrap align-middle",
@@ -552,7 +512,7 @@ export default function ProductLinesEditor({
 										</th>
 									))}
 								</tr>
-								<tr className='bg-muted/40 border-b border-border/60'>
+								<tr className="bg-muted/40 border-b border-border/60">
 									{(taxSupplyType === "intra"
 										? ["CGST %", "CGST Amt", "SGST %", "SGST Amt"]
 										: ["IGST %", "IGST Amt"]
@@ -564,11 +524,21 @@ export default function ProductLinesEditor({
 								</tr>
 							</thead>
 							<tbody>
-								{lines.map((line) => {
-									const isEditing = editingId === line.id;
+								{filledLines.map((line) => {
+									const isEditing = inlineEditId === line.id;
+									const draft = isEditing ? inlineEditDraft : null;
 									const product = line.productId
 										? getProductById(line.productId)
 										: undefined;
+									const draftProduct = draft?.productId
+										? getProductById(Number(draft.productId)) ??
+											products.find((p) => p.id === Number(draft.productId))
+										: null;
+									const displayStock = draftProduct?.stock ?? line.availableStock;
+									const displayQty =
+										isEditing && draft
+											? Number(draft.quantity) || 0
+											: line.quantity;
 									const hasScheme = isProductDiscountSchemeApplied(line);
 									const eligibleSchemes = hasScheme ? [] : getLineEligibleSchemes(line);
 									const hasEligibleScheme = eligibleSchemes.length > 0;
@@ -581,157 +551,173 @@ export default function ProductLinesEditor({
 													zeroGst,
 												)
 											: null;
+
 									return (
 										<tr
 											key={line.id}
-											className='border-b border-border/60 hover:bg-muted/10'
+											className={cn(
+												"border-b border-border/60 transition-colors",
+												isEditing ? "bg-brand-50/60" : "hover:bg-muted/20",
+											)}
 										>
-											<td className='px-2 py-1.5 min-w-[180px]'>
-												<div
-													className={cn(
-														localError &&
-															!line.productId &&
-															"rounded-lg border border-red-400 p-0.5 animate-pulse bg-red-50/20",
-													)}
-												>
-													<ProductSelect
-														products={products}
-														value={line.productId}
-														onSelectMultiple={(selectedProds) =>
-															handleProductSelectMultiple(
-																line.id,
-																selectedProds,
-															)
-														}
+											<td className="px-2 py-1.5 min-w-[180px]">
+												{isEditing && draft ? (
+													<AutocompleteSelect
+														options={productOptions}
+														value={draft.productId}
+														onChange={(val) => {
+															setInlineEditDraft((prev) =>
+																prev ? { ...prev, productId: String(val) } : prev,
+															);
+															setInlineEditError(null);
+														}}
+														className={inputCls}
 													/>
-												</div>
+												) : (
+													<div>
+														<p className="text-xs font-semibold text-foreground">
+															{line.productName}
+														</p>
+														<p className="mt-0.5 text-[11px] text-muted-foreground">
+															<span className="font-mono font-semibold text-brand-700">
+																{line.productCode}
+															</span>
+														</p>
+													</div>
+												)}
 											</td>
-											<td className='px-2 py-1.5'>
+											<td className="px-2 py-1.5">
 												<span
 													className={cn(
 														"text-xs font-medium tabular-nums",
-														line.availableStock === 0
+														displayStock === 0
 															? "text-amber-600"
 															: "text-foreground",
 													)}
 												>
-													{line.productId != null ? line.availableStock : "—"}
+													{displayStock}
 												</span>
 											</td>
-											<td className='px-2 py-1.5 w-16'>
-												{isEditing ? (
-													<Input
-														type='number'
-														min={0}
-														value={line.quantity || ""}
-														onChange={(e) =>
-															updateLine(line.id, {
-																quantity: Number(e.target.value) || 0,
-															})
-														}
-														className={cn(
-															"h-7 text-xs",
-															localError &&
-																line.quantity <= 0 &&
-																"border-red-400 focus-visible:ring-red-400 bg-red-50/10",
-														)}
-													/>
-												) : (
-													<span
-														className={cn(
-															"text-xs",
-															localError &&
-																line.quantity <= 0 &&
-																"text-red-500 font-semibold",
-														)}
-													>
-														{line.quantity}
-													</span>
-												)}
-											</td>
-											<td className='px-2 py-1.5'>
-												<span className='text-xs tabular-nums whitespace-nowrap'>
-													{line.productId
-														? formatSchemeRupee(line.dealerPrice)
-														: "—"}
-												</span>
-											</td>
-											<td className='px-2 py-1.5'>
-												{line.productId ? (
-													hasScheme ? (
-														<div className='flex flex-col gap-0.5 max-w-[140px]'>
-															<Badge className='w-fit px-1.5 py-0 text-[10px] font-semibold bg-emerald-600 hover:bg-emerald-600'>
-																Applied
-															</Badge>
-															<span className='text-[10px] font-mono text-brand-700 truncate'>
-																{line.appliedSchemeCode ?? line.schemeCode}
-															</span>
-															<span className='text-[10px] text-emerald-700 tabular-nums'>
-																{formatSchemeRupee(line.schemeDiscountAmount)} off
-															</span>
-															<button
-																type='button'
-																onClick={() => handleRemoveScheme(line)}
-																className='text-[10px] font-medium text-red-600 hover:text-red-700 hover:underline text-left w-fit'
-															>
-																Remove scheme
-															</button>
-														</div>
-													) : hasEligibleScheme ? (
-														<div className='flex flex-col gap-0.5 max-w-[140px]'>
-															<button
-																type='button'
-																onClick={() => openSchemeDialog(line)}
-																className='inline-flex items-center gap-1 w-fit max-w-full rounded-full border border-dashed border-brand-400 bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-700 hover:bg-brand-100 transition-colors truncate'
-																title={formatSchemeOfferLabel(eligibleSchemes[0])}
-															>
-																<Tag className='w-3 h-3 shrink-0' />
-																<span className='truncate'>
-																	{formatSchemeOfferLabel(eligibleSchemes[0])}
-																</span>
-															</button>
-															{eligibleSchemes.length > 1 && (
-																<span className='text-[9px] text-muted-foreground pl-0.5'>
-																	+{eligibleSchemes.length - 1} more scheme
-																	{eligibleSchemes.length > 2 ? "s" : ""}
-																</span>
+											<td className="px-2 py-1.5 w-16">
+												{isEditing && draft ? (
+													<div className="space-y-0.5">
+														<Input
+															type="number"
+															min={1}
+															value={draft.quantity}
+															onChange={(e) => {
+																setInlineEditDraft((prev) =>
+																	prev
+																		? { ...prev, quantity: e.target.value }
+																		: prev,
+																);
+																setInlineEditError(null);
+															}}
+															className={cn(
+																inputCls,
+																"w-16",
+																inlineEditError && "border-red-400",
 															)}
-														</div>
-													) : (
-														<button
-															type='button'
-															onClick={() => openSchemeDialog(line)}
-															className='text-[10px] font-medium text-muted-foreground hover:text-brand-700 transition-colors'
-														>
-															No Scheme
-														</button>
-													)
+														/>
+														{inlineEditError && (
+															<p className="text-[10px] text-red-500">
+																{inlineEditError}
+															</p>
+														)}
+													</div>
 												) : (
-													"—"
+													<span className="text-xs tabular-nums">{displayQty}</span>
 												)}
 											</td>
-											<td className='px-2 py-1.5'>
-												<span className='text-xs tabular-nums whitespace-nowrap'>
-													{line.productId && hasScheme
+											<td className="px-2 py-1.5">
+												<span className="text-xs tabular-nums whitespace-nowrap">
+													{formatSchemeRupee(line.dealerPrice)}
+												</span>
+											</td>
+											<td className="px-2 py-1.5">
+												{!isEditing && hasScheme ? (
+													<div className="flex flex-col gap-0.5 max-w-[140px]">
+														<Badge className="w-fit px-1.5 py-0 text-[10px] font-semibold bg-emerald-600 hover:bg-emerald-600">
+															Applied
+														</Badge>
+														<span className="text-[10px] font-mono text-brand-700 truncate">
+															{line.appliedSchemeCode ?? line.schemeCode}
+														</span>
+														<span className="text-[10px] text-emerald-700 tabular-nums">
+															{formatSchemeRupee(line.schemeDiscountAmount)} off
+														</span>
+														<button
+															type="button"
+															onClick={() => handleRemoveScheme(line)}
+															className="text-[10px] font-medium text-red-600 hover:text-red-700 hover:underline text-left w-fit"
+														>
+															Remove scheme
+														</button>
+													</div>
+												) : !isEditing && hasEligibleScheme ? (
+													<div className="flex flex-col gap-0.5 max-w-[140px]">
+														<button
+															type="button"
+															onClick={() => openSchemeDialog(line)}
+															className="inline-flex items-center gap-1 w-fit max-w-full rounded-full border border-dashed border-brand-400 bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-700 hover:bg-brand-100 transition-colors truncate"
+															title={formatSchemeOfferLabel(eligibleSchemes[0])}
+														>
+															<Tag className="w-3 h-3 shrink-0" />
+															<span className="truncate">
+																{formatSchemeOfferLabel(eligibleSchemes[0])}
+															</span>
+														</button>
+														{eligibleSchemes.length > 1 && (
+															<span className="text-[9px] text-muted-foreground pl-0.5">
+																+{eligibleSchemes.length - 1} more scheme
+																{eligibleSchemes.length > 2 ? "s" : ""}
+															</span>
+														)}
+													</div>
+												) : !isEditing ? (
+													<button
+														type="button"
+														onClick={() => openSchemeDialog(line)}
+														className="text-[10px] font-medium text-muted-foreground hover:text-brand-700 transition-colors"
+													>
+														No Scheme
+													</button>
+												) : (
+													<span className="text-[10px] text-muted-foreground">—</span>
+												)}
+											</td>
+											<td className="px-2 py-1.5">
+												<span className="text-xs tabular-nums whitespace-nowrap">
+													{hasScheme
 														? formatSchemeRupee(line.schemeDiscountAmount)
 														: "—"}
 												</span>
 											</td>
-											<td className='px-2 py-1.5'>
-												<span className='text-xs font-medium tabular-nums whitespace-nowrap'>
-													{line.productId ? formatSchemeRupee(line.finalRate) : "—"}
+											<td className="px-2 py-1.5">
+												<span className="text-xs font-medium tabular-nums whitespace-nowrap">
+													{formatSchemeRupee(line.finalRate)}
 												</span>
 											</td>
 											{line.productId && product && taxBreakdown ? (
 												taxSupplyType === "intra" ? (
 													<>
-														<td className={cn(TAX_CELL, "min-w-[72px] text-muted-foreground")}>
+														<td
+															className={cn(
+																TAX_CELL,
+																"min-w-[72px] text-muted-foreground",
+															)}
+														>
 															{taxBreakdown.cgstRate}%
 														</td>
 														<td className={cn(TAX_CELL_AMT, "min-w-[80px]")}>
 															{formatRupee(line.cgstAmount ?? 0)}
 														</td>
-														<td className={cn(TAX_CELL, "min-w-[72px] text-muted-foreground")}>
+														<td
+															className={cn(
+																TAX_CELL,
+																"min-w-[72px] text-muted-foreground",
+															)}
+														>
 															{taxBreakdown.sgstRate}%
 														</td>
 														<td className={cn(TAX_CELL_AMT, "min-w-[80px]")}>
@@ -740,7 +726,12 @@ export default function ProductLinesEditor({
 													</>
 												) : (
 													<>
-														<td className={cn(TAX_CELL, "min-w-[72px] text-muted-foreground")}>
+														<td
+															className={cn(
+																TAX_CELL,
+																"min-w-[72px] text-muted-foreground",
+															)}
+														>
 															{taxBreakdown.igstRate}%
 														</td>
 														<td className={cn(TAX_CELL_AMT, "min-w-[80px]")}>
@@ -761,39 +752,53 @@ export default function ProductLinesEditor({
 													<EmptyTaxCell />
 												</>
 											)}
-											<td className='px-2 py-1.5'>
-												<span className='text-xs font-semibold text-foreground tabular-nums'>
+											<td className="px-2 py-1.5">
+												<span className="text-xs font-semibold text-foreground tabular-nums">
 													{formatRupee(line.lineTotal)}
 												</span>
 											</td>
-											<td className='px-2 py-1.5'>
-												<div className='flex items-center gap-0.5 justify-end'>
-													<button
-														type='button'
-														onClick={() =>
-															setEditingId(isEditing ? null : line.id)
-														}
-														className='p-1.5 hover:bg-muted rounded-md transition-colors'
-														title={isEditing ? "Done editing" : "Edit row"}
-													>
-														<Pencil
-															className={cn(
-																"w-3.5 h-3.5",
-																isEditing
-																	? "text-brand-600"
-																	: "text-muted-foreground",
-															)}
-														/>
-													</button>
-													<button
-														type='button'
-														onClick={() => removeLine(line.id)}
-														className='p-1.5 hover:bg-red-50 rounded-md transition-colors'
-														title='Remove row'
-													>
-														<Trash2 className='w-3.5 h-3.5 text-red-500' />
-													</button>
-												</div>
+											<td className="px-2 py-1.5">
+												{isEditing ? (
+													<div className="inline-flex items-center gap-0.5 justify-end">
+														<button
+															type="button"
+															title="Save"
+															onClick={saveInlineEdit}
+															className="inline-flex h-7 w-7 items-center justify-center rounded-md text-emerald-700 hover:bg-emerald-50"
+														>
+															<Check className="h-3.5 w-3.5" />
+														</button>
+														<button
+															type="button"
+															title="Cancel"
+															onClick={cancelInlineEdit}
+															className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+														>
+															<X className="h-3.5 w-3.5" />
+														</button>
+													</div>
+												) : (
+													<div className="inline-flex items-center gap-0.5 justify-end">
+														<button
+															type="button"
+															title="Edit"
+															onClick={() => startInlineEdit(line)}
+															disabled={!!inlineEditId}
+															className="inline-flex h-7 w-7 items-center justify-center rounded-md text-brand-600 hover:bg-brand-50 disabled:pointer-events-none disabled:opacity-40"
+														>
+															<Pencil className="h-3.5 w-3.5" />
+														</button>
+														<button
+															type="button"
+															title="Remove"
+															onClick={() => removeLine(line.id)}
+															disabled={!!inlineEditId}
+															className="inline-flex h-7 w-7 items-center justify-center rounded-md text-red-600 hover:bg-red-50 disabled:pointer-events-none disabled:opacity-40"
+														>
+															<Trash2 className="h-3.5 w-3.5" />
+														</button>
+													</div>
+												)}
 											</td>
 										</tr>
 									);
@@ -801,12 +806,31 @@ export default function ProductLinesEditor({
 							</tbody>
 						</table>
 					</div>
+					<div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-muted/20 px-4 py-2.5">
+						<p className="text-[11px] text-muted-foreground">
+							Showing{" "}
+							<span className="font-medium text-foreground">{filledLines.length}</span>{" "}
+							items
+						</p>
+						<div className="flex flex-wrap items-center gap-3">
+							<p className="text-[11px] text-muted-foreground">
+								Total qty:{" "}
+								<span className="font-medium tabular-nums">{totalQty}</span>
+							</p>
+							<p className="text-[11px] text-muted-foreground">
+								Total amount:{" "}
+								<span className="font-medium tabular-nums font-mono">
+									{formatRupee(totalAmount)}
+								</span>
+							</p>
+						</div>
+					</div>
 				</div>
 			)}
 
 			{error && (
-				<p className='text-xs text-red-500 flex items-center gap-1'>
-					<AlertCircle className='w-3.5 h-3.5 flex-shrink-0' /> {error}
+				<p className="text-xs text-red-500 flex items-center gap-1">
+					<AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {error}
 				</p>
 			)}
 		</div>

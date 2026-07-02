@@ -13,6 +13,7 @@ import {
   getStockTransferByStId,
   updateStockTransferAfterWarehousePacking,
 } from "@/app/(app)/sales/stock-transfer/packing-sync";
+import { getPurchaseReturnsForPacking } from "@/app/(app)/procurement/purchase-returns/purchase-return-packing-sync";
 import {
   getSampleOrdersForPacking,
   mapSampleOrderToPackingRecord,
@@ -46,7 +47,9 @@ export function getSalesOrders(warehouse: string = "All"): SalesOrderRecord[] {
 
   const sampleOrders = getSampleOrdersForPacking().map(mapSampleOrderToPackingRecord);
 
-  const all = [...orders, ...transfers, ...sampleOrders];
+  const purchaseReturns = getPurchaseReturnsForPacking();
+
+  const all = [...orders, ...transfers, ...sampleOrders, ...purchaseReturns];
   if (warehouse === "All") return all;
   return all.filter(o => o.warehouse === warehouse || o.sourceWarehouse === warehouse);
 }

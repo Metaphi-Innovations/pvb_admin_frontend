@@ -203,25 +203,32 @@ function AddressSelector({
 
 export default function BillToShipToSection({
 	addresses,
+	billOptions,
+	shipOptions,
 	billToAddressId,
 	shipToAddressId,
 	onBillToChange,
 	onShipToChange,
 	errors,
+	emptyHint = "Select a customer to load Bill To / Ship To addresses.",
 }: {
-	addresses: SalesOrderCustomerAddress[];
+	addresses?: SalesOrderCustomerAddress[];
+	billOptions?: SalesOrderCustomerAddress[];
+	shipOptions?: SalesOrderCustomerAddress[];
 	billToAddressId: string;
 	shipToAddressId: string;
 	onBillToChange: (id: string) => void;
 	onShipToChange: (id: string) => void;
 	errors?: { billToAddressId?: string; shipToAddressId?: string };
+	emptyHint?: string;
 }) {
-	if (addresses.length === 0) {
+	const billList = billOptions ?? addresses ?? [];
+	const shipList = shipOptions ?? addresses ?? [];
+
+	if (billList.length === 0 && shipList.length === 0) {
 		return (
 			<div className='rounded-lg border border-dashed border-border px-3 py-2.5 bg-muted/20'>
-				<p className='text-[11px] text-muted-foreground'>
-					Select a customer to load Bill To / Ship To addresses.
-				</p>
+				<p className='text-[11px] text-muted-foreground'>{emptyHint}</p>
 			</div>
 		);
 	}
@@ -233,7 +240,7 @@ export default function BillToShipToSection({
 				required
 				value={billToAddressId}
 				onChange={onBillToChange}
-				options={addresses}
+				options={billList}
 				placeholder='Select bill to address…'
 				error={errors?.billToAddressId}
 			/>
@@ -242,7 +249,7 @@ export default function BillToShipToSection({
 				required
 				value={shipToAddressId}
 				onChange={onShipToChange}
-				options={addresses}
+				options={shipList}
 				placeholder='Select ship to address…'
 				error={errors?.shipToAddressId}
 			/>

@@ -126,8 +126,8 @@ export const PRODUCT_UNIT_OPTIONS = [
 
 /** Allowed packaging units (hardcoded — no master dependency). */
 export const PRODUCT_PACKAGING_UNIT_OPTIONS = [
-  { value: "Box", label: "Box" },
   { value: "Case", label: "Case" },
+  { value: "Loose", label: "Loose" },
 ] as const;
 
 export type ProductUnit = (typeof PRODUCT_UNIT_OPTIONS)[number]["value"];
@@ -1238,6 +1238,23 @@ export function resolveSupplierCode(supplierName: string): string {
       (v.vendorName === name || v.companyName === name),
   );
   return vendor?.vendorCode?.trim() ?? "";
+}
+
+/** Products linked to a supplier via Product Master (supplier / supplierCode fields). */
+export function loadProductsForSupplier(
+  supplierName: string,
+  supplierCode?: string,
+): Product[] {
+  const name = supplierName.trim().toLowerCase();
+  const code = supplierCode?.trim().toUpperCase() ?? "";
+  return loadProducts().filter((p) => {
+    if (p.status === "archived") return false;
+    const productSupplier = p.supplier?.trim().toLowerCase() ?? "";
+    const productCode = p.supplierCode?.trim().toUpperCase() ?? "";
+    if (name && productSupplier === name) return true;
+    if (code && productCode === code) return true;
+    return false;
+  });
 }
 
 /**

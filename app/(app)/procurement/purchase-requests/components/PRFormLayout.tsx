@@ -40,6 +40,7 @@ export function PRFormLayout({
     <FormContainer
       title={title}
       description={description}
+      compact
       onBack={() => router.push("/procurement/purchase-requests")}
       actions={
         <div className="flex items-center gap-2">

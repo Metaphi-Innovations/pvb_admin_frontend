@@ -45,6 +45,8 @@ import { getPOTotalItems } from "../po-listing-utils";
 import { canShortClosePO } from "../po-qty";
 import { canUploadPOInvoice } from "../po-invoice-utils";
 import { formatCurrency } from "@/lib/procurement/utils";
+import { CreatePurchaseReturnAction } from "../../purchase-returns/components/CreatePurchaseReturnAction";
+import { purchaseReturnRoutes } from "../../purchase-returns/purchase-return-utils";
 
 const PO_TABS: RecordDetailTab[] = [
   { value: "overview", label: "Overview" },
@@ -180,6 +182,11 @@ export default function PODetailPage() {
           <Scissors className="w-3.5 h-3.5" /> Short Close PO
         </Button>
       )}
+      <CreatePurchaseReturnAction
+        po={po}
+        variant="button"
+        onCreate={() => router.push(purchaseReturnRoutes.new(po.id))}
+      />
       {["approved", "invoice_uploaded"].includes(po.status) && (
         <Button
           variant="outline"

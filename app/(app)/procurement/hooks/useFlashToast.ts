@@ -15,6 +15,8 @@ const FLASH_MESSAGES: Record<string, string> = {
   "po-short-closed": "PO short closed successfully.",
   "pr-approved": "Purchase request approved.",
   "pr-rejected": "Purchase request rejected.",
+  "pret-draft": "Purchase return draft saved.",
+  "pret-submitted": "Purchase return submitted.",
 };
 
 /** Shows a one-time toast from `?toast=` query param, then clears the URL. */

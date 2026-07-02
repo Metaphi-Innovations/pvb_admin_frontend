@@ -879,7 +879,7 @@ export function formToVendor(
     swiftCode: form.swiftCode.trim().toUpperCase(),
     documents: form.documents,
     remarks: form.remarks.trim(),
-    vendorProducts: form.vendorProducts || [],
+    vendorProducts: [],
   };
 }
 
@@ -952,22 +952,6 @@ export function validateVendorForm(form: VendorFormValues): string | null {
     }
     if (contact.email.trim() && !validateVendorEmail(contact.email)) {
       return `Enter a valid email address for contact row ${i + 1}.`;
-    }
-  }
-
-  // Validate product mappings
-  const selectedProductIds = new Set<string>();
-  for (let i = 0; i < (form.vendorProducts || []).length; i++) {
-    const p = form.vendorProducts[i];
-    if (!p.productId || !p.productName.trim()) {
-      return `Product is required at row ${i + 1}.`;
-    }
-    if (selectedProductIds.has(p.productId)) {
-      return `Duplicate product mapping: ${p.productName} is selected multiple times.`;
-    }
-    selectedProductIds.add(p.productId);
-    if (p.price === undefined || p.price === null || isNaN(p.price) || p.price <= 0) {
-      return `Price must be greater than 0 for product "${p.productName || p.productId}" at row ${i + 1}.`;
     }
   }
 

@@ -496,7 +496,7 @@ function SectionHead({
 	required?: boolean;
 }) {
 	return (
-		<div className='mb-2.5 mt-0.5'>
+		<div className='mb-1.5'>
 			<p className='flex items-center text-xs font-bold tracking-wider uppercase text-foreground'>
 				{label}
 				{required && <span className='ml-1 text-red-500'>*</span>}
@@ -1169,7 +1169,7 @@ export function WarehouseForm({
 		);
 
 	return (
-		<div className='w-full space-y-5'>
+		<div className='w-full space-y-3'>
 			{/* ── Section 1: Basic Details ─────────────────────────── */}
 			<div>
 				<SectionHead
@@ -1177,7 +1177,7 @@ export function WarehouseForm({
 					sub='Identity, classification, and operational status'
 					required
 				/>
-				<div className='grid grid-cols-12 gap-3'>
+				<div className='grid grid-cols-12 gap-2.5'>
 					{/* Warehouse Name */}
 					<div className='col-span-12 sm:col-span-4 space-y-1'>
 						<Label className='text-xs font-medium'>
@@ -1231,16 +1231,14 @@ export function WarehouseForm({
 			</div>
 
 			{/* ── Section 2: Contact Details ────────────────────────── */}
-			<div className='pt-4 border-t border-border/60'>
-				<div className='flex items-center justify-between mb-3'>
-					<SectionHead
-						label='Contact Details'
-						sub='Add one or more warehouse contact persons.'
-						required
-					/>
-				</div>
+			<div className='pt-3 border-t border-border/60'>
+				<SectionHead
+					label='Contact Details'
+					sub='Add one or more warehouse contact persons.'
+					required
+				/>
 
-				<div className='space-y-3'>
+				<div className='space-y-2'>
 					{form.contacts.map((contact, index) => {
 						const nameErr = errors[`contactPerson_${index}`];
 						const mobErr = errors[`mobileNumber_${index}`];
@@ -1249,9 +1247,9 @@ export function WarehouseForm({
 						return (
 							<div
 								key={contact.id}
-								className='p-3 space-y-3 border border-border/80 bg-slate-50/50 rounded-xl'
+								className='p-2.5 space-y-2 border border-border/80 bg-slate-50/50 rounded-lg'
 							>
-								<div className='grid items-end grid-cols-1 gap-3 md:grid-cols-12'>
+								<div className='grid items-end grid-cols-1 gap-2.5 md:grid-cols-12'>
 									{/* Contact Person */}
 									<div className='col-span-1 space-y-1 md:col-span-2'>
 										<Label className='text-xs font-medium'>
@@ -1354,7 +1352,7 @@ export function WarehouseForm({
 									</div>
 
 									{/* Primary Radio & Remove Button */}
-									<div className='flex items-center col-span-1 gap-3 pt-2 pb-2 md:col-span-2 md:pt-0'>
+									<div className='flex items-center col-span-1 gap-2 md:col-span-2'>
 										{/* Primary Toggle */}
 										<label className='inline-flex items-center gap-1.5 cursor-pointer text-xs font-medium text-foreground select-none'>
 											<input
@@ -1385,7 +1383,7 @@ export function WarehouseForm({
 					})}
 				</div>
 
-				<div className='mt-3'>
+				<div className='mt-2'>
 					<Button
 						type='button'
 						variant='outline'
@@ -1416,7 +1414,7 @@ export function WarehouseForm({
 			)}
 
 			{/* ── Section 3: Address Details ────────────────────────── */}
-			<div className='pt-4 border-t border-border/60'>
+			<div className='pt-3 border-t border-border/60'>
 				<SectionHead
 					label='Address & Location Details'
 					sub='Warehouse location and postal address'
@@ -1439,7 +1437,7 @@ export function WarehouseForm({
 			</div>
 
 			{/* ── Section 4: GST & Tax Details ──────────────────────── */}
-			<div className='pt-4 border-t border-border/60'>
+			<div className='pt-3 border-t border-border/60'>
 				<ErpFormSection
 					title='GST & Tax Details'
 					headerRight={
@@ -1493,7 +1491,7 @@ export function WarehouseForm({
 			</div>
 
 			{/* ── Section 5: Bank Details ─────────────────────────── */}
-			<div className='pt-4 border-t border-border/60'>
+			<div className='pt-3 border-t border-border/60'>
 				<ErpFormSection title='Bank Details'>
 					<BankDetailsFields
 						values={{
@@ -1518,16 +1516,14 @@ export function WarehouseForm({
 			</div>
 
 			{/* ── Section 6: Documents ─────────────────────────────── */}
-			<div className='pt-4 border-t border-border/60'>
-				<div className='flex items-center justify-between mb-3'>
-					<SectionHead
-						label='Warehouse Documents'
-						sub='Upload related documents, GST certificates, agreements etc.'
-					/>
-				</div>
+			<div className='pt-3 border-t border-border/60'>
+				<SectionHead
+					label='Warehouse Documents'
+					sub='Upload related documents, GST certificates, agreements etc.'
+				/>
 
-				<div className='p-3 mb-3 border rounded-lg border-border bg-muted/25'>
-					<div className='grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto]'>
+				<div className='p-2.5 mb-2 border rounded-lg border-border bg-muted/25'>
+					<div className='grid grid-cols-1 gap-2.5 md:grid-cols-[minmax(0,1fr)_auto]'>
 						<div className='space-y-1'>
 							<label className='text-xs font-medium text-foreground'>
 								Document Types

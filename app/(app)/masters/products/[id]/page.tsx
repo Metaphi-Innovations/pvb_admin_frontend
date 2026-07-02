@@ -269,7 +269,7 @@ export default function ProductDetailPage() {
 							<RecordKvRow label='Unit' value={product.baseUnit} />
 							<RecordKvRow label='Packaging Unit' value={product.packagingUnit} />
 							<RecordKvRow
-								label='Unit Per Packaging Unit'
+								label='Unit per Case'
 								value={
 									product.unitPerCase !== undefined
 										? String(product.unitPerCase)

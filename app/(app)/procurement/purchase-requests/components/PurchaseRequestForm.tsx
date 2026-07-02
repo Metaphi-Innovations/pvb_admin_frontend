@@ -95,7 +95,7 @@ export const DEFAULT_PR_FORM: PRFormValues = {
 
 function SectionHead({ label, sub, required }: { label: string; sub?: string; required?: boolean }) {
   return (
-    <div className="mb-3 pb-2 border-b border-border">
+    <div className="mb-1.5 pb-1.5 border-b border-border">
       <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center">
         {label}
         {required && <span className="text-red-500 ml-1">*</span>}
@@ -361,10 +361,10 @@ export function PurchaseRequestForm({
 
   return (
     <div className={cn("rounded-xl border border-border bg-white p-4 shadow-sm", readOnly && "w-full")}>
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div>
           <SectionHead label="Request Details" sub="Core purchase request information and required timeline." />
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-1">
               <Label className="text-xs font-medium">PR No.</Label>
               <Input
@@ -465,7 +465,7 @@ export function PurchaseRequestForm({
               )}
             </div>
           </div>
-          <div className="mt-3 space-y-1">
+          <div className="mt-2 space-y-1">
             <Label className="text-xs font-medium">Purpose / Justification</Label>
             <Textarea
               rows={2}
@@ -481,8 +481,8 @@ export function PurchaseRequestForm({
           </div>
         </div>
 
-        <div className="border-t border-border/60 pt-4">
-          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+        <div className="border-t border-border/60 pt-3">
+          <div className="flex flex-col gap-1.5 md:flex-row md:items-end md:justify-between">
             <SectionHead
               label="Product / Item Details"
               sub="Enter packaging quantity — total SKU qty and amount are auto-calculated from product master."
@@ -505,8 +505,8 @@ export function PurchaseRequestForm({
           </div>
 
           {!readOnly && (
-            <div className="mb-3 rounded-lg border border-border bg-muted/20 p-3">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_96px_minmax(0,1fr)_auto]">
+            <div className="mb-2 rounded-lg border border-border bg-muted/20 p-2.5">
+              <div className="grid grid-cols-1 gap-2.5 md:grid-cols-[minmax(0,1fr)_96px_minmax(0,1fr)_auto]">
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Product</Label>
                   <AutocompleteSelect
@@ -550,7 +550,7 @@ export function PurchaseRequestForm({
                 </div>
               </div>
               {previewProductInfo && (
-                <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-border/60 bg-white px-3 py-2 text-[11px]">
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-border/60 bg-white px-2.5 py-1.5 text-[11px]">
                   <span>
                     <span className="text-muted-foreground">HSN: </span>
                     <span className="font-mono font-medium text-foreground">{previewProductInfo.hsnCode || "—"}</span>
@@ -585,8 +585,8 @@ export function PurchaseRequestForm({
           )}
 
           {filledLines.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border bg-muted/10 px-4 py-10 text-center">
-              <Package className="mx-auto mb-2 h-10 w-10 text-muted-foreground/70" />
+            <div className="rounded-lg border border-dashed border-border bg-muted/10 px-4 py-8 text-center">
+              <Package className="mx-auto mb-1.5 h-9 w-9 text-muted-foreground/70" />
               <p className="text-sm font-semibold text-foreground">No items added yet</p>
               <p className="mt-1 text-xs text-muted-foreground">Add a product to start building this request.</p>
             </div>
@@ -791,12 +791,12 @@ export function PurchaseRequestForm({
           )}
         </div>
 
-        <div className="border-t border-border/60 pt-4">
+        <div className="border-t border-border/60 pt-3">
           <SectionHead
             label="Remarks & Attachments"
             sub={readOnly ? undefined : "Additional notes and supporting documents."}
           />
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             <div>
               {!readOnly && (
                 <p className="mb-1.5 text-xs font-medium text-foreground">Remarks</p>
@@ -813,9 +813,9 @@ export function PurchaseRequestForm({
                 )}
               />
             </div>
-            <div className="rounded-xl border border-border bg-muted/10 p-3.5">
+            <div className="rounded-xl border border-border bg-muted/10 p-2.5">
               {!readOnly && (
-                <div className="mb-2.5 flex items-center justify-between gap-2">
+                <div className="mb-2 flex items-center justify-between gap-2">
                   <p className="text-xs font-medium text-foreground">Attachments</p>
                   <Button
                     type="button"
@@ -833,11 +833,11 @@ export function PurchaseRequestForm({
               )}
               {!readOnly && <input ref={fileRef} type="file" className="hidden" onChange={onFilePick} />}
                 {form.attachments.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+                  <p className="rounded-lg border border-dashed border-border px-3 py-3 text-center text-xs text-muted-foreground">
                     No attachments
                   </p>
                 ) : (
-                  <ul className="space-y-2">
+                  <ul className="space-y-1.5">
                     {form.attachments.map((a) => (
                       <li
                         key={a.uid}

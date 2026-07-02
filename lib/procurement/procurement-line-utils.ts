@@ -1,5 +1,11 @@
 import type { Product } from "@/app/(app)/masters/products/product-data";
 import { findProductRef, getStandardMrp, resolvePurchaseCostPrice } from "@/lib/pricing/resolve-pricing";
+import { applyTaxSupplyToRates, round2, type TaxSupplyType } from "@/lib/procurement/utils";
+import {
+  applyGstMasterToTaxRates,
+  findGstMasterIdByTotalPct,
+  getDefaultGstMasterId,
+} from "@/lib/procurement/gst-master-utils";
 
 export type PackagingUom = "Unit" | "Case" | "Box" | "Carton";
 
@@ -24,6 +30,98 @@ export interface ProcurementAdditionalCharge {
   chargeName: string;
   amount: number;
   remarks?: string;
+  gstMasterId?: number;
+  cgstPct?: number;
+  sgstPct?: number;
+  igstPct?: number;
+}
+
+export interface AdditionalChargeTaxResult {
+  taxableValue: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  taxAmount: number;
+  netAmount: number;
+}
+
+const DEFAULT_CHARGE_GST_PCT = 18;
+
+export function migrateAdditionalCharge(charge: ProcurementAdditionalCharge): Required<
+  Pick<ProcurementAdditionalCharge, "cgstPct" | "sgstPct" | "igstPct" | "gstMasterId">
+> &
+  ProcurementAdditionalCharge {
+  const totalGst =
+    (charge.cgstPct ?? 0) + (charge.sgstPct ?? 0) + (charge.igstPct ?? 0);
+  const gstMasterId =
+    charge.gstMasterId ??
+    findGstMasterIdByTotalPct(totalGst || DEFAULT_CHARGE_GST_PCT) ??
+    getDefaultGstMasterId();
+  const hasRates =
+    totalGst > 0 &&
+    (charge.cgstPct != null || charge.sgstPct != null || charge.igstPct != null);
+  if (hasRates) {
+    return {
+      ...charge,
+      gstMasterId,
+      cgstPct: charge.cgstPct ?? 0,
+      sgstPct: charge.sgstPct ?? 0,
+      igstPct: charge.igstPct ?? 0,
+    };
+  }
+  const rates = applyGstMasterToTaxRates(gstMasterId, "intra");
+  return {
+    ...charge,
+    gstMasterId,
+    cgstPct: rates.cgstPct,
+    sgstPct: rates.sgstPct,
+    igstPct: rates.igstPct,
+  };
+}
+
+export function calcAdditionalChargeTax(
+  charge: Pick<ProcurementAdditionalCharge, "amount" | "cgstPct" | "sgstPct" | "igstPct">,
+): AdditionalChargeTaxResult {
+  const migrated = migrateAdditionalCharge({
+    uid: "",
+    chargeName: "",
+    amount: charge.amount,
+    cgstPct: charge.cgstPct,
+    sgstPct: charge.sgstPct,
+    igstPct: charge.igstPct,
+  });
+  const taxableValue = round2(Number(migrated.amount) || 0);
+  const cgstAmount = round2(taxableValue * (migrated.cgstPct / 100));
+  const sgstAmount = round2(taxableValue * (migrated.sgstPct / 100));
+  const igstAmount = round2(taxableValue * (migrated.igstPct / 100));
+  const taxAmount = round2(cgstAmount + sgstAmount + igstAmount);
+  const netAmount = round2(taxableValue + taxAmount);
+  return { taxableValue, cgstAmount, sgstAmount, igstAmount, taxAmount, netAmount };
+}
+
+export function sumAdditionalCharges(charges: ProcurementAdditionalCharge[]): number {
+  return round2(charges.reduce((s, c) => s + calcAdditionalChargeTax(c).taxableValue, 0));
+}
+
+export function sumAdditionalChargeTaxes(charges: ProcurementAdditionalCharge[]): {
+  totalCgst: number;
+  totalSgst: number;
+  totalIgst: number;
+} {
+  let totalCgst = 0;
+  let totalSgst = 0;
+  let totalIgst = 0;
+  charges.forEach((c) => {
+    const t = calcAdditionalChargeTax(c);
+    totalCgst += t.cgstAmount;
+    totalSgst += t.sgstAmount;
+    totalIgst += t.igstAmount;
+  });
+  return {
+    totalCgst: round2(totalCgst),
+    totalSgst: round2(totalSgst),
+    totalIgst: round2(totalIgst),
+  };
 }
 
 export const ADDITIONAL_CHARGE_PRESETS = [
@@ -38,18 +136,21 @@ export const ADDITIONAL_CHARGE_PRESETS = [
   "Other Charges",
 ] as const;
 
-export function newAdditionalCharge(partial?: Partial<ProcurementAdditionalCharge>): ProcurementAdditionalCharge {
+export function newAdditionalCharge(
+  partial?: Partial<ProcurementAdditionalCharge>,
+  taxSupplyType: TaxSupplyType = "intra",
+): ProcurementAdditionalCharge {
+  const gstMasterId = partial?.gstMasterId ?? getDefaultGstMasterId();
+  const rates = applyGstMasterToTaxRates(gstMasterId, taxSupplyType);
   return {
     uid: `chg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     chargeName: "",
     amount: 0,
     remarks: "",
+    ...rates,
     ...partial,
+    gstMasterId: partial?.gstMasterId ?? gstMasterId,
   };
-}
-
-export function sumAdditionalCharges(charges: ProcurementAdditionalCharge[]): number {
-  return Math.round(charges.reduce((s, c) => s + (Number(c.amount) || 0), 0) * 100) / 100;
 }
 
 /** Total qty in base unit from packaging quantity (PR / packing orders) */
