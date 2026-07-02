@@ -158,9 +158,27 @@ export function MiniKPICard({
   value,
   icon: Icon,
   accent = false,
+  compact = false,
   className,
   ...props
-}: MiniKPICardProps) {
+}: MiniKPICardProps & { compact?: boolean }) {
+  if (compact) {
+    return (
+      <div
+        className={cn(
+          "flex flex-col justify-center px-2.5 py-1.5 rounded-md border border-border/50 bg-white min-h-[44px]",
+          className,
+        )}
+        {...props}
+      >
+        <p className="text-[10px] font-medium text-muted-foreground leading-none">{label}</p>
+        <p className="text-sm font-bold text-foreground tabular-nums leading-tight mt-0.5 truncate">
+          {value}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(

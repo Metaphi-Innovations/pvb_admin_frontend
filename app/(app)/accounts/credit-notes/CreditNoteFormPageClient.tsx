@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Trash2 } from "lucide-react";
@@ -605,12 +606,10 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
                       </td>
                       <td className={cn("px-3 py-2 align-middle text-right", CREDIT_NOTE_COLUMNS[4].className)}>
                         {isManualEntry && !readOnly ? (
-                          <Input
-                            type="number"
-                            min={0}
+                          <AccountsMoneyInput
                             className="h-8 w-full max-w-[80px] text-xs text-right tabular-nums ml-auto"
                             value={l.unitPrice || ""}
-                            onChange={(e) => updateLine(l.id, { unitPrice: parseFloat(e.target.value) || 0 })}
+                            onChange={(v) => updateLine(l.id, { unitPrice: v })}
                           />
                         ) : (
                           <p className="text-xs text-right tabular-nums font-mono">{l.unitPrice > 0 ? l.unitPrice.toFixed(2) : "—"}</p>
@@ -695,11 +694,10 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
               </div>
               <div className="flex justify-between items-center py-1 gap-2">
                 <span className="text-muted-foreground">Adjustment</span>
-                <Input
-                  type="number"
+                <AccountsMoneyInput
                   className="h-7 w-24 text-xs text-right tabular-nums ml-auto"
                   value={adjustment || ""}
-                  onChange={(e) => setAdjustment(parseFloat(e.target.value) || 0)}
+                  onChange={(v) => setAdjustment(v)}
                   disabled={readOnly}
                 />
               </div>

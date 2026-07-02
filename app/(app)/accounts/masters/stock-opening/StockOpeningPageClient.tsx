@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
@@ -101,7 +102,7 @@ export default function StockOpeningPageClient() {
             </div>
             <div className="space-y-1">
               <Label className="text-[10px]">Rate</Label>
-              <Input type="number" className="h-8 text-xs" value={rate} onChange={(e) => setRate(Number(e.target.value))} />
+              <AccountsMoneyInput className="h-8 text-xs" value={rate} onChange={(v) => setRate(v)} />
             </div>
             <div className="space-y-1">
               <Label className="text-[10px]">Batch No</Label>

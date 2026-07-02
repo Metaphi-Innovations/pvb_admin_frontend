@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertCircle, Check, Landmark, Sparkles } from "lucide-react";
+import { AlertCircle, Check, Landmark } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,7 +49,7 @@ export function ReconcileEntrySheet({
 
   useEffect(() => {
     if (!row || !open) return;
-    setBankProcessingDate(row.bankProcessingDate || row.suggestedMatch?.bankProcessingDate || "");
+    setBankProcessingDate(row.bankProcessingDate || "");
     setRemarks(row.remarks);
     setError("");
   }, [row, open]);
@@ -62,7 +62,6 @@ export function ReconcileEntrySheet({
       rowKey: row.rowKey,
       bankProcessingDate,
       remarks,
-      matchedStatementEntryId: row.suggestedMatch?.statementEntryId ?? null,
     });
     setBusy(false);
     if (!result.ok) {
@@ -87,30 +86,11 @@ export function ReconcileEntrySheet({
               <SheetTitle className="truncate">{row.voucherNo}</SheetTitle>
               <SheetDescription>{row.partyName}</SheetDescription>
             </div>
-            <ReconEntryStatusBadge status={row.status} suggested={row.isSuggested} />
+            <ReconEntryStatusBadge status={row.status} />
           </div>
         </SheetHeader>
 
         <SheetBody className="space-y-4">
-          {row.suggestedMatch && row.status === "pending" && (
-            <div className="rounded-xl border border-navy-200 bg-navy-50/60 px-3 py-2.5 flex items-start gap-2">
-              <Sparkles className="w-4 h-4 text-navy-600 flex-shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-navy-700">Suggested match from bank statement</p>
-                <p className="text-[11px] text-navy-600 mt-0.5 leading-relaxed">
-                  {row.suggestedMatch.narration}
-                  {row.suggestedMatch.referenceNo ? ` · Ref ${row.suggestedMatch.referenceNo}` : ""}
-                </p>
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Amount {formatMoney(row.suggestedMatch.amount)} · Bank date {row.suggestedMatch.bankProcessingDate}
-                </p>
-                <p className="text-[10px] text-muted-foreground mt-1">
-                  Verify against your statement and confirm manually — nothing is auto-reconciled.
-                </p>
-              </div>
-            </div>
-          )}
-
           <div className="grid grid-cols-2 gap-3">
             <InfoField label="Voucher No." value={row.voucherNo} mono />
             <InfoField label="Voucher Type" value={row.voucherTypeLabel} />

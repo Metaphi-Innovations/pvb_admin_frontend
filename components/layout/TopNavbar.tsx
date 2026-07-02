@@ -135,7 +135,7 @@ function HorizontalTabsMegaMenu({
   const activeGroup = groupedChildren[hoveredGroup];
   const activeChildren = activeGroup?.children ?? [];
   const columns = arrangeAccountsMegaMenuColumns(
-    (activeGroup?.id ?? "masters") as AccountsNavGroupId,
+    (activeGroup?.id ?? "coa") as AccountsNavGroupId,
     activeChildren.map((c) => ({
       label: c.label,
       href: c.href,
@@ -588,7 +588,7 @@ const NavDropdown = memo(function NavDropdown({
                 const activeGroup = groupedChildren[hoveredGroup];
                 const activeChildren = activeGroup?.children ?? [];
                 const columns = arrangeAccountsMegaMenuColumns(
-                  (activeGroup?.id ?? "masters") as AccountsNavGroupId,
+                  (activeGroup?.id ?? "coa") as AccountsNavGroupId,
                   activeChildren.map((c) => ({
                     label: c.label,
                     href: c.href,

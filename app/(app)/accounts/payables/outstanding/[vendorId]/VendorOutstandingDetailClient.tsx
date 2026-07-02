@@ -1,35 +1,67 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { IndianRupee, ArrowLeft, MoreHorizontal, Eye } from "lucide-react";
+import { useParams, useSearchParams } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
-import { useTransactionDetailsDrawer } from "@/components/accounts/TransactionDetailsDrawer";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { getVendorOutstandingDetail } from "@/lib/accounts/payables-data";
-import { getVendorPayablesMeta } from "@/lib/accounts/payables-data";
-import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
-import { formatMoney } from "@/lib/accounts/money-format";
-import { MiniKPICard } from "@/components/ui/KPICard";
+import {
+  getVendorOutstandingDetail,
+  getVendorPayablesMeta,
+  getVendorPaymentHistory,
+} from "@/lib/accounts/payables-data";
+import { ensurePayablesDemoOnPageLoad } from "@/lib/accounts/payables-demo-seed";
+import { formatMoney, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
+import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
 import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { formatCreditPeriod } from "@/app/(app)/masters/vendors/vendor-data";
+import { cn } from "@/lib/utils";
+
+function formatReportDate(value: string): string {
+  if (!value || value === "—") return "—";
+  const [y, m, d] = value.slice(0, 10).split("-");
+  if (!y || !m || !d) return value;
+  return `${d}-${m}-${y}`;
+}
+
+function InfoBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium mt-0.5">{value}</p>
+    </div>
+  );
+}
 
 export default function VendorOutstandingDetailClient() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const vendorId = Number(params.vendorId);
-  const { openTransaction, drawer: transactionDrawer } = useTransactionDetailsDrawer();
+  const highlightBillId = Number(searchParams.get("billId"));
+  const [asOnDate] = useState(defaultAsOnDate());
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    ensurePayablesDemoOnPageLoad();
+    setRefreshKey((k) => k + 1);
+  }, []);
+
   const detail = useMemo(
-    () => (Number.isFinite(vendorId) ? getVendorOutstandingDetail(vendorId, "2026-06-20") : null),
-    [vendorId],
+    () => (Number.isFinite(vendorId) ? getVendorOutstandingDetail(vendorId, asOnDate) : null),
+    [vendorId, asOnDate, refreshKey],
   );
+
+  const paymentHistory = useMemo(
+    () => (Number.isFinite(vendorId) ? getVendorPaymentHistory(vendorId) : []),
+    [vendorId, refreshKey],
+  );
+
+  const highlightedBill = useMemo(() => {
+    if (!detail || !Number.isFinite(highlightBillId)) return null;
+    return detail.bills.find((b) => b.billId === highlightBillId) ?? null;
+  }, [detail, highlightBillId]);
 
   if (!detail) {
     return (
@@ -51,15 +83,9 @@ export default function VendorOutstandingDetailClient() {
     );
   }
 
-  const { vendor, ledgerId, bills } = detail;
+  const { vendor, bills } = detail;
   const meta = getVendorPayablesMeta(vendor.id);
-
-  const openBill = useCallback(
-    (billId: number) => {
-      openTransaction({ type: "purchase_invoice", id: billId });
-    },
-    [openTransaction],
-  );
+  const openBills = bills.filter((b) => b.outstanding > 0.009);
 
   return (
     <AccountsPageShell
@@ -67,155 +93,220 @@ export default function VendorOutstandingDetailClient() {
         ...accountsBreadcrumb("Payables", "Supplier Outstanding", "/accounts/payables/outstanding"),
         { label: vendor.vendorName },
       ]}
-      title={vendor.vendorName}
-      description={`${vendor.vendorCode} · ${meta?.territory ?? vendor.billingAddress.state}`}
+      title="Supplier Outstanding Details"
+      description={`${vendor.vendorCode} · Outstanding as on ${formatReportDate(asOnDate)}`}
       actions={
-        <Link href="/accounts/payables/outstanding">
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
-            <ArrowLeft className="w-3.5 h-3.5" /> Back
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/accounts/payables/outstanding">
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
+              <ArrowLeft className="w-3.5 h-3.5" /> Back
+            </Button>
+          </Link>
+          <Link href={`/accounts/payables/payment-allocation?vendorId=${vendor.id}`}>
+            <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white">
+              Go to Payment Allocation
+            </Button>
+          </Link>
+        </div>
       }
       layout="split"
       className="h-full min-h-0"
     >
-      <div className="flex-shrink-0 p-4 border-b border-border/60 bg-muted/5 space-y-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 text-xs">
-          {[
-            ["GSTIN", vendor.gstNumber || "—"],
-            ["Mobile", vendor.mobile],
-            ["Territory", meta?.territory ?? "—"],
-            ["Purchase Manager", meta?.purchaseManager ?? "Purchase Desk"],
-            ["Credit Days", formatCreditPeriod(vendor)],
-            ["Branch", meta?.branch ?? vendor.billingAddress.city],
-          ].map(([label, value]) => (
-            <div key={label}>
-              <p className="text-[10px] uppercase text-muted-foreground font-semibold">{label}</p>
-              <p className="font-medium mt-0.5">{value}</p>
+      <div className="flex-1 overflow-auto min-h-0 space-y-4 p-4">
+        <section className="rounded-xl border border-border bg-white shadow-sm p-4 space-y-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            Supplier Information
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <InfoBlock label="Supplier Name" value={vendor.vendorName} />
+            <InfoBlock label="Supplier Code" value={vendor.vendorCode} />
+            <InfoBlock label="GSTIN" value={vendor.gstNumber || "—"} />
+            <InfoBlock label="Territory" value={meta?.territory ?? "—"} />
+            <InfoBlock label="Branch" value={meta?.branch ?? vendor.billingAddress.city} />
+            <InfoBlock label="Credit Period" value={formatCreditPeriod(vendor)} />
+            <InfoBlock label="Purchase Manager" value={meta?.purchaseManager ?? "Purchase Desk"} />
+            <InfoBlock label="Mobile" value={vendor.mobile} />
+          </div>
+        </section>
+
+        {highlightedBill && (
+          <section className="rounded-xl border border-brand-200 bg-brand-50/40 shadow-sm p-4 space-y-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Invoice Information
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <InfoBlock label="Invoice No." value={highlightedBill.billNo} />
+              <InfoBlock label="Invoice Date" value={formatReportDate(highlightedBill.billDate)} />
+              <InfoBlock label="Due Date" value={formatReportDate(highlightedBill.dueDate)} />
+              <InfoBlock label="Status" value={highlightedBill.status.replaceAll("_", " ")} />
+              <InfoBlock label="Invoice Amount" value={formatMoney(highlightedBill.billAmount)} />
+              <InfoBlock label="Paid" value={formatMoney(highlightedBill.paidAmount)} />
+              <InfoBlock label="Outstanding" value={formatMoney(highlightedBill.outstanding)} />
+              <InfoBlock
+                label="Overdue Days"
+                value={highlightedBill.outstanding > 0 ? String(highlightedBill.daysOverdue) : "—"}
+              />
             </div>
-          ))}
-        </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
+                <Link href={`/accounts/purchase-invoices/${highlightedBill.billId}`}>
+                  View Purchase Invoice
+                </Link>
+              </Button>
+            </div>
+          </section>
+        )}
 
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-          <MiniKPICard label="Opening Balance" value={formatMoney(detail.openingBalance)} icon={IndianRupee} />
-          <MiniKPICard label="Total Purchases" value={formatMoney(detail.totalPurchases)} icon={IndianRupee} />
-          <MiniKPICard label="Total Payments" value={formatMoney(detail.totalPayments)} icon={IndianRupee} />
-          <MiniKPICard label="Debit Notes" value={formatMoney(detail.debitNotes)} icon={IndianRupee} />
-          <MiniKPICard label="Credit Notes" value={formatMoney(detail.creditNotes)} icon={IndianRupee} />
-          <MiniKPICard
-            label="Current Outstanding"
-            value={formatMoney(detail.currentOutstanding)}
-            icon={IndianRupee}
-            accent
-          />
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-auto min-h-0">
-        <table className="accounts-table w-full text-table min-w-[1100px]">
-          <thead className="border-b">
-            <tr>
-              {[
-                "Purchase Bill No",
-                "Bill Date",
-                "Due Date",
-                "Bill Amount",
-                "Paid",
-                "Debit Note Adj.",
-                "Outstanding",
-                "Days Overdue",
-                "Status",
-                "",
-              ].map((h) => (
-                <th
-                  key={h || "act"}
-                  className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap"
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {bills.map((bill) => (
-              <tr
-                key={bill.billId}
-                className="border-b border-border/40 hover:bg-muted/20 cursor-pointer group"
-                onClick={() => openBill(bill.billId)}
+        <section className="rounded-xl border border-border bg-white shadow-sm p-4 space-y-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            Outstanding Summary
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+            {[
+              ["Total Purchases", formatMoney(detail.totalPurchases)],
+              ["Total Payments", formatMoney(detail.totalPayments)],
+              ["Debit Notes", formatMoney(detail.debitNotes)],
+              ["Credit Notes", formatMoney(detail.creditNotes)],
+              ["Current Outstanding", formatMoney(detail.currentOutstanding)],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                className={cn(
+                  "rounded-lg border border-border/60 bg-muted/10 p-3",
+                  label === "Current Outstanding" && "border-brand-200 bg-brand-50/30",
+                )}
               >
-                <td className="px-3 py-2.5 text-xs font-mono font-semibold">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openBill(bill.billId);
-                    }}
-                    className="text-brand-700 hover:underline"
-                  >
-                    {bill.billNo}
-                  </button>
-                </td>
-                <td className="px-3 py-2.5 text-xs">{bill.billDate}</td>
-                <td className="px-3 py-2.5 text-xs">{bill.dueDate}</td>
-                <td className="px-3 py-2.5 text-xs text-right tabular-nums">
-                  {formatMoney(bill.billAmount)}
-                </td>
-                <td className="px-3 py-2.5 text-xs text-right tabular-nums">
-                  {formatMoney(bill.paidAmount)}
-                </td>
-                <td className="px-3 py-2.5 text-xs text-right tabular-nums">
-                  {formatMoney(bill.debitNoteAdjusted)}
-                </td>
-                <td className="px-3 py-2.5 text-xs text-right tabular-nums font-semibold">
-                  {formatMoney(bill.outstanding)}
-                </td>
-                <td className="px-3 py-2.5 text-xs text-center tabular-nums">
-                  {bill.outstanding > 0 ? bill.daysOverdue : "—"}
-                </td>
-                <td className="px-3 py-2.5">
-                  <StatusBadge status={bill.status} />
-                </td>
-                <td className="px-3 py-2.5 text-right">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openBill(bill.billId);
-                    }}
-                    className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-0 group-hover:opacity-100 inline-flex"
-                    aria-label={`View ${bill.billNo}`}
-                  >
-                    <Eye className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-44">
-                      <DropdownMenuItem asChild>
-                        <Link href={`/accounts/purchase-invoices/${bill.billId}`}>
-                          View Purchase Bill
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href={`/accounts/vouchers?tab=payment&vendor=${vendor.id}`}>
-                          Make Payment
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href={buildGeneralLedgerHref(ledgerId)}>View Ledger</Link>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </td>
-              </tr>
+                <p className="text-[10px] uppercase text-muted-foreground font-semibold">{label}</p>
+                <p
+                  className={cn(
+                    "text-sm font-bold mt-1 tabular-nums",
+                    label === "Current Outstanding" && "text-brand-700",
+                  )}
+                >
+                  {value}
+                </p>
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-border bg-white shadow-sm overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-border bg-muted/20">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Open Invoices
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="accounts-table w-full text-table min-w-[900px]">
+              <thead className="border-b">
+                <tr>
+                  {[
+                    "Invoice No.",
+                    "Invoice Date",
+                    "Invoice Amount",
+                    "Paid",
+                    "Outstanding",
+                    "Due Date",
+                    "Status",
+                    "",
+                  ].map((h) => (
+                    <th key={h || "act"} className="text-left whitespace-nowrap">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(openBills.length > 0 ? openBills : bills).map((bill) => (
+                  <tr
+                    key={bill.billId}
+                    className={cn(
+                      "border-b border-border/40 hover:bg-muted/20",
+                      bill.billId === highlightBillId && "bg-brand-50/50",
+                    )}
+                  >
+                    <td className="px-3 py-2.5 text-xs font-mono font-semibold text-brand-700">
+                      {bill.billNo}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs tabular-nums">{formatReportDate(bill.billDate)}</td>
+                    <td className={cn("px-3 py-2.5 text-xs text-right", MONEY_CELL_CLASS)}>
+                      {formatMoney(bill.billAmount)}
+                    </td>
+                    <td className={cn("px-3 py-2.5 text-xs text-right", MONEY_CELL_CLASS)}>
+                      {formatMoney(bill.paidAmount)}
+                    </td>
+                    <td className={cn("px-3 py-2.5 text-xs text-right font-semibold", MONEY_CELL_CLASS)}>
+                      {formatMoney(bill.outstanding)}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs tabular-nums">{formatReportDate(bill.dueDate)}</td>
+                    <td className="px-3 py-2.5">
+                      <StatusBadge status={bill.status} />
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <Link
+                        href={`/accounts/purchase-invoices/${bill.billId}`}
+                        className="text-[11px] text-brand-700 hover:underline"
+                      >
+                        View
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-border bg-white shadow-sm overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-border bg-muted/20">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Payment History
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="accounts-table w-full text-table min-w-[800px]">
+              <thead className="border-b">
+                <tr>
+                  {["Payment No.", "Date", "Amount", "Allocated", "Bank Account", "Reference", "Status"].map(
+                    (h) => (
+                      <th key={h} className="text-left whitespace-nowrap">
+                        {h}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {paymentHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-xs text-muted-foreground">
+                      No payment vouchers recorded for this supplier.
+                    </td>
+                  </tr>
+                ) : (
+                  paymentHistory.map((p) => (
+                    <tr key={p.paymentNo} className="border-b border-border/40 hover:bg-muted/20">
+                      <td className="px-3 py-2.5 text-xs font-mono font-semibold">{p.paymentNo}</td>
+                      <td className="px-3 py-2.5 text-xs tabular-nums">{formatReportDate(p.paymentDate)}</td>
+                      <td className={cn("px-3 py-2.5 text-xs text-right", MONEY_CELL_CLASS)}>
+                        {formatMoney(p.amount)}
+                      </td>
+                      <td className={cn("px-3 py-2.5 text-xs text-right", MONEY_CELL_CLASS)}>
+                        {formatMoney(p.allocatedAmount)}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs">{p.bankAccount}</td>
+                      <td className="px-3 py-2.5 text-xs font-mono">{p.referenceNo}</td>
+                      <td className="px-3 py-2.5">
+                        <StatusBadge status={p.status} />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
-      {transactionDrawer}
     </AccountsPageShell>
   );
 }

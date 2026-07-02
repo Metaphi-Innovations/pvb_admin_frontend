@@ -314,7 +314,7 @@ export function CoaGroupDrillDownPanel({
               <Link href="/accounts/receivables/outstanding">Outstanding Report</Link>
             </Button>
             <Button asChild variant="outline" size="sm" className="h-8 text-xs">
-              <Link href="/accounts/receivables/ageing">Aging Report</Link>
+              <Link href="/accounts/receivables/outstanding?tab=ageing">Aging Report</Link>
             </Button>
             <Button asChild size="sm" className="h-8 text-xs bg-brand-600 text-white">
               <Link href="/masters/customers">Open Customer Master</Link>
@@ -1002,7 +1002,7 @@ export function CoaGroupDrillDownPanel({
           <SummaryField label="Payments" value={context.paymentCount} />
           <div className="flex items-end">
             <Button asChild variant="outline" size="sm" className="h-8 text-xs w-full">
-              <Link href="/accounts/payables/ageing">Ageing</Link>
+              <Link href="/accounts/payables/outstanding?tab=ageing">Ageing</Link>
             </Button>
           </div>
           <div className="flex items-end">

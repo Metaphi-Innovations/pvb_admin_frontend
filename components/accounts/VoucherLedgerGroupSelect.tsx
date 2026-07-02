@@ -19,6 +19,8 @@ interface VoucherLedgerGroupSelectProps {
   onChange: (parentGroupId: number) => void;
   disabled?: boolean;
   placeholder?: string;
+  buildOptions?: (records: ChartOfAccount[]) => LedgerParentOption[];
+  error?: string | null;
 }
 
 export function VoucherLedgerGroupSelect({
@@ -27,13 +29,15 @@ export function VoucherLedgerGroupSelect({
   onChange,
   disabled,
   placeholder = "Select ledger group…",
+  buildOptions = buildVoucherLedgerParentOptions,
+  error,
 }: VoucherLedgerGroupSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
 
   const options = useMemo(
-    () => buildVoucherLedgerParentOptions(records),
-    [records],
+    () => buildOptions(records),
+    [records, buildOptions],
   );
 
   const filtered = useMemo(() => {
@@ -55,6 +59,7 @@ export function VoucherLedgerGroupSelect({
   };
 
   return (
+    <div className="space-y-1">
     <Popover open={open} onOpenChange={setOpen} modal={false}>
       <PopoverTrigger asChild>
         <button
@@ -65,6 +70,7 @@ export function VoucherLedgerGroupSelect({
             "w-full h-9 px-3 text-sm text-left border border-border rounded-lg bg-background flex items-center justify-between gap-2",
             "hover:bg-muted/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300",
             disabled && "opacity-60 cursor-not-allowed",
+            error && "border-red-400 focus-visible:ring-red-300",
           )}
         >
           <span
@@ -79,14 +85,14 @@ export function VoucherLedgerGroupSelect({
         </button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[min(400px,var(--radix-popover-trigger-width))] p-0 z-[400]"
+        className="w-[min(400px,var(--radix-popover-trigger-width))] p-0 z-[400] flex flex-col overflow-hidden max-h-[min(360px,50vh)]"
         align="start"
         side="bottom"
         sideOffset={4}
         collisionPadding={12}
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <div className="p-2 border-b border-border/60">
+        <div className="flex-shrink-0 p-2 border-b border-border/60">
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <input
@@ -97,7 +103,11 @@ export function VoucherLedgerGroupSelect({
             />
           </div>
         </div>
-        <div className="max-h-[min(320px,50vh)] overflow-y-auto py-1">
+        <div
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-1"
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+        >
           {sections.length === 0 ? (
             <p className="px-3 py-6 text-xs text-center text-muted-foreground">
               No ledger groups found.
@@ -130,6 +140,8 @@ export function VoucherLedgerGroupSelect({
         </div>
       </PopoverContent>
     </Popover>
+    {error && <p className="text-xs text-red-500">{error}</p>}
+    </div>
   );
 }
 

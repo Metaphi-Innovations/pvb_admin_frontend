@@ -64,7 +64,7 @@ export function CoaWorkflowPanel({
           <SummaryField label="Payments" value={context.paymentCount} />
           <div className="flex items-end">
             <Button asChild variant="outline" size="sm" className="h-8 text-xs w-full">
-              <Link href="/accounts/receivables/ageing">Ageing</Link>
+              <Link href="/accounts/receivables/outstanding?tab=ageing">Ageing</Link>
             </Button>
           </div>
           <div className="flex items-end">
@@ -97,7 +97,7 @@ export function CoaWorkflowPanel({
         <SummaryField label="Payments" value={context.paymentCount} />
         <div className="flex items-end">
           <Button asChild variant="outline" size="sm" className="h-8 text-xs w-full">
-            <Link href="/accounts/payables/ageing">Ageing</Link>
+            <Link href="/accounts/payables/outstanding?tab=ageing">Ageing</Link>
           </Button>
         </div>
         <div className="flex items-end">

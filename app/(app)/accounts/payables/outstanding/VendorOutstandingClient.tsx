@@ -1,142 +1,251 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import Link from "next/link";
-import { MoreHorizontal } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
-  computeVendorOutstanding,
+  computeSupplierInvoiceOutstanding,
   getPayablesFilterOptions,
+  type PayableStatus,
+  type SupplierInvoiceOutstandingRow,
 } from "@/lib/accounts/payables-data";
-import { formatMoney } from "@/lib/accounts/money-format";
-import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
-import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
-import { Button } from "@/components/ui/button";
+import { ensurePayablesDemoOnPageLoad } from "@/lib/accounts/payables-demo-seed";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  exportSupplierOutstandingToExcel,
+  exportSupplierOutstandingToPdf,
+} from "@/lib/accounts/payables-export";
+import { formatMoney, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
+import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
+import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
+import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
+import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   ReportFilterRow,
-  ReportAsOnDateFilter,
+  ReportFinancialYearFilter,
+  ReportFromToDateFilter,
   ReportVendorFilter,
-  ReportBranchFilter,
 } from "@/components/accounts/ReportFilters";
-import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import {
   AccountsRichTable,
   AccountsTableScroll,
   type AccountsRichColumnDef,
 } from "@/components/accounts/AccountsTable";
+import {
+  AccountsTablePagination,
+  AccountsTableToolbar,
+} from "@/components/accounts/AccountsTableListing";
+import { cn } from "@/lib/utils";
 
-type VendorOutstandingRow = ReturnType<typeof computeVendorOutstanding>[number];
+const PAYMENT_STATUS_OPTIONS: { value: PayableStatus | "all"; label: string }[] = [
+  { value: "all", label: "All statuses" },
+  { value: "unpaid", label: "Pending" },
+  { value: "partially_paid", label: "Partially Paid" },
+  { value: "overdue", label: "Overdue" },
+  { value: "paid", label: "Paid" },
+];
+
+function formatReportDate(value: string): string {
+  if (!value || value === "—") return "—";
+  const [y, m, d] = value.slice(0, 10).split("-");
+  if (!y || !m || !d) return value;
+  return `${d}-${m}-${y}`;
+}
 
 export default function VendorOutstandingClient() {
-  const [asOnDate, setAsOnDate] = useState(defaultAsOnDate());
-  const [vendorId, setVendorId] = useState<string>("all");
-  const [branch, setBranch] = useState<string>("all");
+  const router = useRouter();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [dateFrom, setDateFrom] = useState("2026-04-01");
+  const [dateTo, setDateTo] = useState("2026-06-30");
+  const [financialYearId, setFinancialYearId] = useState("all");
+  const [vendorId, setVendorId] = useState("all");
+  const [paymentStatus, setPaymentStatus] = useState<PayableStatus | "all">("all");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [exporting, setExporting] = useState(false);
 
-  const filterOptions = useMemo(() => getPayablesFilterOptions(), []);
+  useEffect(() => {
+    ensurePayablesDemoOnPageLoad();
+    setRefreshKey((k) => k + 1);
+  }, []);
 
-  const filters = useMemo(
-    () => ({
+  useEffect(() => {
+    const activeFyId = getActiveFinancialYearId();
+    const years = loadFinancialYears();
+    const activeFy = years.find((fy) => fy.id === activeFyId) ?? years.find((fy) => fy.status === "active");
+    if (activeFy) {
+      setFinancialYearId(String(activeFy.id));
+      setDateFrom(activeFy.startDate);
+      setDateTo(activeFy.endDate > "2026-06-30" ? "2026-06-30" : activeFy.endDate);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (financialYearId === "all") return;
+    const fy = loadFinancialYears().find((y) => String(y.id) === financialYearId);
+    if (!fy) return;
+    setDateFrom(fy.startDate);
+    setDateTo(fy.endDate);
+  }, [financialYearId]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [dateFrom, dateTo, financialYearId, vendorId, paymentStatus, search, pageSize, refreshKey]);
+
+  const asOnDate = dateTo || defaultAsOnDate();
+
+  const filterOptions = useMemo(() => getPayablesFilterOptions(), [refreshKey]);
+
+  const rows = useMemo(() => {
+    let data = computeSupplierInvoiceOutstanding(asOnDate, {
       vendorId: vendorId === "all" ? undefined : Number(vendorId),
-      branch: branch === "all" ? undefined : branch,
-    }),
-    [vendorId, branch],
-  );
+      status: paymentStatus === "all" ? undefined : paymentStatus,
+      dateFrom,
+      dateTo,
+      financialYearId: financialYearId === "all" ? undefined : Number(financialYearId),
+      search,
+    });
+    if (paymentStatus === "all") {
+      data = data.filter((r) => r.outstanding > 0.009);
+    } else if (paymentStatus === "paid") {
+      data = data.filter((r) => r.status === "paid");
+    }
+    return data;
+  }, [asOnDate, dateFrom, dateTo, financialYearId, vendorId, paymentStatus, search, refreshKey]);
 
-  const rows = useMemo(() => computeVendorOutstanding(asOnDate, filters), [asOnDate, filters]);
+  const pagedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return rows.slice(start, start + pageSize);
+  }, [rows, page, pageSize]);
 
-  const columns = useMemo((): AccountsRichColumnDef<VendorOutstandingRow>[] => [
+  const exportMeta = useMemo(() => {
+    const fy =
+      financialYearId === "all"
+        ? "All years"
+        : (loadFinancialYears().find((y) => String(y.id) === financialYearId)?.name ?? "All years");
+    const vendor =
+      vendorId === "all"
+        ? "All suppliers"
+        : (filterOptions.vendors.find((v) => String(v.id) === vendorId)?.vendorName ?? "All suppliers");
+    const statusLabel =
+      PAYMENT_STATUS_OPTIONS.find((o) => o.value === paymentStatus)?.label ?? "All statuses";
+    return {
+      reportName: "Supplier Outstanding",
+      financialYear: fy,
+      dateFrom,
+      dateTo,
+      supplier: vendor,
+      paymentStatus: statusLabel,
+      search,
+    };
+  }, [financialYearId, vendorId, paymentStatus, search, dateFrom, dateTo, filterOptions.vendors]);
+
+  const handleExportExcel = useCallback(async () => {
+    setExporting(true);
+    try {
+      await exportSupplierOutstandingToExcel(rows, exportMeta);
+    } finally {
+      setExporting(false);
+    }
+  }, [rows, exportMeta]);
+
+  const handleExportPdf = useCallback(() => {
+    exportSupplierOutstandingToPdf(rows, exportMeta);
+  }, [rows, exportMeta]);
+
+  const columns = useMemo((): AccountsRichColumnDef<SupplierInvoiceOutstandingRow>[] => [
     {
       key: "vendorName",
-      label: "Supplier Name",
+      label: "Supplier",
       render: (r) => (
-        <Link href={buildGeneralLedgerHref(r.ledgerId)} className="text-brand-600 hover:underline font-medium">
+        <span className="text-xs font-medium leading-snug line-clamp-2" title={r.vendorName}>
           {r.vendorName}
-        </Link>
+        </span>
       ),
     },
     {
       key: "vendorCode",
       label: "Supplier Code",
-      render: (r) => <span className="font-mono text-muted-foreground">{r.vendorCode}</span>,
+      render: (r) => <span className="font-mono text-[11px] text-muted-foreground">{r.vendorCode}</span>,
     },
     {
       key: "gstin",
       label: "GSTIN",
-      render: (r) => <span className="font-mono">{r.gstin}</span>,
+      render: (r) => <span className="font-mono text-[11px]">{r.gstin}</span>,
     },
-    { key: "territory", label: "Territory", render: (r) => r.territory },
     {
-      key: "totalPurchaseValue",
-      label: "Total Purchase",
+      key: "invoiceNo",
+      label: "Invoice No.",
+      render: (r) => <span className="font-mono text-xs font-semibold text-brand-700">{r.invoiceNo}</span>,
+    },
+    {
+      key: "invoiceDate",
+      label: "Invoice Date",
+      render: (r) => (
+        <span className="text-muted-foreground tabular-nums whitespace-nowrap">
+          {formatReportDate(r.invoiceDate)}
+        </span>
+      ),
+    },
+    {
+      key: "dueDate",
+      label: "Due Date",
+      render: (r) => (
+        <span className="text-muted-foreground tabular-nums whitespace-nowrap">
+          {formatReportDate(r.dueDate)}
+        </span>
+      ),
+    },
+    {
+      key: "billAmount",
+      label: "Bill Amount",
       align: "right",
-      render: (r) => <span className="tabular-nums">{formatMoney(r.totalPurchaseValue)}</span>,
+      render: (r) => <span className={MONEY_CELL_CLASS}>{formatMoney(r.billAmount)}</span>,
     },
     {
       key: "paidAmount",
-      label: "Paid",
+      label: "Paid Amount",
       align: "right",
-      render: (r) => <span className="tabular-nums">{formatMoney(r.paidAmount)}</span>,
-    },
-    {
-      key: "debitNoteAdjusted",
-      label: "Debit Note Adj.",
-      align: "right",
-      render: (r) => <span className="tabular-nums">{formatMoney(r.debitNoteAdjusted)}</span>,
+      render: (r) => <span className={MONEY_CELL_CLASS}>{formatMoney(r.paidAmount)}</span>,
     },
     {
       key: "outstanding",
-      label: "Outstanding",
+      label: "Outstanding Amount",
       align: "right",
-      render: (r) => <span className="tabular-nums font-semibold">{formatMoney(r.outstanding)}</span>,
+      render: (r) => (
+        <span className={cn(MONEY_CELL_CLASS, "font-semibold text-foreground")}>
+          {formatMoney(r.outstanding)}
+        </span>
+      ),
     },
     {
-      key: "overdueAmount",
-      label: "Overdue",
+      key: "overdueDays",
+      label: "Overdue Days",
       align: "right",
-      render: (r) => <span className="tabular-nums text-red-600">{formatMoney(r.overdueAmount)}</span>,
+      render: (r) => (
+        <span
+          className={cn(
+            "tabular-nums",
+            r.overdueDays > 0 && r.outstanding > 0 ? "text-red-600 font-medium" : "text-muted-foreground",
+          )}
+        >
+          {r.outstanding > 0 ? r.overdueDays : "—"}
+        </span>
+      ),
     },
-    { key: "lastPurchaseDate", label: "Last Purchase", render: (r) => r.lastPurchaseDate },
-    { key: "lastPaymentDate", label: "Last Payment", render: (r) => r.lastPaymentDate },
     {
       key: "status",
       label: "Status",
       render: (r) => <StatusBadge status={r.status} />,
-    },
-    {
-      key: "actions",
-      label: "",
-      align: "right",
-      uppercase: false,
-      render: (r) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-              <MoreHorizontal className="w-4 h-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem asChild>
-              <Link href={`/accounts/payables/outstanding/${r.vendorId}`}>View Supplier</Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href={buildGeneralLedgerHref(r.ledgerId)}>View Supplier Ledger</Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href={`/accounts/vouchers?tab=payment&vendor=${r.vendorId}`}>Make Payment</Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/accounts/vouchers?tab=payment">Allocate Payment</Link>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ),
     },
   ], []);
 
@@ -144,26 +253,71 @@ export default function VendorOutstandingClient() {
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Payables", "Supplier Outstanding")}
       title="Supplier Outstanding"
-      description="Supplier-wise open payables from posted purchase bills, debit notes, credit notes and payments."
+      description="Unpaid and partially paid supplier purchase invoices with due dates and ageing."
       filters={
         <ReportFilterRow>
-          <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
+          <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
+          <ReportFromToDateFilter
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
           <ReportVendorFilter value={vendorId} onChange={setVendorId} vendors={filterOptions.vendors} />
-          <ReportBranchFilter value={branch} onChange={setBranch} options={filterOptions.branches} />
+          <div className="space-y-1 min-w-[140px]">
+            <Label className="text-[10px] font-medium uppercase text-muted-foreground leading-none">
+              Payment Status
+            </Label>
+            <Select
+              value={paymentStatus}
+              onValueChange={(v) => setPaymentStatus(v as PayableStatus | "all")}
+            >
+              <SelectTrigger className="h-7 text-xs mt-0 w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAYMENT_STATUS_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </ReportFilterRow>
       }
       layout="split"
       className="h-full min-h-0"
     >
-      <AccountsTableScroll>
-        <AccountsRichTable
-          columns={columns}
-          rows={rows}
-          minWidth={1400}
-          getRowKey={(r) => r.vendorId}
-          emptyMessage="No supplier outstanding balances for the selected filters."
+      <div className="flex flex-col flex-1 min-h-0">
+        <AccountsTableToolbar
+          search={{ value: search, onChange: setSearch, placeholder: "Search supplier, invoice, GSTIN…" }}
+          onExcel={handleExportExcel}
+          onPdf={handleExportPdf}
+          exportDisabled={exporting || rows.length === 0}
         />
-      </AccountsTableScroll>
+        <AccountsTableScroll>
+          <AccountsRichTable
+            columns={columns}
+            rows={pagedRows}
+            minWidth={1500}
+            getRowKey={(r) => r.billId}
+            emptyMessage="No supplier invoices found for the selected filters."
+            onRowClick={(r) =>
+              router.push(`/accounts/payables/outstanding/${r.vendorId}?billId=${r.billId}`)
+            }
+          />
+        </AccountsTableScroll>
+        {rows.length > 0 && (
+          <AccountsTablePagination
+            page={page}
+            pageSize={pageSize}
+            totalRecords={rows.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
+      </div>
     </AccountsPageShell>
   );
 }

@@ -14,6 +14,7 @@ import {
 import { formatMoney } from "@/lib/accounts/money-format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Checkbox } from "@/components/ui/checkbox";
 
 export default function AllocateReceiptClient() {
@@ -95,7 +96,7 @@ export default function AllocateReceiptClient() {
       setError(err);
       return;
     }
-    router.push("/accounts/receivables/receipt-allocation");
+    router.push(`/accounts/receivables/receipt-allocation?customer=${record.customerId}`);
   };
 
   return (
@@ -169,15 +170,11 @@ export default function AllocateReceiptClient() {
                   <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.paidAmount)}</td>
                   <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.outstanding)}</td>
                   <td className="px-3 py-2.5">
-                    <Input
-                      type="number"
-                      min={0}
-                      max={inv.outstanding}
-                      step="0.01"
+                    <AccountsMoneyInput
                       className="h-8 text-xs w-28"
                       disabled={!selected[inv.invoiceId]}
                       value={amounts[inv.invoiceId] ?? ""}
-                      onChange={(e) => setAmounts((a) => ({ ...a, [inv.invoiceId]: e.target.value }))}
+                      onChange={(v) => setAmounts((a) => ({ ...a, [inv.invoiceId]: String(v) }))}
                     />
                   </td>
                 </tr>

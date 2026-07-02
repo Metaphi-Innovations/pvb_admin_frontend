@@ -18,31 +18,18 @@ const STATUS_CFG: Record<BookReconStatus, { bg: string; text: string; dot: strin
   },
 };
 
-export function ReconEntryStatusBadge({
-  status,
-  suggested,
-}: {
-  status: BookReconStatus;
-  suggested?: boolean;
-}) {
+export function ReconEntryStatusBadge({ status }: { status: BookReconStatus }) {
   const cfg = STATUS_CFG[status];
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span
-        className={cn(
-          "inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium",
-          cfg.bg,
-          cfg.text,
-        )}
-      >
-        <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
-        {cfg.label}
-      </span>
-      {suggested && status === "pending" && (
-        <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-navy-50 text-navy-700 text-[10px] font-semibold border border-navy-100">
-          Suggested
-        </span>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium",
+        cfg.bg,
+        cfg.text,
       )}
+    >
+      <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
+      {cfg.label}
     </span>
   );
 }

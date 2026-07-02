@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -17,7 +18,7 @@ import { GroupedLedgerSelect } from "@/components/accounts/GroupedLedgerSelect";
 import { JournalLedgerImpactPreview } from "@/components/accounts/JournalLedgerImpactPreview";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { journalEntryImpact } from "@/lib/accounts/ledger-impact-previews";
-import { formatMoney, MONEY_INPUT_CLASS, parseMoneyInput } from "@/lib/accounts/money-format";
+import { formatMoney, MONEY_INPUT_CLASS } from "@/lib/accounts/money-format";
 import { applyAutoPartyToLine, applyAutoPartyToLines } from "@/lib/accounts/voucher-ledger-groups";
 import { cn } from "@/lib/utils";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
@@ -241,14 +242,6 @@ export function ZohoVoucherEntryForm({
         return applyAutoPartyToLine(next, coaRecords);
       }),
     );
-  };
-
-  const setLineDebit = (idx: number, raw: string) => {
-    updateLine(idx, { debit: parseMoneyInput(raw), credit: 0 });
-  };
-
-  const setLineCredit = (idx: number, raw: string) => {
-    updateLine(idx, { credit: parseMoneyInput(raw), debit: 0 });
   };
 
   const selectLedger = (idx: number, ledgerId: number) => {
@@ -560,30 +553,20 @@ export function ZohoVoucherEntryForm({
                         />
                       </td>
                       <td className="px-2 py-1.5">
-                        <Input
+                        <AccountsMoneyInput
+                          compact={false}
                           className={cn("h-9 text-xs", MONEY_INPUT_CLASS)}
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={line.debit || ""}
-                          onChange={(e) => setLineDebit(idx, e.target.value)}
+                          value={line.debit || 0}
+                          onChange={(v) => updateLine(idx, { debit: v, credit: 0 })}
                           disabled={readOnly}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" && idx === lines.length - 1 && !readOnly) {
-                              e.preventDefault();
-                              addLine();
-                            }
-                          }}
                         />
                       </td>
                       <td className="px-2 py-1.5">
-                        <Input
+                        <AccountsMoneyInput
+                          compact={false}
                           className={cn("h-9 text-xs", MONEY_INPUT_CLASS)}
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={line.credit || ""}
-                          onChange={(e) => setLineCredit(idx, e.target.value)}
+                          value={line.credit || 0}
+                          onChange={(v) => updateLine(idx, { credit: v, debit: 0 })}
                           disabled={readOnly}
                         />
                       </td>

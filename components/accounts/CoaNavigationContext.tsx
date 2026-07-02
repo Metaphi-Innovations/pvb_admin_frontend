@@ -59,6 +59,9 @@ interface CoaNavigationContextValue {
   collapseAll: () => void;
   refreshRecords: () => void;
   isCoaRoute: boolean;
+  highlightedLedgerId: number | null;
+  setHighlightedLedgerId: React.Dispatch<React.SetStateAction<number | null>>;
+  ensureExpanded: (ids: number | number[]) => void;
 }
 
 const CoaNavigationContext = createContext<CoaNavigationContextValue | null>(null);
@@ -73,6 +76,7 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(() => defaultExpandedIds(FULL_COA_SEED));
   const [search, setSearch] = useState("");
+  const [highlightedLedgerId, setHighlightedLedgerId] = useState<number | null>(null);
 
   const isCoaRoute = pathname.startsWith(CHART_OF_ACCOUNTS_HREF);
 
@@ -101,12 +105,8 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
 
   const selectNode = useCallback(
     (node: ChartOfAccount) => {
-      if (isTdsCoaNode(node, records)) {
+      if (isTdsCoaNode(node, records) && !pathname.startsWith(CHART_OF_ACCOUNTS_HREF)) {
         router.push(buildTdsPartyWiseReportHref(node, records));
-        return;
-      }
-      if (node.nodeLevel === "ledger" && isPostableNode(node, records)) {
-        router.push(buildGeneralLedgerHref(node.id));
         return;
       }
       setSelectedId(node.id);
@@ -116,6 +116,8 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
       const href = `${CHART_OF_ACCOUNTS_HREF}?node=${node.id}`;
       if (pathname.startsWith(CHART_OF_ACCOUNTS_HREF)) {
         router.replace(href, { scroll: false });
+      } else if (node.nodeLevel === "ledger" && isPostableNode(node, records)) {
+        router.push(buildGeneralLedgerHref(node.id));
       } else {
         router.push(href);
       }
@@ -166,6 +168,21 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
     });
   }, []);
 
+  const ensureExpanded = useCallback((ids: number | number[]) => {
+    const list = Array.isArray(ids) ? ids : [ids];
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const id of list) {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, []);
+
   const expandAll = useCallback(() => {
     setExpandedIds(new Set(getAllExpandableIds(records)));
   }, [records]);
@@ -191,6 +208,9 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
       collapseAll,
       refreshRecords,
       isCoaRoute,
+      highlightedLedgerId,
+      setHighlightedLedgerId,
+      ensureExpanded,
     }),
     [
       records,
@@ -204,6 +224,8 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
       collapseAll,
       refreshRecords,
       isCoaRoute,
+      highlightedLedgerId,
+      ensureExpanded,
     ],
   );
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { memo, useMemo } from "react";
+import React, { memo } from "react";
 import { CheckSquare } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CountBadge } from "@/components/ui/StatusBadge";
@@ -17,10 +17,27 @@ const OTHER_PENDING_APPROVALS = [
 
 function ApprovalsButtonInner() {
   const mounted = useClientMounted();
-  const accountsPending = useMemo(
-    () => (mounted ? countPendingAccountsApprovals() : 0),
-    [mounted],
-  );
+  const [accountsPending, setAccountsPending] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!mounted) return;
+    let cancelled = false;
+    const run = () => {
+      if (!cancelled) setAccountsPending(countPendingAccountsApprovals());
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(run, { timeout: 3000 });
+      return () => {
+        cancelled = true;
+        window.cancelIdleCallback(id);
+      };
+    }
+    const t = window.setTimeout(run, 500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [mounted]);
   const otherPending = OTHER_PENDING_APPROVALS.reduce((s, a) => s + a.count, 0);
   const totalPending = accountsPending + otherPending;
 

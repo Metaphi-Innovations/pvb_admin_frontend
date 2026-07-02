@@ -1,34 +1,44 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import {
-  IndianRupee,
-  ArrowLeft,
-  MoreHorizontal,
-  Eye,
-} from "lucide-react";
+import { ArrowLeft, FileText, Receipt } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
-import { useTransactionDetailsDrawer } from "@/components/accounts/TransactionDetailsDrawer";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { getCustomerOutstandingDetail } from "@/lib/accounts/receivables-data";
-import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
+import {
+  getCustomerOutstandingDetail,
+} from "@/lib/accounts/receivables-data";
+import { ensureReceivablesDemoData } from "@/lib/accounts/receivables-demo-seed";
 import { formatMoney } from "@/lib/accounts/money-format";
-import { MiniKPICard } from "@/components/ui/KPICard";
 import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  AccountsTable,
+  AccountsTableBody,
+  AccountsTableCell,
+  AccountsTableHead,
+  AccountsTableHeadCell,
+  AccountsTableHeadRow,
+  AccountsTableRow,
+  AccountsTableScroll,
+} from "@/components/accounts/AccountsTable";
+
+function formatReportDate(value: string): string {
+  if (!value || value === "—") return "—";
+  const [y, m, d] = value.slice(0, 10).split("-");
+  if (!y || !m || !d) return value;
+  return `${d}-${m}-${y}`;
+}
 
 export default function CustomerOutstandingDetailClient() {
   const params = useParams();
   const customerId = Number(params.customerId);
-  const { openTransaction, drawer: transactionDrawer } = useTransactionDetailsDrawer();
+
+  useEffect(() => {
+    ensureReceivablesDemoData();
+  }, []);
+
   const detail = useMemo(
     () => (Number.isFinite(customerId) ? getCustomerOutstandingDetail(customerId) : null),
     [customerId],
@@ -43,7 +53,10 @@ export default function CustomerOutstandingDetailClient() {
         layout="standard"
       >
         <div className="p-8 text-center">
-          <Link href="/accounts/receivables/outstanding" className="text-sm text-brand-600 hover:underline inline-flex items-center gap-1">
+          <Link
+            href="/accounts/receivables/outstanding"
+            className="text-sm text-brand-600 hover:underline inline-flex items-center gap-1"
+          >
             <ArrowLeft className="w-4 h-4" /> Back to Customer Outstanding
           </Link>
         </div>
@@ -51,15 +64,12 @@ export default function CustomerOutstandingDetailClient() {
     );
   }
 
-  const { customer, ledgerId, invoices } = detail;
-  const creditDays = customer.paymentTerms?.match(/(\d+)/)?.[1] ?? "30";
+  const { customer, invoices } = detail;
+  const openInvoices = invoices.filter((i) => i.outstanding > 0.009);
 
-  const openInvoice = useCallback(
-    (invoiceId: number) => {
-      openTransaction({ type: "sales_invoice", id: invoiceId });
-    },
-    [openTransaction],
-  );
+  const openInvoice = useCallback((invoiceId: number) => {
+    window.location.href = `/accounts/receivables/outstanding/invoice/${invoiceId}`;
+  }, []);
 
   return (
     <AccountsPageShell
@@ -67,136 +77,137 @@ export default function CustomerOutstandingDetailClient() {
         ...accountsBreadcrumb("Receivables", "Customer Outstanding", "/accounts/receivables/outstanding"),
         { label: customer.customerName },
       ]}
-      title={customer.customerName}
+      title="Customer Outstanding Details"
       description={`${customer.customerCode} · ${customer.territoryName || customer.districtName || "—"}`}
       actions={
-        <Link href="/accounts/receivables/outstanding">
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
-            <ArrowLeft className="w-3.5 h-3.5" /> Back
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/accounts/receivables/ageing">
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
+              <ArrowLeft className="w-3.5 h-3.5" /> Back
+            </Button>
+          </Link>
+          <Link href={`/accounts/receivables/receipt-allocation?customer=${customer.id}`}>
+            <Button size="sm" className="h-8 text-xs gap-1 bg-brand-600 hover:bg-brand-700 text-white">
+              <Receipt className="w-3.5 h-3.5" /> Go to Receipt Allocation
+            </Button>
+          </Link>
+        </div>
       }
       layout="split"
       className="h-full min-h-0"
     >
-      <div className="flex-shrink-0 p-4 border-b border-border/60 bg-muted/5 space-y-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 text-xs">
-          {[
-            ["GSTIN", customer.gstin || "—"],
-            ["Mobile", customer.mobile],
-            ["Territory", customer.territoryName || "—"],
-            ["Sales Executive", customer.salesManName || "Rajesh Sharma"],
-            ["Credit Limit", formatMoney(customer.creditLimit)],
-            ["Credit Days", creditDays],
-          ].map(([label, value]) => (
-            <div key={label}>
-              <p className="text-[10px] uppercase text-muted-foreground font-semibold">{label}</p>
-              <p className="font-medium mt-0.5">{value}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-          <MiniKPICard label="Opening Balance" value={formatMoney(detail.openingBalance)} icon={IndianRupee} />
-          <MiniKPICard label="Total Sales (Incl. GST)" value={formatMoney(detail.totalSales)} icon={IndianRupee} />
-          <MiniKPICard label="Total Receipts" value={formatMoney(detail.totalReceipts)} icon={IndianRupee} />
-          <MiniKPICard label="Credit Notes" value={formatMoney(detail.creditNotes)} icon={IndianRupee} />
-          <MiniKPICard label="Debit Notes" value={formatMoney(detail.debitNotes)} icon={IndianRupee} />
-          <MiniKPICard label="Current Outstanding" value={formatMoney(detail.currentOutstanding)} icon={IndianRupee} accent />
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-auto min-h-0">
-        <table className="accounts-table w-full text-table min-w-[1280px]">
-          <thead className="border-b">
-            <tr>
-              {[
-                "Invoice No",
-                "Invoice Date",
-                "Due Date",
-                "Taxable Value",
-                "GST Amount",
-                "Invoice Total (Incl. GST)",
-                "Paid",
-                "Credit Note",
-                "Outstanding",
-                "Days Overdue",
-                "Status",
-                "",
-              ].map((h) => (
-                <th key={h || "act"} className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {invoices.map((inv) => (
-              <tr
-                key={inv.invoiceId}
-                className="border-b border-border/40 hover:bg-muted/20 cursor-pointer group"
-                onClick={() => openInvoice(inv.invoiceId)}
-              >
-                <td className="px-3 py-2.5 text-xs font-mono font-semibold">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openInvoice(inv.invoiceId);
-                    }}
-                    className="text-brand-700 hover:underline"
-                  >
-                    {inv.invoiceNo}
-                  </button>
-                </td>
-                <td className="px-3 py-2.5 text-xs">{inv.invoiceDate}</td>
-                <td className="px-3 py-2.5 text-xs">{inv.dueDate}</td>
-                <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.taxableValue)}</td>
-                <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.gstAmount)}</td>
-                <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.invoiceAmount)}</td>
-                <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.paidAmount)}</td>
-                <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.creditNote)}</td>
-                <td className="px-3 py-2.5 text-xs text-right tabular-nums font-semibold">{formatMoney(inv.outstanding)}</td>
-                <td className="px-3 py-2.5 text-xs text-center tabular-nums">{inv.outstanding > 0 ? inv.daysOverdue : "—"}</td>
-                <td className="px-3 py-2.5"><StatusBadge status={inv.status} /></td>
-                <td className="px-3 py-2.5 text-right">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openInvoice(inv.invoiceId);
-                    }}
-                    className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-0 group-hover:opacity-100"
-                    aria-label={`View ${inv.invoiceNo}`}
-                  >
-                    <Eye className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-44">
-                      <DropdownMenuItem asChild>
-                        <Link href={`/accounts/transactions/invoices/${inv.invoiceId}`}>View Invoice</Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href={`/accounts/vouchers?tab=receipt&customer=${customer.id}`}>Record Receipt</Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href="/accounts/receivables/receipt-allocation">Allocate Receipt</Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href={buildGeneralLedgerHref(ledgerId)}>View Ledger</Link>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </td>
-              </tr>
+      <div className="flex-shrink-0 border-b border-border/60 bg-white px-4 py-3 space-y-3">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
+            Customer Information
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 text-xs">
+            {[
+              ["Customer", customer.customerName],
+              ["Code", customer.customerCode],
+              ["GSTIN", customer.gstin || "—"],
+              ["Mobile", customer.mobile],
+              ["Credit Limit", formatMoney(customer.creditLimit)],
+              ["Territory", customer.territoryName || "—"],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <p className="text-[10px] uppercase text-muted-foreground font-semibold">{label}</p>
+                <p className="font-medium mt-0.5">{value}</p>
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 rounded-lg border border-border/60 bg-muted/10 p-3 text-xs">
+          <div>
+            <p className="text-[10px] uppercase text-muted-foreground font-semibold">Total Sales</p>
+            <p className="text-sm font-bold mt-0.5 tabular-nums">{formatMoney(detail.totalSales)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase text-muted-foreground font-semibold">Total Receipts</p>
+            <p className="text-sm font-bold mt-0.5 tabular-nums">{formatMoney(detail.totalReceipts)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase text-muted-foreground font-semibold">Current Outstanding</p>
+            <p className="text-sm font-bold mt-0.5 tabular-nums text-brand-700">
+              {formatMoney(detail.currentOutstanding)}
+            </p>
+          </div>
+        </div>
       </div>
-      {transactionDrawer}
+
+      <div className="flex flex-col flex-1 min-h-0">
+        <div className="flex-shrink-0 px-4 py-2 border-b border-border/60 bg-white">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            Open Invoices
+          </p>
+        </div>
+        <AccountsTableScroll className="flex-1 min-h-0">
+          <AccountsTable minWidth={960}>
+            <AccountsTableHead>
+              <AccountsTableHeadRow>
+                {[
+                  "Invoice No.",
+                  "Invoice Date",
+                  "Invoice Amount",
+                  "Received",
+                  "Outstanding",
+                  "Due Date",
+                  "",
+                ].map((h) => (
+                  <AccountsTableHeadCell key={h || "act"} align={h.includes("Amount") || h === "Received" || h === "Outstanding" ? "right" : "left"}>
+                    {h}
+                  </AccountsTableHeadCell>
+                ))}
+              </AccountsTableHeadRow>
+            </AccountsTableHead>
+            <AccountsTableBody>
+              {openInvoices.length === 0 ? (
+                <AccountsTableRow>
+                  <AccountsTableCell colSpan={7} className="accounts-table-empty">
+                    No open invoices for this customer.
+                  </AccountsTableCell>
+                </AccountsTableRow>
+              ) : (
+                openInvoices.map((inv) => (
+                  <AccountsTableRow
+                    key={inv.invoiceId}
+                    className="group cursor-pointer"
+                    onClick={() => openInvoice(inv.invoiceId)}
+                  >
+                    <AccountsTableCell>
+                      <span className="text-xs font-mono font-semibold text-brand-700">{inv.invoiceNo}</span>
+                    </AccountsTableCell>
+                    <AccountsTableCell>{formatReportDate(inv.invoiceDate)}</AccountsTableCell>
+                    <AccountsTableCell align="right">
+                      <span className="tabular-nums">{formatMoney(inv.invoiceAmount)}</span>
+                    </AccountsTableCell>
+                    <AccountsTableCell align="right">
+                      <span className="tabular-nums">{formatMoney(inv.paidAmount)}</span>
+                    </AccountsTableCell>
+                    <AccountsTableCell align="right">
+                      <span className="tabular-nums font-semibold">{formatMoney(inv.outstanding)}</span>
+                    </AccountsTableCell>
+                    <AccountsTableCell>{formatReportDate(inv.dueDate)}</AccountsTableCell>
+                    <AccountsTableCell align="right">
+                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100">
+                        <Link
+                          href={`/accounts/transactions/invoices/${inv.invoiceId}`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px] gap-1">
+                            <FileText className="w-3.5 h-3.5" /> View
+                          </Button>
+                        </Link>
+                      </div>
+                    </AccountsTableCell>
+                  </AccountsTableRow>
+                ))
+              )}
+            </AccountsTableBody>
+          </AccountsTable>
+        </AccountsTableScroll>
+      </div>
     </AccountsPageShell>
   );
 }

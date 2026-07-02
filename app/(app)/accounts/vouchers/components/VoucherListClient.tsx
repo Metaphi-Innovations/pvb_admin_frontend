@@ -3,12 +3,24 @@
 import React, { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Input } from "@/components/ui/input";
-import { Eye, Pencil, Search } from "lucide-react";
+import { Eye, Pencil } from "lucide-react";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { SortTh, StatusBadge } from "../../components/AccountsUI";
 import { canEditVoucher, getVouchersByType, type VoucherTypeCode } from "../voucher-data";
+import {
+  AccountsTable,
+  AccountsTableBody,
+  AccountsTableCell,
+  AccountsTableHead,
+  AccountsTableHeadCell,
+  AccountsTableHeadRow,
+  AccountsTableRow,
+} from "@/components/accounts/AccountsTable";
+import {
+  AccountsTableListing,
+  AccountsTableToolbar,
+} from "@/components/accounts/AccountsTableListing";
 
 interface VoucherListClientProps {
   voucherType: VoucherTypeCode;
@@ -58,95 +70,91 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex-shrink-0 px-4 py-3 border-b border-border/60 bg-muted/5">
-        <div className="relative max-w-md">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="h-8 pl-8 text-xs"
-            placeholder="Search voucher no., narration…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+    <div className={embedded ? "flex flex-col flex-1 min-h-0" : "flex flex-col h-full overflow-hidden"}>
+      <AccountsTableListing
+        toolbar={
+          <AccountsTableToolbar
+            search={{
+              value: search,
+              onChange: setSearch,
+              placeholder: "Search voucher no., narration…",
+            }}
           />
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-auto p-4">
-        <div className="bg-white border border-border/60 rounded-lg overflow-hidden">
-          <table className="accounts-table w-full text-table min-w-[900px]">
-            <thead className="border-b border-border/60">
-              <tr>
-                <SortTh label="Date" colKey="date" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                <SortTh label="Voucher No." colKey="voucherNumber" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Reference</th>
-                <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Narration</th>
-                <SortTh label="Amount" colKey="totalDebit" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
-                <th className="px-3 py-2 text-center text-[10px] font-semibold uppercase text-muted-foreground">Status</th>
-                <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-muted-foreground min-w-[120px]">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {!mounted ? (
-                <tr>
-                  <td colSpan={7} className="px-3 py-12 text-center text-xs text-muted-foreground">
-                    Loading vouchers…
-                  </td>
-                </tr>
-              ) : visible.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-3 py-12 text-center text-xs text-muted-foreground">
-                    No vouchers yet. Create your first entry.
-                  </td>
-                </tr>
-              ) : (
-                visible.map((v) => (
-                  <tr key={v.id} className="border-b border-border/40 hover:bg-brand-50/30">
-                    <td className="px-3 py-2 text-xs">{v.date}</td>
-                    <td className="px-3 py-2 text-xs font-medium">
-                      <Link
-                        href={`/accounts/vouchers/view/${v.id}`}
-                        className="text-brand-700 hover:underline font-mono"
+        }
+      >
+        <AccountsTable minWidth={900}>
+          <AccountsTableHead>
+            <AccountsTableHeadRow>
+              <SortTh label="Date" colKey="date" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortTh label="Voucher No." colKey="voucherNumber" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <AccountsTableHeadCell uppercase>Reference</AccountsTableHeadCell>
+              <AccountsTableHeadCell uppercase className="accounts-col-narration">Narration</AccountsTableHeadCell>
+              <SortTh label="Amount" colKey="totalDebit" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="right" />
+              <AccountsTableHeadCell align="center" uppercase className="accounts-col-status">Status</AccountsTableHeadCell>
+              <AccountsTableHeadCell align="right" uppercase className="w-20">Actions</AccountsTableHeadCell>
+            </AccountsTableHeadRow>
+          </AccountsTableHead>
+          <AccountsTableBody>
+            {!mounted ? (
+              <AccountsTableRow>
+                <AccountsTableCell colSpan={7} className="accounts-table-empty">
+                  Loading…
+                </AccountsTableCell>
+              </AccountsTableRow>
+            ) : visible.length === 0 ? (
+              <AccountsTableRow>
+                <AccountsTableCell colSpan={7} className="accounts-table-empty">
+                  No records found.
+                </AccountsTableCell>
+              </AccountsTableRow>
+            ) : (
+              visible.map((v) => (
+                <AccountsTableRow key={v.id} className="group">
+                  <AccountsTableCell className="tabular-nums">{v.date}</AccountsTableCell>
+                  <AccountsTableCell mono>
+                    <Link
+                      href={`/accounts/vouchers/view/${v.id}`}
+                      className="text-brand-700 hover:underline font-mono text-xs font-semibold"
+                    >
+                      {v.voucherNumber}
+                    </Link>
+                  </AccountsTableCell>
+                  <AccountsTableCell className="text-muted-foreground">{v.referenceNo || "—"}</AccountsTableCell>
+                  <AccountsTableCell className="accounts-col-narration max-w-[200px] truncate">{v.narration || "—"}</AccountsTableCell>
+                  <AccountsTableCell align="right" money>
+                    <MoneyAmount amount={v.totalDebit} />
+                  </AccountsTableCell>
+                  <AccountsTableCell align="center">
+                    <StatusBadge status={v.status} />
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right">
+                    <div className="flex items-center justify-end gap-0.5">
+                      <button
+                        type="button"
+                        title="View"
+                        className="p-1 hover:bg-muted rounded transition-colors opacity-0 group-hover:opacity-100"
+                        onClick={() => router.push(`/accounts/vouchers/view/${v.id}`)}
                       >
-                        {v.voucherNumber}
-                      </Link>
-                    </td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">{v.referenceNo || "—"}</td>
-                    <td className="px-3 py-2 text-xs max-w-[200px] truncate">{v.narration || "—"}</td>
-                    <td className="px-3 py-2.5 text-right">
-                      <MoneyAmount amount={v.totalDebit} />
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      <StatusBadge status={v.status} />
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <div className="flex items-center justify-end gap-0.5">
+                        <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                      </button>
+                      {canEditVoucher(v) && (
                         <button
                           type="button"
-                          title="View"
-                          className="p-1.5 hover:bg-muted rounded-md transition-colors"
-                          onClick={() => router.push(`/accounts/vouchers/view/${v.id}`)}
+                          title="Edit"
+                          className="p-1 hover:bg-muted rounded transition-colors opacity-0 group-hover:opacity-100"
+                          onClick={() => router.push(`/accounts/vouchers/edit/${v.id}`)}
                         >
-                          <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                          <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
                         </button>
-                        {canEditVoucher(v) && (
-                          <button
-                            type="button"
-                            title="Edit"
-                            className="p-1.5 hover:bg-muted rounded-md transition-colors"
-                            onClick={() => router.push(`/accounts/vouchers/edit/${v.id}`)}
-                          >
-                            <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                      )}
+                    </div>
+                  </AccountsTableCell>
+                </AccountsTableRow>
+              ))
+            )}
+          </AccountsTableBody>
+        </AccountsTable>
+      </AccountsTableListing>
     </div>
   );
 }

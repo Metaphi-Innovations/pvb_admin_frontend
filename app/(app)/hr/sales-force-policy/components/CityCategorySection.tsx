@@ -874,7 +874,7 @@ export function CityCategorySection({
                   </p>
                   <div className="border rounded-lg overflow-x-auto max-h-[360px] overflow-y-auto">
                     <table className="w-full text-xs">
-                      <thead className="bg-muted/30 border-b sticky top-0">
+                      <thead className="bg-white border-b sticky top-0 z-10 shadow-[0_1px_0_0_hsl(var(--border))]">
                         <tr>
                           {["City Name", "Status", "Updated By", "Updated On", "Actions"].map((h) => (
                             <th key={h} className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">

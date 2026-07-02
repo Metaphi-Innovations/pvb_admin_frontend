@@ -359,6 +359,6 @@ function buildSystemCoaNodes(): ChartOfAccount[] {
 export const SYSTEM_COA_NODES: ChartOfAccount[] = buildSystemCoaNodes();
 
 /** Bump when CA system hierarchy changes — triggers storage reset on mismatch */
-export const COA_SYSTEM_REVISION = 2;
+export const COA_SYSTEM_REVISION = 3;
 
 export const EXPECTED_SYSTEM_NODE_COUNT = SYSTEM_COA_NODES.length;

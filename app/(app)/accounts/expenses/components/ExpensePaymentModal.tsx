@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -113,12 +114,10 @@ export function ExpensePaymentModal({
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Amount to Pay</Label>
-            <Input
-              type="number"
-              min={0}
+            <AccountsMoneyInput
               className="h-8 text-xs"
               value={paidAmount}
-              onChange={(e) => setPaidAmount(e.target.value)}
+              onChange={(v) => setPaidAmount(String(v))}
             />
           </div>
           <div className="space-y-1">

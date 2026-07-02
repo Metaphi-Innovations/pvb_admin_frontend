@@ -16,6 +16,13 @@ const nextConfig = {
       "@radix-ui/react-checkbox",
       "@radix-ui/react-scroll-area",
     ],
+    /** Avoid broken vendor-chunks/*.js references in dev when .next cache is stale */
+    serverComponentsExternalPackages: [
+      "axios",
+      "clsx",
+      "tailwind-merge",
+      "class-variance-authority",
+    ],
   },
 
   async redirects() {
@@ -35,7 +42,8 @@ const nextConfig = {
       { source: "/accounts/transactions/purchase-return", destination: "/accounts/transactions/debit-notes", permanent: false },
       { source: "/accounts/transactions/payment", destination: "/accounts/transactions/payments", permanent: false },
       { source: "/accounts/transactions/bank-reconciliation", destination: "/accounts/transactions/reconciliation", permanent: false },
-      { source: "/accounts/ledger", destination: "/accounts/masters/ledgers", permanent: false },
+      { source: "/accounts/ledger", destination: "/accounts/masters/chart-of-accounts", permanent: false },
+      { source: "/accounts/masters/ledgers/:path*", destination: "/accounts/masters/chart-of-accounts", permanent: false },
       { source: "/accounts/outstanding", destination: "/accounts/reports/trial-balance", permanent: false },
     ];
   },

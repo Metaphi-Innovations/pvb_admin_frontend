@@ -28,8 +28,8 @@ import type { CollectionFollowUpStatus } from "@/lib/accounts/receivables-data";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const filterLabelClass = "text-[10px] font-medium uppercase text-muted-foreground";
-const filterControlClass = "h-8 text-xs mt-1";
+const filterLabelClass = "text-[10px] font-medium uppercase text-muted-foreground leading-none";
+const filterControlClass = "h-7 text-xs mt-0.5";
 
 export const REPORT_BRANCH_OPTIONS = CASH_BRANCH_OPTIONS.filter((b) => b !== "all");
 
@@ -41,7 +41,7 @@ export function ReportFilterRow({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap items-end gap-3", className)}>{children}</div>
+    <div className={cn("flex flex-wrap items-end gap-2", className)}>{children}</div>
   );
 }
 
@@ -546,12 +546,12 @@ export function ReportViewByFilter({
 
 const COLLECTION_STATUS_OPTIONS: { value: CollectionFollowUpStatus | "all"; label: string }[] = [
   { value: "all", label: "All statuses" },
-  { value: "pending", label: "Pending" },
-  { value: "follow_up_due", label: "Follow-up Due" },
+  { value: "not_contacted", label: "Not Contacted" },
+  { value: "follow_up_scheduled", label: "Follow-up Scheduled" },
   { value: "promise_to_pay", label: "Promise to Pay" },
-  { value: "partially_collected", label: "Partially Collected" },
-  { value: "collected", label: "Collected" },
+  { value: "part_payment_received", label: "Part Payment Received" },
   { value: "escalated", label: "Escalated" },
+  { value: "closed", label: "Closed" },
 ];
 
 export function ReportCollectionStatusFilter({

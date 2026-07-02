@@ -21,18 +21,80 @@ import { syncCustomerLedger } from "@/lib/accounts/erp-accounting-mapping";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { isPostedForReports } from "@/lib/accounts/accounts-maker-checker";
+import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export type ReceivableStatus = "unpaid" | "partially_paid" | "paid" | "overdue";
 export type ReceiptAllocationStatus = "unallocated" | "partially_allocated" | "fully_allocated";
 export type CollectionFollowUpStatus =
+  | "not_contacted"
+  | "follow_up_scheduled"
+  | "promise_to_pay"
+  | "part_payment_received"
+  | "escalated"
+  | "closed";
+
+/** @deprecated Legacy statuses — migrated on load */
+type LegacyCollectionFollowUpStatus =
   | "pending"
   | "follow_up_due"
-  | "promise_to_pay"
   | "partially_collected"
-  | "collected"
-  | "escalated";
+  | "collected";
+
+export interface InvoiceOutstandingRow {
+  invoiceId: number;
+  customerId: number;
+  customerName: string;
+  customerCode: string;
+  gstin: string;
+  invoiceNo: string;
+  invoiceDate: string;
+  dueDate: string;
+  invoiceAmount: number;
+  receivedAmount: number;
+  outstandingAmount: number;
+  overdueDays: number;
+  status: ReceivableStatus;
+}
+
+export interface InvoiceOutstandingFilters {
+  customerId?: number;
+  status?: ReceivableStatus | "all";
+  dateFrom?: string;
+  dateTo?: string;
+  financialYearId?: number;
+  search?: string;
+}
+
+export interface InvoiceReceiptHistoryRow {
+  receiptNo: string;
+  receiptDate: string;
+  amount: number;
+  paymentMode: string;
+  referenceNo: string;
+}
+
+export interface InvoiceOutstandingDetailView {
+  customer: Customer;
+  invoice: CustomerInvoiceOutstandingRow;
+  receiptHistory: InvoiceReceiptHistoryRow[];
+  summary: {
+    invoiceAmount: number;
+    receivedAmount: number;
+    outstandingAmount: number;
+  };
+}
+
+export interface CustomerReceiptAllocationSummary {
+  customerId: number;
+  customerName: string;
+  customerCode: string;
+  totalOutstanding: number;
+  totalReceiptAvailable: number;
+  unallocatedBalance: number;
+  unallocatedReceipts: ReceiptAllocationRecord[];
+}
 
 export interface CustomerOutstandingRow {
   customerName: string;
@@ -99,13 +161,22 @@ export interface CustomerAgeingRow {
   customerCode: string;
   territory: string;
   salesExecutive: string;
-  currentNotDue: number;
   bucket0_30: number;
   bucket31_60: number;
   bucket61_90: number;
-  bucket90Plus: number;
+  bucket91_120: number;
+  bucketAbove120: number;
   totalOutstanding: number;
   oldestInvoiceDate: string;
+}
+
+export interface CollectionFollowUpHistoryEntry {
+  id: number;
+  followUpId: number;
+  date: string;
+  status: CollectionFollowUpStatus;
+  remarks: string;
+  updatedBy: string;
 }
 
 export interface ReceiptAllocationLine {
@@ -165,6 +236,14 @@ export interface CollectionFollowUpInput {
 
 const ALLOCATION_KEY = "ds_accounts_receipt_allocations_v1";
 const COLLECTION_KEY = "ds_accounts_collection_followups_v1";
+const COLLECTION_HISTORY_KEY = "ds_accounts_collection_followup_history_v1";
+
+const LEGACY_COLLECTION_STATUS_MAP: Record<LegacyCollectionFollowUpStatus, CollectionFollowUpStatus> = {
+  pending: "not_contacted",
+  follow_up_due: "follow_up_scheduled",
+  partially_collected: "part_payment_received",
+  collected: "closed",
+};
 
 const TODAY = () => new Date().toISOString().slice(0, 10);
 
@@ -220,22 +299,49 @@ export function getInvoiceReceivableStatus(
 }
 
 export function getAgeingBucketLabel(daysOverdue: number, asOfDate: string, dueDate: string): string {
-  if (daysBetween(dueDate, asOfDate) <= 0) return "Current / Not Due";
+  if (daysBetween(dueDate, asOfDate) <= 0) return "0–30 Days";
   if (daysOverdue <= 30) return "0–30 Days";
   if (daysOverdue <= 60) return "31–60 Days";
   if (daysOverdue <= 90) return "61–90 Days";
-  return "90+ Days";
+  if (daysOverdue <= 120) return "91–120 Days";
+  return "Above 120 Days";
 }
 
-function bucketKey(daysOverdue: number, asOfDate: string, dueDate: string): keyof Pick<
+function bucketKey(
+  daysOverdue: number,
+  asOfDate: string,
+  dueDate: string,
+): keyof Pick<
   CustomerAgeingRow,
-  "currentNotDue" | "bucket0_30" | "bucket31_60" | "bucket61_90" | "bucket90Plus"
+  "bucket0_30" | "bucket31_60" | "bucket61_90" | "bucket91_120" | "bucketAbove120"
 > {
-  if (daysBetween(dueDate, asOfDate) <= 0) return "currentNotDue";
-  if (daysOverdue <= 30) return "bucket0_30";
+  if (daysBetween(dueDate, asOfDate) <= 0 || daysOverdue <= 30) return "bucket0_30";
   if (daysOverdue <= 60) return "bucket31_60";
   if (daysOverdue <= 90) return "bucket61_90";
-  return "bucket90Plus";
+  if (daysOverdue <= 120) return "bucket91_120";
+  return "bucketAbove120";
+}
+
+function invoiceMatchesFinancialYear(invoiceDate: string, fyId?: number): boolean {
+  if (!fyId) return true;
+  const fy = loadFinancialYears().find((y) => y.id === fyId);
+  if (!fy) return true;
+  return invoiceDate >= fy.startDate && invoiceDate <= fy.endDate;
+}
+
+export function getReceivableStatusLabel(status: ReceivableStatus): string {
+  switch (status) {
+    case "paid":
+      return "Paid";
+    case "partially_paid":
+      return "Partially Received";
+    case "unpaid":
+      return "Pending";
+    case "overdue":
+      return "Overdue";
+    default:
+      return status;
+  }
 }
 
 function customerStatusFromInvoices(
@@ -281,6 +387,124 @@ function buildInvoiceRow(inv: InvoiceRecord, asOfDate: string): CustomerInvoiceO
     daysOverdue: outstanding > 0 ? daysOverdue : 0,
     status: getInvoiceReceivableStatus(inv, asOfDate),
     ageingBucket: getAgeingBucketLabel(daysOverdue, asOfDate, inv.dueDate),
+  };
+}
+
+// ── Invoice-level outstanding ─────────────────────────────────────────────────
+
+export function computeInvoiceOutstanding(
+  asOfDate = TODAY(),
+  filters: InvoiceOutstandingFilters = {},
+): InvoiceOutstandingRow[] {
+  const customers = loadCustomers();
+  const invoices = getPostedSalesInvoices();
+  const q = filters.search?.trim().toLowerCase() ?? "";
+  const rows: InvoiceOutstandingRow[] = [];
+
+  for (const inv of invoices) {
+    if (!inv.customerId) continue;
+    const customer = customers.find((c) => c.id === inv.customerId);
+    if (!customer) continue;
+
+    if (filters.customerId && inv.customerId !== filters.customerId) continue;
+    if (filters.dateFrom && inv.invoiceDate < filters.dateFrom) continue;
+    if (filters.dateTo && inv.invoiceDate > filters.dateTo) continue;
+    if (!invoiceMatchesFinancialYear(inv.invoiceDate, filters.financialYearId)) continue;
+
+    const invoiceRow = buildInvoiceRow(inv, asOfDate);
+    if (filters.status && filters.status !== "all" && invoiceRow.status !== filters.status) continue;
+
+    if (q) {
+      const hay = [
+        customer.customerName,
+        customer.customerCode,
+        customer.gstin,
+        inv.invoiceNo,
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (!hay.includes(q)) continue;
+    }
+
+    rows.push({
+      invoiceId: inv.id,
+      customerId: customer.id,
+      customerName: customer.customerName,
+      customerCode: customer.customerCode,
+      gstin: customer.gstin || "—",
+      invoiceNo: inv.invoiceNo,
+      invoiceDate: inv.invoiceDate,
+      dueDate: inv.dueDate,
+      invoiceAmount: invoiceRow.invoiceAmount,
+      receivedAmount: invoiceRow.paidAmount,
+      outstandingAmount: invoiceRow.outstanding,
+      overdueDays: invoiceRow.daysOverdue,
+      status: invoiceRow.status,
+    });
+  }
+
+  return rows.sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate));
+}
+
+export function getInvoiceReceiptHistory(invoiceId: number): InvoiceReceiptHistoryRow[] {
+  const inv = getPostedSalesInvoices().find((i) => i.id === invoiceId);
+  if (!inv) return [];
+
+  const fromCollections: InvoiceReceiptHistoryRow[] = (inv.collections ?? []).map((c) => ({
+    receiptNo: c.referenceNo || `RCPT-${c.id}`,
+    receiptDate: c.paymentDate,
+    amount: c.amount,
+    paymentMode: c.paymentMode,
+    referenceNo: c.referenceNo || "—",
+  }));
+
+  const allocationReceipts = loadReceiptAllocationRecords()
+    .filter((r) => r.lines.some((l) => l.invoiceId === invoiceId))
+    .flatMap((r) =>
+      r.lines
+        .filter((l) => l.invoiceId === invoiceId)
+        .map((l) => ({
+          receiptNo: r.receiptNo,
+          receiptDate: r.receiptDate,
+          amount: l.amount,
+          paymentMode: "Receipt Voucher",
+          referenceNo: r.referenceNo,
+        })),
+    );
+
+  const merged = [...fromCollections, ...allocationReceipts];
+  const seen = new Set<string>();
+  return merged
+    .filter((row) => {
+      const key = `${row.receiptNo}-${row.amount}-${row.receiptDate}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => b.receiptDate.localeCompare(a.receiptDate));
+}
+
+export function getInvoiceOutstandingDetail(
+  invoiceId: number,
+  asOfDate = TODAY(),
+): InvoiceOutstandingDetailView | null {
+  const inv = getPostedSalesInvoices().find((i) => i.id === invoiceId);
+  if (!inv?.customerId) return null;
+  const customer = getCustomerById(inv.customerId);
+  if (!customer) return null;
+
+  const invoice = buildInvoiceRow(inv, asOfDate);
+  const receiptHistory = getInvoiceReceiptHistory(invoiceId);
+
+  return {
+    customer,
+    invoice,
+    receiptHistory,
+    summary: {
+      invoiceAmount: invoice.invoiceAmount,
+      receivedAmount: invoice.paidAmount,
+      outstandingAmount: invoice.outstanding,
+    },
   };
 }
 
@@ -417,7 +641,8 @@ export function computeCustomerAgeing(asOfDate = TODAY()): AgeingBucket[] {
     { label: "0–30 Days", daysMin: 0, daysMax: 30, amount: summary.bucket0_30 },
     { label: "31–60 Days", daysMin: 31, daysMax: 60, amount: summary.bucket31_60 },
     { label: "61–90 Days", daysMin: 61, daysMax: 90, amount: summary.bucket61_90 },
-    { label: "90+ Days", daysMin: 91, daysMax: null, amount: summary.bucket90Plus },
+    { label: "91–120 Days", daysMin: 91, daysMax: 120, amount: summary.bucket91_120 },
+    { label: "Above 120 Days", daysMin: 121, daysMax: null, amount: summary.bucketAbove120 },
   ];
 }
 
@@ -425,11 +650,11 @@ export function computeAgeingSummary(asOfDate = TODAY()) {
   const rows = computeCustomerAgeingRows(asOfDate);
   return {
     totalOutstanding: round2(rows.reduce((s, r) => s + r.totalOutstanding, 0)),
-    currentNotDue: round2(rows.reduce((s, r) => s + r.currentNotDue, 0)),
     bucket0_30: round2(rows.reduce((s, r) => s + r.bucket0_30, 0)),
     bucket31_60: round2(rows.reduce((s, r) => s + r.bucket31_60, 0)),
     bucket61_90: round2(rows.reduce((s, r) => s + r.bucket61_90, 0)),
-    bucket90Plus: round2(rows.reduce((s, r) => s + r.bucket90Plus, 0)),
+    bucket91_120: round2(rows.reduce((s, r) => s + r.bucket91_120, 0)),
+    bucketAbove120: round2(rows.reduce((s, r) => s + r.bucketAbove120, 0)),
   };
 }
 
@@ -470,11 +695,11 @@ export function computeCustomerAgeingRows(
         customerCode: customer.customerCode,
         territory: customer.territoryName || customer.districtName || "—",
         salesExecutive: customer.salesManName || inv.salesperson || "—",
-        currentNotDue: 0,
         bucket0_30: 0,
         bucket31_60: 0,
         bucket61_90: 0,
-        bucket90Plus: 0,
+        bucket91_120: 0,
+        bucketAbove120: 0,
         totalOutstanding: 0,
         oldestInvoiceDate: inv.invoiceDate,
       } satisfies CustomerAgeingRow);
@@ -680,6 +905,102 @@ export function seedReceiptAllocations(entries: AllocationStoreEntry[]): void {
   saveAllocationStore(entries);
 }
 
+export function getCustomerReceiptAllocationSummary(
+  customerId: number,
+): CustomerReceiptAllocationSummary | null {
+  const customer = getCustomerById(customerId);
+  if (!customer) return null;
+
+  const totalOutstanding = round2(
+    getPostedSalesInvoices()
+      .filter((i) => i.customerId === customerId)
+      .reduce((s, i) => s + getInvoiceOutstanding(i), 0),
+  );
+
+  const unallocatedReceipts = loadReceiptAllocationRecords().filter(
+    (r) => r.customerId === customerId && r.unallocatedAmount > 0.009,
+  );
+  const unallocatedBalance = round2(
+    unallocatedReceipts.reduce((s, r) => s + r.unallocatedAmount, 0),
+  );
+  const totalReceiptAvailable = round2(
+    loadReceiptAllocationRecords()
+      .filter((r) => r.customerId === customerId)
+      .reduce((s, r) => s + r.receiptAmount, 0),
+  );
+
+  return {
+    customerId: customer.id,
+    customerName: customer.customerName,
+    customerCode: customer.customerCode,
+    totalOutstanding,
+    totalReceiptAvailable,
+    unallocatedBalance,
+    unallocatedReceipts,
+  };
+}
+
+export function applyCustomerReceiptAllocation(
+  customerId: number,
+  voucherId: number,
+  allocations: Array<{ invoiceId: number; amount: number }>,
+): string | null {
+  const record = getReceiptAllocationByVoucherId(voucherId);
+  if (!record || record.customerId !== customerId) {
+    return "Selected receipt does not belong to this customer.";
+  }
+  return applyReceiptAllocation(voucherId, allocations);
+}
+
+function migrateCollectionStatus(status: string): CollectionFollowUpStatus {
+  if (status in LEGACY_COLLECTION_STATUS_MAP) {
+    return LEGACY_COLLECTION_STATUS_MAP[status as LegacyCollectionFollowUpStatus];
+  }
+  return status as CollectionFollowUpStatus;
+}
+
+function loadCollectionHistoryStore(): CollectionFollowUpHistoryEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(COLLECTION_HISTORY_KEY);
+    return raw ? (JSON.parse(raw) as CollectionFollowUpHistoryEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCollectionHistoryStore(entries: CollectionFollowUpHistoryEntry[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(COLLECTION_HISTORY_KEY, JSON.stringify(entries));
+}
+
+export function loadCollectionFollowUpHistory(followUpId: number): CollectionFollowUpHistoryEntry[] {
+  return loadCollectionHistoryStore()
+    .filter((e) => e.followUpId === followUpId)
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+function appendCollectionHistory(
+  followUpId: number,
+  status: CollectionFollowUpStatus,
+  remarks: string,
+): void {
+  const list = loadCollectionHistoryStore();
+  const entry: CollectionFollowUpHistoryEntry = {
+    id: list.length ? Math.max(...list.map((e) => e.id)) + 1 : 1,
+    followUpId,
+    date: TODAY(),
+    status,
+    remarks,
+    updatedBy: "Admin",
+  };
+  saveCollectionHistoryStore([entry, ...list]);
+}
+
+export function seedCollectionFollowUpHistory(entries: CollectionFollowUpHistoryEntry[]): void {
+  saveCollectionHistoryStore(entries);
+}
+
 // ── Collection follow-ups ────────────────────────────────────────────────────
 
 export const COLLECTION_FOLLOWUP_SEED: CollectionFollowUp[] = [];
@@ -692,7 +1013,11 @@ export function loadCollectionFollowUps(): CollectionFollowUp[] {
       localStorage.setItem(COLLECTION_KEY, JSON.stringify(COLLECTION_FOLLOWUP_SEED));
       return COLLECTION_FOLLOWUP_SEED;
     }
-    return JSON.parse(raw) as CollectionFollowUp[];
+    const parsed = JSON.parse(raw) as Array<CollectionFollowUp & { status: string }>;
+    return parsed.map((row) => ({
+      ...row,
+      status: migrateCollectionStatus(row.status),
+    }));
   } catch {
     return COLLECTION_FOLLOWUP_SEED;
   }
@@ -728,11 +1053,11 @@ export function computeCollectionSummary(asOfDate = TODAY()) {
       (r) =>
         r.nextFollowUpDate &&
         r.nextFollowUpDate < asOfDate &&
-        r.status !== "collected",
+        r.status !== "closed",
     ).length,
     promisedCollections: records.filter((r) => r.status === "promise_to_pay").length,
     collectedThisMonth: records.filter(
-      (r) => r.status === "collected" && r.followUpDate >= monthStart,
+      (r) => r.status === "closed" && r.followUpDate >= monthStart,
     ).length,
   };
 }
@@ -759,12 +1084,14 @@ export function createCollectionFollowUp(input: CollectionFollowUpInput): string
     );
   }
 
-  const status = input.status ?? "pending";
+  const status = input.status ?? "not_contacted";
   if (
-    (status === "pending" || status === "promise_to_pay") &&
+    (status === "not_contacted" ||
+      status === "follow_up_scheduled" ||
+      status === "promise_to_pay") &&
     !input.nextFollowUpDate
   ) {
-    return "Next follow-up date is required for Pending or Promise To Pay status.";
+    return "Next follow-up date is required for this status.";
   }
 
   if (input.promiseAmount && input.promiseAmount > outstandingAmount + 0.009) {
@@ -792,6 +1119,7 @@ export function createCollectionFollowUp(input: CollectionFollowUpInput): string
     nextFollowUpDate: input.nextFollowUpDate ?? "",
   };
   saveCollectionFollowUps([row, ...list]);
+  appendCollectionHistory(row.id, status, row.remarks || "Follow-up created");
   return null;
 }
 
@@ -808,8 +1136,13 @@ export function updateCollectionFollowUp(
   const nextFollowUpDate = input.nextFollowUpDate ?? current.nextFollowUpDate;
   const promiseAmount = input.promiseAmount ?? current.promiseAmount;
 
-  if ((status === "pending" || status === "promise_to_pay") && !nextFollowUpDate) {
-    return "Next follow-up date is required for Pending or Promise To Pay status.";
+  if (
+    (status === "not_contacted" ||
+      status === "follow_up_scheduled" ||
+      status === "promise_to_pay") &&
+    !nextFollowUpDate
+  ) {
+    return "Next follow-up date is required for this status.";
   }
   if (promiseAmount > current.outstandingAmount + 0.009) {
     return "Promise amount cannot exceed outstanding amount.";
@@ -829,6 +1162,13 @@ export function updateCollectionFollowUp(
     invoiceId: input.invoiceId !== undefined ? input.invoiceId ?? null : current.invoiceId,
   };
   saveCollectionFollowUps(list);
+  if (status !== current.status || (input.remarks && input.remarks !== current.remarks)) {
+    appendCollectionHistory(
+      current.id,
+      status,
+      input.remarks ?? current.remarks ?? "Status updated",
+    );
+  }
   return null;
 }
 

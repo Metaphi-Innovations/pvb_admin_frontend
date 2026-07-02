@@ -127,23 +127,29 @@
   }
 
   .master-listing-thead-row {
-    @apply bg-muted/40 border-b border-border;
+    @apply bg-white border-b border-border;
+  }
+
+  .master-listing-thead-row.sticky,
+  thead.sticky > .master-listing-thead-row,
+  thead.sticky.master-listing-thead-row {
+    box-shadow: 0 1px 0 0 hsl(var(--border));
   }
 
   .master-listing-th {
-    @apply bg-muted/40;
+    @apply bg-white;
   }
 
   .master-listing-th-sorted {
-    @apply bg-brand-50/60 text-brand-700;
+    @apply bg-brand-50 text-brand-700;
   }
 
   .master-listing-th-sticky {
-    @apply sticky right-0 z-20 bg-muted/40 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border;
+    @apply sticky right-0 z-20 bg-white shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border;
   }
 
   .master-listing-th-sticky-sorted {
-    @apply sticky right-0 z-20 bg-brand-50/60 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border;
+    @apply sticky right-0 z-20 bg-brand-50 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border;
   }
 
   .master-listing-row {
@@ -166,7 +172,7 @@
   }
 
   .accounts-table-head {
-    @apply bg-muted;
+    @apply bg-white;
   }
 
   .accounts-table-head-row {
@@ -174,10 +180,10 @@
   }
 
   .accounts-table-th {
-    @apply px-4 whitespace-nowrap text-xs font-semibold text-foreground text-left;
-    @apply border-b border-border bg-muted;
-    height: 50px;
-    min-height: 50px;
+    @apply px-2 whitespace-nowrap text-[10px] font-semibold text-foreground text-left;
+    @apply border-b border-border bg-white;
+    height: 28px;
+    min-height: 28px;
     padding-top: 0;
     padding-bottom: 0;
     box-sizing: border-box;
@@ -185,11 +191,11 @@
   }
 
   .accounts-table-th-inner {
-    @apply flex h-full min-h-[50px] items-center;
+    @apply flex h-full min-h-[28px] items-center;
   }
 
   .accounts-table-th-sticky {
-    @apply sticky top-0 z-30 bg-muted;
+    @apply sticky top-0 z-30 bg-white;
     box-shadow: 0 1px 0 0 hsl(var(--border));
   }
 
@@ -215,9 +221,9 @@
   }
 
   .accounts-table-td {
-    @apply px-4 text-xs text-foreground;
-    height: 54px;
-    min-height: 54px;
+    @apply px-2 text-[11px] text-foreground;
+    height: 30px;
+    min-height: 30px;
     padding-top: 0;
     padding-bottom: 0;
     box-sizing: border-box;
@@ -225,11 +231,35 @@
   }
 
   .accounts-table-td-inner {
-    @apply flex h-full min-h-[54px] items-center;
+    @apply flex h-full min-h-[30px] items-center;
   }
 
   .accounts-table-empty {
-    @apply !h-auto !min-h-0 py-16 text-center text-sm text-muted-foreground;
+    @apply !h-auto !min-h-0 py-4 text-center text-xs text-muted-foreground;
+  }
+
+  .accounts-col-narrow {
+    @apply w-20 max-w-[5rem];
+  }
+
+  .accounts-col-status {
+    @apply w-24 max-w-[6rem];
+  }
+
+  .accounts-col-actions {
+    @apply w-10 max-w-[2.5rem];
+  }
+
+  .accounts-col-wide {
+    min-width: 10rem;
+  }
+
+  .accounts-col-party {
+    min-width: 11rem;
+  }
+
+  .accounts-col-narration {
+    min-width: 14rem;
   }
 
   .accounts-table-foot {
@@ -238,10 +268,10 @@
 
   /* Legacy markup: thead/tr without component classes still get standard layout */
   .accounts-table > thead > tr > th {
-    @apply px-4 whitespace-nowrap text-xs font-semibold text-foreground text-left;
-    @apply border-b border-border bg-muted sticky top-0 z-30;
-    height: 50px;
-    min-height: 50px;
+    @apply px-2 whitespace-nowrap text-[10px] font-semibold text-foreground text-left;
+    @apply border-b border-border bg-white sticky top-0 z-30;
+    height: 28px;
+    min-height: 28px;
     padding-top: 0;
     padding-bottom: 0;
     box-sizing: border-box;
@@ -254,9 +284,9 @@
   }
 
   .accounts-table > tbody > tr > td {
-    @apply px-4 text-xs text-foreground;
-    height: 54px;
-    min-height: 54px;
+    @apply px-2 text-[11px] text-foreground;
+    height: 30px;
+    min-height: 30px;
     padding-top: 0;
     padding-bottom: 0;
     box-sizing: border-box;
@@ -280,6 +310,39 @@
 
   .nav-active-navy {
     @apply bg-gradient-to-r from-navy-50/80 to-white text-navy-800 border-l-2 border-navy-600 font-semibold;
+  }
+
+  /* Accounts module — two-panel shell (sidebar + content); plain CSS fallback if utilities fail */
+  .accounts-module-shell {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .accounts-module-sidebar {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    width: min(380px, 32vw);
+    min-width: 340px;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    background: #fff;
+    border-right: 1px solid hsl(var(--border) / 0.8);
+  }
+
+  .accounts-module-main {
+    display: flex;
+    flex: 1 1 0%;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+    background: rgb(248 250 252 / 0.4);
   }
 }
 
