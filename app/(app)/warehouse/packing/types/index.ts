@@ -25,7 +25,7 @@ export interface SalesOrderRecord {
   status: "Ready For Packing" | "Partially Packed" | "Packing In Progress";
   warehouse: string;
   products: SalesOrderProduct[];
-  sourceDocumentType?: "Sales Order" | "Stock Transfer" | "Sample Order";
+  sourceDocumentType?: "Sales Order" | "Stock Transfer" | "Sample Order" | "Purchase Return";
   sourceDocumentNo?: string;
   sourceWarehouse?: string;
   targetWarehouse?: string;
@@ -81,7 +81,7 @@ export interface PackingRecord {
   warehouse: string;
   products: PackedProduct[];
   nearExpirySchemes?: PackingNearExpirySchemeEntry[];
-  sourceDocumentType?: "Sales Order" | "Stock Transfer" | "Sample Order";
+  sourceDocumentType?: "Sales Order" | "Stock Transfer" | "Sample Order" | "Purchase Return";
   sourceDocumentNo?: string;
   sourceWarehouse?: string;
   targetWarehouse?: string;

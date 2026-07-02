@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useRef, useState } from "react";
-import { Check, Download, Eye, Package, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
+import { Download, Eye, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,13 +12,11 @@ import { CURRENT_USER, DEPARTMENT_OPTIONS, PR_PRIORITY_OPTIONS } from "@/lib/pro
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import {
   calcPackingToBaseQty,
-  calcPrLineAmount,
   enrichProductForProcurement,
   type PackagingUom,
 } from "@/lib/procurement/procurement-line-utils";
 import { stateSelectOptions, warehouseSelectOptions } from "@/lib/procurement/warehouse-filter";
 import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
-import { formatCurrency } from "@/lib/procurement/utils";
 import { enrichPRLineItem, type PRAttachment, type PRLineItem, type PurchaseRequest } from "../pr-data";
 import type { PRPriority } from "@/lib/procurement/config";
 import { ProductItemDetailsSection } from "@/components/procurement/ProductItemDetailsSection";
@@ -96,7 +94,7 @@ export const DEFAULT_PR_FORM: PRFormValues = {
 
 function SectionHead({ label, sub, required }: { label: string; sub?: string; required?: boolean }) {
   return (
-    <div className="mb-3 pb-2 border-b border-border">
+    <div className="mb-1.5 pb-1.5 border-b border-border">
       <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center">
         {label}
         {required && <span className="text-red-500 ml-1">*</span>}
@@ -124,12 +122,6 @@ function formatDisplayDate(iso: string): string {
   const [y, m, d] = iso.split("-");
   if (!y || !m || !d) return iso;
   return `${d}-${m}-${y}`;
-}
-
-interface InlineEditDraft {
-  productId: string;
-  packingQty: string;
-  remarks: string;
 }
 
 function packagingUnitToRequestUom(packagingUnit: string): PackagingUom {
@@ -280,10 +272,10 @@ export function PurchaseRequestForm({
 
   return (
     <div className={cn("rounded-xl border border-border bg-white p-4 shadow-sm", readOnly && "w-full")}>
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div>
           <SectionHead label="Request Details" sub="Core purchase request information and required timeline." />
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-1">
               <Label className="text-xs font-medium">PR No.</Label>
               <Input
@@ -384,7 +376,7 @@ export function PurchaseRequestForm({
               )}
             </div>
           </div>
-          <div className="mt-3 space-y-1">
+          <div className="mt-2 space-y-1">
             <Label className="text-xs font-medium">Purpose / Justification</Label>
             <Textarea
               rows={2}
@@ -401,6 +393,7 @@ export function PurchaseRequestForm({
         </div>
 
         <ProductItemDetailsSection
+          mode="purchase_request"
           products={productOptions}
           items={form.lines}
           onAddItem={onAddItem}
@@ -409,12 +402,12 @@ export function PurchaseRequestForm({
           readOnly={readOnly}
         />
 
-        <div className="border-t border-border/60 pt-4">
+        <div className="border-t border-border/60 pt-3">
           <SectionHead
             label="Remarks & Attachments"
             sub={readOnly ? undefined : "Additional notes and supporting documents."}
           />
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             <div>
               {!readOnly && (
                 <p className="mb-1.5 text-xs font-medium text-foreground">Remarks</p>
@@ -431,9 +424,9 @@ export function PurchaseRequestForm({
                 )}
               />
             </div>
-            <div className="rounded-xl border border-border bg-muted/10 p-3.5">
+            <div className="rounded-xl border border-border bg-muted/10 p-2.5">
               {!readOnly && (
-                <div className="mb-2.5 flex items-center justify-between gap-2">
+                <div className="mb-2 flex items-center justify-between gap-2">
                   <p className="text-xs font-medium text-foreground">Attachments</p>
                   <Button
                     type="button"
@@ -451,11 +444,11 @@ export function PurchaseRequestForm({
               )}
               {!readOnly && <input ref={fileRef} type="file" className="hidden" onChange={onFilePick} />}
                 {form.attachments.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+                  <p className="rounded-lg border border-dashed border-border px-3 py-3 text-center text-xs text-muted-foreground">
                     No attachments
                   </p>
                 ) : (
-                  <ul className="space-y-2">
+                  <ul className="space-y-1.5">
                     {form.attachments.map((a) => (
                       <li
                         key={a.uid}

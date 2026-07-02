@@ -1,26 +1,25 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-	Popover,
-	PopoverContent,
-	PopoverTrigger,
-} from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import {
 	Plus,
-	Search,
 	Check,
-	ChevronsUpDown,
 	Trash2,
 	Pencil,
 	AlertCircle,
 	X,
+	Package,
+	Tag,
+	Search,
+	ChevronsUpDown,
 } from "lucide-react";
 import {
 	type SalesOrderLineItem,
@@ -30,7 +29,6 @@ import {
 	applySchemePricingToLine,
 	applyManualSchemeToLine,
 	removeAppliedSchemeFromLine,
-	recalculateLineItem,
 	applyLineTaxFields,
 	computeLineTaxBreakdown,
 	getProductById,
@@ -46,11 +44,10 @@ import {
 } from "@/app/(app)/masters/scheme/product-discount-scheme";
 import type { EligibleProductDiscountSchemeOffer } from "@/app/(app)/masters/scheme/product-discount-scheme";
 import { Badge } from "@/components/ui/badge";
+import { ProductItemDetailsSection } from "@/components/procurement/ProductItemDetailsSection";
 import ProductSchemeOfferDialog, {
 	type ProductSchemeOfferDialogMode,
 } from "./ProductSchemeOfferDialog";
-import { Tag } from "lucide-react";
-import { ProductItemDetailsSection } from "@/components/procurement/ProductItemDetailsSection";
 
 interface ProductLinesEditorProps {
 	lines: SalesOrderLineItem[];
@@ -65,9 +62,16 @@ interface ProductLinesEditorProps {
 	taxSupplyType?: TaxSupplyType;
 }
 
+interface InlineEditDraft {
+	productId: string;
+	quantity: string;
+}
+
+const inputCls = "h-8 rounded-lg text-xs";
+
 function EmptyTaxCell() {
 	return (
-		<td className='px-2 py-1.5 min-w-[100px] text-xs text-muted-foreground'>
+		<td className="px-2 py-1.5 min-w-[100px] text-xs text-muted-foreground">
 			—
 		</td>
 	);
@@ -266,6 +270,8 @@ export default function ProductLinesEditor({
 	pricingContext = null,
 	taxSupplyType = "intra",
 }: ProductLinesEditorProps) {
+	const [quickProductIds, setQuickProductIds] = useState<string[]>([]);
+	const [quickQty, setQuickQty] = useState("1");
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [editDraft, setEditDraft] = useState<Partial<SalesOrderLineItem> | null>(null);
 	const [localError, setLocalError] = useState<string | null>(null);
@@ -285,6 +291,25 @@ export default function ProductLinesEditor({
 		: "";
 
 	const taxOptionsKey = `${taxSupplyType}|${zeroGst}`;
+
+	const productOptions = useMemo(
+		() =>
+			products.map((p) => ({
+				value: String(p.id),
+				label: `${p.name} (${p.code})`,
+				sublabel: `Stock: ${p.stock}`,
+			})),
+		[products],
+	);
+
+	const filledLines = lines.filter((l) => l.productId != null);
+	const totalQty = filledLines.reduce((sum, l) => sum + (l.quantity || 0), 0);
+	const totalAmount = filledLines.reduce((sum, l) => sum + (l.lineTotal || 0), 0);
+
+	const previewProductId = Number(quickProductIds[0]);
+	const previewProduct = previewProductId
+		? products.find((p) => p.id === previewProductId)
+		: null;
 
 	useEffect(() => {
 		if (!pricingContext?.stateName || !pricingContext.customerMasterType) return;
@@ -333,6 +358,23 @@ export default function ProductLinesEditor({
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- recalc when tax supply type or LUT toggles
 	}, [taxOptionsKey]);
 
+	const taxOptions = { zeroGst, supplyType: taxSupplyType };
+
+	const lineFromProduct = (
+		productId: number,
+		quantity: number,
+		existingId?: string,
+	): SalesOrderLineItem | null => {
+		const product = getProductById(productId) ?? products.find((p) => p.id === productId);
+		if (!product) return null;
+		let line = createEmptyLineItem();
+		if (existingId) line.id = existingId;
+		line.productId = productId;
+		line.quantity = quantity;
+		line = applySchemePricingToLine(line, product, pricingContext, taxOptions);
+		return line;
+	};
+
 	const getLineEligibleSchemes = (
 		line: SalesOrderLineItem,
 	): EligibleProductDiscountSchemeOffer[] => {
@@ -377,7 +419,7 @@ export default function ProductLinesEditor({
 			line,
 			schemeDialog.selectedOffer,
 			product,
-			{ zeroGst, supplyType: taxSupplyType },
+			taxOptions,
 		);
 		onChange(lines.map((entry) => (entry.id === line.id ? updated : entry)));
 	};
@@ -386,11 +428,17 @@ export default function ProductLinesEditor({
 		if (!line.productId) return;
 		const product = getProductById(line.productId);
 		if (!product) return;
-		const updated = removeAppliedSchemeFromLine(line, product, {
-			zeroGst,
-			supplyType: taxSupplyType,
-		});
+		const updated = removeAppliedSchemeFromLine(line, product, taxOptions);
 		onChange(lines.map((entry) => (entry.id === line.id ? updated : entry)));
+	};
+
+	const recalculateLineItem = (line: SalesOrderLineItem): SalesOrderLineItem => {
+		const finalRate = line.unitPrice - (line.schemeDiscountAmount || 0);
+		return {
+			...line,
+			finalRate,
+			lineTotal: Number((line.quantity * finalRate).toFixed(2))
+		};
 	};
 
 	const computeUpdatedLine = (line: SalesOrderLineItem, patch: Partial<SalesOrderLineItem>): SalesOrderLineItem => {
@@ -482,52 +530,45 @@ export default function ProductLinesEditor({
 				return;
 			}
 		}
-		setLocalError(null);
-		const newLine = createEmptyLineItem();
-		onChange([...lines, newLine]);
-		setEditingId(newLine.id);
+
+		onChange([...lines, createEmptyLineItem()]);
+		setQuickProductIds([]);
+		setQuickQty("1");
 	};
 
 	const removeLine = (id: string) => {
-		setLocalError(null);
 		onChange(lines.filter((l) => l.id !== id));
-		if (editingId === id) setEditingId(null);
+		if (editingId === id) {
+			setEditingId(null);
+			setEditDraft(null);
+		}
 	};
 
-	const handleProductSelectMultiple = (
-		lineId: string,
-		selectedProducts: ProductCatalogItem[],
-	) => {
-		setLocalError(null);
-		if (selectedProducts.length === 0) return;
-
-		const lineIndex = lines.findIndex((l) => l.id === lineId);
-		if (lineIndex === -1) return;
-
-		// Check for duplicate products
-		for (const prod of selectedProducts) {
-			const exists = lines.some((l) => l.id !== lineId && l.productId === prod.id);
-			if (exists) {
-				setLocalError(`Product "${prod.name}" is already added to this order.`);
-				return;
-			}
+	const handleProductSelectMultiple = (lineId: string, selectedProds: ProductCatalogItem[]) => {
+		if (selectedProds.length === 0) {
+			updateLine(lineId, { productId: null, productCode: "", productName: "" } as Partial<SalesOrderLineItem>);
+			return;
 		}
 
-		const newLines = [...lines];
+		let newLines = [...lines];
+		const firstProd = selectedProds[0];
+		
+		newLines = newLines.map((l) => {
+			if (l.id !== lineId) return l;
+			let updated = { ...l, productId: firstProd.id } as SalesOrderLineItem;
+			updated = applySchemePricingToLine(updated, firstProd, pricingContext, {
+				zeroGst,
+				supplyType: taxSupplyType,
+			});
+			return updated;
+		});
 
-		const p1 = selectedProducts[0];
-		newLines[lineIndex] = applySchemePricingToLine(
-			newLines[lineIndex],
-			p1,
-			pricingContext,
-			{ zeroGst, supplyType: taxSupplyType },
-		);
-
-		for (let i = 1; i < selectedProducts.length; i++) {
-			const p = selectedProducts[i];
+		for (let i = 1; i < selectedProds.length; i++) {
+			const prod = selectedProds[i];
 			let newLine = createEmptyLineItem();
-			newLine.productId = p.id;
-			newLine = applySchemePricingToLine(newLine, p, pricingContext, {
+			newLine.productId = prod.id;
+			newLine.quantity = 1;
+			newLine = applySchemePricingToLine(newLine, prod, pricingContext, {
 				zeroGst,
 				supplyType: taxSupplyType,
 			});
@@ -601,10 +642,9 @@ export default function ProductLinesEditor({
 	};
 
 	const totalQuantity = lines.reduce((sum, line) => sum + (line.quantity || 0), 0);
-	const totalAmount = lines.reduce((sum, line) => sum + (line.lineTotal || 0), 0);
 
 	return (
-		<div className='space-y-2'>
+		<div className="space-y-2">
 			<ProductSchemeOfferDialog
 				open={schemeDialog != null}
 				mode={schemeDialog?.mode ?? "no-scheme"}
@@ -1056,7 +1096,9 @@ export default function ProductLinesEditor({
 				customTableFooter={
 					<div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-muted/20 px-4 py-2.5">
 						<p className="text-[11px] text-muted-foreground">
-							<span className="font-medium text-foreground">{lines.length}</span> product(s) selected
+							Showing{" "}
+							<span className="font-medium text-foreground">{filledLines.length}</span>{" "}
+							items
 						</p>
 						<div className="flex flex-wrap items-center gap-3">
 							<p className="text-[11px] text-muted-foreground">
@@ -1065,7 +1107,7 @@ export default function ProductLinesEditor({
 							</p>
 							<p className="text-[11px] text-muted-foreground">
 								Total amount:{" "}
-								<span className="font-medium text-foreground tabular-nums font-mono">
+								<span className="font-medium tabular-nums font-mono">
 									{formatRupee(totalAmount)}
 								</span>
 							</p>
@@ -1074,9 +1116,9 @@ export default function ProductLinesEditor({
 				}
 			/>
 
-			{localError && (
-				<p className='text-xs text-red-500 flex items-center gap-1 mt-1'>
-					<AlertCircle className='w-3.5 h-3.5 flex-shrink-0' /> {localError}
+			{error && (
+				<p className="text-xs text-red-500 flex items-center gap-1">
+					<AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {error}
 				</p>
 			)}
 		</div>

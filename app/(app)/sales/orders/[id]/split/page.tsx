@@ -18,7 +18,6 @@ import {
   getOrderById,
   hydrateOrderLineItems,
   loadProductCatalog,
-  createEmptyLineItem,
   splitSalesOrderFromForm,
   canSplitOrder,
   generateOrderNumber,

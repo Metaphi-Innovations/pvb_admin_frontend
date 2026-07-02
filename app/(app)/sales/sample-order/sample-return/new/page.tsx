@@ -172,7 +172,7 @@ export default function NewSampleReturnPage() {
     }
     
     const productsToReturn = flatReturns.map(r => ({
-       product: r.productName,
+       product: r.product,
        sku: r.sku,
        packedQty: r.packedQty ?? 0,
        dispatchQty: r.dispatchQty ?? 0,
