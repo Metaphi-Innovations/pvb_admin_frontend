@@ -1,5 +1,7 @@
 "use client";
 
+/** Accounts reports filter bar — consumed only by `/accounts` pages and report clients. */
+
 import React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +29,8 @@ import { getActiveTDSMasters, getTdsSectionCode } from "@/app/(app)/masters/tds/
 import type { CollectionFollowUpStatus } from "@/lib/accounts/receivables-data";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
+import { AccountsFilterDateRangeSection } from "@/components/accounts/AccountsListingFilter";
 
 const filterLabelClass = "text-[10px] font-medium uppercase text-muted-foreground leading-none";
 const filterControlClass = "h-7 text-xs mt-0.5";
@@ -123,26 +127,15 @@ export function ReportDateRangeFilter({
         </Select>
       </div>
       {preset === "custom" && (
-        <>
-          <div className="space-y-1">
-            <Label className={filterLabelClass}>From</Label>
-            <Input
-              type="date"
-              className={cn(filterControlClass, "mt-0 w-36")}
-              value={dateFrom}
-              onChange={(e) => onDateFromChange(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className={filterLabelClass}>To</Label>
-            <Input
-              type="date"
-              className={cn(filterControlClass, "mt-0 w-36")}
-              value={dateTo}
-              onChange={(e) => onDateToChange(e.target.value)}
-            />
-          </div>
-        </>
+        <div className="space-y-1 min-w-[220px]">
+          <AccountsFilterDateRangeSection
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={onDateFromChange}
+            onDateToChange={onDateToChange}
+            size="default"
+          />
+        </div>
       )}
     </>
   );
@@ -161,26 +154,15 @@ export function ReportFromToDateFilter({
   onDateToChange: (value: string) => void;
 }) {
   return (
-    <>
-      <div className="space-y-1">
-        <Label className={filterLabelClass}>From Date</Label>
-        <Input
-          type="date"
-          className={cn(filterControlClass, "mt-0 w-36")}
-          value={dateFrom}
-          onChange={(e) => onDateFromChange(e.target.value)}
-        />
-      </div>
-      <div className="space-y-1">
-        <Label className={filterLabelClass}>To Date</Label>
-        <Input
-          type="date"
-          className={cn(filterControlClass, "mt-0 w-36")}
-          value={dateTo}
-          onChange={(e) => onDateToChange(e.target.value)}
-        />
-      </div>
-    </>
+    <div className="space-y-1 min-w-[220px]">
+      <AccountsFilterDateRangeSection
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onDateFromChange={onDateFromChange}
+        onDateToChange={onDateToChange}
+        size="default"
+      />
+    </div>
   );
 }
 
@@ -194,11 +176,12 @@ export function ReportAsOnDateFilter({
   return (
     <div className="space-y-1">
       <Label className={filterLabelClass}>As On Date</Label>
-      <Input
-        type="date"
-        className={cn(filterControlClass, "mt-0 w-36")}
+      <AccountsDateInput
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={onChange}
+        className="mt-0 w-36"
+        size="default"
+        aria-label="As on date"
       />
     </div>
   );

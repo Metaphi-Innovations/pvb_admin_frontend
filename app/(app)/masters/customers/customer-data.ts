@@ -61,6 +61,8 @@ export interface BranchAddress {
 	city: string;
 	state: string;
 	pincode: string;
+	/** Branch-specific GSTIN for this address (e.g. ship-to location). */
+	gstin?: string;
 }
 
 export interface BranchDocument {
@@ -348,6 +350,7 @@ const SEED_CUSTOMERS_RAW = [
 					city: "Mumbai",
 					state: "Maharashtra",
 					pincode: "400051",
+					gstin: "27AABCU9603R1ZX",
 				},
 				documents: [
 					{
@@ -374,10 +377,11 @@ const SEED_CUSTOMERS_RAW = [
 					pincode: "411004",
 				},
 				shippingAddress: {
-					address: "123 Market Road, Shivaji Nagar",
+					address: "Plot 45, MIDC, Pune",
 					city: "Pune",
 					state: "Maharashtra",
 					pincode: "411004",
+					gstin: "27AABCA1234B1Z5",
 				},
 				documents: [
 					{

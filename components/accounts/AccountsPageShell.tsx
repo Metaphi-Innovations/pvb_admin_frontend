@@ -11,6 +11,8 @@ export interface AccountsPageShellProps {
   title: string;
   description: string;
   actions?: React.ReactNode;
+  /** Search / filter / export toolbar — aligned top-right in title row */
+  toolbar?: React.ReactNode;
   filters?: React.ReactNode;
   footer?: React.ReactNode;
   children: React.ReactNode;
@@ -26,6 +28,7 @@ export function AccountsPageShell({
   title,
   description,
   actions,
+  toolbar,
   filters,
   footer,
   children,
@@ -41,7 +44,7 @@ export function AccountsPageShell({
     <div
       className={cn(
         "flex flex-col w-full",
-        isSplit ? "h-full min-h-0 overflow-hidden gap-1" : "gap-3",
+        isSplit ? "h-full min-h-0 overflow-hidden gap-3" : "gap-4",
         isConstrainedHeight && !isSplit && "h-full min-h-0 overflow-hidden",
         className,
       )}
@@ -79,8 +82,8 @@ export function AccountsPageShell({
 
       <div
         className={cn(
-          "flex-shrink-0 flex items-center justify-between gap-2 min-h-0",
-          !isSplit && "items-start gap-4",
+          "flex-shrink-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 min-h-0",
+          !isSplit && "items-start",
         )}
       >
         <div className="min-w-0 flex-1">
@@ -104,30 +107,38 @@ export function AccountsPageShell({
             </p>
           )}
         </div>
-        {actions && (
-          <div className={cn("flex items-center flex-shrink-0", isSplit ? "gap-1.5" : "gap-2")}>
+        {(toolbar || actions) && (
+          <div
+            className={cn(
+              "flex items-center flex-shrink-0 flex-wrap justify-end",
+              isSplit ? "gap-1.5" : "gap-2",
+            )}
+          >
+            {toolbar}
             {actions}
           </div>
         )}
       </div>
 
       {filters && (
-        <div
-          className={cn(
-            "flex-shrink-0 z-20 bg-white",
-            isSplit
-              ? "border-b border-border/60 pb-1.5"
-              : "rounded-lg border border-border/60 bg-white px-3 py-2 shadow-sm",
-          )}
-        >
-          {filters}
+        <div className="flex-shrink-0 z-20">
+          <div
+            className={cn(
+              "bg-white",
+              isSplit
+                ? "border-b border-border/60 pb-2"
+                : "rounded-lg border border-border/60 bg-white px-3 py-2 shadow-sm",
+            )}
+          >
+            {filters}
+          </div>
         </div>
       )}
 
       <div
         className={cn(
-          "flex flex-col w-full bg-white border border-border/50 rounded-lg overflow-hidden",
-          isSplit ? "shadow-none" : "shadow-sm",
+          "flex flex-col w-full bg-white border border-border rounded-xl overflow-hidden",
+          isSplit ? "shadow-sm flex-1 min-h-0" : "shadow-sm",
           isConstrainedHeight && "flex-1 min-h-0 overflow-hidden",
         )}
       >

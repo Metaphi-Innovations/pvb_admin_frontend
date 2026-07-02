@@ -14,12 +14,14 @@ import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { SYSTEM_COA_NODES } from "@/app/(app)/accounts/masters/coa-seed-nodes";
 import {
   getAllExpandableIds,
+  getSearchMatchingNodes,
   getSearchVisibleIds,
   hasChildLedgers,
   loadChartOfAccounts,
+  resolveSearchFocusNode,
 } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
-import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
+import { GENERAL_LEDGER_HREF, buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import { backfillCoaMasterLinks } from "@/lib/accounts/coa-master-link";
 import { isPostableNode } from "@/lib/accounts/coa-hierarchy";
 import {
@@ -126,26 +128,48 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
   );
 
   useEffect(() => {
-    const nodeParam = searchParams.get("node") ?? searchParams.get("ledger");
-    if (nodeParam) {
-      const id = Number(nodeParam);
-      if (!Number.isNaN(id)) setSelectedId(id);
+    if (isCoaRoute) {
+      const nodeParam = searchParams.get("node");
+      if (nodeParam) {
+        const id = Number(nodeParam);
+        if (!Number.isNaN(id)) setSelectedId(id);
+        return;
+      }
+      if (records.length > 0) {
+        const firstHead = records
+          .filter((r) => r.nodeLevel === "primary_head")
+          .sort((a, b) => a.accountCode.localeCompare(b.accountCode))[0];
+        if (firstHead) {
+          router.replace(`${CHART_OF_ACCOUNTS_HREF}?node=${firstHead.id}`, { scroll: false });
+        }
+      }
       return;
     }
-    if (isCoaRoute && records.length > 0) {
-      const firstHead = records
-        .filter((r) => r.nodeLevel === "primary_head")
-        .sort((a, b) => a.accountCode.localeCompare(b.accountCode))[0];
-      if (firstHead) {
-        router.replace(`${CHART_OF_ACCOUNTS_HREF}?node=${firstHead.id}`, { scroll: false });
+
+    if (pathname.startsWith(GENERAL_LEDGER_HREF)) {
+      const ledgerParam = searchParams.get("ledger");
+      if (ledgerParam) {
+        const id = Number(ledgerParam);
+        if (!Number.isNaN(id)) setSelectedId(id);
       }
+      return;
     }
-  }, [searchParams, isCoaRoute, records, router]);
+
+    setSelectedId(null);
+  }, [searchParams, isCoaRoute, pathname, records, router]);
 
   useEffect(() => {
-    if (!search.trim()) return;
+    if (!search.trim()) {
+      setHighlightedLedgerId(null);
+      return;
+    }
+    const matching = getSearchMatchingNodes(records, search);
+    if (matching.length === 0) return;
+
     const visible = getSearchVisibleIds(records, search);
-    if (visible.size === 0) return;
+    const focus = resolveSearchFocusNode(records, matching);
+    if (!focus) return;
+
     setExpandedIds((prev) => {
       const next = new Set(prev);
       let changed = false;
@@ -155,9 +179,26 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
           changed = true;
         }
       });
+      if (!next.has(focus.id)) {
+        next.add(focus.id);
+        changed = true;
+      }
       return changed ? next : prev;
     });
-  }, [search, records]);
+
+    setSelectedId((current) => {
+      if (current === focus.id) return current;
+      if (pathname.startsWith(CHART_OF_ACCOUNTS_HREF)) {
+        router.replace(`${CHART_OF_ACCOUNTS_HREF}?node=${focus.id}`, { scroll: false });
+      }
+      return focus.id;
+    });
+
+    const firstLedger = matching.find((n) => n.nodeLevel === "ledger");
+    if (firstLedger) {
+      setHighlightedLedgerId(firstLedger.id);
+    }
+  }, [search, records, pathname, router]);
 
   const toggleExpand = useCallback((id: number) => {
     setExpandedIds((prev) => {

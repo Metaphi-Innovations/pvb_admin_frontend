@@ -45,7 +45,6 @@ import {
   rejectStockTransfer,
 } from "./stock-transfer-data";
 import { downloadTransferNote, printTransferPackingList } from "./transfer-note-document";
-import TransferPackingListDialog from "./components/TransferPackingListDialog";
 import CancelTransferDialog from "./components/CancelTransferDialog";
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
@@ -90,7 +89,6 @@ export default function StockTransferPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-  const [packingTransfer, setPackingTransfer] = useState<StockTransfer | null>(null);
   const [cancelTransfer, setCancelTransfer] = useState<StockTransfer | null>(null);
 
   const refreshTransfers = () => setTransfers(loadTransfers());
@@ -372,7 +370,7 @@ export default function StockTransferPage() {
             <button
               type="button"
               disabled={!canGeneratePackingList(row)}
-              onClick={() => setPackingTransfer(row)}
+              onClick={() => router.push(`/sales/stock-transfer/${row.id}/packing-list/new`)}
               className={cn(
                 "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
                 !canGeneratePackingList(row) ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
@@ -455,16 +453,7 @@ export default function StockTransferPage() {
         />
       </div>
 
-      <TransferPackingListDialog
-        transfer={packingTransfer}
-        open={!!packingTransfer}
-        onClose={() => setPackingTransfer(null)}
-        onSuccess={(updatedTransfer, list) => {
-          refreshTransfers();
-          setPackingTransfer(null);
-          setToast({ msg: `Packing list ${list.packingListNumber} generated for ${updatedTransfer.transferNumber}.`, type: "success" });
-        }}
-      />
+
 
       <CancelTransferDialog
         transfer={cancelTransfer}

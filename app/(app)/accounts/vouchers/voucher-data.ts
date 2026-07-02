@@ -31,6 +31,8 @@ export interface VoucherLine {
   contactName?: string;
 }
 
+export type VoucherEntryMode = "simple" | "double";
+
 export interface AccountingVoucher {
   id: number;
   voucherType: VoucherTypeCode;
@@ -44,6 +46,10 @@ export interface AccountingVoucher {
   totalDebit: number;
   totalCredit: number;
   status: RecordStatus;
+  /** Simple vs double entry UI mode — receipt, payment, contra only */
+  entryMode?: VoucherEntryMode;
+  /** Payment mode for receipt/payment simple entry */
+  paymentMode?: string;
   workflow?: AccountsDocumentWorkflow;
   createdBy: string;
   updatedBy: string;
@@ -91,6 +97,8 @@ function normalizeVoucher(v: AccountingVoucher): AccountingVoucher {
     ...v,
     financialYearId: v.financialYearId ?? null,
     financialYearName: v.financialYearName ?? "",
+    entryMode: v.entryMode,
+    paymentMode: v.paymentMode,
   };
 }
 
@@ -433,6 +441,93 @@ export function validatePaymentVoucherForPost(input: SimpleCashVoucherInput): st
 
 export function canEditVoucher(voucher: AccountingVoucher): boolean {
   return canEditAccountsDocument(voucher.workflow, voucher.status);
+}
+
+export interface SimpleContraVoucherInput {
+  fromLedgerId: number | null;
+  fromLedgerName: string;
+  toLedgerId: number | null;
+  toLedgerName: string;
+  amount: number;
+  referenceNo?: string;
+}
+
+/** Contra: Dr Transfer To · Cr Transfer From */
+export function buildContraVoucherLines(input: SimpleContraVoucherInput): VoucherLine[] {
+  const amount = roundMoney(input.amount);
+  const lines: VoucherLine[] = [];
+  if (input.toLedgerId) {
+    lines.push({
+      id: nextLineId(),
+      ledgerId: input.toLedgerId,
+      ledgerName: input.toLedgerName,
+      debit: amount,
+      credit: 0,
+      remarks: input.referenceNo?.trim() ?? "",
+    });
+  }
+  if (input.fromLedgerId) {
+    lines.push({
+      id: nextLineId(1),
+      ledgerId: input.fromLedgerId,
+      ledgerName: input.fromLedgerName,
+      debit: 0,
+      credit: amount,
+      remarks: input.referenceNo?.trim() ?? "",
+    });
+  }
+  return lines;
+}
+
+export function validateContraVoucherForPost(input: SimpleContraVoucherInput): string | null {
+  if (!input.fromLedgerId) return "Transfer From ledger is required.";
+  if (!input.toLedgerId) return "Transfer To ledger is required.";
+  if (input.fromLedgerId === input.toLedgerId) {
+    return "Transfer From and Transfer To must be different ledgers.";
+  }
+  if (!(Number(input.amount) > 0)) return "Amount must be greater than zero.";
+  return null;
+}
+
+export function parseContraVoucherFromLines(lines: VoucherLine[]): SimpleContraVoucherInput {
+  const active = lines.filter(
+    (l) => l.ledgerId && (lineDebitAmount(l) > 0 || lineCreditAmount(l) > 0),
+  );
+  const debitLine = active.find((l) => lineDebitAmount(l) > 0);
+  const creditLine = active.find((l) => lineCreditAmount(l) > 0);
+  let amount = 0;
+  if (debitLine) amount = lineDebitAmount(debitLine);
+  else if (creditLine) amount = lineCreditAmount(creditLine);
+
+  return {
+    fromLedgerId: creditLine?.ledgerId ?? null,
+    fromLedgerName: creditLine?.ledgerName ?? "",
+    toLedgerId: debitLine?.ledgerId ?? null,
+    toLedgerName: debitLine?.ledgerName ?? "",
+    amount: roundMoney(amount),
+  };
+}
+
+export function inferVoucherEntryMode(voucher: AccountingVoucher): VoucherEntryMode {
+  if (voucher.entryMode) return voucher.entryMode;
+  if (voucher.voucherType === "journal") return "double";
+
+  const active = postedVoucherLines(voucher.lines);
+  if (active.length === 2) {
+    if (voucher.voucherType === "receipt" || voucher.voucherType === "payment") {
+      const parsed = parseCashVoucherFromLines(voucher.lines, voucher.voucherType);
+      if (parsed.partyLedgerId && parsed.bankCashLedgerId && parsed.amount > 0) {
+        return "simple";
+      }
+    }
+    if (voucher.voucherType === "contra") {
+      const parsed = parseContraVoucherFromLines(voucher.lines);
+      if (parsed.fromLedgerId && parsed.toLedgerId && parsed.amount > 0) {
+        return "simple";
+      }
+    }
+  }
+  return "double";
 }
 
 export function parseCashVoucherFromLines(

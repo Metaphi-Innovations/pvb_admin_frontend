@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
+import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import {
   DATE_RANGE_PRESET_OPTIONS,
   resolveDateRangePreset,
@@ -90,23 +91,22 @@ export function CoaListingToolbar({
             </SelectContent>
           </Select>
           {preset === "custom" && (
-            <>
-              <Input
-                type="date"
-                className="h-8 w-[132px] text-xs rounded-lg border-border bg-white"
+            <div className="flex items-center gap-1.5">
+              <AccountsDateInput
                 value={dateFrom}
-                onChange={(e) => onDateFromChange(e.target.value)}
+                onChange={onDateFromChange}
+                className="w-[118px]"
+                size="default"
                 aria-label="From date"
               />
-              <span className="text-xs text-muted-foreground">to</span>
-              <Input
-                type="date"
-                className="h-8 w-[132px] text-xs rounded-lg border-border bg-white"
+              <AccountsDateInput
                 value={dateTo}
-                onChange={(e) => onDateToChange(e.target.value)}
+                onChange={onDateToChange}
+                className="w-[118px]"
+                size="default"
                 aria-label="To date"
               />
-            </>
+            </div>
           )}
         </div>
       </div>
