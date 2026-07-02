@@ -3,5 +3,5 @@ import { purchaseReturnListHref } from "../purchase-returns/purchase-return-util
 
 /** Legacy route — redirects to Purchase Order > Purchase Return tab. */
 export default function LegacyReturnsPage() {
-  redirect(purchaseReturnListHref());
+  redirect("/procurement/purchase-orders?tab=po_return");
 }
