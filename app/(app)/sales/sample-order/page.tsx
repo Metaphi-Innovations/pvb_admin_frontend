@@ -40,7 +40,6 @@ import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListing } from "@/components/listing/MasterListing";
 import type { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
 import CancelOrderDialog from "./components/CancelOrderDialog";
-import PackingListDialog from "./components/PackingListDialog";
 import ApproveOrderDialog from "./components/ApproveOrderDialog";
 import RejectOrderDialog from "./components/RejectOrderDialog";
 import { SampleReturnTab } from "./components/SampleReturnTab";
@@ -222,7 +221,6 @@ export default function SalesOrdersPage() {
   }, [returnSearch]);
 
   const [cancelOrder, setCancelOrder] = useState<SalesOrder | null>(null);
-  const [packingOrder, setPackingOrder] = useState<SalesOrder | null>(null);
   const [approveOrder, setApproveOrder] = useState<SalesOrder | null>(null);
   const [rejectOrder, setRejectOrder] = useState<SalesOrder | null>(null);
 
@@ -530,7 +528,7 @@ export default function SalesOrdersPage() {
               <button
                 type="button"
                 disabled={!packingAllowed}
-                onClick={() => setPackingOrder(hydrated)}
+                onClick={() => router.push(`/sales/sample-order/${hydrated.id}/packing-list/new`)}
                 className={cn(
                   "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
                   !packingAllowed ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
@@ -625,16 +623,6 @@ export default function SalesOrdersPage() {
         onSuccess={() => {
           refreshOrders();
           showToast("Sample Order cancelled successfully.");
-        }}
-      />
-
-      <PackingListDialog
-        order={packingOrder}
-        open={!!packingOrder}
-        onClose={() => setPackingOrder(null)}
-        onSuccess={(updatedOrder, list) => {
-          refreshOrders();
-          showToast(`Packing list ${list.packingListNumber} generated for ${updatedOrder.soNumber}.`);
         }}
       />
 
