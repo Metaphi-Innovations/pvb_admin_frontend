@@ -34,7 +34,6 @@ import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListing } from "@/components/listing/MasterListing";
 import type { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
 import CancelOrderDialog from "./components/CancelOrderDialog";
-import PackingListDialog from "./components/PackingListDialog";
 import { SalesReturnTab } from "./components/SalesReturnTab";
 import { getSalesReturnRecords } from "./sales-return-data";
 import { downloadProformaInvoice } from "./pi-document";
@@ -176,7 +175,6 @@ export default function SalesOrdersPage() {
   const [salesReturnCount, setSalesReturnCount] = useState(0);
 
   const [cancelOrder, setCancelOrder] = useState<SalesOrder | null>(null);
-  const [packingOrder, setPackingOrder] = useState<SalesOrder | null>(null);
 
   const refreshOrders = () => setOrders(loadOrders());
 
@@ -458,7 +456,7 @@ export default function SalesOrdersPage() {
               <button
                 type="button"
                 disabled={!packingAllowed}
-                onClick={() => setPackingOrder(hydrated)}
+                onClick={() => router.push(`/sales/orders/${hydrated.id}/packing-list/new`)}
                 className={cn(
                   "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
                   !packingAllowed ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
@@ -553,16 +551,6 @@ export default function SalesOrdersPage() {
         onSuccess={() => {
           refreshOrders();
           showToast("Sales order cancelled successfully.");
-        }}
-      />
-
-      <PackingListDialog
-        order={packingOrder}
-        open={!!packingOrder}
-        onClose={() => setPackingOrder(null)}
-        onSuccess={(updatedOrder, list) => {
-          refreshOrders();
-          showToast(`Packing list ${list.packingListNumber} generated for ${updatedOrder.soNumber}.`);
         }}
       />
 
