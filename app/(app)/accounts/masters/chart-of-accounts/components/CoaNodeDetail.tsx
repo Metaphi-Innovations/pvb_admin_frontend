@@ -17,6 +17,7 @@ import {
 import { CoaGroupDrillDownPanel } from "@/components/accounts/CoaGroupDrillDownPanel";
 import { resolveCoaAddLedgerPolicy } from "@/lib/accounts/coa-add-ledger-policy";
 import { resolveCoaGroupContext } from "@/lib/accounts/coa-group-drilldown";
+import { resolveCoaMasterLink } from "@/lib/accounts/coa-master-link";
 import type { ChartOfAccount } from "../../../data";
 import {
   canAddLedgerUnder,
@@ -89,7 +90,7 @@ export function CoaNodeDetail({
               <p className="text-[11px] text-muted-foreground mt-0.5">TDS liability account</p>
             </div>
             <Button asChild size="sm" className="h-7 text-xs px-2 bg-brand-600 text-white gap-1">
-              <Link href={reportHref}>View TDS Party-wise Report</Link>
+              <Link href={reportHref}>View TDS Summary</Link>
             </Button>
           </div>
         </div>
@@ -104,6 +105,7 @@ export function CoaNodeDetail({
   }
 
   if (isPosting) {
+    const masterLink = resolveCoaMasterLink(node, records);
     return (
       <div className="flex flex-1 min-h-0 flex-col">
         <div className="flex-shrink-0 px-3 py-2 border-b border-border/30 bg-white/50">
@@ -118,6 +120,11 @@ export function CoaNodeDetail({
                   <BookOpen className="w-3 h-3" /> View General Ledger
                 </Link>
               </Button>
+              {masterLink && (
+                <Button asChild size="sm" variant="outline" className="h-7 text-xs px-2 gap-1">
+                  <Link href={masterLink.masterHref}>Open Source Master</Link>
+                </Button>
+              )}
               {canEditLedgerHere && (
                 <Button
                   size="sm"

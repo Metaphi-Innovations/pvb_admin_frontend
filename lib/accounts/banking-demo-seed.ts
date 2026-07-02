@@ -14,16 +14,18 @@ import {
   loadBankAccountMasters,
 } from "@/lib/accounts/bank-accounts-data";
 import {
-  createFundTransfer,
-  loadFundTransfers,
+  formatTransferAccountName,
   saveFundTransferSeed,
+  type FundTransferMode,
   type FundTransferRecord,
 } from "@/lib/accounts/fund-transfer-data";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
 
-export const BANKING_DEMO_SEED_VERSION = "2026-jun-banking-v1";
+export const BANKING_DEMO_SEED_VERSION = "2026-jul-fund-transfer-v2";
 const VERSION_KEY = "ds_banking_demo_seed_version";
+const FUND_TRANSFER_SEED_KEY = "ds_fund_transfer_demo_seed_version";
+export const FUND_TRANSFER_DEMO_SEED_VERSION = "2026-jul-ft-v2";
 
 function findBankLedger(accountNumberSuffix: string) {
   const master = loadBankAccountMasters().find((m) =>
@@ -170,7 +172,7 @@ function seedBankBookTransactions(): void {
   const icici = findBankLedger("5678");
   const sbi = findBankLedger("4321");
   const axis = findBankLedger("8901");
-  const idfc = findBankLedger("6543");
+  const kotak = findBankLedger("3210");
   if (!hdfc || !icici || !sbi) return;
 
   const abc = findCustomerLedger("ABC Agro");
@@ -202,7 +204,7 @@ function seedBankBookTransactions(): void {
     { bank: sbi, party: krishna, amount: 78000, date: "2026-05-25", ref: "NEFT-008", no: "RV-0008", narration: "Sales collection — Krishna Retail" },
     { bank: hdfc, party: greenHarvest, amount: 95000, date: "2026-06-02", ref: "NEFT-009", no: "RV-0009", narration: "Collection against outstanding invoice" },
     { bank: icici, party: abc, amount: 156000, date: "2026-06-08", ref: "NEFT-010", no: "RV-0010", narration: "Sales collection — distributor payment" },
-    { bank: idfc, party: krishna, amount: 42000, date: "2026-06-12", ref: "NEFT-011", no: "RV-0011", narration: "Customer receipt — retail counter" },
+    { bank: kotak, party: krishna, amount: 42000, date: "2026-06-12", ref: "NEFT-011", no: "RV-0011", narration: "Customer receipt — retail counter" },
     { bank: hdfc, party: abc, amount: 88000, date: "2026-06-15", ref: "NEFT-012", no: "RV-0012", narration: "Farmer collection — seasonal payment" },
   ];
 
@@ -241,11 +243,11 @@ function seedBankBookTransactions(): void {
     { from: hdfc, to: icici, amount: 200000, date: "2026-04-20", no: "FT-0001" },
     { from: icici, to: sbi, amount: 125000, date: "2026-04-28", no: "FT-0002" },
     { from: hdfc, to: axis, amount: 175000, date: "2026-05-08", no: "FT-0003" },
-    { from: sbi, to: idfc, amount: 85000, date: "2026-05-15", no: "FT-0004" },
+    { from: sbi, to: kotak, amount: 85000, date: "2026-05-15", no: "FT-0004" },
     { from: icici, to: hdfc, amount: 95000, date: "2026-05-22", no: "FT-0005" },
     { from: hdfc, to: sbi, amount: 110000, date: "2026-06-01", no: "FT-0006" },
     { from: axis, to: icici, amount: 65000, date: "2026-06-08", no: "FT-0007" },
-    { from: idfc, to: hdfc, amount: 45000, date: "2026-06-12", no: "FT-0008" },
+    { from: kotak, to: hdfc, amount: 45000, date: "2026-06-12", no: "FT-0008" },
   ];
 
   for (const t of transfers) {
@@ -422,78 +424,222 @@ function seedCashBookTransactions(): void {
 }
 
 function seedFundTransferRecords(): void {
-  if (loadFundTransfers().length >= 10) return;
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(FUND_TRANSFER_SEED_KEY) === FUND_TRANSFER_DEMO_SEED_VERSION) return;
 
   const hdfc = findBankLedger("7890");
   const icici = findBankLedger("5678");
   const sbi = findBankLedger("4321");
   const axis = findBankLedger("8901");
   const pettyCash = findCashLedger("Petty");
-  const branchCash = findCashLedger("Branch Counter");
-  if (!hdfc || !icici || !sbi || !pettyCash) return;
+  if (!hdfc || !icici || !sbi || !axis || !pettyCash) return;
 
   const specs: Array<{
-    type: FundTransferRecord["transferType"];
+    mode: FundTransferMode;
     from: number;
     to: number;
     amount: number;
     date: string;
-    ref: string;
-    remarks: string;
-    post: boolean;
+    transferNo: string;
+    referenceNo: string;
+    narration: string;
+    status: FundTransferRecord["status"];
   }> = [
-    { type: "bank_to_bank", from: hdfc.id, to: icici.id, amount: 200000, date: "2026-04-20", ref: "FT-0001", remarks: "HDFC → ICICI working capital transfer", post: true },
-    { type: "bank_to_bank", from: icici.id, to: sbi.id, amount: 125000, date: "2026-04-28", ref: "FT-0002", remarks: "ICICI → SBI operations funding", post: true },
-    { type: "bank_to_bank", from: hdfc.id, to: axis!.id, amount: 175000, date: "2026-05-08", ref: "FT-0003", remarks: "HDFC → Axis salary account funding", post: true },
-    { type: "cash_to_bank", from: pettyCash.id, to: hdfc.id, amount: 50000, date: "2026-05-10", ref: "FT-0009", remarks: "Cash → HDFC daily deposit", post: true },
-    { type: "bank_to_bank", from: sbi.id, to: icici.id, amount: 85000, date: "2026-05-15", ref: "FT-0004", remarks: "SBI → ICICI collection sweep", post: true },
-    { type: "bank_to_cash", from: icici.id, to: pettyCash.id, amount: 25000, date: "2026-05-20", ref: "FT-0010", remarks: "ICICI → Petty cash replenishment", post: true },
-    { type: "bank_to_bank", from: icici.id, to: hdfc.id, amount: 95000, date: "2026-05-22", ref: "FT-0005", remarks: "ICICI → HDFC surplus transfer", post: true },
-    { type: "branch_transfer", from: branchCash?.id ?? pettyCash.id, to: pettyCash.id, amount: 15000, date: "2026-06-01", ref: "FT-0011", remarks: "Branch → HO petty cash", post: true },
-    { type: "bank_to_bank", from: hdfc.id, to: sbi.id, amount: 110000, date: "2026-06-05", ref: "FT-0006", remarks: "HDFC → SBI vendor payment buffer", post: true },
-    { type: "cash_to_bank", from: pettyCash.id, to: icici.id, amount: 35000, date: "2026-06-12", ref: "FT-0012", remarks: "Cash → ICICI collection deposit", post: true },
+    {
+      mode: "neft",
+      from: hdfc.id,
+      to: icici.id,
+      amount: 100000,
+      date: "2026-04-20",
+      transferNo: "FT-0001",
+      referenceNo: "NEFT-HDFC-ICICI-0420",
+      narration: "HDFC → ICICI working capital transfer",
+      status: "completed",
+    },
+    {
+      mode: "rtgs",
+      from: icici.id,
+      to: sbi.id,
+      amount: 125000,
+      date: "2026-04-28",
+      transferNo: "FT-0002",
+      referenceNo: "RTGS-ICICI-SBI-0428",
+      narration: "ICICI → SBI operations funding",
+      status: "completed",
+    },
+    {
+      mode: "neft",
+      from: hdfc.id,
+      to: axis.id,
+      amount: 175000,
+      date: "2026-05-08",
+      transferNo: "FT-0003",
+      referenceNo: "NEFT-HDFC-AXIS-0508",
+      narration: "HDFC → Axis OD account salary funding",
+      status: "completed",
+    },
+    {
+      mode: "cash_deposit",
+      from: pettyCash.id,
+      to: hdfc.id,
+      amount: 50000,
+      date: "2026-05-10",
+      transferNo: "FT-0004",
+      referenceNo: "",
+      narration: "Cash deposit to HDFC Bank Current Account",
+      status: "completed",
+    },
+    {
+      mode: "neft",
+      from: sbi.id,
+      to: icici.id,
+      amount: 85000,
+      date: "2026-05-15",
+      transferNo: "FT-0005",
+      referenceNo: "NEFT-SBI-ICICI-0515",
+      narration: "SBI → ICICI collection sweep",
+      status: "completed",
+    },
+    {
+      mode: "cash_withdrawal",
+      from: icici.id,
+      to: pettyCash.id,
+      amount: 25000,
+      date: "2026-05-20",
+      transferNo: "FT-0006",
+      referenceNo: "",
+      narration: "Cash withdrawal from ICICI for petty cash replenishment",
+      status: "completed",
+    },
+    {
+      mode: "imps",
+      from: icici.id,
+      to: hdfc.id,
+      amount: 95000,
+      date: "2026-05-22",
+      transferNo: "FT-0007",
+      referenceNo: "IMPS-ICICI-HDFC-0522",
+      narration: "ICICI → HDFC surplus transfer",
+      status: "completed",
+    },
+    {
+      mode: "neft",
+      from: hdfc.id,
+      to: sbi.id,
+      amount: 110000,
+      date: "2026-06-01",
+      transferNo: "FT-0008",
+      referenceNo: "NEFT-HDFC-SBI-0601",
+      narration: "HDFC → SBI vendor payment buffer",
+      status: "completed",
+    },
+    {
+      mode: "upi",
+      from: axis.id,
+      to: icici.id,
+      amount: 65000,
+      date: "2026-06-08",
+      transferNo: "FT-0009",
+      referenceNo: "UPI-AXIS-ICICI-0608",
+      narration: "Axis OD → ICICI quick transfer",
+      status: "completed",
+    },
+    {
+      mode: "cash_deposit",
+      from: pettyCash.id,
+      to: icici.id,
+      amount: 35000,
+      date: "2026-06-12",
+      transferNo: "FT-0010",
+      referenceNo: "",
+      narration: "Cash deposit to ICICI Bank Current Account",
+      status: "completed",
+    },
+    {
+      mode: "cheque",
+      from: hdfc.id,
+      to: axis.id,
+      amount: 78000,
+      date: "2026-06-15",
+      transferNo: "FT-0011",
+      referenceNo: "CHQ-784521",
+      narration: "Cheque transfer HDFC → Axis OD account",
+      status: "completed",
+    },
+    {
+      mode: "rtgs",
+      from: sbi.id,
+      to: hdfc.id,
+      amount: 142000,
+      date: "2026-06-18",
+      transferNo: "FT-0012",
+      referenceNo: "RTGS-SBI-HDFC-0618",
+      narration: "SBI → HDFC end-of-month consolidation",
+      status: "completed",
+    },
+    {
+      mode: "neft",
+      from: icici.id,
+      to: axis.id,
+      amount: 92000,
+      date: "2026-06-22",
+      transferNo: "FT-0013",
+      referenceNo: "NEFT-ICICI-AXIS-0622",
+      narration: "ICICI → Axis payment account top-up",
+      status: "completed",
+    },
+    {
+      mode: "cash_withdrawal",
+      from: hdfc.id,
+      to: pettyCash.id,
+      amount: 18000,
+      date: "2026-06-25",
+      transferNo: "FT-0014",
+      referenceNo: "",
+      narration: "ATM cash withdrawal for field collections float",
+      status: "completed",
+    },
+    {
+      mode: "neft",
+      from: hdfc.id,
+      to: icici.id,
+      amount: 45000,
+      date: "2026-06-28",
+      transferNo: "FT-0015",
+      referenceNo: "NEFT-HDFC-ICICI-0628",
+      narration: "Cancelled transfer — duplicate entry reversed",
+      status: "cancelled",
+    },
   ];
 
-  for (const s of specs) {
-    if (loadFundTransfers().some((t) => t.referenceNumber === s.ref)) continue;
-    const existingVoucher = loadVouchers().find((v) => v.voucherNumber === s.ref || v.referenceNo === s.ref);
-    try {
-      if (existingVoucher && s.post) {
-        const list = loadFundTransfers();
-        list.push({
-          id: list.length ? Math.max(...list.map((t) => t.id)) + 1 : 1,
-          transferDate: s.date,
-          transferType: s.type,
-          fromAccountId: s.from,
-          toAccountId: s.to,
-          amount: s.amount,
-          referenceNumber: s.ref,
-          remarks: s.remarks,
-          status: "posted",
-          voucherId: existingVoucher.id,
-          fromAccountName: resolveAccountNameFromId(s.from),
-          toAccountName: resolveAccountNameFromId(s.to),
-          branch: "Head Office",
-          createdBy: ACCOUNTS_CURRENT_USER,
-          updatedBy: ACCOUNTS_CURRENT_USER,
-        });
-        saveFundTransferSeed(list);
-        continue;
-      }
-      createFundTransfer({
-        transferDate: s.date,
-        transferType: s.type,
-        fromAccountId: s.from,
-        toAccountId: s.to,
-        amount: s.amount,
-        referenceNumber: s.ref,
-        remarks: s.remarks,
-        post: s.post,
-      });
-    } catch {
-      // Voucher may already exist from bank seed — skip duplicate
-    }
-  }
+  const seeded: FundTransferRecord[] = specs.map((s, index) => {
+    const existingVoucher = loadVouchers().find(
+      (v) => v.voucherNumber === s.transferNo || v.referenceNo === s.transferNo,
+    );
+    return {
+      id: index + 1,
+      transferDate: s.date,
+      transferNo: s.transferNo,
+      transferMode: s.mode,
+      fromAccountId: s.from,
+      fromAccountName: formatTransferAccountName(s.from),
+      toAccountId: s.to,
+      toAccountName: formatTransferAccountName(s.to),
+      amount: s.amount,
+      referenceNo: s.referenceNo,
+      narration: s.narration,
+      status: s.status,
+      voucherId: existingVoucher?.id ?? null,
+      financialYearId: 1,
+      createdBy: ACCOUNTS_CURRENT_USER,
+      updatedBy: ACCOUNTS_CURRENT_USER,
+      createdDate: s.date,
+      updatedDate: s.date,
+    };
+  });
+
+  saveFundTransferSeed(seeded);
+  localStorage.setItem(FUND_TRANSFER_SEED_KEY, FUND_TRANSFER_DEMO_SEED_VERSION);
 }
 
 export function seedBankingDemoData(force = false): void {
@@ -525,4 +671,5 @@ export function ensureBankingDemoOnPageLoad(): void {
   if (voucherCount < 30) {
     seedBankingDemoData(true);
   }
+  seedFundTransferRecords();
 }

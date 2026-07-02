@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -664,7 +665,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             </div>
           </Section>
 
-          <div className="rounded-lg border border-border/60 bg-muted/10 p-4 space-y-3 lg:sticky lg:top-3">
+          <div className="rounded-lg border border-border bg-white p-4 space-y-3 lg:sticky lg:top-3 lg:z-10 shadow-sm">
             <h2 className="text-sm font-semibold text-foreground">Invoice Total</h2>
             <div className="space-y-2 text-sm">
               <div className="flex items-center justify-between gap-4 py-1">
@@ -677,20 +678,18 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               </div>
               <div className="flex items-center justify-between gap-4 py-1">
                 <Label className="text-muted-foreground font-normal">Shipping Charges</Label>
-                <Input
-                  type="number"
+                <AccountsMoneyInput
                   className={CHARGE_INPUT_CLASS}
                   value={shippingCharges || ""}
-                  onChange={(e) => setShippingCharges(parseFloat(e.target.value) || 0)}
+                  onChange={(v) => setShippingCharges(v)}
                 />
               </div>
               <div className="flex items-center justify-between gap-4 py-1">
                 <Label className="text-muted-foreground font-normal">Other Charges</Label>
-                <Input
-                  type="number"
+                <AccountsMoneyInput
                   className={CHARGE_INPUT_CLASS}
                   value={otherCharges || ""}
-                  onChange={(e) => setOtherCharges(parseFloat(e.target.value) || 0)}
+                  onChange={(v) => setOtherCharges(v)}
                 />
               </div>
               <div className="flex items-center justify-between gap-4 py-1 border-t border-border/60 pt-2">
@@ -699,11 +698,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               </div>
               <div className="flex items-center justify-between gap-4 py-1">
                 <Label className="text-muted-foreground font-normal">Round Off</Label>
-                <Input
-                  type="number"
+                <AccountsMoneyInput
                   className={CHARGE_INPUT_CLASS}
                   value={roundOff || ""}
-                  onChange={(e) => setRoundOff(parseFloat(e.target.value) || 0)}
+                  onChange={(v) => setRoundOff(v)}
                 />
               </div>
               <div className="flex items-center justify-between gap-4 py-2 border-t border-border/60">

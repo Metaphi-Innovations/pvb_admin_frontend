@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -283,7 +284,7 @@ export default function PaymentFormPageClient({ paymentId }: { paymentId?: numbe
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Payment Amount *</Label>
-                  <Input type="number" className="h-8 text-xs" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+                  <AccountsMoneyInput className="h-8 text-xs" value={payAmount} onChange={(v) => setPayAmount(String(v))} />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Payment Mode *</Label>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/sheet";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsTableScroll, AccountsTable, AccountsTableHead, AccountsTableHeadRow, AccountsTableHeadCell, AccountsTableBody, AccountsTableRow, AccountsTableCell } from "@/components/accounts/AccountsTable";
+import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { SectionTabs } from "./AccountsUI";
 import { AccountsVoucherStatusBadge } from "@/components/accounts/AccountsVoucherStatusBadge";
@@ -79,6 +80,8 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
   const [statusTab, setStatusTab] = useState("all");
   const [viewRow, setViewRow] = useState<TransactionRow | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const allRows = useMemo(
     () => (mounted ? config.loadData().map(config.getRow) : []),
@@ -131,6 +134,15 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
     return list;
   }, [allRows, statusTab, search, dateFrom, dateTo, branch]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [statusTab, search, dateFrom, dateTo, branch, pageSize]);
+
+  const pagedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return rows.slice(start, start + pageSize);
+  }, [rows, page, pageSize]);
+
   const rowCanEdit = (r: TransactionRow) =>
     config.editHref &&
     (config.canEdit ? config.canEdit(r) : isDraftStatus(r.status) || r.status.toLowerCase() === "sent_back");
@@ -165,34 +177,35 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
           ) : undefined
         }
         filters={
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="relative flex-1 min-w-[200px] max-w-sm">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="relative flex-1 min-w-[160px] max-w-xs">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                 <Input
-                  className="h-8 text-xs pl-8"
+                  className="h-7 text-xs pl-7"
                   placeholder="Search number, party..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
-              <Input type="date" className="h-8 text-xs w-36" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-              <Input type="date" className="h-8 text-xs w-36" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-              <Input className="h-8 text-xs w-28" placeholder="Branch" value={branch} onChange={(e) => setBranch(e.target.value)} />
+              <Input type="date" className="h-7 text-xs w-32" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+              <Input type="date" className="h-7 text-xs w-32" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+              <Input className="h-7 text-xs w-24" placeholder="Branch" value={branch} onChange={(e) => setBranch(e.target.value)} />
             </div>
-            <SectionTabs tabs={statusTabs} active={statusTab} onChange={setStatusTab} counts={tabCounts} />
+            <SectionTabs tabs={statusTabs} active={statusTab} onChange={setStatusTab} counts={tabCounts} compact />
           </div>
         }
         layout="split"
         className="h-full min-h-0"
       >
+        <div className="flex flex-col flex-1 min-h-0">
         <AccountsTableScroll>
           <AccountsTable>
             <AccountsTableHead>
               <AccountsTableHeadRow>
                 <AccountsTableHeadCell uppercase>Number</AccountsTableHeadCell>
                 <AccountsTableHeadCell uppercase>Date</AccountsTableHeadCell>
-                <AccountsTableHeadCell uppercase>Party</AccountsTableHeadCell>
+                <AccountsTableHeadCell uppercase className="accounts-col-wide">Party</AccountsTableHeadCell>
                 {showGstColumns ? (
                   <>
                     <AccountsTableHeadCell align="right" uppercase>Taxable Value</AccountsTableHeadCell>
@@ -202,11 +215,11 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                 ) : (
                   <AccountsTableHeadCell align="right" uppercase>Amount</AccountsTableHeadCell>
                 )}
-                <AccountsTableHeadCell uppercase>Status</AccountsTableHeadCell>
+                <AccountsTableHeadCell uppercase className="accounts-col-status">Status</AccountsTableHeadCell>
                 {showSchemeSettlementColumn && (
                   <AccountsTableHeadCell uppercase>Scheme Settlement</AccountsTableHeadCell>
                 )}
-                <AccountsTableHeadCell align="right" uppercase className="min-w-[120px]">Actions</AccountsTableHeadCell>
+                <AccountsTableHeadCell align="right" uppercase className="accounts-col-actions min-w-[100px]">Actions</AccountsTableHeadCell>
               </AccountsTableHeadRow>
             </AccountsTableHead>
             <AccountsTableBody>
@@ -219,12 +232,11 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
               ) : rows.length === 0 ? (
                 <AccountsTableRow>
                   <AccountsTableCell colSpan={colSpan} className="accounts-table-empty">
-                    <p className="text-sm font-medium text-foreground">No records found</p>
-                    <p className="text-xs text-muted-foreground mt-1">Adjust filters or create a new entry.</p>
+                    No records found.
                   </AccountsTableCell>
                 </AccountsTableRow>
               ) : (
-                rows.map((r) => (
+                pagedRows.map((r) => (
                   <AccountsTableRow key={r.id}>
                     <AccountsTableCell mono className="font-semibold text-brand-700">
                       {r.viewHref ? (
@@ -324,6 +336,16 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
             </AccountsTableBody>
           </AccountsTable>
         </AccountsTableScroll>
+        {mounted && rows.length > 0 && (
+          <AccountsTablePagination
+            page={page}
+            pageSize={pageSize}
+            totalRecords={rows.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
+        </div>
       </AccountsPageShell>
 
       <Sheet open={!!viewRow} onOpenChange={(o) => !o && setViewRow(null)}>

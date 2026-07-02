@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Pencil, Save, X } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { GroupedLedgerSelect } from "@/components/accounts/GroupedLedgerSelect";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
-import { formatMoney, MONEY_INPUT_CLASS } from "@/lib/accounts/money-format";
+import { formatMoney } from "@/lib/accounts/money-format";
 import { ledgerMatchesVoucherScope } from "@/lib/accounts/voucher-quick-add-ledger";
 import { applyAutoPartyToLines } from "@/lib/accounts/voucher-ledger-groups";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
@@ -405,13 +406,11 @@ export function SimpleCashVoucherForm({
             <Label className="text-xs font-medium">
               Amount {amountRequired && <span className="text-red-500">*</span>}
             </Label>
-            <Input
-              className={`h-9 text-sm bg-white w-full rounded-lg ${MONEY_INPUT_CLASS}`}
-              type="number"
-              min={0}
-              step="0.01"
+            <AccountsMoneyInput
+              compact={false}
+              className="h-9 text-sm bg-white w-full rounded-lg"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(v) => setAmount(String(v))}
               placeholder="0.00"
               disabled={readOnly}
             />

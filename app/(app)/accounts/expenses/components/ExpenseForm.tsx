@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -193,12 +194,10 @@ export function ExpenseForm({
           </div>
           <div>
             <Label className={labelClass}>Expense Amount *</Label>
-            <Input
-              type="number"
-              min={0}
+            <AccountsMoneyInput
               disabled={readOnly}
               value={form.amount || ""}
-              onChange={(e) => set("amount", parseFloat(e.target.value) || 0)}
+              onChange={(v) => set("amount", v)}
               className={cn(fieldClass, "mt-1")}
             />
           </div>

@@ -14,18 +14,10 @@ import {
 	Loader2,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { loadProducts } from "../../products/product-data";
-import {
-	Field,
-	SectionDivider,
-	VendorTabBar,
-	fieldClass,
-} from "./VendorFormLayout";
 import {
 	type VendorFormValues,
 	type VendorContact,
 	type VendorDocument,
-	type VendorProductMapping,
 	emptyContact,
 	todayStr,
 } from "../vendor-data";
@@ -45,8 +37,6 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
-import { getStandardMrp } from "@/lib/pricing/resolve-pricing";
 import { GstRegistrationFields, GstRegisteredToggleControl } from "@/components/masters/GstRegistrationFields";
 import { ComplianceCertificationsGrid } from "@/components/masters/erp/ComplianceCertificationsGrid";
 import { ErpFormSection } from "@/components/masters/erp/ErpFormSection";
@@ -65,11 +55,17 @@ import {
 	type GstAddressSnapshot,
 } from "@/lib/masters/gst-compliance";
 
+import {
+	Field,
+	SectionDivider,
+	VendorTabBar,
+	fieldClass,
+} from "./VendorFormLayout";
+
 const ALL_TABS = [
 	{ id: "basic", label: "Basic Details" },
 	{ id: "contact", label: "Contact Information" },
 	{ id: "banking", label: "Bank & Commercial" },
-	{ id: "product", label: "Product Mapping" },
 	{ id: "documents", label: "Documents & Remarks" },
 ] as const;
 
@@ -192,64 +188,6 @@ function Toast({
 	);
 }
 
-interface ProductCatalogItem {
-	productId: string;
-	numericId: number;
-	productName: string;
-	sku: string;
-	category?: string;
-	hsnCode?: string;
-	gstRate?: string;
-}
-
-function ProductSelect({
-	products,
-	value,
-	onSelect,
-	disabled,
-	multiple = false,
-	onMultiSelect,
-}: {
-	products: ProductCatalogItem[];
-	value: string;
-	onSelect: (product: ProductCatalogItem) => void;
-	multiple?: boolean;
-	onMultiSelect?: (productIds: string[]) => void;
-	disabled?: boolean;
-}) {
-	const options = products.map((p) => ({
-		value: p.productId,
-		label: `${p.sku} — ${p.productName}`,
-		trailing: (
-			<span className='text-[10px] text-muted-foreground'>
-				MRP: {formatIndianRupeeDisplay(getStandardMrp(p.numericId))}
-			</span>
-		),
-	}));
-
-	return (
-		<AutocompleteSelect
-			options={options}
-			value={value}
-			onChange={(val) => {
-				if (multiple) {
-					onMultiSelect?.(Array.isArray(val) ? val.map(String) : []);
-					return;
-				}
-				const prod = products.find((p) => p.productId === val);
-				if (prod) {
-					onSelect(prod);
-				}
-			}}
-			placeholder='Select product by name, SKU, or code'
-			searchPlaceholder='Search product…'
-			disabled={disabled}
-			className='h-8 text-xs font-normal'
-			multiple={multiple}
-		/>
-	);
-}
-
 export function VendorForm({
 	form,
 	onChange,
@@ -270,7 +208,6 @@ export function VendorForm({
 		msg: string;
 		type: "success" | "error";
 	} | null>(null);
-	const [bulkProductIds, setBulkProductIds] = useState<string[]>([]);
 	const [gstAddressSnapshot, setGstAddressSnapshot] =
 		useState<GstAddressSnapshot | null>(null);
 
@@ -303,113 +240,6 @@ export function VendorForm({
 		k: K,
 		v: VendorFormValues[K],
 	) => onChange({ ...form, [k]: v });
-
-	const activeProducts = useMemo((): ProductCatalogItem[] => {
-		try {
-			return loadProducts()
-				.filter((p) => p.status === "active")
-				.map((p) => ({
-					productId: p.sku,
-					numericId: p.id,
-					productName: p.productName,
-					sku: p.sku,
-					category: p.category,
-					hsnCode: p.hsnCode,
-					gstRate: p.gstRate,
-				}));
-		} catch {
-			return [];
-		}
-	}, []);
-
-	const getProductMetadataString = (prodId: string) => {
-		const prod = activeProducts.find((item) => item.productId === prodId);
-		if (!prod) return "";
-		const master = loadProducts().find((p) => p.sku === prodId || String(p.id) === prodId);
-		if (!master) return "";
-		const parts: string[] = [];
-		if (master.category) parts.push(`Category: ${master.category}`);
-		if (master.subCategory) parts.push(`Sub Category: ${master.subCategory}`);
-		if (master.baseUnit) parts.push(`Base Unit: ${master.baseUnit}`);
-		if (master.packagingUnit) parts.push(`Packaging Unit: ${master.packagingUnit}`);
-		if (master.hsnCode) parts.push(`HSN: ${master.hsnCode}`);
-		if (master.gstRate) parts.push(`GST: ${master.gstRate}`);
-		return parts.join(" | ");
-	};
-
-	const addProductRow = () => {
-		const incompleteIndex = (form.vendorProducts || []).findIndex(
-			(p) => !p.productId || !p.productName?.trim(),
-		);
-		if (incompleteIndex !== -1) {
-			showToast("Please select a product before adding a new row.");
-			return;
-		}
-		const newId = `vp-${Math.random().toString(36).substring(2, 9)}`;
-		const newRow: VendorProductMapping = {
-			id: newId,
-			productId: "",
-			productName: "",
-			price: undefined,
-			status: "Active",
-		};
-		set("vendorProducts", [...(form.vendorProducts || []), newRow]);
-	};
-
-	const addSelectedProducts = () => {
-		if (bulkProductIds.length === 0) return;
-
-		const selectedIds = Array.from(new Set(bulkProductIds));
-		const existingIds = new Set(
-			(form.vendorProducts || []).map((product) => product.productId),
-		);
-		const selectedProducts = activeProducts.filter((product) =>
-			selectedIds.includes(product.productId),
-		);
-
-		const nextRows = [...(form.vendorProducts || [])];
-		let addedCount = 0;
-
-		for (const prod of selectedProducts) {
-			if (existingIds.has(prod.productId)) continue;
-
-			nextRows.push({
-				id: `vp-${Math.random().toString(36).substring(2, 9)}`,
-				productId: prod.productId,
-				productName: prod.productName,
-				sku: prod.sku,
-				price: undefined,
-				status: "Active",
-			});
-			existingIds.add(prod.productId);
-			addedCount += 1;
-		}
-
-		if (addedCount === 0) {
-			showToast("All selected products are already mapped.");
-			return;
-		}
-
-		set("vendorProducts", nextRows);
-		setBulkProductIds([]);
-		showToast(`${addedCount} product${addedCount === 1 ? "" : "s"} added.`, "success");
-	};
-
-	const updateProductRow = (
-		id: string,
-		patch: Partial<VendorProductMapping>,
-	) => {
-		const updated = (form.vendorProducts || []).map((p) => {
-			if (p.id !== id) return p;
-			return { ...p, ...patch };
-		});
-		set("vendorProducts", updated);
-	};
-
-	const removeProductRow = (id: string) => {
-		const updated = (form.vendorProducts || []).filter((p) => p.id !== id);
-		set("vendorProducts", updated);
-	};
 
 	const inputCls = cn(
 		ERP.input,
@@ -1041,226 +871,6 @@ export function VendorForm({
 								</div>
 							</div>
 						</ErpFormSection>
-					</div>
-				)}
-
-				{tab === "product" && (
-					<div className='w-full space-y-3'>
-						<div className='flex items-center justify-between pb-1 border-b border-border/60'>
-							<SectionDivider
-								title='Product Mappings'
-								subtitle='Supplier-specific purchase prices'
-							/>
-						</div>
-
-						{!readOnly && (
-							<div className='p-2.5 border rounded-lg border-border bg-muted/20'>
-								<div className='grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end'>
-									<div className='space-y-1'>
-										<label className='text-xs font-medium text-foreground'>
-											Products
-										</label>
-										<AutocompleteSelect
-											options={activeProducts.map((p) => ({
-												value: p.productId,
-												label: `${p.sku} — ${p.productName}`,
-												trailing: (
-													<span className='text-[10px] text-muted-foreground'>
-														MRP: {formatIndianRupeeDisplay(getStandardMrp(p.numericId))}
-													</span>
-												),
-											}))}
-											value={bulkProductIds}
-											onChange={(val) =>
-												setBulkProductIds(
-													Array.isArray(val) ? val.map(String) : [],
-												)
-											}
-											multiple
-											placeholder='Search or select products...'
-											searchPlaceholder='Search product...'
-											className='h-8 text-xs font-normal'
-											renderTriggerLabel={(selected) => {
-												if (!Array.isArray(selected) || selected.length === 0) {
-													return "Search or select products...";
-												}
-												if (selected.length === 1) {
-													return selected[0].label;
-												}
-												return `${selected.length} products selected`;
-											}}
-										/>
-									</div>
-									<div className='flex items-end'>
-										<Button
-											type='button'
-											variant='outline'
-											size='sm'
-											className='h-8 gap-1 text-xs border-dashed animate-none'
-											disabled={bulkProductIds.length === 0}
-											onClick={addSelectedProducts}
-										>
-											<Plus className='w-3.5 h-3.5 mr-1' /> Add Selected
-										</Button>
-									</div>
-								</div>
-							</div>
-						)}
-
-						{!form.vendorProducts || form.vendorProducts.length === 0 ? (
-							<div className='py-4 text-center border border-dashed rounded-lg border-border'>
-								<p className='text-xs text-muted-foreground'>
-									No products mapped — select and add products above
-								</p>
-							</div>
-						) : (
-							<div className='overflow-hidden bg-white border rounded-lg border-border'>
-								<div className='overflow-x-auto'>
-									<table className='w-full text-xs min-w-[900px]'>
-										<thead>
-											<tr className='text-left border-b bg-muted/40 border-border text-muted-foreground'>
-												<th className='px-2 py-2 font-semibold'>Product</th>
-												<th className='px-2 py-2 font-semibold'>SKU</th>
-												<th className='px-2 py-2 font-semibold'>Category</th>
-												<th className='px-2 py-2 font-semibold'>HSN</th>
-												<th className='px-2 py-2 font-semibold'>GST</th>
-												<th className='px-2 py-2 font-semibold w-28'>MRP</th>
-												<th className='px-2 py-2 font-semibold w-28'>Cost Price</th>
-												{!readOnly && <th className='w-10 px-2 py-2' />}
-											</tr>
-										</thead>
-										<tbody>
-											{form.vendorProducts.map((p, idx) => {
-												const isPriceInvalid =
-													p.price === undefined ||
-													p.price === null ||
-													isNaN(p.price) ||
-													p.price <= 0;
-												const prodMeta = activeProducts.find(
-													(item) => item.productId === p.productId,
-												);
-
-												return (
-													<tr
-														key={p.id}
-														className='border-b border-border/40 last:border-0 hover:bg-muted/10'
-													>
-														{/* Product Select */}
-														<td className='px-2 py-1.5 min-w-[180px]'>
-															{readOnly ? (
-																<span className='font-medium text-foreground'>
-																	{p.productName || "—"}
-																</span>
-															) : (
-																<ProductSelect
-																	products={activeProducts}
-																	value={p.productId}
-																	onSelect={(prod) => {
-																		const isDuplicate =
-																			form.vendorProducts.some(
-																				(item) =>
-																					item.productId === prod.productId &&
-																					item.id !== p.id,
-																			);
-																		if (isDuplicate) {
-																			showToast(
-																				`${prod.productName} is already mapped.`,
-																			);
-																			return;
-																		}
-																		updateProductRow(p.id, {
-																			productId: prod.productId,
-																			productName: prod.productName,
-																			sku: prod.sku,
-																		});
-																	}}
-																/>
-															)}
-														</td>
-														<td className='px-2 py-1.5 font-mono text-muted-foreground'>
-															{prodMeta?.sku || p.sku || "—"}
-														</td>
-														<td className='px-2 py-1.5 text-muted-foreground'>
-															{prodMeta?.category || "—"}
-														</td>
-														<td className='px-2 py-1.5 font-mono text-muted-foreground'>
-															{prodMeta?.hsnCode || "—"}
-														</td>
-														<td className='px-2 py-1.5 text-muted-foreground'>
-															{prodMeta?.gstRate ? `${prodMeta.gstRate}%` : "—"}
-														</td>
-
-														{/* MRP (Pricing Master) */}
-														<td className='px-2 py-1.5 w-28'>
-															<span
-																className='font-mono text-muted-foreground'
-																title='From Pricing Master'
-															>
-																{(() => {
-																	if (!prodMeta) return "—";
-																	const mrp = getStandardMrp(prodMeta.numericId);
-																	return mrp > 0
-																		? formatIndianRupeeDisplay(mrp)
-																		: "—";
-																})()}
-															</span>
-														</td>
-
-														{/* Vendor Price (overrides CP) */}
-														<td className='px-2 py-1.5 w-28'>
-															{readOnly ? (
-																<span className='font-mono font-semibold text-foreground'>
-																	{p.price !== undefined && p.price !== null
-																		? `₹${p.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-																		: "—"}
-																</span>
-															) : (
-																<Input
-																	type='number'
-																	min={0}
-																	step='0.01'
-																	placeholder='Enter supplier price'
-																	value={p.price === undefined ? "" : p.price}
-																	onChange={(e) => {
-																		const val =
-																			e.target.value === ""
-																				? undefined
-																				: parseFloat(e.target.value);
-																		updateProductRow(p.id, {
-																			price: isNaN(val as any)
-																				? undefined
-																				: val,
-																		});
-																	}}
-																	className={cn(
-																		"h-8 text-xs font-mono ",
-																		isPriceInvalid &&
-																			"border-red-400 focus-visible:ring-red-300",
-																	)}
-																/>
-															)}
-														</td>
-
-														{/* Actions */}
-														{!readOnly && (
-															<td className='w-12 px-3 py-2 text-center'>
-																<button
-																	type='button'
-																	className='p-1.5 rounded-md hover:bg-red-50 text-red-600'
-																	onClick={() => removeProductRow(p.id)}
-																>
-																	<Trash2 className='w-3.5 h-3.5' />
-																</button>
-															</td>
-														)}
-													</tr>
-												);
-											})}
-										</tbody>
-									</table>
-								</div>
-							</div>
-						)}
 					</div>
 				)}
 

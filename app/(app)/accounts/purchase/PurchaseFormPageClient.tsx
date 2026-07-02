@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Download, Eye, Trash2, Upload } from "lucide-react";
@@ -185,15 +186,15 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Invoice Amount *</Label>
-              <Input type="number" className="h-8 text-xs" value={invoiceAmount} onChange={(e) => onAmountChange("invoice", e.target.value)} />
+              <AccountsMoneyInput className="h-8 text-xs" value={invoiceAmount} onChange={(v) => onAmountChange("invoice", String(v))} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Tax Amount *</Label>
-              <Input type="number" className="h-8 text-xs" value={taxAmount} onChange={(e) => onAmountChange("tax", e.target.value)} />
+              <AccountsMoneyInput className="h-8 text-xs" value={taxAmount} onChange={(v) => onAmountChange("tax", String(v))} />
             </div>
             <div className="space-y-1 col-span-2">
               <Label className="text-xs">Total Amount *</Label>
-              <Input type="number" className="h-8 text-xs" value={totalAmount} onChange={(e) => onAmountChange("total", e.target.value)} />
+              <AccountsMoneyInput className="h-8 text-xs" value={totalAmount} onChange={(v) => onAmountChange("total", String(v))} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">PO Reference</Label>

@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { AlertTriangle, Plus, Trash2, ChevronsUpDown, Search } from "lucide-react";
+import { AlertTriangle, Plus, Trash2, ChevronsUpDown, Search, Pencil, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import type { ProductCatalogItem } from "@/app/(app)/sales/orders/orders-data";
 import {
   computeLineTaxBreakdown,
@@ -69,6 +71,15 @@ export default function TransferProductLinesEditor({
         const product = products.find((p) => p.id === (patch.productId ?? line.productId));
         let next: TransferLineItem = { ...line, ...patch };
 
+        if (patch.caseQuantity !== undefined || patch.pieceQuantity !== undefined || patch.quantityType !== undefined) {
+          if (next.quantityType === "Case") {
+            next.pieceQuantity = 0;
+          }
+          next.quantity = next.quantityType === "Case"
+            ? ((next.caseQuantity || 0) * (product?.packSize || 1))
+            : ((next.caseQuantity || 0) * (product?.packSize || 1)) + (next.pieceQuantity || 0);
+        }
+
         if (product?.gstRate) {
           const breakdown = computeLineTaxBreakdown(next, product.gstRate, taxSupplyType);
           next = {
@@ -90,8 +101,44 @@ export default function TransferProductLinesEditor({
   const [topSelectedProduct, setTopSelectedProduct] = useState<ProductCatalogItem | null>(null);
   const [topSelectedBatch, setTopSelectedBatch] = useState<any | null>(null);
   const [topInputQty, setTopInputQty] = useState<string>("1");
+  const [topQuantityType, setTopQuantityType] = useState<"Case" | "Piece">("Piece");
+  const [topCaseQuantity, setTopCaseQuantity] = useState<number>(0);
+  const [topPieceQuantity, setTopPieceQuantity] = useState<number>(0);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<TransferLineItem> | null>(null);
 
+  const updateDraft = (patch: Partial<TransferLineItem>) => {
+    setEditDraft((prev) => {
+      if (!prev) return prev;
+      let next = { ...prev, ...patch } as TransferLineItem;
+      const product = products.find((p) => p.id === next.productId);
+
+      if (patch.caseQuantity !== undefined || patch.pieceQuantity !== undefined || patch.quantityType !== undefined) {
+        if (next.quantityType === "Case") {
+          next.pieceQuantity = 0;
+        }
+        next.quantity = next.quantityType === "Case"
+          ? ((next.caseQuantity || 0) * (product?.packSize || 1))
+          : ((next.caseQuantity || 0) * (product?.packSize || 1)) + (next.pieceQuantity || 0);
+      }
+
+      if (product?.gstRate) {
+        const breakdown = computeLineTaxBreakdown(next, product.gstRate, taxSupplyType);
+        next = {
+          ...next,
+          gstRate: product.gstRate,
+          gstAmount: breakdown.gstAmount,
+          cgstAmount: breakdown.cgstAmount,
+          sgstAmount: breakdown.sgstAmount,
+          igstAmount: breakdown.igstAmount,
+        };
+      }
+
+      next = recalculateLineItem(next) as TransferLineItem;
+      return next;
+    });
+  };
   const topBatches = useMemo(() => {
     if (!sourceWarehouseName || !topSelectedProduct) return [];
     return getAvailableBatchRowsForTransfer(
@@ -114,7 +161,10 @@ export default function TransferProductLinesEditor({
       setLocalError("Please select a batch.");
       return;
     }
-    const qty = parseInt(topInputQty, 10) || 0;
+    const qty = topQuantityType === "Case"
+      ? (topCaseQuantity * (topSelectedProduct.packSize || 1))
+      : (topCaseQuantity * (topSelectedProduct.packSize || 1)) + topPieceQuantity;
+
     if (qty <= 0) {
       setLocalError("Transfer Qty must be greater than zero.");
       return;
@@ -145,6 +195,9 @@ export default function TransferProductLinesEditor({
     newLine.unitPrice = topSelectedProduct.sellingPrice;
     newLine.finalRate = topSelectedProduct.sellingPrice;
     newLine.gstRate = topSelectedProduct.gstRate;
+    newLine.quantityType = topQuantityType;
+    newLine.caseQuantity = topCaseQuantity;
+    newLine.pieceQuantity = topPieceQuantity;
     newLine.quantity = qty;
 
     if (topSelectedProduct.gstRate) {
@@ -162,7 +215,8 @@ export default function TransferProductLinesEditor({
     onChange([...lines, newLine]);
     setTopSelectedProduct(null);
     setTopSelectedBatch(null);
-    setTopInputQty("1");
+    setTopCaseQuantity(0);
+    setTopPieceQuantity(0);
     setLocalError(null);
   };
 
@@ -217,65 +271,118 @@ export default function TransferProductLinesEditor({
             }}
           />
         }
-        customTableHead={
+        customQuantityArea={
           <>
-            <tr className="bg-muted/40 border-b border-border">
-              {[
-                { h: "Product", rowSpan: 2 },
-                { h: "SKU", rowSpan: 2 },
-                { h: "Batch No.", rowSpan: 2 },
-                { h: "Expiry", rowSpan: 2 },
-                { h: "Available", rowSpan: 2 },
-                { h: "Transfer Qty", rowSpan: 2 },
-                { h: "CP", rowSpan: 2 },
-              ].map(({ h, rowSpan }) => (
-                <th
-                  key={h}
-                  rowSpan={rowSpan}
-                  className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap align-middle"
-                >
-                  {h}
-                </th>
-              ))}
-              <th
-                colSpan={taxSupplyType === "intra" ? 4 : 2}
-                className="px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-foreground border-b border-border/60"
+            <div className="space-y-1">
+              <Label className="text-xs font-medium">Type</Label>
+              <Select
+                value={topQuantityType}
+                onValueChange={(value) => {
+                  const type = value as "Case" | "Piece";
+                  setTopQuantityType(type);
+                  if (type === "Case") {
+                    setTopPieceQuantity(0);
+                  }
+                }}
               >
-                {taxSupplyType === "intra" ? "Tax — CGST + SGST" : "Tax — IGST"}
-              </th>
-              {[
-                { h: "Total", rowSpan: 2 },
-                { h: "", rowSpan: 2 },
-              ].map(({ h, rowSpan }) => (
-                <th
-                  key={h || "actions"}
-                  rowSpan={rowSpan}
-                  className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground align-middle"
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-            <tr className="bg-muted/40 border-b border-border">
-              {(taxSupplyType === "intra"
-                ? ["CGST %", "CGST Amt", "SGST %", "SGST Amt"]
-                : ["IGST %", "IGST Amt"]
-              ).map((h) => (
-                <th key={h} className={TAX_HEAD}>
-                  {h}
-                </th>
-              ))}
-            </tr>
+                <SelectTrigger className="h-8 text-xs rounded-lg border-border bg-white w-[90px]">
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent className="min-w-[120px]">
+                  <SelectItem value="Case">Case</SelectItem>
+                  <SelectItem value="Piece">Piece</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-medium">Cases</Label>
+              <Input
+                type="number"
+                min={0}
+                value={topCaseQuantity || ""}
+                onChange={(e) => setTopCaseQuantity(Number(e.target.value) || 0)}
+                className="h-8 text-xs w-20 bg-white"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-medium">Pieces</Label>
+              <Input
+                type="number"
+                min={0}
+                disabled={topQuantityType === "Case"}
+                value={topPieceQuantity || ""}
+                onChange={(e) => setTopPieceQuantity(Number(e.target.value) || 0)}
+                className="h-8 text-xs w-20 bg-white disabled:opacity-50"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-medium">Total Unit Qty</Label>
+              <Input
+                type="text"
+                disabled
+                value={
+                  topSelectedProduct
+                    ? (((topCaseQuantity || 0) * (topSelectedProduct.packSize || 1)) + (topPieceQuantity || 0)) || "—"
+                    : "—"
+                }
+                className="h-8 text-xs w-24 font-semibold bg-muted text-muted-foreground"
+              />
+            </div>
           </>
+        }
+        customTableHead={
+          <tr className="bg-muted/40 border-b border-border">
+            {[
+              { h: "Product", className: "w-[240px]" },
+              { h: "SKU" },
+              { h: "Batch No." },
+              { h: "Expiry" },
+              { h: "Available", className: "w-16" },
+              { h: "Type", className: "w-[80px]" },
+              { h: "Cases", className: "w-20" },
+              { h: "Pieces", className: "w-20" },
+              { h: "Total Unit Qty", className: "w-20" },
+              { h: "CP" },
+            ].map(({ h, className }) => (
+              <th
+                key={h}
+                className={cn(
+                  "px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap align-middle",
+                  className
+                )}
+              >
+                {h}
+              </th>
+            ))}
+            {(taxSupplyType === "intra"
+              ? ["CGST", "SGST", "GST"]
+              : ["IGST", "GST"]
+            ).map((h) => (
+              <th key={h} className={TAX_HEAD}>
+                {h}
+              </th>
+            ))}
+            {[
+              { h: "Total" },
+              { h: "" },
+            ].map(({ h }) => (
+              <th
+                key={h || "actions"}
+                className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground align-middle"
+              >
+                {h}
+              </th>
+            ))}
+          </tr>
         }
         customTableBody={
           lines.map((line) => {
             const batches = sourceWarehouseName
               ? getAvailableBatchRowsForTransfer(
-                  sourceWarehouseName,
-                  line.productName,
-                  line.productCode,
-                )
+                sourceWarehouseName,
+                line.productName,
+                line.productCode,
+              )
               : [];
             const product = products.find((p) => p.id === line.productId);
             const selectedBatch = batches.find((b) => b.batchNumber === line.batchNumber);
@@ -285,6 +392,9 @@ export default function TransferProductLinesEditor({
               line.productId && product?.gstRate
                 ? computeLineTaxBreakdown(line, product.gstRate, taxSupplyType)
                 : null;
+
+            const isEditing = editingId === line.id;
+            const draftLine = isEditing && editDraft ? (editDraft as TransferLineItem) : line;
 
             return (
               <tr
@@ -345,18 +455,66 @@ export default function TransferProductLinesEditor({
                 <td className="px-3 py-2 text-xs font-bold text-center">
                   {line.batchNumber ? line.availableStock ?? 0 : "—"}
                 </td>
-                <td className="px-3 py-2">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={line.availableStock ?? 0}
-                    disabled={!line.batchNumber || isExpired}
-                    value={line.quantity || ""}
-                    onChange={(e) =>
-                      updateLine(line.id, { quantity: parseInt(e.target.value, 10) || 0 })
-                    }
-                    className="h-8 w-24 text-xs text-right bg-white"
-                  />
+                <td className='px-2 py-1.5 w-[80px]'>
+                  {isEditing ? (
+                    <Select
+                      disabled={!line.batchNumber || isExpired}
+                      value={draftLine.quantityType || "Piece"}
+                      onValueChange={(value) => updateDraft({ quantityType: value as "Case" | "Piece" })}
+                    >
+                      <SelectTrigger className="h-7 text-xs rounded border-border bg-white w-full px-2">
+                        <SelectValue placeholder="Type" />
+                      </SelectTrigger>
+                      <SelectContent className="min-w-[120px]">
+                        <SelectItem value="Case">Case</SelectItem>
+                        <SelectItem value="Piece">Piece</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span className="text-xs">{line.quantityType || "Piece"}</span>
+                  )}
+                </td>
+                <td className='px-2 py-1.5 w-20'>
+                  {isEditing ? (
+                    <Input
+                      type="number"
+                      min={0}
+                      disabled={!line.batchNumber || isExpired}
+                      value={draftLine.caseQuantity === 0 && !draftLine.quantity ? "" : draftLine.caseQuantity}
+                      onChange={(e) => updateDraft({ caseQuantity: e.target.value ? Number(e.target.value) : 0 })}
+                      className="h-7 text-xs w-full"
+                    />
+                  ) : (
+                    <span className="text-xs">{line.caseQuantity || 0}</span>
+                  )}
+                </td>
+                <td className='px-2 py-1.5 w-20'>
+                  {isEditing ? (
+                    <Input
+                      type="number"
+                      min={0}
+                      disabled={(!line.batchNumber || isExpired) || draftLine.quantityType === "Case"}
+                      value={draftLine.pieceQuantity === 0 && !draftLine.quantity ? "" : draftLine.pieceQuantity}
+                      onChange={(e) => updateDraft({ pieceQuantity: e.target.value ? Number(e.target.value) : 0 })}
+                      className="h-7 text-xs w-full disabled:opacity-50"
+                    />
+                  ) : (
+                    <span className="text-xs">{line.pieceQuantity || 0}</span>
+                  )}
+                </td>
+                <td className='px-2 py-1.5 w-20'>
+                  {isEditing ? (
+                    <Input
+                      type="number"
+                      disabled
+                      value={draftLine.quantity || ""}
+                      className="h-7 text-xs w-full font-semibold bg-muted text-muted-foreground"
+                    />
+                  ) : (
+                    <span className="text-xs font-semibold tabular-nums text-foreground">
+                      {line.quantity || 0}
+                    </span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-xs tabular-nums whitespace-nowrap">
                   {line.productId ? formatRupee(line.unitPrice ?? 0) : "—"}
@@ -364,41 +522,112 @@ export default function TransferProductLinesEditor({
                 {line.productId && product && taxBreakdown ? (
                   taxSupplyType === "intra" ? (
                     <>
-                      <td className={cn(TAX_CELL, "text-muted-foreground")}>
-                        {taxBreakdown.cgstRate}%
+                      <td className={cn(TAX_CELL, "min-w-[100px] whitespace-nowrap")}>
+                        <div className="flex flex-col">
+                          <span className="text-foreground">{formatRupee(line.cgstAmount ?? 0)}</span>
+                          <span className="text-[10px] text-muted-foreground">({taxBreakdown.cgstRate}%)</span>
+                        </div>
                       </td>
-                      <td className={TAX_CELL_AMT}>{formatRupee(line.cgstAmount ?? 0)}</td>
-                      <td className={cn(TAX_CELL, "text-muted-foreground")}>
-                        {taxBreakdown.sgstRate}%
+                      <td className={cn(TAX_CELL, "min-w-[100px] whitespace-nowrap")}>
+                        <div className="flex flex-col">
+                          <span className="text-foreground">{formatRupee(line.sgstAmount ?? 0)}</span>
+                          <span className="text-[10px] text-muted-foreground">({taxBreakdown.sgstRate}%)</span>
+                        </div>
                       </td>
-                      <td className={TAX_CELL_AMT}>{formatRupee(line.sgstAmount ?? 0)}</td>
+                      <td className={cn(TAX_CELL_AMT, "min-w-[100px] whitespace-nowrap")}>
+                        <div className="flex flex-col">
+                          <span className="text-foreground">{formatRupee(line.gstAmount ?? 0)}</span>
+                          <span className="text-[10px] text-muted-foreground">({taxBreakdown.cgstRate + taxBreakdown.sgstRate}%)</span>
+                        </div>
+                      </td>
                     </>
                   ) : (
                     <>
-                      <td className={cn(TAX_CELL, "text-muted-foreground")}>
-                        {taxBreakdown.igstRate}%
+                      <td className={cn(TAX_CELL, "min-w-[100px] whitespace-nowrap")}>
+                        <div className="flex flex-col">
+                          <span className="text-foreground">{formatRupee(line.igstAmount ?? 0)}</span>
+                          <span className="text-[10px] text-muted-foreground">({taxBreakdown.igstRate}%)</span>
+                        </div>
                       </td>
-                      <td className={TAX_CELL_AMT}>{formatRupee(line.igstAmount ?? 0)}</td>
+                      <td className={cn(TAX_CELL_AMT, "min-w-[100px] whitespace-nowrap")}>
+                        <div className="flex flex-col">
+                          <span className="text-foreground">{formatRupee(line.gstAmount ?? 0)}</span>
+                          <span className="text-[10px] text-muted-foreground">({taxBreakdown.igstRate}%)</span>
+                        </div>
+                      </td>
                     </>
                   )
                 ) : (
-                  Array.from({ length: taxSupplyType === "intra" ? 4 : 2 }).map((_, i) => (
-                    <td key={i} className={TAX_CELL}>
-                      —
-                    </td>
-                  ))
+                  taxSupplyType === "intra" ? (
+                    <>
+                      <td className={cn(TAX_CELL, "min-w-[100px]")}>—</td>
+                      <td className={cn(TAX_CELL, "min-w-[100px]")}>—</td>
+                      <td className={cn(TAX_CELL, "min-w-[100px]")}>—</td>
+                    </>
+                  ) : (
+                    <>
+                      <td className={cn(TAX_CELL, "min-w-[100px]")}>—</td>
+                      <td className={cn(TAX_CELL, "min-w-[100px]")}>—</td>
+                    </>
+                  )
                 )}
                 <td className="px-3 py-2 text-xs font-semibold tabular-nums whitespace-nowrap">
                   {line.productId ? formatRupee(line.lineTotal ?? 0) : "—"}
                 </td>
                 <td className="px-3 py-2">
-                  <button
-                    type="button"
-                    onClick={() => removeLine(line.id)}
-                    className="p-1.5 hover:bg-red-50 rounded-md transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                  </button>
+                  <div className="flex items-center justify-end gap-0.5">
+                    {isEditing ? (
+                      <>
+                        <button
+                          type='button'
+                          onClick={() => {
+                            if (editDraft) {
+                              updateLine(line.id, editDraft);
+                            }
+                            setEditingId(null);
+                            setEditDraft(null);
+                          }}
+                          className='p-1.5 hover:bg-emerald-50 rounded-md transition-colors'
+                          title='Save changes'
+                        >
+                          <Check className='w-3.5 h-3.5 text-emerald-600' />
+                        </button>
+                        <button
+                          type='button'
+                          onClick={() => {
+                            setEditingId(null);
+                            setEditDraft(null);
+                          }}
+                          className='p-1.5 hover:bg-red-50 rounded-md transition-colors'
+                          title='Cancel editing'
+                        >
+                          <X className='w-3.5 h-3.5 text-red-500' />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type='button'
+                          onClick={() => {
+                            setEditingId(line.id);
+                            setEditDraft({ ...line });
+                          }}
+                          className='p-1.5 hover:bg-muted rounded-md transition-colors'
+                          title='Edit row'
+                        >
+                          <Pencil className='w-3.5 h-3.5 text-muted-foreground' />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeLine(line.id)}
+                          className="p-1.5 hover:bg-red-50 rounded-md transition-colors"
+                          title="Remove row"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </td>
               </tr>
             );
@@ -411,7 +640,7 @@ export default function TransferProductLinesEditor({
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <p className="text-[11px] text-muted-foreground">
-                Total quantity:{" "}
+                Total unit qty:{" "}
                 <span className="font-medium text-foreground tabular-nums">{totalQuantity}</span>
               </p>
               <p className="text-[11px] text-muted-foreground">

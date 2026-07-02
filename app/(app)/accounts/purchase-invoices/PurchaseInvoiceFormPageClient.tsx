@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -704,11 +705,10 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                       />
                     </td>
                     <td className="py-1.5 pr-2">
-                      <Input
-                        type="number"
+                      <AccountsMoneyInput
                         className="h-7 text-xs text-right"
                         value={line.rate}
-                        onChange={(e) => updateLine(idx, { rate: Number(e.target.value) || 0 })}
+                        onChange={(v) => updateLine(idx, { rate: v })}
                       />
                     </td>
                     <td className="py-1.5 pr-2">

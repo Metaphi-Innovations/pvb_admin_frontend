@@ -1,0 +1,38 @@
+/* Trial Balance module — compact density overrides (scoped to this page only) */
+
+.trial-balance-compact .accounts-table-th,
+.trial-balance-compact .accounts-table > thead > tr > th {
+  height: 32px;
+  min-height: 32px;
+  padding-left: 0.625rem;
+  padding-right: 0.625rem;
+  font-size: 10px;
+}
+
+.trial-balance-compact .accounts-table-th-inner {
+  min-height: 32px;
+}
+
+.trial-balance-compact .accounts-table-td,
+.trial-balance-compact .accounts-table > tbody > tr > td {
+  height: 34px;
+  min-height: 34px;
+  padding-left: 0.625rem;
+  padding-right: 0.625rem;
+  font-size: 11px;
+}
+
+.trial-balance-compact .accounts-table-td-inner {
+  min-height: 34px;
+}
+
+.trial-balance-compact .accounts-table-foot .accounts-table-td,
+.trial-balance-compact .accounts-table-foot .accounts-table > tbody > tr > td {
+  height: 34px;
+  min-height: 34px;
+}
+
+.trial-balance-compact .accounts-table-empty {
+  padding-top: 2.5rem;
+  padding-bottom: 2.5rem;
+}

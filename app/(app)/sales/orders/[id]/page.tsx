@@ -27,7 +27,6 @@ import {
   type RecordDetailTab,
 } from "@/components/record-detail";
 import CancelOrderDialog from "../components/CancelOrderDialog";
-import PackingListDialog from "../components/PackingListDialog";
 import ApproveOrderDialog from "../components/ApproveOrderDialog";
 import RejectOrderDialog from "../components/RejectOrderDialog";
 import { downloadProformaInvoice } from "../pi-document";
@@ -82,7 +81,6 @@ export default function ViewSalesOrderPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
-  const [packingOpen, setPackingOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState("overview");
@@ -159,7 +157,7 @@ export default function ViewSalesOrderPage() {
     quickActions.push({
       label: "Generate Packing List",
       icon: Package,
-      onClick: () => setPackingOpen(true),
+      onClick: () => router.push(`/sales/orders/${order.id}/packing-list/new`),
     });
   }
   if (!approvalMode && splittable) {
@@ -454,16 +452,6 @@ export default function ViewSalesOrderPage() {
         onSuccess={() => {
           refresh();
           showToast("Sales order cancelled successfully.");
-        }}
-      />
-
-      <PackingListDialog
-        order={order}
-        open={packingOpen}
-        onClose={() => setPackingOpen(false)}
-        onSuccess={(updatedOrder, list) => {
-          setOrder(updatedOrder);
-          showToast(`Packing list ${list.packingListNumber} generated.`);
         }}
       />
 

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { ActiveInactiveToggle } from "@/components/ui/ActiveInactiveToggle";
 import {
@@ -147,13 +148,11 @@ export function VoucherQuickAddLedgerSheet({
 
           <div className="space-y-1.5">
             <Label className="text-xs">Opening Balance</Label>
-            <Input
+            <AccountsMoneyInput
+              compact={false}
               className="h-9 text-sm rounded-lg"
-              type="number"
-              min={0}
-              step="0.01"
               value={form.openingBalance}
-              onChange={(e) => setField({ openingBalance: e.target.value })}
+              onChange={(v) => setField({ openingBalance: String(v) })}
               placeholder="0.00"
             />
           </div>

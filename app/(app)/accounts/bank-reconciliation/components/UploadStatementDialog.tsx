@@ -73,6 +73,11 @@ export function UploadStatementDialog({
       setError("Please fill all required fields and select a file.");
       return;
     }
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!["csv", "xls", "xlsx"].includes(ext)) {
+      setError("Only CSV, XLS, and XLSX files are supported.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {

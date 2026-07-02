@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -168,13 +169,10 @@ export function ReconciliationAdjustmentsPanel({
 
               <div className="space-y-1">
                 <Label className="text-[10px]">Amount</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
+                <AccountsMoneyInput
                   className="h-8 text-xs tabular-nums"
                   value={row.amount || ""}
-                  onChange={(e) => updateRow(row.id, { amount: Number(e.target.value) || 0 })}
+                  onChange={(v) => updateRow(row.id, { amount: v })}
                 />
               </div>
             </div>

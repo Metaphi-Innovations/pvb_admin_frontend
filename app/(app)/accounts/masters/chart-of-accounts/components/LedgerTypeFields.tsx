@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -133,7 +134,7 @@ export function LedgerTypeFields({ meta, readOnly, mode, onChange }: LedgerTypeF
           {type === "Customer" && (
             <div className="grid grid-cols-2 gap-2">
               <Field label="Credit Limit">
-                <Input className="h-8 text-xs" type="number" disabled={readOnly} value={meta.creditLimit} onChange={(e) => set({ creditLimit: e.target.value })} />
+                <AccountsMoneyInput className="h-8 text-xs" disabled={readOnly} value={meta.creditLimit} onChange={(v) => set({ creditLimit: String(v) })} />
               </Field>
               <Field label="Credit Days">
                 <Input className="h-8 text-xs" type="number" disabled={readOnly} value={meta.creditDays} onChange={(e) => set({ creditDays: e.target.value })} />

@@ -63,6 +63,7 @@ export interface ProductCatalogItem {
   sellingPrice: number;
   stock: number;
   status: "active" | "inactive" | "archived";
+  packSize?: number;
 }
 
 export interface SalesOrderLineItem {
@@ -71,6 +72,9 @@ export interface SalesOrderLineItem {
   productCode: string;
   productName: string;
   availableStock: number;
+  quantityType?: "Case" | "Piece";
+  caseQuantity?: number;
+  pieceQuantity?: number;
   quantity: number;
   /** Dealer price (DP) from Pricing Master */
   dealerPrice: number;
@@ -120,6 +124,13 @@ export interface SalesOrderAdditionalExpense {
   discountType: ExpenseDiscountType;
   discountValue: number;
   netAmount: number;
+  gstRate: string;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  gstAmount: number;
+  totalAmount: number;
+  remarks: string;
 }
 
 export const EXPENSE_DISCOUNT_TYPE_OPTIONS: { value: ExpenseDiscountType; label: string }[] = [
@@ -188,18 +199,18 @@ export interface InventoryBatch {
 }
 
 const PRODUCT_CATALOG: ProductCatalogItem[] = [
-  { id: 1, code: "PRD-001", name: "NPK 19:19:19", uom: "KG", gstRate: "5%", sellingPrice: 1050, stock: 450, status: "active" },
-  { id: 2, code: "PRD-002", name: "DAP Fertilizer", uom: "KG", gstRate: "5%", sellingPrice: 1250, stock: 320, status: "active" },
-  { id: 3, code: "PRD-003", name: "Urea 46%", uom: "KG", gstRate: "5%", sellingPrice: 820, stock: 800, status: "active" },
-  { id: 4, code: "PRD-004", name: "Chlorpyrifos 20 EC", uom: "LTR", gstRate: "18%", sellingPrice: 320, stock: 180, status: "active" },
-  { id: 5, code: "PRD-005", name: "Glyphosate 41% SL", uom: "LTR", gstRate: "18%", sellingPrice: 390, stock: 95, status: "active" },
-  { id: 6, code: "PRD-006", name: "Hybrid Tomato Seeds", uom: "PKT", gstRate: "0%", sellingPrice: 95, stock: 600, status: "active" },
-  { id: 7, code: "PRD-007", name: "Hybrid Chilli Seeds", uom: "PKT", gstRate: "0%", sellingPrice: 70, stock: 420, status: "active" },
-  { id: 8, code: "PRD-008", name: "Vermicompost", uom: "KG", gstRate: "0%", sellingPrice: 14, stock: 2400, status: "active" },
-  { id: 9, code: "PRD-009", name: "Zinc Sulphate 21%", uom: "KG", gstRate: "5%", sellingPrice: 72, stock: 340, status: "active" },
-  { id: 10, code: "PRD-010", name: "Manual Sprayer 16L", uom: "PCS", gstRate: "12%", sellingPrice: 480, stock: 45, status: "inactive" },
-  { id: 11, code: "PRD-011", name: "MOP Potash", uom: "KG", gstRate: "5%", sellingPrice: 680, stock: 220, status: "active" },
-  { id: 12, code: "PRD-012", name: "Mancozeb 75 WP", uom: "KG", gstRate: "18%", sellingPrice: 235, stock: 130, status: "active" },
+  { id: 1, code: "PRD-001", name: "NPK 19:19:19", uom: "KG", gstRate: "5%", sellingPrice: 1050, stock: 450, status: "active", packSize: 24 },
+  { id: 2, code: "PRD-002", name: "DAP Fertilizer", uom: "KG", gstRate: "5%", sellingPrice: 1250, stock: 320, status: "active", packSize: 20 },
+  { id: 3, code: "PRD-003", name: "Urea 46%", uom: "KG", gstRate: "5%", sellingPrice: 820, stock: 800, status: "active", packSize: 50 },
+  { id: 4, code: "PRD-004", name: "Chlorpyrifos 20 EC", uom: "LTR", gstRate: "18%", sellingPrice: 320, stock: 180, status: "active", packSize: 12 },
+  { id: 5, code: "PRD-005", name: "Glyphosate 41% SL", uom: "LTR", gstRate: "18%", sellingPrice: 390, stock: 95, status: "active", packSize: 10 },
+  { id: 6, code: "PRD-006", name: "Hybrid Tomato Seeds", uom: "PKT", gstRate: "0%", sellingPrice: 95, stock: 600, status: "active", packSize: 100 },
+  { id: 7, code: "PRD-007", name: "Hybrid Chilli Seeds", uom: "PKT", gstRate: "0%", sellingPrice: 70, stock: 420, status: "active", packSize: 100 },
+  { id: 8, code: "PRD-008", name: "Vermicompost", uom: "KG", gstRate: "0%", sellingPrice: 14, stock: 2400, status: "active", packSize: 50 },
+  { id: 9, code: "PRD-009", name: "Zinc Sulphate 21%", uom: "KG", gstRate: "5%", sellingPrice: 72, stock: 340, status: "active", packSize: 25 },
+  { id: 10, code: "PRD-010", name: "Manual Sprayer 16L", uom: "PCS", gstRate: "12%", sellingPrice: 480, stock: 45, status: "inactive", packSize: 1 },
+  { id: 11, code: "PRD-011", name: "MOP Potash", uom: "KG", gstRate: "5%", sellingPrice: 680, stock: 220, status: "active", packSize: 20 },
+  { id: 12, code: "PRD-012", name: "Mancozeb 75 WP", uom: "KG", gstRate: "18%", sellingPrice: 235, stock: 130, status: "active", packSize: 10 },
 ];
 
 const SEED_VERSION = 4;
@@ -672,13 +683,37 @@ export function calculateExpenseNet(
 
 export function recalculateExpense(
 	expense: SalesOrderAdditionalExpense,
+	taxSupplyType: TaxSupplyType = "intra",
 ): SalesOrderAdditionalExpense {
 	const netAmount = calculateExpenseNet(expense);
+	const rate = parseGstRate(expense.gstRate || "0");
+	let cgstAmount = 0;
+	let sgstAmount = 0;
+	let igstAmount = 0;
+
+	if (rate > 0) {
+		if (taxSupplyType === "intra") {
+			const halfRate = rate / 2;
+			cgstAmount = Math.round(netAmount * (halfRate / 100) * 100) / 100;
+			sgstAmount = Math.round(netAmount * (halfRate / 100) * 100) / 100;
+		} else {
+			igstAmount = Math.round(netAmount * (rate / 100) * 100) / 100;
+		}
+	}
+
+	const gstAmount = cgstAmount + sgstAmount + igstAmount;
+	const totalAmount = Math.round((netAmount + gstAmount) * 100) / 100;
+
 	return {
 		...expense,
 		discountType: "percent",
 		discountValue: 0,
 		netAmount,
+		cgstAmount,
+		sgstAmount,
+		igstAmount,
+		gstAmount,
+		totalAmount,
 	};
 }
 
@@ -690,6 +725,13 @@ export function createEmptyExpense(): SalesOrderAdditionalExpense {
     discountType: "percent",
     discountValue: 0,
     netAmount: 0,
+    gstRate: "0",
+    cgstAmount: 0,
+    sgstAmount: 0,
+    igstAmount: 0,
+    gstAmount: 0,
+    totalAmount: 0,
+    remarks: "",
   };
 }
 
@@ -734,6 +776,10 @@ export function calculateOrderTotalsSummary(
     additionalExpensesTotal += exp.amount || 0;
     expenseDiscountTotal += Math.max(0, (exp.amount || 0) - net);
     netAdditionalExpenses += net;
+    totalGst += exp.gstAmount || 0;
+    cgstTotal += exp.cgstAmount || 0;
+    sgstTotal += exp.sgstAmount || 0;
+    igstTotal += exp.igstAmount || 0;
   }
 
   subtotalBeforeDiscount = Math.round(subtotalBeforeDiscount * 100) / 100;
@@ -866,6 +912,9 @@ export function createEmptyLineItem(): SalesOrderLineItem {
     productCode: "",
     productName: "",
     availableStock: 0,
+    quantityType: "Piece",
+    caseQuantity: 0,
+    pieceQuantity: 0,
     quantity: 1,
     dealerPrice: 0,
     unitPrice: 0,
@@ -876,6 +925,9 @@ export function createEmptyLineItem(): SalesOrderLineItem {
     finalRate: 0,
     schemeApplied: "No",
     gstAmount: 0,
+    cgstAmount: 0,
+    sgstAmount: 0,
+    igstAmount: 0,
     lineTotal: 0,
   };
 }
@@ -1248,7 +1300,7 @@ export function suggestFefoAllocations(productId: number, orderedQty: number): {
 // ── Order access & business rules ────────────────────────────────────────────
 
 export function hydrateOrderLineItems(order: SalesOrder): SalesOrder {
-  const additionalExpenses = (order.additionalExpenses ?? []).map(recalculateExpense);
+  const additionalExpenses = (order.additionalExpenses ?? []).map(e => recalculateExpense(e));
   if (order.lineItems.length > 0) {
     return {
       ...order,
@@ -1424,7 +1476,7 @@ export function buildOrderFromForm(
     deliveryDate: form.deliveryDate,
     status: finalStatus,
     lineItems: form.lineItems,
-    additionalExpenses: (form.additionalExpenses ?? []).map(recalculateExpense),
+    additionalExpenses: (form.additionalExpenses ?? []).map(e => recalculateExpense(e)),
     totalAmount,
     requiresApproval,
     approvalStatus,

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Plus, Search, Check, ChevronsUpDown, Trash2 } from "lucide-react";
 import {
@@ -223,13 +224,12 @@ export function InvoiceLinesEditor({
                       />
                     </td>
                     <td className="p-2 w-[108px]">
-                      <Input
-                        type="number"
-                        min={0}
+                      <AccountsMoneyInput
+                        compact={false}
                         className={cn(NUM_INPUT_CLASS, !manualEntry && "bg-muted/20")}
                         value={line.unitPrice || ""}
-                        readOnly={!manualEntry}
-                        onChange={(e) => update(line.id, { unitPrice: parseFloat(e.target.value) || 0 })}
+                        disabled={!manualEntry}
+                        onChange={(v) => update(line.id, { unitPrice: v })}
                       />
                     </td>
                     <td className="p-2 w-[96px]">

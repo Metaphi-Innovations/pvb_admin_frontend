@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Plus,
   MoreVertical,
   Eye,
   Edit2,
@@ -26,11 +25,7 @@ import {
   ShoppingCart,
   Scissors,
   MessageSquare,
-  RotateCcw,
-  Clock,
-  Search,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/procurement/utils";
 import { Toast } from "../components/ProcurementUI";
 import { ProcurementApprovalModal } from "../components/ProcurementApprovalModal";
@@ -68,7 +63,10 @@ import { canUploadPOInvoice } from "./po-invoice-utils";
 import { exportPOListingCsv } from "./po-export-utils";
 import { computePOListingKpis } from "@/lib/procurement/listing-kpis";
 import { POListingKpiRow } from "../components/listing/ListingKpiRows";
-import { ProcCompactKpi, ProcCompactKpiGrid } from "../components/analytics/ProcCompactKpi";
+import { CreatePurchaseReturnAction } from "../purchase-returns/components/CreatePurchaseReturnAction";
+import { loadPurchaseReturns } from "../purchase-returns/purchase-return-data";
+import { purchaseReturnRoutes } from "../purchase-returns/purchase-return-utils";
+import { PurchaseReturnListing } from "./components/PurchaseReturnListing";
 
 type TabId = "all" | "draft" | "pending_approval" | "rejected" | "po_return";
 
@@ -77,32 +75,8 @@ const TABS: { value: TabId; label: string }[] = [
   { value: "draft", label: "Draft" },
   { value: "pending_approval", label: "Approval" },
   { value: "rejected", label: "Rejected" },
-  { value: "po_return", label: "PO Return" },
+  { value: "po_return", label: "Purchase Return" },
 ];
-
-interface ReturnRecord {
-  id: number;
-  returnNumber: string;
-  poNumber: string;
-  vendor: string;
-  returnDate: string;
-  reason: string;
-  items: number;
-  amount: number;
-  status: "pending" | "approved" | "processed";
-}
-
-const RETURNS_SEED: ReturnRecord[] = [
-  { id: 1, returnNumber: "PR-2024-001", poNumber: "PO-2024-001", vendor: "Agro Chem Distributors",  returnDate: "2024-01-22", reason: "Damaged packaging",    items: 2, amount: 42500, status: "processed" },
-  { id: 2, returnNumber: "PR-2024-002", poNumber: "PO-2024-003", vendor: "Fertilizer World",        returnDate: "2024-02-10", reason: "Quality mismatch",     items: 1, amount: 28000, status: "approved" },
-  { id: 3, returnNumber: "PR-2024-003", poNumber: "PO-2024-002", vendor: "Seed Corp India Pvt Ltd", returnDate: "2024-02-18", reason: "Short expiry",         items: 3, amount: 15600, status: "pending" },
-];
-
-const RETURN_STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
-  pending:   { bg: "bg-amber-50",   text: "text-amber-700",   dot: "bg-amber-400" },
-  approved:  { bg: "bg-blue-50",    text: "text-blue-700",    dot: "bg-blue-500" },
-  processed: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
-};
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string; label: string }> = {
   draft: { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-400", label: "Draft" },
@@ -141,17 +115,6 @@ export default function PurchaseOrdersPageClient() {
     }
   }, [searchParams]);
 
-  const [returnSearch, setReturnSearch] = useState("");
-
-  const visibleReturns = useMemo(() => {
-    return returnSearch.trim()
-      ? RETURNS_SEED.filter(
-          (r) =>
-            r.returnNumber.toLowerCase().includes(returnSearch.toLowerCase()) ||
-            r.vendor.toLowerCase().includes(returnSearch.toLowerCase())
-        )
-      : RETURNS_SEED;
-  }, [returnSearch]);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [approvalTarget, setApprovalTarget] = useState<PurchaseOrder | null>(null);
   const [approvalAction, setApprovalAction] = useState<"approve" | "reject">("approve");
@@ -193,13 +156,13 @@ export default function PurchaseOrdersPageClient() {
     (["draft", "pending_approval", "rejected"] as TabId[]).forEach((s) => {
       if (s !== "all") c[s] = records.filter((r) => r.status === s).length;
     });
-    c["po_return"] = RETURNS_SEED.length;
+    c["po_return"] = loadPurchaseReturns().length;
     return c;
   }, [records]);
 
   const filtered = useMemo(() => {
     let r = [...records];
-    if (tab !== "all") r = r.filter((x) => x.status === tab);
+    if (tab !== "all" && tab !== "po_return") r = r.filter((x) => x.status === tab);
 
     // MasterListing Filters
     Object.keys(filters).forEach((key) => {
@@ -475,6 +438,10 @@ export default function PurchaseOrdersPageClient() {
                 <Scissors className="w-3.5 h-3.5" /> Short Close PO
               </button>
             )}
+            <CreatePurchaseReturnAction
+              po={row}
+              onCreate={() => router.push(purchaseReturnRoutes.new(row.id))}
+            />
             {["approved", "invoice_uploaded"].includes(row.status) && (
               <button
                 type="button"
@@ -523,85 +490,14 @@ export default function PurchaseOrdersPageClient() {
         setTab(id as TabId);
         router.replace(`/procurement/purchase-orders?tab=${id}`);
       }}
-      metrics={<POListingKpiRow kpis={poListingKpis} />}
+      metrics={tab === "po_return" ? undefined : <POListingKpiRow kpis={poListingKpis} />}
     >
       {tab === "po_return" ? (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 min-w-[200px] max-w-xs">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-[9px] text-muted-foreground pointer-events-none" />
-              <Input
-                value={returnSearch}
-                onChange={(e) => setReturnSearch(e.target.value)}
-                placeholder="Search returns…"
-                className="pl-8 h-8 text-xs bg-white"
-              />
-            </div>
-          </div>
-
-          <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/40 border-b border-border">
-                  {["Return No.","PO Reference","Vendor","Return Date","Reason","Items","Amount","Status",""].map((h, i) => (
-                    <th key={i} className={cn("px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap", i === 8 && "w-10")}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {visibleReturns.map(rec => (
-                  <tr key={rec.id} className="border-b border-border/60 hover:bg-muted/20 transition-colors group">
-                    <td className="px-4 py-2"><span className="font-mono text-xs font-semibold text-brand-700">{rec.returnNumber}</span></td>
-                    <td className="px-4 py-2"><span className="font-mono text-xs text-muted-foreground">{rec.poNumber}</span></td>
-                    <td className="px-4 py-2 text-xs font-medium">{rec.vendor}</td>
-                    <td className="px-4 py-2 text-xs text-muted-foreground">{rec.returnDate}</td>
-                    <td className="px-4 py-2 text-xs text-muted-foreground">{rec.reason}</td>
-                    <td className="px-4 py-2 text-xs font-medium">{rec.items}</td>
-                    <td className="px-4 py-2 text-xs font-semibold">₹{rec.amount.toLocaleString("en-IN")}</td>
-                    <td className="px-4 py-2">
-                      {(() => {
-                        const cfg = RETURN_STATUS_CFG[rec.status] ?? RETURN_STATUS_CFG.pending;
-                        return (
-                          <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium", cfg.bg, cfg.text)}>
-                            <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
-                            {rec.status.charAt(0).toUpperCase() + rec.status.slice(1)}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-3 py-2.5 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-100">
-                            <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48 z-[200]">
-                          <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
-                            Actions
-                          </DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <button
-                            type="button"
-                            className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
-                          >
-                            <Eye className="w-3.5 h-3.5" /> View
-                          </button>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="px-4 py-3 border-t border-border bg-muted/20">
-              <p className="text-[11px] text-muted-foreground">Showing <span className="font-medium text-foreground">{visibleReturns.length}</span> of <span className="font-medium text-foreground">{RETURNS_SEED.length}</span> returns</p>
-            </div>
-          </div>
-        </div>
+        <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading…</div>}>
+          <PurchaseReturnListing />
+        </Suspense>
       ) : (
-        <div>
-          <MasterListing<PurchaseOrder>
+        <MasterListing<PurchaseOrder>
             columns={columns}
             data={paginated}
             totalRecords={filtered.length}
@@ -619,7 +515,6 @@ export default function PurchaseOrdersPageClient() {
             currentFilters={filters}
             currentSort={sort}
           />
-        </div>
       )}
 
       {uploadTarget && (
