@@ -1,7 +1,9 @@
-import { QcPassedStockRecord, RejectedStockRecord, GrnPendingStockRecord, HoldStockRecord } from "../types";
+import { QcPassedStockRecord, RejectedStockRecord, GrnPendingStockRecord, HoldStockRecord, SalesReturnStockRecord, SampleReturnStockRecord } from "../types";
 import { SEED_QC_PASSED_STOCK } from "./qcPassedStock";
 import { SEED_REJECTED_STOCK } from "./rejectedStock";
 import { SEED_GRN_PENDING_STOCK } from "./grnPendingStock";
+import { SEED_SALES_RETURN_STOCK } from "./salesReturnStock";
+import { SEED_SAMPLE_RETURN_STOCK } from "./sampleReturnStock";
 
 // Storage Keys
 const KEY_QC_PASSED = "ds_stock_qc_passed";
@@ -11,6 +13,8 @@ const QC_PASSED_SEED_VERSION = "5";
 const KEY_REJECTED = "ds_stock_rejected";
 const KEY_GRN_PENDING = "ds_stock_grn_pending";
 const KEY_HOLD = "ds_stock_hold";
+const KEY_SALES_RETURN_STOCK = "ds_stock_sales_return";
+const KEY_SAMPLE_RETURN_STOCK = "ds_stock_sample_return";
 
 /** Merge seed rows into stored data; seed rows always win by id. */
 function mergeQcPassedSeed(stored: QcPassedStockRecord[]): QcPassedStockRecord[] {
@@ -83,6 +87,38 @@ export function getHoldStockRecords(): HoldStockRecord[] {
 export function saveHoldStockRecords(records: HoldStockRecord[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(KEY_HOLD, JSON.stringify(records));
+}
+
+// Sales Return Stock Accessors
+export function getSalesReturnStockRecords(): SalesReturnStockRecord[] {
+  if (typeof window === "undefined") return SEED_SALES_RETURN_STOCK;
+  const stored = localStorage.getItem(KEY_SALES_RETURN_STOCK);
+  if (!stored) {
+    localStorage.setItem(KEY_SALES_RETURN_STOCK, JSON.stringify(SEED_SALES_RETURN_STOCK));
+    return SEED_SALES_RETURN_STOCK;
+  }
+  return JSON.parse(stored);
+}
+
+export function saveSalesReturnStockRecords(records: SalesReturnStockRecord[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(KEY_SALES_RETURN_STOCK, JSON.stringify(records));
+}
+
+// Sample Return Stock Accessors
+export function getSampleReturnStockRecords(): SampleReturnStockRecord[] {
+  if (typeof window === "undefined") return SEED_SAMPLE_RETURN_STOCK;
+  const stored = localStorage.getItem(KEY_SAMPLE_RETURN_STOCK);
+  if (!stored) {
+    localStorage.setItem(KEY_SAMPLE_RETURN_STOCK, JSON.stringify(SEED_SAMPLE_RETURN_STOCK));
+    return SEED_SAMPLE_RETURN_STOCK;
+  }
+  return JSON.parse(stored);
+}
+
+export function saveSampleReturnStockRecords(records: SampleReturnStockRecord[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(KEY_SAMPLE_RETURN_STOCK, JSON.stringify(records));
 }
 
 // Re-export old seed stock as qc passed for compatibility if imported anywhere else

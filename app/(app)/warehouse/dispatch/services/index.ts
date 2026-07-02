@@ -15,6 +15,8 @@ import {
 } from "@/app/(app)/sales/sample-order/packing-sync";
 import { markSampleOrderDispatched } from "@/app/(app)/sales/sample-order/stock-movement-sync";
 import { downloadProformaInvoice } from "@/app/(app)/sales/sample-order/pi-document";
+import { markPurchaseReturnReturned } from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
+import { getPurchaseReturnByReturnNumber } from "@/app/(app)/procurement/purchase-returns/purchase-return-packing-sync";
 
 export function getDispatchesByWarehouse(warehouse: string = "All"): DispatchRecord[] {
   const dispatches = getDispatchRecords();
@@ -102,6 +104,22 @@ export function saveDispatch(record: DispatchRecord): void {
         if (transfer) {
           markStockTransferDispatched(transfer.id, record.dispatchNumber);
           downloadStockTransferChallan(transfer, record.dispatchNumber);
+        }
+      }
+    }
+
+    const isPurchaseReturnDispatch =
+      record.source_type === "purchase_return" ||
+      record.sourceDocumentType === "Purchase Return";
+    if (isPurchaseReturnDispatch && isFinalDispatch) {
+      const docNos = (record.source_document_no || record.salesOrderNumber || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const docNo of docNos) {
+        const pret = getPurchaseReturnByReturnNumber(docNo);
+        if (pret && pret.status === "issued_for_packing") {
+          markPurchaseReturnReturned(pret);
         }
       }
     }

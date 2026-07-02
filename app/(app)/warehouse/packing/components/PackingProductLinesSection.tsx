@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { SalesOrderProduct, SalesOrderRecord } from "../types";
 import { PackingBatchSelectionTable } from "./PackingBatchSelectionTable";
+import { PurchaseReturnBatchDetailsTable } from "./PurchaseReturnBatchDetailsTable";
+import { getPackingQtyLabel, isPurchaseReturnDoc } from "../lib/packing-document-labels";
 
 interface PackingProductLinesSectionProps {
   order: SalesOrderRecord;
@@ -45,10 +47,11 @@ export function PackingProductLinesSection({
     order.products.length > 0 &&
     order.products.filter((p) => selectedSkus[p.sku]).length === order.products.length;
 
-  const orderedQtyLabel =
-    order.sourceDocumentType === "Stock Transfer" ? "Transfer Qty" : "Ordered Qty";
+  const orderedQtyLabel = getPackingQtyLabel(order.sourceDocumentType);
+  const isPurchaseReturn = isPurchaseReturnDoc(order);
 
   useEffect(() => {
+    if (!isPurchaseReturn) return;
     setExpandedSkus((prev) => {
       const next = { ...prev };
       order.products.forEach((p) => {
@@ -58,7 +61,7 @@ export function PackingProductLinesSection({
       });
       return next;
     });
-  }, [order.products, selectedSkus, packingQty]);
+  }, [isPurchaseReturn, order.products, selectedSkus, packingQty]);
 
   const toggleExpanded = (sku: string) => {
     setExpandedSkus((prev) => ({ ...prev, [sku]: !prev[sku] }));
@@ -69,7 +72,7 @@ export function PackingProductLinesSection({
       <div className="flex items-center justify-between gap-3 border-b pb-2">
         <h2 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
           <Package className="w-4 h-4 text-brand-600" />
-          Order Products & Batch Allocation
+          {isPurchaseReturn ? "Return Lines & Batch Details" : "Order Products & Batch Allocation"}
         </h2>
       </div>
 
@@ -86,8 +89,9 @@ export function PackingProductLinesSection({
       <div className="border border-border rounded-xl overflow-hidden bg-white shadow-sm divide-y divide-border/60">
         {order.products.map((p) => (
           <PackingProductRow
-            key={p.sku}
+            key={p.lineId ?? p.sku}
             product={p}
+            isPurchaseReturn={isPurchaseReturn}
             orderedQtyLabel={orderedQtyLabel}
             warehouseName={warehouseName}
             isSelected={!!selectedSkus[p.sku]}
@@ -111,6 +115,7 @@ export function PackingProductLinesSection({
 
 interface PackingProductRowProps {
   product: SalesOrderProduct;
+  isPurchaseReturn: boolean;
   orderedQtyLabel: string;
   warehouseName: string;
   isSelected: boolean;
@@ -127,6 +132,7 @@ interface PackingProductRowProps {
 
 function PackingProductRow({
   product,
+  isPurchaseReturn,
   orderedQtyLabel,
   warehouseName,
   isSelected,
@@ -184,6 +190,15 @@ function PackingProductRow({
         <div className="flex-1 min-w-[140px]">
           <p className="text-xs font-bold text-foreground">{product.product}</p>
           <p className="font-mono text-[11px] text-brand-700 font-semibold">{product.sku}</p>
+          {(product.batchNumber || product.grnNo) && (
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              {product.batchNumber && (
+                <span className="font-mono">Batch: {product.batchNumber}</span>
+              )}
+              {product.batchNumber && product.grnNo && " · "}
+              {product.grnNo && <span className="font-mono">GRN: {product.grnNo}</span>}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
@@ -219,14 +234,23 @@ function PackingProductRow({
 
       {isExpanded && showBatchSection && (
         <div className="px-3 py-3 bg-white">
-          <PackingBatchSelectionTable
-            productName={product.product}
-            sku={product.sku}
-            warehouse={warehouseName}
-            requiredQty={requiredQty}
-            selections={batchSelections}
-            onSelectionsChange={onBatchSelectionsChange}
-          />
+          {isPurchaseReturn ? (
+            <PurchaseReturnBatchDetailsTable
+              product={product}
+              requiredQty={requiredQty}
+              selections={batchSelections}
+              onSelectionsChange={onBatchSelectionsChange}
+            />
+          ) : (
+            <PackingBatchSelectionTable
+              productName={product.product}
+              sku={product.sku}
+              warehouse={warehouseName}
+              requiredQty={requiredQty}
+              selections={batchSelections}
+              onSelectionsChange={onBatchSelectionsChange}
+            />
+          )}
         </div>
       )}
     </div>

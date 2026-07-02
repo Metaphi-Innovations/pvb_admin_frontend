@@ -28,11 +28,18 @@ export function PackingListingLayout({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     setIsMounted(true);
-    setRawOrders(getSalesOrders("All"));
-    setRawPackings(getPackingRecordsList("All"));
-  }, []);
+    const refresh = () => {
+      setRawOrders(getSalesOrders("All"));
+      setRawPackings(getPackingRecordsList("All"));
+    };
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [pathname]);
 
-  const activeTab = pathname.includes("/warehouse/packing/stock-transfer")
+  const activeTab = pathname.includes("/warehouse/packing/purchase-return")
+    ? "purchase-return"
+    : pathname.includes("/warehouse/packing/stock-transfer")
     ? "stock-transfer"
     : pathname.includes("/warehouse/packing/sample")
     ? "sample"
@@ -73,6 +80,9 @@ export function PackingListingLayout({ children }: { children: React.ReactNode }
       "stock-transfer":
         countBySource(ordersForWarehouse, "stock_transfer") +
         countBySource(packingsForWarehouse, "stock_transfer"),
+      "purchase-return":
+        countBySource(ordersForWarehouse, "purchase_return") +
+        countBySource(packingsForWarehouse, "purchase_return"),
     }),
     [ordersForWarehouse, packingsForWarehouse]
   );
@@ -112,6 +122,7 @@ export function PackingListingLayout({ children }: { children: React.ReactNode }
         { value: "sales", label: `Sales (${isMounted ? sourceCounts.sales : 0})` },
         { value: "sample", label: `Sample (${isMounted ? sourceCounts.sample : 0})` },
         { value: "stock-transfer", label: `Stock Transfer (${isMounted ? sourceCounts["stock-transfer"] : 0})` },
+        { value: "purchase-return", label: `Purchase Return (${isMounted ? sourceCounts["purchase-return"] : 0})` },
       ]}
       activeTab={activeTab}
       onTabChange={(val) => router.push(`/warehouse/packing/${val}`)}
