@@ -24,6 +24,12 @@ import { inferInterstateFromPlaceOfSupply } from "@/lib/accounts/gst-accounting"
 import { reconcileInvoiceCredits } from "../invoices/invoices-data";
 import { invalidateAccountsDataCache } from "@/lib/accounts/accounts-data-service";
 import { buildCreditNotesSeed } from "./credit-notes-seed";
+import {
+  getProductReturnPieces,
+  getSalesReturnById,
+  getSalesReturnRecords,
+  type SalesReturnRecord,
+} from "@/app/(app)/sales/orders/sales-return-data";
 
 export type CreditNoteSource = "sales_return" | "payment_discount_scheme" | "manual";
 
@@ -44,6 +50,9 @@ export type NoteWorkflowStatus = "draft" | "pending_approval" | "sent_back" | "a
 
 export type CreditReferenceType = "invoice" | "sales_order";
 
+export type CreditNoteCreationMode = "against_reference" | "direct_adjustment";
+export type CreditReferenceDocType = "sales_invoice" | "sales_return";
+
 export interface CreditNoteLine {
   id: string;
   sourceLineId: string;
@@ -51,8 +60,13 @@ export interface CreditNoteLine {
   productName: string;
   sku?: string;
   hsn?: string;
+  batchNo?: string;
   description: string;
   invoiceQty: number;
+  /** Max creditable qty from sales return (when applicable). */
+  salesReturnQty?: number;
+  /** Upper bound for credit qty validation. */
+  eligibleReturnQty?: number;
   unitPrice: number;
   discountPct: number;
   taxPct: number;
@@ -389,8 +403,11 @@ export function createEmptyCreditLine(): CreditNoteLine {
     productName: "",
     sku: "",
     hsn: "",
+    batchNo: "",
     description: "",
     invoiceQty: 0,
+    salesReturnQty: 0,
+    eligibleReturnQty: 0,
     unitPrice: 0,
     discountPct: 0,
     taxPct: 0,
@@ -399,6 +416,105 @@ export function createEmptyCreditLine(): CreditNoteLine {
     returnQty: 0,
     creditAmount: 0,
     reason: "",
+  };
+}
+
+export function getCreditLineMaxQty(line: CreditNoteLine): number {
+  if (line.eligibleReturnQty != null && line.eligibleReturnQty > 0) return line.eligibleReturnQty;
+  if (line.salesReturnQty != null && line.salesReturnQty > 0) return line.salesReturnQty;
+  return line.invoiceQty > 0 ? line.invoiceQty : Number.POSITIVE_INFINITY;
+}
+
+export function validateCreditNoteLines(lines: CreditNoteLine[]): void {
+  for (const line of lines) {
+    if (line.returnQty <= 0) continue;
+    const max = getCreditLineMaxQty(line);
+    if (Number.isFinite(max) && line.returnQty > max + 0.0001) {
+      throw new Error(
+        `Credit qty for "${line.productName || "line"}" cannot exceed eligible return qty (${max}).`,
+      );
+    }
+  }
+}
+
+export function listSalesReturnsForCreditNote(): SalesReturnRecord[] {
+  return getSalesReturnRecords().filter((r) => r.status !== "rejected");
+}
+
+function findInvoiceForSalesReturnRecord(ret: SalesReturnRecord): InvoiceRecord | undefined {
+  const order = loadOrders().find((o) => o.soNumber === ret.salesOrderNumber);
+  if (order) {
+    const linked = findInvoiceLinkedToOrder(order.id);
+    if (linked) return linked;
+  }
+  if (ret.sourceInvoiceId) {
+    const byId = loadInvoices().find((i) => i.id === ret.sourceInvoiceId);
+    if (byId) return byId;
+  }
+  return loadInvoices().find(
+    (inv) =>
+      inv.invoiceStatus !== "cancelled" &&
+      (inv.salesOrderNo === ret.salesOrderNumber ||
+        inv.referenceNo === ret.salesOrderNumber ||
+        inv.dispatchNo === ret.dispatchNumber),
+  );
+}
+
+function matchSalesReturnProductToLine(
+  ret: SalesReturnRecord,
+  line: CreditNoteLine,
+): { returnQty: number; batchNo: string } | null {
+  const key = line.productName.trim().toLowerCase();
+  const skuKey = (line.sku ?? "").trim().toLowerCase();
+  const match = ret.products.find((p) => {
+    const name = p.product.trim().toLowerCase();
+    const sku = p.sku.trim().toLowerCase();
+    if (skuKey && sku === skuKey) return true;
+    return name === key || name.includes(key) || key.includes(name);
+  });
+  if (!match) return null;
+  return {
+    returnQty: getProductReturnPieces(match),
+    batchNo: match.batchNo ?? "",
+  };
+}
+
+export function enrichInvoiceCreditLines(lines: CreditNoteLine[]): CreditNoteLine[] {
+  return lines.map((line) =>
+    normalizeCreditLine({
+      ...line,
+      eligibleReturnQty: line.eligibleReturnQty ?? line.invoiceQty,
+      salesReturnQty: line.salesReturnQty ?? 0,
+    }),
+  );
+}
+
+/** Build preview when user selects a sales return for quantity-based credit. */
+export function buildReferenceFromSalesReturn(returnId: string): CreditReferencePreview | null {
+  const ret = getSalesReturnById(returnId);
+  if (!ret) return null;
+  const invoice = findInvoiceForSalesReturnRecord(ret);
+  if (!invoice) return null;
+  const base = buildReferenceFromInvoice(invoice.id);
+  if (!base) return null;
+
+  const lineItems = base.lineItems.map((line) => {
+    const matched = matchSalesReturnProductToLine(ret, line);
+    const salesReturnQty = matched?.returnQty ?? 0;
+    const eligibleReturnQty = salesReturnQty > 0 ? salesReturnQty : line.invoiceQty;
+    return normalizeCreditLine({
+      ...line,
+      batchNo: matched?.batchNo ?? line.batchNo ?? "",
+      salesReturnQty,
+      eligibleReturnQty,
+      returnQty: 0,
+      creditAmount: 0,
+    });
+  });
+
+  return {
+    ...base,
+    lineItems: lineItems.filter((l) => (l.salesReturnQty ?? 0) > 0 || l.invoiceQty > 0),
   };
 }
 
@@ -466,7 +582,7 @@ export function buildReferenceFromInvoice(invoiceId: number): CreditReferencePre
     originalAmount: inv.grandTotal,
     taxAmount: inv.taxAmount,
     alreadyAdjustedAmount: inv.amountCredited ?? 0,
-    lineItems: inv.lineItems.map(invoiceLineToCreditLine),
+    lineItems: enrichInvoiceCreditLines(inv.lineItems.map(invoiceLineToCreditLine)),
   };
 }
 

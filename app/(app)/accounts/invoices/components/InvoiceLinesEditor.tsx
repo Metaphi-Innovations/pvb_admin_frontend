@@ -22,10 +22,53 @@ import {
   INVOICE_FORM_TABLE_TH_CLASS,
 } from "@/app/(app)/accounts/components/InvoiceFormLayout";
 
+const CELL_CLASS = cn(INVOICE_FORM_TABLE_TD_CLASS, "align-top");
 const NUM_INPUT_CLASS = cn(
   INVOICE_FORM_INPUT_CLASS,
-  "tabular-nums text-right min-w-[5.5rem] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+  "w-full tabular-nums text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
 );
+
+const RIGHT_ALIGNED_HEADERS = new Set([
+  "Quantity",
+  "Rate",
+  "Discount %",
+  "Amount",
+  "GST %",
+  "CGST",
+  "SGST",
+  "IGST",
+]);
+
+type LineColumn = {
+  key: string;
+  label: string;
+  width: string;
+  align?: "left" | "right" | "center";
+};
+
+function getColumns(interstate: boolean): LineColumn[] {
+  const base: LineColumn[] = [
+    { key: "item", label: "Item Details", width: "24%" },
+    { key: "hsn", label: "HSN/SAC", width: "8%" },
+    { key: "qty", label: "Quantity", width: "7%", align: "right" },
+    { key: "unit", label: "Unit", width: "6%", align: "center" },
+    { key: "rate", label: "Rate", width: "9%", align: "right" },
+    { key: "discount", label: "Discount %", width: "8%", align: "right" },
+    { key: "amount", label: "Amount", width: "9%", align: "right" },
+    { key: "gst", label: "GST %", width: "7%", align: "right" },
+  ];
+
+  if (interstate) {
+    return [...base, { key: "igst", label: "IGST", width: "9%", align: "right" }, { key: "actions", label: "", width: "44px" }];
+  }
+
+  return [
+    ...base,
+    { key: "cgst", label: "CGST", width: "8%", align: "right" },
+    { key: "sgst", label: "SGST", width: "8%", align: "right" },
+    { key: "actions", label: "", width: "44px" },
+  ];
+}
 
 function ProductSelect({
   products,
@@ -118,6 +161,8 @@ export function InvoiceLinesEditor({
   /** When false (dispatch-sourced invoice), lines are read-only. */
   manualEntry?: boolean;
 }) {
+  const columns = getColumns(interstate);
+
   const update = (id: string, patch: Partial<InvoiceLineItem>) => {
     onChange(
       lines.map((line) => {
@@ -137,9 +182,131 @@ export function InvoiceLinesEditor({
   const addRow = () => onChange([...lines, createEmptyLine()]);
   const removeRow = (id: string) => onChange(lines.filter((l) => l.id !== id));
 
-  const headers = interstate
-    ? ["Item Details", "HSN/SAC", "Quantity", "Unit", "Rate", "Discount %", "Amount", "GST %", "IGST", ""]
-    : ["Item Details", "HSN/SAC", "Quantity", "Unit", "Rate", "Discount %", "Amount", "GST %", "CGST", "SGST", ""];
+  const renderCell = (column: LineColumn, line: InvoiceLineItem) => {
+    const split = calcGstLineSplit(line, interstate);
+
+    switch (column.key) {
+      case "item":
+        return (
+          <div className="min-w-0 space-y-1.5">
+            <ProductSelect
+              products={products}
+              value={line.productId}
+              onSelect={(p) => update(line.id, { productId: p.id })}
+              disabled={!manualEntry}
+            />
+            {!line.productId && manualEntry && (
+              <Input
+                className="h-8 text-sm w-full"
+                placeholder="Or enter item name"
+                value={line.productName}
+                onChange={(e) => update(line.id, { productName: e.target.value })}
+              />
+            )}
+          </div>
+        );
+      case "hsn":
+        return (
+          <Input
+            className="h-8 text-sm font-mono w-full bg-muted/20"
+            placeholder="HSN"
+            value={line.hsn ?? ""}
+            readOnly={!manualEntry || !!line.productId}
+            onChange={(e) => update(line.id, { hsn: e.target.value })}
+          />
+        );
+      case "qty":
+        return (
+          <Input
+            type="number"
+            min={0}
+            className={cn(NUM_INPUT_CLASS, !manualEntry && "bg-muted/20")}
+            value={line.qty || ""}
+            readOnly={!manualEntry}
+            onChange={(e) => update(line.id, { qty: parseFloat(e.target.value) || 0 })}
+          />
+        );
+      case "unit":
+        return (
+          <Input
+            className="h-8 text-sm text-center w-full bg-muted/20"
+            value={line.unit}
+            readOnly={!manualEntry || !!line.productId}
+            onChange={(e) => update(line.id, { unit: e.target.value })}
+          />
+        );
+      case "rate":
+        return (
+          <AccountsMoneyInput
+            compact={false}
+            className={cn(NUM_INPUT_CLASS, !manualEntry && "bg-muted/20")}
+            value={line.unitPrice || ""}
+            disabled={!manualEntry}
+            onChange={(v) => update(line.id, { unitPrice: v })}
+          />
+        );
+      case "discount":
+        return (
+          <Input
+            type="number"
+            min={0}
+            max={100}
+            className={cn(NUM_INPUT_CLASS, !manualEntry && "bg-muted/20")}
+            value={line.discountPct || ""}
+            readOnly={!manualEntry}
+            onChange={(e) => update(line.id, { discountPct: parseFloat(e.target.value) || 0 })}
+          />
+        );
+      case "amount":
+        return (
+          <span className="block tabular-nums text-right font-medium whitespace-nowrap text-sm">
+            {formatINR(split.taxable)}
+          </span>
+        );
+      case "gst":
+        return (
+          <Input
+            type="number"
+            min={0}
+            className={cn(NUM_INPUT_CLASS, "bg-muted/20")}
+            value={line.taxPct || ""}
+            readOnly={!manualEntry || !!line.productId}
+            onChange={(e) => update(line.id, { taxPct: parseFloat(e.target.value) || 0 })}
+          />
+        );
+      case "cgst":
+        return (
+          <span className="block tabular-nums text-right text-muted-foreground whitespace-nowrap text-sm">
+            {split.cgst > 0 ? formatINR(split.cgst) : "—"}
+          </span>
+        );
+      case "sgst":
+        return (
+          <span className="block tabular-nums text-right text-muted-foreground whitespace-nowrap text-sm">
+            {split.sgst > 0 ? formatINR(split.sgst) : "—"}
+          </span>
+        );
+      case "igst":
+        return (
+          <span className="block tabular-nums text-right text-muted-foreground whitespace-nowrap text-sm">
+            {split.igst > 0 ? formatINR(split.igst) : "—"}
+          </span>
+        );
+      case "actions":
+        return manualEntry ? (
+          <button
+            type="button"
+            className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-red-50 text-red-600 mx-auto"
+            onClick={() => removeRow(line.id)}
+            aria-label="Remove line"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        ) : null;
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -159,19 +326,25 @@ export function InvoiceLinesEditor({
       </div>
 
       <div className="overflow-x-auto border border-slate-200 rounded-lg bg-white">
-        <table className="w-full min-w-[960px]">
+        <table className="w-full min-w-[1180px] table-fixed border-collapse">
+          <colgroup>
+            {columns.map((col) => (
+              <col key={col.key} style={{ width: col.width }} />
+            ))}
+          </colgroup>
           <thead className="border-b border-slate-200 bg-slate-50">
             <tr>
-              {headers.map((h) => (
+              {columns.map((col) => (
                 <th
-                  key={h || "actions"}
+                  key={col.key}
                   className={cn(
                     INVOICE_FORM_TABLE_TH_CLASS,
-                    "px-3",
-                    h && ["Quantity", "Rate", "Discount %", "Amount", "GST %", "CGST", "SGST", "IGST"].includes(h) && "text-right",
+                    col.align === "right" && "text-right",
+                    col.align === "center" && "text-center",
+                    RIGHT_ALIGNED_HEADERS.has(col.label) && !col.align && "text-right",
                   )}
                 >
-                  {h}
+                  {col.label}
                 </th>
               ))}
             </tr>
@@ -179,121 +352,28 @@ export function InvoiceLinesEditor({
           <tbody>
             {lines.length === 0 ? (
               <tr>
-                <td colSpan={headers.length} className="py-10 text-center text-sm text-slate-500">
+                <td colSpan={columns.length} className="py-10 text-center text-sm text-slate-500">
                   Add at least one product or service line.
                 </td>
               </tr>
             ) : (
-              lines.map((line) => {
-                const split = calcGstLineSplit(line, interstate);
-                return (
-                  <tr key={line.id} className="border-b border-slate-100 last:border-b-0">
-                    <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "min-w-[260px]")}>
-                      <ProductSelect
-                        products={products}
-                        value={line.productId}
-                        onSelect={(p) => update(line.id, { productId: p.id })}
-                        disabled={!manualEntry}
-                      />
-                      {!line.productId && manualEntry && (
-                        <Input
-                          className="h-8 text-sm mt-1.5"
-                          placeholder="Or enter item name"
-                          value={line.productName}
-                          onChange={(e) => update(line.id, { productName: e.target.value })}
-                        />
+              lines.map((line) => (
+                <tr key={line.id} className="border-b border-slate-100 last:border-b-0">
+                  {columns.map((col) => (
+                    <td
+                      key={col.key}
+                      className={cn(
+                        CELL_CLASS,
+                        col.align === "right" && "text-right",
+                        col.align === "center" && "text-center",
+                        col.key === "actions" && "px-1",
                       )}
+                    >
+                      {renderCell(col, line)}
                     </td>
-                    <td className="p-2 w-[100px]">
-                      <Input
-                        className="h-8 text-sm font-mono bg-muted/20"
-                        placeholder="HSN"
-                        value={line.hsn ?? ""}
-                        readOnly={!manualEntry || !!line.productId}
-                        onChange={(e) => update(line.id, { hsn: e.target.value })}
-                      />
-                    </td>
-                    <td className="p-2 w-[100px]">
-                      <Input
-                        type="number"
-                        min={0}
-                        className={cn(NUM_INPUT_CLASS, !manualEntry && "bg-muted/20")}
-                        value={line.qty || ""}
-                        readOnly={!manualEntry}
-                        onChange={(e) => update(line.id, { qty: parseFloat(e.target.value) || 0 })}
-                      />
-                    </td>
-                    <td className="p-2 w-[88px]">
-                      <Input
-                        className="h-8 text-sm text-center bg-muted/20"
-                        value={line.unit}
-                        readOnly={!manualEntry || !!line.productId}
-                        onChange={(e) => update(line.id, { unit: e.target.value })}
-                      />
-                    </td>
-                    <td className="p-2 w-[108px]">
-                      <AccountsMoneyInput
-                        compact={false}
-                        className={cn(NUM_INPUT_CLASS, !manualEntry && "bg-muted/20")}
-                        value={line.unitPrice || ""}
-                        disabled={!manualEntry}
-                        onChange={(v) => update(line.id, { unitPrice: v })}
-                      />
-                    </td>
-                    <td className="p-2 w-[96px]">
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        className={cn(NUM_INPUT_CLASS, !manualEntry && "bg-muted/20")}
-                        value={line.discountPct || ""}
-                        readOnly={!manualEntry}
-                        onChange={(e) => update(line.id, { discountPct: parseFloat(e.target.value) || 0 })}
-                      />
-                    </td>
-                    <td className="p-2 w-[120px] tabular-nums text-right font-medium whitespace-nowrap">
-                      {formatINR(split.taxable)}
-                    </td>
-                    <td className="p-2 w-[80px]">
-                      <Input
-                        type="number"
-                        min={0}
-                        className={cn(NUM_INPUT_CLASS, "bg-muted/20")}
-                        value={line.taxPct || ""}
-                        readOnly={!manualEntry || !!line.productId}
-                        onChange={(e) => update(line.id, { taxPct: parseFloat(e.target.value) || 0 })}
-                      />
-                    </td>
-                    {!interstate && (
-                      <>
-                        <td className="p-2 w-[100px] tabular-nums text-right text-muted-foreground whitespace-nowrap">
-                          {split.cgst > 0 ? formatINR(split.cgst) : "—"}
-                        </td>
-                        <td className="p-2 w-[100px] tabular-nums text-right text-muted-foreground whitespace-nowrap">
-                          {split.sgst > 0 ? formatINR(split.sgst) : "—"}
-                        </td>
-                      </>
-                    )}
-                    {interstate && (
-                      <td className="p-2 w-[100px] tabular-nums text-right text-muted-foreground whitespace-nowrap">
-                        {split.igst > 0 ? formatINR(split.igst) : "—"}
-                      </td>
-                    )}
-                    <td className="p-2 w-10">
-                      {manualEntry && (
-                        <button
-                          type="button"
-                          className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-red-50 text-red-600"
-                          onClick={() => removeRow(line.id)}
-                          aria-label="Remove line"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
+                  ))}
+                </tr>
+              ))
             )}
           </tbody>
         </table>

@@ -35,11 +35,13 @@ import { buildSalesInvoicePrefillFromDispatch, mapDispatchSchemeToInvoiceSettlem
 import type { PendingDispatchInvoiceRow } from "@/lib/accounts/dispatch-invoice-bridge";
 import type { InvoiceDocumentType } from "@/lib/accounts/invoice-type";
 import type { DispatchNearExpirySchemeEntry } from "@/app/(app)/warehouse/dispatch/types";
-import { InvoiceSchemeSettlementPanel } from "./components/InvoiceSchemeSettlementPanel";
+import { InvoiceApplicableSchemesPanel } from "./components/InvoiceApplicableSchemesPanel";
 import { InvoiceLinesEditor } from "./components/InvoiceLinesEditor";
+import { InvoiceProductLinesReadOnly } from "./components/InvoiceProductLinesReadOnly";
 import { InvoiceAdditionalExpensesEditor } from "./components/InvoiceAdditionalExpensesEditor";
 import { SalesInvoiceCustomerSection } from "./components/SalesInvoiceCustomerSection";
-import { SalesInvoiceDispatchSelect } from "./components/SalesInvoiceDispatchSelect";
+import { SalesInvoiceDocumentInfoSection } from "./components/SalesInvoiceDocumentInfoSection";
+import { getDispatchById } from "@/lib/accounts/dispatch-invoice-bridge";
 import {
   calculateInvoiceTotals,
   createEmptyLine,
@@ -62,6 +64,11 @@ import {
   customerMasterToTransactionFields,
   type CustomerTransactionFields,
 } from "@/lib/accounts/transaction-master-fetch";
+import type { Customer } from "@/app/(app)/masters/customers/customer-data";
+import {
+  getCustomerAddressesForSalesOrder,
+  getDefaultBillShipAddressIds,
+} from "@/app/(app)/sales/orders/sales-order-address-utils";
 import {
   calcAdditionalExpensesTotals,
   createEmptyAdditionalExpense,
@@ -80,6 +87,13 @@ function Section({ title, children, className }: { title: string; children: Reac
 
 const CHARGE_INPUT_CLASS =
   "h-9 text-sm tabular-nums text-right w-28 ml-auto [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
+
+function computeDueDate(baseDate: string, creditDays: number): string {
+  const d = new Date(baseDate);
+  if (Number.isNaN(d.getTime())) return "";
+  d.setDate(d.getDate() + creditDays);
+  return d.toISOString().slice(0, 10);
+}
 
 export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: number }) {
   const router = useRouter();
@@ -128,6 +142,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [referenceNo, setReferenceNo] = useState("");
   const [salesOrderRef, setSalesOrderRef] = useState("");
   const [dispatchRef, setDispatchRef] = useState("");
+  const [dispatchDate, setDispatchDate] = useState("");
   const [branch, setBranch] = useState("Head Office");
   const [warehouse, setWarehouse] = useState("Central Warehouse");
   const [remarks, setRemarks] = useState("");
@@ -144,10 +159,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   );
 
   useEffect(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 30);
-    setDueDate(d.toISOString().slice(0, 10));
-  }, []);
+    if (invoiceDate && creditDays >= 0) {
+      setDueDate(computeDueDate(invoiceDate, creditDays));
+    }
+  }, [invoiceDate, creditDays]);
 
   const searchParams = useSearchParams();
 
@@ -207,6 +222,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setCustomerLedgerId(prefill.customerLedgerId);
     setSalesOrderRef(prefill.salesOrderNo);
     setDispatchRef(prefill.dispatchNo);
+    const dispatch = prefill.sourceDispatchId ? getDispatchById(prefill.sourceDispatchId) : null;
+    setDispatchDate(dispatch?.dispatchDate ?? "");
     setReferenceNo(prefill.referenceNo);
     setBranch(prefill.branch);
     setWarehouse(prefill.warehouse);
@@ -249,6 +266,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setCustomerLedgerId(null);
     setSalesOrderRef("");
     setDispatchRef("");
+    setDispatchDate("");
     setReferenceNo("");
     setSalesperson("");
     setWarehouse("Central Warehouse");
@@ -258,15 +276,30 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setSchemeSettlementEntries([]);
   };
 
-  const onCustomerSelect = (id: string, fields: CustomerTransactionFields | null) => {
+  const onCustomerSelect = (
+    id: string,
+    customer: Customer | null,
+    addressDefaults?: {
+      billToId: string;
+      shipToId: string;
+      billingAddress: string;
+      shippingAddress: string;
+    },
+  ) => {
     const customerChanged = customerId !== id;
     setCustomerId(id);
-    if (!fields) {
+    if (!customer) {
       setCustomerFields(null);
       if (customerChanged) clearDispatchLinkedFields();
       return;
     }
-    applyCustomerTransactionFields(fields);
+    applyCustomerTransactionFields(customerMasterToTransactionFields(customer));
+    if (addressDefaults) {
+      setBillToId(addressDefaults.billToId);
+      setShipToId(addressDefaults.shipToId);
+      setBillingAddress(addressDefaults.billingAddress);
+      setShippingAddress(addressDefaults.shippingAddress);
+    }
     if (customerChanged) clearDispatchLinkedFields();
   };
 
@@ -277,6 +310,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       setSalesOrderId(null);
       setSalesOrderRef("");
       setDispatchRef("");
+      setDispatchDate("");
       setReferenceNo("");
       setSalesperson("");
       setWarehouse("Central Warehouse");
@@ -286,6 +320,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       setSchemeSettlementEntries([]);
       return;
     }
+
+    setDispatchDate(row.dispatchDate);
 
     const prefill = buildSalesInvoicePrefillFromDispatch(
       dispatchId,
@@ -362,9 +398,17 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setStateName(rec.state ?? "");
     setGstTreatment(rec.gstTreatment ?? "");
     setReceivableLedger(rec.receivableLedger ?? rec.customerName);
-    if (c) applyCustomerTransactionFields(customerMasterToTransactionFields(c));
+    if (c) {
+      applyCustomerTransactionFields(customerMasterToTransactionFields(c));
+      const addresses = getCustomerAddressesForSalesOrder(c);
+      const { billToAddressId, shipToAddressId } = getDefaultBillShipAddressIds(addresses);
+      setBillToId(billToAddressId);
+      setShipToId(shipToAddressId);
+    }
     setSalesOrderRef(rec.salesOrderNo ?? rec.referenceNo ?? "");
     setDispatchRef(rec.dispatchNo ?? "");
+    const dispatch = rec.sourceDispatchId ? getDispatchById(rec.sourceDispatchId) : null;
+    setDispatchDate(dispatch?.dispatchDate ?? "");
     setBranch(rec.branch ?? "Head Office");
     setWarehouse(rec.warehouse ?? "Central Warehouse");
     setSalesperson(rec.salesperson ?? "");
@@ -617,8 +661,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
-        <InvoiceFormCard title={isStockTransferInvoice ? "Destination Warehouse" : "Customer Information"}>
+      <div className="space-y-4">
+        <InvoiceFormCard title={isStockTransferInvoice ? "Destination Warehouse" : "Customer"}>
           {isStockTransferInvoice ? (
             <div className={INVOICE_FORM_GRID_CLASS}>
               <InvoiceFormReadOnly label="Destination Warehouse" value={customerName} className="sm:col-span-2 lg:col-span-3" />
@@ -631,51 +675,37 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               customers={customers}
               customerId={customerId}
               onCustomerIdChange={onCustomerSelect}
-              fields={customerFields}
               billToId={billToId}
               shipToId={shipToId}
               onBillToChange={(id, addr) => {
                 setBillToId(id);
                 setBillingAddress(addr);
               }}
-              onShipToChange={(id, addr) => {
+              onShipToChange={(id, shipAddr) => {
                 setShipToId(id);
-                setShippingAddress(addr);
+                setShippingAddress(shipAddr);
               }}
-              billingAddress={billingAddress}
-              shippingAddress={shippingAddress}
             />
           )}
         </InvoiceFormCard>
 
-        <InvoiceFormCard title="Invoice Information">
-          <div className={INVOICE_FORM_GRID_CLASS}>
-            <InvoiceFormField label="Invoice No.">
-              <InvoiceFormInput disabled className="bg-slate-50 text-slate-700" value={isEdit ? invoiceNo : "Auto-generated"} />
-            </InvoiceFormField>
-            <InvoiceFormField label="Invoice Date">
-              <InvoiceFormInput type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
-            </InvoiceFormField>
-            <InvoiceFormField label="Due Date">
-              <InvoiceFormInput type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-            </InvoiceFormField>
-            <InvoiceFormReadOnly label="Sales Order No." value={salesOrderRef} mono />
-            <div className="sm:col-span-2 lg:col-span-3">
-              <SalesInvoiceDispatchSelect
-                customerId={customerId}
-                value={selectedDispatchId}
-                onChange={onDispatchSelect}
-                disabled={!customerId}
-              />
-            </div>
-            <InvoiceFormReadOnly label="Branch" value={branch} />
-            <InvoiceFormReadOnly label="Warehouse" value={warehouse} />
-            <InvoiceFormReadOnly label="Place of Supply" value={placeOfSupply} />
-            <InvoiceFormReadOnly label="GST Treatment" value={gstTreatment} />
-            <InvoiceFormField label="Salesperson" className="sm:col-span-2 lg:col-span-3">
-              <InvoiceFormInput value={salesperson} onChange={(e) => setSalesperson(e.target.value)} placeholder="Optional" />
-            </InvoiceFormField>
-          </div>
+        <InvoiceFormCard title="Invoice & Dispatch Details">
+          <SalesInvoiceDocumentInfoSection
+            isEdit={isEdit}
+            invoiceNo={invoiceNo}
+            invoiceDate={invoiceDate}
+            onInvoiceDateChange={setInvoiceDate}
+            dueDate={dueDate}
+            creditDays={creditDays}
+            salesOrderRef={salesOrderRef}
+            dispatchRef={dispatchRef}
+            dispatchDate={dispatchDate}
+            sourceDispatchId={sourceDispatchId}
+            customerId={customerId}
+            selectedDispatchId={selectedDispatchId}
+            onDispatchSelect={onDispatchSelect}
+            showDispatchSelect={!isStockTransferInvoice}
+          />
           {showSezSupply && (
             <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1">
               <p className="text-xs font-medium text-slate-800">SEZ Customer — {getSezSupplyTypeLabel(sezSupplyType)}</p>
@@ -689,21 +719,27 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             </div>
           )}
         </InvoiceFormCard>
-      </div>
 
-        {schemeSettlementEntries.length > 0 && (
-          <InvoiceSchemeSettlementPanel entries={schemeSettlementEntries} />
+        {!isStockTransferInvoice && (
+          <InvoiceApplicableSchemesPanel
+            lines={lines}
+            nearExpiryEntries={schemeSettlementEntries}
+          />
         )}
 
         <Section title="Product Details">
-          <InvoiceLinesEditor
-            lines={lines}
-            products={products}
-            onChange={setLines}
-            interstate={interstateGst}
-            hideMasterHint
-            manualEntry={isManualInvoice}
-          />
+          {isManualInvoice && !isStockTransferInvoice ? (
+            <InvoiceLinesEditor
+              lines={lines}
+              products={products}
+              onChange={setLines}
+              interstate={interstateGst}
+              hideMasterHint
+              manualEntry
+            />
+          ) : (
+            <InvoiceProductLinesReadOnly lines={lines} interstate={interstateGst} />
+          )}
         </Section>
 
         <Section title="Additional Expenses">
@@ -785,6 +821,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             <SalesInvoiceAccountingPanel invoice={accountingPreview} />
           </div>
         </Section>
+      </div>
     </InvoiceFormLayout>
   );
 }

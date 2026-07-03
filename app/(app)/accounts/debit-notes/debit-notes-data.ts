@@ -22,6 +22,13 @@ import { computeNoteTaxBreakup } from "@/lib/accounts/note-tax-breakup";
 import { inferInterstateFromPlaceOfSupply } from "@/lib/accounts/gst-accounting";
 import { invalidateAccountsDataCache } from "@/lib/accounts/accounts-data-service";
 import { buildDebitNotesSeed } from "./debit-notes-seed";
+import {
+  getPurchaseReturnById,
+  loadPurchaseReturns,
+  type PurchaseReturn,
+} from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
+
+export type DebitNoteCreationMode = "against_return" | "direct_adjustment";
 
 export type DebitNoteSource = "purchase_return" | "manual";
 
@@ -59,7 +66,13 @@ export interface DebitNoteLine {
   id: string;
   sourceLineId: string;
   productName: string;
+  batchNo?: string;
+  hsn?: string;
   invoiceQty: number;
+  /** Qty from purchase return document. */
+  purchaseReturnQty?: number;
+  /** Upper bound for debit qty validation. */
+  eligibleReturnQty?: number;
   uom: string;
   unitPrice: number;
   discountPct: number;
@@ -193,7 +206,11 @@ export function createEmptyDebitLine(): DebitNoteLine {
     id: `dnl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     sourceLineId: "",
     productName: "",
+    batchNo: "",
+    hsn: "",
     invoiceQty: 0,
+    purchaseReturnQty: 0,
+    eligibleReturnQty: 0,
     uom: "",
     unitPrice: 0,
     discountPct: 0,
@@ -206,13 +223,113 @@ export function createEmptyDebitLine(): DebitNoteLine {
   };
 }
 
+export function getDebitLineMaxQty(line: DebitNoteLine): number {
+  if (line.eligibleReturnQty != null && line.eligibleReturnQty > 0) return line.eligibleReturnQty;
+  if (line.purchaseReturnQty != null && line.purchaseReturnQty > 0) return line.purchaseReturnQty;
+  return line.invoiceQty > 0 ? line.invoiceQty : Number.POSITIVE_INFINITY;
+}
+
+export function validateDebitNoteLines(lines: DebitNoteLine[]): void {
+  for (const line of lines) {
+    if (line.returnQty <= 0) continue;
+    const max = getDebitLineMaxQty(line);
+    if (Number.isFinite(max) && line.returnQty > max + 0.0001) {
+      throw new Error(
+        `Debit qty for "${line.productName || "line"}" cannot exceed eligible return qty (${max}).`,
+      );
+    }
+  }
+}
+
+export function listPurchaseReturnsForDebitNote(): PurchaseReturn[] {
+  return loadPurchaseReturns().filter(
+    (r) =>
+      r.status === "approved" ||
+      r.status === "returned" ||
+      r.status === "issued_for_packing" ||
+      r.status === "submitted",
+  );
+}
+
+export function buildReferenceFromPurchaseReturn(returnId: number): DebitReferencePreview | null {
+  const ret = getPurchaseReturnById(returnId);
+  if (!ret) return null;
+  const pi = findPurchaseInvoiceForPO(ret.poId);
+  const basePreview = pi ? buildReferenceFromPurchaseInvoice(pi.id) : null;
+  const vendor = getActiveVendors().find(
+    (v) => v.id === ret.supplierId || v.vendorName === ret.supplierName,
+  );
+  const wh = warehouseRefsForPo(ret.poNumber);
+
+  const lineItems = ret.items
+    .filter((item) => item.returnQty > 0 || item.balanceRejectedQty > 0)
+    .map((item) => {
+      const baseLine =
+        basePreview?.lineItems.find((l) => l.sourceLineId === item.id) ??
+        basePreview?.lineItems.find(
+          (l) => l.productName.trim().toLowerCase() === item.productName.trim().toLowerCase(),
+        );
+      const purchaseReturnQty = item.returnQty > 0 ? item.returnQty : item.balanceRejectedQty;
+      const taxPct = item.cgstPct + item.sgstPct + item.igstPct;
+      const lineTotal =
+        item.netAmount > 0
+          ? item.netAmount
+          : Math.round((item.taxableValue + item.taxAmount) * 100) / 100;
+      return normalizeDebitLine({
+        id: baseLine?.id ?? `dnl-pr-${item.id}`,
+        sourceLineId: baseLine?.sourceLineId ?? item.id,
+        productName: item.productName,
+        batchNo: item.batchNumber,
+        hsn: baseLine?.hsn ?? "",
+        invoiceQty: baseLine?.invoiceQty ?? item.grnReceivedQty,
+        purchaseReturnQty,
+        eligibleReturnQty: purchaseReturnQty,
+        uom: baseLine?.uom ?? "Unit",
+        unitPrice: item.unitPrice || baseLine?.unitPrice || 0,
+        discountPct: baseLine?.discountPct ?? 0,
+        taxPct: taxPct || baseLine?.taxPct || 0,
+        gstAmount: item.taxAmount || baseLine?.gstAmount || 0,
+        lineAmount: baseLine?.lineAmount ?? lineTotal,
+        returnQty: 0,
+        debitAmount: 0,
+        lineRemarks: item.lineRemark || ret.overallRemarks,
+      });
+    });
+
+  if (!lineItems.length) return null;
+
+  return {
+    referenceType: "purchase_invoice",
+    documentDate: ret.returnDate,
+    sourceInvoiceId: pi?.id ?? null,
+    sourceInvoiceNo: pi?.invoiceNo ?? "",
+    sourcePoId: ret.poId,
+    sourcePoNo: ret.poNumber,
+    sourceGrnNo: wh.sourceGrnNo,
+    sourceQcNo: wh.sourceQcNo,
+    vendorId: ret.supplierId ?? vendor?.id ?? null,
+    vendorName: ret.supplierName,
+    vendorPhone: vendor ? `${vendor.mobileCountryCode} ${vendor.mobile}`.trim() : "",
+    vendorEmail: vendor?.email ?? "",
+    vendorGstin: vendor?.gstNumber ?? "",
+    originalAmount: basePreview?.originalAmount ?? ret.summary?.grandTotal ?? 0,
+    taxAmount: basePreview?.taxAmount ?? 0,
+    alreadyAdjustedAmount: basePreview?.alreadyAdjustedAmount ?? 0,
+    lineItems,
+  };
+}
+
 function piLineToDebitLine(l: PurchaseInvoiceLine): DebitNoteLine {
   const lineTotal = Math.round((l.lineAmount + l.taxAmount) * 100) / 100;
   return {
     id: `dnl-${l.id}`,
     sourceLineId: l.id,
     productName: l.productName,
+    batchNo: l.batchNumber ?? "",
+    hsn: "",
     invoiceQty: l.invoiceQty,
+    purchaseReturnQty: 0,
+    eligibleReturnQty: l.invoiceQty,
     uom: l.unit,
     unitPrice: l.unitPrice,
     discountPct: 0,
@@ -225,7 +342,7 @@ function piLineToDebitLine(l: PurchaseInvoiceLine): DebitNoteLine {
   };
 }
 
-function calcDebitFromQty(line: Pick<DebitNoteLine, "returnQty" | "invoiceQty" | "unitPrice" | "discountPct" | "taxPct" | "lineAmount">): number {
+export function calcDebitFromQty(line: Pick<DebitNoteLine, "returnQty" | "invoiceQty" | "unitPrice" | "discountPct" | "taxPct" | "lineAmount">): number {
   const returnQty = Math.max(0, line.returnQty);
   if (returnQty <= 0) return 0;
   const invoiceQty = line.invoiceQty;

@@ -92,6 +92,7 @@ export interface InvoiceLineItem {
 	id: string;
 	productId: number | null;
 	productName: string;
+	productCode?: string;
 	description: string;
 	hsn?: string;
 	qty: number;
@@ -102,6 +103,15 @@ export interface InvoiceLineItem {
 	amount: number;
 	creditedQty?: number;
 	creditedAmount?: number;
+	/** Product Discount Scheme — carried from sales order / dispatch */
+	schemeApplied?: "Yes" | "No";
+	schemeCode?: string;
+	schemeName?: string;
+	schemeDiscountPercent?: number;
+	schemeDiscountAmount?: number;
+	schemeDiscountType?: "Percentage" | "Rupees";
+	dealerPrice?: number;
+	finalRate?: number;
 }
 
 export interface InvoiceAttachment {
