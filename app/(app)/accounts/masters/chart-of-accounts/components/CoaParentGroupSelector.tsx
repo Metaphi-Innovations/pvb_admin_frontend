@@ -72,7 +72,7 @@ function ParentOptionList({
             <PathResult path={opt.path} />
           </div>
           {value === opt.id && (
-            <Check className="w-3.5 h-3.5 text-brand-600 flex-shrink-0 mt-0.5" />
+            <Check className="w-4 h-4 text-brand-600 flex-shrink-0 mt-0.5" />
           )}
         </button>
       ))}
@@ -158,7 +158,7 @@ export function CoaParentGroupSelector({
     return (
       <div className="space-y-1.5">
         <div className="relative">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none z-10" />
+          <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none z-10" />
           <Input
             className="h-9 pl-8 text-xs focus-visible:ring-brand-300 focus-visible:ring-1"
             placeholder="Search account group..."
@@ -208,7 +208,7 @@ export function CoaParentGroupSelector({
             >
               {selectedDisplay ?? placeholder}
             </span>
-            <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <ChevronsUpDown className="w-4 h-4 text-muted-foreground shrink-0" />
           </button>
         </PopoverTrigger>
         <PopoverContent
@@ -219,7 +219,7 @@ export function CoaParentGroupSelector({
         >
           <div className="p-2 border-b border-border/60">
             <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               <input
                 placeholder="Search ledger group…"
                 value={search}
@@ -246,7 +246,7 @@ export function CoaParentGroupSelector({
     <div className="space-y-1.5">
       <Popover open={open} onOpenChange={handleOpenChange}>
         <div className="relative">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none z-10" />
+          <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none z-10" />
           <PopoverAnchor asChild>
             <Input
               className="h-8 pl-8 text-xs focus-visible:ring-orange-200/60 focus-visible:ring-1"

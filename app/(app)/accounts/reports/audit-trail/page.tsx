@@ -1,8 +1,5 @@
-"use client";
-
-import { AccountsReportPlaceholderClient } from "@/components/accounts/AccountsReportPlaceholderClient";
-import { AUDIT_TRAIL_REPORT } from "@/lib/accounts/report-placeholder-config";
+import AuditTrailPageClient from "./AuditTrailPageClient";
 
 export default function AuditTrailReportPage() {
-  return <AccountsReportPlaceholderClient {...AUDIT_TRAIL_REPORT} />;
+  return <AuditTrailPageClient />;
 }

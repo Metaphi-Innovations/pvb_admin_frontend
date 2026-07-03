@@ -41,7 +41,7 @@ export function PartyBranchAddressSelector({
             onBillToChange(id, opt?.formatted ?? "");
           }}
         >
-          <SelectTrigger className="h-8 text-xs">
+          <SelectTrigger className="h-9 text-[13px] font-medium">
             <SelectValue placeholder="Select billing location…" />
           </SelectTrigger>
           <SelectContent>
@@ -63,7 +63,7 @@ export function PartyBranchAddressSelector({
             onShipToChange(id, opt?.formatted ?? "");
           }}
         >
-          <SelectTrigger className="h-8 text-xs">
+          <SelectTrigger className="h-9 text-[13px] font-medium">
             <SelectValue placeholder="Select delivery location…" />
           </SelectTrigger>
           <SelectContent>

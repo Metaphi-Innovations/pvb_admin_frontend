@@ -1,3 +1,4 @@
+import { demoAddDays, demoDateAt, demoFinancialYearStart, demoToday, demoTimestamp } from "@/lib/accounts/demo-date-utils";
 /**
  * Stock Valuation report — read-only accounts report data (demo seed).
  * Isolated from inventory / warehouse modules.
@@ -81,7 +82,7 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "Central Warehouse",
     availableQty: 320,
     costPrice: 185,
-    mfgDate: "2025-08-01",
+    mfgDate: demoDateAt(0),
     expiryDate: "2027-08-01",
   },
   {
@@ -96,8 +97,8 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "North Zone Hub",
     availableQty: 96,
     costPrice: 185,
-    mfgDate: "2025-09-10",
-    expiryDate: "2026-08-20",
+    mfgDate: demoDateAt(1),
+    expiryDate: demoDateAt(2),
   },
   {
     id: "sv-03",
@@ -111,7 +112,7 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "Central Warehouse",
     availableQty: 500,
     costPrice: 620,
-    mfgDate: "2025-11-01",
+    mfgDate: demoDateAt(3),
     expiryDate: "2027-11-01",
   },
   {
@@ -126,8 +127,8 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "North Zone Hub",
     availableQty: 80,
     costPrice: 620,
-    mfgDate: "2025-09-01",
-    expiryDate: "2026-08-15",
+    mfgDate: demoDateAt(4),
+    expiryDate: demoDateAt(5),
   },
   {
     id: "sv-05",
@@ -141,7 +142,7 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "Central Warehouse",
     availableQty: 300,
     costPrice: 1450,
-    mfgDate: "2025-12-05",
+    mfgDate: demoDateAt(6),
     expiryDate: "2027-12-05",
   },
   {
@@ -156,8 +157,8 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "North Zone Hub",
     availableQty: 200,
     costPrice: 890,
-    mfgDate: "2025-10-10",
-    expiryDate: "2026-10-10",
+    mfgDate: demoDateAt(7),
+    expiryDate: demoDateAt(8),
   },
   {
     id: "sv-07",
@@ -171,7 +172,7 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "Central Warehouse",
     availableQty: 45,
     costPrice: 1380,
-    mfgDate: "2025-12-01",
+    mfgDate: demoDateAt(9),
     expiryDate: "2027-12-01",
   },
   {
@@ -186,7 +187,7 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "Central Warehouse",
     availableQty: 140,
     costPrice: 720,
-    mfgDate: "2025-11-15",
+    mfgDate: demoDateAt(10),
     expiryDate: "2027-11-15",
   },
   {
@@ -201,7 +202,7 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "South Zone Depot",
     availableQty: 180,
     costPrice: 95,
-    mfgDate: "2025-07-01",
+    mfgDate: demoDateAt(11),
     expiryDate: "2027-07-01",
   },
   {
@@ -216,8 +217,8 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "South Zone Depot",
     availableQty: 72,
     costPrice: 310,
-    mfgDate: "2025-06-01",
-    expiryDate: "2026-06-01",
+    mfgDate: demoDateAt(12),
+    expiryDate: demoDateAt(13),
   },
   {
     id: "sv-11",
@@ -231,8 +232,8 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "West Zone Hub",
     availableQty: 144,
     costPrice: 245,
-    mfgDate: "2025-04-01",
-    expiryDate: "2026-09-01",
+    mfgDate: demoDateAt(14),
+    expiryDate: demoDateAt(15),
   },
   {
     id: "sv-12",
@@ -246,7 +247,7 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "East Zone Hub",
     availableQty: 220,
     costPrice: 980,
-    mfgDate: "2025-10-20",
+    mfgDate: demoDateAt(16),
     expiryDate: "2027-10-20",
   },
   {
@@ -261,8 +262,8 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "South Zone Depot",
     availableQty: 160,
     costPrice: 520,
-    mfgDate: "2025-08-15",
-    expiryDate: "2026-08-30",
+    mfgDate: demoDateAt(17),
+    expiryDate: demoDateAt(18),
   },
   {
     id: "sv-14",
@@ -276,8 +277,8 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "West Zone Hub",
     availableQty: 60,
     costPrice: 165,
-    mfgDate: "2025-05-01",
-    expiryDate: "2026-05-15",
+    mfgDate: demoDateAt(19),
+    expiryDate: demoDateAt(20),
   },
   {
     id: "sv-15",
@@ -291,7 +292,7 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "Central Warehouse",
     availableQty: 200,
     costPrice: 142,
-    mfgDate: "2025-09-20",
+    mfgDate: demoDateAt(21),
     expiryDate: "2027-09-20",
   },
   {
@@ -306,8 +307,8 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "North Zone Hub",
     availableQty: 84,
     costPrice: 275,
-    mfgDate: "2025-03-01",
-    expiryDate: "2026-06-20",
+    mfgDate: demoDateAt(22),
+    expiryDate: demoDateAt(23),
   },
   {
     id: "sv-17",
@@ -321,7 +322,7 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "East Zone Hub",
     availableQty: 380,
     costPrice: 420,
-    mfgDate: "2025-11-05",
+    mfgDate: demoDateAt(24),
     expiryDate: "2027-11-05",
   },
   {
@@ -336,8 +337,8 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "South Zone Depot",
     availableQty: 96,
     costPrice: 1050,
-    mfgDate: "2025-02-01",
-    expiryDate: "2026-02-01",
+    mfgDate: demoDateAt(25),
+    expiryDate: demoDateAt(26),
   },
   {
     id: "sv-19",
@@ -351,7 +352,7 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "West Zone Hub",
     availableQty: 120,
     costPrice: 198,
-    mfgDate: "2025-10-01",
+    mfgDate: demoDateAt(27),
     expiryDate: "2027-10-01",
   },
   {
@@ -366,7 +367,7 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "Central Warehouse",
     availableQty: 75,
     costPrice: 1180,
-    mfgDate: "2025-12-10",
+    mfgDate: demoDateAt(28),
     expiryDate: "2027-12-10",
   },
   {
@@ -381,8 +382,8 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "South Zone Depot",
     availableQty: 48,
     costPrice: 185,
-    mfgDate: "2025-01-15",
-    expiryDate: "2026-07-15",
+    mfgDate: demoDateAt(29),
+    expiryDate: demoDateAt(30),
   },
   {
     id: "sv-22",
@@ -396,7 +397,7 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "North Zone Hub",
     availableQty: 110,
     costPrice: 385,
-    mfgDate: "2025-08-25",
+    mfgDate: demoDateAt(31),
     expiryDate: "2027-08-25",
   },
   {
@@ -411,8 +412,8 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "East Zone Hub",
     availableQty: 180,
     costPrice: 88,
-    mfgDate: "2025-07-10",
-    expiryDate: "2026-09-20",
+    mfgDate: demoDateAt(32),
+    expiryDate: demoDateAt(33),
   },
   {
     id: "sv-24",
@@ -426,7 +427,7 @@ const SEED_STOCK_VALUATION: StockValuationSeedRecord[] = [
     warehouse: "West Zone Hub",
     availableQty: 90,
     costPrice: 215,
-    mfgDate: "2025-11-01",
+    mfgDate: demoDateAt(34),
     expiryDate: "2027-11-01",
   },
 ];

@@ -5,13 +5,6 @@ import Link from "next/link";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { Button } from "@/components/ui/button";
 import { FileText } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import {
   AccountsTable,
@@ -28,11 +21,20 @@ import {
   AccountsTablePagination,
   AccountsTableToolbar,
 } from "@/components/accounts/AccountsTableListing";
-import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
+import {
+  ReportDateRangeFilter,
+  useReportDateRange,
+} from "@/components/accounts/ReportFilters";
+import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { accountsDataService } from "@/lib/accounts/accounts-data-service";
 import { listPendingTaxInvoices } from "@/lib/accounts/sales-workflow-data";
-import { formatMoney } from "@/lib/accounts/money-format";
-import { NEAR_EXPIRY_SETTLEMENT_TOOLTIP } from "@/app/(app)/warehouse/dispatch/near-expiry-dispatch";
+import { InvoiceTypeBadge } from "@/components/accounts/InvoiceTypeBadge";
+import { INVOICE_TYPE_LABELS } from "@/lib/accounts/invoice-type";
+import {
+  formatInvoiceGstBreakup,
+  getPendingRowGstBreakup,
+} from "@/lib/accounts/invoice-gst-breakup";
 
 function buildGenerateInvoiceHref(row: ReturnType<typeof listPendingTaxInvoices>[number]) {
   const params = new URLSearchParams();
@@ -44,38 +46,41 @@ function buildGenerateInvoiceHref(row: ReturnType<typeof listPendingTaxInvoices>
 
 function exportPendingCsv(rows: ReturnType<typeof listPendingTaxInvoices>) {
   const headers = [
-    "Sales Order No",
+    "Type",
+    "Source No",
     "Dispatch No",
-    "Customer",
+    "Party",
     "Dispatch Date",
     "Taxable Value",
-    "GST Amount",
+    "CGST",
+    "SGST",
+    "IGST",
     "Invoice Value",
     "Status",
-    "Scheme",
-    "Settlement",
   ];
-  const lines = rows.map((r) =>
-    [
+  const lines = rows.map((r) => {
+    const formatted = formatInvoiceGstBreakup(getPendingRowGstBreakup(r));
+    return [
+      INVOICE_TYPE_LABELS[r.invoiceType],
       r.soNumber,
       r.dispatchNo,
       r.customerName,
       r.dispatchDate,
-      r.taxableValue,
-      r.gstAmount,
-      r.invoiceValue,
+      formatted.taxableValue,
+      formatted.cgst,
+      formatted.sgst,
+      formatted.igst,
+      formatted.invoiceTotal,
       r.status,
-      r.schemeLabel ?? "",
-      r.settlementLabel ?? "",
     ]
       .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-      .join(","),
-  );
+      .join(",");
+  });
   const blob = new Blob([[headers.join(","), ...lines].join("\n")], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "pending-tax-invoices.csv";
+  a.download = "pending-invoices.csv";
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -83,13 +88,12 @@ function exportPendingCsv(rows: ReturnType<typeof listPendingTaxInvoices>) {
 export default function PendingTaxInvoicesClient() {
   const mounted = useClientMounted();
   const [search, setSearch] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("last_month");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
   const allRows = useMemo(
-    () => (mounted ? listPendingTaxInvoices() : []),
+    () => (mounted ? accountsDataService.getPendingInvoices() : []),
     [mounted],
   );
 
@@ -102,7 +106,8 @@ export default function PendingTaxInvoicesClient() {
           r.soNumber.toLowerCase().includes(q) ||
           r.dispatchNo.toLowerCase().includes(q) ||
           r.customerName.toLowerCase().includes(q) ||
-          r.status.toLowerCase().includes(q),
+          r.status.toLowerCase().includes(q) ||
+          INVOICE_TYPE_LABELS[r.invoiceType].toLowerCase().includes(q),
       );
     }
     if (dateFrom) list = list.filter((r) => r.dispatchDate >= dateFrom);
@@ -119,36 +124,46 @@ export default function PendingTaxInvoicesClient() {
     return filtered.slice(start, start + pageSize);
   }, [filtered, page, pageSize]);
 
+  const clearFilters = () => {
+    setSearch("");
+    setPreset("last_month");
+    const { from, to } = resolveDateRangePreset("last_month");
+    setDateFrom(from);
+    setDateTo(to);
+  };
+
   return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Transactions", "Pending Invoices")}
       title="Pending Invoices"
       description="Dispatch-completed orders from Warehouse — generate tax invoice and post to ledger."
+      hideDescription
       layout="split"
       className="h-full min-h-0"
-      toolbar={
-        <AccountsTableToolbar
-          placement="page-header"
-          search={{
-            value: search,
-            onChange: setSearch,
-            placeholder: "Search SO, dispatch, customer…",
-          }}
-          filters={
-            <AccountsListingDateFilter
-              dateFrom={dateFrom}
-              dateTo={dateTo}
-              onDateFromChange={setDateFrom}
-              onDateToChange={setDateTo}
-            />
-          }
-          onExcel={() => exportPendingCsv(filtered)}
-          onPdf={() => exportPendingCsv(filtered)}
-          exportDisabled={filtered.length === 0}
-        />
-      }
     >
       <AccountsTableListing
+        toolbar={
+          <AccountsTableToolbar
+            search={{
+              value: search,
+              onChange: setSearch,
+              placeholder: "Search source, dispatch, party…",
+            }}
+            filters={
+              <ReportDateRangeFilter
+                preset={preset}
+                dateFrom={dateFrom}
+                dateTo={dateTo}
+                onPresetChange={setPreset}
+                onDateFromChange={setDateFrom}
+                onDateToChange={setDateTo}
+              />
+            }
+            onExcel={() => exportPendingCsv(filtered)}
+            onPdf={() => exportPendingCsv(filtered)}
+            exportDisabled={filtered.length === 0}
+          />
+        }
         footer={
           mounted && filtered.length > 0 ? (
             <AccountsTablePagination
@@ -162,97 +177,77 @@ export default function PendingTaxInvoicesClient() {
           ) : null
         }
       >
-        <AccountsTable minWidth={1060}>
+        <AccountsTable minWidth={1240}>
           <AccountsTableHead>
             <AccountsTableHeadRow>
-              <AccountsTableHeadCell uppercase>Sales Order No</AccountsTableHeadCell>
+              <AccountsTableHeadCell uppercase>Type</AccountsTableHeadCell>
+              <AccountsTableHeadCell uppercase>Source No</AccountsTableHeadCell>
               <AccountsTableHeadCell uppercase>Dispatch No</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase className="accounts-col-party">Customer</AccountsTableHeadCell>
+              <AccountsTableHeadCell uppercase className="accounts-col-party">Party</AccountsTableHeadCell>
               <AccountsTableHeadCell uppercase>Dispatch Date</AccountsTableHeadCell>
               <AccountsTableHeadCell align="right" uppercase>Taxable Value</AccountsTableHeadCell>
-              <AccountsTableHeadCell align="right" uppercase>GST Amount</AccountsTableHeadCell>
+              <AccountsTableHeadCell align="right" uppercase>CGST</AccountsTableHeadCell>
+              <AccountsTableHeadCell align="right" uppercase>SGST</AccountsTableHeadCell>
+              <AccountsTableHeadCell align="right" uppercase>IGST</AccountsTableHeadCell>
               <AccountsTableHeadCell align="right" uppercase>Invoice Value</AccountsTableHeadCell>
               <AccountsTableHeadCell uppercase className="accounts-col-status">Status</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase>Scheme</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase>Settlement</AccountsTableHeadCell>
               <AccountsTableHeadCell align="right" uppercase className="accounts-col-actions-wide" />
             </AccountsTableHeadRow>
           </AccountsTableHead>
           <AccountsTableBody>
             {!mounted ? (
-              <AccountsTableEmpty colSpan={11} message="Loading pending invoices…" />
+              <AccountsTableEmpty colSpan={12} message="Loading pending invoices…" />
             ) : filtered.length === 0 ? (
               <AccountsTableEmpty
-                colSpan={11}
+                colSpan={12}
                 message="No dispatch-ready orders pending invoice generation."
-                onClear={search || dateFrom || dateTo ? () => { setSearch(""); setDateFrom(""); setDateTo(""); } : undefined}
+                onClear={search || preset !== "last_month" ? clearFilters : undefined}
               />
             ) : (
-              <TooltipProvider>
-                {pagedRows.map((r) => (
-                  <AccountsTableRow key={r.dispatchId}>
-                    <AccountsTableCell mono className="font-semibold text-brand-700">
-                      {r.soNumber}
-                    </AccountsTableCell>
-                    <AccountsTableCell mono>{r.dispatchNo}</AccountsTableCell>
-                    <AccountsTableCell className="accounts-col-party">{r.customerName}</AccountsTableCell>
-                    <AccountsTableCell className="tabular-nums">{r.dispatchDate}</AccountsTableCell>
-                    <AccountsTableCell align="right" money>
-                      {formatMoney(r.taxableValue)}
-                    </AccountsTableCell>
-                    <AccountsTableCell align="right" money>
-                      {formatMoney(r.gstAmount)}
-                    </AccountsTableCell>
-                    <AccountsTableCell align="right" money className="font-semibold">
-                      {formatMoney(r.invoiceValue)}
-                    </AccountsTableCell>
-                    <AccountsTableCell>{r.status}</AccountsTableCell>
-                    <AccountsTableCell>
-                      {r.schemeLabel ? (
-                        <Badge
-                          variant="outline"
-                          className="h-5 px-1.5 text-[10px] font-semibold border-orange-200 bg-orange-50 text-orange-800 whitespace-nowrap"
-                        >
-                          {r.schemeLabel}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </AccountsTableCell>
-                    <AccountsTableCell>
-                      {r.settlementLabel ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Badge
-                              variant="outline"
-                              className="h-5 px-1.5 text-[10px] font-semibold border-amber-200 bg-amber-50 text-amber-800 whitespace-nowrap cursor-help"
-                            >
-                              {r.settlementLabel}
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-xs text-xs">
-                            {NEAR_EXPIRY_SETTLEMENT_TOOLTIP}
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </AccountsTableCell>
-                    <AccountsTableCell align="right">
-                      <Button
-                        asChild
-                        size="sm"
-                        className="h-7 text-[11px] bg-brand-600 hover:bg-brand-700 text-white gap-1"
-                      >
-                        <Link href={buildGenerateInvoiceHref(r)}>
-                          <FileText className="w-3 h-3" />
-                          Generate Invoice
-                        </Link>
-                      </Button>
-                    </AccountsTableCell>
-                  </AccountsTableRow>
-                ))}
-              </TooltipProvider>
+              pagedRows.map((r) => {
+                const formatted = formatInvoiceGstBreakup(getPendingRowGstBreakup(r));
+                return (
+                <AccountsTableRow key={r.dispatchId}>
+                  <AccountsTableCell>
+                    <InvoiceTypeBadge type={r.invoiceType} />
+                  </AccountsTableCell>
+                  <AccountsTableCell mono className="font-semibold text-brand-700">
+                    {r.soNumber}
+                  </AccountsTableCell>
+                  <AccountsTableCell mono>{r.dispatchNo}</AccountsTableCell>
+                  <AccountsTableCell className="accounts-col-party">{r.customerName}</AccountsTableCell>
+                  <AccountsTableCell className="tabular-nums">{r.dispatchDate}</AccountsTableCell>
+                  <AccountsTableCell align="right" money>
+                    {formatted.taxableValue}
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right" money>
+                    {formatted.cgst}
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right" money>
+                    {formatted.sgst}
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right" money>
+                    {formatted.igst}
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right" money className="font-semibold">
+                    {formatted.invoiceTotal}
+                  </AccountsTableCell>
+                  <AccountsTableCell>{r.status}</AccountsTableCell>
+                  <AccountsTableCell align="right">
+                    <Button
+                      asChild
+                      size="sm"
+                      className="h-7 text-[11px] bg-brand-600 hover:bg-brand-700 text-white gap-1"
+                    >
+                      <Link href={buildGenerateInvoiceHref(r)}>
+                        <FileText className="w-3 h-3" />
+                        Generate Invoice
+                      </Link>
+                    </Button>
+                  </AccountsTableCell>
+                </AccountsTableRow>
+                );
+              })
             )}
           </AccountsTableBody>
         </AccountsTable>

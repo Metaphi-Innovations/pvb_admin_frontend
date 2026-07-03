@@ -1,6 +1,10 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
+  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
+} from "@/components/accounts/ReportFilters";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Truck, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -18,13 +22,11 @@ import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
 import {
   ReportFilterRow,
-  ReportFinancialYearFilter,
-  ReportFromToDateFilter,
+  ReportDateRangeFilter,
+  useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import { formatBalanceAmount, formatMoney } from "@/lib/accounts/money-format";
-import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import {
@@ -38,21 +40,13 @@ import {
 } from "./supplier-ledger-export";
 import { SupplierLedgerTable } from "./SupplierLedgerTable";
 
-const filterLabelClass = "text-[10px] font-medium uppercase text-muted-foreground leading-none";
-const filterControlClass = "h-8 text-xs";
-const PLACEHOLDER_FROM = "2026-04-01";
-const PLACEHOLDER_TO = "2026-06-30";
-
 function SupplierLedgerPageContent() {
   const mounted = useClientMounted();
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const [supplierId, setSupplierId] = useState("");
-  const [financialYearId, setFinancialYearId] = useState("all");
-  const [dateFrom, setDateFrom] = useState(PLACEHOLDER_FROM);
-  const [dateTo, setDateTo] = useState(PLACEHOLDER_TO);
-  const [datesReady, setDatesReady] = useState(false);
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [voucherType, setVoucherType] = useState("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -62,36 +56,14 @@ function SupplierLedgerPageContent() {
   const suppliers = useMemo(() => getSupplierLedgerSuppliers(), []);
 
   useEffect(() => {
-    const activeFyId = getActiveFinancialYearId();
-    const years = loadFinancialYears();
-    const activeFy = years.find((fy) => fy.id === activeFyId) ?? years.find((fy) => fy.status === "active");
-
-    if (activeFy) {
-      setFinancialYearId(String(activeFy.id));
-      setDateFrom(activeFy.startDate);
-      setDateTo(activeFy.endDate > "2026-06-30" ? "2026-06-30" : activeFy.endDate);
-    } else {
-      setDateFrom(PLACEHOLDER_FROM);
-      setDateTo(PLACEHOLDER_TO);
-    }
-    setDatesReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (!datesReady) return;
+    if (!mounted) return;
     const urlSupplier = searchParams.get("supplier") ?? "";
     if (urlSupplier && suppliers.some((s) => s.id === urlSupplier)) {
       setSupplierId(urlSupplier);
     }
-  }, [searchParams, datesReady, suppliers]);
+  }, [searchParams, mounted, suppliers]);
 
-  useEffect(() => {
-    if (financialYearId === "all") return;
-    const fy = loadFinancialYears().find((y) => String(y.id) === financialYearId);
-    if (!fy) return;
-    setDateFrom(fy.startDate);
-    setDateTo(fy.endDate);
-  }, [financialYearId]);
+  
 
   const handleSupplierChange = useCallback(
     (value: string) => {
@@ -109,14 +81,14 @@ function SupplierLedgerPageContent() {
   );
 
   const statement = useMemo(() => {
-    if (!mounted || !supplierId || !datesReady) return null;
+    if (!mounted || !supplierId) return null;
     return buildSupplierLedgerStatement(supplierId, {
       dateFrom,
       dateTo,
       voucherType,
       search,
     });
-  }, [mounted, supplierId, dateFrom, dateTo, voucherType, search, datesReady]);
+  }, [mounted, supplierId, dateFrom, dateTo, voucherType, search]);
 
   const openingRow = statement?.displayRows[0] ?? null;
   const closingRow = statement ? statement.displayRows[statement.displayRows.length - 1] : null;
@@ -127,18 +99,12 @@ function SupplierLedgerPageContent() {
     return allTransactionRows.slice(start, start + pageSize);
   }, [allTransactionRows, page, pageSize]);
 
-  const financialYearLabel = useMemo(() => {
-    if (financialYearId === "all") return "All years";
-    return loadFinancialYears().find((fy) => String(fy.id) === financialYearId)?.name ?? "—";
-  }, [financialYearId]);
-
   const exportMeta = useMemo(
     () => ({
       dateFrom,
       dateTo,
-      financialYear: financialYearLabel,
     }),
-    [dateFrom, dateTo, financialYearLabel],
+    [dateFrom, dateTo],
   );
 
   const canExport = Boolean(statement && supplierId);
@@ -190,7 +156,9 @@ function SupplierLedgerPageContent() {
   const showNoTransactions =
     supplierId &&
     statement &&
-    !statement.hasPeriodTransactions &&
+    allTransactionRows.length === 0 &&
+    statement.summary.openingBalance === 0 &&
+    statement.summary.closingBalance === 0 &&
     !search.trim() &&
     voucherType === "all";
 
@@ -207,10 +175,11 @@ function SupplierLedgerPageContent() {
       description="Complete supplier-wise transaction history with running balance."
       filters={
         <ReportFilterRow className="items-end">
-          <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
-          <ReportFromToDateFilter
+          <ReportDateRangeFilter
+            preset={preset}
             dateFrom={dateFrom}
             dateTo={dateTo}
+            onPresetChange={setPreset}
             onDateFromChange={setDateFrom}
             onDateToChange={setDateTo}
           />
@@ -263,7 +232,7 @@ function SupplierLedgerPageContent() {
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   aria-label="Clear search"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>

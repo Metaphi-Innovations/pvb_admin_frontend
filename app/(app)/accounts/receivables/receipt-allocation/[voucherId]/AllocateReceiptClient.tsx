@@ -109,8 +109,8 @@ export default function AllocateReceiptClient() {
       description={`Allocate ${record.receiptNo} against open invoices for ${record.customerName}.`}
       actions={
         <Link href="/accounts/receivables/receipt-allocation">
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
-            <ArrowLeft className="w-3.5 h-3.5" /> Back
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1">
+            <ArrowLeft className="w-4 h-4" /> Back
           </Button>
         </Link>
       }
@@ -146,7 +146,7 @@ export default function AllocateReceiptClient() {
         {error && <p className="text-xs text-red-600">{error}</p>}
 
         <div className="rounded-lg border border-border/60 overflow-hidden">
-          <table className="accounts-table w-full text-table">
+          <table className="accounts-table w-full">
             <thead className="border-b">
               <tr>
                 {["Select", "Invoice No", "Invoice Date", "Due Date", "Invoice Amt", "Already Paid", "Outstanding", "Allocation"].map((h) => (
@@ -171,7 +171,7 @@ export default function AllocateReceiptClient() {
                   <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.outstanding)}</td>
                   <td className="px-3 py-2.5">
                     <AccountsMoneyInput
-                      className="h-8 text-xs w-28"
+                      className="h-9 text-[13px] font-medium w-28"
                       disabled={!selected[inv.invoiceId]}
                       value={amounts[inv.invoiceId] ?? ""}
                       onChange={(v) => setAmounts((a) => ({ ...a, [inv.invoiceId]: String(v) }))}

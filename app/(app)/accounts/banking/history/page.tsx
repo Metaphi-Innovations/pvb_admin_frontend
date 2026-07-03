@@ -6,10 +6,11 @@ export default function ReconciliationHistoryPage() {
   return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Banking", "Reconciliation History")}
-      title=""
-      description=""
-      layout="standard"
-      className="h-full"
+      title="Reconciliation History"
+      description="Audit trail of categorized and reconciled bank transactions"
+      hideDescription
+      layout="split"
+      className="h-full min-h-0"
     >
       <ReconciliationHistoryClient />
     </AccountsPageShell>

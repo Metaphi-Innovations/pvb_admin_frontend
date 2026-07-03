@@ -111,7 +111,7 @@ export default function ExpenseFormPageClient({
       code={expenseNumber}
       footer={
         <>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.push(EXPENSE_LIST_PATH)}>
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => router.push(EXPENSE_LIST_PATH)}>
             Cancel
           </Button>
         </>
@@ -122,7 +122,7 @@ export default function ExpenseFormPageClient({
       <div className="flex justify-end gap-2 mt-4 pb-6">
         <Button
           size="sm"
-          className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+          className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
           onClick={() => persist(false)}
         >
           {mode === "create" ? "Submit for Approval" : "Save & Submit"}

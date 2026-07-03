@@ -82,8 +82,8 @@ export default function PaymentViewPageClient({ paymentId }: { paymentId: number
       }
       headerActions={
         actions.includes("pay") ? (
-          <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1" onClick={() => setPayOpen(true)}>
-            <Banknote className="w-3.5 h-3.5" /> Record Payment
+          <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1" onClick={() => setPayOpen(true)}>
+            <Banknote className="w-4 h-4" /> Record Payment
           </Button>
         ) : undefined
       }
@@ -170,7 +170,7 @@ export default function PaymentViewPageClient({ paymentId }: { paymentId: number
           {record.installments.length === 0 ? (
             <p className="text-xs text-muted-foreground">No payments recorded yet. Balance {formatINR(balance)}.</p>
           ) : (
-            <table className="accounts-table w-full text-xs">
+            <table className="accounts-table w-full">
               <thead className="border-b">
                 <tr>
                   {["Date", "Amount", "Mode", "Reference", "Transaction", "Entered By"].map((h) => (

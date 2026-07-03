@@ -5,8 +5,6 @@ import { formatJournalRegisterDate } from "./journal-register-data";
 export interface JournalRegisterExportMeta {
   dateFrom: string;
   dateTo: string;
-  financialYear: string;
-  journalNo: string;
   ledger: string;
   search: string;
 }
@@ -35,9 +33,7 @@ export async function exportJournalRegisterToExcel(
   const summarySheet = XLSX.utils.aoa_to_sheet([
     ["Journal Register Report"],
     ["Period", `${meta.dateFrom} to ${meta.dateTo}`],
-    ["Financial Year", meta.financialYear],
-    ["Journal No.", meta.journalNo || "All"],
-    ["Ledger", meta.ledger],
+    ["Ledger Filter", meta.ledger || "All"],
     ["Search", meta.search || "—"],
     ["Total Entries", summary.count],
     ["Total Debit", summary.totalDebit],
@@ -99,9 +95,7 @@ export function exportJournalRegisterToPdf(
   <h1>Journal Register</h1>
   <div class="meta">
     <div>Period: ${meta.dateFrom} to ${meta.dateTo}</div>
-    <div>Financial Year: ${meta.financialYear}</div>
-    <div>Journal No.: ${meta.journalNo || "All"}</div>
-    <div>Ledger: ${meta.ledger}</div>
+    <div>Ledger Filter: ${meta.ledger || "All"}</div>
     <div>Search: ${meta.search || "—"}</div>
     <div>Entries: ${summary.count}</div>
   </div>

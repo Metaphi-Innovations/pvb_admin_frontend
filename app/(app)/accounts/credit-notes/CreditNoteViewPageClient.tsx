@@ -11,6 +11,7 @@ import { CreditNoteCancelDialog } from "./components/CreditNoteCancelDialog";
 import {
   canEditCreditNote,
   cancelCreditNote,
+  CREDIT_NOTE_SOURCE_LABELS,
   getCreditNoteById,
   type CreditNoteRecord,
 } from "./credit-notes-data";
@@ -118,16 +119,39 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
         />
 
         <div className="rounded-lg border border-brand-200/50 bg-brand-50/20 p-3 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+          <DetailRow label="Source" value={CREDIT_NOTE_SOURCE_LABELS[record.source]} />
+          <DetailRow
+            label="Reference Document"
+            value={
+              record.source === "sales_return"
+                ? record.sourceReturnNo
+                : record.source === "payment_discount_scheme"
+                  ? record.schemeName ?? record.schemeCode
+                  : record.reason
+            }
+          />
           <DetailRow label="Customer" value={record.customerName} />
-          <DetailRow label="Reference Invoice No." value={record.sourceInvoiceNo} />
-          <DetailRow label="Reference Sales Order No." value={record.sourceOrderNo} />
+          <DetailRow label="Invoice Reference" value={record.sourceInvoiceNo} />
+          {record.source === "payment_discount_scheme" && record.schemeName && (
+            <DetailRow label="Scheme Name" value={record.schemeName} />
+          )}
+          {record.source === "payment_discount_scheme" && record.discountPercent != null && (
+            <DetailRow label="Discount %" value={`${record.discountPercent}%`} />
+          )}
+          {record.source === "sales_return" && record.sourceReturnNo && (
+            <DetailRow label="Sales Return No." value={record.sourceReturnNo} />
+          )}
           <DetailRow label="Credit Note Date" value={record.creditNoteDate} />
-          <DetailRow label="Reason" value={record.reason} />
+          <DetailRow label="Taxable Value" value={formatINR(record.taxableValue)} />
+          <DetailRow label="CGST" value={formatINR(record.cgstAmount)} />
+          <DetailRow label="SGST" value={formatINR(record.sgstAmount)} />
+          <DetailRow label="IGST" value={formatINR(record.igstAmount)} />
+          <DetailRow label="Total" value={formatINR(record.currentCreditAmount)} />
         </div>
 
         <div className="bg-white rounded-lg border border-border/60 p-4 overflow-x-auto">
           <h2 className="text-sm font-semibold mb-3">Line Items</h2>
-          <table className="accounts-table w-full text-xs min-w-[640px]">
+          <table className="accounts-table w-full min-w-[640px]">
             <thead className="border-b">
               <tr>
                 {["Product", "Description", "Inv Qty", "Return Qty", "Credit Amount"].map((h) => (

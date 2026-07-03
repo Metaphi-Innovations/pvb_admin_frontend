@@ -25,6 +25,7 @@ import {
   getCreditNoteById,
   getCustomersForCreditNote,
   listInvoicesForReference,
+  MANUAL_CREDIT_REASONS,
   normalizeCreditLine,
   postCreditNote,
   previewToFormInput,
@@ -32,6 +33,7 @@ import {
   schemeDiscountPct,
   updateCreditNote,
   type CreditNoteLine,
+  type CreditNoteSource,
   type CreditReferencePreview,
   type NoteWorkflowStatus,
 } from "./credit-notes-data";
@@ -120,6 +122,7 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
   const [lines, setLines] = useState<CreditNoteLine[]>([createEmptyCreditLine()]);
   const [customerNotes, setCustomerNotes] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [manualReason, setManualReason] = useState("");
   const [status, setStatus] = useState<NoteWorkflowStatus>("draft");
   const [error, setError] = useState<string | null>(null);
   const [adjustment, setAdjustment] = useState(0);
@@ -327,6 +330,7 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
     }
     setCustomerNotes(rec.customerNotes ?? "");
     setRemarks(rec.remarks);
+    setManualReason(rec.source === "manual" ? rec.reason : "");
     setStatus(rec.status);
     const loadedLines = rec.lineItems.length
       ? rec.lineItems.map((l) => normalizeCreditLine(l))
@@ -378,7 +382,14 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
     return "";
   };
 
-  const buildInput = (nextStatus: NoteWorkflowStatus) => ({
+  const buildInput = (nextStatus: NoteWorkflowStatus) => {
+    const isManual = !schemeSettlementKey && !isInvoiceLinked;
+    const source: CreditNoteSource = schemeSettlementKey
+      ? "payment_discount_scheme"
+      : isManual
+        ? "manual"
+        : "sales_return";
+    return {
     creditNoteDate,
     customerId: customerId ? Number(customerId) : null,
     customerName: resolveCustomerName(),
@@ -393,19 +404,30 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
     originalAmount: original,
     alreadyAdjustedAmount: alreadyAdjustedNum,
     lineItems: lines.filter((l) => l.productName || l.creditAmount > 0),
-    reason: schemeSettlementKey ? "Near Expiry Scheme Settlement" : "Sales return",
+    reason: schemeSettlementKey
+      ? "Near Expiry Scheme Settlement"
+      : isManual
+        ? manualReason || "Manual Adjustment"
+        : "Sales return",
     remarks: remarks || customerNotes,
     status: nextStatus,
+    source,
+    schemeName: schemeSelection?.schemeName,
     schemeSettlementKey: schemeSettlementKey || undefined,
     schemeCode: schemeSelection?.schemeCode,
     schemeSettlementAmount: schemeSettlementKey ? grandTotal : undefined,
-  });
+    };
+  };
 
   const postNote = () => {
     setError(null);
     try {
       if (!resolveCustomerName().trim()) {
         setError("Select a customer before posting.");
+        return;
+      }
+      if (!schemeSettlementKey && !isInvoiceLinked && !manualReason.trim()) {
+        setError("Select a reason for manual credit note.");
         return;
       }
       if (schemeSettlementKey && schemeSelection) {
@@ -453,15 +475,15 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
       code={creditNoteNo || undefined}
       footer={
         readOnly ? (
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.push(CREDIT_NOTES_LIST_PATH)}>
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => router.push(CREDIT_NOTES_LIST_PATH)}>
             Back
           </Button>
         ) : (
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.push(CREDIT_NOTES_LIST_PATH)}>
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => router.push(CREDIT_NOTES_LIST_PATH)}>
               Cancel
             </Button>
-            <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={postNote}>
+            <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white" onClick={postNote}>
               Post Credit Note
             </Button>
           </div>
@@ -537,7 +559,7 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-7 text-xs gap-1 shrink-0"
+                  className="h-9 text-[13px] font-medium gap-1 shrink-0"
                   onClick={() => setLines([...lines, createEmptyCreditLine()])}
                 >
                   <Plus className="w-3 h-3" /> Add Row
@@ -655,7 +677,7 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
                       <td className={cn("px-3 py-2 align-middle", CREDIT_NOTE_COLUMNS[11].className)}>
                         {!readOnly && isManualEntry && lines.length > 1 && (
                           <button type="button" className="w-8 h-8 flex items-center justify-center rounded hover:bg-red-50 text-red-600" onClick={() => setLines(lines.filter((x) => x.id !== l.id))}>
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         )}
                       </td>
@@ -729,7 +751,22 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
           </div>
         )}
 
-        <div className="px-6 py-4 border-t border-border/60">
+        <div className="px-6 py-4 border-t border-border/60 space-y-3">
+          {!schemeSettlementKey && !isInvoiceLinked && (
+            <div className="space-y-1.5 max-w-xs">
+              <Label className="text-xs font-medium">
+                Reason <span className="text-red-500">*</span>
+              </Label>
+              <SearchableSelect
+                label="Reason"
+                value={manualReason}
+                onChange={setManualReason}
+                options={MANUAL_CREDIT_REASONS.map((r) => ({ value: r, label: r }))}
+                placeholder="Select reason…"
+                disabled={readOnly}
+              />
+            </div>
+          )}
           <div className="space-y-1 max-w-xl">
             <Label className="text-xs font-medium text-muted-foreground">Customer Notes</Label>
             <Textarea className="min-h-[72px] text-xs resize-none" value={customerNotes} onChange={(e) => setCustomerNotes(e.target.value)} placeholder="Notes visible to customer" disabled={readOnly} />

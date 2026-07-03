@@ -23,6 +23,7 @@ import {
   createDebitNote,
   createEmptyDebitLine,
   DEBIT_REASONS,
+  MANUAL_DEBIT_REASONS,
   getDebitNoteById,
   getVendorsForDebitNote,
   listCreditablePurchaseInvoices,
@@ -307,6 +308,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
     remarks,
     attachments,
     status,
+    source: "manual" as const,
   });
 
   const postNote = () => {
@@ -333,10 +335,10 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
       code={debitNoteNo || undefined}
       footer={
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.push(DEBIT_NOTES_LIST_PATH)}>
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => router.push(DEBIT_NOTES_LIST_PATH)}>
             Cancel
           </Button>
-          <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={postNote}>
+          <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white" onClick={postNote}>
             Post Debit Note
           </Button>
         </div>
@@ -348,11 +350,11 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Debit Note No.</Label>
-                <Input className="h-8 text-xs bg-muted/30" disabled value={isEdit ? debitNoteNo : "Auto-generated"} />
+                <Input className="h-9 text-[13px] font-medium bg-muted/30" disabled value={isEdit ? debitNoteNo : "Auto-generated"} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Debit Note Date *</Label>
-                <Input type="date" className="h-8 text-xs" value={debitNoteDate} onChange={(e) => setDebitNoteDate(e.target.value)} />
+                <Input type="date" className="h-9 text-[13px] font-medium" value={debitNoteDate} onChange={(e) => setDebitNoteDate(e.target.value)} />
               </div>
             </div>
             <VendorMasterPanel
@@ -381,7 +383,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
               <div className="space-y-1">
                 <Label className="text-xs">Reference Type</Label>
                 <Select value={referenceType} onValueChange={(v) => onReferenceTypeChange(v as DebitNoteAgainst)}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-[13px] font-medium"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="purchase_invoice" className="text-xs">Purchase Invoice</SelectItem>
                     <SelectItem value="purchase_order" className="text-xs">Purchase Order</SelectItem>
@@ -408,7 +410,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
                   <div className="space-y-1">
                     <Label className="text-xs">PO Source</Label>
                     <Select value={referenceMode} onValueChange={(v) => onReferenceModeChange(v as typeof referenceMode)}>
-                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-9 text-[13px] font-medium"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="purchase_order" className="text-xs">Purchase Order</SelectItem>
                         <SelectItem value="qc_rejected" className="text-xs">QC Rejected Quantity</SelectItem>
@@ -455,7 +457,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div className="space-y-1">
                   <Label className="text-xs">Debit Amount *</Label>
-                  <AccountsMoneyInput className="h-8 text-xs" value={standaloneAmount} onChange={(v) => setStandaloneAmount(String(v))} />
+                  <AccountsMoneyInput className="h-9 text-[13px] font-medium" value={standaloneAmount} onChange={(v) => setStandaloneAmount(String(v))} />
                 </div>
               </div>
             )}
@@ -466,9 +468,9 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
               <div className="space-y-1">
                 <Label className="text-xs">Reason *</Label>
                 <Select value={reason} onValueChange={setReason}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select reason" /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-[13px] font-medium"><SelectValue placeholder="Select reason" /></SelectTrigger>
                   <SelectContent>
-                    {DEBIT_REASONS.map((r) => (
+                    {MANUAL_DEBIT_REASONS.map((r) => (
                       <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>
                     ))}
                   </SelectContent>
@@ -494,17 +496,17 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
                   <tbody>
                     {lines.map((l) => (
                       <tr key={l.id} className="border-b border-border/40">
-                        <td className="p-1.5"><Input className="h-7 text-xs min-w-[100px] bg-muted/10" readOnly value={l.productName} /></td>
+                        <td className="p-1.5"><Input className="h-9 text-[13px] font-medium min-w-[100px] bg-muted/10" readOnly value={l.productName} /></td>
                         <td className="p-1.5"><Input className="h-7 w-14 text-xs bg-muted/10" readOnly value={l.invoiceQty || ""} /></td>
                         <td className="p-1.5"><Input type="number" className="h-7 w-16 text-xs" value={l.returnQty || ""} onChange={(e) => updateLine(l.id, { returnQty: parseFloat(e.target.value) || 0 })} /></td>
                         <td className="p-1.5"><Input className="h-7 w-12 text-xs bg-muted/10" readOnly value={l.uom} /></td>
                         <td className="p-1.5"><AccountsMoneyInput className="h-7 w-16 text-xs" value={l.unitPrice || ""} onChange={(v) => updateLine(l.id, { unitPrice: v })} /></td>
                         <td className="p-1.5"><Input type="number" className="h-7 w-12 text-xs" value={l.taxPct || ""} onChange={(e) => updateLine(l.id, { taxPct: parseFloat(e.target.value) || 0 })} /></td>
                         <td className="p-1.5"><Input type="number" className="h-7 w-20 text-xs bg-muted/10" readOnly value={l.debitAmount > 0 ? l.debitAmount : ""} /></td>
-                        <td className="p-1.5"><Input className="h-7 text-xs min-w-[80px]" value={l.lineRemarks} onChange={(e) => updateLine(l.id, { lineRemarks: e.target.value })} /></td>
+                        <td className="p-1.5"><Input className="h-9 text-[13px] font-medium min-w-[80px]" value={l.lineRemarks} onChange={(e) => updateLine(l.id, { lineRemarks: e.target.value })} /></td>
                         <td className="p-1.5">
                           <button type="button" className="w-7 h-7 flex items-center justify-center rounded hover:bg-red-50 text-red-600" onClick={() => lines.length > 1 && setLines(lines.filter((x) => x.id !== l.id))}>
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </td>
                       </tr>
@@ -512,7 +514,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
                   </tbody>
                 </table>
               </div>
-              <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setLines([...lines, createEmptyDebitLine()])}>
+              <Button type="button" variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1" onClick={() => setLines([...lines, createEmptyDebitLine()])}>
                 <Plus className="w-3 h-3" /> Add Row
               </Button>
             </Section>
@@ -522,10 +524,10 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
             <div className="flex flex-wrap gap-2 items-end">
               <div className="space-y-1 flex-1 min-w-[140px]">
                 <Label className="text-xs">Document Name</Label>
-                <Input id="dn-doc-name" className="h-8 text-xs" placeholder="e.g. Return proof" />
+                <Input id="dn-doc-name" className="h-9 text-[13px] font-medium" placeholder="e.g. Return proof" />
               </div>
               <label className="inline-flex items-center gap-1.5 h-8 px-3 text-xs border rounded-lg cursor-pointer hover:bg-muted/40">
-                <Upload className="w-3.5 h-3.5" /> Upload
+                <Upload className="w-4 h-4" /> Upload
                 <input
                   type="file"
                   className="hidden"
@@ -547,11 +549,11 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
                     <span className="text-muted-foreground truncate flex-1">{att.fileName}</span>
                     {att.dataUrl && (
                       <>
-                        <button type="button" className="p-1 hover:bg-muted rounded" onClick={() => window.open(att.dataUrl, "_blank")}><Eye className="w-3.5 h-3.5" /></button>
-                        <a href={att.dataUrl} download={att.fileName} className="p-1 hover:bg-muted rounded"><Download className="w-3.5 h-3.5" /></a>
+                        <button type="button" className="p-1 hover:bg-muted rounded" onClick={() => window.open(att.dataUrl, "_blank")}><Eye className="w-4 h-4" /></button>
+                        <a href={att.dataUrl} download={att.fileName} className="p-1 hover:bg-muted rounded"><Download className="w-4 h-4" /></a>
                       </>
                     )}
-                    <button type="button" className="p-1 hover:bg-red-50 text-red-600 rounded" onClick={() => setAttachments((p) => p.filter((a) => a.id !== att.id))}><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button type="button" className="p-1 hover:bg-red-50 text-red-600 rounded" onClick={() => setAttachments((p) => p.filter((a) => a.id !== att.id))}><Trash2 className="w-4 h-4" /></button>
                   </div>
                 ))}
               </div>

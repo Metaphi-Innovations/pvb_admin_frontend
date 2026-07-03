@@ -36,25 +36,25 @@ export function CoaMasterLinkActions({
       <Button
         variant="outline"
         size="sm"
-        className="h-8 text-xs gap-1"
+        className="h-9 text-[13px] font-medium gap-1"
         onClick={() => router.push(ledgerDetailHref(ledgerId))}
       >
-        <BookOpen className="w-3.5 h-3.5" /> View Ledger
+        <BookOpen className="w-4 h-4" /> View Ledger
       </Button>
       <Button
         variant="outline"
         size="sm"
-        className="h-8 text-xs gap-1"
+        className="h-9 text-[13px] font-medium gap-1"
         onClick={() => (onViewTransactions ? onViewTransactions() : router.push(`${coaHrefForLedger(ledgerId)}`))}
       >
-        <ListOrdered className="w-3.5 h-3.5" /> View Transactions
+        <ListOrdered className="w-4 h-4" /> View Transactions
       </Button>
       <Button
         size="sm"
-        className="h-8 text-xs gap-1 bg-brand-600 hover:bg-brand-700 text-white"
+        className="h-9 text-[13px] font-medium gap-1 bg-brand-600 hover:bg-brand-700 text-white"
         onClick={() => router.push(link.masterHref)}
       >
-        <ExternalLink className="w-3.5 h-3.5" /> Open Source Master
+        <ExternalLink className="w-4 h-4" /> Open Source Master
       </Button>
     </div>
   );

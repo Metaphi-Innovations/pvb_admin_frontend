@@ -114,7 +114,7 @@ export function ExpenseApprovalModal({
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Approved Amount (editable)</Label>
             <AccountsMoneyInput
-              className="h-8 text-xs font-semibold"
+              className="h-9 text-[13px] font-medium font-semibold"
               value={approvedInput}
               onChange={(v) => {
                 setApprovedInput(String(v));
@@ -149,7 +149,7 @@ export function ExpenseApprovalModal({
           <div className="flex flex-wrap gap-2 w-full">
             <Button
               size="sm"
-              className="h-8 text-xs flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="h-9 text-[13px] font-medium flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
               onClick={handleFull}
             >
               Approve Full Amount
@@ -157,7 +157,7 @@ export function ExpenseApprovalModal({
             <Button
               size="sm"
               variant="outline"
-              className="h-8 text-xs flex-1 border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+              className="h-9 text-[13px] font-medium flex-1 border-emerald-300 text-emerald-800 hover:bg-emerald-50"
               onClick={handlePartial}
               disabled={parsedApproved <= 0 || parsedApproved > claimed}
             >
@@ -168,12 +168,12 @@ export function ExpenseApprovalModal({
             <Button
               size="sm"
               variant="outline"
-              className="h-8 text-xs flex-1 text-red-600 border-red-200 hover:bg-red-50"
+              className="h-9 text-[13px] font-medium flex-1 text-red-600 border-red-200 hover:bg-red-50"
               onClick={handleReject}
             >
               Reject
             </Button>
-            <Button variant="outline" size="sm" className="h-8 text-xs flex-1" onClick={onClose}>
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium flex-1" onClick={onClose}>
               Cancel
             </Button>
           </div>

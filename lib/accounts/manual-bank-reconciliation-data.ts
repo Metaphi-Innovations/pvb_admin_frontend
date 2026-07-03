@@ -8,7 +8,7 @@ import {
   type BankStatementEntry,
 } from "@/app/(app)/accounts/bank-reconciliation/bank-reconciliation-data";
 
-export type BookReconStatus = "pending" | "reconciled";
+export type BookReconStatus = "pending" | "reconciled" | "unmatched" | "difference";
 
 export type ManualReconVoucherType =
   | "Payment"
@@ -16,6 +16,31 @@ export type ManualReconVoucherType =
   | "Contra"
   | "Journal"
   | "Fund Transfer";
+
+export type DifferenceReason =
+  | ""
+  | "date_difference"
+  | "bank_charges"
+  | "tds_difference"
+  | "gst_difference"
+  | "amount_difference"
+  | "direct_bank_entry"
+  | "other";
+
+export const DIFFERENCE_REASON_OPTIONS: { value: DifferenceReason; label: string }[] = [
+  { value: "", label: "Select reason" },
+  { value: "date_difference", label: "Date Difference" },
+  { value: "bank_charges", label: "Bank Charges" },
+  { value: "tds_difference", label: "TDS Difference" },
+  { value: "gst_difference", label: "GST Difference" },
+  { value: "amount_difference", label: "Amount Difference" },
+  { value: "direct_bank_entry", label: "Direct Bank Entry" },
+  { value: "other", label: "Other" },
+];
+
+export function differenceReasonLabel(reason: DifferenceReason): string {
+  return DIFFERENCE_REASON_OPTIONS.find((o) => o.value === reason)?.label ?? "";
+}
 
 export interface BookReconRecord {
   rowKey: string;
@@ -34,9 +59,28 @@ export interface BookReconRecord {
   reconciledBy: string;
   reconciledOn: string;
   remarks: string;
+  differenceReason: DifferenceReason;
+  matchedStatementEntryId: number | null;
+  matchedStatementRef: string;
+  differenceAmount: number;
+  bankName: string;
 }
 
-export interface ManualReconGridRow extends BookReconRecord {}
+export interface ManualReconGridRow extends BookReconRecord {
+  suggestedStatementMatch: SuggestedMatch | null;
+  /** Book voucher row vs unmatched bank-statement line shown in the same grid */
+  rowSource?: "book" | "statement";
+}
+
+export interface SuggestedMatch {
+  statementEntryId: number;
+  statementDate: string;
+  statementRef: string;
+  statementNarration: string;
+  statementAmount: number;
+  matchScore: number;
+  matchType: "exact" | "amount" | "reference" | "date_near";
+}
 
 export interface ManualReconSummary {
   balanceAsPerBooks: number;
@@ -44,6 +88,9 @@ export interface ManualReconSummary {
   difference: number;
   pendingCount: number;
   reconciledCount: number;
+  unmatchedCount: number;
+  differenceCount: number;
+  totalCount: number;
 }
 
 export interface ManualReconFilters {
@@ -58,6 +105,7 @@ export interface StatementPreviewRow {
   id: number;
   statementDate: string;
   description: string;
+  referenceNo: string;
   debitAmount: number;
   creditAmount: number;
   balance: number;
@@ -123,8 +171,17 @@ export function isoFromInputDate(value: string): string {
   return value;
 }
 
-export function deriveReconStatus(bankProcessingDate: string): BookReconStatus {
-  return bankProcessingDate?.trim() ? "reconciled" : "pending";
+export function deriveReconStatus(
+  bankProcessingDate: string,
+  differenceAmount?: number,
+  matchedStatementEntryId?: number | null,
+): BookReconStatus {
+  if (bankProcessingDate?.trim()) {
+    if (differenceAmount && Math.abs(differenceAmount) > 0.01) return "difference";
+    return "reconciled";
+  }
+  if (matchedStatementEntryId) return "pending";
+  return "unmatched";
 }
 
 export function loadBookReconRecords(): BookReconRecord[] {
@@ -192,6 +249,7 @@ export function buildStatementPreviewRows(bankMasterId: number): StatementPrevie
     id: entry.id,
     statementDate: entry.transactionDate,
     description: entry.narration,
+    referenceNo: entry.referenceNo,
     debitAmount: entry.debit,
     creditAmount: entry.credit,
     balance: entry.balance,
@@ -227,15 +285,134 @@ export function saveBankStatementBalance(bankMasterId: number, balance: number):
   saveList(BANK_BALANCE_KEY, list);
 }
 
+function dateDiffDays(a: string, b: string): number {
+  const da = new Date(`${a}T12:00:00`);
+  const db = new Date(`${b}T12:00:00`);
+  return Math.abs(Math.round((da.getTime() - db.getTime()) / 86400000));
+}
+
+function normalizeRef(ref: string): string {
+  return ref.replace(/[^a-z0-9]/gi, "").toLowerCase();
+}
+
+export function findSuggestedMatch(
+  bookRow: { entryDate: string; debitAmount: number; creditAmount: number; voucherNo: string; partyName: string },
+  statementEntries: BankStatementEntry[],
+  alreadyMatchedIds: Set<number>,
+): SuggestedMatch | null {
+  const bookAmount = bookRow.debitAmount || bookRow.creditAmount;
+  if (!bookAmount) return null;
+  const bookIsDebit = bookRow.debitAmount > 0;
+  const bookRef = normalizeRef(bookRow.voucherNo);
+  const bookParty = bookRow.partyName.toLowerCase();
+
+  let bestMatch: SuggestedMatch | null = null;
+  let bestScore = 0;
+
+  for (const entry of statementEntries) {
+    if (alreadyMatchedIds.has(entry.id)) continue;
+    const stmtAmount = bookIsDebit ? entry.credit : entry.debit;
+    if (!stmtAmount) continue;
+
+    let score = 0;
+    let matchType: SuggestedMatch["matchType"] = "date_near";
+
+    if (Math.abs(stmtAmount - bookAmount) < 0.01) {
+      score += 50;
+      matchType = "amount";
+    } else {
+      continue;
+    }
+
+    const stmtRef = normalizeRef(entry.referenceNo);
+    if (bookRef && stmtRef && (stmtRef.includes(bookRef) || bookRef.includes(stmtRef))) {
+      score += 30;
+      matchType = "reference";
+    }
+
+    const stmtNarration = entry.narration.toLowerCase();
+    if (bookParty && stmtNarration.includes(bookParty.split(" ")[0])) {
+      score += 10;
+    }
+
+    const daysDiff = dateDiffDays(bookRow.entryDate, entry.transactionDate);
+    if (daysDiff <= 7) {
+      score += Math.max(0, 20 - daysDiff * 2);
+      if (daysDiff === 0 && score >= 50) matchType = "exact";
+    } else {
+      score -= 10;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = {
+        statementEntryId: entry.id,
+        statementDate: entry.transactionDate,
+        statementRef: entry.referenceNo,
+        statementNarration: entry.narration,
+        statementAmount: stmtAmount,
+        matchScore: score,
+        matchType: score >= 80 ? "exact" : matchType,
+      };
+    }
+  }
+
+  return bestScore >= 40 ? bestMatch : null;
+}
+
+function buildRecordFromStatementEntry(
+  entry: BankStatementEntry,
+  bankMasterId: number,
+  coaLedgerId: number,
+  bankName: string,
+  existing: BookReconRecord | undefined,
+): BookReconRecord {
+  const debitAmount = entry.debit || 0;
+  const creditAmount = entry.credit || 0;
+  const bankProcessingDate = existing?.bankProcessingDate ?? "";
+  const differenceAmount = existing?.differenceAmount ?? 0;
+  const matchedStatementEntryId = entry.id;
+  const status =
+    existing?.status ??
+    deriveReconStatus(bankProcessingDate, differenceAmount, matchedStatementEntryId);
+
+  return {
+    rowKey: `stmt-${entry.id}`,
+    ledgerId: coaLedgerId,
+    bankMasterId,
+    voucherId: 0,
+    voucherNo: entry.referenceNo || `STMT-${entry.id}`,
+    entryDate: entry.transactionDate,
+    partyName: entry.narration.slice(0, 80),
+    voucherTypeLabel: creditAmount > 0 ? "Receipt" : "Payment",
+    debitAmount,
+    creditAmount,
+    narration: entry.narration,
+    bankProcessingDate,
+    status,
+    reconciledBy: existing?.reconciledBy ?? "",
+    reconciledOn: existing?.reconciledOn ?? "",
+    remarks: existing?.remarks ?? "",
+    differenceReason: existing?.differenceReason ?? "",
+    matchedStatementEntryId,
+    matchedStatementRef: entry.referenceNo,
+    differenceAmount,
+    bankName,
+  };
+}
+
 function buildRecordFromBookEntry(
   entry: BookEntryRow,
   bankMasterId: number,
+  bankName: string,
   existing: BookReconRecord | undefined,
 ): BookReconRecord {
   const debitAmount = entry.receipt;
   const creditAmount = entry.payment;
   const bankProcessingDate = existing?.bankProcessingDate ?? "";
-  const status = existing?.status ?? deriveReconStatus(bankProcessingDate);
+  const differenceAmount = existing?.differenceAmount ?? 0;
+  const matchedStatementEntryId = existing?.matchedStatementEntryId ?? null;
+  const status = existing?.status ?? deriveReconStatus(bankProcessingDate, differenceAmount, matchedStatementEntryId);
 
   return {
     rowKey: entry.rowKey,
@@ -254,6 +431,11 @@ function buildRecordFromBookEntry(
     reconciledBy: existing?.reconciledBy ?? "",
     reconciledOn: existing?.reconciledOn ?? "",
     remarks: existing?.remarks ?? "",
+    differenceReason: existing?.differenceReason ?? "",
+    matchedStatementEntryId,
+    matchedStatementRef: existing?.matchedStatementRef ?? "",
+    differenceAmount,
+    bankName,
   };
 }
 
@@ -261,17 +443,25 @@ export function buildManualReconGrid(
   bookEntries: BookEntryRow[],
   coaLedgerId: number,
   closingBookBalance: number,
+  bankMasterIdInput: number | null,
+  bankName: string,
 ): { rows: ManualReconGridRow[]; summary: ManualReconSummary } {
-  const bankMasterId = resolveBankMasterId(coaLedgerId);
+  const bankMasterId = bankMasterIdInput ?? resolveBankMasterId(coaLedgerId);
   const records = loadBookReconRecords();
+  const statementEntries = bankMasterId ? getStatementEntriesForBank(bankMasterId) : [];
 
   const scopedRecords = records.filter((r) => r.ledgerId === coaLedgerId);
   const recordMap = new Map(scopedRecords.map((r) => [r.rowKey, r]));
 
+  const alreadyMatchedIds = new Set<number>();
+  for (const rec of scopedRecords) {
+    if (rec.matchedStatementEntryId) alreadyMatchedIds.add(rec.matchedStatementEntryId);
+  }
+
   const syncedRecords = [...records.filter((r) => r.ledgerId !== coaLedgerId)];
   const rows: ManualReconGridRow[] = bookEntries.map((entry) => {
     const existing = recordMap.get(entry.rowKey);
-    const record = buildRecordFromBookEntry(entry, bankMasterId ?? 0, existing);
+    const record = buildRecordFromBookEntry(entry, bankMasterId ?? 0, bankName, existing);
     const amountError = validateBookAmounts(record.debitAmount, record.creditAmount);
     if (amountError) {
       record.remarks = amountError;
@@ -279,22 +469,63 @@ export function buildManualReconGrid(
     const existingIdx = syncedRecords.findIndex((r) => r.rowKey === record.rowKey);
     if (existingIdx >= 0) syncedRecords[existingIdx] = record;
     else syncedRecords.push(record);
-    return record;
+
+    const suggestedStatementMatch =
+      record.status === "unmatched" && statementEntries.length > 0
+        ? findSuggestedMatch(record, statementEntries, alreadyMatchedIds)
+        : null;
+
+    if (suggestedStatementMatch) {
+      alreadyMatchedIds.add(suggestedStatementMatch.statementEntryId);
+    }
+
+    return { ...record, suggestedStatementMatch, rowSource: "book" as const };
   });
+
+  const bookMatchedStmtIds = new Set<number>();
+  for (const row of rows) {
+    if (row.matchedStatementEntryId) bookMatchedStmtIds.add(row.matchedStatementEntryId);
+  }
+  for (const rec of scopedRecords) {
+    if (rec.matchedStatementEntryId && !rec.rowKey.startsWith("stmt-")) {
+      bookMatchedStmtIds.add(rec.matchedStatementEntryId);
+    }
+  }
+
+  const statementRows: ManualReconGridRow[] = [];
+  for (const entry of statementEntries) {
+    if (bookMatchedStmtIds.has(entry.id)) continue;
+    const rowKey = `stmt-${entry.id}`;
+    const existing = recordMap.get(rowKey) ?? records.find((r) => r.rowKey === rowKey);
+    const record = buildRecordFromStatementEntry(entry, bankMasterId ?? 0, coaLedgerId, bankName, existing);
+    const existingIdx = syncedRecords.findIndex((r) => r.rowKey === record.rowKey);
+    if (existingIdx >= 0) syncedRecords[existingIdx] = record;
+    else syncedRecords.push(record);
+    statementRows.push({ ...record, suggestedStatementMatch: null, rowSource: "statement" });
+  }
   saveList(RECORDS_KEY, syncedRecords);
 
-  const pendingCount = rows.filter((r) => r.status === "pending").length;
-  const reconciledCount = rows.filter((r) => r.status === "reconciled").length;
+  const allRows = [...rows, ...statementRows].sort((a, b) =>
+    a.entryDate.localeCompare(b.entryDate) || a.rowKey.localeCompare(b.rowKey),
+  );
+
+  const pendingCount = allRows.filter((r) => r.status === "pending").length;
+  const reconciledCount = allRows.filter((r) => r.status === "reconciled").length;
+  const unmatchedCount = allRows.filter((r) => r.status === "unmatched").length;
+  const differenceCount = allRows.filter((r) => r.status === "difference").length;
   const balanceAsPerBank = bankMasterId ? getBankStatementBalance(bankMasterId) : 0;
 
   return {
-    rows,
+    rows: allRows,
     summary: {
       balanceAsPerBooks: closingBookBalance,
       balanceAsPerBank,
       difference: closingBookBalance - balanceAsPerBank,
       pendingCount,
       reconciledCount,
+      unmatchedCount,
+      differenceCount,
+      totalCount: allRows.length,
     },
   };
 }
@@ -309,7 +540,8 @@ export function filterManualReconRows(
     if (filters.status && filters.status !== "all" && row.status !== filters.status) return false;
     if (filters.search?.trim()) {
       const q = filters.search.trim().toLowerCase();
-      const hay = `${row.partyName} ${row.voucherNo} ${row.voucherTypeLabel} ${row.narration}`.toLowerCase();
+      const amountStr = `${row.debitAmount} ${row.creditAmount}`;
+      const hay = `${row.partyName} ${row.voucherNo} ${row.voucherTypeLabel} ${row.narration} ${row.matchedStatementRef} ${amountStr}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -330,7 +562,15 @@ function appendAudit(entry: Omit<BookReconAuditEntry, "id" | "reconciledBy" | "r
 export function saveManualReconciliation(input: {
   coaLedgerId: number;
   closingBookBalance: number;
-  rowDates: { rowKey: string; bankProcessingDate: string }[];
+  rowUpdates: {
+    rowKey: string;
+    bankProcessingDate: string;
+    matchedStatementEntryId?: number | null;
+    matchedStatementRef?: string;
+    differenceReason?: DifferenceReason;
+    differenceAmount?: number;
+    remarks?: string;
+  }[];
   bankStatementBalance?: number;
 }): { ok: true; summary: ManualReconSummary } | { ok: false; error: string } {
   const records = loadBookReconRecords();
@@ -339,24 +579,27 @@ export function saveManualReconciliation(input: {
     return { ok: false, error: "Bank account is required." };
   }
 
-  const dateMap = new Map(input.rowDates.map((r) => [r.rowKey, r.bankProcessingDate.trim()]));
+  const updateMap = new Map(input.rowUpdates.map((r) => [r.rowKey, r]));
 
-  for (const { rowKey, bankProcessingDate } of input.rowDates) {
-    const record = records.find((r) => r.rowKey === rowKey);
+  for (const upd of input.rowUpdates) {
+    const record = records.find((r) => r.rowKey === upd.rowKey);
     if (!record) continue;
-    const error = validateBankProcessingDate(record.entryDate, bankProcessingDate);
-    if (error) return { ok: false, error: `${record.voucherNo}: ${error}` };
-    const amountError = validateBookAmounts(record.debitAmount, record.creditAmount);
-    if (amountError) return { ok: false, error: `${record.voucherNo}: ${amountError}` };
+    if (upd.bankProcessingDate) {
+      const error = validateBankProcessingDate(record.entryDate, upd.bankProcessingDate);
+      if (error) return { ok: false, error: `${record.voucherNo}: ${error}` };
+    }
   }
 
   const now = new Date().toISOString();
   const updated = records.map((record) => {
     if (record.ledgerId !== input.coaLedgerId) return record;
-    if (!dateMap.has(record.rowKey)) return record;
+    const upd = updateMap.get(record.rowKey);
+    if (!upd) return record;
 
-    const bankProcessingDate = dateMap.get(record.rowKey) ?? "";
-    const status = deriveReconStatus(bankProcessingDate);
+    const bankProcessingDate = upd.bankProcessingDate ?? record.bankProcessingDate;
+    const differenceAmount = upd.differenceAmount ?? record.differenceAmount ?? 0;
+    const matchedStatementEntryId = upd.matchedStatementEntryId ?? record.matchedStatementEntryId;
+    const status = deriveReconStatus(bankProcessingDate, differenceAmount, matchedStatementEntryId);
     const wasReconciled = record.status === "reconciled";
     const isReconciled = status === "reconciled";
 
@@ -367,7 +610,7 @@ export function saveManualReconciliation(input: {
         action: isReconciled ? "reconciled" : "pending",
         entryDate: record.entryDate,
         bankProcessingDate,
-        remarks: record.remarks,
+        remarks: upd.remarks ?? record.remarks,
       });
     } else if (!wasReconciled && isReconciled) {
       appendAudit({
@@ -376,7 +619,7 @@ export function saveManualReconciliation(input: {
         action: "reconciled",
         entryDate: record.entryDate,
         bankProcessingDate,
-        remarks: record.remarks,
+        remarks: upd.remarks ?? record.remarks,
       });
     }
 
@@ -386,6 +629,11 @@ export function saveManualReconciliation(input: {
       status,
       reconciledBy: isReconciled ? ACCOUNTS_CURRENT_USER : "",
       reconciledOn: isReconciled ? now : "",
+      matchedStatementEntryId: upd.matchedStatementEntryId ?? record.matchedStatementEntryId,
+      matchedStatementRef: upd.matchedStatementRef ?? record.matchedStatementRef,
+      differenceReason: upd.differenceReason ?? record.differenceReason,
+      differenceAmount,
+      remarks: upd.remarks ?? record.remarks,
     };
   });
 
@@ -406,6 +654,9 @@ export function saveManualReconciliation(input: {
       difference: input.closingBookBalance - balanceAsPerBank,
       pendingCount: scoped.filter((r) => r.status === "pending").length,
       reconciledCount: scoped.filter((r) => r.status === "reconciled").length,
+      unmatchedCount: scoped.filter((r) => r.status === "unmatched").length,
+      differenceCount: scoped.filter((r) => r.status === "difference").length,
+      totalCount: scoped.length,
     },
   };
 }
@@ -414,32 +665,58 @@ export function getAuditForRow(rowKey: string): BookReconAuditEntry[] {
   return loadBookReconAudit().filter((a) => a.rowKey === rowKey);
 }
 
-/** Single-row reconcile helper (legacy sheet support). */
-export function markBookEntryReconciled(input: {
+export function reconcileSingleRow(input: {
   rowKey: string;
   bankProcessingDate: string;
+  matchedStatementEntryId?: number | null;
+  matchedStatementRef?: string;
+  differenceReason?: DifferenceReason;
+  differenceAmount?: number;
   remarks?: string;
 }): { ok: true; record: BookReconRecord } | { ok: false; error: string } {
   const records = loadBookReconRecords();
   const record = records.find((r) => r.rowKey === input.rowKey);
   if (!record) return { ok: false, error: "Record not found." };
 
-  const result = saveManualReconciliation({
-    coaLedgerId: record.ledgerId,
-    closingBookBalance: 0,
-    rowDates: [{ rowKey: input.rowKey, bankProcessingDate: input.bankProcessingDate }],
-  });
-  if (!result.ok) return result;
+  const error = validateBankProcessingDate(record.entryDate, input.bankProcessingDate);
+  if (error) return { ok: false, error };
 
-  const updated = loadBookReconRecords().find((r) => r.rowKey === input.rowKey);
-  if (!updated) return { ok: false, error: "Record not found." };
-  if (input.remarks?.trim()) {
-    const all = loadBookReconRecords();
-    const idx = all.findIndex((r) => r.rowKey === input.rowKey);
-    if (idx >= 0) {
-      all[idx] = { ...all[idx], remarks: input.remarks.trim() };
-      saveList(RECORDS_KEY, all);
-    }
-  }
-  return { ok: true, record: updated };
+  const differenceAmount = input.differenceAmount ?? 0;
+  const status = deriveReconStatus(input.bankProcessingDate, differenceAmount, input.matchedStatementEntryId);
+  const now = new Date().toISOString();
+
+  appendAudit({
+    rowKey: record.rowKey,
+    voucherNo: record.voucherNo,
+    action: status === "reconciled" ? "reconciled" : "bank_date_updated",
+    entryDate: record.entryDate,
+    bankProcessingDate: input.bankProcessingDate,
+    remarks: input.remarks ?? "",
+  });
+
+  const idx = records.findIndex((r) => r.rowKey === input.rowKey);
+  records[idx] = {
+    ...record,
+    bankProcessingDate: input.bankProcessingDate,
+    status,
+    reconciledBy: status === "reconciled" ? ACCOUNTS_CURRENT_USER : "",
+    reconciledOn: status === "reconciled" ? now : "",
+    matchedStatementEntryId: input.matchedStatementEntryId ?? record.matchedStatementEntryId,
+    matchedStatementRef: input.matchedStatementRef ?? record.matchedStatementRef,
+    differenceReason: input.differenceReason ?? record.differenceReason,
+    differenceAmount,
+    remarks: input.remarks ?? record.remarks,
+  };
+
+  saveList(RECORDS_KEY, records);
+  return { ok: true, record: records[idx] };
+}
+
+/** Legacy compat alias */
+export function markBookEntryReconciled(input: {
+  rowKey: string;
+  bankProcessingDate: string;
+  remarks?: string;
+}): { ok: true; record: BookReconRecord } | { ok: false; error: string } {
+  return reconcileSingleRow(input);
 }

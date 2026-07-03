@@ -142,12 +142,12 @@ export default function FundTransferFormClient() {
       code={transferNo}
       footer={
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.back()}>
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => router.back()}>
             Cancel
           </Button>
           <Button
             size="sm"
-            className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
             disabled={saving}
             onClick={save}
           >
@@ -307,7 +307,7 @@ export default function FundTransferFormClient() {
           />
           {form.attachmentName ? (
             <div className="flex items-center gap-2 text-xs bg-white border border-border rounded-lg px-3 py-2">
-              <Paperclip className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+              <Paperclip className="w-4 h-4 text-muted-foreground flex-shrink-0" />
               <span className="flex-1 truncate font-medium">{form.attachmentName}</span>
               <button
                 type="button"
@@ -316,7 +316,7 @@ export default function FundTransferFormClient() {
                   setForm({ ...form, attachmentName: "", attachmentDataUrl: "" })
                 }
               >
-                <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                <Trash2 className="w-4 h-4 text-red-500" />
               </button>
             </div>
           ) : (
@@ -328,7 +328,7 @@ export default function FundTransferFormClient() {
                 "rounded-lg hover:bg-muted/40 text-muted-foreground",
               )}
             >
-              <Upload className="w-3.5 h-3.5" />
+              <Upload className="w-4 h-4" />
               Upload supporting document
             </button>
           )}

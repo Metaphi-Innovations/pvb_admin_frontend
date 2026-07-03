@@ -181,9 +181,11 @@ export function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** Default Day Book range — first day of demo period through today. */
+import { demoFinancialYearStart } from "@/lib/accounts/demo-date-utils";
+
+/** Default Day Book range — first day of current FY through today. */
 export function defaultDayBookDateFrom(): string {
-  return "2026-04-01";
+  return demoFinancialYearStart();
 }
 
 export const DAY_BOOK_DEMO_VOUCHER_PATTERN =

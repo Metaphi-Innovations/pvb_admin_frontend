@@ -1,3 +1,4 @@
+import { demoAddDays, demoDateAt, demoFinancialYearStart, demoToday, demoTimestamp } from "@/lib/accounts/demo-date-utils";
 /**
  * Demo ledger balance seeding — assigns realistic opening balances and posts
  * vouchers so every ledger derives current balance from actual transactions.
@@ -20,7 +21,7 @@ import { ensurePricingDemoSeed } from "@/app/(app)/masters/pricing/pricing-data"
 import { ensureGstAccountingLedgers } from "@/lib/accounts/gst-accounting";
 import { loadBankAccountMasters } from "@/lib/accounts/bank-accounts-data";
 
-const FY_OPENING_DATE = "2026-04-01";
+const FY_OPENING_DATE = demoFinancialYearStart();
 
 /** Deterministic amount from ledger name — stable across reloads */
 function hashAmount(name: string, base: number, spread = 45000): number {
@@ -273,30 +274,30 @@ export function seedDemoAccountingVouchers(): void {
     { ledgerName: "Salary Payable - HO Staff", debit: 0, credit: 185000 },
   ]);
 
-  postBalancedJournal("2026-04-05", "JRN-RENT-APR", "April rent — Head Office", [
+  postBalancedJournal(demoDateAt(7), "JRN-RENT-APR", "April rent — Head Office", [
     { ledgerName: "Head Office Rent", debit: 45000, credit: 0 },
     { ledgerName: "HDFC Bank", debit: 0, credit: 45000 },
   ]);
 
-  postBalancedJournal("2026-04-10", "JRN-DEPR-Q1", "Q1 depreciation provision", [
+  postBalancedJournal(demoDateAt(8), "JRN-DEPR-Q1", "Q1 depreciation provision", [
     { ledgerName: "Depreciation - Plant & Machinery", debit: 42000, credit: 0 },
     { ledgerName: "Depreciation - Buildings", debit: 18000, credit: 0 },
     { ledgerName: "Depreciation - Vehicles", debit: 8500, credit: 0 },
     { ledgerName: "Accumulated Surplus - Prior Years", debit: 0, credit: 68500 },
   ]);
 
-  postBalancedJournal("2026-04-18", "JRN-INT-APR", "Bank interest accrued", [
+  postBalancedJournal(demoDateAt(9), "JRN-INT-APR", "Bank interest accrued", [
     { ledgerName: "Accrued Bank Interest Income", debit: 12500, credit: 0 },
     { ledgerName: "Bank Interest - HDFC Current Account", debit: 0, credit: 12500 },
   ]);
 
-  postBalancedJournal("2026-05-01", "JRN-MKT-MAY", "May marketing spend", [
+  postBalancedJournal(demoDateAt(10), "JRN-MKT-MAY", "May marketing spend", [
     { ledgerName: "Farmer Awareness Campaign", debit: 28000, credit: 0 },
     { ledgerName: "Google Ads", debit: 15000, credit: 0 },
     { ledgerName: "HDFC Bank", debit: 0, credit: 43000 },
   ]);
 
-  postBalancedJournal("2026-05-08", "JRN-ELEC-MAY", "May electricity charges", [
+  postBalancedJournal(demoDateAt(11), "JRN-ELEC-MAY", "May electricity charges", [
     { ledgerName: "Warehouse Electricity", debit: 18500, credit: 0 },
     { ledgerName: "Head Office Electricity", debit: 9200, credit: 0 },
     { ledgerName: "Electricity Charges Payable", debit: 0, credit: 27700 },
@@ -307,7 +308,7 @@ export function seedDemoAccountingVouchers(): void {
   const pettyCash = requireLedger("Office Petty Cash");
 
   createVoucher("contra", {
-    date: "2026-04-25",
+    date: demoDateAt(0),
     referenceNo: "CONTRA-001",
     narration: "Cash deposited to HDFC Bank",
     status: "posted",
@@ -318,7 +319,7 @@ export function seedDemoAccountingVouchers(): void {
   });
 
   createVoucher("contra", {
-    date: "2026-05-15",
+    date: demoDateAt(1),
     referenceNo: "CONTRA-002",
     narration: "Fund transfer HDFC → Axis Bank",
     status: "posted",
@@ -328,13 +329,48 @@ export function seedDemoAccountingVouchers(): void {
     ],
   });
 
+  const branchCash = requireLedger("Branch Counter Cash");
+
+  createVoucher("contra", {
+    date: demoDateAt(2),
+    referenceNo: "CONTRA-003",
+    narration: "Cash withdrawal from HDFC Bank",
+    status: "posted",
+    lines: [
+      { id: 1, ledgerId: pettyCash.id, ledgerName: pettyCash.accountName, debit: 25000, credit: 0, remarks: "Cash in" },
+      { id: 2, ledgerId: hdfc.id, ledgerName: hdfc.accountName, debit: 0, credit: 25000, remarks: "Bank out" },
+    ],
+  });
+
+  createVoucher("contra", {
+    date: demoDateAt(3),
+    referenceNo: "CONTRA-004",
+    narration: "Petty cash replenishment from Axis Bank",
+    status: "posted",
+    lines: [
+      { id: 1, ledgerId: pettyCash.id, ledgerName: pettyCash.accountName, debit: 15000, credit: 0, remarks: "Cash in" },
+      { id: 2, ledgerId: axis.id, ledgerName: axis.accountName, debit: 0, credit: 15000, remarks: "Bank out" },
+    ],
+  });
+
+  createVoucher("contra", {
+    date: demoDateAt(4),
+    referenceNo: "CONTRA-005",
+    narration: "Inter-branch cash transfer to HO Cash",
+    status: "posted",
+    lines: [
+      { id: 1, ledgerId: branchCash.id, ledgerName: branchCash.accountName, debit: 10000, credit: 0, remarks: "Branch cash in" },
+      { id: 2, ledgerId: pettyCash.id, ledgerName: pettyCash.accountName, debit: 0, credit: 10000, remarks: "Office petty cash out" },
+    ],
+  });
+
   const abcAgro = requireLedger("ABC Agro Distributor");
   const fertilizerSales = requireLedger("Fertilizer Sales");
   const outputCgst = requireLedger("Output CGST Payable") ?? requireLedger("CGST Payable");
   const outputSgst = requireLedger("Output SGST Payable") ?? requireLedger("SGST Payable");
 
   createVoucher("credit_note", {
-    date: "2026-05-18",
+    date: demoDateAt(5),
     referenceNo: "CN-2026-001",
     narration: "Credit note — partial return ABC Agro Distributor",
     status: "posted",
@@ -352,7 +388,7 @@ export function seedDemoAccountingVouchers(): void {
   const inputSgst = requireLedger("SGST Receivable") ?? requireLedger("GST Input Credit (SGST)");
 
   createVoucher("debit_note", {
-    date: "2026-05-20",
+    date: demoDateAt(6),
     referenceNo: "DN-2026-001",
     narration: "Debit note — purchase return GreenField Suppliers",
     status: "posted",
@@ -364,12 +400,12 @@ export function seedDemoAccountingVouchers(): void {
     ],
   });
 
-  postBalancedJournal("2026-05-22", "JRN-BANK-CHG", "Bank service charges — May 2026", [
+  postBalancedJournal(demoDateAt(12), "JRN-BANK-CHG", "Bank service charges — May 2026", [
     { ledgerName: "HDFC Bank Service Charges", debit: 2500, credit: 0 },
     { ledgerName: "HDFC Bank", debit: 0, credit: 2500 },
   ]);
 
-  postBalancedJournal("2026-05-28", "JRN-GST-MAY", "May GST liability accrual", [
+  postBalancedJournal(demoDateAt(13), "JRN-GST-MAY", "May GST liability accrual", [
     { ledgerName: "Output CGST Payable", debit: 0, credit: 32400 },
     { ledgerName: "Output SGST Payable", debit: 0, credit: 32400 },
     { ledgerName: "GST Payable Control Account", debit: 64800, credit: 0 },
@@ -394,7 +430,7 @@ function seedIncomeExpenseActivity(): void {
     incomeEntries.push({ ledgerName: l.accountName, debit: 0, credit: amount });
   }
   if (incomeTotal > 0) {
-    postBalancedJournal("2026-05-30", "JRN-INC-FY26", "FY26 income recognition — all income ledgers", [
+    postBalancedJournal(demoDateAt(14), "JRN-INC-FY26", "FY26 income recognition — all income ledgers", [
       { ledgerName: retained.accountName, debit: incomeTotal, credit: 0 },
       ...incomeEntries,
     ]);

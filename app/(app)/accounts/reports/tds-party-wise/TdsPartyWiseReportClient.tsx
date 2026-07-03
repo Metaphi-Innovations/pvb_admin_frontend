@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
+  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
+} from "@/components/accounts/ReportFilters";
 import { useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,14 +32,12 @@ import {
 import { AccountsTableListing } from "@/components/accounts/AccountsTableListing";
 import {
   ReportFilterRow,
-  ReportFinancialYearFilter,
-  ReportFromToDateFilter,
+  ReportDateRangeFilter,
   ReportSearchFilter,
+  useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
-import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "../pl/pl-hooks";
@@ -48,9 +50,7 @@ import {
   type TdsSummaryRow,
 } from "./tds-summary-data";
 import { exportTdsSummaryToExcel, exportTdsSummaryToPdf } from "./tds-summary-export";
-
-const filterLabelClass = "text-[10px] font-medium uppercase text-muted-foreground leading-none";
-const filterControlClass = "h-8 text-xs";
+import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
 
 const PARTY_TYPE_OPTIONS = [
   { value: "all", label: "All" },
@@ -115,9 +115,7 @@ export default function TdsPartyWiseReportClient() {
   const searchParams = useSearchParams();
   const mounted = useClientMounted();
 
-  const [dateFrom, setDateFrom] = useState("2025-04-01");
-  const [dateTo, setDateTo] = useState("2025-06-30");
-  const [financialYearId, setFinancialYearId] = useState("all");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [partyType, setPartyType] = useState("all");
   const [tdsSection, setTdsSection] = useState("all");
   const [search, setSearch] = useState("");
@@ -126,26 +124,9 @@ export default function TdsPartyWiseReportClient() {
   const debouncedSearch = useDebouncedValue(search, 300);
 
   useEffect(() => {
-    const activeFyId = getActiveFinancialYearId();
-    if (activeFyId) {
-      setFinancialYearId(String(activeFyId));
-      const fy = loadFinancialYears().find((f) => f.id === activeFyId);
-      if (fy) {
-        setDateFrom(fy.startDate);
-        setDateTo(fy.endDate);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
     const fromUrl = searchParams.get("section");
     if (fromUrl) setTdsSection(fromUrl.toUpperCase());
   }, [searchParams]);
-
-  const fyLabel = useMemo(() => {
-    if (financialYearId === "all") return "All Financial Years";
-    return loadFinancialYears().find((fy) => String(fy.id) === financialYearId)?.name ?? "";
-  }, [financialYearId]);
 
   const partyTypeLabel =
     PARTY_TYPE_OPTIONS.find((o) => o.value === partyType)?.label ?? "All";
@@ -164,47 +145,32 @@ export default function TdsPartyWiseReportClient() {
     [partyType, tdsSection, debouncedSearch],
   );
 
-  const activeFyId = mounted ? getActiveFinancialYearId() : null;
-
   const hasFilters =
     Boolean(search.trim()) ||
     partyType !== "all" ||
-    tdsSection !== "all" ||
-    financialYearId !== (activeFyId ? String(activeFyId) : "all");
+    tdsSection !== "all";
 
   const resetFilters = useCallback(() => {
     setSearch("");
     setPartyType("all");
     setTdsSection("all");
-    setFinancialYearId(activeFyId ? String(activeFyId) : "all");
-    const fy = activeFyId
-      ? loadFinancialYears().find((f) => f.id === activeFyId)
-      : undefined;
-    if (fy) {
-      setDateFrom(fy.startDate);
-      setDateTo(fy.endDate);
-    }
-  }, [activeFyId]);
+    setPreset("this_year");
+    const { from, to } = resolveDateRangePreset("this_year");
+    setDateFrom(from);
+    setDateTo(to);
+  }, [setPreset, setDateFrom, setDateTo]);
 
-  useEffect(() => {
-    if (financialYearId === "all") return;
-    const fy = loadFinancialYears().find((f) => String(f.id) === financialYearId);
-    if (fy) {
-      setDateFrom(fy.startDate);
-      setDateTo(fy.endDate);
-    }
-  }, [financialYearId]);
+  
 
   const exportMeta = useMemo(
     () => ({
       dateFrom,
       dateTo,
-      financialYear: fyLabel,
       partyType: partyTypeLabel,
       tdsSection: tdsSectionLabel,
       search: debouncedSearch,
     }),
-    [dateFrom, dateTo, fyLabel, partyTypeLabel, tdsSectionLabel, debouncedSearch],
+    [dateFrom, dateTo, partyTypeLabel, tdsSectionLabel, debouncedSearch],
   );
 
   const handleExportExcel = async () => {
@@ -241,13 +207,11 @@ export default function TdsPartyWiseReportClient() {
       }
       filters={
         <ReportFilterRow className="items-end gap-2">
-          <ReportFinancialYearFilter
-            value={financialYearId}
-            onChange={setFinancialYearId}
-          />
-          <ReportFromToDateFilter
+          <ReportDateRangeFilter
+            preset={preset}
             dateFrom={dateFrom}
             dateTo={dateTo}
+            onPresetChange={setPreset}
             onDateFromChange={setDateFrom}
             onDateToChange={setDateTo}
           />

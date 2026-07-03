@@ -44,10 +44,10 @@ export default function AccountItemsPageClient() {
       actions={
         <Button
           size="sm"
-          className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1"
+          className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
           onClick={() => router.push("/accounts/masters/items/new")}
         >
-          <Plus className="w-3.5 h-3.5" /> Add Item
+          <Plus className="w-4 h-4" /> Add Item
         </Button>
       }
       filters={
@@ -62,7 +62,7 @@ export default function AccountItemsPageClient() {
             />
           </div>
           <select
-            className="h-8 text-xs border border-border rounded-lg px-2 bg-white"
+            className="h-9 text-[13px] font-medium border border-border rounded-lg px-2 bg-white"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
           >
@@ -78,7 +78,7 @@ export default function AccountItemsPageClient() {
       layout="split"
     >
       <div className="overflow-auto flex-1">
-        <table className="accounts-table w-full text-xs min-w-[900px]">
+        <table className="accounts-table w-full min-w-[900px]">
           <thead className="border-b border-border/60">
             <tr>
               {["Item", "SKU", "Category", "HSN", "GST", "Unit", "Opening Qty", "Opening Value", "Valuation", "Status"].map(
@@ -99,7 +99,7 @@ export default function AccountItemsPageClient() {
             {rows.map((item) => (
               <tr
                 key={item.id}
-                className="border-b border-border/30 hover:bg-brand-50/30 cursor-pointer"
+                className="accounts-table-row group cursor-pointer"
                 onClick={() => router.push(`/accounts/masters/items/${item.id}/edit`)}
               >
                 <td className="px-3 py-2.5 font-medium">{item.itemName}</td>

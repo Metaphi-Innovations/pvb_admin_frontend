@@ -16,6 +16,7 @@ import {
   loadChartOfAccounts,
   saveChartOfAccounts,
 } from "../../data";
+import { isBundledCoaDemoLedger } from "./coa-demo-bundle";
 import { SYSTEM_COA_NODES } from "../coa-seed-nodes";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
 import { loadVouchers } from "../../vouchers/voucher-data";
@@ -29,6 +30,7 @@ const COA_MANUAL_LEDGER_PURGE_KEY = "ds_coa_manual_ledger_purge_v3";
 export function isManualCoaLedger(record: ChartOfAccount): boolean {
   if (record.nodeLevel !== "ledger") return false;
   if (record.isSystem) return false;
+  if (isBundledCoaDemoLedger(record)) return false;
   if (record.isSystemGenerated || record.erpSourceModule) return false;
   return true;
 }

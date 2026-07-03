@@ -1,3 +1,9 @@
+import { roundMoney } from "@/lib/accounts/money-format";
+import {
+  buildPurchaseRegisterRows,
+  buildSalesRegisterRows,
+} from "../register-shared/register-live-data";
+
 export type GstCategory = "output" | "input" | "rcm";
 
 export type GstSummaryRowKind = "section" | "data" | "total" | "net";
@@ -35,18 +41,79 @@ export interface GstSummaryTotals {
   netGstPayable: number;
 }
 
-const GST_DATA_ROWS: Omit<GstSummaryLine, "id" | "kind">[] = [
+const GST_RATES = [5, 12, 18, 28] as const;
+
+type GstRateBucket = Record<number, { taxableValue: number; gstAmount: number }>;
+
+function addToGstBucket(
+  buckets: GstRateBucket,
+  rate: number,
+  taxableValue: number,
+  gstAmount: number,
+) {
+  if (gstAmount <= 0 && taxableValue <= 0) return;
+  if (!buckets[rate]) buckets[rate] = { taxableValue: 0, gstAmount: 0 };
+  buckets[rate].taxableValue = roundMoney(buckets[rate].taxableValue + taxableValue);
+  buckets[rate].gstAmount = roundMoney(buckets[rate].gstAmount + gstAmount);
+}
+
+function bucketToGstLine(
+  category: "output" | "input",
+  rate: number,
+  bucket: { taxableValue: number; gstAmount: number },
+): Omit<GstSummaryLine, "id" | "kind"> {
+  const halfGst = roundMoney(bucket.gstAmount / 2);
+  return {
+    label: `${category === "output" ? "Output" : "Input"} GST @ ${rate}%`,
+    category,
+    rate,
+    amounts: {
+      taxableValue: bucket.taxableValue,
+      cgst: halfGst,
+      sgst: halfGst,
+      igst: 0,
+      totalGst: bucket.gstAmount,
+      totalInvoiceValue: roundMoney(bucket.taxableValue + bucket.gstAmount),
+    },
+  };
+}
+
+function buildLiveGstDataRows(): Omit<GstSummaryLine, "id" | "kind">[] {
+  const outputBuckets: GstRateBucket = {};
+  const inputBuckets: GstRateBucket = {};
+
+  for (const row of buildSalesRegisterRows()) {
+    if (row.invoiceStatus === "cancelled" || row.invoiceStatus === "draft") continue;
+    addToGstBucket(outputBuckets, row.gstRate, row.taxableValue, row.gstAmount);
+  }
+
+  for (const row of buildPurchaseRegisterRows()) {
+    if (row.invoiceStatus === "cancelled" || row.invoiceStatus === "draft") continue;
+    addToGstBucket(inputBuckets, row.gstRate, row.taxableValue, row.gstAmount);
+  }
+
+  const rows: Omit<GstSummaryLine, "id" | "kind">[] = [];
+  for (const rate of GST_RATES) {
+    const out = outputBuckets[rate];
+    if (out && out.gstAmount > 0) rows.push(bucketToGstLine("output", rate, out));
+    const input = inputBuckets[rate];
+    if (input && input.gstAmount > 0) rows.push(bucketToGstLine("input", rate, input));
+  }
+  return rows;
+}
+
+const STATIC_GST_FALLBACK: Omit<GstSummaryLine, "id" | "kind">[] = [
   { label: "Output GST @ 5%", category: "output", rate: 5, amounts: { taxableValue: 250000, cgst: 6250, sgst: 6250, igst: 0, totalGst: 12500, totalInvoiceValue: 262500 } },
   { label: "Output GST @ 12%", category: "output", rate: 12, amounts: { taxableValue: 480000, cgst: 28800, sgst: 28800, igst: 0, totalGst: 57600, totalInvoiceValue: 537600 } },
   { label: "Output GST @ 18%", category: "output", rate: 18, amounts: { taxableValue: 820000, cgst: 73800, sgst: 73800, igst: 0, totalGst: 147600, totalInvoiceValue: 967600 } },
-  { label: "Output GST @ 28%", category: "output", rate: 28, amounts: { taxableValue: 110000, cgst: 15400, sgst: 15400, igst: 0, totalGst: 30800, totalInvoiceValue: 140800 } },
-  { label: "Input GST @ 5%", category: "input", rate: 5, amounts: { taxableValue: 175000, cgst: 4375, sgst: 4375, igst: 0, totalGst: 8750, totalInvoiceValue: 183750 } },
-  { label: "Input GST @ 12%", category: "input", rate: 12, amounts: { taxableValue: 360000, cgst: 21600, sgst: 21600, igst: 0, totalGst: 43200, totalInvoiceValue: 403200 } },
   { label: "Input GST @ 18%", category: "input", rate: 18, amounts: { taxableValue: 540000, cgst: 48600, sgst: 48600, igst: 0, totalGst: 97200, totalInvoiceValue: 637200 } },
-  { label: "Input GST @ 28%", category: "input", rate: 28, amounts: { taxableValue: 95000, cgst: 13300, sgst: 13300, igst: 0, totalGst: 26600, totalInvoiceValue: 121600 } },
-  { label: "RCM Payable", category: "rcm", amounts: { taxableValue: 90000, cgst: 8100, sgst: 8100, igst: 0, totalGst: 16200, totalInvoiceValue: 106200 } },
-  { label: "RCM Input Credit", category: "rcm", amounts: { taxableValue: 75000, cgst: 6750, sgst: 6750, igst: 0, totalGst: 13500, totalInvoiceValue: 88500 } },
 ];
+
+function getGstDataRows(): Omit<GstSummaryLine, "id" | "kind">[] {
+  if (typeof window === "undefined") return STATIC_GST_FALLBACK;
+  const live = buildLiveGstDataRows();
+  return live.length > 0 ? live : STATIC_GST_FALLBACK;
+}
 
 function sumGst(rows: GstSummaryLine[], category: GstCategory): number {
   return rows
@@ -55,6 +122,7 @@ function sumGst(rows: GstSummaryLine[], category: GstCategory): number {
 }
 
 function buildFullStatement(): GstSummaryLine[] {
+  const GST_DATA_ROWS = getGstDataRows();
   const dataLines: GstSummaryLine[] = [
     { id: "sec-output", kind: "section", label: "Output GST" },
     ...GST_DATA_ROWS.filter((r) => r.category === "output").map((r, i) => ({
@@ -68,20 +136,12 @@ function buildFullStatement(): GstSummaryLine[] {
       kind: "data" as const,
       ...r,
     })),
-    { id: "sec-rcm", kind: "section", label: "RCM GST" },
-    ...GST_DATA_ROWS.filter((r) => r.category === "rcm").map((r, i) => ({
-      id: `rcm-${i}`,
-      kind: "data" as const,
-      ...r,
-    })),
   ];
 
   const dataOnly = dataLines.filter((l) => l.kind === "data");
   const totalOutput = sumGst(dataOnly, "output");
   const totalInput = sumGst(dataOnly, "input");
-  const rcmPayable = dataOnly.find((l) => l.label === "RCM Payable")?.amounts?.totalGst ?? 0;
-  const rcmCredit = dataOnly.find((l) => l.label === "RCM Input Credit")?.amounts?.totalGst ?? 0;
-  const netGst = totalOutput + rcmPayable - totalInput - rcmCredit;
+  const netGst = totalOutput - totalInput;
 
   return [
     ...dataLines,
@@ -151,11 +211,7 @@ export function buildGstSummaryStatement(filters: GstSummaryFilters): {
 
   const totalOutput = sumGst(filteredData, "output");
   const totalInput = sumGst(filteredData, "input");
-  const rcmPayable =
-    filteredData.find((l) => l.label === "RCM Payable")?.amounts?.totalGst ?? 0;
-  const rcmCredit =
-    filteredData.find((l) => l.label === "RCM Input Credit")?.amounts?.totalGst ?? 0;
-  const netGst = totalOutput + rcmPayable - totalInput - rcmCredit;
+  const netGst = totalOutput - totalInput;
 
   lines.push({ id: "sec-net", kind: "section", label: "Net GST Payable / Receivable" });
   lines.push({

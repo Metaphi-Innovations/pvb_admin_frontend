@@ -4,9 +4,12 @@ import React from "react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
-import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { AccountsColumnarTable } from "@/components/accounts/AccountsTable";
-import { AccountsTableListing } from "@/components/accounts/AccountsTableListing";import type { LucideIcon } from "lucide-react";
+import {
+  AccountsTableListing,
+  AccountsListingToolbar,
+} from "@/components/accounts/AccountsTableListing";
+import type { LucideIcon } from "lucide-react";
 
 export interface ReportColumn {
   key: string;
@@ -72,12 +75,20 @@ export function AccountsReportShell({
       breadcrumbs={accountsBreadcrumb(section, title)}
       title={title}
       description={description}
-      actions={<AccountsExportMenu onExcel={exportCsv} onPdf={exportCsv} />}
-      filters={filters}
+      hideDescription
       layout="split"
       className="h-full min-h-0"
     >
       <AccountsTableListing
+        toolbar={
+          <AccountsListingToolbar
+            onExcel={exportCsv}
+            onPdf={exportCsv}
+            exportDisabled={rows.length === 0}
+          >
+            {filters}
+          </AccountsListingToolbar>
+        }
         summary={
           kpis && kpis.length > 0 ? (
             <AccountsSummaryBar
@@ -105,7 +116,8 @@ export function AccountsReportShell({
           getRowKey={getRowKey}
           clickableColumnKeys={clickableColumnKeys}
         />
-      </AccountsTableListing>    </AccountsPageShell>
+      </AccountsTableListing>
+    </AccountsPageShell>
   );
 }
 

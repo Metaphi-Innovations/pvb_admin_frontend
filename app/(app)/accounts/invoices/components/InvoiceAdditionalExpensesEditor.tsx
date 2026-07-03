@@ -147,7 +147,7 @@ export function InvoiceAdditionalExpensesEditor({
 													})
 												}
 											>
-												<SelectTrigger className="h-8 text-xs">
+												<SelectTrigger className="h-9 text-[13px] font-medium">
 													<SelectValue placeholder="Select expense head…" />
 												</SelectTrigger>
 												<SelectContent>
@@ -203,7 +203,7 @@ export function InvoiceAdditionalExpensesEditor({
 										</td>
 										<td className="p-2 min-w-[140px]">
 											<Input
-												className="h-8 text-xs"
+												className="h-9 text-[13px] font-medium"
 												placeholder="Optional"
 												disabled={disabled}
 												value={row.remarks}
@@ -220,7 +220,7 @@ export function InvoiceAdditionalExpensesEditor({
 													className="p-1.5 rounded-md hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors"
 													aria-label="Remove expense row"
 												>
-													<Trash2 className="w-3.5 h-3.5" />
+													<Trash2 className="w-4 h-4" />
 												</button>
 											)}
 										</td>
@@ -239,20 +239,20 @@ export function InvoiceAdditionalExpensesEditor({
 							type="button"
 							variant="outline"
 							size="sm"
-							className="h-8 text-xs gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+							className="h-9 text-[13px] font-medium gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
 							onClick={() => removeRow(expenses[expenses.length - 1].id)}
 						>
-							<Trash2 className="w-3.5 h-3.5" /> Delete Expense
+							<Trash2 className="w-4 h-4" /> Delete Expense
 						</Button>
 					)}
 					<Button
 						type="button"
 						variant="outline"
 						size="sm"
-						className="h-8 text-xs gap-1.5"
+						className="h-9 text-[13px] font-medium gap-1.5"
 						onClick={addRow}
 					>
-						<Plus className="w-3.5 h-3.5" /> Add Expense
+						<Plus className="w-4 h-4" /> Add Expense
 					</Button>
 				</div>
 			)}

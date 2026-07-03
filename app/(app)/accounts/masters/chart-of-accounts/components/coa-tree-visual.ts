@@ -149,25 +149,17 @@ export const VISUAL_ICON_CLASS: Record<CoaVisualLevel, string> = {
 
 
 export const VISUAL_ROW_CLASS: Record<CoaVisualLevel, string> = {
-
-  primary_head: "text-[13px] font-bold text-foreground",
-
-  account_group: "text-[13px] font-medium text-foreground/90",
-
-  sub_group: "text-xs font-medium text-foreground/85",
-
-  ledger: "text-xs font-medium text-foreground/80",
-
+  primary_head: "text-[13px] font-semibold text-[#1F2937]",
+  account_group: "text-[13px] font-medium text-[#1F2937]",
+  sub_group: "text-[13px] font-medium text-[#1F2937]/90",
+  ledger: "text-[13px] font-medium text-[#1F2937]/85",
 };
 
 
 
-/** Sidebar left padding from tree depth — sub groups indent more than level-2 groups */
-
+/** Sidebar left padding from tree depth */
 export function coaSidebarIndentPx(depth: number): number {
-
-  return 4 + depth * 14;
-
+  return 4 + depth * 12;
 }
 
 
@@ -219,13 +211,9 @@ export const LEVEL_ROW_CLASS: Record<ChartOfAccount["nodeLevel"], string> = {
 
 
 export const LEVEL_SELECTED_ROW_CLASS: Record<ChartOfAccount["nodeLevel"], string> = {
-
-  primary_head: "text-sm font-bold text-brand-900",
-
-  account_group: "text-[13px] font-semibold text-brand-900",
-
-  ledger: "text-xs font-semibold text-foreground",
-
+  primary_head: "text-[13px] font-semibold text-brand-800",
+  account_group: "text-[13px] font-semibold text-brand-800",
+  ledger: "text-[13px] font-semibold text-[#1F2937]",
 };
 
 

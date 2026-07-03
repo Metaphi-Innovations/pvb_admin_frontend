@@ -13,9 +13,9 @@ import {
 } from "@/lib/accounts/accounts-maker-checker";
 import {
   canEditDebitNote,
+  DEBIT_NOTE_SOURCE_LABELS,
   getDebitNoteById,
   processDebitNote,
-  REFERENCE_TYPE_LABELS,
   totalRejectedQtyFromLines,
   type DebitNoteRecord,
 } from "./debit-notes-data";
@@ -66,24 +66,24 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
       statusVariant={displayStatus === "posted" ? "active" : displayStatus === "draft" ? "draft" : "neutral"}
       metaItems={[
         { icon: Calendar, label: record.debitNoteDate },
-        { label: REFERENCE_TYPE_LABELS[record.againstType] },
+        { label: DEBIT_NOTE_SOURCE_LABELS[record.source] },
       ]}
       onEdit={canEdit ? () => router.push(`${DEBIT_NOTES_LIST_PATH}/${record.id}/edit`) : undefined}
       headerActions={
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => downloadDebitNotePdf(record)}>
-            <Download className="w-3.5 h-3.5" /> Download PDF
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1" onClick={() => downloadDebitNotePdf(record)}>
+            <Download className="w-4 h-4" /> Download PDF
           </Button>
           {displayStatus === "posted" && record.status === "approved" && (
             <Button
               size="sm"
-              className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1"
+              className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
               onClick={() => {
                 processDebitNote(record.id);
                 refresh();
               }}
             >
-              <PlayCircle className="w-3.5 h-3.5" /> Mark Processed
+              <PlayCircle className="w-4 h-4" /> Mark Processed
             </Button>
           )}
         </div>
@@ -146,22 +146,26 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
         />
 
         <div className="rounded-lg border border-border/60 bg-white p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <DetailRow label="Source" value={DEBIT_NOTE_SOURCE_LABELS[record.source]} />
+          <DetailRow
+            label="Reference Document"
+            value={record.source === "purchase_return" ? record.sourceReturnNo ?? "" : record.reason}
+          />
           <DetailRow label="Supplier" value={record.vendorName} />
+          <DetailRow label="Purchase Return Reference" value={record.sourceReturnNo ?? ""} />
+          <DetailRow label="Purchase Invoice Reference" value={record.sourceInvoiceNo} />
           <DetailRow label="Debit Note Date" value={record.debitNoteDate} />
-          <DetailRow label="Reference Type" value={REFERENCE_TYPE_LABELS[record.againstType]} />
-          <DetailRow label="Purchase Invoice No." value={record.sourceInvoiceNo} />
-          <DetailRow label="PO No." value={record.sourcePoNo} />
-          <DetailRow label="GRN No." value={record.sourceGrnNo} />
-          <DetailRow label="QC Reference" value={record.sourceQcNo} />
-          <DetailRow label="Rejected Qty" value={String(totalRejectedQtyFromLines(record.lineItems) || "—")} />
-          <DetailRow label="Debit Amount" value={formatINR(record.currentDebitAmount)} />
-          <DetailRow label="Reason" value={record.reason} />
+          <DetailRow label="Taxable Value" value={formatINR(record.taxableAmount)} />
+          <DetailRow label="CGST" value={formatINR(record.cgstAmount)} />
+          <DetailRow label="SGST" value={formatINR(record.sgstAmount)} />
+          <DetailRow label="IGST" value={formatINR(record.igstAmount)} />
+          <DetailRow label="Total" value={formatINR(record.currentDebitAmount)} />
         </div>
 
         {record.againstType !== "standalone_adjustment" && record.lineItems.length > 0 && (
           <div className="bg-white rounded-lg border border-border/60 p-4 overflow-x-auto">
             <h2 className="text-sm font-semibold mb-3">Line Items</h2>
-            <table className="accounts-table w-full text-xs min-w-[720px]">
+            <table className="accounts-table w-full min-w-[720px]">
               <thead className="border-b">
                 <tr>
                   {["Product", "Inv Qty", "Return Qty", "UOM", "Rate", "GST %", "Debit Amount"].map((h) => (
@@ -199,10 +203,10 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
                   {att.dataUrl && (
                     <>
                       <button type="button" className="p-1 hover:bg-muted rounded" onClick={() => window.open(att.dataUrl, "_blank")}>
-                        <Eye className="w-3.5 h-3.5" />
+                        <Eye className="w-4 h-4" />
                       </button>
                       <a href={att.dataUrl} download={att.fileName} className="p-1 hover:bg-muted rounded">
-                        <Download className="w-3.5 h-3.5" />
+                        <Download className="w-4 h-4" />
                       </a>
                     </>
                   )}

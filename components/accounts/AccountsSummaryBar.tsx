@@ -1,6 +1,10 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import {
+  ACCOUNTS_SUMMARY_LABEL_CLASS,
+  ACCOUNTS_SUMMARY_VALUE_CLASS,
+} from "@/lib/accounts/accounts-typography";
 
 export interface AccountsSummaryItem {
   label: string;
@@ -18,7 +22,7 @@ export function AccountsSummaryBar({
   return (
     <div
       className={cn(
-        "flex-shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-1 px-2 py-1 border-b border-border/60 bg-muted/5",
+        "flex-shrink-0 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 px-3 py-2 border-b border-[#E5E7EB] bg-white",
         className,
       )}
     >
@@ -26,15 +30,15 @@ export function AccountsSummaryBar({
         <div
           key={item.label}
           className={cn(
-            "flex flex-col justify-center px-2 py-1 rounded border border-border/50 bg-white min-h-[36px]",
+            "flex flex-col justify-center px-2.5 py-1.5 rounded-md border border-[#E5E7EB] bg-white min-h-[40px]",
             item.warn && "border-red-200 bg-red-50/50",
           )}
         >
-          <p className="text-[10px] font-medium text-muted-foreground leading-none">{item.label}</p>
+          <p className={ACCOUNTS_SUMMARY_LABEL_CLASS}>{item.label}</p>
           <p
             className={cn(
-              "text-xs font-bold tabular-nums leading-tight mt-0.5 truncate",
-              item.warn ? "text-red-700" : "text-foreground",
+              ACCOUNTS_SUMMARY_VALUE_CLASS,
+              item.warn ? "text-red-700" : undefined,
             )}
           >
             {item.value}

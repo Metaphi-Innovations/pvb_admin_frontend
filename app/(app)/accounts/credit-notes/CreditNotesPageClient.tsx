@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ModuleFiltersBar } from "@/components/module/ModuleFiltersBar";
+import { AccountsFilterBar } from "@/components/accounts/AccountsFilterBar";
 import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { Button } from "@/components/ui/button";
 import {
@@ -85,16 +85,16 @@ export default function CreditNotesPageClient() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs gap-1.5"
+                className="h-9 text-[13px] font-medium gap-1.5"
                 disabled={exporting || visible.length === 0}
                 onClick={handleExport}
               >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <FileSpreadsheet className="w-4 h-4" />
                 {exporting ? "Exporting…" : "Export"}
               </Button>
-              <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5" asChild>
+              <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5" asChild>
                 <Link href={`${CREDIT_NOTES_LIST_PATH}/new`}>
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-4 h-4" />
                   Create Credit Note
                 </Link>
               </Button>
@@ -104,7 +104,7 @@ export default function CreditNotesPageClient() {
 
         <SectionTabs tabs={TABS} active={tab} onChange={setTab} counts={counts} />
 
-        <ModuleFiltersBar
+        <AccountsFilterBar
           searchValue={search}
           onSearchChange={setSearch}
           searchPlaceholder="CN no., customer, invoice ref., SO ref…"
@@ -115,11 +115,11 @@ export default function CreditNotesPageClient() {
             onDateFromChange={setDateFrom}
             onDateToChange={setDateTo}
           />
-        </ModuleFiltersBar>
+        </AccountsFilterBar>
 
         <div className="page-shell overflow-hidden">
           <div className="overflow-x-auto max-h-[calc(100vh-300px)]">
-            <table className="accounts-table w-full text-table min-w-[1280px]">
+            <table className="accounts-table w-full min-w-[1280px]">
               <thead className="border-b border-border">
                 <tr>
                   {[
@@ -146,13 +146,13 @@ export default function CreditNotesPageClient() {
               <tbody>
                 {visible.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-12 text-center text-xs text-muted-foreground">
+                    <td colSpan={10} className="accounts-table-empty">
                       No credit notes. Click Create Credit Note to add one.
                     </td>
                   </tr>
                 ) : (
                   visible.map((r) => (
-                    <tr key={r.id} className="border-b border-border/50 hover:bg-brand-50/25">
+                    <tr key={r.id} className="accounts-table-row group">
                       <td className="px-2.5 py-2 text-xs font-mono font-medium">{r.creditNoteNo}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.creditNoteDate}</td>
                       <td className="px-2.5 py-2 text-xs">{r.customerName}</td>
@@ -184,7 +184,7 @@ export default function CreditNotesPageClient() {
                                     className="text-xs gap-2 text-red-600"
                                     onClick={() => setCancelTarget(r)}
                                   >
-                                    <XCircle className="w-3.5 h-3.5" /> Cancel
+                                    <XCircle className="w-4 h-4" /> Cancel
                                   </DropdownMenuItem>
                                 );
                               return null;

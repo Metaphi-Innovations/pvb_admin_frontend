@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,14 +14,26 @@ import {
 	LUT_SUPPLY_DECLARATION,
 	resolveSezLutSupply,
 } from "@/lib/settings/gst-tax-config";
-import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import {
+  InvoiceFormCard,
+  InvoiceFormField,
+  InvoiceFormInput,
+  InvoiceFormLayout,
+  InvoiceFormReadOnly,
+  InvoiceFormSection,
+  INVOICE_FORM_GRID_CLASS,
+  INVOICE_FORM_INPUT_CLASS,
+  INVOICE_FORM_LABEL_CLASS,
+  INVOICE_FORM_HELPER_CLASS,
+} from "@/app/(app)/accounts/components/InvoiceFormLayout";
 import {
   buildSalesInvoicePrefill,
   type SalesInvoicePrefill,
 } from "@/lib/accounts/sales-invoice-prefill";
 import { buildSalesInvoicePrefillFromDispatch, mapDispatchSchemeToInvoiceSettlement } from "@/lib/accounts/dispatch-invoice-bridge";
 import type { PendingDispatchInvoiceRow } from "@/lib/accounts/dispatch-invoice-bridge";
+import type { InvoiceDocumentType } from "@/lib/accounts/invoice-type";
 import type { DispatchNearExpirySchemeEntry } from "@/app/(app)/warehouse/dispatch/types";
 import { InvoiceSchemeSettlementPanel } from "./components/InvoiceSchemeSettlementPanel";
 import { InvoiceLinesEditor } from "./components/InvoiceLinesEditor";
@@ -61,26 +72,14 @@ import {
 
 function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("space-y-3", className)}>
-      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-      {children}
-    </div>
+    <InvoiceFormSection title={title}>
+      <div className={className}>{children}</div>
+    </InvoiceFormSection>
   );
 }
 
 const CHARGE_INPUT_CLASS =
-  "h-8 text-sm tabular-nums text-right w-28 ml-auto [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
-
-function ReadOnlyField({ label, value, className }: { label: string; value: string; className?: string }) {
-  return (
-    <div className={className}>
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      <p className="text-xs font-medium py-1.5 px-2.5 bg-muted/25 rounded-md border border-border/50 min-h-[32px] flex items-center mt-1">
-        {value || "—"}
-      </p>
-    </div>
-  );
-}
+  "h-9 text-sm tabular-nums text-right w-28 ml-auto [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
 
 export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: number }) {
   const router = useRouter();
@@ -120,6 +119,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   ]);
   const [roundOff, setRoundOff] = useState(0);
   const [salesOrderId, setSalesOrderId] = useState<number | null>(null);
+  const [invoiceType, setInvoiceType] = useState<InvoiceDocumentType>("sales");
   const [sourceDispatchId, setSourceDispatchId] = useState("");
   const [selectedDispatchId, setSelectedDispatchId] = useState("");
   const [customerLedgerId, setCustomerLedgerId] = useState<number | null>(null);
@@ -201,6 +201,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     }
 
     setSalesOrderId(prefill.salesOrderId);
+    setInvoiceType(prefill.invoiceType ?? "sales");
     setSourceDispatchId(prefill.sourceDispatchId);
     setSelectedDispatchId(prefill.sourceDispatchId);
     setCustomerLedgerId(prefill.customerLedgerId);
@@ -368,6 +369,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setWarehouse(rec.warehouse ?? "Central Warehouse");
     setSalesperson(rec.salesperson ?? "");
     setSalesOrderId(rec.salesOrderId ?? null);
+    setInvoiceType(rec.invoiceType ?? (rec.invoiceNo.startsWith("STI-") ? "stock_transfer" : "sales"));
     setSourceDispatchId(rec.sourceDispatchId ?? "");
     setSelectedDispatchId(rec.sourceDispatchId ?? "");
     setCustomerLedgerId(rec.customerLedgerId ?? null);
@@ -525,6 +527,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     lineItems: lines.filter((l) => l.productName || l.productId),
     attachments,
     invoiceStatus,
+    invoiceType,
     nearExpirySchemeSettlements: schemeSettlementEntries.length
       ? schemeSettlementEntries.map((entry) =>
           "settlementMethod" in entry
@@ -536,10 +539,16 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
 
   const isManualInvoice = !sourceDispatchId;
 
+  const isStockTransferInvoice = invoiceType === "stock_transfer";
+
   const submit = (asDraft: boolean) => {
     setError(null);
     if (!customerName.trim()) {
-      setError("Select a customer from Customer Master.");
+      setError(
+        isStockTransferInvoice
+          ? "Destination warehouse is required."
+          : "Select a customer from Customer Master.",
+      );
       return;
     }
     const validLines = lines.filter((l) => l.productName || l.productId);
@@ -569,94 +578,118 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   };
 
   return (
-    <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Sales", isEdit ? "Edit Invoice" : "Create Invoice", INVOICES_LIST_PATH)}
+    <InvoiceFormLayout
       title={isEdit ? "Edit Sales Invoice" : "Create Sales Invoice"}
-      description="Select customer and dispatch to auto-fill invoice details, or create a manual invoice."
+      subtitle="Select customer and dispatch to auto-fill invoice details, or create a manual invoice."
+      breadcrumb={accountsBreadcrumb("Transactions", isEdit ? "Edit Invoice" : "Create Invoice", INVOICES_LIST_PATH)}
+      backHref={INVOICES_LIST_PATH}
       actions={
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.push(INVOICES_LIST_PATH)}>
-            Back
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className={INVOICE_FORM_INPUT_CLASS}
+            onClick={() => router.push(INVOICES_LIST_PATH)}
+          >
+            Cancel
           </Button>
-          <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={() => submit(false)}>
+          <Button
+            variant="outline"
+            size="sm"
+            className={INVOICE_FORM_INPUT_CLASS}
+            onClick={() => submit(true)}
+          >
+            Save Draft
+          </Button>
+          <Button
+            size="sm"
+            className={cn(INVOICE_FORM_INPUT_CLASS, "bg-brand-600 hover:bg-brand-700 text-white border-0")}
+            onClick={() => submit(false)}
+          >
             Post Invoice
           </Button>
         </div>
       }
     >
-      <div className="p-4 pb-10 space-y-6">
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <Section title="Customer Information">
-            <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
-              <SalesInvoiceCustomerSection
-                customers={customers}
-                customerId={customerId}
-                onCustomerIdChange={onCustomerSelect}
-                fields={customerFields}
-                billToId={billToId}
-                shipToId={shipToId}
-                onBillToChange={(id, addr) => {
-                  setBillToId(id);
-                  setBillingAddress(addr);
-                }}
-                onShipToChange={(id, addr) => {
-                  setShipToId(id);
-                  setShippingAddress(addr);
-                }}
-                billingAddress={billingAddress}
-                shippingAddress={shippingAddress}
-              />
-            </div>
-          </Section>
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 font-medium">
+          {error}
+        </div>
+      )}
 
-          <Section title="Invoice Information">
-            <div className="rounded-lg border border-border/60 bg-muted/10 p-4 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Invoice No.</Label>
-                  <Input className="h-9 text-sm bg-muted/30" disabled value={isEdit ? invoiceNo : "Auto-generated"} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Invoice Date</Label>
-                  <Input type="date" className="h-9 text-sm" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Due Date</Label>
-                  <Input type="date" className="h-9 text-sm" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-                </div>
-                <ReadOnlyField label="Sales Order No." value={salesOrderRef} />
-                <div className="sm:col-span-2">
-                  <SalesInvoiceDispatchSelect
-                    customerId={customerId}
-                    value={selectedDispatchId}
-                    onChange={onDispatchSelect}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+        <InvoiceFormCard title={isStockTransferInvoice ? "Destination Warehouse" : "Customer Information"}>
+          {isStockTransferInvoice ? (
+            <div className={INVOICE_FORM_GRID_CLASS}>
+              <InvoiceFormReadOnly label="Destination Warehouse" value={customerName} className="sm:col-span-2 lg:col-span-3" />
+              <InvoiceFormReadOnly label="Source Warehouse" value={warehouse} />
+              <InvoiceFormReadOnly label="Dispatch No." value={dispatchRef} mono />
+              <InvoiceFormReadOnly label="Stock Transfer No." value={salesOrderRef} mono />
+            </div>
+          ) : (
+            <SalesInvoiceCustomerSection
+              customers={customers}
+              customerId={customerId}
+              onCustomerIdChange={onCustomerSelect}
+              fields={customerFields}
+              billToId={billToId}
+              shipToId={shipToId}
+              onBillToChange={(id, addr) => {
+                setBillToId(id);
+                setBillingAddress(addr);
+              }}
+              onShipToChange={(id, addr) => {
+                setShipToId(id);
+                setShippingAddress(addr);
+              }}
+              billingAddress={billingAddress}
+              shippingAddress={shippingAddress}
+            />
+          )}
+        </InvoiceFormCard>
+
+        <InvoiceFormCard title="Invoice Information">
+          <div className={INVOICE_FORM_GRID_CLASS}>
+            <InvoiceFormField label="Invoice No.">
+              <InvoiceFormInput disabled className="bg-slate-50 text-slate-700" value={isEdit ? invoiceNo : "Auto-generated"} />
+            </InvoiceFormField>
+            <InvoiceFormField label="Invoice Date">
+              <InvoiceFormInput type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+            </InvoiceFormField>
+            <InvoiceFormField label="Due Date">
+              <InvoiceFormInput type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </InvoiceFormField>
+            <InvoiceFormReadOnly label="Sales Order No." value={salesOrderRef} mono />
+            <div className="sm:col-span-2 lg:col-span-3">
+              <SalesInvoiceDispatchSelect
+                customerId={customerId}
+                value={selectedDispatchId}
+                onChange={onDispatchSelect}
                 disabled={!customerId}
               />
-                </div>
-                <ReadOnlyField label="Branch" value={branch} />
-                <ReadOnlyField label="Warehouse" value={warehouse} />
-                <ReadOnlyField label="Place of Supply" value={placeOfSupply} />
-                <ReadOnlyField label="GST Treatment" value={gstTreatment} />
-                <div className="space-y-1 sm:col-span-2">
-                  <Label className="text-xs">Salesperson</Label>
-                  <Input className="h-9 text-sm" value={salesperson} onChange={(e) => setSalesperson(e.target.value)} placeholder="Optional" />
-                </div>
-              </div>
-              {showSezSupply && (
-                <div className="rounded-lg border border-border/60 bg-white p-3 space-y-2">
-                  <p className="text-xs font-medium">SEZ Customer — {getSezSupplyTypeLabel(sezSupplyType)}</p>
-                  {sezLutResolution.appliesLut ? (
-                    <p className="text-[11px] text-muted-foreground">
-                      Active LUT: {lutNumber}. IGST will not be charged.
-                    </p>
-                  ) : (
-                    <p className="text-[11px] text-muted-foreground">No active LUT — IGST applies.</p>
-                  )}
-                </div>
+            </div>
+            <InvoiceFormReadOnly label="Branch" value={branch} />
+            <InvoiceFormReadOnly label="Warehouse" value={warehouse} />
+            <InvoiceFormReadOnly label="Place of Supply" value={placeOfSupply} />
+            <InvoiceFormReadOnly label="GST Treatment" value={gstTreatment} />
+            <InvoiceFormField label="Salesperson" className="sm:col-span-2 lg:col-span-3">
+              <InvoiceFormInput value={salesperson} onChange={(e) => setSalesperson(e.target.value)} placeholder="Optional" />
+            </InvoiceFormField>
+          </div>
+          {showSezSupply && (
+            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1">
+              <p className="text-xs font-medium text-slate-800">SEZ Customer — {getSezSupplyTypeLabel(sezSupplyType)}</p>
+              {sezLutResolution.appliesLut ? (
+                <p className={INVOICE_FORM_HELPER_CLASS}>
+                  Active LUT: {lutNumber}. IGST will not be charged.
+                </p>
+              ) : (
+                <p className={INVOICE_FORM_HELPER_CLASS}>No active LUT — IGST applies.</p>
               )}
             </div>
-          </Section>
-        </div>
+          )}
+        </InvoiceFormCard>
+      </div>
 
         {schemeSettlementEntries.length > 0 && (
           <InvoiceSchemeSettlementPanel entries={schemeSettlementEntries} />
@@ -681,40 +714,37 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           />
         </Section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-4 items-start">
           <Section title="Customer Notes &amp; Terms">
-            <div className="rounded-lg border border-border/60 bg-muted/10 p-4 space-y-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Customer Notes</Label>
-                <Textarea
-                  className="min-h-[72px] text-sm resize-y"
-                  value={customerNotes}
-                  onChange={(e) => setCustomerNotes(e.target.value)}
-                  placeholder="Thanks for your business."
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Terms &amp; Conditions</Label>
-                <Textarea
-                  className="min-h-[72px] text-sm resize-y"
-                  value={termsAndConditions}
-                  onChange={(e) => setTermsAndConditions(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Internal Remarks</Label>
-                <Textarea
-                  className="min-h-[56px] text-sm resize-y"
-                  value={internalRemarks}
-                  onChange={(e) => setInternalRemarks(e.target.value)}
-                  placeholder="Internal use only"
-                />
-              </div>
-            </div>
-          </Section>
+          <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
+            <InvoiceFormField label="Customer Notes">
+              <Textarea
+                className={cn(INVOICE_FORM_INPUT_CLASS, "min-h-[72px] resize-y")}
+                value={customerNotes}
+                onChange={(e) => setCustomerNotes(e.target.value)}
+                placeholder="Thanks for your business."
+              />
+            </InvoiceFormField>
+            <InvoiceFormField label="Terms &amp; Conditions">
+              <Textarea
+                className={cn(INVOICE_FORM_INPUT_CLASS, "min-h-[72px] resize-y")}
+                value={termsAndConditions}
+                onChange={(e) => setTermsAndConditions(e.target.value)}
+              />
+            </InvoiceFormField>
+            <InvoiceFormField label="Internal Remarks">
+              <Textarea
+                className={cn(INVOICE_FORM_INPUT_CLASS, "min-h-[72px] resize-y")}
+                value={internalRemarks}
+                onChange={(e) => setInternalRemarks(e.target.value)}
+                placeholder="Internal use only"
+              />
+            </InvoiceFormField>
+          </div>
+        </Section>
 
-          <div className="rounded-lg border border-border bg-white p-4 space-y-3 lg:sticky lg:top-3 lg:z-10 shadow-sm">
-            <h2 className="text-sm font-semibold text-foreground">Invoice Summary</h2>
+        <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3 lg:sticky lg:top-3 lg:z-10 shadow-sm">
+          <h2 className="text-[15px] font-semibold text-slate-900">Invoice Summary</h2>
             <div className="space-y-2 text-sm">
               <div className="flex items-center justify-between gap-4 py-1">
                 <span className="text-muted-foreground">Product Sub Total</span>
@@ -751,13 +781,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         </div>
 
         <Section title="Ledger Impact Preview">
-          <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
+          <div className="rounded-lg border border-slate-200 bg-white p-4">
             <SalesInvoiceAccountingPanel invoice={accountingPreview} />
           </div>
         </Section>
-
-        {error && <p className="text-sm text-red-600">{error}</p>}
-      </div>
-    </AccountsPageShell>
+    </InvoiceFormLayout>
   );
 }

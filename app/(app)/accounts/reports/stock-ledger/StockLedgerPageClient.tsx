@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
+  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
+} from "@/components/accounts/ReportFilters";
 import { Package, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,12 +21,10 @@ import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
 import {
   ReportFilterRow,
-  ReportFinancialYearFilter,
-  ReportFromToDateFilter,
+  ReportDateRangeFilter,
+  useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
-import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import {
@@ -40,19 +42,11 @@ import {
 } from "./stock-ledger-export";
 import { StockLedgerTable } from "./StockLedgerTable";
 
-const filterLabelClass = "text-[10px] font-medium uppercase text-muted-foreground leading-none";
-const filterControlClass = "h-8 text-xs";
-const PLACEHOLDER_FROM = "2026-04-01";
-const PLACEHOLDER_TO = "2026-06-30";
-
 export default function StockLedgerPageClient() {
   const mounted = useClientMounted();
 
   const [productId, setProductId] = useState("");
-  const [financialYearId, setFinancialYearId] = useState("all");
-  const [dateFrom, setDateFrom] = useState(PLACEHOLDER_FROM);
-  const [dateTo, setDateTo] = useState(PLACEHOLDER_TO);
-  const [datesReady, setDatesReady] = useState(false);
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [warehouse, setWarehouse] = useState("all");
   const [batchNo, setBatchNo] = useState("all");
   const [search, setSearch] = useState("");
@@ -69,29 +63,7 @@ export default function StockLedgerPageClient() {
     [productId],
   );
 
-  useEffect(() => {
-    const activeFyId = getActiveFinancialYearId();
-    const years = loadFinancialYears();
-    const activeFy = years.find((fy) => fy.id === activeFyId) ?? years.find((fy) => fy.status === "active");
-
-    if (activeFy) {
-      setFinancialYearId(String(activeFy.id));
-      setDateFrom(activeFy.startDate);
-      setDateTo(activeFy.endDate > "2026-06-30" ? "2026-06-30" : activeFy.endDate);
-    } else {
-      setDateFrom(PLACEHOLDER_FROM);
-      setDateTo(PLACEHOLDER_TO);
-    }
-    setDatesReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (financialYearId === "all") return;
-    const fy = loadFinancialYears().find((y) => String(y.id) === financialYearId);
-    if (!fy) return;
-    setDateFrom(fy.startDate);
-    setDateTo(fy.endDate);
-  }, [financialYearId]);
+  
 
   useEffect(() => {
     setBatchNo("all");
@@ -99,12 +71,12 @@ export default function StockLedgerPageClient() {
   }, [productId]);
 
   const statement = useMemo(() => {
-    if (!mounted || !productId || !datesReady) return null;
+    if (!mounted || !productId) return null;
     return buildStockLedgerStatement({
       productId,
       dateFrom,
       dateTo,
-      financialYearId,
+      financialYearId: "all",
       warehouse,
       batchNo,
       search,
@@ -114,11 +86,9 @@ export default function StockLedgerPageClient() {
     productId,
     dateFrom,
     dateTo,
-    financialYearId,
     warehouse,
     batchNo,
     search,
-    datesReady,
   ]);
 
   const sortedTransactions = useMemo(() => {
@@ -136,23 +106,17 @@ export default function StockLedgerPageClient() {
 
   useEffect(() => {
     setPage(1);
-  }, [productId, dateFrom, dateTo, financialYearId, warehouse, batchNo, search, sortKey, sortDir, pageSize]);
-
-  const financialYearLabel = useMemo(() => {
-    if (financialYearId === "all") return "All years";
-    return loadFinancialYears().find((fy) => String(fy.id) === financialYearId)?.name ?? "—";
-  }, [financialYearId]);
+  }, [productId, dateFrom, dateTo, warehouse, batchNo, search, sortKey, sortDir, pageSize]);
 
   const exportMeta = useMemo(
     () => ({
       dateFrom,
       dateTo,
-      financialYear: financialYearLabel,
       warehouse: warehouse === "all" ? "All" : warehouse,
       batchNo: batchNo === "all" ? "All" : batchNo,
       search,
     }),
-    [dateFrom, dateTo, financialYearLabel, warehouse, batchNo, search],
+    [dateFrom, dateTo, warehouse, batchNo, search],
   );
 
   const canExport = Boolean(statement && productId);
@@ -230,10 +194,11 @@ export default function StockLedgerPageClient() {
       description="Complete stock movement history for a selected product with running balance."
       filters={
         <ReportFilterRow className="items-end">
-          <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
-          <ReportFromToDateFilter
+          <ReportDateRangeFilter
+            preset={preset}
             dateFrom={dateFrom}
             dateTo={dateTo}
+            onPresetChange={setPreset}
             onDateFromChange={setDateFrom}
             onDateToChange={setDateTo}
           />
@@ -303,7 +268,7 @@ export default function StockLedgerPageClient() {
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   aria-label="Clear search"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>

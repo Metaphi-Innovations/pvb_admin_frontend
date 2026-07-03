@@ -146,7 +146,7 @@ function TreeNode({
           isSearchMatch && !isSelected && "bg-brand-50/60",
         )}
         style={{
-          minHeight: isSidebar ? 30 : undefined,
+          minHeight: isSidebar ? 28 : undefined,
           paddingLeft: isSidebar ? coaSidebarIndentPx(depth) : undefined,
         }}
       >
@@ -193,7 +193,7 @@ function TreeNode({
             onClick={handleClick}
             className={cn(
               "flex flex-1 min-w-0 text-left items-center",
-              isSidebar ? "gap-1.5 py-1 pr-1" : "items-start gap-2 py-1.5 pr-2",
+              isSidebar ? "gap-1.5 py-0.5 pr-1" : "items-start gap-2 py-1.5 pr-2",
             )}
           >
             <Icon

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ModuleFiltersBar } from "@/components/module/ModuleFiltersBar";
+import { AccountsFilterBar } from "@/components/accounts/AccountsFilterBar";
 import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { Button } from "@/components/ui/button";
 import {
@@ -107,16 +107,16 @@ export default function DebitNotesPageClient() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs gap-1.5"
+                className="h-9 text-[13px] font-medium gap-1.5"
                 disabled={exporting || visible.length === 0}
                 onClick={handleExport}
               >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <FileSpreadsheet className="w-4 h-4" />
                 {exporting ? "Exporting…" : "Export Excel"}
               </Button>
-              <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5" asChild>
+              <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5" asChild>
                 <Link href={`${DEBIT_NOTES_LIST_PATH}/new`}>
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-4 h-4" />
                   Create Debit Note
                 </Link>
               </Button>
@@ -126,7 +126,7 @@ export default function DebitNotesPageClient() {
 
         <SectionTabs tabs={TABS} active={tab} onChange={setTab} counts={counts} />
 
-        <ModuleFiltersBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Debit note no., supplier, reference…">
+        <AccountsFilterBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Debit note no., supplier, reference…">
           <Select value={vendor} onValueChange={setVendor}>
             <SelectTrigger className="h-8 w-[140px] text-xs bg-white"><SelectValue placeholder="Supplier" /></SelectTrigger>
             <SelectContent>
@@ -163,11 +163,11 @@ export default function DebitNotesPageClient() {
               <SelectItem value="cancelled" className="text-xs">Cancelled</SelectItem>
             </SelectContent>
           </Select>
-        </ModuleFiltersBar>
+        </AccountsFilterBar>
 
         <div className="page-shell overflow-hidden">
           <div className="overflow-x-auto max-h-[calc(100vh-320px)]">
-            <table className="accounts-table w-full text-table min-w-[1320px]">
+            <table className="accounts-table w-full min-w-[1320px]">
               <thead className="border-b">
                 <tr>
                   {[
@@ -195,13 +195,13 @@ export default function DebitNotesPageClient() {
               <tbody>
                 {visible.length === 0 ? (
                   <tr>
-                    <td colSpan={14} className="py-12 text-center text-xs text-muted-foreground">
+                    <td colSpan={14} className="accounts-table-empty">
                       No debit notes. Click Create Debit Note to add one.
                     </td>
                   </tr>
                 ) : (
                   visible.map((r) => (
-                    <tr key={r.id} className="border-b hover:bg-brand-50/25">
+                    <tr key={r.id} className="accounts-table-row group">
                       <td className="px-2.5 py-2 text-xs font-mono font-medium">{r.debitNoteNo}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.debitNoteDate}</td>
                       <td className="px-2.5 py-2 text-xs">{r.vendorName}</td>
@@ -236,7 +236,7 @@ export default function DebitNotesPageClient() {
                                       refresh();
                                     }}
                                   >
-                                    <CheckCircle className="w-3.5 h-3.5" /> Approve
+                                    <CheckCircle className="w-4 h-4" /> Approve
                                   </DropdownMenuItem>
                                 );
                               if (a === "process")
@@ -249,19 +249,19 @@ export default function DebitNotesPageClient() {
                                       refresh();
                                     }}
                                   >
-                                    <PlayCircle className="w-3.5 h-3.5" /> Mark Processed
+                                    <PlayCircle className="w-4 h-4" /> Mark Processed
                                   </DropdownMenuItem>
                                 );
                               if (a === "cancel")
                                 return (
                                   <DropdownMenuItem key="cancel" className="text-xs gap-2 text-red-600" onClick={() => setCancelTarget(r)}>
-                                    <XCircle className="w-3.5 h-3.5" /> Cancel
+                                    <XCircle className="w-4 h-4" /> Cancel
                                   </DropdownMenuItem>
                                 );
                               if (a === "pdf")
                                 return (
                                   <DropdownMenuItem key="pdf" className="text-xs gap-2" onClick={() => downloadDebitNotePdf(r)}>
-                                    <Download className="w-3.5 h-3.5" /> Download PDF
+                                    <Download className="w-4 h-4" /> Download PDF
                                   </DropdownMenuItem>
                                 );
                               return null;

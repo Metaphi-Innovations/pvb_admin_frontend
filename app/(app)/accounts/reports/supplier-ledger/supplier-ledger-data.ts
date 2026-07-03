@@ -1,15 +1,21 @@
+import { demoAddDays, demoDateAt, demoFinancialYearStart, demoToday, demoTimestamp } from "@/lib/accounts/demo-date-utils";
 /**
  * Supplier Ledger report — local data & statement builder.
  * Isolated to Accounts → Reports → Supplier Ledger only.
  */
 
-import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { loadVendors, type Vendor } from "@/app/(app)/masters/vendors/vendor-data";
 import { getPurchaseInvoiceByNo } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
 import { loadPurchaseInvoices } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
 import { loadDebitNotes } from "@/app/(app)/accounts/debit-notes/debit-notes-data";
 import { loadCreditNotes } from "@/app/(app)/accounts/credit-notes/credit-notes-data";
 import { loadVouchers } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { roundMoney, type BalanceSide } from "@/lib/accounts/money-format";
+import {
+  buildPartyLedgerMovements,
+  ledgerOpeningBalance,
+  resolveVendorPayableLedger,
+} from "@/lib/accounts/party-ledger-statement";
 
 export type SupplierLedgerVoucherTypeCode =
   | "opening"
@@ -132,7 +138,7 @@ const SUPPLIER_OPENING: Record<string, { openingBalance: number; openingBalanceT
 /** 24 realistic supplier movements — Agro Chem Distributors (vendor id 1). */
 const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
   {
-    date: "2026-04-04",
+    date: demoDateAt(0),
     voucherNo: "PI-0001",
     voucherTypeCode: "purchase",
     voucherType: "Purchase Invoice",
@@ -142,7 +148,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 45000,
   },
   {
-    date: "2026-04-09",
+    date: demoDateAt(1),
     voucherNo: "PV-0001",
     voucherTypeCode: "payment",
     voucherType: "Payment Voucher",
@@ -152,7 +158,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 0,
   },
   {
-    date: "2026-04-12",
+    date: demoDateAt(2),
     voucherNo: "DN-0001",
     voucherTypeCode: "debit_note",
     voucherType: "Debit Note",
@@ -162,7 +168,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 0,
   },
   {
-    date: "2026-04-16",
+    date: demoDateAt(3),
     voucherNo: "PI-0002",
     voucherTypeCode: "purchase",
     voucherType: "Purchase Invoice",
@@ -172,7 +178,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 68500,
   },
   {
-    date: "2026-04-20",
+    date: demoDateAt(4),
     voucherNo: "PV-0002",
     voucherTypeCode: "payment",
     voucherType: "Payment Voucher",
@@ -182,7 +188,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 0,
   },
   {
-    date: "2026-04-23",
+    date: demoDateAt(5),
     voucherNo: "CN-0001",
     voucherTypeCode: "credit_note",
     voucherType: "Credit Note",
@@ -192,7 +198,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 2200,
   },
   {
-    date: "2026-04-28",
+    date: demoDateAt(6),
     voucherNo: "PI-0003",
     voucherTypeCode: "purchase",
     voucherType: "Purchase Invoice",
@@ -202,7 +208,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 92000,
   },
   {
-    date: "2026-05-02",
+    date: demoDateAt(7),
     voucherNo: "JV-0001",
     voucherTypeCode: "journal",
     voucherType: "Journal Voucher",
@@ -212,7 +218,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 3500,
   },
   {
-    date: "2026-05-05",
+    date: demoDateAt(8),
     voucherNo: "PV-0003",
     voucherTypeCode: "payment",
     voucherType: "Payment Voucher",
@@ -222,7 +228,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 0,
   },
   {
-    date: "2026-05-08",
+    date: demoDateAt(9),
     voucherNo: "DN-0002",
     voucherTypeCode: "debit_note",
     voucherType: "Debit Note",
@@ -232,7 +238,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 0,
   },
   {
-    date: "2026-05-12",
+    date: demoDateAt(10),
     voucherNo: "PI-0004",
     voucherTypeCode: "purchase",
     voucherType: "Purchase Invoice",
@@ -242,7 +248,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 56800,
   },
   {
-    date: "2026-05-15",
+    date: demoDateAt(11),
     voucherNo: "PV-0004",
     voucherTypeCode: "payment",
     voucherType: "Payment Voucher",
@@ -252,7 +258,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 0,
   },
   {
-    date: "2026-05-18",
+    date: demoDateAt(12),
     voucherNo: "JV-0002",
     voucherTypeCode: "journal",
     voucherType: "Journal Voucher",
@@ -262,7 +268,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 0,
   },
   {
-    date: "2026-05-22",
+    date: demoDateAt(13),
     voucherNo: "PI-0005",
     voucherTypeCode: "purchase",
     voucherType: "Purchase Invoice",
@@ -272,7 +278,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 28400,
   },
   {
-    date: "2026-05-25",
+    date: demoDateAt(14),
     voucherNo: "CN-0002",
     voucherTypeCode: "credit_note",
     voucherType: "Credit Note",
@@ -282,7 +288,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 4100,
   },
   {
-    date: "2026-05-28",
+    date: demoDateAt(15),
     voucherNo: "PV-0005",
     voucherTypeCode: "payment",
     voucherType: "Payment Voucher",
@@ -292,7 +298,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 0,
   },
   {
-    date: "2026-06-02",
+    date: demoDateAt(16),
     voucherNo: "PI-0006",
     voucherTypeCode: "purchase",
     voucherType: "Purchase Invoice",
@@ -302,7 +308,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 43200,
   },
   {
-    date: "2026-06-06",
+    date: demoDateAt(17),
     voucherNo: "DN-0003",
     voucherTypeCode: "debit_note",
     voucherType: "Debit Note",
@@ -312,7 +318,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 0,
   },
   {
-    date: "2026-06-10",
+    date: demoDateAt(18),
     voucherNo: "PV-0006",
     voucherTypeCode: "payment",
     voucherType: "Payment Voucher",
@@ -322,7 +328,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 0,
   },
   {
-    date: "2026-06-14",
+    date: demoDateAt(19),
     voucherNo: "JV-0003",
     voucherTypeCode: "journal",
     voucherType: "Journal Voucher",
@@ -332,7 +338,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 75,
   },
   {
-    date: "2026-06-18",
+    date: demoDateAt(20),
     voucherNo: "PI-0007",
     voucherTypeCode: "purchase",
     voucherType: "Purchase Invoice",
@@ -342,7 +348,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 37600,
   },
   {
-    date: "2026-06-22",
+    date: demoDateAt(21),
     voucherNo: "PV-0007",
     voucherTypeCode: "payment",
     voucherType: "Payment Voucher",
@@ -352,7 +358,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 0,
   },
   {
-    date: "2026-06-26",
+    date: demoDateAt(22),
     voucherNo: "CN-0003",
     voucherTypeCode: "credit_note",
     voucherType: "Credit Note",
@@ -362,7 +368,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 2800,
   },
   {
-    date: "2026-06-28",
+    date: demoDateAt(23),
     voucherNo: "DN-0004",
     voucherTypeCode: "debit_note",
     voucherType: "Debit Note",
@@ -375,7 +381,7 @@ const AGRO_CHEM_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
 
 const SEED_CORP_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
   {
-    date: "2026-04-08",
+    date: demoDateAt(24),
     voucherNo: "PI-0101",
     voucherTypeCode: "purchase",
     voucherType: "Purchase Invoice",
@@ -385,7 +391,7 @@ const SEED_CORP_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 48000,
   },
   {
-    date: "2026-04-18",
+    date: demoDateAt(25),
     voucherNo: "PV-0101",
     voucherTypeCode: "payment",
     voucherType: "Payment Voucher",
@@ -395,7 +401,7 @@ const SEED_CORP_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 0,
   },
   {
-    date: "2026-05-10",
+    date: demoDateAt(26),
     voucherNo: "PI-0102",
     voucherTypeCode: "purchase",
     voucherType: "Purchase Invoice",
@@ -405,7 +411,7 @@ const SEED_CORP_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 36500,
   },
   {
-    date: "2026-05-20",
+    date: demoDateAt(27),
     voucherNo: "PV-0102",
     voucherTypeCode: "payment",
     voucherType: "Payment Voucher",
@@ -415,7 +421,7 @@ const SEED_CORP_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 0,
   },
   {
-    date: "2026-06-05",
+    date: demoDateAt(28),
     voucherNo: "DN-0101",
     voucherTypeCode: "debit_note",
     voucherType: "Debit Note",
@@ -425,7 +431,7 @@ const SEED_CORP_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 0,
   },
   {
-    date: "2026-06-15",
+    date: demoDateAt(29),
     voucherNo: "JV-0101",
     voucherTypeCode: "journal",
     voucherType: "Journal Voucher",
@@ -438,7 +444,7 @@ const SEED_CORP_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
 
 const SWIFT_LOGISTICS_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
   {
-    date: "2026-04-11",
+    date: demoDateAt(30),
     voucherNo: "PI-0201",
     voucherTypeCode: "purchase",
     voucherType: "Purchase Invoice",
@@ -448,7 +454,7 @@ const SWIFT_LOGISTICS_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 18500,
   },
   {
-    date: "2026-04-25",
+    date: demoDateAt(31),
     voucherNo: "PV-0201",
     voucherTypeCode: "payment",
     voucherType: "Payment Voucher",
@@ -458,7 +464,7 @@ const SWIFT_LOGISTICS_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 0,
   },
   {
-    date: "2026-05-14",
+    date: demoDateAt(32),
     voucherNo: "PI-0202",
     voucherTypeCode: "purchase",
     voucherType: "Purchase Invoice",
@@ -468,7 +474,7 @@ const SWIFT_LOGISTICS_TRANSACTIONS: SupplierLedgerRawTransaction[] = [
     credit: 22400,
   },
   {
-    date: "2026-06-08",
+    date: demoDateAt(33),
     voucherNo: "PV-0202",
     voucherTypeCode: "payment",
     voucherType: "Payment Voucher",
@@ -485,24 +491,38 @@ const TRANSACTIONS_BY_SUPPLIER: Record<string, SupplierLedgerRawTransaction[]> =
   "3": SWIFT_LOGISTICS_TRANSACTIONS,
 };
 
+function inferSupplierVoucherTypeCode(
+  voucherType: string,
+  voucherNo: string,
+): SupplierLedgerVoucherTypeCode {
+  const label = voucherType.toLowerCase();
+  const ref = voucherNo.toUpperCase();
+  if (label.includes("opening") || ref === "OB") return "opening";
+  if (label.includes("purchase") || ref.startsWith("PUR-") || ref.startsWith("PI-")) return "purchase";
+  if (label.includes("payment") || ref.startsWith("PV-")) return "payment";
+  if (label.includes("debit note") || ref.startsWith("DN-")) return "debit_note";
+  if (label.includes("credit note") || ref.startsWith("CN-")) return "credit_note";
+  return "journal";
+}
+
+function vendorToOption(vendor: Vendor): SupplierLedgerSupplierOption {
+  const ledger = resolveVendorPayableLedger(vendor);
+  const opening = ledgerOpeningBalance(ledger);
+  return {
+    id: String(vendor.id),
+    code: vendor.vendorCode,
+    name: vendor.vendorName,
+    gstin: vendor.gstNumber || "—",
+    pan: vendor.panNumber || "—",
+    openingBalance: opening.amount,
+    openingBalanceType: opening.balanceType,
+  };
+}
+
 export function getSupplierLedgerSuppliers(): SupplierLedgerSupplierOption[] {
   return loadVendors()
     .filter((v) => v.status === "active")
-    .map((v) => {
-      const opening = SUPPLIER_OPENING[String(v.id)] ?? {
-        openingBalance: 0,
-        openingBalanceType: "Credit" as BalanceSide,
-      };
-      return {
-        id: String(v.id),
-        code: v.vendorCode,
-        name: v.vendorName,
-        gstin: v.gstNumber || "—",
-        pan: v.panNumber || "—",
-        openingBalance: opening.openingBalance,
-        openingBalanceType: opening.openingBalanceType,
-      };
-    })
+    .map(vendorToOption)
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -589,11 +609,34 @@ export function buildSupplierLedgerStatement(
   const supplier = getSupplierLedgerSupplierById(supplierId);
   if (!supplier) return null;
 
-  const allTransactions = (TRANSACTIONS_BY_SUPPLIER[supplierId] ?? []).sort(
-    (a, b) => a.date.localeCompare(b.date) || a.voucherNo.localeCompare(b.voucherNo),
-  );
+  const masterVendor = loadVendors().find((v) => String(v.id) === supplierId);
+  const ledger = masterVendor ? resolveVendorPayableLedger(masterVendor) : null;
+  const opening = ledgerOpeningBalance(ledger);
+  const partyMovements = buildPartyLedgerMovements(ledger);
 
-  const periodOpening = computeOpeningAtDate(supplier, allTransactions, filters.dateFrom);
+  const allTransactions = partyMovements
+    .map(
+      (m): SupplierLedgerRawTransaction => ({
+        date: m.date,
+        voucherNo: m.voucherNo,
+        voucherTypeCode: inferSupplierVoucherTypeCode(m.voucherType, m.voucherNo),
+        voucherType: m.voucherType,
+        particular: m.particular,
+        narration: m.narration,
+        debit: m.debit,
+        credit: m.credit,
+        viewHref: m.viewHref ?? undefined,
+      }),
+    )
+    .sort((a, b) => a.date.localeCompare(b.date) || a.voucherNo.localeCompare(b.voucherNo));
+
+  const supplierWithOpening: SupplierLedgerSupplierOption = {
+    ...supplier,
+    openingBalance: opening.amount,
+    openingBalanceType: opening.balanceType,
+  };
+
+  const periodOpening = computeOpeningAtDate(supplierWithOpening, allTransactions, filters.dateFrom);
 
   const periodTransactions = allTransactions.filter(
     (t) => t.date >= filters.dateFrom && t.date <= filters.dateTo,
@@ -619,7 +662,10 @@ export function buildSupplierLedgerStatement(
       credit: t.credit,
       runningBalance: running.amount,
       runningBalanceType: running.balanceType,
-      viewHref: t.viewHref ?? resolveSupplierLedgerVoucherHref(t.voucherNo, t.voucherTypeCode) ?? undefined,
+      viewHref:
+        t.viewHref ??
+        resolveSupplierLedgerVoucherHref(t.voucherNo, t.voucherTypeCode) ??
+        undefined,
     };
   });
 

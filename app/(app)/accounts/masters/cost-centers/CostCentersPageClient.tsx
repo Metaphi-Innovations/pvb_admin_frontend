@@ -35,18 +35,18 @@ export default function CostCentersPageClient() {
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
               <Label className="text-[11px]">Code</Label>
-              <Input className="h-8 text-xs w-32 font-mono" value={code} onChange={(e) => setCode(e.target.value)} />
+              <Input className="h-9 text-[13px] font-medium w-32 font-mono" value={code} onChange={(e) => setCode(e.target.value)} />
             </div>
             <div className="space-y-1 flex-1 min-w-[200px]">
               <Label className="text-[11px]">Name</Label>
-              <Input className="h-8 text-xs" value={name} onChange={(e) => setName(e.target.value)} />
+              <Input className="h-9 text-[13px] font-medium" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
-            <Button size="sm" className="h-8 text-xs bg-brand-600 text-white gap-1" onClick={save}>
-              <Plus className="w-3.5 h-3.5" /> Add
+            <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 text-white gap-1" onClick={save}>
+              <Plus className="w-4 h-4" /> Add
             </Button>
           </div>
         </div>
-        <table className="accounts-table w-full text-table">
+        <table className="accounts-table w-full">
           <thead className="border-b border-border/60">
             <tr>
               <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Code</th>
@@ -56,7 +56,7 @@ export default function CostCentersPageClient() {
           </thead>
           <tbody>
             {records.map((r) => (
-              <tr key={r.id} className="border-b border-border/40 hover:bg-muted/20">
+              <tr key={r.id} className="accounts-table-row group">
                 <td className="px-4 py-2.5 text-xs font-mono font-semibold">{r.code}</td>
                 <td className="px-4 py-2.5 text-xs">{r.name}</td>
                 <td className="px-4 py-2.5"><StatusBadge status={r.status} /></td>
