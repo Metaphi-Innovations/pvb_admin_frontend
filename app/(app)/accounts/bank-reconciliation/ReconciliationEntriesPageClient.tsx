@@ -29,11 +29,11 @@ function formatDisplayDate(iso: string): string {
 
 function StatementDetailsCell({ entry }: { entry: BankStatementEntry }) {
   return (
-    <div className="space-y-1 py-0.5">
+    <div className="min-w-0">
       {entry.referenceNo && (
-        <p className="text-[10px] font-mono text-muted-foreground">Ref# {entry.referenceNo}</p>
+        <p className="text-[10px] font-mono text-muted-foreground leading-tight">Ref# {entry.referenceNo}</p>
       )}
-      <p className="text-xs whitespace-normal break-words leading-relaxed">{entry.narration}</p>
+      <p className="text-xs whitespace-normal break-words leading-snug mt-0.5">{entry.narration}</p>
     </div>
   );
 }
@@ -154,7 +154,7 @@ export default function ReconciliationEntriesPageClient({
           {selectedIds.size > 0 && (
             <Button
               size="sm"
-              className="h-7 text-xs bg-brand-600 text-white"
+              className="h-9 text-[13px] font-medium bg-brand-600 text-white"
               onClick={() => setActiveEntries(selectedEntries)}
             >
               Categorize ({selectedIds.size})
@@ -163,11 +163,11 @@ export default function ReconciliationEntriesPageClient({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 text-xs"
+            className="h-9 text-[13px] font-medium"
             disabled={exporting}
             onClick={handleExport}
           >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
+            <FileSpreadsheet className="w-4 h-4" />
           </Button>
         </div>
       </div>
@@ -175,7 +175,7 @@ export default function ReconciliationEntriesPageClient({
       {/* Filters */}
       <div className="flex-shrink-0 px-3 py-2 border-b border-border/30 flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[160px] max-w-xs">
-          <Search className="absolute left-2 top-2 w-3.5 h-3.5 text-muted-foreground" />
+          <Search className="absolute left-2 top-2 w-4 h-4 text-muted-foreground" />
           <Input
             className="h-8 pl-7 text-xs"
             placeholder="Search narration, reference…"
@@ -219,28 +219,28 @@ export default function ReconciliationEntriesPageClient({
             panelEntries.length > 0 ? "flex-1 border-r border-border/40" : "w-full",
           )}
         >
-          <table className="accounts-table w-full text-sm min-w-full">
-            <thead className="bg-slate-50 border-b border-border/60 sticky top-0 z-[1]">
+          <table className="accounts-table w-full min-w-full">
+            <thead className="bg-muted/40 border-b border-border sticky top-0 z-[1]">
               <tr>
-                <th className="w-10 px-3 py-2.5">
+                <th className="w-10 px-4 py-2.5 align-middle">
                   <Checkbox
                     checked={entries.length > 0 && selectedIds.size === entries.length}
                     onCheckedChange={toggleSelectAll}
                   />
                 </th>
-                <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap w-[110px]">
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap w-[110px] align-middle">
                   Date
                 </th>
-                <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground min-w-[min(100%,320px)]">
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground min-w-[min(100%,320px)] align-middle">
                   Statement Details
                 </th>
-                <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap w-[130px]">
+                <th className="px-4 py-2.5 text-right text-xs font-semibold text-foreground whitespace-nowrap w-[130px] align-middle">
                   Deposits
                 </th>
-                <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap w-[130px]">
+                <th className="px-4 py-2.5 text-right text-xs font-semibold text-foreground whitespace-nowrap w-[130px] align-middle">
                   Withdrawals
                 </th>
-                <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground w-[140px]">
+                <th className="px-4 py-2.5 text-left text-xs font-semibold text-foreground w-[140px] align-middle">
                   Status
                 </th>
               </tr>
@@ -248,7 +248,7 @@ export default function ReconciliationEntriesPageClient({
             <tbody>
               {entries.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-xs text-muted-foreground">
+                  <td colSpan={6} className="accounts-table-empty">
                     No entries match filters.
                   </td>
                 </tr>
@@ -266,25 +266,25 @@ export default function ReconciliationEntriesPageClient({
                         if (selectedIds.size <= 1) setSelectedIds(new Set());
                       }}
                     >
-                      <td className="px-2 py-2 align-top" onClick={(ev) => ev.stopPropagation()}>
+                      <td className="px-4 py-2 align-middle" onClick={(ev) => ev.stopPropagation()}>
                         <Checkbox
                           checked={selectedIds.has(e.id)}
                           onCheckedChange={() => toggleSelect(e.id)}
                         />
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap align-top">
+                      <td className="px-4 py-2 text-xs text-muted-foreground whitespace-nowrap align-middle">
                         {formatDisplayDate(e.transactionDate)}
                       </td>
-                      <td className="px-3 py-2.5 align-top">
+                      <td className="px-4 py-2 align-middle">
                         <StatementDetailsCell entry={e} />
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-right tabular-nums align-top font-medium text-green-600">
+                      <td className="px-4 py-2 text-xs text-right tabular-nums align-middle font-medium text-emerald-600">
                         {e.credit > 0 ? formatINR(e.credit) : "—"}
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-right tabular-nums align-top font-medium text-red-600">
+                      <td className="px-4 py-2 text-xs text-right tabular-nums align-middle font-medium text-red-600">
                         {e.debit > 0 ? formatINR(e.debit) : "—"}
                       </td>
-                      <td className="px-3 py-2.5 align-top">
+                      <td className="px-4 py-2 align-middle">
                         <MatchStatusBadge status={e.matchStatus} />
                       </td>
                     </tr>
@@ -307,7 +307,7 @@ export default function ReconciliationEntriesPageClient({
         {panelEntries.length > 0 ? (
           <Button
             size="sm"
-            className="w-full h-8 text-xs bg-brand-600 text-white"
+            className="w-full h-9 text-[13px] font-medium bg-brand-600 text-white"
             onClick={() => setMobilePanelOpen(true)}
           >
             Categorize Manually

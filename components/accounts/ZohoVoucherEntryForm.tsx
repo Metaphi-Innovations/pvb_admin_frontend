@@ -16,7 +16,6 @@ import { GripVertical, Pencil, Plus, Save, Settings, Trash2, X } from "lucide-re
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { GroupedLedgerSelect } from "@/components/accounts/GroupedLedgerSelect";
 import { JournalLedgerImpactPreview } from "@/components/accounts/JournalLedgerImpactPreview";
-import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { journalEntryImpact } from "@/lib/accounts/ledger-impact-previews";
 import { formatMoney, MONEY_INPUT_CLASS } from "@/lib/accounts/money-format";
 import { applyAutoPartyToLine, applyAutoPartyToLines } from "@/lib/accounts/voucher-ledger-groups";
@@ -71,9 +70,9 @@ const VOUCHER_NUMBER_LABELS: Partial<Record<VoucherTypeCode, string>> = {
 
 const VOUCHER_DESCRIPTIONS: Partial<Record<VoucherTypeCode, string>> = {
   journal: "Record debit and credit entries in any order. Post when ready.",
-  receipt: "Record money received in bank or cash from a customer or income source.",
-  payment: "Record money paid from bank or cash to a party or expense ledger.",
-  contra: "Transfer funds between cash and bank accounts.",
+  receipt: "Record debit and credit entries in any order. Post when ready.",
+  payment: "Record debit and credit entries in any order. Post when ready.",
+  contra: "Record debit and credit entries in any order. Post when ready.",
 };
 
 function FormRow({
@@ -332,7 +331,7 @@ export function ZohoVoucherEntryForm({
       narration,
       lines: enrichedLines,
       status: "posted" as const,
-      entryMode: voucherType === "journal" ? ("double" as const) : entryMode,
+      entryMode: "double" as const,
     };
     const voucher =
       isEdit && voucherId != null
@@ -412,30 +411,30 @@ export function ZohoVoucherEntryForm({
       actions={
         readOnly ? (
           <>
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleCancel}>
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={handleCancel}>
               Back
             </Button>
             {existingVoucher && canEditVoucher(existingVoucher) && onEdit && (
               <Button
                 size="sm"
-                className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+                className="h-9 text-[13px] font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
                 onClick={onEdit}
               >
-                <Pencil className="w-3.5 h-3.5" /> Edit
+                <Pencil className="w-4 h-4" /> Edit
               </Button>
             )}
           </>
         ) : (
           <>
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={handleCancel}>
-              <X className="w-3.5 h-3.5" /> Cancel
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1" onClick={handleCancel}>
+              <X className="w-4 h-4" /> Cancel
             </Button>
             <Button
               size="sm"
-              className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1"
+              className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
               onClick={handlePost}
             >
-              <Save className="w-3.5 h-3.5" /> Post Voucher
+              <Save className="w-4 h-4" /> Post Voucher
             </Button>
           </>
         )
@@ -614,7 +613,7 @@ export function ZohoVoucherEntryForm({
                             className="w-8 h-8 flex items-center justify-center rounded hover:bg-red-50 text-muted-foreground hover:text-red-600"
                             aria-label="Delete row"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         )}
                       </td>
@@ -629,11 +628,11 @@ export function ZohoVoucherEntryForm({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 text-xs gap-1 text-brand-600 hover:text-brand-700 hover:bg-brand-50"
+                  className="h-9 text-[13px] font-medium gap-1 text-brand-600 hover:text-brand-700 hover:bg-brand-50"
                   onClick={addLine}
                   type="button"
                 >
-                  <Plus className="w-3.5 h-3.5" /> Add New Row
+                  <Plus className="w-4 h-4" /> Add New Row
                 </Button>
               </div>
             )}
@@ -670,21 +669,16 @@ export function ZohoVoucherEntryForm({
             </div>
           </div>
 
-          {readOnly && impactLines.length > 0 &&
-            (voucherType === "journal" ? (
-              <div className="mt-4 mb-2">
-                <JournalLedgerImpactPreview
-                  lines={impactLines}
-                  totalDebit={totalDebit}
-                  totalCredit={totalCredit}
-                  balanced={balanced}
-                />
-              </div>
-            ) : (
-              <div className="mt-4">
-                <LedgerImpactPreview lines={impactLines} />
-              </div>
-            ))}
+          {readOnly && impactLines.length > 0 && (
+            <div className="mt-4 mb-2">
+              <JournalLedgerImpactPreview
+                lines={impactLines}
+                totalDebit={totalDebit}
+                totalCredit={totalCredit}
+                balanced={balanced}
+              />
+            </div>
+          )}
 
           {readOnly && voucherId && VOUCHER_CATEGORY_MAP[voucherType] && (
             <div className="mt-4 px-4 sm:px-6">

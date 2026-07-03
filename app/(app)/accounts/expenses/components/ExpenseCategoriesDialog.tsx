@@ -125,12 +125,12 @@ export function ExpenseCategoriesDialog({
           <div className="flex items-center justify-between gap-2">
             <DialogTitle className="text-sm font-semibold">Expense Categories</DialogTitle>
             {mode === "list" && (
-              <Button size="sm" className="h-8 text-xs gap-1" onClick={openAdd}>
-                <Plus className="w-3.5 h-3.5" /> Add Category
+              <Button size="sm" className="h-9 text-[13px] font-medium gap-1" onClick={openAdd}>
+                <Plus className="w-4 h-4" /> Add Category
               </Button>
             )}
             {mode !== "list" && (
-              <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setMode("list")}>
+              <Button variant="ghost" size="sm" className="h-9 text-[13px] font-medium" onClick={() => setMode("list")}>
                 Back to list
               </Button>
             )}
@@ -150,7 +150,7 @@ export function ExpenseCategoriesDialog({
               </thead>
               <tbody>
                 {categories.map((c) => (
-                  <tr key={c.id} className="border-b border-border/50 hover:bg-muted/20">
+                  <tr key={c.id} className="accounts-table-row group">
                     <td className="py-2 px-2 font-medium">{c.name}</td>
                     <td className="py-2 px-2 text-muted-foreground max-w-[200px] truncate">{c.description}</td>
                     <td className="py-2 px-2">
@@ -159,10 +159,10 @@ export function ExpenseCategoriesDialog({
                     <td className="py-2 px-2 text-right">
                       <div className="flex justify-end gap-1">
                         <button type="button" className="p-1.5 rounded hover:bg-muted" onClick={() => openView(c)}>
-                          <Eye className="w-3.5 h-3.5" />
+                          <Eye className="w-4 h-4" />
                         </button>
                         <button type="button" className="p-1.5 rounded hover:bg-muted" onClick={() => openEdit(c)}>
-                          <Pencil className="w-3.5 h-3.5" />
+                          <Pencil className="w-4 h-4" />
                         </button>
                         <Button variant="outline" size="sm" className="h-7 text-[10px] px-2" onClick={() => toggleStatus(c)}>
                           {c.status === "active" ? "Deactivate" : "Activate"}
@@ -199,7 +199,7 @@ export function ExpenseCategoriesDialog({
           <div className="p-5 space-y-3 flex-1">
             <div className="space-y-1">
               <Label className="text-xs">Category Name *</Label>
-              <Input className="h-8 text-xs" value={name} onChange={(e) => setName(e.target.value)} />
+              <Input className="h-9 text-[13px] font-medium" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Description</Label>
@@ -212,7 +212,7 @@ export function ExpenseCategoriesDialog({
             <div className="space-y-1">
               <Label className="text-xs">Status</Label>
               <Select value={status} onValueChange={(v) => setStatus(v as "active" | "inactive")}>
-                <SelectTrigger className="h-8 text-xs w-[140px]">
+                <SelectTrigger className="h-9 text-[13px] font-medium w-[140px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -222,10 +222,10 @@ export function ExpenseCategoriesDialog({
               </Select>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setMode("list")}>
+              <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => setMode("list")}>
                 Cancel
               </Button>
-              <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={persist}>
+              <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white" onClick={persist}>
                 {editing ? "Save Changes" : "Add Category"}
               </Button>
             </div>

@@ -128,7 +128,7 @@ export function buildCreditNoteLedgerImpact(input: {
 export function postCreditNoteAccounting(note: CreditNoteRecord): PostingResult | null {
   if (note.status !== "approved") return null;
 
-  const isScheme = Boolean(note.schemeSettlementKey);
+  const isScheme = Boolean(note.schemeSettlementKey) || note.source === "payment_discount_scheme";
   const customerName = note.receivableLedger?.trim() || note.customerName;
   const interstate = inferInterstateFromPlaceOfSupply(
     (note as { placeOfSupply?: string }).placeOfSupply,

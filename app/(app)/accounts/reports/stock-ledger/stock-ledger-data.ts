@@ -1,3 +1,4 @@
+import { demoAddDays, demoDateAt, demoFinancialYearStart, demoToday, demoTimestamp } from "@/lib/accounts/demo-date-utils";
 /**
  * Stock Ledger report — local data & statement builder.
  * Isolated to Accounts → Reports → Stock Ledger only.
@@ -144,40 +145,40 @@ const PRODUCTS: StockLedgerProductOption[] = [
 
 /** 25 movements for Bio Growth Liquid 5L — Apr–Jun 2026. */
 const BGL_MOVEMENTS: Omit<StockLedgerMovementSeed, "productId">[] = [
-  { id: "sl-001", date: "2026-04-01", transactionType: "opening_stock", documentNo: "OS-0001", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 500, outQty: 0, costPrice: 180, financialYearId: 1 },
-  { id: "sl-002", date: "2026-04-03", transactionType: "purchase", documentNo: "GRN-0005", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 100, outQty: 0, costPrice: 180, financialYearId: 1 },
-  { id: "sl-003", date: "2026-04-05", transactionType: "purchase", documentNo: "GRN-0006", warehouse: "Regional Warehouse", batchNo: "BG-2402", inQty: 50, outQty: 0, costPrice: 180, financialYearId: 1 },
-  { id: "sl-004", date: "2026-04-08", transactionType: "sales", documentNo: "SI-0003", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 0, outQty: 80, costPrice: 180, financialYearId: 1 },
-  { id: "sl-005", date: "2026-04-10", transactionType: "stock_transfer_out", documentNo: "ST-0002", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 0, outQty: 50, costPrice: 180, financialYearId: 1 },
-  { id: "sl-006", date: "2026-04-10", transactionType: "stock_transfer_in", documentNo: "ST-0002", warehouse: "Field Depot", batchNo: "BG-2401", inQty: 50, outQty: 0, costPrice: 180, financialYearId: 1 },
-  { id: "sl-007", date: "2026-04-12", transactionType: "sales_return", documentNo: "SR-0001", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 20, outQty: 0, costPrice: 180, financialYearId: 1 },
-  { id: "sl-008", date: "2026-04-15", transactionType: "purchase", documentNo: "GRN-0009", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 75, outQty: 0, costPrice: 180, financialYearId: 1 },
-  { id: "sl-009", date: "2026-04-18", transactionType: "sales", documentNo: "SI-0008", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 0, outQty: 60, costPrice: 180, financialYearId: 1 },
-  { id: "sl-010", date: "2026-04-20", transactionType: "sample_issue", documentNo: "SM-0002", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 0, outQty: 15, costPrice: 180, financialYearId: 1 },
-  { id: "sl-011", date: "2026-04-22", transactionType: "purchase_return", documentNo: "PR-0001", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 0, outQty: 10, costPrice: 180, financialYearId: 1 },
-  { id: "sl-012", date: "2026-04-25", transactionType: "sales", documentNo: "SI-0012", warehouse: "Field Depot", batchNo: "BG-2401", inQty: 0, outQty: 40, costPrice: 180, financialYearId: 1 },
-  { id: "sl-013", date: "2026-04-28", transactionType: "purchase", documentNo: "GRN-0015", warehouse: "Regional Warehouse", batchNo: "BG-2402", inQty: 120, outQty: 0, costPrice: 180, financialYearId: 1 },
-  { id: "sl-014", date: "2026-05-02", transactionType: "sales", documentNo: "SI-0015", warehouse: "Regional Warehouse", batchNo: "BG-2402", inQty: 0, outQty: 55, costPrice: 180, financialYearId: 1 },
-  { id: "sl-015", date: "2026-05-05", transactionType: "sales_return", documentNo: "SR-0002", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 12, outQty: 0, costPrice: 180, financialYearId: 1 },
-  { id: "sl-016", date: "2026-05-08", transactionType: "stock_transfer_out", documentNo: "ST-0005", warehouse: "Regional Warehouse", batchNo: "BG-2402", inQty: 0, outQty: 30, costPrice: 180, financialYearId: 1 },
-  { id: "sl-017", date: "2026-05-08", transactionType: "stock_transfer_in", documentNo: "ST-0005", warehouse: "Central Warehouse", batchNo: "BG-2402", inQty: 30, outQty: 0, costPrice: 180, financialYearId: 1 },
-  { id: "sl-018", date: "2026-05-11", transactionType: "sample_issue", documentNo: "SM-0005", warehouse: "Regional Warehouse", batchNo: "BG-2402", inQty: 0, outQty: 8, costPrice: 180, financialYearId: 1 },
-  { id: "sl-019", date: "2026-05-14", transactionType: "purchase_return", documentNo: "PR-0003", warehouse: "Regional Warehouse", batchNo: "BG-2402", inQty: 0, outQty: 5, costPrice: 180, financialYearId: 1 },
-  { id: "sl-020", date: "2026-05-18", transactionType: "sales", documentNo: "SI-0020", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 0, outQty: 70, costPrice: 180, financialYearId: 1 },
-  { id: "sl-021", date: "2026-05-22", transactionType: "purchase", documentNo: "GRN-0020", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 90, outQty: 0, costPrice: 180, financialYearId: 1 },
-  { id: "sl-022", date: "2026-05-25", transactionType: "sample_return", documentNo: "SM-0008", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 6, outQty: 0, costPrice: 180, financialYearId: 1 },
-  { id: "sl-023", date: "2026-05-28", transactionType: "sales", documentNo: "SI-0025", warehouse: "Field Depot", batchNo: "BG-2401", inQty: 0, outQty: 45, costPrice: 180, financialYearId: 1 },
-  { id: "sl-024", date: "2026-06-02", transactionType: "purchase", documentNo: "GRN-0025", warehouse: "Regional Warehouse", batchNo: "BG-2402", inQty: 60, outQty: 0, costPrice: 180, financialYearId: 1 },
-  { id: "sl-025", date: "2026-06-06", transactionType: "sales", documentNo: "SI-0030", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 0, outQty: 50, costPrice: 180, financialYearId: 1 },
+  { id: "sl-001", date: demoDateAt(0), transactionType: "opening_stock", documentNo: "OS-0001", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 500, outQty: 0, costPrice: 180, financialYearId: 1 },
+  { id: "sl-002", date: demoDateAt(1), transactionType: "purchase", documentNo: "GRN-0005", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 100, outQty: 0, costPrice: 180, financialYearId: 1 },
+  { id: "sl-003", date: demoDateAt(2), transactionType: "purchase", documentNo: "GRN-0006", warehouse: "Regional Warehouse", batchNo: "BG-2402", inQty: 50, outQty: 0, costPrice: 180, financialYearId: 1 },
+  { id: "sl-004", date: demoDateAt(3), transactionType: "sales", documentNo: "SI-0003", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 0, outQty: 80, costPrice: 180, financialYearId: 1 },
+  { id: "sl-005", date: demoDateAt(4), transactionType: "stock_transfer_out", documentNo: "ST-0002", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 0, outQty: 50, costPrice: 180, financialYearId: 1 },
+  { id: "sl-006", date: demoDateAt(5), transactionType: "stock_transfer_in", documentNo: "ST-0002", warehouse: "Field Depot", batchNo: "BG-2401", inQty: 50, outQty: 0, costPrice: 180, financialYearId: 1 },
+  { id: "sl-007", date: demoDateAt(6), transactionType: "sales_return", documentNo: "SR-0001", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 20, outQty: 0, costPrice: 180, financialYearId: 1 },
+  { id: "sl-008", date: demoDateAt(7), transactionType: "purchase", documentNo: "GRN-0009", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 75, outQty: 0, costPrice: 180, financialYearId: 1 },
+  { id: "sl-009", date: demoDateAt(8), transactionType: "sales", documentNo: "SI-0008", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 0, outQty: 60, costPrice: 180, financialYearId: 1 },
+  { id: "sl-010", date: demoDateAt(9), transactionType: "sample_issue", documentNo: "SM-0002", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 0, outQty: 15, costPrice: 180, financialYearId: 1 },
+  { id: "sl-011", date: demoDateAt(10), transactionType: "purchase_return", documentNo: "PR-0001", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 0, outQty: 10, costPrice: 180, financialYearId: 1 },
+  { id: "sl-012", date: demoDateAt(11), transactionType: "sales", documentNo: "SI-0012", warehouse: "Field Depot", batchNo: "BG-2401", inQty: 0, outQty: 40, costPrice: 180, financialYearId: 1 },
+  { id: "sl-013", date: demoDateAt(12), transactionType: "purchase", documentNo: "GRN-0015", warehouse: "Regional Warehouse", batchNo: "BG-2402", inQty: 120, outQty: 0, costPrice: 180, financialYearId: 1 },
+  { id: "sl-014", date: demoDateAt(13), transactionType: "sales", documentNo: "SI-0015", warehouse: "Regional Warehouse", batchNo: "BG-2402", inQty: 0, outQty: 55, costPrice: 180, financialYearId: 1 },
+  { id: "sl-015", date: demoDateAt(14), transactionType: "sales_return", documentNo: "SR-0002", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 12, outQty: 0, costPrice: 180, financialYearId: 1 },
+  { id: "sl-016", date: demoDateAt(15), transactionType: "stock_transfer_out", documentNo: "ST-0005", warehouse: "Regional Warehouse", batchNo: "BG-2402", inQty: 0, outQty: 30, costPrice: 180, financialYearId: 1 },
+  { id: "sl-017", date: demoDateAt(16), transactionType: "stock_transfer_in", documentNo: "ST-0005", warehouse: "Central Warehouse", batchNo: "BG-2402", inQty: 30, outQty: 0, costPrice: 180, financialYearId: 1 },
+  { id: "sl-018", date: demoDateAt(17), transactionType: "sample_issue", documentNo: "SM-0005", warehouse: "Regional Warehouse", batchNo: "BG-2402", inQty: 0, outQty: 8, costPrice: 180, financialYearId: 1 },
+  { id: "sl-019", date: demoDateAt(18), transactionType: "purchase_return", documentNo: "PR-0003", warehouse: "Regional Warehouse", batchNo: "BG-2402", inQty: 0, outQty: 5, costPrice: 180, financialYearId: 1 },
+  { id: "sl-020", date: demoDateAt(19), transactionType: "sales", documentNo: "SI-0020", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 0, outQty: 70, costPrice: 180, financialYearId: 1 },
+  { id: "sl-021", date: demoDateAt(20), transactionType: "purchase", documentNo: "GRN-0020", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 90, outQty: 0, costPrice: 180, financialYearId: 1 },
+  { id: "sl-022", date: demoDateAt(21), transactionType: "sample_return", documentNo: "SM-0008", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 6, outQty: 0, costPrice: 180, financialYearId: 1 },
+  { id: "sl-023", date: demoDateAt(22), transactionType: "sales", documentNo: "SI-0025", warehouse: "Field Depot", batchNo: "BG-2401", inQty: 0, outQty: 45, costPrice: 180, financialYearId: 1 },
+  { id: "sl-024", date: demoDateAt(23), transactionType: "purchase", documentNo: "GRN-0025", warehouse: "Regional Warehouse", batchNo: "BG-2402", inQty: 60, outQty: 0, costPrice: 180, financialYearId: 1 },
+  { id: "sl-025", date: demoDateAt(24), transactionType: "sales", documentNo: "SI-0030", warehouse: "Central Warehouse", batchNo: "BG-2401", inQty: 0, outQty: 50, costPrice: 180, financialYearId: 1 },
 ];
 
 const OTHER_MOVEMENTS: StockLedgerMovementSeed[] = [
-  { id: "sl-u01", productId: "ur-50kg", date: "2026-04-01", transactionType: "opening_stock", documentNo: "OS-0002", warehouse: "Central Warehouse", batchNo: "B-UR-99A", inQty: 300, outQty: 0, costPrice: 280, financialYearId: 1 },
-  { id: "sl-u02", productId: "ur-50kg", date: "2026-04-08", transactionType: "purchase", documentNo: "GRN-0010", warehouse: "Central Warehouse", batchNo: "B-UR-99A", inQty: 100, outQty: 0, costPrice: 280, financialYearId: 1 },
-  { id: "sl-u03", productId: "ur-50kg", date: "2026-04-15", transactionType: "sales", documentNo: "SI-0005", warehouse: "Central Warehouse", batchNo: "B-UR-99A", inQty: 0, outQty: 80, costPrice: 280, financialYearId: 1 },
-  { id: "sl-h01", productId: "hrb-max-1l", date: "2026-04-01", transactionType: "opening_stock", documentNo: "OS-0003", warehouse: "Regional Warehouse", batchNo: "B-HRB-88X", inQty: 200, outQty: 0, costPrice: 320, financialYearId: 1 },
-  { id: "sl-h02", productId: "hrb-max-1l", date: "2026-04-12", transactionType: "purchase", documentNo: "GRN-0012", warehouse: "Regional Warehouse", batchNo: "B-HRB-88X", inQty: 80, outQty: 0, costPrice: 320, financialYearId: 1 },
-  { id: "sl-h03", productId: "hrb-max-1l", date: "2026-04-22", transactionType: "sales", documentNo: "SI-0010", warehouse: "Regional Warehouse", batchNo: "B-HRB-88X", inQty: 0, outQty: 45, costPrice: 320, financialYearId: 1 },
+  { id: "sl-u01", productId: "ur-50kg", date: demoDateAt(25), transactionType: "opening_stock", documentNo: "OS-0002", warehouse: "Central Warehouse", batchNo: "B-UR-99A", inQty: 300, outQty: 0, costPrice: 280, financialYearId: 1 },
+  { id: "sl-u02", productId: "ur-50kg", date: demoDateAt(26), transactionType: "purchase", documentNo: "GRN-0010", warehouse: "Central Warehouse", batchNo: "B-UR-99A", inQty: 100, outQty: 0, costPrice: 280, financialYearId: 1 },
+  { id: "sl-u03", productId: "ur-50kg", date: demoDateAt(27), transactionType: "sales", documentNo: "SI-0005", warehouse: "Central Warehouse", batchNo: "B-UR-99A", inQty: 0, outQty: 80, costPrice: 280, financialYearId: 1 },
+  { id: "sl-h01", productId: "hrb-max-1l", date: demoDateAt(28), transactionType: "opening_stock", documentNo: "OS-0003", warehouse: "Regional Warehouse", batchNo: "B-HRB-88X", inQty: 200, outQty: 0, costPrice: 320, financialYearId: 1 },
+  { id: "sl-h02", productId: "hrb-max-1l", date: demoDateAt(29), transactionType: "purchase", documentNo: "GRN-0012", warehouse: "Regional Warehouse", batchNo: "B-HRB-88X", inQty: 80, outQty: 0, costPrice: 320, financialYearId: 1 },
+  { id: "sl-h03", productId: "hrb-max-1l", date: demoDateAt(30), transactionType: "sales", documentNo: "SI-0010", warehouse: "Regional Warehouse", batchNo: "B-HRB-88X", inQty: 0, outQty: 45, costPrice: 320, financialYearId: 1 },
 ];
 
 const MOVEMENT_SEEDS: StockLedgerMovementSeed[] = [

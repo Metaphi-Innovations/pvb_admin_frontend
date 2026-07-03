@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { CoaExplorerTree } from "@/app/(app)/accounts/masters/chart-of-accounts/components/CoaExplorerTree";
 import { requestCoaAddLedger } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-add-ledger-bridge";
-import { canCoa } from "@/lib/accounts/permissions";
+import { useCanCoa } from "@/lib/accounts/use-can-coa";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 import { useCoaNavigation } from "./CoaNavigationContext";
 
@@ -19,15 +19,15 @@ export function CoaSidebarNav() {
     records,
     selectedId,
     expandedIds,
-    search,
-    setSearch,
+    treeSearchTerm,
+    setTreeSearchTerm,
     selectNode,
     toggleExpand,
     isCoaRoute,
     highlightedLedgerId,
   } = useCoaNavigation();
 
-  const canCreate = canCoa("create");
+  const canCreate = useCanCoa("create");
 
   const [panelOpen, setPanelOpen] = useState(isCoaRoute);
 
@@ -37,7 +37,7 @@ export function CoaSidebarNav() {
   }, [pathname, isCoaRoute]);
 
   const goToChartOfAccounts = () => {
-    setSearch("");
+    setTreeSearchTerm("");
     if (!isCoaRoute) {
       router.push(CHART_OF_ACCOUNTS_HREF);
       return;
@@ -69,7 +69,7 @@ export function CoaSidebarNav() {
           <span className="w-7 h-7 rounded-md bg-brand-100 border border-brand-200/80 flex items-center justify-center flex-shrink-0">
             <FolderTree className="w-4 h-4 text-brand-600" />
           </span>
-          <span className="flex-1 text-xs font-semibold text-brand-800 truncate">Chart of Accounts</span>
+          <span className="flex-1 text-[13px] font-medium text-brand-800 truncate">Chart of Accounts</span>
         </button>
         <button
           type="button"
@@ -96,22 +96,22 @@ export function CoaSidebarNav() {
       {panelOpen && (
         <>
           <div className="relative px-2.5 py-2 border-b border-border/40 bg-white">
-            <Search className="w-3.5 h-3.5 absolute left-5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <Search className="w-4 h-4 absolute left-5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
-              className="h-8 pl-8 text-xs bg-muted/20 border-border/60 rounded-lg"
+              className="h-[34px] pl-8 text-[13px] bg-white border-[#E5E7EB] rounded-md"
               placeholder="Search accounts..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={treeSearchTerm}
+              onChange={(e) => setTreeSearchTerm(e.target.value)}
             />
           </div>
 
-          <div className="max-h-[min(56vh,32rem)] overflow-y-auto overscroll-contain px-1 py-2">
+          <div className="max-h-[min(56vh,32rem)] overflow-y-auto overscroll-contain px-1 py-1">
             <CoaExplorerTree
               variant="sidebar"
               records={records}
               selectedId={selectedId}
               expandedIds={expandedIds}
-              search={search}
+              search={treeSearchTerm}
               canCreate={canCreate}
               highlightedLedgerId={highlightedLedgerId}
               onSelect={selectNode}

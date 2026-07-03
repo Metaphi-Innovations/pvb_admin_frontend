@@ -5,8 +5,12 @@ import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
   AccountsColumnarTable,
-  AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
+import {
+  AccountsTableListing,
+  AccountsListingToolbar,
+  AccountsListingCountFooter,
+} from "@/components/accounts/AccountsTableListing";
 
 export interface WorkbenchColumn {
   key: string;
@@ -23,6 +27,9 @@ export interface AccountsWorkbenchPageProps {
   columns: WorkbenchColumn[];
   rows: Record<string, string | number>[];
   actions?: React.ReactNode;
+  filters?: React.ReactNode;
+  onExcel?: () => void;
+  onPdf?: () => void;
   emptyMessage?: string;
 }
 
@@ -33,6 +40,9 @@ export function AccountsWorkbenchPage({
   columns,
   rows,
   actions,
+  filters,
+  onExcel,
+  onPdf,
   emptyMessage = "No records found.",
 }: AccountsWorkbenchPageProps) {
   return (
@@ -40,31 +50,39 @@ export function AccountsWorkbenchPage({
       breadcrumbs={accountsBreadcrumb(section, title)}
       title={title}
       description={description}
+      hideDescription
       actions={actions}
       layout="split"
       className="h-full min-h-0"
     >
-      <AccountsTableScroll>
-        {rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-            <p className="text-sm font-medium text-foreground">{emptyMessage}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Data appears when related vouchers are posted in the system.
-            </p>
-          </div>
-        ) : (
-          <AccountsColumnarTable
-            columns={columns.map((c) => ({
-              key: c.key,
-              label: c.label,
-              align: c.align,
-              money: c.money,
-              mono: c.mono,
-            }))}
-            rows={rows}
-          />
-        )}
-      </AccountsTableScroll>
+      <AccountsTableListing
+        toolbar={
+          filters || onExcel || onPdf ? (
+            <AccountsListingToolbar onExcel={onExcel} onPdf={onPdf} exportDisabled={rows.length === 0}>
+              {filters}
+            </AccountsListingToolbar>
+          ) : undefined
+        }
+        footer={
+          rows.length > 0 ? (
+            <AccountsListingCountFooter>
+              Showing <span className="font-medium text-foreground">{rows.length}</span> records
+            </AccountsListingCountFooter>
+          ) : undefined
+        }
+      >
+        <AccountsColumnarTable
+          columns={columns.map((c) => ({
+            key: c.key,
+            label: c.label,
+            align: c.align,
+            money: c.money,
+            mono: c.mono,
+          }))}
+          rows={rows}
+          emptyMessage={emptyMessage}
+        />
+      </AccountsTableListing>
     </AccountsPageShell>
   );
 }

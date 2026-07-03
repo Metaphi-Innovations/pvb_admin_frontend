@@ -1,3 +1,4 @@
+import { demoAddDays, demoDateAt, demoFinancialYearStart, demoToday, demoTimestamp } from "@/lib/accounts/demo-date-utils";
 /**
  * Customer Ledger report — local data & statement builder.
  * Isolated to Accounts → Reports → Customer Ledger only.
@@ -13,6 +14,11 @@ import {
   type Customer,
 } from "@/app/(app)/masters/customers/customer-data";
 import { roundMoney, type BalanceSide } from "@/lib/accounts/money-format";
+import {
+  buildPartyLedgerMovements,
+  ledgerOpeningBalance,
+  resolveCustomerReceivableLedger,
+} from "@/lib/accounts/party-ledger-statement";
 
 export type CustomerLedgerRowKind = "opening" | "transaction" | "closing";
 
@@ -100,49 +106,49 @@ const OPENING_BALANCES: Record<number, { amount: number; balanceType: BalanceSid
 
 /** 24 movements for Agro Solutions Pvt Ltd — Apr–Jun 2026. */
 const AGRO_SOLUTIONS_TRANSACTIONS: CustomerLedgerRawTransaction[] = [
-  { date: "2026-04-01", voucherNo: "SI-0001", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Sales invoice raised — urea dispatch", debit: 25000, credit: 0 },
-  { date: "2026-04-03", voucherNo: "RV-0001", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "HDFC Bank", narration: "Payment received — NEFT", debit: 0, credit: 20000 },
-  { date: "2026-04-08", voucherNo: "CN-0001", voucherTypeCode: "credit_note", voucherType: "Credit Note", particular: "Sales Return", narration: "Sales return adjustment — damaged bags", debit: 0, credit: 5000 },
-  { date: "2026-04-12", voucherNo: "SI-0002", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "DAP bulk order — Kharif prep", debit: 35400, credit: 0 },
-  { date: "2026-04-15", voucherNo: "RV-0002", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "HDFC Bank", narration: "Cheque deposit against SI-0002", debit: 0, credit: 25000 },
-  { date: "2026-04-18", voucherNo: "JV-0001", voucherTypeCode: "journal", voucherType: "Journal Voucher", particular: "Interest on delayed payment", narration: "Debit note adjustment journal", debit: 3200, credit: 0 },
-  { date: "2026-04-22", voucherNo: "SI-0003", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Pesticide combo — field pack", debit: 18750, credit: 0 },
-  { date: "2026-04-28", voucherNo: "RV-0003", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "HDFC Bank", narration: "UPI collection — field counter", debit: 0, credit: 12000 },
-  { date: "2026-05-02", voucherNo: "CN-0002", voucherTypeCode: "credit_note", voucherType: "Credit Note", particular: "Sales Return", narration: "Rate difference credit", debit: 0, credit: 2750 },
-  { date: "2026-05-05", voucherNo: "SI-0004", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "NPK seasonal pack", debit: 42500, credit: 0 },
-  { date: "2026-05-08", voucherNo: "RV-0004", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "HDFC Bank", narration: "RTGS receipt against SI-0004", debit: 0, credit: 30000 },
-  { date: "2026-05-10", voucherNo: "JV-0002", voucherTypeCode: "journal", voucherType: "Journal Voucher", particular: "Round-off adjustment", narration: "Round-off on May settlement", debit: 0, credit: 50 },
-  { date: "2026-05-12", voucherNo: "SI-0005", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Seed distribution — hybrid paddy", debit: 23600, credit: 0 },
-  { date: "2026-05-15", voucherNo: "CN-0003", voucherTypeCode: "credit_note", voucherType: "Credit Note", particular: "Sales Return", narration: "Damaged bags return", debit: 0, credit: 4200 },
-  { date: "2026-05-18", voucherNo: "RV-0005", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "HDFC Bank", narration: "Cash deposit — collection drive", debit: 0, credit: 18000 },
-  { date: "2026-05-20", voucherNo: "DN-0001", voucherTypeCode: "debit_note", voucherType: "Debit Note", particular: "Freight charges", narration: "Freight debit note raised", debit: 1800, credit: 0 },
-  { date: "2026-05-22", voucherNo: "SI-0006", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Micronutrient kit", debit: 15800, credit: 0 },
-  { date: "2026-05-28", voucherNo: "RV-0006", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "HDFC Bank", narration: "Final settlement — May outstanding", debit: 0, credit: 22000 },
-  { date: "2026-06-01", voucherNo: "SI-0007", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Kharif pre-booking", debit: 52000, credit: 0 },
-  { date: "2026-06-04", voucherNo: "RV-0007", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "HDFC Bank", narration: "Advance receipt — kharif booking", debit: 0, credit: 25000 },
-  { date: "2026-06-08", voucherNo: "CN-0004", voucherTypeCode: "credit_note", voucherType: "Credit Note", particular: "Sales Return", narration: "Scheme discount credit", debit: 0, credit: 3500 },
-  { date: "2026-06-12", voucherNo: "SI-0008", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Herbicide stock dispatch", debit: 28900, credit: 0 },
-  { date: "2026-06-15", voucherNo: "JV-0003", voucherTypeCode: "journal", voucherType: "Journal Voucher", particular: "Write-off adjustment", narration: "Small balance write-off approved", debit: 0, credit: 150 },
-  { date: "2026-06-18", voucherNo: "RV-0008", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "HDFC Bank", narration: "Part payment against SI-0008", debit: 0, credit: 15000 },
+  { date: demoDateAt(0), voucherNo: "SI-0001", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Sales invoice raised — urea dispatch", debit: 25000, credit: 0 },
+  { date: demoDateAt(1), voucherNo: "RV-0001", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "HDFC Bank", narration: "Payment received — NEFT", debit: 0, credit: 20000 },
+  { date: demoDateAt(2), voucherNo: "CN-0001", voucherTypeCode: "credit_note", voucherType: "Credit Note", particular: "Sales Return", narration: "Sales return adjustment — damaged bags", debit: 0, credit: 5000 },
+  { date: demoDateAt(3), voucherNo: "SI-0002", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "DAP bulk order — Kharif prep", debit: 35400, credit: 0 },
+  { date: demoDateAt(4), voucherNo: "RV-0002", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "HDFC Bank", narration: "Cheque deposit against SI-0002", debit: 0, credit: 25000 },
+  { date: demoDateAt(5), voucherNo: "JV-0001", voucherTypeCode: "journal", voucherType: "Journal Voucher", particular: "Interest on delayed payment", narration: "Debit note adjustment journal", debit: 3200, credit: 0 },
+  { date: demoDateAt(6), voucherNo: "SI-0003", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Pesticide combo — field pack", debit: 18750, credit: 0 },
+  { date: demoDateAt(7), voucherNo: "RV-0003", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "HDFC Bank", narration: "UPI collection — field counter", debit: 0, credit: 12000 },
+  { date: demoDateAt(8), voucherNo: "CN-0002", voucherTypeCode: "credit_note", voucherType: "Credit Note", particular: "Sales Return", narration: "Rate difference credit", debit: 0, credit: 2750 },
+  { date: demoDateAt(9), voucherNo: "SI-0004", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "NPK seasonal pack", debit: 42500, credit: 0 },
+  { date: demoDateAt(10), voucherNo: "RV-0004", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "HDFC Bank", narration: "RTGS receipt against SI-0004", debit: 0, credit: 30000 },
+  { date: demoDateAt(11), voucherNo: "JV-0002", voucherTypeCode: "journal", voucherType: "Journal Voucher", particular: "Round-off adjustment", narration: "Round-off on May settlement", debit: 0, credit: 50 },
+  { date: demoDateAt(12), voucherNo: "SI-0005", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Seed distribution — hybrid paddy", debit: 23600, credit: 0 },
+  { date: demoDateAt(13), voucherNo: "CN-0003", voucherTypeCode: "credit_note", voucherType: "Credit Note", particular: "Sales Return", narration: "Damaged bags return", debit: 0, credit: 4200 },
+  { date: demoDateAt(14), voucherNo: "RV-0005", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "HDFC Bank", narration: "Cash deposit — collection drive", debit: 0, credit: 18000 },
+  { date: demoDateAt(15), voucherNo: "DN-0001", voucherTypeCode: "debit_note", voucherType: "Debit Note", particular: "Freight charges", narration: "Freight debit note raised", debit: 1800, credit: 0 },
+  { date: demoDateAt(16), voucherNo: "SI-0006", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Micronutrient kit", debit: 15800, credit: 0 },
+  { date: demoDateAt(17), voucherNo: "RV-0006", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "HDFC Bank", narration: "Final settlement — May outstanding", debit: 0, credit: 22000 },
+  { date: demoDateAt(18), voucherNo: "SI-0007", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Kharif pre-booking", debit: 52000, credit: 0 },
+  { date: demoDateAt(19), voucherNo: "RV-0007", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "HDFC Bank", narration: "Advance receipt — kharif booking", debit: 0, credit: 25000 },
+  { date: demoDateAt(20), voucherNo: "CN-0004", voucherTypeCode: "credit_note", voucherType: "Credit Note", particular: "Sales Return", narration: "Scheme discount credit", debit: 0, credit: 3500 },
+  { date: demoDateAt(21), voucherNo: "SI-0008", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Herbicide stock dispatch", debit: 28900, credit: 0 },
+  { date: demoDateAt(22), voucherNo: "JV-0003", voucherTypeCode: "journal", voucherType: "Journal Voucher", particular: "Write-off adjustment", narration: "Small balance write-off approved", debit: 0, credit: 150 },
+  { date: demoDateAt(23), voucherNo: "RV-0008", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "HDFC Bank", narration: "Part payment against SI-0008", debit: 0, credit: 15000 },
 ];
 
 const MAHARASHTRA_AGRI_TRANSACTIONS: CustomerLedgerRawTransaction[] = [
-  { date: "2026-04-05", voucherNo: "SI-0101", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Fertilizer dispatch — Vidarbha", debit: 18500, credit: 0 },
-  { date: "2026-04-14", voucherNo: "RV-0101", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "ICICI Bank", narration: "NEFT receipt", debit: 0, credit: 10000 },
-  { date: "2026-04-20", voucherNo: "SI-0102", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Seed order — soybean", debit: 22400, credit: 0 },
-  { date: "2026-05-03", voucherNo: "CN-0101", voucherTypeCode: "credit_note", voucherType: "Credit Note", particular: "Sales Return", narration: "Quality complaint credit", debit: 0, credit: 2400 },
-  { date: "2026-05-11", voucherNo: "RV-0102", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "ICICI Bank", narration: "Cheque collection", debit: 0, credit: 15000 },
-  { date: "2026-05-25", voucherNo: "DN-0101", voucherTypeCode: "debit_note", voucherType: "Debit Note", particular: "Late payment charges", narration: "Interest on overdue invoice", debit: 950, credit: 0 },
-  { date: "2026-06-02", voucherNo: "SI-0103", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Monsoon stock replenishment", debit: 31200, credit: 0 },
-  { date: "2026-06-10", voucherNo: "JV-0101", voucherTypeCode: "journal", voucherType: "Journal Voucher", particular: "Discount adjustment", narration: "Volume discount journal entry", debit: 0, credit: 1200 },
+  { date: demoDateAt(24), voucherNo: "SI-0101", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Fertilizer dispatch — Vidarbha", debit: 18500, credit: 0 },
+  { date: demoDateAt(25), voucherNo: "RV-0101", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "ICICI Bank", narration: "NEFT receipt", debit: 0, credit: 10000 },
+  { date: demoDateAt(26), voucherNo: "SI-0102", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Seed order — soybean", debit: 22400, credit: 0 },
+  { date: demoDateAt(27), voucherNo: "CN-0101", voucherTypeCode: "credit_note", voucherType: "Credit Note", particular: "Sales Return", narration: "Quality complaint credit", debit: 0, credit: 2400 },
+  { date: demoDateAt(28), voucherNo: "RV-0102", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "ICICI Bank", narration: "Cheque collection", debit: 0, credit: 15000 },
+  { date: demoDateAt(29), voucherNo: "DN-0101", voucherTypeCode: "debit_note", voucherType: "Debit Note", particular: "Late payment charges", narration: "Interest on overdue invoice", debit: 950, credit: 0 },
+  { date: demoDateAt(30), voucherNo: "SI-0103", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Monsoon stock replenishment", debit: 31200, credit: 0 },
+  { date: demoDateAt(31), voucherNo: "JV-0101", voucherTypeCode: "journal", voucherType: "Journal Voucher", particular: "Discount adjustment", narration: "Volume discount journal entry", debit: 0, credit: 1200 },
 ];
 
 const SHIVNERI_TRANSACTIONS: CustomerLedgerRawTransaction[] = [
-  { date: "2026-04-07", voucherNo: "SI-0201", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Retail counter sale", debit: 9800, credit: 0 },
-  { date: "2026-04-18", voucherNo: "RV-0201", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "Cash in Hand", narration: "Cash receipt at depot", debit: 0, credit: 5000 },
-  { date: "2026-05-06", voucherNo: "CN-0201", voucherTypeCode: "credit_note", voucherType: "Credit Note", particular: "Sales Return", narration: "Expired stock return", debit: 0, credit: 1800 },
-  { date: "2026-05-20", voucherNo: "SI-0202", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Bio-fertilizer order", debit: 14200, credit: 0 },
-  { date: "2026-06-05", voucherNo: "RV-0202", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "HDFC Bank", narration: "Bank transfer received", debit: 0, credit: 8000 },
+  { date: demoDateAt(32), voucherNo: "SI-0201", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Retail counter sale", debit: 9800, credit: 0 },
+  { date: demoDateAt(33), voucherNo: "RV-0201", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "Cash in Hand", narration: "Cash receipt at depot", debit: 0, credit: 5000 },
+  { date: demoDateAt(34), voucherNo: "CN-0201", voucherTypeCode: "credit_note", voucherType: "Credit Note", particular: "Sales Return", narration: "Expired stock return", debit: 0, credit: 1800 },
+  { date: demoDateAt(35), voucherNo: "SI-0202", voucherTypeCode: "sales", voucherType: "Sales Invoice", particular: "Sales Account", narration: "Bio-fertilizer order", debit: 14200, credit: 0 },
+  { date: demoDateAt(36), voucherNo: "RV-0202", voucherTypeCode: "receipt", voucherType: "Receipt Voucher", particular: "HDFC Bank", narration: "Bank transfer received", debit: 0, credit: 8000 },
 ];
 
 const TRANSACTIONS_BY_CUSTOMER: Record<number, CustomerLedgerRawTransaction[]> = {
@@ -176,8 +182,19 @@ function applyMovement(
   return balanceFromSigned(signed);
 }
 
+function inferCustomerVoucherTypeCode(voucherType: string, voucherNo: string): VoucherTypeCode {
+  const label = voucherType.toLowerCase();
+  const ref = voucherNo.toUpperCase();
+  if (label.includes("sales") || ref.startsWith("INV") || ref.startsWith("SI-")) return "sales";
+  if (label.includes("receipt") || ref.startsWith("RV-")) return "receipt";
+  if (label.includes("credit note") || ref.startsWith("CN-")) return "credit_note";
+  if (label.includes("debit note") || ref.startsWith("DN-")) return "debit_note";
+  return "journal";
+}
+
 function customerToOption(customer: Customer): CustomerLedgerCustomerOption {
-  const opening = OPENING_BALANCES[customer.id] ?? { amount: 0, balanceType: "Debit" as BalanceSide };
+  const ledger = resolveCustomerReceivableLedger(customer);
+  const opening = ledgerOpeningBalance(ledger);
   return {
     id: String(customer.id),
     customerId: customer.id,
@@ -266,11 +283,34 @@ export function buildCustomerLedgerStatement(
   const customer = getCustomerLedgerCustomerById(customerId);
   if (!customer) return null;
 
-  const allTransactions = (TRANSACTIONS_BY_CUSTOMER[customer.customerId] ?? [])
-    .slice()
+  const masterCustomer = getCustomersForTransactionDropdown().find(
+    (c) => c.id === customer.customerId,
+  );
+  const ledger = masterCustomer ? resolveCustomerReceivableLedger(masterCustomer) : null;
+  const opening = ledgerOpeningBalance(ledger);
+
+  const allTransactions = buildPartyLedgerMovements(ledger)
+    .map(
+      (m): CustomerLedgerRawTransaction => ({
+        date: m.date,
+        voucherNo: m.voucherNo,
+        voucherTypeCode: inferCustomerVoucherTypeCode(m.voucherType, m.voucherNo),
+        voucherType: m.voucherType,
+        particular: m.particular,
+        narration: m.narration,
+        debit: m.debit,
+        credit: m.credit,
+      }),
+    )
     .sort((a, b) => a.date.localeCompare(b.date) || a.voucherNo.localeCompare(b.voucherNo));
 
-  const periodOpening = computeOpeningAtDate(customer, allTransactions, filters.dateFrom);
+  const customerWithOpening: CustomerLedgerCustomerOption = {
+    ...customer,
+    openingBalance: opening.amount,
+    openingBalanceType: opening.balanceType,
+  };
+
+  const periodOpening = computeOpeningAtDate(customerWithOpening, allTransactions, filters.dateFrom);
 
   const periodTransactions = allTransactions.filter(
     (t) => t.date >= filters.dateFrom && t.date <= filters.dateTo,
@@ -282,8 +322,15 @@ export function buildCustomerLedgerStatement(
   });
 
   let running = { ...periodOpening };
+  const movementViewHref = new Map(
+    buildPartyLedgerMovements(ledger).map((m) => [
+      `${m.date}|${m.voucherNo}|${m.debit}|${m.credit}`,
+      m.viewHref,
+    ]),
+  );
   const transactionRows: CustomerLedgerDisplayRow[] = filteredTransactions.map((t) => {
     running = applyMovement(running, t.debit, t.credit);
+    const hrefKey = `${t.date}|${t.voucherNo}|${t.debit}|${t.credit}`;
     return {
       kind: "transaction",
       date: formatCustomerLedgerDate(t.date),
@@ -296,7 +343,9 @@ export function buildCustomerLedgerStatement(
       credit: t.credit,
       runningBalance: running.amount,
       runningBalanceType: running.balanceType,
-      voucherHref: resolveCustomerLedgerVoucherHref(t.voucherNo, t.voucherTypeCode),
+      voucherHref:
+        movementViewHref.get(hrefKey) ??
+        resolveCustomerLedgerVoucherHref(t.voucherNo, t.voucherTypeCode),
     };
   });
 

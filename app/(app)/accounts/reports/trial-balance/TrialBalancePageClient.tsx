@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
@@ -26,18 +27,17 @@ import {
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
-  ReportFinancialYearFilter,
+  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
+  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
 import { SortTh } from "@/app/(app)/accounts/components/AccountsUI";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
-import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import {
   balanceSideLabel,
   formatMoney,
   formatMoneyOrDash,
 } from "@/lib/accounts/money-format";
-import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import {
   resolveDateRangePreset,
   type DateRangePresetId,
@@ -69,8 +69,6 @@ import {
 import { useDebouncedValue } from "./trial-balance-hooks";
 import "./trial-balance-compact.css";
 
-const filterLabelClass = "text-[10px] font-medium uppercase text-muted-foreground leading-none";
-const filterControlClass = "h-8 text-xs";
 const PLACEHOLDER_DATE = "2025-04-01";
 
 export default function TrialBalancePageClient() {
@@ -83,8 +81,6 @@ export default function TrialBalancePageClient() {
   const [datesReady, setDatesReady] = useState(false);
 
   const [search, setSearch] = useState("");
-  const [financialYearId, setFinancialYearId] = useState("all");
-  const [fyReady, setFyReady] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
@@ -102,10 +98,6 @@ export default function TrialBalancePageClient() {
     setDateFrom(from);
     setDateTo(to);
     setDatesReady(true);
-
-    const activeFyId = getActiveFinancialYearId();
-    if (activeFyId) setFinancialYearId(String(activeFyId));
-    setFyReady(true);
   }, []);
 
   const handlePresetChange = useCallback((value: DateRangePresetId) => {
@@ -176,51 +168,32 @@ export default function TrialBalancePageClient() {
     return detailedFlatRows.slice(start, start + pageSize);
   }, [detailedFlatRows, page, pageSize]);
 
-  const activeFyId = mounted ? getActiveFinancialYearId() : null;
-
-  const fyLabel = useMemo(() => {
-    if (!mounted || financialYearId === "all") return "All Financial Years";
-    return (
-      loadFinancialYears().find((fy) => String(fy.id) === financialYearId)?.name ?? ""
-    );
-  }, [mounted, financialYearId]);
-
   const hasFilters =
     Boolean(search.trim()) ||
-    (fyReady && financialYearId !== (activeFyId ? String(activeFyId) : "all")) ||
     (datesReady && preset !== "this_month");
 
   const resetFilters = useCallback(() => {
     setSearch("");
-    setFinancialYearId(activeFyId ? String(activeFyId) : "all");
     setPreset("this_month");
     const { from, to } = resolveDateRangePreset("this_month");
     setDateFrom(from);
     setDateTo(to);
     setPage(1);
-  }, [activeFyId]);
+  }, []);
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, financialYearId, pageSize, activeTab]);
+  }, [debouncedSearch, pageSize, activeTab]);
 
-  useEffect(() => {
-    if (!mounted || financialYearId === "all") return;
-    const fy = loadFinancialYears().find((f) => String(f.id) === financialYearId);
-    if (fy) {
-      setDateFrom(fy.startDate);
-      setDateTo(fy.endDate);
-    }
-  }, [mounted, financialYearId]);
+  
 
   const exportMeta = useMemo(
     () => ({
       dateFrom,
       dateTo,
-      financialYear: fyLabel,
       view: activeTab,
     }),
-    [dateFrom, dateTo, fyLabel, activeTab],
+    [dateFrom, dateTo, activeTab],
   );
 
   const hasExportData =
@@ -303,10 +276,6 @@ export default function TrialBalancePageClient() {
       }
       filters={
         <ReportFilterRow className="items-end gap-2">
-          <ReportFinancialYearFilter
-            value={financialYearId}
-            onChange={setFinancialYearId}
-          />
           <ReportDateRangeFilter
             preset={preset}
             dateFrom={dateFrom}
@@ -349,6 +318,7 @@ export default function TrialBalancePageClient() {
         </ReportFilterRow>
       }
     >
+      <AccountsListingTableCard className="trial-balance-compact flex-1 min-h-0">
       <Tabs
         value={activeTab}
         onValueChange={(v) => setActiveTab(v as TrialBalanceTab)}
@@ -584,7 +554,7 @@ export default function TrialBalancePageClient() {
                           >
                             <ChevronRight
                               className={cn(
-                                "w-3.5 h-3.5 flex-shrink-0 transition-transform",
+                                "w-4 h-4 flex-shrink-0 transition-transform",
                                 expandedGroupIds.has(row.groupKey) && "rotate-90",
                               )}
                             />
@@ -654,6 +624,7 @@ export default function TrialBalancePageClient() {
           </AccountsTableListing>
         </TabsContent>
       </Tabs>
+      </AccountsListingTableCard>
     </AccountsPageShell>
   );
 }

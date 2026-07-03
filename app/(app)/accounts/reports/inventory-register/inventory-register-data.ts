@@ -1,3 +1,4 @@
+import { demoAddDays, demoDateAt, demoFinancialYearStart, demoToday, demoTimestamp } from "@/lib/accounts/demo-date-utils";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { roundMoney } from "@/lib/accounts/money-format";
 
@@ -97,7 +98,7 @@ interface ProductOption {
 const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   {
     id: "inv-001",
-    date: "2025-04-01",
+    date: demoDateAt(0),
     transactionType: "opening_stock",
     documentNo: "OS-0001",
     productName: "Urea 50kg",
@@ -113,7 +114,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-002",
-    date: "2025-04-01",
+    date: demoDateAt(1),
     transactionType: "opening_stock",
     documentNo: "OS-0002",
     productName: "NPK 20:20:0",
@@ -129,7 +130,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-003",
-    date: "2025-04-02",
+    date: demoDateAt(2),
     transactionType: "opening_stock",
     documentNo: "OS-0003",
     productName: "Herbicide Max 1L",
@@ -145,7 +146,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-004",
-    date: "2025-04-03",
+    date: demoDateAt(3),
     transactionType: "purchase",
     documentNo: "GRN-0005",
     productName: "Urea 50kg",
@@ -161,7 +162,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-005",
-    date: "2025-04-05",
+    date: demoDateAt(4),
     transactionType: "purchase",
     documentNo: "GRN-0008",
     productName: "Bio Fertilizer 5kg",
@@ -177,7 +178,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-006",
-    date: "2025-04-08",
+    date: demoDateAt(5),
     transactionType: "sales",
     documentNo: "SI-0003",
     productName: "Urea 50kg",
@@ -193,7 +194,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-007",
-    date: "2025-04-10",
+    date: demoDateAt(6),
     transactionType: "sample_issue",
     documentNo: "SM-0001",
     productName: "Urea 50kg",
@@ -209,7 +210,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-008",
-    date: "2025-04-12",
+    date: demoDateAt(7),
     transactionType: "sales",
     documentNo: "SI-0007",
     productName: "NPK 20:20:0",
@@ -225,7 +226,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-009",
-    date: "2025-04-15",
+    date: demoDateAt(8),
     transactionType: "purchase_return",
     documentNo: "PR-0002",
     productName: "Urea 50kg",
@@ -241,7 +242,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-010",
-    date: "2025-04-18",
+    date: demoDateAt(9),
     transactionType: "sales_return",
     documentNo: "SR-0001",
     productName: "Urea 50kg",
@@ -257,7 +258,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-011",
-    date: "2025-04-20",
+    date: demoDateAt(10),
     transactionType: "stock_transfer_out",
     documentNo: "ST-0003",
     productName: "Urea 50kg",
@@ -273,7 +274,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-012",
-    date: "2025-04-20",
+    date: demoDateAt(11),
     transactionType: "stock_transfer_in",
     documentNo: "ST-0003",
     productName: "Urea 50kg",
@@ -289,7 +290,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-013",
-    date: "2025-04-22",
+    date: demoDateAt(12),
     transactionType: "purchase",
     documentNo: "GRN-0012",
     productName: "Herbicide Max 1L",
@@ -305,7 +306,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-014",
-    date: "2025-04-25",
+    date: demoDateAt(13),
     transactionType: "sales",
     documentNo: "SI-0012",
     productName: "Herbicide Max 1L",
@@ -321,7 +322,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-015",
-    date: "2025-04-28",
+    date: demoDateAt(14),
     transactionType: "sample_issue",
     documentNo: "SM-0004",
     productName: "Bio Fertilizer 5kg",
@@ -337,7 +338,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-016",
-    date: "2025-05-02",
+    date: demoDateAt(15),
     transactionType: "sales",
     documentNo: "SI-0018",
     productName: "Urea 50kg",
@@ -353,7 +354,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-017",
-    date: "2025-05-05",
+    date: demoDateAt(16),
     transactionType: "purchase",
     documentNo: "GRN-0018",
     productName: "NPK 20:20:0",
@@ -369,7 +370,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-018",
-    date: "2025-05-08",
+    date: demoDateAt(17),
     transactionType: "sales_return",
     documentNo: "SR-0003",
     productName: "NPK 20:20:0",
@@ -385,7 +386,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-019",
-    date: "2025-05-11",
+    date: demoDateAt(18),
     transactionType: "stock_transfer_out",
     documentNo: "ST-0007",
     productName: "Bio Fertilizer 5kg",
@@ -401,7 +402,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-020",
-    date: "2025-05-11",
+    date: demoDateAt(19),
     transactionType: "stock_transfer_in",
     documentNo: "ST-0007",
     productName: "Bio Fertilizer 5kg",
@@ -417,7 +418,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-021",
-    date: "2025-05-14",
+    date: demoDateAt(20),
     transactionType: "sample_return",
     documentNo: "SM-0006",
     productName: "Urea 50kg",
@@ -433,7 +434,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-022",
-    date: "2025-05-18",
+    date: demoDateAt(21),
     transactionType: "sales",
     documentNo: "SI-0024",
     productName: "Bio Fertilizer 5kg",
@@ -449,7 +450,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-023",
-    date: "2025-05-22",
+    date: demoDateAt(22),
     transactionType: "purchase",
     documentNo: "GRN-0022",
     productName: "Fungicide Shield 500ml",
@@ -465,7 +466,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-024",
-    date: "2025-05-25",
+    date: demoDateAt(23),
     transactionType: "sales",
     documentNo: "SI-0028",
     productName: "Fungicide Shield 500ml",
@@ -481,7 +482,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-025",
-    date: "2025-05-28",
+    date: demoDateAt(24),
     transactionType: "purchase_return",
     documentNo: "PR-0005",
     productName: "Herbicide Max 1L",
@@ -497,7 +498,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-026",
-    date: "2025-06-02",
+    date: demoDateAt(25),
     transactionType: "sample_issue",
     documentNo: "SM-0009",
     productName: "NPK 20:20:0",
@@ -513,7 +514,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-027",
-    date: "2025-06-06",
+    date: demoDateAt(26),
     transactionType: "opening_stock",
     documentNo: "OS-0004",
     productName: "Micronutrient Mix",
@@ -529,7 +530,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-028",
-    date: "2025-06-10",
+    date: demoDateAt(27),
     transactionType: "sales",
     documentNo: "SI-0035",
     productName: "Micronutrient Mix",
@@ -545,7 +546,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-029",
-    date: "2025-06-14",
+    date: demoDateAt(28),
     transactionType: "stock_transfer_in",
     documentNo: "ST-0011",
     productName: "NPK 20:20:0",
@@ -561,7 +562,7 @@ const MOVEMENT_SEEDS: InventoryRegisterMovementSeed[] = [
   },
   {
     id: "inv-030",
-    date: "2025-06-18",
+    date: demoDateAt(29),
     transactionType: "sample_return",
     documentNo: "SM-0012",
     productName: "Bio Fertilizer 5kg",

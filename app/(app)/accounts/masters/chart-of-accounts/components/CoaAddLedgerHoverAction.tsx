@@ -26,7 +26,7 @@ export function CoaAddLedgerHoverAction({ onClick, className }: CoaAddLedgerHove
       title="Add Ledger"
       aria-label="Add Ledger"
     >
-      <Plus className="w-3.5 h-3.5" strokeWidth={2} />
+      <Plus className="w-4 h-4" strokeWidth={2} />
     </button>
   );
 }

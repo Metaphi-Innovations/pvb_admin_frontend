@@ -26,6 +26,7 @@ import {
   parseContraVoucherFromLines,
   updateVoucher,
   validateContraVoucherForPost,
+  validateVoucherDraft,
   validateVoucherForPost,
   VOUCHER_TYPE_LABELS,
 } from "@/app/(app)/accounts/vouchers/voucher-data";
@@ -38,8 +39,6 @@ interface SimpleContraVoucherFormProps {
   voucherId?: number;
   readOnly?: boolean;
   onEdit?: () => void;
-  entryModeControl?: React.ReactNode;
-  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function SimpleContraVoucherForm({
@@ -48,8 +47,6 @@ export function SimpleContraVoucherForm({
   voucherId,
   readOnly = false,
   onEdit,
-  entryModeControl,
-  onDirtyChange,
 }: SimpleContraVoucherFormProps) {
   const mounted = useClientMounted();
   const label = VOUCHER_TYPE_LABELS.contra;
@@ -114,16 +111,7 @@ export function SimpleContraVoucherForm({
     [coaRecords],
   );
 
-  useEffect(() => {
-    if (!onDirtyChange || readOnly) return;
-    const dirty =
-      Boolean(referenceNo.trim()) ||
-      Boolean(narration.trim()) ||
-      numericAmount > 0 ||
-      fromLedger != null ||
-      toLedger != null;
-    onDirtyChange(dirty);
-  }, [referenceNo, narration, numericAmount, fromLedger, toLedger, onDirtyChange, readOnly]);
+  const buildLines = () => buildContraVoucherLines(simpleInput);
 
   const impactLines = useMemo(() => {
     if (!fromLedger && !toLedger && numericAmount <= 0) return [];
@@ -146,8 +134,6 @@ export function SimpleContraVoucherForm({
     return lines;
   }, [fromLedger, toLedger, numericAmount]);
 
-  const buildLines = () => buildContraVoucherLines(simpleInput);
-
   const persistVoucher = (status: "draft" | "posted") => {
     const payload = {
       date,
@@ -163,6 +149,16 @@ export function SimpleContraVoucherForm({
       createVoucher("contra", payload);
     }
     onDone();
+  };
+
+  const handleSaveDraft = () => {
+    setError(null);
+    const draftErr = validateVoucherDraft({ date });
+    if (draftErr) {
+      setError(draftErr);
+      return;
+    }
+    persistVoucher("draft");
   };
 
   const handlePost = () => {
@@ -205,31 +201,39 @@ export function SimpleContraVoucherForm({
       actions={
         readOnly ? (
           <>
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={onDone}>
-              <X className="w-3.5 h-3.5" /> Back
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1" onClick={onDone}>
+              <X className="w-4 h-4" /> Back
             </Button>
             {existing && canEditVoucher(existing) && onEdit && (
               <Button
                 size="sm"
-                className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1"
+                className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
                 onClick={onEdit}
               >
-                <Pencil className="w-3.5 h-3.5" /> Edit
+                <Pencil className="w-4 h-4" /> Edit
               </Button>
             )}
           </>
         ) : (
           <>
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={onDone}>
-              <X className="w-3.5 h-3.5" /> Cancel
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1" onClick={onDone}>
+              <X className="w-4 h-4" /> Cancel
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 text-[13px] font-medium gap-1"
+              onClick={handleSaveDraft}
+            >
+              <Save className="w-4 h-4" /> Save Draft
             </Button>
             <Button
               size="sm"
-              className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1"
+              className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
               onClick={handlePost}
               disabled={!canPost}
             >
-              <Save className="w-3.5 h-3.5" /> Post Voucher
+              <Save className="w-4 h-4" /> Post Voucher
             </Button>
           </>
         )
@@ -244,8 +248,6 @@ export function SimpleContraVoucherForm({
       )}
 
       <div className="border border-border rounded-xl bg-white shadow-sm p-4 space-y-4 w-full">
-        {entryModeControl && <div className="pb-1">{entryModeControl}</div>}
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-xs font-medium">
@@ -260,11 +262,11 @@ export function SimpleContraVoucherForm({
             />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs font-medium">Voucher Number</Label>
+            <Label className="text-xs font-medium">Voucher No.</Label>
             <Input className="h-9 text-sm font-mono bg-muted/30 w-full" value={voucherNumber} readOnly disabled />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs font-medium">Reference No</Label>
+            <Label className="text-xs font-medium">Reference No.</Label>
             <Input
               className="h-9 text-sm rounded-lg bg-white w-full"
               value={referenceNo}
@@ -279,17 +281,6 @@ export function SimpleContraVoucherForm({
               <StatusBadge status={voucherStatus} />
             </div>
           </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label className="text-xs font-medium">Narration</Label>
-          <Textarea
-            className="text-sm min-h-[52px] resize-none bg-white w-full rounded-lg"
-            value={narration}
-            onChange={(e) => setNarration(e.target.value)}
-            placeholder="Voucher narration…"
-            disabled={readOnly}
-          />
         </div>
 
         <div className="pb-2.5 border-b border-border">
@@ -337,6 +328,17 @@ export function SimpleContraVoucherForm({
               <p className="text-[11px] text-muted-foreground">{formatMoney(numericAmount)}</p>
             )}
           </div>
+        </div>
+
+        <div className="space-y-1.5 pt-1">
+          <Label className="text-xs font-medium">Narration</Label>
+          <Textarea
+            className="text-sm min-h-[52px] resize-none bg-white w-full rounded-lg"
+            value={narration}
+            onChange={(e) => setNarration(e.target.value)}
+            placeholder="Voucher narration…"
+            disabled={readOnly}
+          />
         </div>
       </div>
 

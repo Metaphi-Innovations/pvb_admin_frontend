@@ -46,7 +46,7 @@ export function CoaGroupAccountingFooter({
       {showLedgerSearch && (
         <div className="flex-shrink-0 px-4 py-3 border-b border-border/30 bg-white">
           <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
               className="h-9 pl-8 text-sm rounded-lg"
               placeholder="Search ledgers in this group…"
@@ -77,7 +77,7 @@ export function CoaGroupAccountingFooter({
               No ledgers match your search.
             </p>
           ) : (
-            <table className="accounts-table w-full text-sm">
+            <table className="accounts-table w-full">
               <thead className="border-b border-border/40">
                 <tr>
                   {["Ledger", "Opening", "Balance"].map((h) => (

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Truck,
-  FileText,
   Plus,
   Trash2,
   ChevronDown,
@@ -28,14 +27,10 @@ import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-pr
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import {
   getVendorsForPurchaseDropdown,
-  getPurchaseInvoiceById,
   getGrnsPendingInvoice,
   createPurchaseFromGrn,
-  createManualPurchaseEntry,
-  updateManualPurchaseEntry,
   type PurchaseInvoiceLine,
 } from "./purchase-invoices-data";
-import { maybePostPurchaseInvoice } from "@/lib/accounts/document-posting-bridge";
 import type { GrnRecord } from "@/app/(app)/warehouse/grn/types";
 import { VendorMasterPanel } from "@/components/accounts/master-fetch/VendorMasterPanel";
 import { TransactionProductSelect } from "@/components/accounts/master-fetch/TransactionProductSelect";
@@ -46,10 +41,6 @@ import {
   type VendorTransactionFields,
   type TransactionProductOption,
 } from "@/lib/accounts/transaction-master-fetch";
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-type Mode = "grn" | "manual";
 
 interface LineItem {
   id: string;
@@ -158,50 +149,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-// ─── Mode Selector ────────────────────────────────────────────────────────────
-
-function ModeSelector({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => void }) {
-  return (
-    <div className="grid grid-cols-2 gap-3">
-      {(["grn", "manual"] as Mode[]).map((m) => {
-        const active = mode === m;
-        return (
-          <button
-            key={m}
-            onClick={() => onChange(m)}
-            className={`flex items-start gap-3 rounded-lg border-2 p-4 text-left transition-all ${
-              active
-                ? "border-brand-600 bg-brand-50"
-                : "border-border bg-white hover:border-border/80 hover:bg-muted/20"
-            }`}
-          >
-            <div
-              className={`mt-0.5 rounded-full p-1.5 ${active ? "bg-brand-600 text-white" : "bg-muted/60 text-muted-foreground"}`}
-            >
-              {m === "grn" ? <Truck className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
-            </div>
-            <div>
-              <p className={`text-sm font-semibold ${active ? "text-brand-700" : "text-foreground"}`}>
-                {m === "grn" ? "Create From GRN" : "Manual Entry"}
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {m === "grn"
-                  ? "Auto-populate from received GRN. Preferred method."
-                  : "Enter supplier invoice details manually without a GRN."}
-              </p>
-            </div>
-            {m === "grn" && (
-              <Badge className="ml-auto text-[10px] h-5 bg-brand-100 text-brand-700 border-brand-200">
-                Recommended
-              </Badge>
-            )}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 // ─── GRN Selector ────────────────────────────────────────────────────────────
 
 function GrnSelector({
@@ -218,7 +165,9 @@ function GrnSelector({
       <div className="flex flex-col items-center py-8 text-center">
         <CheckCircle2 className="w-8 h-8 text-emerald-500 mb-2" />
         <p className="text-sm font-medium">No pending GRNs</p>
-        <p className="text-xs text-muted-foreground mt-1">All received GRNs already have invoices. Use manual entry.</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          All completed GRNs already have purchase invoices.
+        </p>
       </div>
     );
   }
@@ -241,7 +190,7 @@ function GrnSelector({
             }`}
           >
             <div className={`mt-0.5 rounded p-1.5 ${active ? "bg-brand-600 text-white" : "bg-blue-100 text-blue-700"}`}>
-              <Truck className="w-3.5 h-3.5" />
+              <Truck className="w-4 h-4" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
@@ -281,76 +230,49 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
   const router = useRouter();
   const searchParams = useSearchParams();
   const isEdit = invoiceId != null;
-
-  const defaultMode: Mode =
-    (searchParams.get("mode") as Mode) === "manual" ? "manual" : "grn";
   const preselectedGrnId = searchParams.get("grnId");
 
-  const [mode, setMode] = useState<Mode>(isEdit ? "manual" : defaultMode);
   const [selectedGrn, setSelectedGrn] = useState<GrnRecord | null>(null);
   const [showGrnSelector, setShowGrnSelector] = useState(true);
 
   const vendors = useMemo(() => getVendorsForPurchaseDropdown(), []);
   const pendingGrns = useMemo(() => getGrnsPendingInvoice(), []);
-  const existing = useMemo(
-    () => (invoiceId ? getPurchaseInvoiceById(invoiceId) : null),
-    [invoiceId],
-  );
+
+  useEffect(() => {
+    if (isEdit && invoiceId) {
+      router.replace(`/accounts/purchase-invoices/${invoiceId}`);
+    }
+  }, [isEdit, invoiceId, router]);
+
+  useEffect(() => {
+    if (searchParams.get("mode") === "manual") {
+      const grnId = searchParams.get("grnId");
+      router.replace(
+        grnId
+          ? `/accounts/purchase-invoices/new?mode=grn&grnId=${grnId}`
+          : "/accounts/purchase-invoices/new?mode=grn",
+      );
+    }
+  }, [router, searchParams]);
 
   // Vendor fields
-  const [vendorId, setVendorId] = useState(existing?.vendorId?.toString() ?? "");
+  const [vendorId, setVendorId] = useState("");
   const [vendorFields, setVendorFields] = useState<VendorTransactionFields | null>(null);
   const [billToId, setBillToId] = useState("");
   const [shipToId, setShipToId] = useState("");
   const [billingAddress, setBillingAddress] = useState("");
   const [shippingAddress, setShippingAddress] = useState("");
-  const [invoiceDate, setInvoiceDate] = useState(
-    existing?.invoiceDate ?? new Date().toISOString().slice(0, 10),
-  );
-  const [vendorInvoiceNo, setVendorInvoiceNo] = useState(existing?.vendorInvoiceNo ?? "");
+  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
+  const [vendorInvoiceNo, setVendorInvoiceNo] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [remarks, setRemarks] = useState(existing?.remarks ?? "");
+  const [remarks, setRemarks] = useState("");
 
-  // Line items
-  const [lines, setLines] = useState<LineItem[]>(() => {
-    if (existing?.lineItems?.length) {
-      return existing.lineItems.map((l) =>
-        recalcLine({
-          id: l.id,
-          productId: l.productId,
-          productName: l.productName,
-          hsnCode: "",
-          qty: l.invoiceQty,
-          unit: l.unit,
-          rate: l.unitPrice,
-          discountPct: 0,
-          gstPct: l.taxPct,
-          taxableAmt: 0,
-          gstAmt: 0,
-          total: 0,
-        }),
-      );
-    }
-    return [recalcLine(emptyLine())];
-  });
+  const [lines, setLines] = useState<LineItem[]>(() => [recalcLine(emptyLine())]);
 
   const products = useMemo(
     () => getProductsForPurchaseTransaction(vendorId ? Number(vendorId) : undefined),
     [vendorId],
   );
-
-  useEffect(() => {
-    if (!existing?.vendorId) return;
-    const v = vendors.find((x) => x.id === existing.vendorId);
-    if (v) {
-      const fields = vendorMasterToTransactionFields(v);
-      setVendorFields(fields);
-      setBillToId(fields.defaultBillToId);
-      setShipToId(fields.defaultShipToId);
-      setBillingAddress(fields.billingAddress);
-      setShippingAddress(fields.shippingAddress);
-    }
-  }, [existing?.vendorId, vendors]);
 
   // Auto-select GRN from query param
   useEffect(() => {
@@ -421,8 +343,9 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
 
   // Totals — computed above
 
-  const doSave = (post: boolean) => {
+  const doSave = () => {
     setError("");
+    if (!selectedGrn) return setError("Select a completed GRN to create the purchase invoice.");
     if (!vendorId) return setError("Select a vendor.");
     if (!vendorInvoiceNo.trim()) return setError("Enter supplier invoice number.");
     if (lines.some((l) => !l.productName.trim())) return setError("All line items need a product from master.");
@@ -430,52 +353,15 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
 
     setSaving(true);
     try {
-      if (mode === "grn" && selectedGrn) {
-        const created = createPurchaseFromGrn({
-          grnId: selectedGrn.id,
-          grnNo: selectedGrn.grnNo,
-          vendorId: Number(vendorId),
-          vendorInvoiceNo,
-          invoiceDate,
-          remarks,
-          lineItems: lines.map(toPurchaseInvoiceLine),
-        });
-        if (!post) {
-          // posting is auto; but navigate anyway
-        }
-        router.push(`/accounts/purchase-invoices/${created.id}`);
-        return;
-      }
-
-      if (isEdit && existing) {
-        const updated = updateManualPurchaseEntry(invoiceId!, {
-          vendorId: Number(vendorId),
-          vendorInvoiceNo,
-          invoiceDate,
-          invoiceAmount: subtotal,
-          taxAmount: totalGst,
-          totalAmount: finalTotal,
-          remarks,
-          attachment: null,
-          lineItems: lines.map(toPurchaseInvoiceLine),
-        });
-        if (post) maybePostPurchaseInvoice(updated);
-        router.push(`/accounts/purchase-invoices/${updated.id}`);
-        return;
-      }
-
-      const created = createManualPurchaseEntry({
+      const created = createPurchaseFromGrn({
+        grnId: selectedGrn.id,
+        grnNo: selectedGrn.grnNo,
         vendorId: Number(vendorId),
         vendorInvoiceNo,
         invoiceDate,
-        invoiceAmount: subtotal,
-        taxAmount: totalGst,
-        totalAmount: finalTotal,
         remarks,
-        attachment: null,
         lineItems: lines.map(toPurchaseInvoiceLine),
       });
-      if (post) maybePostPurchaseInvoice(created);
       router.push(`/accounts/purchase-invoices/${created.id}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Save failed.");
@@ -484,52 +370,25 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
     }
   };
 
-  const title = isEdit
-    ? `Edit ${existing?.invoiceNo ?? ""}`
-    : mode === "grn" && selectedGrn
-      ? `Invoice from ${selectedGrn.grnNo}`
-      : "New Purchase Invoice";
+  if (isEdit) return null;
+
+  const title = selectedGrn ? `Invoice from ${selectedGrn.grnNo}` : "New Purchase Invoice";
 
   return (
     <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb(
-        "Purchase Invoices",
-        isEdit ? "Edit Invoice" : "New Invoice",
-      )}
+      breadcrumbs={accountsBreadcrumb("Transactions", "New Purchase Invoice")}
       title={title}
-      description={
-        isEdit
-          ? "Edit manual purchase entry."
-          : "Create a purchase invoice from a GRN or enter manually."
-      }
+      description="Create a purchase invoice from a completed GRN."
     >
       <div className="space-y-4 max-w-5xl pb-10">
         {error && (
           <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 font-medium">
-            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
             {error}
           </div>
         )}
 
-        {/* Mode selector (new only) */}
-        {!isEdit && (
-          <Section title="Creation Method">
-            <ModeSelector
-              mode={mode}
-              onChange={(m) => {
-                setMode(m);
-                setSelectedGrn(null);
-                setShowGrnSelector(true);
-                setLines([recalcLine(emptyLine())]);
-                setVendorId("");
-              }}
-            />
-          </Section>
-        )}
-
-        {/* GRN Selector */}
-        {!isEdit && mode === "grn" && (
-          <Section title={selectedGrn ? "Selected GRN" : "Select GRN"}>
+        <Section title={selectedGrn ? "Selected GRN" : "Select GRN"}>
             {selectedGrn && !showGrnSelector ? (
               <div className="flex items-center gap-3 rounded-lg border border-brand-200 bg-brand-50 p-3">
                 <div className="rounded p-1.5 bg-brand-600 text-white">
@@ -549,7 +408,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-7 text-xs"
+                  className="h-9 text-[13px] font-medium"
                   onClick={() => {
                     setSelectedGrn(null);
                     setShowGrnSelector(true);
@@ -566,8 +425,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                 onSelect={handleGrnSelect}
               />
             )}
-          </Section>
-        )}
+        </Section>
 
         {/* Supplier Info */}
         <Section title="Supplier Info">
@@ -588,7 +446,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
             }}
             billingAddress={billingAddress}
             shippingAddress={shippingAddress}
-            disabled={mode === "grn" && !!selectedGrn}
+            disabled={!!selectedGrn}
           />
         </Section>
 
@@ -599,7 +457,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
               <Label className="text-xs">Invoice Date *</Label>
               <Input
                 type="date"
-                className="h-8 text-xs mt-1"
+                className="h-9 text-[13px] font-medium mt-1"
                 value={invoiceDate}
                 onChange={(e) => setInvoiceDate(e.target.value)}
               />
@@ -607,7 +465,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
             <div>
               <Label className="text-xs">Supplier Invoice No *</Label>
               <Input
-                className="h-8 text-xs mt-1"
+                className="h-9 text-[13px] font-medium mt-1"
                 value={vendorInvoiceNo}
                 onChange={(e) => setVendorInvoiceNo(e.target.value)}
                 placeholder="e.g. INV/AC/2026/001"
@@ -617,13 +475,13 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
               <Label className="text-xs">Due Date</Label>
               <Input
                 type="date"
-                className="h-8 text-xs mt-1"
+                className="h-9 text-[13px] font-medium mt-1"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
               />
             </div>
           </div>
-          {mode === "grn" && selectedGrn && (
+          {selectedGrn && (
             <div className="flex items-center gap-4 rounded-md bg-muted/30 border border-border/40 px-3 py-2 text-xs text-muted-foreground">
               <span>
                 <span className="font-medium text-foreground">GRN: </span>
@@ -683,7 +541,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                     </td>
                     <td className="py-1.5 pr-2">
                       <Input
-                        className="h-7 text-xs font-mono bg-muted/25"
+                        className="h-9 text-[13px] font-medium font-mono bg-muted/25"
                         readOnly
                         value={line.hsnCode}
                         placeholder="HSN"
@@ -692,21 +550,21 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                     <td className="py-1.5 pr-2">
                       <Input
                         type="number"
-                        className="h-7 text-xs text-right"
+                        className="h-9 text-[13px] font-medium text-right"
                         value={line.qty}
                         onChange={(e) => updateLine(idx, { qty: Number(e.target.value) || 0 })}
                       />
                     </td>
                     <td className="py-1.5 pr-2">
                       <Input
-                        className="h-7 text-xs bg-muted/25"
+                        className="h-9 text-[13px] font-medium bg-muted/25"
                         readOnly
                         value={line.unit}
                       />
                     </td>
                     <td className="py-1.5 pr-2">
                       <AccountsMoneyInput
-                        className="h-7 text-xs text-right"
+                        className="h-9 text-[13px] font-medium text-right"
                         value={line.rate}
                         onChange={(v) => updateLine(idx, { rate: v })}
                       />
@@ -714,7 +572,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                     <td className="py-1.5 pr-2">
                       <Input
                         type="number"
-                        className="h-7 text-xs text-right"
+                        className="h-9 text-[13px] font-medium text-right"
                         value={line.discountPct}
                         onChange={(e) => updateLine(idx, { discountPct: Number(e.target.value) || 0 })}
                       />
@@ -722,7 +580,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                     <td className="py-1.5 pr-2">
                       <Input
                         type="number"
-                        className="h-7 text-xs text-right bg-muted/25"
+                        className="h-9 text-[13px] font-medium text-right bg-muted/25"
                         readOnly
                         value={line.gstPct}
                       />
@@ -750,10 +608,10 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
           <Button
             variant="outline"
             size="sm"
-            className="h-7 text-xs gap-1 mt-2"
+            className="h-9 text-[13px] font-medium gap-1 mt-2"
             onClick={addLine}
           >
-            <Plus className="w-3.5 h-3.5" /> Add Line
+            <Plus className="w-4 h-4" /> Add Line
           </Button>
         </Section>
 
@@ -816,11 +674,11 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
           <Button
             size="sm"
             className="h-9 text-xs bg-brand-600 text-white gap-1.5"
-            disabled={saving}
-            onClick={() => doSave(true)}
+            onClick={doSave}
+            disabled={saving || !selectedGrn}
           >
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            {mode === "grn" ? "Create & Post Invoice" : "Post Invoice"}
+            <CheckCircle2 className="w-4 h-4" />
+            Create & Post Invoice
           </Button>
         </div>
       </div>

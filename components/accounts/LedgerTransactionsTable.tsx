@@ -5,6 +5,28 @@ import { ExternalLink } from "lucide-react";
 import { MoneyCell } from "@/components/accounts/MoneyAmount";
 import { formatMoney } from "@/lib/accounts/money-format";
 import type { StatementRow } from "@/lib/accounts/ledger-detail-utils";
+import {
+  AccountsTable,
+  AccountsTableBody,
+  AccountsTableCell,
+  AccountsTableHead,
+  AccountsTableHeadCell,
+  AccountsTableHeadRow,
+  AccountsTableRow,
+  AccountsTableScroll,
+} from "@/components/accounts/AccountsTable";
+
+const COLUMNS = [
+  { key: "date", label: "Date", align: "left" as const },
+  { key: "voucher", label: "Voucher No", align: "left" as const },
+  { key: "type", label: "Voucher Type", align: "left" as const },
+  { key: "source", label: "Source Module", align: "left" as const },
+  { key: "particulars", label: "Particulars", align: "left" as const },
+  { key: "debit", label: "Debit", align: "right" as const },
+  { key: "credit", label: "Credit", align: "right" as const },
+  { key: "balance", label: "Running Balance", align: "right" as const },
+  { key: "action", label: "Action", align: "left" as const },
+];
 
 export function LedgerTransactionsTable({
   rows,
@@ -14,64 +36,47 @@ export function LedgerTransactionsTable({
   emptyLabel?: string;
 }) {
   if (rows.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground py-8 text-center px-4">{emptyLabel}</p>
-    );
+    return <p className="text-xs text-muted-foreground py-6 text-center px-4">{emptyLabel}</p>;
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="accounts-table w-full text-xs min-w-[960px]">
-        <thead className="border-b border-border/60">
-          <tr>
-            {[
-              "Date",
-              "Voucher No",
-              "Voucher Type",
-              "Source Module",
-              "Particulars",
-              "Debit",
-              "Credit",
-              "Running Balance",
-              "Action",
-            ].map((h) => (
-              <th
-                key={h}
-                className={`px-3 py-2.5 font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap ${
-                  h === "Debit" || h === "Credit" || h === "Running Balance" ? "text-right" : "text-left"
-                }`}
-              >
-                {h}
-              </th>
+    <AccountsTableScroll>
+      <AccountsTable minWidth={960}>
+        <AccountsTableHead>
+          <AccountsTableHeadRow>
+            {COLUMNS.map((col) => (
+              <AccountsTableHeadCell key={col.key} align={col.align} uppercase>
+                {col.label}
+              </AccountsTableHeadCell>
             ))}
-          </tr>
-        </thead>
-        <tbody>
+          </AccountsTableHeadRow>
+        </AccountsTableHead>
+        <AccountsTableBody>
           {rows.map((row, i) => {
             const isOpening = row.voucherType === "Opening Balance" || row.voucherType === "Opening";
             return (
-              <tr key={`${row.id ?? row.voucherNo}-${i}`} className="border-b border-border/30 hover:bg-muted/10">
-                <td className="px-3 py-2.5 whitespace-nowrap">{row.date}</td>
-                <td className="px-3 py-2.5 font-mono">
+              <AccountsTableRow key={`${row.id ?? row.voucherNo}-${i}`}>
+                <AccountsTableCell className="whitespace-nowrap">{row.date}</AccountsTableCell>
+                <AccountsTableCell mono>
                   {row.href && !isOpening ? (
-                    <Link href={row.href} className="text-brand-700 hover:underline">
+                    <Link href={row.href} className="text-brand-700 hover:underline font-semibold">
                       {row.voucherNo}
                     </Link>
                   ) : (
                     row.voucherNo
                   )}
-                </td>
-                <td className="px-3 py-2.5">{row.voucherType}</td>
-                <td className="px-3 py-2.5 text-muted-foreground">{row.sourceModule || "—"}</td>
-                <td className="px-3 py-2.5 max-w-[240px] truncate" title={row.particulars}>
+                </AccountsTableCell>
+                <AccountsTableCell>{row.voucherType}</AccountsTableCell>
+                <AccountsTableCell className="text-muted-foreground">{row.sourceModule || "—"}</AccountsTableCell>
+                <AccountsTableCell className="max-w-[240px] truncate" title={row.particulars}>
                   {row.particulars}
-                </td>
-                <MoneyCell amount={row.debit} dashIfZero className="px-3 py-2.5" />
-                <MoneyCell amount={row.credit} dashIfZero className="px-3 py-2.5" />
-                <td className="px-3 py-2.5 text-right tabular-nums font-medium whitespace-nowrap">
+                </AccountsTableCell>
+                <MoneyCell amount={row.debit} dashIfZero />
+                <MoneyCell amount={row.credit} dashIfZero />
+                <AccountsTableCell align="right" money className="font-medium whitespace-nowrap">
                   {formatMoney(row.runningBalance)} {row.balanceType === "Debit" ? "Dr" : "Cr"}
-                </td>
-                <td className="px-3 py-2.5 whitespace-nowrap">
+                </AccountsTableCell>
+                <AccountsTableCell className="whitespace-nowrap">
                   {row.sourceHref && !isOpening ? (
                     <Link
                       href={row.sourceHref}
@@ -83,12 +88,12 @@ export function LedgerTransactionsTable({
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
-                </td>
-              </tr>
+                </AccountsTableCell>
+              </AccountsTableRow>
             );
           })}
-        </tbody>
-      </table>
-    </div>
+        </AccountsTableBody>
+      </AccountsTable>
+    </AccountsTableScroll>
   );
 }

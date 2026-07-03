@@ -1,8 +1,8 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { MoneyAmount, MoneyCell } from "@/components/accounts/MoneyAmount";
-import { formatMoneyOrDash } from "@/lib/accounts/money-format";
+import { MoneyCell } from "@/components/accounts/MoneyAmount";
+import { balanceSideLabel, formatMoney } from "@/lib/accounts/money-format";
 import {
   AccountsTable,
   AccountsTableBody,
@@ -17,69 +17,32 @@ import type { GeneralLedgerDisplayRow } from "./general-ledger-data";
 
 const COLUMNS = [
   { key: "date", label: "Date", align: "left" as const },
-  { key: "voucher", label: "Voucher No.", align: "left" as const },
   { key: "type", label: "Voucher Type", align: "left" as const },
-  { key: "party", label: "Party Name", align: "left" as const },
-  { key: "gstin", label: "GSTIN", align: "left" as const },
-  { key: "pan", label: "PAN", align: "left" as const },
-  { key: "expense", label: "Expense Head", align: "left" as const },
-  { key: "narration", label: "Particulars / Narration", align: "left" as const },
+  { key: "voucher", label: "Voucher No.", align: "left" as const },
+  { key: "reference", label: "Reference No.", align: "left" as const },
+  { key: "particulars", label: "Particulars", align: "left" as const },
   { key: "debit", label: "Debit", align: "right" as const },
   { key: "credit", label: "Credit", align: "right" as const },
-  { key: "bank", label: "Bank / Cash", align: "left" as const },
-  { key: "tdsSection", label: "TDS Section", align: "left" as const },
-  { key: "tdsAmount", label: "TDS Amount", align: "right" as const },
-  { key: "gstAmount", label: "GST Amount", align: "right" as const },
-  { key: "reference", label: "Reference No.", align: "left" as const },
   { key: "balance", label: "Running Balance", align: "right" as const },
+  { key: "side", label: "Dr/Cr", align: "center" as const },
 ];
 
-function TextCell({
-  value,
-  className,
-  mono,
-  title,
-}: {
-  value: string;
-  className?: string;
-  mono?: boolean;
-  title?: string;
-}) {
-  return (
-    <AccountsTableCell
-      className={cn(mono && "font-mono text-[11px]", className)}
-      title={title ?? (value !== "—" ? value : undefined)}
-    >
-      {value}
-    </AccountsTableCell>
-  );
-}
-
-function OptionalMoneyCell({ amount }: { amount: number | null }) {
-  if (amount == null || amount === 0) {
-    return (
-      <AccountsTableCell align="right" className="tabular-nums text-muted-foreground">
-        —
-      </AccountsTableCell>
-    );
-  }
-  return <MoneyCell amount={amount} className="accounts-table-td" />;
+function emptyCell(value: string) {
+  return value && value !== "—" ? value : "—";
 }
 
 export function GeneralLedgerTable({
   openingRow,
   transactionRows,
-  closingRow,
 }: {
   openingRow: GeneralLedgerDisplayRow;
   transactionRows: GeneralLedgerDisplayRow[];
-  closingRow: GeneralLedgerDisplayRow;
 }) {
-  const rows = [openingRow, ...transactionRows, closingRow];
+  const rows = [openingRow, ...transactionRows];
 
   return (
     <AccountsTableScroll className="flex-1 min-h-0 h-full">
-      <AccountsTable minWidth={2200} className="text-xs">
+      <AccountsTable minWidth={960} className="text-xs">
         <AccountsTableHead>
           <AccountsTableHeadRow>
             {COLUMNS.map((col) => (
@@ -100,68 +63,38 @@ export function GeneralLedgerTable({
 }
 
 function GeneralLedgerTableRow({ row }: { row: GeneralLedgerDisplayRow }) {
-  const isSummary = row.kind === "opening" || row.kind === "closing";
+  const isOpening = row.kind === "opening";
 
   return (
-    <AccountsTableRow
-      className={cn(
-        isSummary && "bg-muted/20 font-medium",
-      )}
-    >
-      <AccountsTableCell className="whitespace-nowrap">
-        {isSummary ? "—" : row.date}
+    <AccountsTableRow className={cn(isOpening && "bg-muted/20 font-medium")}>
+      <AccountsTableCell className="whitespace-nowrap">{row.date}</AccountsTableCell>
+      <AccountsTableCell className="whitespace-nowrap text-muted-foreground">
+        {isOpening ? "Opening" : row.voucherType}
       </AccountsTableCell>
       <AccountsTableCell className="whitespace-nowrap">
-        {isSummary ? (
+        {isOpening || !row.voucherNo ? (
           <span className="text-muted-foreground">—</span>
         ) : (
           <span className="font-mono text-xs font-semibold text-brand-700">{row.voucherNo}</span>
         )}
       </AccountsTableCell>
-      <TextCell value={isSummary ? "—" : row.voucherType} className="whitespace-nowrap text-muted-foreground" />
-      <TextCell
-        value={isSummary ? row.particularsNarration : row.partyName}
-        className={cn(!isSummary && "max-w-[160px] truncate font-medium")}
-      />
-      <TextCell value={isSummary ? "—" : row.gstin} mono className="whitespace-nowrap" />
-      <TextCell value={isSummary ? "—" : row.pan} mono className="whitespace-nowrap" />
-      <TextCell value={isSummary ? "—" : row.expenseHead} className="max-w-[140px] truncate" />
-      <TextCell
-        value={isSummary ? row.particularsNarration : row.particularsNarration}
-        className={cn("max-w-[200px] truncate", isSummary && "font-semibold text-foreground")}
-      />
+      <AccountsTableCell className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">
+        {emptyCell(row.referenceNo)}
+      </AccountsTableCell>
+      <AccountsTableCell
+        className={cn("max-w-[280px] truncate", isOpening && "font-semibold text-foreground")}
+        title={row.particularsNarration}
+      >
+        {row.particularsNarration}
+      </AccountsTableCell>
       <MoneyCell amount={row.debit} dashIfZero className="accounts-table-td" />
       <MoneyCell amount={row.credit} dashIfZero className="accounts-table-td" />
-      <TextCell value={isSummary ? "—" : row.bankCash} className="max-w-[140px] truncate" />
-      <TextCell value={isSummary ? "—" : row.tdsSection} className="max-w-[140px] truncate" />
-      {isSummary ? (
-        <AccountsTableCell align="right" className="text-muted-foreground">
-          —
-        </AccountsTableCell>
-      ) : (
-        <OptionalMoneyCell amount={row.tdsAmount} />
-      )}
-      {isSummary ? (
-        <AccountsTableCell align="right" className="text-muted-foreground">
-          —
-        </AccountsTableCell>
-      ) : (
-        <OptionalMoneyCell amount={row.gstAmount} />
-      )}
-      <TextCell value={isSummary ? "—" : row.referenceNo} mono className="whitespace-nowrap" />
       <AccountsTableCell align="right" className="tabular-nums font-medium whitespace-nowrap">
-        <MoneyAmount
-          amount={row.runningBalance}
-          side={row.runningBalanceType}
-          sideBadge
-          className="text-xs justify-end"
-        />
+        {formatMoney(row.runningBalance)}
+      </AccountsTableCell>
+      <AccountsTableCell align="center" className="whitespace-nowrap text-xs font-semibold">
+        {balanceSideLabel(row.runningBalanceType)}
       </AccountsTableCell>
     </AccountsTableRow>
   );
-}
-
-export function formatGeneralLedgerOptionalMoney(amount: number | null): string {
-  if (amount == null || amount === 0) return "—";
-  return formatMoneyOrDash(amount);
 }

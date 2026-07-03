@@ -137,32 +137,31 @@ export default function BankAccountsPageClient() {
       breadcrumbs={accountsBreadcrumb("Banking", "Bank Accounts")}
       title="Bank Accounts"
       description="Company bank ledgers used in Bank Book, fund transfers, vouchers and reconciliation."
+      hideDescription
       actions={
         <Button
           size="sm"
-          className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1"
+          className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
           onClick={() => router.push("/accounts/banking/bank-accounts/new")}
         >
-          <Plus className="w-3.5 h-3.5" /> Add Bank Account
+          <Plus className="w-4 h-4" /> Add Bank Account
         </Button>
-      }
-      toolbar={
-        <AccountsTableToolbar
-          placement="page-header"
-          search={{
-            value: search,
-            onChange: setSearch,
-            placeholder: "Search bank, account no., IFSC…",
-          }}
-          onExcel={() => exportBankAccountsCsv(filtered)}
-          onPdf={() => exportBankAccountsCsv(filtered)}
-          exportDisabled={filtered.length === 0}
-        />
       }
       layout="split"
       className="h-full min-h-0"
     >
       <AccountsTableListing
+        toolbar={
+          <AccountsTableToolbar
+            search={{
+              value: search,
+              onChange: setSearch,
+              placeholder: "Search bank, account no., IFSC…",
+            }}
+            onExcel={() => exportBankAccountsCsv(filtered)}
+            exportDisabled={filtered.length === 0}
+          />
+        }
         summary={
           filtered.length > 0 ? (
             <div className="flex items-center justify-between px-5 py-2 border-b border-border/60 bg-muted/10 text-[11px] text-muted-foreground">

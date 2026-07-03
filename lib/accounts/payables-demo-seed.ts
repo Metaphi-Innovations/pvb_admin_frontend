@@ -28,6 +28,13 @@ import {
   type VendorCreditNoteRecord,
 } from "@/lib/accounts/payables-data";
 import { resolveMappingLedger } from "@/lib/accounts/ledger-mappings";
+import {
+  applyRelativeInvoiceDates,
+  demoDateAt,
+  demoDocNo,
+  demoFinancialYearStart,
+  demoTimestamp,
+} from "@/lib/accounts/demo-date-utils";
 
 // ── Demo vendor specs ────────────────────────────────────────────────────────
 
@@ -160,7 +167,7 @@ export const PAYABLES_DEMO_VENDORS: Array<{
 ];
 
 /** 25 purchase bills — mix of paid, pending, partial, and overdue */
-export const PAYABLES_DEMO_BILLS: Array<{
+export const PAYABLES_DEMO_BILLS_RAW: Array<{
   id: number;
   invoiceNo: string;
   vendorId: number;
@@ -496,6 +503,10 @@ export const PAYABLES_DEMO_BILLS: Array<{
   },
 ];
 
+function getPayablesDemoBills() {
+  return applyRelativeInvoiceDates(PAYABLES_DEMO_BILLS_RAW, 5, "PUR", new Date(), 3);
+}
+
 function vendorTemplate(): Vendor {
   return {
     id: 1,
@@ -529,9 +540,9 @@ function vendorTemplate(): Vendor {
     remarks: "",
     status: "active",
     createdBy: ACCOUNTS_CURRENT_USER,
-    createdDate: "2026-04-01",
+    createdDate: demoFinancialYearStart(),
     updatedBy: ACCOUNTS_CURRENT_USER,
-    updatedDate: "2026-04-01",
+    updatedDate: demoFinancialYearStart(),
   };
 }
 
@@ -572,7 +583,7 @@ function patchPayablesVendor(base: Vendor, spec: (typeof PAYABLES_DEMO_VENDORS)[
 }
 
 function buildPurchaseBill(
-  spec: (typeof PAYABLES_DEMO_BILLS)[number],
+  spec: ReturnType<typeof getPayablesDemoBills>[number],
   vendorName: string,
   vendorGst: string,
 ): PurchaseInvoiceRecord {
@@ -693,15 +704,20 @@ function seedVendorPayment(
   return voucher.id;
 }
 
-function buildDebitNotes(): DebitNoteRecord[] {
+function buildDebitNotes(ref = new Date()): DebitNoteRecord[] {
+  const bills = getPayablesDemoBills();
+  const bill106 = bills.find((b) => b.id === 106);
+  const bill112 = bills.find((b) => b.id === 112);
+  const dnDate1 = demoDateAt(12, ref);
+  const dnDate2 = demoDateAt(35, ref);
   return [
     {
       id: 101,
-      debitNoteNo: "DN-2026-101",
-      debitNoteDate: "2026-04-28",
+      debitNoteNo: demoDocNo("DN", 101, ref, 3),
+      debitNoteDate: dnDate1,
       againstType: "purchase_invoice",
       sourceInvoiceId: 106,
-      sourceInvoiceNo: "PUR-2026-106",
+      sourceInvoiceNo: bill106?.invoiceNo ?? demoDocNo("PUR", 106, ref, 3),
       sourcePoId: null,
       sourcePoNo: "",
       sourceGrnNo: "GRN-106",
@@ -712,17 +728,22 @@ function buildDebitNotes(): DebitNoteRecord[] {
       alreadyAdjustedAmount: 0,
       taxableAmount: 12712,
       gstAmount: 2288,
+      cgstAmount: 1144,
+      sgstAmount: 1144,
+      igstAmount: 0,
+      source: "purchase_return",
+      sourceReturnNo: "PRET-DEMO-106",
       currentDebitAmount: 15000,
       balanceAfterAdjustment: 305000,
       standaloneDebitAmount: 0,
       lineItems: [],
       reason: "Short Supply",
-      remarks: "Short delivery on IFFCO DAP — debit note against PUR-2026-106",
+      remarks: `Short delivery on IFFCO DAP — debit note against ${bill106?.invoiceNo ?? "PUR-106"}`,
       attachments: [],
       status: "approved",
       activity: [
         {
-          at: "2026-04-28T10:00:00.000Z",
+          at: demoTimestamp(dnDate1, "10:00:00"),
           action: "approved",
           by: ACCOUNTS_CURRENT_USER,
           detail: "Debit note posted — reduces vendor payable",
@@ -731,17 +752,17 @@ function buildDebitNotes(): DebitNoteRecord[] {
       createdBy: ACCOUNTS_CURRENT_USER,
       updatedBy: ACCOUNTS_CURRENT_USER,
       approvedBy: ACCOUNTS_CURRENT_USER,
-      approvedAt: "2026-04-28T10:00:00.000Z",
-      createdAt: "2026-04-28T09:00:00.000Z",
-      updatedAt: "2026-04-28T10:00:00.000Z",
+      approvedAt: demoTimestamp(dnDate1, "10:00:00"),
+      createdAt: demoTimestamp(dnDate1, "09:00:00"),
+      updatedAt: demoTimestamp(dnDate1, "10:00:00"),
     },
     {
       id: 102,
-      debitNoteNo: "DN-2026-102",
-      debitNoteDate: "2026-03-25",
+      debitNoteNo: demoDocNo("DN", 102, ref, 3),
+      debitNoteDate: dnDate2,
       againstType: "purchase_invoice",
       sourceInvoiceId: 112,
-      sourceInvoiceNo: "PUR-2026-112",
+      sourceInvoiceNo: bill112?.invoiceNo ?? demoDocNo("PUR", 112, ref, 3),
       sourcePoId: null,
       sourcePoNo: "",
       sourceGrnNo: "GRN-112",
@@ -752,6 +773,11 @@ function buildDebitNotes(): DebitNoteRecord[] {
       alreadyAdjustedAmount: 0,
       taxableAmount: 8475,
       gstAmount: 1525,
+      cgstAmount: 762.5,
+      sgstAmount: 762.5,
+      igstAmount: 0,
+      source: "purchase_return",
+      sourceReturnNo: "PRET-DEMO-112",
       currentDebitAmount: 10000,
       balanceAfterAdjustment: 110000,
       standaloneDebitAmount: 0,
@@ -762,7 +788,7 @@ function buildDebitNotes(): DebitNoteRecord[] {
       status: "approved",
       activity: [
         {
-          at: "2026-03-25T10:00:00.000Z",
+          at: demoTimestamp(dnDate2, "10:00:00"),
           action: "approved",
           by: ACCOUNTS_CURRENT_USER,
           detail: "Debit note posted",
@@ -771,39 +797,88 @@ function buildDebitNotes(): DebitNoteRecord[] {
       createdBy: ACCOUNTS_CURRENT_USER,
       updatedBy: ACCOUNTS_CURRENT_USER,
       approvedBy: ACCOUNTS_CURRENT_USER,
-      approvedAt: "2026-03-25T10:00:00.000Z",
-      createdAt: "2026-03-25T09:00:00.000Z",
-      updatedAt: "2026-03-25T10:00:00.000Z",
+      approvedAt: demoTimestamp(dnDate2, "10:00:00"),
+      createdAt: demoTimestamp(dnDate2, "09:00:00"),
+      updatedAt: demoTimestamp(dnDate2, "10:00:00"),
     },
   ];
 }
 
-const VENDOR_CREDIT_NOTES: VendorCreditNoteRecord[] = [
-  {
-    id: 1,
-    creditNoteNo: "VCN-2026-001",
-    creditNoteDate: "2026-05-28",
-    vendorId: 2,
-    vendorName: "Coromandel International",
-    sourceBillId: 103,
-    sourceBillNo: "PUR-2026-103",
-    amount: 12000,
-    reason: "Freight surcharge",
-    status: "approved",
-  },
-  {
-    id: 2,
-    creditNoteNo: "VCN-2026-002",
-    creditNoteDate: "2026-06-01",
-    vendorId: 4,
-    vendorName: "Bayer CropScience",
-    sourceBillId: null,
-    sourceBillNo: "",
-    amount: 8500,
-    reason: "Rate revision — additional billing",
-    status: "approved",
-  },
-];
+function buildVendorCreditNotes(ref = new Date()): VendorCreditNoteRecord[] {
+  const bills = getPayablesDemoBills();
+  const bill103 = bills.find((b) => b.id === 103);
+  return [
+    {
+      id: 1,
+      creditNoteNo: demoDocNo("VCN", 1, ref, 3),
+      creditNoteDate: demoDateAt(4, ref),
+      vendorId: 2,
+      vendorName: "Coromandel International",
+      sourceBillId: 103,
+      sourceBillNo: bill103?.invoiceNo ?? demoDocNo("PUR", 103, ref, 3),
+      amount: 12000,
+      reason: "Freight surcharge",
+      status: "approved",
+    },
+    {
+      id: 2,
+      creditNoteNo: demoDocNo("VCN", 2, ref, 3),
+      creditNoteDate: demoDateAt(1, ref),
+      vendorId: 4,
+      vendorName: "Bayer CropScience",
+      sourceBillId: null,
+      sourceBillNo: "",
+      amount: 8500,
+      reason: "Rate revision — additional billing",
+      status: "approved",
+    },
+  ];
+}
+
+const PAYABLES_PAYMENT_SPECS = [
+  { vendorName: "Rallis India Ltd", amount: 175000, dateIndex: 9, refNo: "NEFT-RAL-001", billId: 101, pvSeq: 1, allocAmount: 175000 },
+  { vendorName: "Rallis India Ltd", amount: 25000, dateIndex: 4, refNo: "NEFT-RAL-002", billId: 102, pvSeq: 2, allocAmount: 25000 },
+  { vendorName: "UPL Limited", amount: 310000, dateIndex: 8, refNo: "NEFT-UPL-001", billId: 104, pvSeq: 3, allocAmount: 310000 },
+  { vendorName: "IFFCO", amount: 100000, dateIndex: 6, refNo: "NEFT-IFF-001", billId: 106, pvSeq: 4, allocAmount: 100000 },
+  { vendorName: "IFFCO", amount: 50000, dateIndex: 4, refNo: "NEFT-IFF-002", billId: 107, pvSeq: 5, allocAmount: 30000 },
+  { vendorName: "Coromandel International", amount: 95000, dateIndex: 2, refNo: "NEFT-COR-001", billId: 103, pvSeq: 6 },
+  { vendorName: "Chambal Fertilisers", amount: 65000, dateIndex: 5, refNo: "NEFT-CHF-001", billId: 108, pvSeq: 7, allocAmount: 65000 },
+  { vendorName: "Coromandel International", amount: 95000, dateIndex: 1, refNo: "NEFT-COR-002", billId: 114, pvSeq: 8, allocAmount: 45000 },
+] as const;
+
+function seedPayablesPaymentVouchers(
+  ref = new Date(),
+  resolveVoucherId?: (voucherNumber: string) => number | undefined,
+): void {
+  const bills = getPayablesDemoBills();
+  const billNo = (id: number) => bills.find((b) => b.id === id)?.invoiceNo ?? demoDocNo("PUR", id, ref, 3);
+  const paymentIds: Record<string, number> = {};
+
+  for (const spec of PAYABLES_PAYMENT_SPECS) {
+    const pvNo = demoDocNo("PV", spec.pvSeq, ref, 3);
+    const date = demoDateAt(spec.dateIndex, ref);
+    paymentIds[pvNo] = seedVendorPayment(
+      spec.vendorName,
+      spec.amount,
+      date,
+      spec.refNo,
+      billNo(spec.billId),
+      pvNo,
+    );
+  }
+
+  const vid = resolveVoucherId ?? ((no: string) => loadVouchers().find((v) => v.voucherNumber === no)?.id);
+
+  seedPaymentAllocations(
+    PAYABLES_PAYMENT_SPECS.filter((s) => "allocAmount" in s && s.allocAmount != null).map((spec) => {
+      const pvNo = demoDocNo("PV", spec.pvSeq, ref, 3);
+      return {
+        voucherId: vid(pvNo) ?? paymentIds[pvNo],
+        lines: [{ billId: spec.billId, billNo: billNo(spec.billId), amount: spec.allocAmount! }],
+      };
+    }),
+  );
+}
 
 function postVendorCreditNoteVoucher(note: VendorCreditNoteRecord): void {
   const vendor = resolveMappingLedger("purchase_payable", note.vendorName, { createIfMissing: true });
@@ -869,7 +944,7 @@ export function seedPayablesDemoData(
   saveVendorPayablesMeta(meta);
 
   const vendors = loadVendors();
-  const purchases = PAYABLES_DEMO_BILLS.map((spec) => {
+  const purchases = getPayablesDemoBills().map((spec) => {
     const vendor = vendors.find((v) => v.id === spec.vendorId);
     return buildPurchaseBill(spec, vendor?.vendorName ?? "Supplier", vendor?.gstNumber ?? "");
   });
@@ -879,49 +954,23 @@ export function seedPayablesDemoData(
     maybePostPurchaseInvoice(pur);
   }
 
-  const debitNotes = buildDebitNotes();
+  const ref = new Date();
+  const debitNotes = buildDebitNotes(ref);
   saveDebitNotes(debitNotes);
   for (const dn of debitNotes) {
     maybePostDebitNote(dn);
   }
 
-  seedVendorCreditNotes(VENDOR_CREDIT_NOTES);
-  for (const vcn of VENDOR_CREDIT_NOTES) {
+  const vendorCreditNotes = buildVendorCreditNotes(ref);
+  seedVendorCreditNotes(vendorCreditNotes);
+  for (const vcn of vendorCreditNotes) {
     postVendorCreditNoteVoucher(vcn);
   }
 
-  // 6 payment vouchers — 3 fully allocated, 2 partial, 1 pending allocation
-  const pv1 = seedVendorPayment("Rallis India Ltd", 175000, "2026-04-20", "NEFT-RAL-001", "PUR-2026-101", "PV-2026-001");
-  const pv2 = seedVendorPayment("Rallis India Ltd", 25000, "2026-05-28", "NEFT-RAL-002", "PUR-2026-102", "PV-2026-002");
-  const pv3 = seedVendorPayment("UPL Limited", 310000, "2026-04-25", "NEFT-UPL-001", "PUR-2026-104", "PV-2026-003");
-  const pv4 = seedVendorPayment("IFFCO", 100000, "2026-05-08", "NEFT-IFF-001", "PUR-2026-106", "PV-2026-004");
-  const pv5 = seedVendorPayment("IFFCO", 50000, "2026-05-28", "NEFT-IFF-002", "PUR-2026-107", "PV-2026-005");
-  const pv6 = seedVendorPayment("Coromandel International", 95000, "2026-06-10", "NEFT-COR-001", "PUR-2026-103", "PV-2026-006");
-
-  const pv7 = seedVendorPayment("Chambal Fertilisers", 65000, "2026-05-20", "NEFT-CHF-001", "PUR-2026-108", "PV-2026-007");
-  const pv8 = seedVendorPayment("Coromandel International", 95000, "2026-06-15", "NEFT-COR-002", "PUR-2026-114", "PV-2026-008");
-
-  const vid = resolveVoucherId ?? ((no: string) => loadVouchers().find((v) => v.voucherNumber === no)?.id);
-
-  seedPaymentAllocations([
-    { voucherId: vid("PV-2026-001") ?? pv1, lines: [{ billId: 101, billNo: "PUR-2026-101", amount: 175000 }] },
-    { voucherId: vid("PV-2026-002") ?? pv2, lines: [{ billId: 102, billNo: "PUR-2026-102", amount: 25000 }] },
-    { voucherId: vid("PV-2026-003") ?? pv3, lines: [{ billId: 104, billNo: "PUR-2026-104", amount: 310000 }] },
-    { voucherId: vid("PV-2026-004") ?? pv4, lines: [{ billId: 106, billNo: "PUR-2026-106", amount: 100000 }] },
-    {
-      voucherId: vid("PV-2026-005") ?? pv5,
-      lines: [{ billId: 107, billNo: "PUR-2026-107", amount: 30000 }],
-    },
-    { voucherId: vid("PV-2026-007") ?? pv7, lines: [{ billId: 108, billNo: "PUR-2026-108", amount: 65000 }] },
-    {
-      voucherId: vid("PV-2026-008") ?? pv8,
-      lines: [{ billId: 114, billNo: "PUR-2026-114", amount: 45000 }],
-    },
-    // PV-2026-006 — pending allocation (no entry)
-  ]);
+  seedPayablesPaymentVouchers(ref, resolveVoucherId);
 }
 
-const PAYABLES_PAGE_SEED_VERSION = "2026-payables-v2";
+const PAYABLES_PAGE_SEED_VERSION = "relative-dates-v3";
 const PAYABLES_PAGE_SEED_KEY = "ds_payables_page_seed_version";
 
 /** Re-seed payables demo when page data version changes (payables module only). */

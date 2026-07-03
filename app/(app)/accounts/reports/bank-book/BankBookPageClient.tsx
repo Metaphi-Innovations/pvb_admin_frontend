@@ -17,14 +17,14 @@ import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
 import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
 import {
   ReportFilterRow,
-  ReportFinancialYearFilter,
-  ReportFromToDateFilter,
+  ReportDateRangeFilter,
+  useReportDateRange,
+  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
+  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import { formatBalanceAmount, formatMoney } from "@/lib/accounts/money-format";
 import { toSignedBalance } from "@/lib/accounts/running-balance";
-import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import {
@@ -38,20 +38,12 @@ import { ensureBankBookDemoOnPageLoad } from "./bank-book-demo-seed";
 import { exportBankBookToExcel, exportBankBookToPdf } from "./bank-book-export";
 import { BankBookTable } from "./BankBookTable";
 
-const filterLabelClass = "text-[10px] font-medium uppercase text-muted-foreground leading-none";
-const filterControlClass = "h-8 text-xs";
-const PLACEHOLDER_FROM = "2026-04-01";
-const PLACEHOLDER_TO = "2026-06-30";
-
 function BankBookPageContent() {
   const mounted = useClientMounted();
   const [refreshKey, setRefreshKey] = useState(0);
 
   const [bankLedgerId, setBankLedgerId] = useState("");
-  const [financialYearId, setFinancialYearId] = useState("all");
-  const [dateFrom, setDateFrom] = useState(PLACEHOLDER_FROM);
-  const [dateTo, setDateTo] = useState(PLACEHOLDER_TO);
-  const [datesReady, setDatesReady] = useState(false);
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
   const [voucherType, setVoucherType] = useState("all");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<BankBookSortKey>("date");
@@ -71,39 +63,23 @@ function BankBookPageContent() {
   }, [refreshKey]);
 
   useEffect(() => {
-    const activeFyId = getActiveFinancialYearId();
-    const years = loadFinancialYears();
-    const activeFy = years.find((fy) => fy.id === activeFyId) ?? years.find((fy) => fy.status === "active");
-
-    if (activeFy) {
-      setFinancialYearId(String(activeFy.id));
-      setDateFrom(activeFy.startDate);
-      setDateTo(activeFy.endDate > "2026-06-30" ? "2026-06-30" : activeFy.endDate);
-    } else {
-      setDateFrom(PLACEHOLDER_FROM);
-      setDateTo(PLACEHOLDER_TO);
-    }
-    setDatesReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (financialYearId === "all") return;
-    const fy = loadFinancialYears().find((y) => String(y.id) === financialYearId);
-    if (!fy) return;
-    setDateFrom(fy.startDate);
-    setDateTo(fy.endDate);
-  }, [financialYearId]);
+    if (bankOptions.length === 0) return;
+    if (bankLedgerId && bankOptions.some((b) => String(b.ledgerId) === bankLedgerId)) return;
+    const defaultBank =
+      bankOptions.find((b) => b.defaultForReceipts) ?? bankOptions[0];
+    if (defaultBank) setBankLedgerId(String(defaultBank.ledgerId));
+  }, [bankOptions, bankLedgerId]);
 
   const statement = useMemo(() => {
-    if (!mounted || !bankLedgerId || !datesReady) return null;
+    if (!mounted || !bankLedgerId) return null;
     return buildBankBookStatement(Number(bankLedgerId), {
       dateFrom,
       dateTo,
-      financialYearId,
+      financialYearId: "all",
       voucherType,
       search,
     });
-  }, [mounted, bankLedgerId, dateFrom, dateTo, financialYearId, voucherType, search, datesReady]);
+  }, [mounted, bankLedgerId, dateFrom, dateTo, voucherType, search]);
 
   const sortedTransactions = useMemo(() => {
     if (!statement) return [];
@@ -124,18 +100,12 @@ function BankBookPageContent() {
     return sortedTransactions.slice(start, start + pageSize);
   }, [sortedTransactions, page, pageSize]);
 
-  const financialYearLabel = useMemo(() => {
-    if (financialYearId === "all") return "All years";
-    return loadFinancialYears().find((fy) => String(fy.id) === financialYearId)?.name ?? "—";
-  }, [financialYearId]);
-
   const exportMeta = useMemo(
     () => ({
       dateFrom,
       dateTo,
-      financialYear: financialYearLabel,
     }),
-    [dateFrom, dateTo, financialYearLabel],
+    [dateFrom, dateTo],
   );
 
   const canExport = Boolean(statement && bankLedgerId);
@@ -177,7 +147,7 @@ function BankBookPageContent() {
 
   useEffect(() => {
     setPage(1);
-  }, [bankLedgerId, dateFrom, dateTo, financialYearId, voucherType, search, sortKey, sortDir, pageSize]);
+  }, [bankLedgerId, dateFrom, dateTo, voucherType, search, sortKey, sortDir, pageSize]);
 
   const summaryItems = statement
     ? [
@@ -221,11 +191,21 @@ function BankBookPageContent() {
       title="Bank Book"
       description="Read-only bank ledger report from posted accounting vouchers."
       filters={
-        <ReportFilterRow className="items-end">
-          <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
-          <ReportFromToDateFilter
+        <ReportFilterRow
+          className="items-end"
+          end={
+            <AccountsExportMenu
+              onExcel={handleExportExcel}
+              onPdf={handleExportPdf}
+              disabled={!canExport || exporting}
+            />
+          }
+        >
+          <ReportDateRangeFilter
+            preset={preset}
             dateFrom={dateFrom}
             dateTo={dateTo}
+            onPresetChange={setPreset}
             onDateFromChange={setDateFrom}
             onDateToChange={setDateTo}
           />
@@ -284,16 +264,11 @@ function BankBookPageContent() {
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   aria-label="Clear search"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>
           </div>
-          <AccountsExportMenu
-            onExcel={handleExportExcel}
-            onPdf={handleExportPdf}
-            disabled={!canExport || exporting}
-          />
         </ReportFilterRow>
       }
       layout="split"

@@ -27,14 +27,14 @@ export default function InventoryLedgerPageClient() {
       title="Inventory Ledger"
       description="View stock-related ledgers under Chart of Accounts. Create items from Inventory → Items."
       actions={
-        <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+        <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
           <Link href="/accounts/masters/chart-of-accounts">View in Chart of Accounts</Link>
         </Button>
       }
       layout="standard"
     >
       <div className="rounded-xl border border-border/50 bg-white shadow-sm overflow-hidden">
-        <table className="accounts-table w-full text-sm">
+        <table className="accounts-table w-full">
           <thead className="border-b border-border/60">
             <tr>
               {["Ledger Code", "Ledger Name", "Type", "Opening Balance", "Current Balance", "Status"].map((h) => (
@@ -52,7 +52,7 @@ export default function InventoryLedgerPageClient() {
           <tbody>
             {ledgers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={6} className="accounts-table-empty">
                   No inventory ledgers yet. Stock postings will appear here when items and stock opening are configured.
                 </td>
               </tr>
@@ -62,7 +62,7 @@ export default function InventoryLedgerPageClient() {
                 return (
                   <tr
                     key={l.id}
-                    className="border-b border-border/40 hover:bg-brand-50/30 cursor-pointer"
+                    className="accounts-table-row group cursor-pointer"
                     onClick={() => router.push(`/accounts/masters/ledgers/${l.id}`)}
                   >
                     <td className="px-4 py-3 text-xs font-mono">{l.accountCode}</td>

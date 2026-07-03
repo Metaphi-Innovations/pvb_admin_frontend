@@ -14,7 +14,7 @@ import {
 export const ACCOUNTS_ACTION_BTN_CLASS =
   "inline-flex items-center justify-center p-1.5 hover:bg-muted rounded-md transition-colors flex-shrink-0";
 
-export const ACCOUNTS_ACTION_ICON_CLASS = "w-3.5 h-3.5 text-muted-foreground";
+export const ACCOUNTS_ACTION_ICON_CLASS = "w-4 h-4 text-muted-foreground";
 
 export const ACCOUNTS_ACTION_COL_CLASS = {
   single: "accounts-col-actions",
@@ -169,7 +169,7 @@ export function AccountsMoreActions({
             className,
           )}
         >
-          <MoreVertical className="w-3.5 h-3.5 text-muted-foreground" />
+          <MoreVertical className="w-4 h-4 text-muted-foreground" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align={align} className={cn("w-44", contentClassName)}>

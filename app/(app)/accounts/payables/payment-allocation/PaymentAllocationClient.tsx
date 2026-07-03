@@ -145,8 +145,8 @@ function AllocationWorkspace({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <div className="flex-shrink-0 px-2 py-1.5 border-b border-border/60 bg-white flex items-center gap-2">
-        <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={onBack}>
-          <ArrowLeft className="w-3.5 h-3.5" /> All Suppliers
+        <Button variant="ghost" size="sm" className="h-9 text-[13px] font-medium gap-1" onClick={onBack}>
+          <ArrowLeft className="w-4 h-4" /> All Suppliers
         </Button>
       </div>
 
@@ -174,7 +174,7 @@ function AllocationWorkspace({
 
         <div className="rounded-xl border border-border bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="accounts-table w-full text-table min-w-[1000px]">
+            <table className="accounts-table w-full min-w-[1000px]">
               <thead className="border-b bg-muted/20">
                 <tr>
                   {[
@@ -201,7 +201,7 @@ function AllocationWorkspace({
                   </tr>
                 ) : (
                   context.openBills.map((bill) => (
-                    <tr key={bill.billId} className="border-b border-border/40 hover:bg-muted/20">
+                    <tr key={bill.billId} className="accounts-table-row group">
                       <td className="px-3 py-2.5">
                         <Checkbox
                           checked={!!selected[bill.billId]}
@@ -221,7 +221,7 @@ function AllocationWorkspace({
                       </td>
                       <td className="px-3 py-2.5">
                         <AccountsMoneyInput
-                          className="h-8 text-xs w-32"
+                          className="h-9 text-[13px] font-medium w-32"
                           disabled={!selected[bill.billId]}
                           value={amounts[bill.billId] ?? ""}
                           onChange={(v) => {
@@ -257,13 +257,13 @@ function AllocationWorkspace({
         </div>
         <div className="flex items-center gap-2">
           <Link href={`/accounts/payables/outstanding/${vendorId}`}>
-            <Button variant="outline" size="sm" className="h-8 text-xs">
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium">
               View Outstanding
             </Button>
           </Link>
           <Button
             size="sm"
-            className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
             onClick={handleSave}
             disabled={saving || totalSelected <= 0 || context.unallocatedBalance <= 0}
           >
@@ -461,7 +461,7 @@ export default function PaymentAllocationClient() {
               value={allocationStatus}
               onValueChange={(v) => setAllocationStatus(v as PaymentAllocationStatus | "all")}
             >
-              <SelectTrigger className="h-7 text-xs mt-0 w-[160px]">
+              <SelectTrigger className="h-9 text-[13px] font-medium mt-0 w-[160px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

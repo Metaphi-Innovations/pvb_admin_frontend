@@ -87,13 +87,13 @@ export default function CustomerOutstandingDetailClient() {
       actions={
         <div className="flex items-center gap-2">
           <Link href="/accounts/receivables/ageing">
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
-              <ArrowLeft className="w-3.5 h-3.5" /> Back
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1">
+              <ArrowLeft className="w-4 h-4" /> Back
             </Button>
           </Link>
           <Link href={`/accounts/receivables/receipt-allocation?customer=${customer.id}`}>
-            <Button size="sm" className="h-8 text-xs gap-1 bg-brand-600 hover:bg-brand-700 text-white">
-              <Receipt className="w-3.5 h-3.5" /> Go to Receipt Allocation
+            <Button size="sm" className="h-9 text-[13px] font-medium gap-1 bg-brand-600 hover:bg-brand-700 text-white">
+              <Receipt className="w-4 h-4" /> Go to Receipt Allocation
             </Button>
           </Link>
         </div>

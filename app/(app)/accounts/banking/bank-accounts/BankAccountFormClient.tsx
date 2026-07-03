@@ -159,10 +159,10 @@ export default function BankAccountFormClient({ accountId }: { accountId?: numbe
       ]}
       footer={
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.back()}>
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => router.back()}>
             Cancel
           </Button>
-          <Button size="sm" className="h-8 text-xs bg-brand-600 text-white" onClick={save}>
+          <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 text-white" onClick={save}>
             Save Bank Account
           </Button>
         </div>

@@ -28,7 +28,7 @@ import {
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { canCoa } from "@/lib/accounts/permissions";
+import { useCanCoa } from "@/lib/accounts/use-can-coa";
 import { SortTh, StatusBadge } from "../../components/AccountsUI";
 import { getCoaLedgers, loadChartOfAccounts, nextId, saveChartOfAccounts, type ChartOfAccount } from "../../data";
 import { SYSTEM_COA_NODES } from "../coa-seed-nodes";
@@ -72,8 +72,8 @@ export default function LedgersPageClient() {
   const [formError, setFormError] = useState<string | null>(null);
   const [previewCode, setPreviewCode] = useState("");
 
-  const canCreate = canCoa("create");
-  const canEdit = canCoa("edit");
+  const canCreate = useCanCoa("create");
+  const canEdit = useCanCoa("edit");
 
   const refresh = useCallback(() => {
     setCoaRecords(loadChartOfAccounts());
@@ -229,7 +229,7 @@ export default function LedgersPageClient() {
   const filterBar = (
     <div className="flex flex-wrap items-end gap-3">
       <div className="relative flex-1 min-w-[200px] max-w-sm">
-        <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
           className="h-9 pl-8 text-xs bg-white"
           placeholder="Search ledger name, code, alias…"
@@ -263,11 +263,11 @@ export default function LedgersPageClient() {
               : `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, visible.length)} of ${visible.length}`}
           </span>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
               Previous
             </Button>
             <span className="text-[11px] tabular-nums">Page {page} of {totalPages}</span>
-            <Button variant="outline" size="sm" className="h-7 text-xs" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
               Next
             </Button>
           </div>
@@ -282,12 +282,12 @@ export default function LedgersPageClient() {
         description="Ledger accounts created under Chart of Accounts groups and sub-groups."
         actions={
           <>
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={exportCsv}>
-              <Download className="w-3.5 h-3.5" /> Export
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1" onClick={exportCsv}>
+              <Download className="w-4 h-4" /> Export
             </Button>
             {canCreate && (
-              <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1" onClick={openAdd}>
-                <Plus className="w-3.5 h-3.5" /> Add Ledger
+              <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1" onClick={openAdd}>
+                <Plus className="w-4 h-4" /> Add Ledger
               </Button>
             )}
           </>
@@ -322,8 +322,8 @@ export default function LedgersPageClient() {
                       Adjust search or date range, or add a ledger under a valid group.
                     </p>
                     {canCreate && (
-                      <Button size="sm" className="h-8 text-xs mt-3 bg-brand-600 text-white" onClick={openAdd}>
-                        <Plus className="w-3.5 h-3.5 mr-1" /> Add Ledger
+                      <Button size="sm" className="h-9 text-[13px] font-medium mt-3 bg-brand-600 text-white" onClick={openAdd}>
+                        <Plus className="w-4 h-4 mr-1" /> Add Ledger
                       </Button>
                     )}
                   </AccountsTableCell>

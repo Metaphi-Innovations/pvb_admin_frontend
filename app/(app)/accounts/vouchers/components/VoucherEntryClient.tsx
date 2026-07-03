@@ -1,8 +1,11 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { ZohoVoucherEntryForm } from "@/components/accounts/ZohoVoucherEntryForm";
 import { voucherTypeToUrl } from "../voucher-routes";
+import type { ChartOfAccount } from "../../data";
 import type { VoucherTypeCode } from "../../masters/masters-data";
+import type { VoucherLedgerScope } from "@/lib/accounts/voucher-quick-add-ledger";
 
 interface VoucherEntryClientProps {
   voucherType: VoucherTypeCode;
@@ -12,8 +15,14 @@ interface VoucherEntryClientProps {
   readOnly?: boolean;
   cancelHref?: string;
   onEdit?: () => void;
+  showFinancialYear?: boolean;
+  strictPostValidation?: boolean;
+  ledgerFilter?: (ledger: ChartOfAccount) => boolean;
+  quickAddScope?: VoucherLedgerScope;
+  extraHeader?: ReactNode;
 }
 
+/** Journal-style voucher entry (header fields + ledger debit/credit grid). */
 export function VoucherEntryClient({
   voucherType,
   onDone,
@@ -22,6 +31,11 @@ export function VoucherEntryClient({
   readOnly = false,
   cancelHref: cancelHrefProp,
   onEdit,
+  showFinancialYear = true,
+  strictPostValidation = true,
+  ledgerFilter,
+  quickAddScope,
+  extraHeader,
 }: VoucherEntryClientProps) {
   const cancelHref =
     cancelHrefProp ??
@@ -38,8 +52,13 @@ export function VoucherEntryClient({
       readOnly={readOnly}
       onEdit={onEdit}
       onDone={() => onDone?.()}
-      showFinancialYear={voucherType === "journal"}
+      showFinancialYear={showFinancialYear}
+      strictPostValidation={strictPostValidation}
       breadcrumbSection="Transactions"
+      ledgerFilter={ledgerFilter}
+      quickAddScope={quickAddScope}
+      extraHeader={extraHeader}
+      entryMode="double"
     />
   );
 }

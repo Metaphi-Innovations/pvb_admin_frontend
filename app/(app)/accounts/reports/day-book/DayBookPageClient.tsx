@@ -27,24 +27,21 @@ import { SortTh } from "../../components/AccountsUI";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
   ReportFilterRow,
-  ReportFromToDateFilter,
+  ReportDateRangeFilter,
   DayBookVoucherTypeFilter,
-  ReportFinancialYearFilter,
+  useReportDateRange,
 } from "@/components/accounts/ReportFilters";
-import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import {
   buildDayBookEntries,
   computeDayBookSummary,
   DAY_BOOK_VOUCHER_TYPE_OPTIONS,
   filterDayBookEntries,
   formatDayBookDate,
-  defaultDayBookDateFrom,
-  getActiveFinancialYearId,
   sortDayBookEntries,
-  todayIso,
   type DayBookEntry,
   type DayBookSortKey,
 } from "@/lib/accounts/day-book-data";
+import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
 import {
   exportDayBookToExcel,
   exportDayBookToPdf,
@@ -53,17 +50,9 @@ import { formatMoney, formatMoneyOrDash } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 
 export default function DayBookPageClient() {
-  const today = todayIso();
-  const defaultFrom = defaultDayBookDateFrom();
-  const activeFyId = getActiveFinancialYearId();
-
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
   const [search, setSearch] = useState("");
-  const [dateFrom, setDateFrom] = useState(defaultFrom);
-  const [dateTo, setDateTo] = useState(today);
   const [voucherType, setVoucherType] = useState("all");
-  const [financialYearId, setFinancialYearId] = useState(
-    activeFyId ? String(activeFyId) : "all",
-  );
   const [sortKey, setSortKey] = useState<DayBookSortKey>("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
@@ -79,10 +68,9 @@ export default function DayBookPageClient() {
         dateFrom,
         dateTo,
         voucherType: voucherType as DayBookEntry["voucherType"] | "all",
-        financialYearId:
-          financialYearId === "all" ? "all" : Number(financialYearId),
+        financialYearId: "all",
       }),
-    [allEntries, search, dateFrom, dateTo, voucherType, financialYearId],
+    [allEntries, search, dateFrom, dateTo, voucherType],
   );
 
   const sorted = useMemo(
@@ -99,15 +87,8 @@ export default function DayBookPageClient() {
 
   const hasFilters =
     Boolean(search.trim()) ||
-    dateFrom !== defaultFrom ||
-    dateTo !== today ||
-    voucherType !== "all" ||
-    financialYearId !== (activeFyId ? String(activeFyId) : "all");
-
-  const fyLabel =
-    financialYearId === "all"
-      ? "All Financial Years"
-      : loadFinancialYears().find((fy) => String(fy.id) === financialYearId)?.name ?? "";
+    preset !== "this_month" ||
+    voucherType !== "all";
 
   const voucherTypeLabel =
     DAY_BOOK_VOUCHER_TYPE_OPTIONS.find((o) => o.value === voucherType)?.label ?? "All Types";
@@ -116,11 +97,10 @@ export default function DayBookPageClient() {
     () => ({
       dateFrom,
       dateTo,
-      financialYear: fyLabel,
       voucherType: voucherTypeLabel,
       search: search.trim(),
     }),
-    [dateFrom, dateTo, fyLabel, voucherTypeLabel, search],
+    [dateFrom, dateTo, voucherTypeLabel, search],
   );
 
   const handleSort = (key: DayBookSortKey) => {
@@ -135,16 +115,17 @@ export default function DayBookPageClient() {
 
   const clearFilters = useCallback(() => {
     setSearch("");
-    setDateFrom(defaultFrom);
-    setDateTo(today);
+    setPreset("this_month");
+    const { from, to } = resolveDateRangePreset("this_month");
+    setDateFrom(from);
+    setDateTo(to);
     setVoucherType("all");
-    setFinancialYearId(activeFyId ? String(activeFyId) : "all");
     setPage(1);
-  }, [today, defaultFrom, activeFyId]);
+  }, [setPreset, setDateFrom, setDateTo]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, dateFrom, dateTo, voucherType, financialYearId, pageSize]);
+  }, [search, dateFrom, dateTo, voucherType, pageSize]);
 
   const handleExportExcel = async () => {
     setExporting(true);
@@ -167,8 +148,8 @@ export default function DayBookPageClient() {
       actions={
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" disabled={exporting}>
-              <Download className="w-3.5 h-3.5" />
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1.5" disabled={exporting}>
+              <Download className="w-4 h-4" />
               Export
             </Button>
           </DropdownMenuTrigger>
@@ -178,7 +159,7 @@ export default function DayBookPageClient() {
               disabled={exporting || sorted.length === 0}
               onClick={handleExportExcel}
             >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <FileSpreadsheet className="w-4 h-4" />
               Excel
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -186,7 +167,7 @@ export default function DayBookPageClient() {
               disabled={sorted.length === 0}
               onClick={handleExportPdf}
             >
-              <FileDown className="w-3.5 h-3.5" />
+              <FileDown className="w-4 h-4" />
               PDF
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -194,10 +175,11 @@ export default function DayBookPageClient() {
       }
       filters={
         <ReportFilterRow className="items-end">
-          <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
-          <ReportFromToDateFilter
+          <ReportDateRangeFilter
+            preset={preset}
             dateFrom={dateFrom}
             dateTo={dateTo}
+            onPresetChange={setPreset}
             onDateFromChange={setDateFrom}
             onDateToChange={setDateTo}
           />
@@ -209,7 +191,7 @@ export default function DayBookPageClient() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Voucher no., type, party, narration…"
-                className="h-8 text-xs pr-8"
+                className="h-9 text-[13px] font-medium pr-8"
               />
               {search && (
                 <button
@@ -218,7 +200,7 @@ export default function DayBookPageClient() {
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   aria-label="Clear search"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>
@@ -227,7 +209,7 @@ export default function DayBookPageClient() {
             <Button
               variant="outline"
               size="sm"
-              className="h-8 text-xs"
+              className="h-9 text-[13px] font-medium"
               onClick={clearFilters}
             >
               Clear Filters
@@ -323,12 +305,12 @@ export default function DayBookPageClient() {
             >
               {summary.isBalanced ? (
                 <>
-                  <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                  <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
                   Total Debit and Total Credit are balanced.
                 </>
               ) : (
                 <>
-                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                   Total Debit ({formatMoney(summary.totalDebit)}) and Total Credit ({formatMoney(summary.totalCredit)}) do not match.
                   Difference: {formatMoney(summary.difference)}.
                 </>

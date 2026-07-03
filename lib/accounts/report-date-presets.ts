@@ -2,6 +2,7 @@ export type DateRangePresetId =
   | "today"
   | "this_week"
   | "this_month"
+  | "last_month"
   | "this_quarter"
   | "this_year"
   | "custom";
@@ -10,8 +11,18 @@ export const DATE_RANGE_PRESET_OPTIONS: { id: DateRangePresetId; label: string }
   { id: "today", label: "Today" },
   { id: "this_week", label: "This Week" },
   { id: "this_month", label: "This Month" },
+  { id: "last_month", label: "Last Month" },
   { id: "this_quarter", label: "This Quarter" },
   { id: "this_year", label: "This Year" },
+  { id: "custom", label: "Custom Range" },
+];
+
+/** Presets used on Pending Invoice & Sales Invoice listing pages. */
+export const INVOICE_LISTING_DATE_PRESETS: { id: DateRangePresetId; label: string }[] = [
+  { id: "today", label: "Today" },
+  { id: "this_week", label: "This Week" },
+  { id: "this_month", label: "This Month" },
+  { id: "last_month", label: "Last Month" },
   { id: "custom", label: "Custom Range" },
 ];
 
@@ -49,6 +60,13 @@ export function resolveDateRangePreset(
       const d = new Date(refDate);
       d.setDate(1);
       return { from: formatIsoDate(d), to };
+    }
+    case "last_month": {
+      const start = new Date(refDate);
+      start.setMonth(start.getMonth() - 1, 1);
+      const end = new Date(refDate);
+      end.setDate(0);
+      return { from: formatIsoDate(start), to: formatIsoDate(end) };
     }
     case "this_quarter":
       return { from: formatIsoDate(startOfQuarter(refDate)), to };

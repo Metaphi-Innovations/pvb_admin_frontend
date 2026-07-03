@@ -1,6 +1,6 @@
 "use client";
 
-import { VoucherDualEntryForm } from "@/components/accounts/VoucherDualEntryForm";
+import { VoucherEntryClient } from "./VoucherEntryClient";
 
 interface PaymentVoucherFormProps {
   onDone?: () => void;
@@ -15,14 +15,9 @@ export function PaymentVoucherForm({
   readOnly = false,
   onEdit,
 }: PaymentVoucherFormProps) {
-  const cancelHref = voucherId
-    ? `/accounts/vouchers/view/${voucherId}`
-    : "/accounts/vouchers?tab=payment";
-
   return (
-    <VoucherDualEntryForm
+    <VoucherEntryClient
       voucherType="payment"
-      cancelHref={cancelHref}
       voucherId={voucherId}
       readOnly={readOnly}
       onEdit={onEdit}

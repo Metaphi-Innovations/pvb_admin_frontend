@@ -20,7 +20,10 @@ import {
   AccountsTablePagination,
   AccountsTableToolbar,
 } from "@/components/accounts/AccountsTableListing";
-import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
+import {
+  ReportDateRangeFilter,
+  useReportDateRange,
+} from "@/components/accounts/ReportFilters";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { listPendingVendorBills } from "@/lib/accounts/purchases-workflow-data";
 
@@ -42,8 +45,7 @@ function exportPendingBillsCsv(rows: ReturnType<typeof listPendingVendorBills>) 
 
 export default function PendingVendorBillsClient() {
   const [search, setSearch] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
@@ -79,38 +81,40 @@ export default function PendingVendorBillsClient() {
       breadcrumbs={accountsBreadcrumb("Purchases", "Pending Supplier Bills")}
       title="Pending Supplier Bills"
       description="GRN-completed receipts → create purchase invoice → posts to supplier ledger."
+      hideDescription
       layout="split"
       className="h-full min-h-0"
       actions={
-        <Button asChild size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1">
+        <Button asChild size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1">
           <Link href="/accounts/transactions/purchase/new">
-            <Plus className="w-3.5 h-3.5" /> Create Purchase Invoice
+            <Plus className="w-4 h-4" /> Create Purchase Invoice
           </Link>
         </Button>
       }
-      toolbar={
-        <AccountsTableToolbar
-          placement="page-header"
-          search={{
-            value: search,
-            onChange: setSearch,
-            placeholder: "Search GRN, PO, supplier…",
-          }}
-          filters={
-            <AccountsListingDateFilter
-              dateFrom={dateFrom}
-              dateTo={dateTo}
-              onDateFromChange={setDateFrom}
-              onDateToChange={setDateTo}
-            />
-          }
-          onExcel={() => exportPendingBillsCsv(filtered)}
-          onPdf={() => exportPendingBillsCsv(filtered)}
-          exportDisabled={filtered.length === 0}
-        />
-      }
     >
       <AccountsTableListing
+        toolbar={
+          <AccountsTableToolbar
+            search={{
+              value: search,
+              onChange: setSearch,
+              placeholder: "Search GRN, PO, supplier…",
+            }}
+            filters={
+              <ReportDateRangeFilter
+                preset={preset}
+                dateFrom={dateFrom}
+                dateTo={dateTo}
+                onPresetChange={setPreset}
+                onDateFromChange={setDateFrom}
+                onDateToChange={setDateTo}
+              />
+            }
+            onExcel={() => exportPendingBillsCsv(filtered)}
+            onPdf={() => exportPendingBillsCsv(filtered)}
+            exportDisabled={filtered.length === 0}
+          />
+        }
         footer={
           filtered.length > 0 ? (
             <AccountsTablePagination
