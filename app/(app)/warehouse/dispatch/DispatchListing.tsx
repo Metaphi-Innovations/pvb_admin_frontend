@@ -55,7 +55,7 @@ export function DispatchListing({ rawDispatches, reload }: DispatchListingProps)
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [subTab, setSubTab] = useState<"sales_order" | "sample_order" | "stock_transfer">("sales_order");
+  const [subTab, setSubTab] = useState<"sales_order" | "sample_order" | "stock_transfer" | "purchase_return">("sales_order");
 
   // Modal states
   const [revertTarget, setRevertTarget] = useState<DispatchRecord | null>(null);
@@ -80,7 +80,9 @@ export function DispatchListing({ rawDispatches, reload }: DispatchListingProps)
           ? "sales"
           : subTab === "sample_order"
             ? "sample"
-            : "stock_transfer";
+            : subTab === "purchase_return"
+              ? "purchase_return"
+              : "stock_transfer";
       return matchesOrderTypeFilter(type, typeFilter);
     });
   }, [rawDispatches, subTab]);
@@ -151,7 +153,11 @@ export function DispatchListing({ rawDispatches, reload }: DispatchListingProps)
       ? "Issued To Employee"
       : subTab === "stock_transfer"
         ? "Target Warehouse"
-        : "Customer";
+        : subTab === "purchase_return"
+          ? "Supplier"
+          : "Customer";
+
+  const orderNoHeader = subTab === "purchase_return" ? "Return No" : "Order No";
 
   // Columns
   const salesOrderColumns = useMemo(() => {
@@ -195,7 +201,7 @@ export function DispatchListing({ rawDispatches, reload }: DispatchListingProps)
       },
       {
         key: "source_document_no",
-        header: "Order No",
+        header: orderNoHeader,
         sortable: true,
         filterable: true,
         filterType: "text",
@@ -224,8 +230,17 @@ export function DispatchListing({ rawDispatches, reload }: DispatchListingProps)
           const label =
             type === "stock_transfer"
               ? row.target_warehouse_name || row.targetWarehouse || row.customer
-              : row.customer_name || row.customer;
-          return <span className="text-xs font-bold text-foreground">{label}</span>;
+              : type === "purchase_return"
+                ? row.customer_name || row.customer
+                : row.customer_name || row.customer;
+          return (
+            <div className="min-w-0">
+              <span className="text-xs font-bold text-foreground block truncate">{label}</span>
+              {type === "purchase_return" && row.supplierCode && (
+                <span className="text-[11px] text-muted-foreground font-mono">{row.supplierCode}</span>
+              )}
+            </div>
+          );
         },
       },
       {
@@ -313,7 +328,7 @@ export function DispatchListing({ rawDispatches, reload }: DispatchListingProps)
         },
       },
     ] as ColumnConfig<DispatchRecord>[];
-  }, [partyHeader]);
+  }, [partyHeader, orderNoHeader]);
 
   const columns = salesOrderColumns;
 
@@ -406,6 +421,7 @@ export function DispatchListing({ rawDispatches, reload }: DispatchListingProps)
           <TabsTrigger value="sales_order" className="text-xs">Sales Order</TabsTrigger>
           <TabsTrigger value="sample_order" className="text-xs">Sample Order</TabsTrigger>
           <TabsTrigger value="stock_transfer" className="text-xs">Stock Transfer</TabsTrigger>
+          <TabsTrigger value="purchase_return" className="text-xs">Purchase Return</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -420,7 +436,10 @@ export function DispatchListing({ rawDispatches, reload }: DispatchListingProps)
         onSortChange={setSort}
         onFilterChange={setFilters}
         actions={actions}
-        onAdd={() => router.push("/warehouse/dispatch/create")}
+        onAdd={() => {
+          const query = subTab === "purchase_return" ? "?sourceType=purchase_return" : "";
+          router.push(`/warehouse/dispatch/create${query}`);
+        }}
         addLabel="Create Dispatch"
         emptyMessage="dispatch records"
         searchPlaceholder="Search dispatch..."

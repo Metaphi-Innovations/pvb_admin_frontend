@@ -1,6 +1,14 @@
 import { getGrnRecords } from "@/app/(app)/warehouse/grn/mock-data";
 import { getQcRecords } from "@/app/(app)/warehouse/qc/mock-data";
+import type { SalesOrderCustomerAddress } from "@/app/(app)/sales/orders/sales-order-address-utils";
 import type { PurchaseOrder } from "../purchase-orders/po-data";
+import { getPOById } from "../purchase-orders/po-data";
+import {
+  findPOAddressById,
+  getDefaultPOBillShipIds,
+  getPOBillToAddresses,
+  getPOShipToAddresses,
+} from "../purchase-orders/po-address-utils";
 import { getSupplierById } from "../masters/suppliers/supplier-data";
 import type { PurchaseReturn, PurchaseReturnItem } from "./purchase-return-data";
 import { loadPurchaseReturns } from "./purchase-return-data";
@@ -223,4 +231,37 @@ export function validateReturnItems(items: PurchaseReturnItem[]): Record<string,
 export function summarizeReturn(po: PurchaseReturn): PurchaseReturn {
   const { totalItems, totalReturnQty } = computeReturnTotals(po.items);
   return { ...po, totalItems, totalReturnQty };
+}
+
+export function getPurchaseReturnBillShipAddresses(record: PurchaseReturn): {
+  billAddress: SalesOrderCustomerAddress | null;
+  shipAddress: SalesOrderCustomerAddress | null;
+  billToAddressId: string;
+  shipToAddressId: string;
+} {
+  const po = getPOById(record.poId);
+  const supplier = getSupplierById(record.supplierId);
+  const billAddresses = getPOBillToAddresses();
+  const shipAddresses = getPOShipToAddresses();
+  const defaults = getDefaultPOBillShipIds(billAddresses, shipAddresses, po?.warehouseId);
+  const billToAddressId = po?.billToAddressId || defaults.billToAddressId;
+  const shipToAddressId = po?.shipToAddressId || defaults.shipToAddressId;
+  const billAddress = findPOAddressById(billAddresses, billToAddressId);
+
+  const shipAddress: SalesOrderCustomerAddress | null = supplier
+    ? {
+        id: `supplier-${supplier.id}`,
+        label: `${supplier.supplierName} — Ship To`,
+        companyName: supplier.supplierName,
+        addressLine1: supplier.address,
+        city: supplier.city,
+        state: supplier.state,
+        pincode: supplier.pincode,
+        gstin: supplier.gstNumber || "—",
+        phone: supplier.mobile || supplier.phone || "—",
+        email: supplier.email || "—",
+      }
+    : findPOAddressById(shipAddresses, shipToAddressId);
+
+  return { billAddress, shipAddress, billToAddressId, shipToAddressId };
 }

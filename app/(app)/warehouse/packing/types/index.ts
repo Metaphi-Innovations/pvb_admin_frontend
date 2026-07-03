@@ -10,6 +10,11 @@ export interface SalesOrderProduct {
   orderedQty: number;
   packedQty: number;
   pendingQty: number;
+  batchNumber?: string;
+  grnNo?: string;
+  mfgDate?: string;
+  expDate?: string;
+  lineId?: string;
 }
 
 export interface SalesOrderRecord {
@@ -31,6 +36,10 @@ export interface SalesOrderRecord {
   targetWarehouse?: string;
   createdDate?: string;
   packingListNo?: string;
+  poNumber?: string;
+  supplierCode?: string;
+  initiatedBy?: string;
+  returnRemarks?: string;
 }
 
 export interface PackedProduct {
@@ -40,6 +49,7 @@ export interface PackedProduct {
   packedQty: number;
   batchAllocations?: PackedBatchAllocation[];
   nearExpirySchemeEligible?: boolean;
+  lineId?: string;
 }
 
 export interface PackingNearExpirySchemeEntry {
@@ -87,6 +97,11 @@ export interface PackingRecord {
   targetWarehouse?: string;
   createdDate?: string;
   packingListNo?: string;
+  poNumber?: string;
+  supplierCode?: string;
+  initiatedBy?: string;
+  returnRemarks?: string;
+  orderAmount?: number;
 }
 
 export type PackingRecordUnion =
