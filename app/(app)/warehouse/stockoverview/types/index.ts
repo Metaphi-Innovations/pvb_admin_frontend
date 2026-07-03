@@ -54,8 +54,36 @@ export interface HoldStockRecord {
   remarks?: string;
 }
 
+export interface SalesReturnStockRecord {
+  id: string;
+  product: string;
+  warehouse: string;
+  batchNumber: string;
+  availableQuantity: number;
+  salesReturnNo: string;
+  customer: string;
+  returnDate: string;
+  expiryDate: string;
+  status: string;
+}
+
+export interface SampleReturnStockRecord {
+  id: string;
+  product: string;
+  warehouse: string;
+  batchNumber: string;
+  availableQuantity: number;
+  sampleReturnNo: string;
+  customer: string;
+  returnDate: string;
+  expiryDate: string;
+  status: string;
+}
+
 export type StockRecordUnion =
   | { type: "qc-passed"; data: QcPassedStockRecord }
   | { type: "rejected"; data: RejectedStockRecord }
   | { type: "grn-pending"; data: GrnPendingStockRecord }
-  | { type: "hold"; data: HoldStockRecord };
+  | { type: "hold"; data: HoldStockRecord }
+  | { type: "sales-return"; data: SalesReturnStockRecord }
+  | { type: "sample-return"; data: SampleReturnStockRecord };

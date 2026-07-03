@@ -19,6 +19,7 @@ import {
   formatWarehouseOrderAmount,
   type OrderTypeFilterTab,
 } from "@/app/(app)/warehouse/lib/order-document-type";
+import { getPackingListOrderNoHeader } from "../lib/packing-document-labels";
 
 type PackingSourceTab = Exclude<OrderTypeFilterTab, "all">;
 
@@ -126,7 +127,9 @@ export function ReadyPackingListing({ ordersForWarehouse, sourceFilter }: ReadyP
   }, [processed, page, pageSize]);
 
   const columns = useMemo(() => {
-    return [
+    const isPurchaseReturn = sourceFilter === "purchase_return";
+
+    const baseColumns: ColumnConfig<SalesOrderRecord>[] = [
       {
         key: "orderType",
         header: "Order Type",
@@ -135,7 +138,7 @@ export function ReadyPackingListing({ ordersForWarehouse, sourceFilter }: ReadyP
       },
       {
         key: "salesOrderNo",
-        header: "Order No",
+        header: getPackingListOrderNoHeader(sourceFilter),
         sortable: true,
         filterable: true,
         filterType: "text",
@@ -149,16 +152,43 @@ export function ReadyPackingListing({ ordersForWarehouse, sourceFilter }: ReadyP
           </Link>
         ),
       },
+    ];
+
+    if (isPurchaseReturn) {
+      baseColumns.push({
+        key: "poNumber",
+        header: "PO No",
+        sortable: true,
+        filterable: true,
+        filterType: "text",
+        width: "130px",
+        render: (_: unknown, row: SalesOrderRecord) => (
+          <span className="font-mono text-xs font-semibold text-navy-700">{row.poNumber ?? "—"}</span>
+        ),
+      });
+    }
+
+    baseColumns.push(
       {
         key: "customer",
-        header: sourceFilter === "sample" ? "Issued To Employee" : "Customer / Issued To",
+        header:
+          sourceFilter === "sample"
+            ? "Issued To Employee"
+            : sourceFilter === "purchase_return"
+              ? "Supplier"
+              : "Customer / Issued To",
         sortable: true,
         filterable: true,
         filterType: "dropdown",
         filterOptions: CUSTOMER_OPTIONS,
         width: "180px",
         render: (_: unknown, row: SalesOrderRecord) => (
-          <span className="text-xs text-foreground font-semibold">{row.customer}</span>
+          <div className="min-w-0">
+            <span className="text-xs text-foreground font-semibold block truncate">{row.customer}</span>
+            {isPurchaseReturn && row.supplierCode && (
+              <span className="text-[11px] text-muted-foreground font-mono">{row.supplierCode}</span>
+            )}
+          </div>
         ),
       },
       {
@@ -182,6 +212,22 @@ export function ReadyPackingListing({ ordersForWarehouse, sourceFilter }: ReadyP
           <span className="font-mono text-xs tabular-nums">{val as number}</span>
         ),
       },
+    );
+
+    if (isPurchaseReturn) {
+      baseColumns.push({
+        key: "totalQuantity",
+        header: "Return Qty",
+        sortable: true,
+        align: "right",
+        width: "90px",
+        render: (val: unknown) => (
+          <span className="font-mono text-xs tabular-nums">{val as number}</span>
+        ),
+      });
+    }
+
+    baseColumns.push(
       {
         key: "orderAmount",
         header: "Amount",
@@ -217,7 +263,9 @@ export function ReadyPackingListing({ ordersForWarehouse, sourceFilter }: ReadyP
           );
         },
       },
-    ] as ColumnConfig<SalesOrderRecord>[];
+    );
+
+    return baseColumns;
   }, [sourceFilter]);
 
   const actions: ActionItemConfig<SalesOrderRecord>[] = [
@@ -248,7 +296,7 @@ export function ReadyPackingListing({ ordersForWarehouse, sourceFilter }: ReadyP
         onFilterChange={setFilters}
         actions={actions}
         emptyMessage=""
-        searchPlaceholder="Search orders..."
+        searchPlaceholder={sourceFilter === "purchase_return" ? "Search returns..." : "Search orders..."}
       />
   );
 }

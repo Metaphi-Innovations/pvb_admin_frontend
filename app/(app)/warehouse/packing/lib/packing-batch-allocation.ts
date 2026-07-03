@@ -60,7 +60,6 @@ export function getPackingBatchInventoryRows(
     });
 }
 
-/** FEFO recommendation — pre-select earliest-expiry sellable batches. */
 export function buildFefoRecommendedSelections(
   rows: PackingBatchInventoryRow[],
   requiredQty: number,
@@ -77,6 +76,65 @@ export function buildFefoRecommendedSelections(
     remaining -= take;
   }
   return selections;
+}
+
+/** Pre-select the batch fixed on the purchase return line item. */
+export function buildPurchaseReturnBatchSelections(
+  product: SalesOrderProduct,
+  qty: number,
+): Record<string, number> {
+  if (!product.batchNumber || qty <= 0) return {};
+  return { [product.batchNumber]: qty };
+}
+
+export function buildPurchaseReturnBatchAllocations(
+  product: SalesOrderProduct,
+  selections: Record<string, number>,
+): BatchAllocation[] {
+  return Object.entries(selections)
+    .filter(([, allocatedQty]) => allocatedQty > 0)
+    .map(([batchNumber, allocatedQty]) => ({
+      batchNumber,
+      expiryDate: product.expDate ?? "",
+      allocatedQty,
+    }));
+}
+
+export function validatePurchaseReturnBatchSelections(
+  products: SalesOrderProduct[],
+  selectedSkus: Record<string, boolean>,
+  packingQty: Record<string, number>,
+  batchSelections: Record<string, Record<string, number>>,
+): { valid: boolean; message?: string; batchErrors: Record<string, string> } {
+  const batchErrors: Record<string, string> = {};
+
+  for (const p of products) {
+    if (!selectedSkus[p.sku]) continue;
+    const qty = packingQty[p.sku] ?? 0;
+    if (qty <= 0) continue;
+
+    const selections = batchSelections[p.sku] ?? {};
+    const selectedTotal = getBatchSelectionTotal(selections);
+
+    if (selectedTotal !== qty) {
+      batchErrors[p.sku] = `Batch qty (${selectedTotal}) must match packing qty (${qty}).`;
+      continue;
+    }
+
+    if (p.batchNumber && (selections[p.batchNumber] ?? 0) <= 0) {
+      batchErrors[p.sku] = `Return batch ${p.batchNumber} must be packed.`;
+    }
+  }
+
+  if (Object.keys(batchErrors).length > 0) {
+    return {
+      valid: false,
+      batchErrors,
+      message: "Complete batch allocation for all return lines.",
+    };
+  }
+
+  return { valid: true, batchErrors };
 }
 
 export function getFefoRecommendedBatchNumbers(
@@ -203,7 +261,17 @@ export function validateBatchSelectionsForPacking(
   packingQty: Record<string, number>,
   batchSelections: Record<string, Record<string, number>>,
   warehouse: string,
+  sourceDocumentType?: string,
 ): { valid: boolean; message?: string; batchErrors: Record<string, string> } {
+  if (sourceDocumentType === "Purchase Return") {
+    return validatePurchaseReturnBatchSelections(
+      products,
+      selectedSkus,
+      packingQty,
+      batchSelections,
+    );
+  }
+
   const batchErrors: Record<string, string> = {};
 
   for (const p of products) {
@@ -254,6 +322,7 @@ export function buildBatchAllocationMap(
   selectedSkus: Record<string, boolean>,
   batchSelections: Record<string, Record<string, number>>,
   warehouse: string,
+  sourceDocumentType?: string,
 ): Record<string, BatchAllocation[]> {
   const map: Record<string, BatchAllocation[]> = {};
 
@@ -261,6 +330,15 @@ export function buildBatchAllocationMap(
     if (!selectedSkus[p.sku]) continue;
     const selections = batchSelections[p.sku];
     if (!selections) continue;
+
+    if (sourceDocumentType === "Purchase Return" && p.batchNumber) {
+      const allocations = buildPurchaseReturnBatchAllocations(p, selections);
+      if (allocations.length) {
+        map[p.sku] = allocations;
+      }
+      continue;
+    }
+
     const allocations = batchSelectionsToAllocations(p.product, warehouse, selections);
     if (allocations.length) {
       map[p.sku] = allocations;
