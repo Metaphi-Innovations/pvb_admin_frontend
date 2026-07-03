@@ -92,6 +92,7 @@ function CashBookPageContent() {
     () => ({
       dateFrom,
       dateTo,
+      financialYear: "",
     }),
     [dateFrom, dateTo],
   );

@@ -77,6 +77,7 @@ function CustomerLedgerPageContent() {
     () => ({
       dateFrom,
       dateTo,
+      financialYear: "",
     }),
     [dateFrom, dateTo],
   );

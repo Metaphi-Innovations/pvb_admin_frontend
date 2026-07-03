@@ -176,6 +176,7 @@ export default function InventoryRegisterPageClient() {
     return {
       dateFrom,
       dateTo,
+      financialYear: "",
       warehouse: warehouse === "all" ? "All" : warehouse,
       product,
       category: category === "all" ? "All" : category,

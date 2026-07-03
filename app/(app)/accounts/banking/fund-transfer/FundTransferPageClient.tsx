@@ -156,6 +156,7 @@ export default function FundTransferPageClient() {
     () => ({
       dateFrom,
       dateTo,
+      financialYear: "",
       fromAccount: fromAccountLabel,
       toAccount: toAccountLabel,
       transferMode: modeLabel,

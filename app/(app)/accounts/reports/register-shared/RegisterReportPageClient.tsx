@@ -195,6 +195,7 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
       reportName: config.title,
       dateFrom,
       dateTo,
+      financialYear: "",
       partyLabel: config.partyLabel,
       partyFilter: party,
       invoiceStatus: statusLabel,

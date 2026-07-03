@@ -34,11 +34,16 @@ function emptyCell(value: string) {
 export function GeneralLedgerTable({
   openingRow,
   transactionRows,
+  closingRow,
 }: {
   openingRow: GeneralLedgerDisplayRow;
   transactionRows: GeneralLedgerDisplayRow[];
+  closingRow?: GeneralLedgerDisplayRow;
 }) {
   const rows = [openingRow, ...transactionRows];
+  if (closingRow) {
+    rows.push(closingRow);
+  }
 
   return (
     <AccountsTableScroll className="flex-1 min-h-0 h-full">

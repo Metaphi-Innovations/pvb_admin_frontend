@@ -117,6 +117,7 @@ function GeneralLedgerPageContent() {
     () => ({
       dateFrom,
       dateTo,
+      financialYear: "",
     }),
     [dateFrom, dateTo],
   );

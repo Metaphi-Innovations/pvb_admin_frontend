@@ -182,6 +182,7 @@ export default function GstSummaryPageClient() {
     () => ({
       dateFrom,
       dateTo,
+      financialYear: "",
       gstType: gstTypeLabel,
       gstRate: gstRateLabel,
       search: debouncedSearch,

@@ -103,6 +103,7 @@ function SupplierLedgerPageContent() {
     () => ({
       dateFrom,
       dateTo,
+      financialYear: "",
     }),
     [dateFrom, dateTo],
   );

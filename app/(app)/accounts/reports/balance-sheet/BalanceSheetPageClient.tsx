@@ -149,6 +149,7 @@ export default function BalanceSheetPageClient() {
     () => ({
       dateFrom,
       dateTo,
+      financialYear: "",
     }),
     [dateFrom, dateTo],
   );

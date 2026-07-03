@@ -179,6 +179,7 @@ export default function CashFlowPageClient() {
     () => ({
       dateFrom,
       dateTo,
+      financialYear: "",
     }),
     [dateFrom, dateTo],
   );

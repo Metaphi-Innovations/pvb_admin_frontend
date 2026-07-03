@@ -117,6 +117,7 @@ export default function VendorOutstandingClient() {
       reportName: "Supplier Outstanding",
       dateFrom,
       dateTo,
+      financialYear: "",
       supplier: vendor,
       paymentStatus: statusLabel,
       search,

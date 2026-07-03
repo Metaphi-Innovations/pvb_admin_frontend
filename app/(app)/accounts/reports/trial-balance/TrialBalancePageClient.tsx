@@ -191,6 +191,7 @@ export default function TrialBalancePageClient() {
     () => ({
       dateFrom,
       dateTo,
+      financialYear: "",
       view: activeTab,
     }),
     [dateFrom, dateTo, activeTab],

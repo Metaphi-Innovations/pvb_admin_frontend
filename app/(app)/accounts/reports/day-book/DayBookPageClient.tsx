@@ -97,6 +97,7 @@ export default function DayBookPageClient() {
     () => ({
       dateFrom,
       dateTo,
+      financialYear: "",
       voucherType: voucherTypeLabel,
       search: search.trim(),
     }),

@@ -104,6 +104,7 @@ function BankBookPageContent() {
     () => ({
       dateFrom,
       dateTo,
+      financialYear: "",
     }),
     [dateFrom, dateTo],
   );

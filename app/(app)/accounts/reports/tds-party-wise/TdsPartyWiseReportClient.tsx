@@ -166,6 +166,7 @@ export default function TdsPartyWiseReportClient() {
     () => ({
       dateFrom,
       dateTo,
+      financialYear: "",
       partyType: partyTypeLabel,
       tdsSection: tdsSectionLabel,
       search: debouncedSearch,

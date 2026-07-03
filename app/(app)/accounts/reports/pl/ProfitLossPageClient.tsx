@@ -349,6 +349,7 @@ export default function ProfitLossPageClient() {
       dateFrom,
 
       dateTo,
+      financialYear: "",
 
     }),
 

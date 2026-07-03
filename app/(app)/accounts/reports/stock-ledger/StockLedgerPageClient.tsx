@@ -112,6 +112,7 @@ export default function StockLedgerPageClient() {
     () => ({
       dateFrom,
       dateTo,
+      financialYear: "",
       warehouse: warehouse === "all" ? "All" : warehouse,
       batchNo: batchNo === "all" ? "All" : batchNo,
       search,
