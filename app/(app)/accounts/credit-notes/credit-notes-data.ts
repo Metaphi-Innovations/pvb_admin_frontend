@@ -19,6 +19,25 @@ import {
   type PendingSchemeSettlementOption,
 } from "@/lib/accounts/scheme-settlement-data";
 import { NEAR_EXPIRY_SETTLEMENT_STATUS_SETTLED } from "@/app/(app)/warehouse/dispatch/near-expiry-dispatch";
+import { computeNoteTaxBreakup } from "@/lib/accounts/note-tax-breakup";
+import { inferInterstateFromPlaceOfSupply } from "@/lib/accounts/gst-accounting";
+import { reconcileInvoiceCredits } from "../invoices/invoices-data";
+import { invalidateAccountsDataCache } from "@/lib/accounts/accounts-data-service";
+import { buildCreditNotesSeed } from "./credit-notes-seed";
+
+export type CreditNoteSource = "sales_return" | "payment_discount_scheme" | "manual";
+
+export const CREDIT_NOTE_SOURCE_LABELS: Record<CreditNoteSource, string> = {
+  sales_return: "Sales Return",
+  payment_discount_scheme: "Payment Discount Scheme",
+  manual: "Manual",
+};
+
+export const MANUAL_CREDIT_REASONS = [
+  "Manual Adjustment",
+  "Commercial Settlement",
+  "Other",
+] as const;
 
 export type CreditNoteAgainst = "sales_invoice" | "sales_order" | "general";
 export type NoteWorkflowStatus = "draft" | "pending_approval" | "sent_back" | "approved" | "rejected" | "cancelled";
@@ -107,9 +126,20 @@ export interface CreditNoteRecord {
   schemeSettlementKey?: string;
   schemeCode?: string;
   schemeSettlementAmount?: number;
+  /** Document origin */
+  source: CreditNoteSource;
+  sourceReturnId?: string;
+  sourceReturnNo?: string;
+  schemeName?: string;
+  discountPercent?: number;
+  taxableValue: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
 }
 
-const STORAGE_KEY = "ds_accounts_credit_notes_v1";
+const STORAGE_KEY = "ds_accounts_credit_notes_v2";
+const SEED_VERSION_KEY = "ds_accounts_credit_notes_seed_v2";
 
 export const CREDIT_REASONS = [
   "Sales return",
@@ -122,7 +152,7 @@ export const CREDIT_REASONS = [
   "Other",
 ];
 
-const SEED: CreditNoteRecord[] = [];
+const SEED: CreditNoteRecord[] = buildCreditNotesSeed();
 
 function nextCreditNoteNo(records: CreditNoteRecord[]): string {
   const max = records.reduce((m, r) => {
@@ -265,10 +295,26 @@ export function computeCreditNoteGstSplit(lines: CreditNoteLine[]): { taxable: n
   };
 }
 
+function inferCreditNoteSource(rec: CreditNoteRecord): CreditNoteSource {
+  if (rec.source) return rec.source;
+  if (rec.sourceReturnNo) return "sales_return";
+  if (rec.schemeSettlementKey || (rec.schemeCode && rec.schemeName)) {
+    return "payment_discount_scheme";
+  }
+  if (rec.schemeCode && rec.reason?.toLowerCase().includes("payment discount")) {
+    return "payment_discount_scheme";
+  }
+  return "manual";
+}
+
 export function normalizeCreditNote(rec: CreditNoteRecord): CreditNoteRecord {
   const lineItems = rec.lineItems.map((l) => normalizeCreditLine(l));
   const currentCreditAmount = lineItems.reduce((s, l) => s + l.creditAmount, 0);
   const { taxAmount } = computeCreditNoteGstSplit(lineItems);
+  const interstate = inferInterstateFromPlaceOfSupply(
+    (rec as { placeOfSupply?: string }).placeOfSupply,
+  );
+  const taxBreakup = computeNoteTaxBreakup(lineItems, interstate);
   const originalAmount = rec.originalAmount > 0 ? rec.originalAmount : currentCreditAmount;
   const balanceAfterAdjustment = Math.max(
     0,
@@ -276,10 +322,15 @@ export function normalizeCreditNote(rec: CreditNoteRecord): CreditNoteRecord {
   );
   return {
     ...rec,
+    source: inferCreditNoteSource(rec),
     lineItems,
     originalAmount,
     currentCreditAmount: Math.round(currentCreditAmount * 100) / 100,
     taxCreditAmount: taxAmount,
+    taxableValue: taxBreakup.taxableValue,
+    cgstAmount: taxBreakup.cgstAmount,
+    sgstAmount: taxBreakup.sgstAmount,
+    igstAmount: taxBreakup.igstAmount,
     balanceAfterAdjustment: Math.round(balanceAfterAdjustment * 100) / 100,
   };
 }
@@ -287,9 +338,32 @@ export function normalizeCreditNote(rec: CreditNoteRecord): CreditNoteRecord {
 export function loadCreditNotes(): CreditNoteRecord[] {
   if (typeof window === "undefined") return SEED.map(normalizeCreditNote);
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const seedCurrent = localStorage.getItem(SEED_VERSION_KEY) === SEED_VERSION_KEY;
+    let raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw && !seedCurrent) {
+      const legacy = localStorage.getItem("ds_accounts_credit_notes_v1");
+      if (legacy) {
+        localStorage.setItem(STORAGE_KEY, legacy);
+        raw = legacy;
+      }
+    }
+    if (!raw && !seedCurrent) {
+      const seeded = SEED.map(normalizeCreditNote);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
+      localStorage.setItem(SEED_VERSION_KEY, SEED_VERSION_KEY);
+      return seeded;
+    }
     const list: CreditNoteRecord[] = raw ? JSON.parse(raw) : SEED;
-    const normalized = list.map(normalizeCreditNote);
+    const normalized = list.map((r) =>
+      normalizeCreditNote({
+        ...r,
+        source: r.source ?? inferCreditNoteSource(r as CreditNoteRecord),
+        taxableValue: r.taxableValue ?? 0,
+        cgstAmount: r.cgstAmount ?? 0,
+        sgstAmount: r.sgstAmount ?? 0,
+        igstAmount: r.igstAmount ?? 0,
+      }),
+    );
     localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
     return normalized;
   } catch {
@@ -300,6 +374,7 @@ export function loadCreditNotes(): CreditNoteRecord[] {
 export function saveCreditNotes(records: CreditNoteRecord[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(records.map(normalizeCreditNote)));
+  invalidateAccountsDataCache("creditNotes");
 }
 
 export function getCreditNoteById(id: number): CreditNoteRecord | undefined {
@@ -518,6 +593,11 @@ export type CreditNoteFormInput = {
   schemeSettlementKey?: string;
   schemeCode?: string;
   schemeSettlementAmount?: number;
+  source?: CreditNoteSource;
+  sourceReturnId?: string;
+  sourceReturnNo?: string;
+  schemeName?: string;
+  discountPercent?: number;
 };
 
 function inferAgainstType(input: CreditNoteFormInput): CreditNoteAgainst {
@@ -526,10 +606,18 @@ function inferAgainstType(input: CreditNoteFormInput): CreditNoteAgainst {
   return "general";
 }
 
+function resolveCreditNoteSource(input: CreditNoteFormInput): CreditNoteSource {
+  if (input.source) return input.source;
+  if (input.sourceReturnNo) return "sales_return";
+  if (input.schemeSettlementKey || input.schemeName) return "payment_discount_scheme";
+  return "manual";
+}
+
 export function createCreditNote(input: CreditNoteFormInput): CreditNoteRecord {
   validateBasic(input);
   const all = loadCreditNotes();
   const id = all.length ? Math.max(...all.map((r) => r.id)) + 1 : 1;
+  const source = resolveCreditNoteSource(input);
   const rec = normalizeCreditNote({
     id,
     creditNoteNo: nextCreditNoteNo(all),
@@ -553,10 +641,19 @@ export function createCreditNote(input: CreditNoteFormInput): CreditNoteRecord {
     currentCreditAmount: 0,
     balanceAfterAdjustment: 0,
     taxCreditAmount: 0,
+    taxableValue: 0,
+    cgstAmount: 0,
+    sgstAmount: 0,
+    igstAmount: 0,
     lineItems: input.lineItems,
     reason: input.reason,
     remarks: input.remarks,
     status: input.status,
+    source,
+    sourceReturnId: input.sourceReturnId,
+    sourceReturnNo: input.sourceReturnNo,
+    schemeName: input.schemeName,
+    discountPercent: input.discountPercent,
     schemeSettlementKey: input.schemeSettlementKey,
     schemeCode: input.schemeCode,
     schemeSettlementAmount: input.schemeSettlementAmount,
@@ -602,6 +699,11 @@ export function updateCreditNote(id: number, input: CreditNoteFormInput): Credit
     reason: input.reason,
     remarks: input.remarks,
     status: input.status,
+    source: resolveCreditNoteSource(input),
+    sourceReturnId: input.sourceReturnId ?? cur.sourceReturnId,
+    sourceReturnNo: input.sourceReturnNo ?? cur.sourceReturnNo,
+    schemeName: input.schemeName ?? cur.schemeName,
+    discountPercent: input.discountPercent ?? cur.discountPercent,
     schemeSettlementKey: input.schemeSettlementKey,
     schemeCode: input.schemeCode,
     schemeSettlementAmount: input.schemeSettlementAmount,
@@ -691,7 +793,20 @@ export function approveCreditNote(id: number): CreditNoteRecord {
   if (updated.schemeSettlementKey) {
     settleSchemeFromCreditNote(updated);
   }
+  if (updated.sourceInvoiceId && updated.lineItems.length > 0) {
+    reconcileInvoiceCredits(
+      updated.sourceInvoiceId,
+      updated.lineItems
+        .filter((l) => l.creditAmount > 0)
+        .map((l) => ({
+          lineId: l.sourceLineId,
+          creditedQty: l.returnQty,
+          creditedAmount: l.creditAmount,
+        })),
+    );
+  }
   postCreditNoteAccounting(updated);
+  invalidateAccountsDataCache("invoices");
   return updated;
 }
 
@@ -741,7 +856,10 @@ export function filterCreditNotes(
         x.creditNoteNo.toLowerCase().includes(q) ||
         x.customerName.toLowerCase().includes(q) ||
         x.sourceInvoiceNo.toLowerCase().includes(q) ||
-        x.sourceOrderNo.toLowerCase().includes(q),
+        x.sourceOrderNo.toLowerCase().includes(q) ||
+        x.sourceReturnNo?.toLowerCase().includes(q) ||
+        x.schemeName?.toLowerCase().includes(q) ||
+        CREDIT_NOTE_SOURCE_LABELS[x.source].toLowerCase().includes(q),
     );
   }
   return r;
@@ -761,7 +879,11 @@ export function filterCreditNotesListing(
         x.creditNoteNo.toLowerCase().includes(q) ||
         x.customerName.toLowerCase().includes(q) ||
         x.sourceInvoiceNo.toLowerCase().includes(q) ||
-        x.sourceOrderNo.toLowerCase().includes(q),
+        x.sourceOrderNo.toLowerCase().includes(q) ||
+        x.sourceReturnNo?.toLowerCase().includes(q) ||
+        x.schemeName?.toLowerCase().includes(q) ||
+        x.schemeCode?.toLowerCase().includes(q) ||
+        CREDIT_NOTE_SOURCE_LABELS[x.source].toLowerCase().includes(q),
     );
   }
   return r.sort((a, b) => b.creditNoteDate.localeCompare(a.creditNoteDate));

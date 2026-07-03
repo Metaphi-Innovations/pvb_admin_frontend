@@ -26,14 +26,14 @@ import {
 import { AccountsTableListing } from "@/components/accounts/AccountsTableListing";
 import {
   ReportFilterRow,
-  ReportFinancialYearFilter,
-  ReportFromToDateFilter,
+  ReportDateRangeFilter,
   ReportSearchFilter,
+  useReportDateRange,
+  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
+  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
-import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "../pl/pl-hooks";
@@ -45,9 +45,7 @@ import {
   type GstTypeFilter,
 } from "./gst-summary-data";
 import { exportGstSummaryToExcel, exportGstSummaryToPdf } from "./gst-summary-export";
-
-const filterLabelClass = "text-[10px] font-medium uppercase text-muted-foreground leading-none";
-const filterControlClass = "h-8 text-xs";
+import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
 
 const GST_TYPE_OPTIONS: { value: GstTypeFilter; label: string }[] = [
   { value: "all", label: "All" },
@@ -142,32 +140,13 @@ function GstSummaryTableRow({ line }: { line: GstSummaryLine }) {
 export default function GstSummaryPageClient() {
   const mounted = useClientMounted();
 
-  const [dateFrom, setDateFrom] = useState("2025-04-01");
-  const [dateTo, setDateTo] = useState("2025-06-30");
-  const [financialYearId, setFinancialYearId] = useState("all");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [gstType, setGstType] = useState<GstTypeFilter>("all");
   const [gstRate, setGstRate] = useState<GstRateFilter>("all");
   const [search, setSearch] = useState("");
   const [exporting, setExporting] = useState(false);
 
   const debouncedSearch = useDebouncedValue(search, 300);
-
-  useEffect(() => {
-    const activeFyId = getActiveFinancialYearId();
-    if (activeFyId) {
-      setFinancialYearId(String(activeFyId));
-      const fy = loadFinancialYears().find((f) => f.id === activeFyId);
-      if (fy) {
-        setDateFrom(fy.startDate);
-        setDateTo(fy.endDate);
-      }
-    }
-  }, []);
-
-  const fyLabel = useMemo(() => {
-    if (financialYearId === "all") return "All Financial Years";
-    return loadFinancialYears().find((fy) => String(fy.id) === financialYearId)?.name ?? "";
-  }, [financialYearId]);
 
   const gstTypeLabel = GST_TYPE_OPTIONS.find((o) => o.value === gstType)?.label ?? "All";
   const gstRateLabel = GST_RATE_OPTIONS.find((o) => o.value === gstRate)?.label ?? "All rates";
@@ -182,47 +161,33 @@ export default function GstSummaryPageClient() {
     [gstType, gstRate, debouncedSearch],
   );
 
-  const activeFyId = mounted ? getActiveFinancialYearId() : null;
-
   const hasFilters =
     Boolean(search.trim()) ||
     gstType !== "all" ||
-    gstRate !== "all" ||
-    financialYearId !== (activeFyId ? String(activeFyId) : "all");
+    gstRate !== "all";
 
   const resetFilters = useCallback(() => {
     setSearch("");
     setGstType("all");
     setGstRate("all");
-    setFinancialYearId(activeFyId ? String(activeFyId) : "all");
-    const fy = activeFyId
-      ? loadFinancialYears().find((f) => f.id === activeFyId)
-      : undefined;
-    if (fy) {
-      setDateFrom(fy.startDate);
-      setDateTo(fy.endDate);
-    }
-  }, [activeFyId]);
+    setPreset("this_year");
+    const { from, to } = resolveDateRangePreset("this_year");
+    setDateFrom(from);
+    setDateTo(to);
+  }, [setPreset, setDateFrom, setDateTo]);
 
-  useEffect(() => {
-    if (financialYearId === "all") return;
-    const fy = loadFinancialYears().find((f) => String(f.id) === financialYearId);
-    if (fy) {
-      setDateFrom(fy.startDate);
-      setDateTo(fy.endDate);
-    }
-  }, [financialYearId]);
+  
 
   const exportMeta = useMemo(
     () => ({
       dateFrom,
       dateTo,
-      financialYear: fyLabel,
+      financialYear: "",
       gstType: gstTypeLabel,
       gstRate: gstRateLabel,
       search: debouncedSearch,
     }),
-    [dateFrom, dateTo, fyLabel, gstTypeLabel, gstRateLabel, debouncedSearch],
+    [dateFrom, dateTo, gstTypeLabel, gstRateLabel, debouncedSearch],
   );
 
   const handleExportExcel = async () => {
@@ -257,13 +222,11 @@ export default function GstSummaryPageClient() {
       }
       filters={
         <ReportFilterRow className="items-end gap-2">
-          <ReportFinancialYearFilter
-            value={financialYearId}
-            onChange={setFinancialYearId}
-          />
-          <ReportFromToDateFilter
+          <ReportDateRangeFilter
+            preset={preset}
             dateFrom={dateFrom}
             dateTo={dateTo}
+            onPresetChange={setPreset}
             onDateFromChange={setDateFrom}
             onDateToChange={setDateTo}
           />

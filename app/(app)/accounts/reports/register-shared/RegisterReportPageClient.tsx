@@ -29,15 +29,15 @@ import {
 } from "@/components/accounts/AccountsTableListing";
 import {
   ReportFilterRow,
-  ReportFinancialYearFilter,
-  ReportFromToDateFilter,
+  ReportDateRangeFilter,
   ReportSearchFilter,
+  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
+  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
+  useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 import { EmptySearch } from "@/components/ui/EmptyState";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
-import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import { RegisterPaymentStatusBadge } from "../register-shared/RegisterPaymentStatusBadge";
@@ -49,9 +49,7 @@ import {
   filterRegisterRows,
   formatRegisterDate,
 } from "../register-shared/register-utils";
-
-const filterLabelClass = "text-[10px] font-medium uppercase text-muted-foreground leading-none";
-const filterControlClass = "h-7 text-xs mt-0";
+import { buildRegisterPartyOptions } from "../register-shared/register-live-data";
 
 const INVOICE_STATUS_OPTIONS = [
   { value: "all", label: "All statuses" },
@@ -74,7 +72,7 @@ export interface RegisterReportPageConfig {
   description: string;
   breadcrumbSection: string;
   partyLabel: string;
-  partyOptions: RegisterPartyOption[];
+  partyOptions?: RegisterPartyOption[];
   buildRows: () => RegisterReportRow[];
   viewHref: (row: RegisterReportRow) => string;
   exportFilePrefix: string;
@@ -115,9 +113,7 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
   const router = useRouter();
   const mounted = useClientMounted();
 
-  const [dateFrom, setDateFrom] = useState("2025-04-01");
-  const [dateTo, setDateTo] = useState("2026-03-31");
-  const [financialYearId, setFinancialYearId] = useState("all");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [partyId, setPartyId] = useState("all");
   const [invoiceStatus, setInvoiceStatus] = useState("all");
   const [gstRate, setGstRate] = useState("all");
@@ -126,24 +122,28 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
 
-  useEffect(() => {
-    const activeFyId = getActiveFinancialYearId();
-    if (activeFyId) setFinancialYearId(String(activeFyId));
-  }, []);
 
   const sourceRows = useMemo(() => (mounted ? config.buildRows() : []), [mounted, config]);
+
+  const partyOptions = useMemo(
+    () =>
+      config.partyOptions && config.partyOptions.length > 0
+        ? config.partyOptions
+        : buildRegisterPartyOptions(sourceRows),
+    [config.partyOptions, sourceRows],
+  );
 
   const filterParams = useMemo(
     () => ({
       dateFrom,
       dateTo,
-      financialYearId,
+      financialYearId: "all",
       partyId,
       invoiceStatus,
       gstRate,
       search,
     }),
-    [dateFrom, dateTo, financialYearId, partyId, invoiceStatus, gstRate, search],
+    [dateFrom, dateTo, partyId, invoiceStatus, gstRate, search],
   );
 
   const filteredRows = useMemo(
@@ -155,7 +155,7 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
 
   useEffect(() => {
     setPage(1);
-  }, [dateFrom, dateTo, financialYearId, partyId, invoiceStatus, gstRate, search, pageSize]);
+  }, [dateFrom, dateTo, partyId, invoiceStatus, gstRate, search, pageSize]);
 
   const paginatedRows = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -166,16 +166,13 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
     search.trim() !== "" ||
     partyId !== "all" ||
     invoiceStatus !== "all" ||
-    gstRate !== "all" ||
-    financialYearId !== "all";
+    gstRate !== "all";
 
   const clearFilters = () => {
     setSearch("");
     setPartyId("all");
     setInvoiceStatus("all");
     setGstRate("all");
-    const activeFyId = getActiveFinancialYearId();
-    setFinancialYearId(activeFyId ? String(activeFyId) : "all");
   };
 
   const openInvoiceView = useCallback(
@@ -186,15 +183,10 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
   );
 
   const exportMeta = useMemo(() => {
-    const years = loadFinancialYears();
-    const fy =
-      financialYearId === "all"
-        ? "All years"
-        : (years.find((y) => String(y.id) === financialYearId)?.name ?? financialYearId);
     const party =
       partyId === "all"
         ? "All"
-        : (config.partyOptions.find((p) => String(p.id) === partyId)?.name ?? partyId);
+        : (partyOptions.find((p) => String(p.id) === partyId)?.name ?? partyId);
     const statusLabel =
       INVOICE_STATUS_OPTIONS.find((o) => o.value === invoiceStatus)?.label ?? invoiceStatus;
     const gstLabel = GST_RATE_OPTIONS.find((o) => o.value === gstRate)?.label ?? gstRate;
@@ -203,7 +195,7 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
       reportName: config.title,
       dateFrom,
       dateTo,
-      financialYear: fy,
+      financialYear: "",
       partyLabel: config.partyLabel,
       partyFilter: party,
       invoiceStatus: statusLabel,
@@ -213,10 +205,9 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
   }, [
     config.title,
     config.partyLabel,
-    config.partyOptions,
+    partyOptions,
     dateFrom,
     dateTo,
-    financialYearId,
     partyId,
     invoiceStatus,
     gstRate,
@@ -245,19 +236,21 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
       breadcrumbs={accountsBreadcrumb(config.breadcrumbSection, config.title)}
       title={config.title}
       description={config.description}
-      actions={
-        <AccountsExportMenu
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          disabled={exporting || filteredRows.length === 0}
-        />
-      }
       filters={
-        <ReportFilterRow>
-          <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
-          <ReportFromToDateFilter
+        <ReportFilterRow
+          end={
+            <AccountsExportMenu
+              onExcel={handleExportExcel}
+              onPdf={handleExportPdf}
+              disabled={exporting || filteredRows.length === 0}
+            />
+          }
+        >
+          <ReportDateRangeFilter
+            preset={preset}
             dateFrom={dateFrom}
             dateTo={dateTo}
+            onPresetChange={setPreset}
             onDateFromChange={setDateFrom}
             onDateToChange={setDateTo}
           />
@@ -265,7 +258,7 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
             label={config.partyLabel}
             value={partyId}
             onChange={setPartyId}
-            parties={config.partyOptions}
+            parties={partyOptions}
           />
           <div className="space-y-1 min-w-[130px]">
             <Label className={filterLabelClass}>Invoice Status</Label>

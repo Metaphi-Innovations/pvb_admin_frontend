@@ -60,7 +60,7 @@ export default function FundTransferDetailClient({ transferId }: { transferId: n
           onClick={() => router.push("/accounts/banking/fund-transfer")}
           className="h-8 px-3 text-xs border border-border rounded-lg hover:bg-muted/40 inline-flex items-center gap-1.5"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
+          <ArrowLeft className="w-4 h-4" />
           Back to list
         </button>
       }
@@ -91,7 +91,7 @@ export default function FundTransferDetailClient({ transferId }: { transferId: n
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Attachment</p>
             {transfer.attachmentName ? (
               <div className="flex items-center gap-2 text-xs bg-muted/20 border border-border rounded-lg px-3 py-2">
-                <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
+                <Paperclip className="w-4 h-4 text-muted-foreground" />
                 <span className="flex-1 truncate font-medium">{transfer.attachmentName}</span>
                 {transfer.attachmentDataUrl && (
                   <a
@@ -100,7 +100,7 @@ export default function FundTransferDetailClient({ transferId }: { transferId: n
                     className="p-1 hover:bg-muted rounded"
                     title="Download"
                   >
-                    <Download className="w-3.5 h-3.5 text-brand-600" />
+                    <Download className="w-4 h-4 text-brand-600" />
                   </a>
                 )}
               </div>

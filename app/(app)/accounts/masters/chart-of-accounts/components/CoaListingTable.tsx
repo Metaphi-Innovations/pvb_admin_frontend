@@ -4,7 +4,7 @@ import React from "react";
 import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
-import { formatMoneyOrDash } from "@/lib/accounts/money-format";
+import { formatMoney } from "@/lib/accounts/money-format";
 import {
   AccountsTable,
   AccountsTableBody,
@@ -26,6 +26,7 @@ interface CoaListingTableProps {
   records: ChartOfAccount[];
   canCreate: boolean;
   highlightedLedgerId?: number | null;
+  isSearchMode?: boolean;
   onDrillInto: (node: ChartOfAccount) => void;
   onAddLedger: (parentGroupId: number) => void;
   emptyMessage?: string;
@@ -36,28 +37,37 @@ export function CoaListingTable({
   records,
   canCreate,
   highlightedLedgerId = null,
+  isSearchMode = false,
   onDrillInto,
   onAddLedger,
   emptyMessage = "No accounts at this level.",
 }: CoaListingTableProps) {
   if (rows.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-14 px-4">
-        <p className="text-sm font-medium text-foreground">{emptyMessage}</p>
-        <p className="text-xs text-muted-foreground mt-1">
-          Select a group in the sidebar or clear search to browse accounts.
-        </p>
+      <div className="flex flex-col items-center justify-center py-6 px-4">
+        <p className="text-[13px] font-medium text-slate-800">{emptyMessage}</p>
+        {!isSearchMode && (
+          <p className="text-sm text-slate-500 mt-1">
+            Select a group in the sidebar or clear search to browse accounts.
+          </p>
+        )}
       </div>
     );
   }
 
   return (
     <AccountsTableScroll>
-      <AccountsTable minWidth={860}>
+      <AccountsTable minWidth={isSearchMode ? 1080 : 860}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
             <AccountsTableHeadCell className="w-28">Ledger Code</AccountsTableHeadCell>
-            <AccountsTableHeadCell className="min-w-[260px]">Ledger Name</AccountsTableHeadCell>
+            <AccountsTableHeadCell className="min-w-[200px]">Ledger Name</AccountsTableHeadCell>
+            {isSearchMode && (
+              <>
+                <AccountsTableHeadCell className="min-w-[160px]">Parent Group</AccountsTableHeadCell>
+                <AccountsTableHeadCell className="min-w-[220px]">Hierarchy Path</AccountsTableHeadCell>
+              </>
+            )}
             <AccountsTableHeadCell align="right" className="w-36">
               Opening Balance
             </AccountsTableHeadCell>
@@ -87,14 +97,14 @@ export function CoaListingTable({
                 className={cn(
                   "group",
                   drillable && "cursor-pointer",
-                  isHighlighted && "bg-brand-50/80 ring-1 ring-inset ring-brand-300/70",
+                  isHighlighted && "is-selected",
                 )}
                 onClick={() => drillable && onDrillInto(node)}
               >
                 <AccountsTableCell className="font-mono text-xs font-semibold text-brand-700 whitespace-nowrap">
                   {node.accountCode}
                 </AccountsTableCell>
-                <AccountsTableCell wrap className="min-w-[260px]">
+                <AccountsTableCell wrap className="min-w-[200px]">
                   <div className="flex items-start gap-1 min-w-0">
                     <p
                       className={cn(
@@ -120,6 +130,16 @@ export function CoaListingTable({
                     )}
                   </div>
                 </AccountsTableCell>
+                {isSearchMode && (
+                  <>
+                    <AccountsTableCell wrap className="text-xs text-foreground/90">
+                      {row.parentGroupName || "—"}
+                    </AccountsTableCell>
+                    <AccountsTableCell wrap className="text-[11px] text-muted-foreground leading-snug">
+                      {row.hierarchyPath}
+                    </AccountsTableCell>
+                  </>
+                )}
                 <AccountsTableCell align="right">
                   {row.openingAmount > 0 ? (
                     <MoneyAmount amount={row.openingAmount} side={row.openingSide} className="text-xs" />
@@ -128,10 +148,10 @@ export function CoaListingTable({
                   )}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" money className="text-xs">
-                  {formatMoneyOrDash(row.periodDebit)}
+                  {formatMoney(row.periodDebit)}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" money className="text-xs">
-                  {formatMoneyOrDash(row.periodCredit)}
+                  {formatMoney(row.periodCredit)}
                 </AccountsTableCell>
                 <AccountsTableCell align="right">
                   {row.closingAmount > 0 ? (

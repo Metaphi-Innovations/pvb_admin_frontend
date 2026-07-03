@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { ACCOUNTS_STATUS_BADGE_CLASS } from "@/lib/accounts/accounts-typography";
 import type { BookReconStatus } from "@/lib/accounts/manual-bank-reconciliation-data";
 
 const STATUS_CFG: Record<BookReconStatus, { bg: string; text: string; dot: string; label: string }> = {
@@ -16,14 +17,26 @@ const STATUS_CFG: Record<BookReconStatus, { bg: string; text: string; dot: strin
     dot: "bg-emerald-500",
     label: "Reconciled",
   },
+  unmatched: {
+    bg: "bg-slate-100",
+    text: "text-slate-600",
+    dot: "bg-slate-400",
+    label: "Unmatched",
+  },
+  difference: {
+    bg: "bg-red-50",
+    text: "text-red-700",
+    dot: "bg-red-400",
+    label: "Difference",
+  },
 };
 
 export function ReconEntryStatusBadge({ status }: { status: BookReconStatus }) {
-  const cfg = STATUS_CFG[status];
+  const cfg = STATUS_CFG[status] ?? STATUS_CFG.unmatched;
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium",
+        ACCOUNTS_STATUS_BADGE_CLASS,
         cfg.bg,
         cfg.text,
       )}

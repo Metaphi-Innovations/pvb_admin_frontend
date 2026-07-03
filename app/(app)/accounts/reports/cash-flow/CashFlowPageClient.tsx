@@ -20,12 +20,11 @@ import { AccountsTableListing } from "@/components/accounts/AccountsTableListing
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
-  ReportFinancialYearFilter,
+  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
+  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import { MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
-import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import {
   resolveDateRangePreset,
   type DateRangePresetId,
@@ -42,8 +41,6 @@ import {
 } from "./cash-flow-data";
 import { exportCashFlowToExcel, exportCashFlowToPdf } from "./cash-flow-export";
 
-const filterLabelClass = "text-[10px] font-medium uppercase text-muted-foreground leading-none";
-const filterControlClass = "h-8 text-xs";
 const PLACEHOLDER_DATE = "2025-04-01";
 
 function CashFlowRow({ line }: { line: CashFlowLineItem }) {
@@ -123,8 +120,6 @@ export default function CashFlowPageClient() {
   const [datesReady, setDatesReady] = useState(false);
 
   const [search, setSearch] = useState("");
-  const [financialYearId, setFinancialYearId] = useState("all");
-  const [fyReady, setFyReady] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const debouncedSearch = useDebouncedValue(search, 300);
@@ -134,10 +129,6 @@ export default function CashFlowPageClient() {
     setDateFrom(from);
     setDateTo(to);
     setDatesReady(true);
-
-    const activeFyId = getActiveFinancialYearId();
-    if (activeFyId) setFinancialYearId(String(activeFyId));
-    setFyReady(true);
   }, []);
 
   const handlePresetChange = useCallback((value: DateRangePresetId) => {
@@ -163,50 +154,34 @@ export default function CashFlowPageClient() {
       };
     }
     return buildCashFlowStatement();
-  }, [mounted, dateFrom, dateTo, financialYearId]);
+  }, [mounted, dateFrom, dateTo]);
 
   const statement = useMemo(
     () => filterCashFlowStatement(sourceStatement, { search: debouncedSearch }),
     [sourceStatement, debouncedSearch],
   );
 
-  const activeFyId = mounted ? getActiveFinancialYearId() : null;
-
-  const fyLabel = useMemo(() => {
-    if (!mounted || financialYearId === "all") return "All Financial Years";
-    return loadFinancialYears().find((fy) => String(fy.id) === financialYearId)?.name ?? "";
-  }, [mounted, financialYearId]);
-
   const hasFilters =
     Boolean(search.trim()) ||
-    (fyReady && financialYearId !== (activeFyId ? String(activeFyId) : "all")) ||
     (datesReady && preset !== "this_month");
 
   const resetFilters = useCallback(() => {
     setSearch("");
-    setFinancialYearId(activeFyId ? String(activeFyId) : "all");
     setPreset("this_month");
     const { from, to } = resolveDateRangePreset("this_month");
     setDateFrom(from);
     setDateTo(to);
-  }, [activeFyId]);
+  }, []);
 
-  useEffect(() => {
-    if (!mounted || financialYearId === "all") return;
-    const fy = loadFinancialYears().find((f) => String(f.id) === financialYearId);
-    if (fy) {
-      setDateFrom(fy.startDate);
-      setDateTo(fy.endDate);
-    }
-  }, [mounted, financialYearId]);
+  
 
   const exportMeta = useMemo(
     () => ({
       dateFrom,
       dateTo,
-      financialYear: fyLabel,
+      financialYear: "",
     }),
-    [dateFrom, dateTo, fyLabel],
+    [dateFrom, dateTo],
   );
 
   const handleExportExcel = async () => {
@@ -243,10 +218,6 @@ export default function CashFlowPageClient() {
       }
       filters={
         <ReportFilterRow className="items-end gap-2">
-          <ReportFinancialYearFilter
-            value={financialYearId}
-            onChange={setFinancialYearId}
-          />
           <ReportDateRangeFilter
             preset={preset}
             dateFrom={dateFrom}

@@ -14,11 +14,87 @@ import { DispatchProduct, DispatchRecord } from "../types";
 import { buildDispatchNearExpiryEntries } from "../near-expiry-dispatch";
 import { NearExpirySchemeInfoPanel } from "../components/NearExpirySchemeInfoPanel";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
+import BillToShipToSection from "@/app/(app)/sales/orders/components/BillToShipToSection";
+import { getPurchaseReturnByReturnNumber } from "@/app/(app)/procurement/purchase-returns/purchase-return-packing-sync";
+import { getPurchaseReturnBillShipAddresses } from "@/app/(app)/procurement/purchase-returns/purchase-return-utils";
+import {
+  buildDispatchProductLines,
+  resolveDispatchTaxSupplyType,
+} from "../dispatch-product-lines";
+import { DispatchProductDetailsTable } from "../components/DispatchProductDetailsTable";
+import { buildDispatchSourceFooterData } from "../dispatch-source-footer";
+import { DispatchSourceFooterSection } from "../components/DispatchSourceFooterSection";
+
+function isPurchaseReturnPacking(p: PackingRecord): boolean {
+  return (
+    p.sourceDocumentType === "Purchase Return" ||
+    p.id.startsWith("pret-pkg-") ||
+    p.salesOrderNo.startsWith("PRET-")
+  );
+}
+
+function getSourceDocumentCode(p: PackingRecord): string {
+  if (isPurchaseReturnPacking(p)) {
+    return p.sourceDocumentNo ?? p.salesOrderNo;
+  }
+  return p.salesOrderNo;
+}
+
+function formatSourceDocumentOption(p: PackingRecord): { value: string; label: string; warehouse: string; customer: string; isPurchaseReturn: boolean } {
+  const isStockTransfer = p.sourceDocumentType === "Stock Transfer";
+  const isPurchaseReturn = isPurchaseReturnPacking(p);
+  const docCode = getSourceDocumentCode(p);
+  const customer = isStockTransfer
+    ? p.targetWarehouse || p.customer.replace("Transfer to ", "")
+    : p.customer;
+
+  const label = isPurchaseReturn
+    ? `${docCode} — ${customer}`
+    : isStockTransfer
+      ? `${docCode} — ${customer}`
+      : `${docCode} (${customer})`;
+
+  return {
+    value: docCode,
+    label,
+    warehouse: p.warehouse || p.sourceWarehouse || "Central Warehouse",
+    customer,
+    isPurchaseReturn,
+  };
+}
+
+function matchesSourceTypeFilter(p: PackingRecord, sourceType: string | null): boolean {
+  if (!sourceType) return true;
+  if (sourceType === "purchase_return") return isPurchaseReturnPacking(p);
+  if (sourceType === "stock_transfer") {
+    return p.sourceDocumentType === "Stock Transfer" || p.id.startsWith("st-");
+  }
+  if (sourceType === "sample_order") {
+    return (
+      p.sourceDocumentType === "Sample Order" ||
+      p.salesOrderNo.startsWith("SM-") ||
+      p.salesOrderNo.startsWith("SMP-")
+    );
+  }
+  if (sourceType === "sales_order") {
+    return (
+      !isPurchaseReturnPacking(p) &&
+      p.sourceDocumentType !== "Stock Transfer" &&
+      !p.id.startsWith("st-") &&
+      p.sourceDocumentType !== "Sample Order" &&
+      !p.salesOrderNo.startsWith("SM-") &&
+      !p.salesOrderNo.startsWith("SMP-")
+    );
+  }
+  return true;
+}
 
 export default function CreateDispatchPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const packingId = searchParams ? searchParams.get("packingId") : null;
+  const sourceTypeFilter = searchParams ? searchParams.get("sourceType") : null;
+  const isPurchaseReturnContext = sourceTypeFilter === "purchase_return";
 
   const [packingNo, setPackingNo] = useState("");
   const [dispatchDate, setDispatchDate] = useState(new Date().toISOString().split("T")[0]);
@@ -29,30 +105,38 @@ export default function CreateDispatchPage() {
   const [selectedSalesOrderNo, setSelectedSalesOrderNo] = useState("All");
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
 
-  // We fetch all packings globally here so we can build a list of unique Sales Orders
+  // We fetch all packings globally here so we can build a list of unique source documents
   const allPackings = useMemo(() => getPackedOrdersByWarehouse("All"), []);
 
+  const scopedPackings = useMemo(
+    () => allPackings.filter((p) => matchesSourceTypeFilter(p, sourceTypeFilter)),
+    [allPackings, sourceTypeFilter],
+  );
+
   const uniqueSalesOrders = useMemo(() => {
-    const map = new Map<string, { label: string; warehouse: string; customer: string }>();
-    allPackings.forEach(p => {
-      if (!map.has(p.salesOrderNo)) {
-        const customer = p.sourceDocumentType === "Stock Transfer"
-            ? p.targetWarehouse || p.customer.replace("Transfer to ", "")
-            : p.customer;
-        map.set(p.salesOrderNo, {
-          label: p.salesOrderNo,
-          warehouse: p.warehouse || p.sourceWarehouse || "Central Warehouse",
-          customer: customer,
+    const map = new Map<
+      string,
+      { label: string; warehouse: string; customer: string; isPurchaseReturn: boolean }
+    >();
+    scopedPackings.forEach((p) => {
+      const option = formatSourceDocumentOption(p);
+      if (!map.has(option.value)) {
+        map.set(option.value, {
+          label: option.label,
+          warehouse: option.warehouse,
+          customer: option.customer,
+          isPurchaseReturn: option.isPurchaseReturn,
         });
       }
     });
     return Array.from(map.entries()).map(([value, data]) => ({
       value,
-      label: `${value} (${data.customer})`,
+      label: data.label,
       warehouse: data.warehouse,
-      customer: data.customer
+      customer: data.customer,
+      isPurchaseReturn: data.isPurchaseReturn,
     }));
-  }, [allPackings]);
+  }, [scopedPackings]);
 
   useEffect(() => {
     setPackingNo(generateDispatchNumber());
@@ -62,19 +146,30 @@ export default function CreateDispatchPage() {
     if (packingId) {
       const record = getPackingRecordById(packingId);
       if (record) {
-        setSelectedSalesOrderNo(record.salesOrderNo);
+        setSelectedSalesOrderNo(getSourceDocumentCode(record));
       }
     }
   }, [packingId]);
 
-  const selectedSOData = uniqueSalesOrders.find(so => so.value === selectedSalesOrderNo);
+  useEffect(() => {
+    if (selectedSalesOrderNo === "All") return;
+    const stillValid = scopedPackings.some(
+      (p) => getSourceDocumentCode(p) === selectedSalesOrderNo,
+    );
+    if (!stillValid) setSelectedSalesOrderNo("All");
+  }, [scopedPackings, selectedSalesOrderNo]);
+
+  const selectedSOData = uniqueSalesOrders.find((so) => so.value === selectedSalesOrderNo);
   const autoWarehouse = selectedSOData?.warehouse || "";
   const customerNameStr = selectedSOData?.customer || "";
+  const isPurchaseReturnOrder = selectedSOData?.isPurchaseReturn ?? false;
 
   const packedOrders = useMemo(() => {
     if (selectedSalesOrderNo === "All") return [];
-    return allPackings.filter(p => p.salesOrderNo === selectedSalesOrderNo);
-  }, [selectedSalesOrderNo, allPackings]);
+    return scopedPackings.filter(
+      (p) => getSourceDocumentCode(p) === selectedSalesOrderNo,
+    );
+  }, [selectedSalesOrderNo, scopedPackings]);
 
   // Auto-select packings when changing SO
   useEffect(() => {
@@ -115,38 +210,40 @@ export default function CreateDispatchPage() {
     [packedOrders, selectedOrderIds],
   );
 
-  const productRows = useMemo(() => {
-    const rows: {
-      orderId: string;
-      packingNo: string;
-      product: string;
-      sku: string;
-      packedQty: number;
-      customerName: string;
-      warehouse: string;
-      batchAllocations: { batchNumber: string; expiryDate: string; allocatedQty: number }[];
-    }[] = [];
-    selectedOrders.forEach((order) => {
-      const customerName =
-        order.sourceDocumentType === "Stock Transfer"
-          ? order.targetWarehouse || order.customer.replace("Transfer to ", "")
-          : order.customer;
-      const warehouse = order.warehouse || order.sourceWarehouse || autoWarehouse;
-      order.products.forEach((p) => {
-        rows.push({
-          orderId: order.id,
-          packingNo: order.packingNo,
-          product: p.product,
-          sku: p.sku,
-          packedQty: p.packedQty,
-          customerName,
-          warehouse: warehouse === "All" ? "Central Warehouse" : warehouse,
-          batchAllocations: p.batchAllocations ?? [],
-        });
-      });
-    });
-    return rows;
-  }, [selectedOrders, autoWarehouse]);
+  const dispatchProductLines = useMemo(
+    () => buildDispatchProductLines(selectedOrders, autoWarehouse),
+    [selectedOrders, autoWarehouse],
+  );
+
+  const dispatchTaxSupplyType = useMemo(
+    () => resolveDispatchTaxSupplyType(selectedOrders),
+    [selectedOrders],
+  );
+
+  const dispatchSourceFooter = useMemo(
+    () =>
+      buildDispatchSourceFooterData(
+        selectedOrders,
+        dispatchProductLines,
+        dispatchTaxSupplyType,
+      ),
+    [selectedOrders, dispatchProductLines, dispatchTaxSupplyType],
+  );
+
+  const productRows = useMemo(
+    () =>
+      dispatchProductLines.map((line) => ({
+        orderId: line.orderId,
+        packingNo: line.packingNo,
+        product: line.productName,
+        sku: line.productCode,
+        packedQty: line.packedQty,
+        customerName: line.customerName,
+        warehouse: line.warehouse,
+        batchAllocations: line.batchAllocations,
+      })),
+    [dispatchProductLines],
+  );
 
   const nearExpirySchemeEntries = useMemo(() => {
     const entries: ReturnType<typeof buildDispatchNearExpiryEntries> = [];
@@ -170,6 +267,22 @@ export default function CreateDispatchPage() {
     () => selectedOrders.some((o) => o.sourceDocumentType === "Stock Transfer" || o.id.startsWith("st-")),
     [selectedOrders],
   );
+
+  const isPurchaseReturn = useMemo(
+    () =>
+      isPurchaseReturnOrder ||
+      selectedOrders.some(
+        (o) => o.sourceDocumentType === "Purchase Return" || o.id.startsWith("pret-pkg-"),
+      ),
+    [selectedOrders, isPurchaseReturnOrder],
+  );
+
+  const purchaseReturnBillShip = useMemo(() => {
+    if (!isPurchaseReturn || selectedSalesOrderNo === "All") return null;
+    const pret = getPurchaseReturnByReturnNumber(selectedSalesOrderNo);
+    if (!pret) return null;
+    return getPurchaseReturnBillShipAddresses(pret);
+  }, [isPurchaseReturn, selectedSalesOrderNo]);
 
   const totalDispatchQty = productRows.reduce((a, b) => a + b.packedQty, 0);
   const isNearExpiryDemo =
@@ -210,8 +323,22 @@ export default function CreateDispatchPage() {
         o.salesOrderNo.startsWith("SM-") ||
         o.salesOrderNo.startsWith("SMP-"),
     );
-    const docType = isStockTransfer ? "Stock Transfer" : isSampleOrder ? "Sample Order" : "Sales Order";
-    const sourceType = isStockTransfer ? "stock_transfer" : isSampleOrder ? "sample_order" : "sales_order";
+    const docType = isPurchaseReturn
+      ? "Purchase Return"
+      : isStockTransfer
+        ? "Stock Transfer"
+        : isSampleOrder
+          ? "Sample Order"
+          : "Sales Order";
+    const sourceType = isPurchaseReturn
+      ? "purchase_return"
+      : isStockTransfer
+        ? "stock_transfer"
+        : isSampleOrder
+          ? "sample_order"
+          : "sales_order";
+
+    const firstPretOrder = selectedOrders.find((o) => o.sourceDocumentType === "Purchase Return");
 
     const record: DispatchRecord = {
       id: `dp-${Date.now()}`,
@@ -235,7 +362,11 @@ export default function CreateDispatchPage() {
       sourceWarehouse: selectedOrders.map((o) => o.sourceWarehouse || o.warehouse).join(", "),
       targetWarehouse: isStockTransfer
         ? selectedOrders.map((o) => o.targetWarehouse || o.customer.replace("Transfer to ", "")).join(", ")
-        : undefined,
+        : isPurchaseReturn
+          ? selectedOrders.map((o) => o.customer).join(", ")
+          : undefined,
+      poNumber: firstPretOrder?.poNumber,
+      supplierCode: firstPretOrder?.supplierCode,
       dispatch_id: `dp-${Date.now()}`,
       dispatch_no: packingNo,
       source_type: sourceType,
@@ -245,7 +376,9 @@ export default function CreateDispatchPage() {
       source_warehouse_name: selectedOrders.map((o) => o.sourceWarehouse || o.warehouse).join(", "),
       target_warehouse_name: isStockTransfer
         ? selectedOrders.map((o) => o.targetWarehouse || o.customer.replace("Transfer to ", "")).join(", ")
-        : "",
+        : isPurchaseReturn
+          ? selectedOrders.map((o) => o.customer).join(", ")
+          : "",
       total_items: dispatchProducts.length,
       total_quantity: dispatchProducts.reduce((acc, p) => acc + p.dispatchQty, 0),
       dispatch_status: "Pending Dispatch",
@@ -301,13 +434,23 @@ export default function CreateDispatchPage() {
             </div>
             
             <div>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Sales Order / Stock Transfer</p>
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                Source Document
+              </p>
               <AutocompleteSelect
-                options={[{ value: "All", label: "Select Sales Order..." }, ...uniqueSalesOrders]}
+                options={[
+                  {
+                    value: "All",
+                    label: isPurchaseReturnContext ? "Select purchase return..." : "Select document...",
+                  },
+                  ...uniqueSalesOrders,
+                ]}
                 value={selectedSalesOrderNo}
                 onChange={setSelectedSalesOrderNo}
-                placeholder="Select Sales Order"
-                searchPlaceholder="Search order..."
+                placeholder={
+                  isPurchaseReturnContext ? "Select Purchase Return" : "Select Sales Order / Return / Transfer"
+                }
+                searchPlaceholder={isPurchaseReturnContext ? "Search return code..." : "Search SO, PRET, ST..."}
                 className="h-8 text-xs mt-1.5 rounded-lg border-border bg-white"
               />
             </div>
@@ -360,50 +503,73 @@ export default function CreateDispatchPage() {
           </div>
         </div>
 
-        {/* Dynamic Customer / Destination Details */}
+        {/* Dynamic Customer / Destination / Bill-Ship Details */}
         {selectedSalesOrderNo !== "All" && (
           <div className="rounded-xl border border-border bg-slate-50/50 overflow-hidden mt-6">
             <div className="bg-slate-100/80 border-b border-border px-4 py-2 flex items-center justify-between">
               <h3 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <User className="w-4 h-4 text-brand-600" />
-                {isStockTransfer ? "Destination Details" : "Customer Details"}
+                {isPurchaseReturn ? (
+                  <Building className="w-4 h-4 text-brand-600" />
+                ) : (
+                  <User className="w-4 h-4 text-brand-600" />
+                )}
+                {isStockTransfer
+                  ? "Destination Details"
+                  : isPurchaseReturn
+                    ? "Bill To / Ship To"
+                    : "Customer Details"}
               </h3>
             </div>
-            <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                  {isStockTransfer ? "Target Warehouse" : "Name"}
-                </p>
-                <p className="text-sm font-bold text-foreground">
-                  {customerNameStr || "—"}
-                </p>
-              </div>
-              
-              {!isStockTransfer && (
-                <>
+            <div className="p-4">
+              {isPurchaseReturn ? (
+                <BillToShipToSection
+                  readOnly
+                  billToAddressId={purchaseReturnBillShip?.billToAddressId ?? ""}
+                  shipToAddressId={purchaseReturnBillShip?.shipToAddressId ?? ""}
+                  billAddress={purchaseReturnBillShip?.billAddress ?? null}
+                  shipAddress={purchaseReturnBillShip?.shipAddress ?? null}
+                  onBillToChange={() => {}}
+                  onShipToChange={() => {}}
+                  emptyHint="Purchase return address details are not available."
+                />
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div>
                     <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                      Contact
+                      {isStockTransfer ? "Target Warehouse" : "Name"}
                     </p>
-                    <div className="flex flex-col gap-1 text-xs text-slate-700">
-                      <span className="flex items-center gap-1.5"><Phone className="w-3 h-3 text-slate-400" /> {customerDetails?.mobile || "—"}</span>
-                      <span className="flex items-center gap-1.5"><Mail className="w-3 h-3 text-slate-400" /> {customerDetails?.email || "—"}</span>
-                    </div>
-                  </div>
-                  <div className="lg:col-span-2">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                      Address
+                    <p className="text-sm font-bold text-foreground">
+                      {customerNameStr || "—"}
                     </p>
-                    <div className="flex items-start gap-1.5 text-xs text-slate-700">
-                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                      <span>
-                        {customerDetails?.address ? (
-                          <>{customerDetails.address}, {customerDetails.districtName}, {customerDetails.stateName} - {customerDetails.pincode}</>
-                        ) : "—"}
-                      </span>
-                    </div>
                   </div>
-                </>
+
+                  {!isStockTransfer && (
+                    <>
+                      <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                          Contact
+                        </p>
+                        <div className="flex flex-col gap-1 text-xs text-slate-700">
+                          <span className="flex items-center gap-1.5"><Phone className="w-3 h-3 text-slate-400" /> {customerDetails?.mobile || "—"}</span>
+                          <span className="flex items-center gap-1.5"><Mail className="w-3 h-3 text-slate-400" /> {customerDetails?.email || "—"}</span>
+                        </div>
+                      </div>
+                      <div className="lg:col-span-2">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                          Address
+                        </p>
+                        <div className="flex items-start gap-1.5 text-xs text-slate-700">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                          <span>
+                            {customerDetails?.address ? (
+                              <>{customerDetails.address}, {customerDetails.districtName}, {customerDetails.stateName} - {customerDetails.pincode}</>
+                            ) : "—"}
+                          </span>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -415,7 +581,7 @@ export default function CreateDispatchPage() {
           </h2>
           {selectedSalesOrderNo === "All" ? (
              <p className="text-xs text-muted-foreground py-4 text-center">
-              Please select a Sales Order from above to view available packings.
+              Please select a source document from above to view available packings.
              </p>
           ) : packedOrders.length === 0 ? (
             <p className="text-xs text-muted-foreground py-4 text-center">
@@ -468,61 +634,16 @@ export default function CreateDispatchPage() {
           )}
         </div>
 
-        {productRows.length > 0 && (
+        {selectedOrderIds.size > 0 && (
           <div className="border-t border-border/80 pt-6 mt-6 space-y-4">
             <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
-              <Package className="w-4 h-4 text-brand-600" /> Read-Only Dispatch Product Details
+              <Package className="w-4 h-4 text-brand-600" /> Dispatch Product Details
             </h2>
-            <div className="overflow-x-auto rounded-lg border border-border">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-border bg-slate-50/80">
-                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Product</th>
-                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">SKU</th>
-                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Packing No</th>
-                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Batch Allocation</th>
-                    <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-right">Dispatch Qty</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60">
-                  {productRows.map((row) => {
-                    const key = `${row.orderId}::${row.sku}`;
-                    return (
-                      <tr key={key} className="hover:bg-slate-50/40">
-                        <td className="py-3 px-3 text-xs font-bold">{row.product}</td>
-                        <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{row.sku}</td>
-                        <td className="py-3 px-3 text-xs font-mono text-muted-foreground">{row.packingNo}</td>
-                        <td className="py-2 px-3">
-                          {row.batchAllocations.length === 0 ? (
-                            <span className="text-xs text-muted-foreground italic">No batch</span>
-                          ) : (
-                            <div className="flex flex-col gap-1">
-                              {row.batchAllocations.map(b => (
-                                <div key={b.batchNumber} className="flex items-center gap-2">
-                                  <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[10px] font-mono font-semibold border border-slate-200">
-                                    {b.batchNumber}
-                                  </span>
-                                  <span className="text-xs text-slate-600 font-medium">Qty: {b.allocatedQty}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-3 px-3 text-xs font-bold text-right text-brand-700">{row.packedQty}</td>
-                      </tr>
-                    );
-                  })}
-                  <tr className="bg-slate-50">
-                    <td colSpan={4} className="py-3 px-4 text-xs font-bold text-right uppercase tracking-wider text-slate-500">
-                      Total Dispatch Quantity
-                    </td>
-                    <td className="py-3 px-3 text-sm font-bold text-right text-brand-700">
-                      {totalDispatchQty}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <DispatchProductDetailsTable
+              lines={dispatchProductLines}
+              taxSupplyType={dispatchTaxSupplyType}
+            />
+            {dispatchSourceFooter && <DispatchSourceFooterSection data={dispatchSourceFooter} />}
           </div>
         )}
 

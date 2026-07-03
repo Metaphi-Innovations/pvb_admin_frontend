@@ -1,4 +1,5 @@
 import {
+  differenceReasonLabel,
   formatAccountsDate,
   type ManualReconGridRow,
   type ManualReconSummary,
@@ -18,15 +19,27 @@ export async function exportManualReconciliationToExcel(
 
   const detailRows = rows.map((row) => ({
     "Entry Date as per Books": formatAccountsDate(row.entryDate),
+    "Voucher No.": row.voucherNo,
     "Party Name": row.partyName,
     "Voucher Type": row.voucherTypeLabel,
+    Narration: row.narration,
     "Debit Amount": row.debitAmount || "",
     "Credit Amount": row.creditAmount || "",
+    Bank: row.bankName,
     "Bank Processing Date": row.bankProcessingDate
       ? formatAccountsDate(row.bankProcessingDate)
       : "",
-    Status: row.status === "reconciled" ? "Reconciled" : "Pending",
-    "Voucher No.": row.voucherNo,
+    "Statement Reference": row.matchedStatementRef || "",
+    Difference: row.differenceAmount || "",
+    Status:
+      row.status === "reconciled"
+        ? "Reconciled"
+        : row.status === "difference"
+          ? "Difference"
+          : row.status === "pending"
+            ? "Pending"
+            : "Unmatched",
+    "Difference Reason": differenceReasonLabel(row.differenceReason),
   }));
 
   const summaryRows = [
@@ -34,11 +47,16 @@ export async function exportManualReconciliationToExcel(
     { Metric: "Financial Year", Value: meta.financialYear },
     { Metric: "From Date", Value: formatAccountsDate(meta.dateFrom) },
     { Metric: "To Date", Value: formatAccountsDate(meta.dateTo) },
+    { Metric: "", Value: "" },
     { Metric: "Balance as per Books", Value: summary.balanceAsPerBooks },
     { Metric: "Balance as per Bank Statement", Value: summary.balanceAsPerBank },
     { Metric: "Difference", Value: summary.difference },
-    { Metric: "Pending Transactions", Value: summary.pendingCount },
-    { Metric: "Reconciled Transactions", Value: summary.reconciledCount },
+    { Metric: "", Value: "" },
+    { Metric: "Total Entries", Value: summary.totalCount },
+    { Metric: "Reconciled", Value: summary.reconciledCount },
+    { Metric: "Pending", Value: summary.pendingCount },
+    { Metric: "Unmatched", Value: summary.unmatchedCount },
+    { Metric: "With Difference", Value: summary.differenceCount },
   ];
 
   const wb = XLSX.utils.book_new();

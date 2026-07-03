@@ -1,5 +1,7 @@
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import { splitInvoiceGst } from "@/lib/accounts/invoice-gst-breakup";
 import { getActiveVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { buildPurchaseInvoiceSeedRecords } from "./purchase-invoice-seed";
 import {
   getPOById,
   loadPurchaseOrders,
@@ -170,6 +172,24 @@ function normalizePI(rec: PurchaseInvoiceRecord): PurchaseInvoiceRecord {
   };
 }
 
+export function isGrnPurchaseInvoice(rec: PurchaseInvoiceRecord): boolean {
+  return rec.source !== "manual_entry" && Boolean(rec.grnId?.trim() && rec.grnNo?.trim());
+}
+
+export function getPurchaseInvoiceGstBreakup(rec: PurchaseInvoiceRecord) {
+  const taxableValue = rec.subtotal ?? rec.productAmount ?? 0;
+  const { cgst, sgst, igst } = splitInvoiceGst(rec.taxAmount ?? 0, false);
+  return { taxableValue, cgst, sgst, igst };
+}
+
+export function getPurchaseInvoicePaymentStatus(
+  rec: Pick<PurchaseInvoiceRecord, "amountPaid" | "grandTotal">,
+): "paid" | "partial" | "unpaid" {
+  if (rec.amountPaid >= rec.grandTotal && rec.grandTotal > 0) return "paid";
+  if (rec.amountPaid > 0) return "partial";
+  return "unpaid";
+}
+
 export function loadPurchaseInvoices(): PurchaseInvoiceRecord[] {
   if (typeof window === "undefined") return [];
   try {
@@ -180,13 +200,23 @@ export function loadPurchaseInvoices(): PurchaseInvoiceRecord[] {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
       return migrated;
     }
-    const list: PurchaseInvoiceRecord[] = raw ? JSON.parse(raw) : [];
+    let list: PurchaseInvoiceRecord[] = raw ? JSON.parse(raw) : [];
+    if (list.length === 0) {
+      list = buildPurchaseInvoiceSeedRecords();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+      return list.map(normalizePI);
+    }
     const normalized = list.map(normalizePI);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
     return normalized;
   } catch {
     return [];
   }
+}
+
+/** Listing scope — GRN-linked purchase invoices only. */
+export function loadGrnPurchaseInvoices(): PurchaseInvoiceRecord[] {
+  return loadPurchaseInvoices().filter(isGrnPurchaseInvoice);
 }
 
 export function savePurchaseInvoices(records: PurchaseInvoiceRecord[]): void {
@@ -462,18 +492,22 @@ export function filterPurchaseInvoices(
   records: PurchaseInvoiceRecord[],
   filters: {
     search: string;
-    source: string;
-    vendor: string;
+    source?: string;
+    vendor?: string;
     dateFrom: string;
     dateTo: string;
+    status?: string;
   },
 ): PurchaseInvoiceRecord[] {
-  let r = records;
+  let r = records.filter(isGrnPurchaseInvoice);
   if (filters.source && filters.source !== "all") {
     r = r.filter((x) => x.source === filters.source);
   }
   if (filters.vendor && filters.vendor !== "all") {
     r = r.filter((x) => x.vendorName === filters.vendor);
+  }
+  if (filters.status && filters.status !== "all") {
+    r = r.filter((x) => getPurchaseInvoicePaymentStatus(x) === filters.status);
   }
   if (filters.dateFrom) r = r.filter((x) => x.invoiceDate >= filters.dateFrom);
   if (filters.dateTo) r = r.filter((x) => x.invoiceDate <= filters.dateTo);
@@ -484,6 +518,7 @@ export function filterPurchaseInvoices(
         x.invoiceNo.toLowerCase().includes(q) ||
         x.vendorInvoiceNo.toLowerCase().includes(q) ||
         x.vendorName.toLowerCase().includes(q) ||
+        x.grnNo.toLowerCase().includes(q) ||
         x.poNumber.toLowerCase().includes(q),
     );
   }

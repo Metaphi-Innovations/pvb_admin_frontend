@@ -9,11 +9,24 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getPackingUnionById } from "../../services";
-import { PackingRecordUnion } from "../../types";
+import { PackingRecordUnion, SalesOrderRecord, SalesOrderProduct, PackingRecord } from "../../types";
 import { STATUS_BADGE_CONFIG } from "../../constants";
 import { formatBatchExpiryDate } from "../../../dispatch/near-expiry-dispatch";
 import { NearExpirySchemeBadge } from "../../../dispatch/components/NearExpirySchemeBadge";
 import { NearExpirySchemeInfoPanel } from "../../../dispatch/components/NearExpirySchemeInfoPanel";
+import {
+  getPackingDateLabel,
+  getPackingDocumentNo,
+  getPackingDocumentNoLabel,
+  getPackingPartyLabel,
+  getPackingPartyValue,
+  getPackingQtyLabel,
+  getPackingSectionTitle,
+  getPackingWarehouseLabel,
+  getPackingWarehouseValue,
+  isPurchaseReturnDoc,
+  isStockTransferDoc,
+} from "../../lib/packing-document-labels";
 
 function packingStatusVariant(status: string): "active" | "inactive" | "draft" | "blocked" | "neutral" {
   const s = status.toLowerCase();
@@ -58,6 +71,10 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
   const { type, data } = unionRecord;
   const statusCfg = STATUS_BADGE_CONFIG[data.status] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: data.status };
   const rowData = data as any;
+  const docType = rowData.sourceDocumentType;
+  const isPurchaseReturn = isPurchaseReturnDoc(rowData);
+  const isStockTransfer = isStockTransferDoc(rowData);
+  const qtyLabel = getPackingQtyLabel(docType);
 
   return (
     <RecordDetailPage
@@ -65,18 +82,18 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
       listLabel="Packing"
       recordName={
         type === "order"
-          ? (rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.targetWarehouse ?? "Stock Transfer") : String(rowData.customer ?? "Sales Order"))
+          ? (isStockTransfer ? String(rowData.targetWarehouse ?? "Stock Transfer") : isPurchaseReturn ? String(rowData.customer ?? "Purchase Return") : String(rowData.customer ?? "Sales Order"))
           : String(rowData.packingNo ?? "Packing")
       }
       recordCode={
         type === "order"
-          ? (rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.sourceDocumentNo ?? "") : String(rowData.salesOrderNo ?? ""))
+          ? (isStockTransfer || isPurchaseReturn ? String(rowData.sourceDocumentNo ?? "") : String(rowData.salesOrderNo ?? ""))
           : String(rowData.packingNo ?? "")
       }
       statusLabel={statusCfg.label}
       statusVariant={packingStatusVariant(data.status)}
       metaItems={[
-        { icon: Building, label: rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.sourceWarehouse ?? data.warehouse) : data.warehouse },
+        { icon: Building, label: isStockTransfer || isPurchaseReturn ? String(rowData.sourceWarehouse ?? data.warehouse) : data.warehouse },
         ...(type === "order"
           ? [{ icon: Calendar, label: String(rowData.orderDate ?? "") }]
           : [{ icon: User, label: String(rowData.packedBy ?? "") }]),
@@ -85,13 +102,22 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
         summary: [
           ...(type === "order"
             ? [
-                { label: rowData.sourceDocumentType === "Stock Transfer" ? "Target Warehouse" : "Customer", value: rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.targetWarehouse ?? "—") : String(rowData.customer ?? "—") },
+                { label: getPackingPartyLabel(docType), value: getPackingPartyValue(rowData) },
+                ...(isPurchaseReturn
+                  ? [
+                      { label: "PO No", value: String(rowData.poNumber ?? "—") },
+                      { label: "Supplier Code", value: String(rowData.supplierCode ?? "—") },
+                    ]
+                  : []),
                 { label: "Amount / Value", value: `₹${Number(rowData.orderAmount ?? 0).toLocaleString("en-IN")}`, highlight: true },
-                { label: "Delivery Date", value: String(rowData.deliveryDate ?? "—") },
+                { label: isPurchaseReturn ? "Return Date" : "Delivery Date", value: String(isPurchaseReturn ? rowData.orderDate : rowData.deliveryDate ?? "—") },
               ]
             : [
-                { label: rowData.sourceDocumentType === "Stock Transfer" ? "Stock Transfer No." : "Sales Order", value: String(rowData.salesOrderNo ?? "—") },
-                { label: rowData.sourceDocumentType === "Stock Transfer" ? "Target Warehouse" : "Customer", value: rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.targetWarehouse ?? "—") : String(rowData.customer ?? "—") },
+                { label: getPackingDocumentNoLabel(docType), value: String(getPackingDocumentNo(rowData)) },
+                { label: getPackingPartyLabel(docType), value: getPackingPartyValue(rowData) },
+                ...(isPurchaseReturn
+                  ? [{ label: "PO No", value: String(rowData.poNumber ?? "—") }]
+                  : []),
                 { label: "Packing Date", value: String(rowData.packingDate ?? "—"), highlight: true },
               ]),
         ],
@@ -113,64 +139,89 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
         {/* Sales Order / Stock Transfer View (Ready For Packing) */}
         {type === "order" && (
           <div className="space-y-6">
-            {/* Header Information */}
             <div className="bg-white rounded-xl border border-border p-5 shadow-sm space-y-4">
               <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
                 <FileText className="w-4 h-4 text-brand-600" />
-                {rowData.sourceDocumentType === "Stock Transfer" ? "Stock Transfer Information" : "Sales Order Information"}
+                {getPackingSectionTitle(docType)}
               </h2>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 pt-1">
                 <div>
                   <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                    {rowData.sourceDocumentType === "Stock Transfer" ? "Source Document No." : "Sales Order No"}
+                    {getPackingDocumentNoLabel(docType)}
                   </p>
                   <p className="text-xs font-mono font-bold text-brand-700 mt-1">
-                    {rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.sourceDocumentNo) : String(rowData.salesOrderNo)}
+                    {getPackingDocumentNo(rowData)}
                   </p>
+                </div>
+                {isPurchaseReturn && (
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                      Reference PO No.
+                    </p>
+                    <p className="text-xs font-mono font-bold text-navy-700 mt-1">{rowData.poNumber ?? "—"}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                    {getPackingPartyLabel(docType)}
+                  </p>
+                  <p className="text-xs font-bold text-foreground mt-1">{getPackingPartyValue(rowData)}</p>
+                  {isPurchaseReturn && rowData.supplierCode && (
+                    <p className="text-[11px] text-muted-foreground font-mono mt-0.5">{rowData.supplierCode}</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                    {rowData.sourceDocumentType === "Stock Transfer" ? "Target Warehouse" : "Customer"}
-                  </p>
-                  <p className="text-xs font-bold text-foreground mt-1">
-                    {rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.targetWarehouse) : String(rowData.customer)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                    {rowData.sourceDocumentType === "Stock Transfer" ? "Source Warehouse" : "Warehouse"}
+                    {getPackingWarehouseLabel(docType)}
                   </p>
                   <p className="text-xs font-bold text-foreground mt-1 flex items-center gap-1">
                     <Building className="w-3.5 h-3.5 text-muted-foreground/60" />
-                    {rowData.sourceDocumentType === "Stock Transfer" ? String(rowData.sourceWarehouse) : data.warehouse}
+                    {getPackingWarehouseValue(rowData)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Document Date</p>
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                    {getPackingDateLabel(docType)}
+                  </p>
                   <p className="text-xs font-bold text-foreground mt-1 flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5 text-muted-foreground/60" />
                     {rowData.orderDate}
                   </p>
                 </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Delivery Date</p>
-                  <p className="text-xs font-bold text-foreground mt-1 flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-muted-foreground/60" />
-                    {rowData.deliveryDate}
-                  </p>
-                </div>
+                {!isPurchaseReturn && (
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Delivery Date</p>
+                    <p className="text-xs font-bold text-foreground mt-1 flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-muted-foreground/60" />
+                      {rowData.deliveryDate}
+                    </p>
+                  </div>
+                )}
+                {isPurchaseReturn && (
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Initiated By</p>
+                    <p className="text-xs font-bold text-foreground mt-1">{rowData.initiatedBy ?? "—"}</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Value Amount</p>
                   <p className="text-xs font-bold text-foreground mt-1">₹{Number(rowData.orderAmount).toLocaleString("en-IN")}</p>
                 </div>
               </div>
+              {isPurchaseReturn && rowData.returnRemarks && (
+                <div className="pt-2 border-t border-border/60">
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                    Return Remarks
+                  </p>
+                  <p className="text-xs text-foreground mt-1">{rowData.returnRemarks}</p>
+                </div>
+              )}
             </div>
 
-            {/* Product Grid */}
             <div className="bg-white rounded-xl border border-border p-5 shadow-sm space-y-4">
               <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
                 <Package className="w-4 h-4 text-brand-600" />
-                Product Details
+                {isPurchaseReturn ? "Return Line Items" : "Product Details"}
               </h2>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
@@ -178,18 +229,34 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
                     <tr className="border-b border-border bg-slate-50/50">
                       <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Product</th>
                       <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">SKU</th>
+                      {isPurchaseReturn && (
+                        <>
+                          <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Batch</th>
+                          <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">GRN No</th>
+                          <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Mfg Date</th>
+                          <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Expiry Date</th>
+                        </>
+                      )}
                       <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">
-                        {rowData.sourceDocumentType === "Stock Transfer" ? "Transfer Qty" : "Ordered Qty"}
+                        {qtyLabel}
                       </th>
                       <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Packed Qty</th>
                       <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Pending Qty</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rowData.products && (rowData.products as any).map((p: any) => (
+                    {rowData.products?.map((p: SalesOrderProduct) => (
                       <tr key={p.sku} className="border-b border-border/60 hover:bg-slate-50/40">
                         <td className="py-3 px-3 text-xs font-bold text-foreground">{p.product}</td>
                         <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{p.sku}</td>
+                        {isPurchaseReturn && (
+                          <>
+                            <td className="py-3 px-3 text-xs font-mono text-foreground">{p.batchNumber ?? "—"}</td>
+                            <td className="py-3 px-3 text-xs font-mono text-navy-700">{p.grnNo ?? "—"}</td>
+                            <td className="py-3 px-3 text-xs text-muted-foreground">{p.mfgDate ?? "—"}</td>
+                            <td className="py-3 px-3 text-xs text-muted-foreground">{p.expDate ?? "—"}</td>
+                          </>
+                        )}
                         <td className="py-3 px-3 text-xs font-semibold text-center">{p.orderedQty}</td>
                         <td className="py-3 px-3 text-xs font-bold text-center text-emerald-600">{p.packedQty}</td>
                         <td className="py-3 px-3 text-xs font-bold text-center text-amber-600">{p.pendingQty}</td>

@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, FileText, Receipt } from "lucide-react";
+import { ArrowLeft, Receipt } from "lucide-react";
+import {
+  AccountsTableActionCell,
+  AccountsViewAction,
+  accountsActionColClass,
+} from "@/components/accounts/AccountsTableActions";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
@@ -82,13 +87,13 @@ export default function CustomerOutstandingDetailClient() {
       actions={
         <div className="flex items-center gap-2">
           <Link href="/accounts/receivables/ageing">
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
-              <ArrowLeft className="w-3.5 h-3.5" /> Back
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1">
+              <ArrowLeft className="w-4 h-4" /> Back
             </Button>
           </Link>
           <Link href={`/accounts/receivables/receipt-allocation?customer=${customer.id}`}>
-            <Button size="sm" className="h-8 text-xs gap-1 bg-brand-600 hover:bg-brand-700 text-white">
-              <Receipt className="w-3.5 h-3.5" /> Go to Receipt Allocation
+            <Button size="sm" className="h-9 text-[13px] font-medium gap-1 bg-brand-600 hover:bg-brand-700 text-white">
+              <Receipt className="w-4 h-4" /> Go to Receipt Allocation
             </Button>
           </Link>
         </div>
@@ -189,17 +194,14 @@ export default function CustomerOutstandingDetailClient() {
                       <span className="tabular-nums font-semibold">{formatMoney(inv.outstanding)}</span>
                     </AccountsTableCell>
                     <AccountsTableCell>{formatReportDate(inv.dueDate)}</AccountsTableCell>
-                    <AccountsTableCell align="right">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100">
-                        <Link
+                    <AccountsTableCell align="right" className={accountsActionColClass("single")}>
+                      <AccountsTableActionCell variant="single">
+                        <AccountsViewAction
+                          title="View invoice"
                           href={`/accounts/transactions/invoices/${inv.invoiceId}`}
                           onClick={(e) => e.stopPropagation()}
-                        >
-                          <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px] gap-1">
-                            <FileText className="w-3.5 h-3.5" /> View
-                          </Button>
-                        </Link>
-                      </div>
+                        />
+                      </AccountsTableActionCell>
                     </AccountsTableCell>
                   </AccountsTableRow>
                 ))

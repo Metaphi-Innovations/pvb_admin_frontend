@@ -44,17 +44,15 @@ import {
 
   ReportDateRangeFilter,
 
-  ReportFinancialYearFilter,
+  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
+
+  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 
 } from "@/components/accounts/ReportFilters";
 
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 
-import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
-
 import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
-
-import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 
 import {
 
@@ -85,10 +83,6 @@ import { exportPandLToExcel, exportPandLToPdf } from "./pl-export";
 import { useDebouncedValue } from "./pl-hooks";
 
 
-
-const filterLabelClass = "text-[10px] font-medium uppercase text-muted-foreground leading-none";
-
-const filterControlClass = "h-8 text-xs";
 
 const PLACEHOLDER_DATE = "2025-04-01";
 
@@ -244,10 +238,6 @@ export default function ProfitLossPageClient() {
 
   const [search, setSearch] = useState("");
 
-  const [financialYearId, setFinancialYearId] = useState("all");
-
-  const [fyReady, setFyReady] = useState(false);
-
   const [exporting, setExporting] = useState(false);
 
 
@@ -265,14 +255,6 @@ export default function ProfitLossPageClient() {
     setDateTo(to);
 
     setDatesReady(true);
-
-
-
-    const activeFyId = getActiveFinancialYearId();
-
-    if (activeFyId) setFinancialYearId(String(activeFyId));
-
-    setFyReady(true);
 
   }, []);
 
@@ -318,7 +300,7 @@ export default function ProfitLossPageClient() {
 
     return buildPandLStatement();
 
-  }, [mounted, dateFrom, dateTo, financialYearId]);
+  }, [mounted, dateFrom, dateTo]);
 
 
 
@@ -332,25 +314,9 @@ export default function ProfitLossPageClient() {
 
 
 
-  const activeFyId = mounted ? getActiveFinancialYearId() : null;
-
-
-
-  const fyLabel = useMemo(() => {
-
-    if (!mounted || financialYearId === "all") return "All Financial Years";
-
-    return loadFinancialYears().find((fy) => String(fy.id) === financialYearId)?.name ?? "";
-
-  }, [mounted, financialYearId]);
-
-
-
   const hasFilters =
 
     Boolean(search.trim()) ||
-
-    (fyReady && financialYearId !== (activeFyId ? String(activeFyId) : "all")) ||
 
     (datesReady && preset !== "this_month");
 
@@ -360,8 +326,6 @@ export default function ProfitLossPageClient() {
 
     setSearch("");
 
-    setFinancialYearId(activeFyId ? String(activeFyId) : "all");
-
     setPreset("this_month");
 
     const { from, to } = resolveDateRangePreset("this_month");
@@ -370,25 +334,11 @@ export default function ProfitLossPageClient() {
 
     setDateTo(to);
 
-  }, [activeFyId]);
+  }, []);
 
 
 
-  useEffect(() => {
-
-    if (!mounted || financialYearId === "all") return;
-
-    const fy = loadFinancialYears().find((f) => String(f.id) === financialYearId);
-
-    if (fy) {
-
-      setDateFrom(fy.startDate);
-
-      setDateTo(fy.endDate);
-
-    }
-
-  }, [mounted, financialYearId]);
+  
 
 
 
@@ -399,12 +349,11 @@ export default function ProfitLossPageClient() {
       dateFrom,
 
       dateTo,
-
-      financialYear: fyLabel,
+      financialYear: "",
 
     }),
 
-    [dateFrom, dateTo, fyLabel],
+    [dateFrom, dateTo],
 
   );
 
@@ -485,14 +434,6 @@ export default function ProfitLossPageClient() {
       filters={
 
         <ReportFilterRow className="items-end gap-2">
-
-          <ReportFinancialYearFilter
-
-            value={financialYearId}
-
-            onChange={setFinancialYearId}
-
-          />
 
           <ReportDateRangeFilter
 

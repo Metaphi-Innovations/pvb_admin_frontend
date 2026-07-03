@@ -11,6 +11,7 @@ import {
 import { AccountsTableListing } from "@/components/accounts/AccountsTableListing";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { EmptySearch } from "@/components/ui/EmptyState";
+import { AccountsViewAction, accountsActionColClass } from "@/components/accounts/AccountsTableActions";
 import { Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -351,19 +352,15 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
           key: "action",
           label: "",
           align: "center",
-          className: "w-10",
+          className: accountsActionColClass("single"),
           render: (row) => (
-            <button
-              type="button"
+            <AccountsViewAction
+              title={`View ${row.docNo}`}
               onClick={(e) => {
                 e.stopPropagation();
                 openInvoiceDetail(row);
               }}
-              className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-0 group-hover:opacity-100"
-              aria-label={`View ${row.docNo}`}
-            >
-              <Eye className="w-4 h-4 text-muted-foreground" />
-            </button>
+            />
           ),
         },
       ],
@@ -418,10 +415,10 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 text-xs gap-1 text-brand-700 hover:text-brand-800"
+              className="h-9 text-[13px] font-medium gap-1 text-brand-700 hover:text-brand-800"
               onClick={() => handlePartyDrill(row.groupKey)}
             >
-              <Eye className="w-3.5 h-3.5" />
+              <Eye className="w-4 h-4" />
               {actionLabel}
             </Button>
           ),
@@ -484,10 +481,10 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 text-xs gap-1 text-brand-700 hover:text-brand-800"
+              className="h-9 text-[13px] font-medium gap-1 text-brand-700 hover:text-brand-800"
               onClick={() => drillToInvoiceView({ monthKey: row.groupKey })}
             >
-              <Eye className="w-3.5 h-3.5" />
+              <Eye className="w-4 h-4" />
               {actionLabel}
             </Button>
           ),
@@ -551,10 +548,10 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 text-xs gap-1 text-brand-700 hover:text-brand-800"
+            className="h-9 text-[13px] font-medium gap-1 text-brand-700 hover:text-brand-800"
             onClick={() => handleCommodityDrill(row.groupKey)}
           >
-            <Eye className="w-3.5 h-3.5" />
+            <Eye className="w-4 h-4" />
             {actionLabel}
           </Button>
         ),

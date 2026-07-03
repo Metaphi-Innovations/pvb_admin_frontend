@@ -1,3 +1,4 @@
+import { demoAddDays, demoDateAt, demoFinancialYearStart, demoToday, demoTimestamp } from "@/lib/accounts/demo-date-utils";
 /**
  * Cash Book demo seed — creates voucher-based cash transactions only.
  * Isolated to Cash Book; does not modify bank book or fund transfer modules.
@@ -10,10 +11,11 @@ import {
   saveVouchers,
 } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { ensureBankingDemoOnPageLoad } from "@/lib/accounts/banking-demo-seed";
-import { loadBankAccountMasters } from "@/lib/accounts/bank-accounts-data";
+import { getDemoBankLedgers } from "@/lib/accounts/bank-ledger-resolver";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 
-const VERSION_KEY = "ds_cash_book_demo_seed_v2";
+const CASH_BOOK_DEMO_VERSION = "relative-dates-v3";
+const VERSION_KEY = "ds_cash_book_demo_seed_version";
 
 function findCashLedger(namePart: string): ChartOfAccount | null {
   return (
@@ -21,14 +23,6 @@ function findCashLedger(namePart: string): ChartOfAccount | null {
       l.accountName.toLowerCase().includes(namePart.toLowerCase()),
     ) ?? null
   );
-}
-
-function findBankLedger(accountNumberSuffix: string): ChartOfAccount | null {
-  const master = loadBankAccountMasters().find((m) =>
-    m.accountNumber.replace(/\D/g, "").endsWith(accountNumberSuffix.replace(/\D/g, "")),
-  );
-  if (!master) return null;
-  return loadChartOfAccounts().find((r) => r.id === master.coaLedgerId) ?? null;
 }
 
 function findExpenseLedger(namePart: string): ChartOfAccount | null {
@@ -57,8 +51,7 @@ function seedAdditionalContraAndJournal(): void {
   const pettyCash = findCashLedger("Petty");
   const branchCash = findCashLedger("Branch Counter");
   const fieldCash = findCashLedger("Field Staff");
-  const hdfc = findBankLedger("7890");
-  const icici = findBankLedger("5678");
+  const { hdfc, icici } = getDemoBankLedgers();
   const officeExpense = findExpenseLedger("Office") ?? findExpenseLedger("Stationery");
   const transportExpense = findExpenseLedger("Transport");
 
@@ -75,7 +68,7 @@ function seedAdditionalContraAndJournal(): void {
       cash: pettyCash,
       bank: hdfc,
       amount: 35000,
-      date: "2026-04-25",
+      date: demoDateAt(0),
       no: "CV-0001",
       narration: "Cash deposit to HDFC — weekly collection",
       direction: "deposit",
@@ -84,7 +77,7 @@ function seedAdditionalContraAndJournal(): void {
       cash: branchCash,
       bank: icici,
       amount: 22000,
-      date: "2026-05-14",
+      date: demoDateAt(1),
       no: "CV-0002",
       narration: "Branch counter cash deposited to ICICI",
       direction: "deposit",
@@ -93,7 +86,7 @@ function seedAdditionalContraAndJournal(): void {
       cash: pettyCash,
       bank: hdfc,
       amount: 15000,
-      date: "2026-05-25",
+      date: demoDateAt(2),
       no: "CV-0003",
       narration: "Cash withdrawal from HDFC for petty cash replenishment",
       direction: "withdraw",
@@ -102,7 +95,7 @@ function seedAdditionalContraAndJournal(): void {
       cash: fieldCash,
       bank: icici,
       amount: 18000,
-      date: "2026-06-08",
+      date: demoDateAt(3),
       no: "CV-0004",
       narration: "Field staff cash deposited to ICICI collection account",
       direction: "deposit",
@@ -144,7 +137,7 @@ function seedAdditionalContraAndJournal(): void {
       cash: pettyCash,
       other: officeExpense,
       amount: 8500,
-      date: "2026-04-18",
+      date: demoDateAt(4),
       no: "JV-CSH-0001",
       narration: "Petty cash expenses booked via journal",
       cashDebit: false,
@@ -153,7 +146,7 @@ function seedAdditionalContraAndJournal(): void {
       cash: branchCash,
       other: transportExpense,
       amount: 6200,
-      date: "2026-05-20",
+      date: demoDateAt(5),
       no: "JV-CSH-0002",
       narration: "Branch delivery charges — cash journal adjustment",
       cashDebit: false,
@@ -162,7 +155,7 @@ function seedAdditionalContraAndJournal(): void {
       cash: fieldCash,
       other: officeExpense,
       amount: 4800,
-      date: "2026-06-15",
+      date: demoDateAt(6),
       no: "JV-CSH-0003",
       narration: "Field cash shortfall adjustment journal",
       cashDebit: false,
@@ -196,8 +189,8 @@ export function ensureCashBookDemoOnPageLoad(): void {
 
   ensureBankingDemoOnPageLoad();
 
-  if (localStorage.getItem(VERSION_KEY) === VERSION_KEY) return;
+  if (localStorage.getItem(VERSION_KEY) === CASH_BOOK_DEMO_VERSION) return;
 
   seedAdditionalContraAndJournal();
-  localStorage.setItem(VERSION_KEY, VERSION_KEY);
+  localStorage.setItem(VERSION_KEY, CASH_BOOK_DEMO_VERSION);
 }

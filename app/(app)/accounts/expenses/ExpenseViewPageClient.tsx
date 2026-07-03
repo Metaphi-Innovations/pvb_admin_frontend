@@ -98,10 +98,10 @@ export default function ExpenseViewPageClient({ paymentId }: { paymentId: number
         actions.includes("mark_paid") ? (
           <Button
             size="sm"
-            className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1"
+            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
             onClick={() => setPaymentOpen(true)}
           >
-            <Banknote className="w-3.5 h-3.5" /> Mark as Paid
+            <Banknote className="w-4 h-4" /> Mark as Paid
           </Button>
         ) : undefined
       }
@@ -167,10 +167,10 @@ export default function ExpenseViewPageClient({ paymentId }: { paymentId: number
                   <span className="font-medium">{att.documentName}</span>
                   <span className="text-muted-foreground flex-1 truncate">{att.fileName}</span>
                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => attachmentAction(att, "view")}>
-                    <Eye className="w-3.5 h-3.5" />
+                    <Eye className="w-4 h-4" />
                   </Button>
                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => attachmentAction(att, "download")}>
-                    <Download className="w-3.5 h-3.5" />
+                    <Download className="w-4 h-4" />
                   </Button>
                 </div>
               ))}

@@ -5,8 +5,8 @@ import { cn } from "@/lib/utils";
 import { MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 
 /** Standard accounts table row heights (px) — keep in sync with globals.css */
-export const ACCOUNTS_TABLE_HEADER_HEIGHT = 28;
-export const ACCOUNTS_TABLE_ROW_HEIGHT = 30;
+export const ACCOUNTS_TABLE_HEADER_HEIGHT = 36;
+export const ACCOUNTS_TABLE_ROW_HEIGHT = 42;
 
 /** Scroll container for split-layout accounts pages */
 export function AccountsTableScroll({
@@ -155,8 +155,9 @@ export function AccountsTableCell({
         align === "center" && "text-center",
         align === "left" && "text-left",
         money && MONEY_AMOUNT_CLASS,
+        money && "whitespace-nowrap",
         mono && "font-mono",
-        wrap && "!h-auto !min-h-[30px] py-1 align-top",
+        wrap && "!h-auto !min-h-0 py-4 align-top",
         className,
       )}
     >

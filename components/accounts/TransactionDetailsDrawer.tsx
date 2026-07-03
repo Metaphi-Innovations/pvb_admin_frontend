@@ -214,7 +214,7 @@ export function TransactionDetailsDrawer({
                     key={att.id}
                     className="flex items-center gap-2.5 p-2.5 rounded-lg border border-border bg-muted/20"
                   >
-                    <Paperclip className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                    <Paperclip className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium truncate">{att.name}</p>
                       <p className="text-[10px] text-muted-foreground truncate">{att.fileName}</p>
@@ -236,13 +236,13 @@ export function TransactionDetailsDrawer({
         </SheetBody>
 
         <SheetFooter className="flex-row gap-2 justify-end">
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handlePrint}>
-            <Printer className="w-3.5 h-3.5" />
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1.5" onClick={handlePrint}>
+            <Printer className="w-4 h-4" />
             Print
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" asChild>
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1.5" asChild>
             <Link href={detail.sourceHref} onClick={onClose}>
-              <ExternalLink className="w-3.5 h-3.5" />
+              <ExternalLink className="w-4 h-4" />
               Open Original Voucher
             </Link>
           </Button>

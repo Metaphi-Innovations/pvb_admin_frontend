@@ -16,9 +16,16 @@ import {
   type InvoiceProductOption,
 } from "../invoices-data";
 import { formatINR } from "../invoice-utils";
+import {
+  INVOICE_FORM_INPUT_CLASS,
+  INVOICE_FORM_TABLE_TD_CLASS,
+  INVOICE_FORM_TABLE_TH_CLASS,
+} from "@/app/(app)/accounts/components/InvoiceFormLayout";
 
-const NUM_INPUT_CLASS =
-  "h-8 text-sm tabular-nums text-right min-w-[5.5rem] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
+const NUM_INPUT_CLASS = cn(
+  INVOICE_FORM_INPUT_CLASS,
+  "tabular-nums text-right min-w-[5.5rem] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+);
 
 function ProductSelect({
   products,
@@ -47,20 +54,20 @@ function ProductSelect({
           type="button"
           disabled={disabled}
           className={cn(
-            "w-full h-8 px-2.5 text-sm text-left border border-border rounded-md bg-background flex items-center justify-between",
+            "w-full h-9 px-2.5 text-sm text-left border border-slate-200 rounded-md bg-white flex items-center justify-between",
             disabled && "opacity-70 cursor-default bg-muted/20",
           )}
         >
           <span className={cn("truncate", !selected && "text-muted-foreground")}>
             {selected ? `${selected.code} — ${selected.name}` : "Type or click to select an item…"}
           </span>
-          <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          <ChevronsUpDown className="w-4 h-4 text-muted-foreground shrink-0" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
         <div className="p-2 border-b">
           <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search products…"
               value={search}
@@ -86,7 +93,7 @@ function ProductSelect({
             >
               <span className="font-mono text-brand-700 shrink-0">{p.code}</span>
               <span className="flex-1 truncate">{p.name}</span>
-              {value === p.id && <Check className="w-3.5 h-3.5 text-brand-600" />}
+              {value === p.id && <Check className="w-4 h-4 text-brand-600" />}
             </button>
           ))}
         </div>
@@ -145,21 +152,22 @@ export function InvoiceLinesEditor({
           </span>
         )}
         {manualEntry && (
-          <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={addRow}>
-            <Plus className="w-3.5 h-3.5" /> Add New Row
+          <Button type="button" variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1.5" onClick={addRow}>
+            <Plus className="w-4 h-4" /> Add New Row
           </Button>
         )}
       </div>
 
-      <div className="overflow-x-auto border border-border/60 rounded-lg bg-white">
-        <table className="w-full text-sm min-w-[960px]">
-          <thead className="border-b border-border/60">
+      <div className="overflow-x-auto border border-slate-200 rounded-lg bg-white">
+        <table className="w-full min-w-[960px]">
+          <thead className="border-b border-slate-200 bg-slate-50">
             <tr>
               {headers.map((h) => (
                 <th
                   key={h || "actions"}
                   className={cn(
-                    "px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
+                    INVOICE_FORM_TABLE_TH_CLASS,
+                    "px-3",
                     h && ["Quantity", "Rate", "Discount %", "Amount", "GST %", "CGST", "SGST", "IGST"].includes(h) && "text-right",
                   )}
                 >
@@ -171,7 +179,7 @@ export function InvoiceLinesEditor({
           <tbody>
             {lines.length === 0 ? (
               <tr>
-                <td colSpan={headers.length} className="py-10 text-center text-sm text-muted-foreground">
+                <td colSpan={headers.length} className="py-10 text-center text-sm text-slate-500">
                   Add at least one product or service line.
                 </td>
               </tr>
@@ -179,8 +187,8 @@ export function InvoiceLinesEditor({
               lines.map((line) => {
                 const split = calcGstLineSplit(line, interstate);
                 return (
-                  <tr key={line.id} className="border-b border-border/40 last:border-b-0">
-                    <td className="p-2 min-w-[260px]">
+                  <tr key={line.id} className="border-b border-slate-100 last:border-b-0">
+                    <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "min-w-[260px]")}>
                       <ProductSelect
                         products={products}
                         value={line.productId}

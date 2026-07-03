@@ -72,32 +72,31 @@ export function VendorMasterPanel({
       </p>
 
       {allowSelect ? (
-        <div className="max-w-md">
-          <SearchableSelect
-            label={`Select ${title}`}
-            options={options}
-            value={vendorId}
-            onChange={handleSelect}
-            placeholder={`Search ${title.toLowerCase()}…`}
-            disabled={disabled}
-            required
-          />
-        </div>
+        <SearchableSelect
+          label={`${title} Name`}
+          options={options}
+          value={vendorId}
+          onChange={handleSelect}
+          placeholder={`Search ${title.toLowerCase()}…`}
+          disabled={disabled}
+          required
+        />
       ) : null}
 
       {fields && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            <MasterReadOnlyField label="Supplier Name" value={fields.vendorName} className="sm:col-span-2" />
-            <MasterReadOnlyField label="Supplier Code" value={fields.vendorCode} mono />
-            <MasterReadOnlyField label="Trade Payables Ledger" value={fields.payableLedger} />
+            <MasterReadOnlyField label={`${title} Code`} value={fields.vendorCode} mono />
+            <MasterReadOnlyField label="Vendor Ledger" value={fields.payableLedger} />
             <MasterReadOnlyField label="GSTIN" value={fields.vendorGst} mono />
             <MasterReadOnlyField label="PAN" value={fields.pan} mono />
+            <MasterReadOnlyField label="State" value={fields.billingAddress?.split(",").slice(-2, -1)[0]?.trim() ?? "—"} />
             <MasterReadOnlyField label="Contact Person" value={fields.contactPerson} />
             <MasterReadOnlyField label="Mobile" value={fields.vendorMobile} />
             <MasterReadOnlyField label="Email" value={fields.vendorEmail} />
-            <MasterReadOnlyField label="Payment Terms" value={fields.paymentTerms} />
             <MasterReadOnlyField label="Credit Days" value={String(fields.creditDays)} />
+            <MasterReadOnlyField label="Payment Terms" value={fields.paymentTerms} />
+            <MasterReadOnlyField label="GST Number" value={fields.vendorGst} mono className="sm:col-span-2 lg:col-span-3" />
           </div>
 
           {(fields.bankName || fields.accountNumber) && (

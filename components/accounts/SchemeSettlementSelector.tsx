@@ -123,7 +123,7 @@ export function SchemeSettlementSelector({
                   Settlement Amount
                 </Label>
                 <AccountsMoneyInput
-                  className="mt-0.5 h-8 text-xs tabular-nums"
+                  className="mt-0.5 h-9 text-[13px] font-medium tabular-nums"
                   value={settlementAmount || ""}
                   onChange={onSettlementAmountChange}
                   disabled={disabled}

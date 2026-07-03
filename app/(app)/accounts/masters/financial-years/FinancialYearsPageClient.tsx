@@ -67,14 +67,14 @@ export default function FinancialYearsPageClient() {
         title="Financial Years"
         description="Define accounting periods with start, end and lock dates. Only one financial year can be active."
         actions={
-          <Button size="sm" className="h-8 text-xs bg-brand-600 text-white gap-1" onClick={() => setOpen(true)}>
-            <Plus className="w-3.5 h-3.5" /> Add Financial Year
+          <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 text-white gap-1" onClick={() => setOpen(true)}>
+            <Plus className="w-4 h-4" /> Add Financial Year
           </Button>
         }
         layout="split"
       >
         <div className="flex-1 overflow-auto min-h-0">
-          <table className="accounts-table w-full text-table">
+          <table className="accounts-table w-full">
             <thead className="border-b border-border/60">
               <tr>
                 <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">FY Name</th>
@@ -93,14 +93,14 @@ export default function FinancialYearsPageClient() {
                     <p className="text-xs text-muted-foreground mt-1">
                       Add a financial year to begin voucher entry and reporting.
                     </p>
-                    <Button size="sm" className="h-8 text-xs mt-3 bg-brand-600 text-white gap-1" onClick={() => setOpen(true)}>
-                      <Plus className="w-3.5 h-3.5" /> Add Financial Year
+                    <Button size="sm" className="h-9 text-[13px] font-medium mt-3 bg-brand-600 text-white gap-1" onClick={() => setOpen(true)}>
+                      <Plus className="w-4 h-4" /> Add Financial Year
                     </Button>
                   </td>
                 </tr>
               ) : (
                 records.map((fy) => (
-                  <tr key={fy.id} className="border-b border-border/40 hover:bg-muted/20">
+                  <tr key={fy.id} className="accounts-table-row group">
                     <td className="px-4 py-3 text-sm font-medium">{fy.name}</td>
                     <td className="px-4 py-3 text-xs">{fy.startDate}</td>
                     <td className="px-4 py-3 text-xs">{fy.endDate}</td>
@@ -137,23 +137,23 @@ export default function FinancialYearsPageClient() {
             )}
             <div className="space-y-1">
               <Label className="text-[11px]">FY Name</Label>
-              <Input className="h-8 text-xs" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="FY 2026-27" />
+              <Input className="h-9 text-[13px] font-medium" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="FY 2026-27" />
             </div>
             <div className="space-y-1">
               <Label className="text-[11px]">Start Date</Label>
-              <Input className="h-8 text-xs" type="date" value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} />
+              <Input className="h-9 text-[13px] font-medium" type="date" value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} />
             </div>
             <div className="space-y-1">
               <Label className="text-[11px]">End Date</Label>
-              <Input className="h-8 text-xs" type="date" value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} />
+              <Input className="h-9 text-[13px] font-medium" type="date" value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} />
             </div>
             <div className="space-y-1">
               <Label className="text-[11px]">Lock Date</Label>
-              <Input className="h-8 text-xs" type="date" value={form.lockDate} onChange={(e) => setForm((f) => ({ ...f, lockDate: e.target.value }))} />
+              <Input className="h-9 text-[13px] font-medium" type="date" value={form.lockDate} onChange={(e) => setForm((f) => ({ ...f, lockDate: e.target.value }))} />
             </div>
           </SheetBody>
           <SheetFooter>
-            <Button size="sm" className="h-8 text-xs bg-brand-600 text-white" onClick={saveNew}>Save</Button>
+            <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 text-white" onClick={saveNew}>Save</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

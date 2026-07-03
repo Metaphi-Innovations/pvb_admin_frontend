@@ -136,14 +136,14 @@ export function ReconciliationAdjustmentsPanel({
                   onClick={() => removeRow(row.id)}
                   aria-label="Remove adjustment"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
               <Select
                 value={row.adjustmentTypeId}
                 onValueChange={(v) => updateRow(row.id, { adjustmentTypeId: v })}
               >
-                <SelectTrigger className="h-8 text-xs">
+                <SelectTrigger className="h-9 text-[13px] font-medium">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -170,7 +170,7 @@ export function ReconciliationAdjustmentsPanel({
               <div className="space-y-1">
                 <Label className="text-[10px]">Amount</Label>
                 <AccountsMoneyInput
-                  className="h-8 text-xs tabular-nums"
+                  className="h-9 text-[13px] font-medium tabular-nums"
                   value={row.amount || ""}
                   onChange={(v) => updateRow(row.id, { amount: v })}
                 />

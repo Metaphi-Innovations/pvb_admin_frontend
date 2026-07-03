@@ -35,28 +35,79 @@ export interface VoucherTypeMaster {
 const FY_KEY = "ds_accounts_fy";
 const VT_KEY = "ds_accounts_voucher_types";
 
-const FY_SEED: FinancialYear[] = [
-  {
-    id: 1,
-    name: "FY 2025-26",
-    startDate: "2025-04-01",
-    endDate: "2026-03-31",
-    lockDate: "2026-03-15",
-    status: "active",
-    createdBy: "System",
-    updatedBy: "Admin",
-  },
-  {
-    id: 2,
-    name: "FY 2024-25",
-    startDate: "2024-04-01",
-    endDate: "2025-03-31",
-    lockDate: "2025-03-31",
-    status: "inactive",
-    createdBy: "System",
-    updatedBy: "Admin",
-  },
-];
+function formatFyLabel(fyStartYear: number): string {
+  const endShort = String((fyStartYear + 1) % 100).padStart(2, "0");
+  return `FY ${fyStartYear}-${endShort}`;
+}
+
+function buildFinancialYearSeed(ref = new Date()): FinancialYear[] {
+  const month = ref.getMonth();
+  const year = ref.getFullYear();
+  const currentFyStartYear = month >= 3 ? year : year - 1;
+  const prevFyStartYear = currentFyStartYear - 1;
+
+  return [
+    {
+      id: 1,
+      name: formatFyLabel(currentFyStartYear),
+      startDate: `${currentFyStartYear}-04-01`,
+      endDate: `${currentFyStartYear + 1}-03-31`,
+      lockDate: `${currentFyStartYear + 1}-03-15`,
+      status: "active",
+      createdBy: "System",
+      updatedBy: "Admin",
+    },
+    {
+      id: 2,
+      name: formatFyLabel(prevFyStartYear),
+      startDate: `${prevFyStartYear}-04-01`,
+      endDate: `${currentFyStartYear}-03-31`,
+      lockDate: `${currentFyStartYear}-03-31`,
+      status: "inactive",
+      createdBy: "System",
+      updatedBy: "Admin",
+    },
+  ];
+}
+
+const FY_SEED: FinancialYear[] = buildFinancialYearSeed();
+
+/** Ensure the active FY contains today's date (fixes stale localStorage FY records). */
+export function ensureFinancialYearsCurrent(ref = new Date()): void {
+  if (typeof window === "undefined") return;
+
+  const today = ref.toISOString().slice(0, 10);
+  const currentSeed = buildFinancialYearSeed(ref);
+  const currentFyTemplate = currentSeed[0];
+  let stored = getOrSeed(FY_KEY, currentSeed) as FinancialYear[];
+
+  const activeContainsToday = stored.some(
+    (fy) => fy.status === "active" && today >= fy.startDate && today <= fy.endDate,
+  );
+
+  if (activeContainsToday) return;
+
+  const existingCurrent = stored.find((fy) => fy.startDate === currentFyTemplate.startDate);
+  if (existingCurrent) {
+    stored = stored.map((fy) => ({
+      ...fy,
+      status: (fy.id === existingCurrent.id ? "active" : "inactive") as FinancialYear["status"],
+      updatedBy: ACCOUNTS_CURRENT_USER,
+    }));
+  } else {
+    const nextId = stored.length > 0 ? Math.max(...stored.map((fy) => fy.id)) + 1 : 1;
+    stored = [
+      { ...currentFyTemplate, id: nextId, status: "active" as const },
+      ...stored.map((fy) => ({
+        ...fy,
+        status: "inactive" as const,
+        updatedBy: ACCOUNTS_CURRENT_USER,
+      })),
+    ];
+  }
+
+  save(FY_KEY, stored);
+}
 
 const VT_SEED: VoucherTypeMaster[] = [
   { id: 1, code: "journal", name: "Journal", prefix: "JRN", numberingType: "auto", startingNumber: 1, status: "active", isSystem: true },
@@ -89,7 +140,8 @@ function save<T>(key: string, data: T) {
 }
 
 export function loadFinancialYears(): FinancialYear[] {
-  return getOrSeed(FY_KEY, FY_SEED) as FinancialYear[];
+  ensureFinancialYearsCurrent();
+  return getOrSeed(FY_KEY, buildFinancialYearSeed()) as FinancialYear[];
 }
 
 export function saveFinancialYears(list: FinancialYear[]) {

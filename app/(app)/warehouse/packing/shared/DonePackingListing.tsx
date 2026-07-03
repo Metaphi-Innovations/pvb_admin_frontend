@@ -20,6 +20,7 @@ import {
   formatWarehouseOrderAmount,
   type OrderTypeFilterTab,
 } from "@/app/(app)/warehouse/lib/order-document-type";
+import { getPackingListOrderNoHeader } from "../lib/packing-document-labels";
 
 type PackingSourceTab = Exclude<OrderTypeFilterTab, "all">;
 
@@ -124,12 +125,16 @@ export function DonePackingListing({ packingsForWarehouse, sourceFilter }: DoneP
     return processed.slice(start, start + pageSize);
   }, [processed, page, pageSize]);
 
+  const isPurchaseReturn = sourceFilter === "purchase_return";
+
   const partyHeader =
     sourceFilter === "sample"
       ? "Issued To Employee"
       : sourceFilter === "stock_transfer"
         ? "Target Warehouse"
-        : "Customer";
+        : sourceFilter === "purchase_return"
+          ? "Supplier"
+          : "Customer";
 
   const columns = useMemo(() => {
     const cols: ColumnConfig<PackingRecord>[] = [
@@ -141,7 +146,7 @@ export function DonePackingListing({ packingsForWarehouse, sourceFilter }: DoneP
       },
       {
         key: "salesOrderNo",
-        header: "Order No",
+        header: getPackingListOrderNoHeader(sourceFilter),
         sortable: true,
         filterable: true,
         filterType: "text",
@@ -155,6 +160,23 @@ export function DonePackingListing({ packingsForWarehouse, sourceFilter }: DoneP
           </Link>
         ),
       },
+    ];
+
+    if (isPurchaseReturn) {
+      cols.push({
+        key: "poNumber",
+        header: "PO No",
+        sortable: true,
+        filterable: true,
+        filterType: "text",
+        width: "130px",
+        render: (_: unknown, row: PackingRecord) => (
+          <span className="font-mono text-xs font-semibold text-navy-700">{row.poNumber ?? "—"}</span>
+        ),
+      });
+    }
+
+    cols.push(
       {
         key: "customer",
         header: partyHeader,
@@ -169,7 +191,14 @@ export function DonePackingListing({ packingsForWarehouse, sourceFilter }: DoneP
             type === "stock_transfer"
               ? row.targetWarehouse || row.customer
               : row.customer;
-          return <span className="text-xs text-foreground font-semibold">{label}</span>;
+          return (
+            <div className="min-w-0">
+              <span className="text-xs text-foreground font-semibold block truncate">{label}</span>
+              {isPurchaseReturn && row.supplierCode && (
+                <span className="text-[11px] text-muted-foreground font-mono">{row.supplierCode}</span>
+              )}
+            </div>
+          );
         },
       },
       {
@@ -217,6 +246,13 @@ export function DonePackingListing({ packingsForWarehouse, sourceFilter }: DoneP
               </span>
             );
           }
+          if (type === "purchase_return" && row.orderAmount != null) {
+            return (
+              <span className="font-mono text-xs tabular-nums">
+                {formatWarehouseOrderAmount(type, row.orderAmount)}
+              </span>
+            );
+          }
           return <span className="text-xs text-muted-foreground">—</span>;
         },
       },
@@ -261,9 +297,9 @@ export function DonePackingListing({ packingsForWarehouse, sourceFilter }: DoneP
           );
         },
       },
-    ];
+    );
     return cols;
-  }, [partyHeader]);
+  }, [partyHeader, isPurchaseReturn, sourceFilter]);
 
   const actions: ActionItemConfig<PackingRecord>[] = [
     {

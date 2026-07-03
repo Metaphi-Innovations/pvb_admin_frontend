@@ -3,6 +3,7 @@
 import React from "react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
+import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
   AccountsColumnarTable,
@@ -54,12 +55,18 @@ export function AccountingReportPage({
       breadcrumbs={accountsBreadcrumb("Reports", title)}
       title={title}
       description={description}
-      actions={<AccountsExportMenu onExcel={exportCsv} onPdf={exportCsv} />}
-      filters={filters}
+      filters={
+        <div className="flex flex-wrap items-end gap-2 w-full">
+          {filters}
+          <div className="ml-auto flex items-end gap-1.5 flex-shrink-0">
+            <AccountsExportMenu onExcel={exportCsv} onPdf={exportCsv} disabled={rows.length === 0} />
+          </div>
+        </div>
+      }
       layout="split"
       className="h-full min-h-0"
     >
-      <div className="flex flex-col flex-1 min-h-0">
+      <AccountsListingTableCard className="flex-1 min-h-0">
         <AccountsTableScroll>
           <AccountsColumnarTable
             columns={columns.map((c) => ({
@@ -73,7 +80,7 @@ export function AccountingReportPage({
             footer={footer}
           />
         </AccountsTableScroll>
-      </div>
+      </AccountsListingTableCard>
     </AccountsPageShell>
   );
 }

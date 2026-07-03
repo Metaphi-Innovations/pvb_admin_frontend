@@ -1,19 +1,76 @@
 "use client";
 
 import React from "react";
-import { Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { AccountsTableScroll } from "@/components/accounts/AccountsTable";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
+import { ReportSearchFilter } from "@/components/accounts/ReportFilters";
+import {
+  AccountsListingFilterCard,
+  AccountsListingTableCard,
+  AccountsListingTabsRow,
+} from "@/components/accounts/AccountsListingHeader";
 import { Pagination } from "@/components/listing/Pagination";
+
+export {
+  AccountsListingFilterCard,
+  AccountsListingTableCard,
+  AccountsListingTabsRow,
+} from "@/components/accounts/AccountsListingHeader";
 
 /** Default page size for accounts listings and reports */
 export const ACCOUNTS_DEFAULT_PAGE_SIZE = 25;
 export const ACCOUNTS_PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 
-/* ── Compact toolbar: search · filter · columns · export ── */
+/* ── COA-style listing toolbar row ── */
+
+export interface AccountsListingToolbarProps {
+  children?: React.ReactNode;
+  actions?: React.ReactNode;
+  onExcel?: () => void;
+  onPdf?: () => void;
+  onCsv?: () => void;
+  exportDisabled?: boolean;
+  className?: string;
+}
+
+/** Compact filter row — rendered as a standalone filter card above the table */
+export function AccountsListingToolbar({
+  children,
+  actions,
+  onExcel,
+  onPdf,
+  onCsv,
+  exportDisabled,
+  className,
+}: AccountsListingToolbarProps) {
+  const hasExport = Boolean(onExcel || onPdf || onCsv);
+
+  return (
+    <AccountsListingFilterCard
+      className={className}
+      actions={
+        (actions || hasExport) ? (
+          <>
+            {actions}
+            {hasExport && (
+              <AccountsExportMenu
+                onExcel={onExcel}
+                onPdf={onPdf}
+                onCsv={onCsv}
+                disabled={exportDisabled}
+              />
+            )}
+          </>
+        ) : undefined
+      }
+    >
+      {children}
+    </AccountsListingFilterCard>
+  );
+}
+
+/* ── Toolbar: search · filter · export ── */
 
 export interface AccountsTableToolbarSearch {
   value: string;
@@ -27,9 +84,12 @@ export interface AccountsTableToolbarProps {
   columns?: React.ReactNode;
   onExcel?: () => void;
   onPdf?: () => void;
+  onCsv?: () => void;
   exportDisabled?: boolean;
   actions?: React.ReactNode;
   className?: string;
+  /** @deprecated All toolbars render as filter card with COA layout */
+  placement?: "page-header" | "in-card";
 }
 
 export function AccountsTableToolbar({
@@ -38,49 +98,56 @@ export function AccountsTableToolbar({
   columns,
   onExcel,
   onPdf,
+  onCsv,
   exportDisabled,
   actions,
   className,
 }: AccountsTableToolbarProps) {
-  const hasExport = Boolean(onExcel || onPdf);
+  return (
+    <AccountsListingToolbar
+      onExcel={onExcel}
+      onPdf={onPdf}
+      onCsv={onCsv}
+      exportDisabled={exportDisabled}
+      actions={actions}
+      className={className}
+    >
+      {filters}
+      {search && (
+        <ReportSearchFilter
+          value={search.value}
+          onChange={search.onChange}
+          placeholder={search.placeholder ?? "Search…"}
+          className="min-w-[180px] flex-1 max-w-sm"
+        />
+      )}
+      {columns}
+    </AccountsListingToolbar>
+  );
+}
 
+/* ── Simple count footer (COA-style) ── */
+
+export function AccountsListingCountFooter({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
     <div
       className={cn(
-        "flex-shrink-0 flex items-center justify-end gap-1.5 px-2 py-1 border-b border-border/60 bg-white",
+        "flex-shrink-0 px-4 py-2 border-t border-border bg-muted/20",
         className,
       )}
     >
-      {search && (
-        <div className="relative w-full max-w-[200px] mr-auto">
-          <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <Input
-            value={search.value}
-            onChange={(e) => search.onChange(e.target.value)}
-            placeholder={search.placeholder ?? "Search…"}
-            className="h-7 pl-7 pr-2 text-xs rounded-md border-border bg-white"
-          />
-        </div>
-      )}
-
-      {filters}
-
-      {columns}
-
-      {hasExport && (
-        <AccountsExportMenu
-          onExcel={onExcel}
-          onPdf={onPdf}
-          disabled={exportDisabled}
-        />
-      )}
-
-      {actions}
+      <p className="text-[11px] text-muted-foreground">{children}</p>
     </div>
   );
 }
 
-/* ── Compact pagination footer (bottom-right aligned) ── */
+/* ── Pagination footer ── */
 
 export interface AccountsTablePaginationProps {
   page: number;
@@ -107,16 +174,18 @@ export function AccountsTablePagination({
       onPageChange={onPageChange}
       onPageSizeChange={onPageSizeChange}
       recordLabel={recordLabel}
-      variant="compact"
+      variant="full"
     />
   );
 }
 
-/* ── Listing wrapper: summary · toolbar · scroll · footer ── */
+/* ── Table card: filter card · tabs · scroll · footer ── */
 
 export interface AccountsTableListingProps {
   summary?: React.ReactNode;
   toolbar?: React.ReactNode;
+  /** Secondary row below filters (e.g. status tabs) */
+  subheader?: React.ReactNode;
   children: React.ReactNode;
   footer?: React.ReactNode;
   className?: string;
@@ -125,16 +194,20 @@ export interface AccountsTableListingProps {
 export function AccountsTableListing({
   summary,
   toolbar,
+  subheader,
   children,
   footer,
   className,
 }: AccountsTableListingProps) {
   return (
-    <div className={cn("flex flex-col flex-1 min-h-0", className)}>
-      {summary}
+    <div className={cn("accounts-listing-card", className)}>
       {toolbar}
-      <AccountsTableScroll>{children}</AccountsTableScroll>
-      {footer}
+      <AccountsListingTableCard>
+        {subheader ? <AccountsListingTabsRow>{subheader}</AccountsListingTabsRow> : null}
+        {summary}
+        <AccountsTableScroll>{children}</AccountsTableScroll>
+        {footer}
+      </AccountsListingTableCard>
     </div>
   );
 }

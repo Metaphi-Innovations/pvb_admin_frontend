@@ -1,3 +1,4 @@
+import { demoAddDays, demoDateAt, demoFinancialYearStart, demoToday, demoTimestamp } from "@/lib/accounts/demo-date-utils";
 /**
  * Day Book demo seed — 18 balanced accounting vouchers (Jun 25–30 2026).
  * Idempotent via version key; replaces prior day-book demo records on upgrade.
@@ -35,7 +36,7 @@ import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 import { DAY_BOOK_DEMO_VOUCHER_PATTERN } from "@/lib/accounts/day-book-data";
 
-export const DAY_BOOK_DEMO_SEED_VERSION = "2026-jun-day-book-v2";
+export const DAY_BOOK_DEMO_SEED_VERSION = "relative-dates-v1";
 const VERSION_KEY = "ds_day_book_demo_seed_version";
 
 const DEMO_ID_BASE = 9100;
@@ -232,6 +233,11 @@ function minimalCreditNote(spec: {
     currentCreditAmount: spec.amount,
     balanceAfterAdjustment: 0,
     taxCreditAmount: 0,
+    taxableValue: spec.amount,
+    cgstAmount: 0,
+    sgstAmount: 0,
+    igstAmount: 0,
+    source: "manual",
     lineItems: [],
     reason: "Sales return",
     remarks: spec.remarks,
@@ -270,6 +276,10 @@ function minimalDebitNote(spec: {
     alreadyAdjustedAmount: 0,
     taxableAmount: Math.round((spec.amount / 1.18) * 100) / 100,
     gstAmount: Math.round((spec.amount - spec.amount / 1.18) * 100) / 100,
+    cgstAmount: 0,
+    sgstAmount: 0,
+    igstAmount: Math.round((spec.amount - spec.amount / 1.18) * 100) / 100,
+    source: "manual",
     currentDebitAmount: spec.amount,
     balanceAfterAdjustment: 0,
     standaloneDebitAmount: spec.amount,
@@ -371,7 +381,7 @@ function seedDayBookDocuments(): void {
       id: DEMO_ID_BASE + 1,
       invoiceNo: "SI-0001",
       customerName: "ABC Agro Distributor",
-      invoiceDate: "2026-06-25",
+      invoiceDate: demoDateAt(0),
       time: "09:15",
       grandTotal: 115000,
       status: "sent",
@@ -382,7 +392,7 @@ function seedDayBookDocuments(): void {
       id: DEMO_ID_BASE + 2,
       invoiceNo: "SI-0002",
       customerName: "Krishna Retail Store",
-      invoiceDate: "2026-06-26",
+      invoiceDate: demoDateAt(1),
       time: "10:30",
       grandTotal: 48920,
       status: "sent",
@@ -393,7 +403,7 @@ function seedDayBookDocuments(): void {
       id: DEMO_ID_BASE + 3,
       invoiceNo: "SI-0003",
       customerName: "Green Crop Solutions",
-      invoiceDate: "2026-06-27",
+      invoiceDate: demoDateAt(2),
       time: "11:45",
       grandTotal: 76500,
       status: "sent",
@@ -408,7 +418,7 @@ function seedDayBookDocuments(): void {
       id: DEMO_ID_BASE + 11,
       invoiceNo: "PI-0001",
       vendorName: "Bharat Seeds",
-      invoiceDate: "2026-06-25",
+      invoiceDate: demoDateAt(3),
       time: "14:20",
       grandTotal: 115000,
       remarks: "Purchase of pesticides",
@@ -417,7 +427,7 @@ function seedDayBookDocuments(): void {
       id: DEMO_ID_BASE + 12,
       invoiceNo: "PI-0002",
       vendorName: "Pioneer Agro",
-      invoiceDate: "2026-06-26",
+      invoiceDate: demoDateAt(4),
       time: "15:10",
       grandTotal: 48920,
       remarks: "Purchase of pesticides — replenishment stock",
@@ -426,7 +436,7 @@ function seedDayBookDocuments(): void {
       id: DEMO_ID_BASE + 13,
       invoiceNo: "PI-0003",
       vendorName: "Shree Traders",
-      invoiceDate: "2026-06-27",
+      invoiceDate: demoDateAt(5),
       time: "16:00",
       grandTotal: 35400,
       remarks: "Purchase of pesticides — seasonal procurement",
@@ -442,7 +452,7 @@ function seedDayBookDocuments(): void {
       id: DEMO_ID_BASE + 21,
       creditNoteNo: "CN-0001",
       customerName: "ABC Agro Distributor",
-      creditNoteDate: "2026-06-27",
+      creditNoteDate: demoDateAt(6),
       time: "13:30",
       amount: 27500,
       remarks: "Sales return adjustment",
@@ -451,7 +461,7 @@ function seedDayBookDocuments(): void {
       id: DEMO_ID_BASE + 22,
       creditNoteNo: "CN-0002",
       customerName: "Sunrise Agro",
-      creditNoteDate: "2026-06-28",
+      creditNoteDate: demoDateAt(7),
       time: "14:45",
       amount: 18750,
       remarks: "Sales return adjustment — damaged goods",

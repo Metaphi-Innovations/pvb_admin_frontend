@@ -1,8 +1,10 @@
 "use client";
 
+/** Accounts reports filter bar — consumed only by `/accounts` pages and report clients. */
+
 import React from "react";
+import { useClientMounted } from "@/lib/use-client-mounted";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -25,23 +27,51 @@ import {
 import { DAY_BOOK_VOUCHER_TYPE_OPTIONS } from "@/lib/accounts/day-book-data";
 import { getActiveTDSMasters, getTdsSectionCode } from "@/app/(app)/masters/tds/tds-data";
 import type { CollectionFollowUpStatus } from "@/lib/accounts/receivables-data";
-import { X } from "lucide-react";
+import { X, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
+import { AccountsFilterDateRangeSection } from "@/components/accounts/AccountsListingFilter";
 
-const filterLabelClass = "text-[10px] font-medium uppercase text-muted-foreground leading-none";
-const filterControlClass = "h-7 text-xs mt-0.5";
+import {
+  ACCOUNTS_FILTER_CONTROL_CLASS,
+  ACCOUNTS_FILTER_LABEL_CLASS,
+  ACCOUNTS_FILTER_SELECT_CLASS,
+  ACCOUNTS_DATE_FILTER_WIDTH_CLASS,
+  ACCOUNTS_PRESET_SELECT_WIDTH_CLASS,
+} from "@/lib/accounts/accounts-typography";
+
+const filterLabelClass = ACCOUNTS_FILTER_LABEL_CLASS;
+const filterControlClass = cn(ACCOUNTS_FILTER_CONTROL_CLASS, "mt-0");
+const filterSelectClass = cn(ACCOUNTS_FILTER_CONTROL_CLASS, ACCOUNTS_FILTER_SELECT_CLASS, "mt-0");
+
+/** Shared compact filter label + control classes for accounts listing/report pages */
+export {
+  ACCOUNTS_FILTER_LABEL_CLASS,
+  ACCOUNTS_FILTER_CONTROL_CLASS,
+  ACCOUNTS_FILTER_SELECT_CLASS,
+  ACCOUNTS_DATE_FILTER_WIDTH_CLASS,
+  ACCOUNTS_PRESET_SELECT_WIDTH_CLASS,
+};
 
 export const REPORT_BRANCH_OPTIONS = CASH_BRANCH_OPTIONS.filter((b) => b !== "all");
 
 export function ReportFilterRow({
   children,
+  end,
   className,
 }: {
   children: React.ReactNode;
+  /** Right-aligned actions (e.g. Export) in the filter row */
+  end?: React.ReactNode;
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap items-end gap-2", className)}>{children}</div>
+    <div className={cn("flex flex-wrap items-end gap-2 w-full", className)}>
+      {children}
+      {end ? (
+        <div className="ml-auto flex items-end gap-1.5 flex-shrink-0">{end}</div>
+      ) : null}
+    </div>
   );
 }
 
@@ -56,17 +86,19 @@ export function ReportSearchFilter({
   placeholder?: string;
   className?: string;
 }) {
+  const mounted = useClientMounted();
+
   return (
-    <div className={cn("space-y-1 min-w-[180px] flex-1", className)}>
-      <Label className={filterLabelClass}>Search</Label>
+    <div className={cn("space-y-0.5 min-w-[160px] flex-1 max-w-sm", className)}>
+      <span className={filterLabelClass}>Search</span>
       <div className="relative">
         <Input
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className={cn(filterControlClass, "mt-0 pr-8")}
+          className={cn(filterControlClass, "mt-0 pr-8 w-full")}
         />
-        {value && (
+        {mounted && value ? (
           <button
             type="button"
             onClick={() => onChange("")}
@@ -75,7 +107,7 @@ export function ReportSearchFilter({
           >
             <X className="w-3.5 h-3.5" />
           </button>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -102,49 +134,55 @@ export function ReportDateRangeFilter({
       const { from, to } = resolveDateRangePreset(value);
       onDateFromChange(from);
       onDateToChange(to);
+      return;
+    }
+    if (!dateFrom || !dateTo) {
+      const { from, to } = resolveDateRangePreset("last_month");
+      onDateFromChange(from);
+      onDateToChange(to);
     }
   };
 
   return (
-    <>
-      <div className="space-y-1 min-w-[140px]">
-        <Label className={filterLabelClass}>Date Range</Label>
+    <div className="space-y-0.5">
+      <span className={cn(filterLabelClass, "inline-flex items-center gap-1")}>
+        <Calendar className="w-3 h-3 flex-shrink-0" aria-hidden />
+        Date Range
+      </span>
+      <div className="flex flex-wrap items-center gap-1.5">
         <Select value={preset} onValueChange={(v) => handlePresetChange(v as DateRangePresetId)}>
-          <SelectTrigger className={cn(filterControlClass, "mt-0 w-[140px]")}>
+          <SelectTrigger className={cn(filterSelectClass, ACCOUNTS_PRESET_SELECT_WIDTH_CLASS)}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {DATE_RANGE_PRESET_OPTIONS.map((o) => (
-              <SelectItem key={o.id} value={o.id}>
+              <SelectItem key={o.id} value={o.id} className="text-xs">
                 {o.label}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-      </div>
-      {preset === "custom" && (
-        <>
-          <div className="space-y-1">
-            <Label className={filterLabelClass}>From</Label>
-            <Input
-              type="date"
-              className={cn(filterControlClass, "mt-0 w-36")}
+        {preset === "custom" && (
+          <>
+            <AccountsDateInput
               value={dateFrom}
-              onChange={(e) => onDateFromChange(e.target.value)}
+              onChange={onDateFromChange}
+              aria-label="From date"
+              className={ACCOUNTS_DATE_FILTER_WIDTH_CLASS}
             />
-          </div>
-          <div className="space-y-1">
-            <Label className={filterLabelClass}>To</Label>
-            <Input
-              type="date"
-              className={cn(filterControlClass, "mt-0 w-36")}
+            <span className="text-[11px] text-[#9CA3AF] select-none px-0.5" aria-hidden>
+              –
+            </span>
+            <AccountsDateInput
               value={dateTo}
-              onChange={(e) => onDateToChange(e.target.value)}
+              onChange={onDateToChange}
+              aria-label="To date"
+              className={ACCOUNTS_DATE_FILTER_WIDTH_CLASS}
             />
-          </div>
-        </>
-      )}
-    </>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -161,26 +199,14 @@ export function ReportFromToDateFilter({
   onDateToChange: (value: string) => void;
 }) {
   return (
-    <>
-      <div className="space-y-1">
-        <Label className={filterLabelClass}>From Date</Label>
-        <Input
-          type="date"
-          className={cn(filterControlClass, "mt-0 w-36")}
-          value={dateFrom}
-          onChange={(e) => onDateFromChange(e.target.value)}
-        />
-      </div>
-      <div className="space-y-1">
-        <Label className={filterLabelClass}>To Date</Label>
-        <Input
-          type="date"
-          className={cn(filterControlClass, "mt-0 w-36")}
-          value={dateTo}
-          onChange={(e) => onDateToChange(e.target.value)}
-        />
-      </div>
-    </>
+    <div className="space-y-0.5 min-w-[220px]">
+      <AccountsFilterDateRangeSection
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onDateFromChange={onDateFromChange}
+        onDateToChange={onDateToChange}
+      />
+    </div>
   );
 }
 
@@ -192,13 +218,13 @@ export function ReportAsOnDateFilter({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="space-y-1">
-      <Label className={filterLabelClass}>As On Date</Label>
-      <Input
-        type="date"
-        className={cn(filterControlClass, "mt-0 w-36")}
+    <div className="space-y-0.5">
+      <span className={filterLabelClass}>As On Date</span>
+      <AccountsDateInput
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={onChange}
+        className="mt-0 w-[118px]"
+        aria-label="As on date"
       />
     </div>
   );
@@ -214,10 +240,10 @@ export function ReportBranchFilter({
   options?: readonly string[];
 }) {
   return (
-    <div className="space-y-1 min-w-[140px]">
-      <Label className={filterLabelClass}>Branch</Label>
+    <div className="space-y-0.5 min-w-[140px]">
+      <span className={filterLabelClass}>Branch</span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[140px]")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[140px]")}>
           <SelectValue placeholder="All branches" />
         </SelectTrigger>
         <SelectContent>
@@ -243,10 +269,10 @@ export function ReportBasisFilter({
   onChange: (value: ReportBasis) => void;
 }) {
   return (
-    <div className="space-y-1 min-w-[120px]">
-      <Label className={filterLabelClass}>Report Basis</Label>
+    <div className="space-y-0.5 min-w-[120px]">
+      <span className={filterLabelClass}>Report Basis</span>
       <Select value={value} onValueChange={(v) => onChange(v as ReportBasis)}>
-        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[120px]")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[120px]")}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -271,10 +297,10 @@ export function ReportLedgerFilter({
   required?: boolean;
 }) {
   return (
-    <div className="space-y-1 min-w-[180px]">
-      <Label className={filterLabelClass}>Ledger</Label>
+    <div className="space-y-0.5 min-w-[180px]">
+      <span className={filterLabelClass}>Ledger</span>
       <Select value={value || (required ? undefined : "all")} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[180px]")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[180px]")}>
           <SelectValue placeholder={required ? "Select ledger…" : "All ledgers"} />
         </SelectTrigger>
         <SelectContent>
@@ -300,10 +326,10 @@ export function DayBookVoucherTypeFilter({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="space-y-1 min-w-[150px]">
-      <Label className={filterLabelClass}>Voucher Type</Label>
+    <div className="space-y-0.5 min-w-[150px]">
+      <span className={filterLabelClass}>Voucher Type</span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[150px]")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[150px]")}>
           <SelectValue placeholder="All types" />
         </SelectTrigger>
         <SelectContent>
@@ -327,10 +353,10 @@ export function ReportFinancialYearFilter({
 }) {
   const years = loadFinancialYears();
   return (
-    <div className="space-y-1 min-w-[130px]">
-      <Label className={filterLabelClass}>Financial Year</Label>
+    <div className="space-y-0.5 min-w-[130px]">
+      <span className={filterLabelClass}>Financial Year</span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[130px]")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[130px]")}>
           <SelectValue placeholder="All years" />
         </SelectTrigger>
         <SelectContent>
@@ -354,10 +380,10 @@ export function ReportVoucherTypeFilter({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="space-y-1 min-w-[140px]">
-      <Label className={filterLabelClass}>Voucher Type</Label>
+    <div className="space-y-0.5 min-w-[140px]">
+      <span className={filterLabelClass}>Voucher Type</span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[140px]")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[140px]")}>
           <SelectValue placeholder="All types" />
         </SelectTrigger>
         <SelectContent>
@@ -383,10 +409,10 @@ export function ReportCustomerFilter({
   customers: { id: number; customerName: string }[];
 }) {
   return (
-    <div className="space-y-1 min-w-[160px]">
-      <Label className={filterLabelClass}>Customer</Label>
+    <div className="space-y-0.5 min-w-[160px]">
+      <span className={filterLabelClass}>Customer</span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[160px]")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[160px]")}>
           <SelectValue placeholder="All customers" />
         </SelectTrigger>
         <SelectContent>
@@ -412,10 +438,10 @@ export function ReportVendorFilter({
   vendors: { id: number; vendorName: string }[];
 }) {
   return (
-    <div className="space-y-1 min-w-[160px]">
-      <Label className={filterLabelClass}>Supplier</Label>
+    <div className="space-y-0.5 min-w-[160px]">
+      <span className={filterLabelClass}>Supplier</span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[160px]")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[160px]")}>
           <SelectValue placeholder="All suppliers" />
         </SelectTrigger>
         <SelectContent>
@@ -439,10 +465,10 @@ export function ReportWarehouseFilter({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="space-y-1 min-w-[150px]">
-      <Label className={filterLabelClass}>Warehouse</Label>
+    <div className="space-y-0.5 min-w-[150px]">
+      <span className={filterLabelClass}>Warehouse</span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[150px]")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[150px]")}>
           <SelectValue placeholder="All warehouses" />
         </SelectTrigger>
         <SelectContent>
@@ -468,10 +494,10 @@ export function ReportProductFilter({
   products: { id: number; productName: string }[];
 }) {
   return (
-    <div className="space-y-1 min-w-[160px]">
-      <Label className={filterLabelClass}>Product</Label>
+    <div className="space-y-0.5 min-w-[160px]">
+      <span className={filterLabelClass}>Product</span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[160px]")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[160px]")}>
           <SelectValue placeholder="All products" />
         </SelectTrigger>
         <SelectContent>
@@ -497,10 +523,10 @@ export function ReportStateFilter({
   states: string[];
 }) {
   return (
-    <div className="space-y-1 min-w-[140px]">
-      <Label className={filterLabelClass}>State</Label>
+    <div className="space-y-0.5 min-w-[140px]">
+      <span className={filterLabelClass}>State</span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[140px]")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[140px]")}>
           <SelectValue placeholder="All states" />
         </SelectTrigger>
         <SelectContent>
@@ -526,10 +552,10 @@ export function ReportViewByFilter({
   options: { value: string; label: string }[];
 }) {
   return (
-    <div className="space-y-1 min-w-[150px]">
-      <Label className={filterLabelClass}>View By</Label>
+    <div className="space-y-0.5 min-w-[150px]">
+      <span className={filterLabelClass}>View By</span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[150px]")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[150px]")}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -562,10 +588,10 @@ export function ReportCollectionStatusFilter({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="space-y-1 min-w-[150px]">
-      <Label className={filterLabelClass}>Collection Status</Label>
+    <div className="space-y-0.5 min-w-[150px]">
+      <span className={filterLabelClass}>Collection Status</span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[150px]")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[150px]")}>
           <SelectValue placeholder="All statuses" />
         </SelectTrigger>
         <SelectContent>
@@ -597,10 +623,10 @@ export function ReportTdsSectionFilter({
   );
 
   return (
-    <div className="space-y-1 min-w-[160px]">
-      <Label className={filterLabelClass}>TDS Section</Label>
+    <div className="space-y-0.5 min-w-[160px]">
+      <span className={filterLabelClass}>TDS Section</span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[160px]")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[160px]")}>
           <SelectValue placeholder="All sections" />
         </SelectTrigger>
         <SelectContent>
@@ -626,10 +652,10 @@ export function ReportTdsPartyTypeFilter({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="space-y-1 min-w-[140px]">
-      <Label className={filterLabelClass}>Party Type</Label>
+    <div className="space-y-0.5 min-w-[140px]">
+      <span className={filterLabelClass}>Party Type</span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[140px]")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[140px]")}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -665,10 +691,10 @@ export function ReportTdsPaymentStatusFilter({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="space-y-1 min-w-[120px]">
-      <Label className={filterLabelClass}>Payment</Label>
+    <div className="space-y-0.5 min-w-[120px]">
+      <span className={filterLabelClass}>Payment</span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterControlClass, "mt-0 w-[120px]")}>
+        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[120px]")}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -705,7 +731,15 @@ export function ReportFilterBar({
   onBranch: (v: string) => void;
   extra?: React.ReactNode;
 }) {
-  const [preset, setPreset] = React.useState<DateRangePresetId>("custom");
+  const [preset, setPreset] = React.useState<DateRangePresetId>("this_month");
+
+  React.useEffect(() => {
+    if (preset === "custom" && !dateFrom && !dateTo) {
+      const { from, to } = resolveDateRangePreset("this_month");
+      onDateFrom(from);
+      onDateTo(to);
+    }
+  }, [preset, dateFrom, dateTo, onDateFrom, onDateTo]);
 
   return (
     <ReportFilterRow>

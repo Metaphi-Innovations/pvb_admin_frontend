@@ -4,17 +4,23 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ModuleFiltersBar } from "@/components/module/ModuleFiltersBar";
+import { AccountsFilterBar } from "@/components/accounts/AccountsFilterBar";
+import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Banknote, Eye, FileSpreadsheet, MoreVertical, Pencil, Plus, XCircle } from "lucide-react";
+import {
+  AccountsEditAction,
+  AccountsMoreActions,
+  AccountsTableActionCell,
+  AccountsViewAction,
+  accountsActionColClass,
+} from "@/components/accounts/AccountsTableActions";
+import { Banknote, FileSpreadsheet, Plus, XCircle } from "lucide-react";
 import { SectionTabs } from "../components/AccountsUI";
 import {
   addPaymentInstallment,
@@ -34,6 +40,7 @@ import { PaymentInstallmentModal } from "./components/PaymentInstallmentModal";
 import { exportPaymentsToExcel } from "./payments-export";
 import { ThreeWayMatchStatusBadge } from "@/components/erp/ThreeWayMatchStatusBadge";
 import { getPurchasePaymentMatchContext } from "@/lib/erp/payment-match-context";
+import { cn } from "@/lib/utils";
 import { formatINR, PAYMENTS_BREADCRUMB, PAYMENTS_LIST_PATH } from "./payment-utils";
 
 const TABS = [
@@ -89,16 +96,16 @@ export default function PaymentsPageClient() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs gap-1.5"
+                className="h-9 text-[13px] font-medium gap-1.5"
                 disabled={exporting || visible.length === 0}
                 onClick={handleExport}
               >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <FileSpreadsheet className="w-4 h-4" />
                 {exporting ? "Exporting…" : "Export Excel"}
               </Button>
-              <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" asChild>
+              <Button size="sm" className="h-9 text-[13px] font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" asChild>
                 <Link href={`${PAYMENTS_LIST_PATH}/new`}>
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-4 h-4" />
                   Record Payment
                 </Link>
               </Button>
@@ -108,7 +115,7 @@ export default function PaymentsPageClient() {
 
         <SectionTabs tabs={TABS} active={tab} onChange={setTab} counts={counts} />
 
-        <ModuleFiltersBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Payment no., payee, source ref…">
+        <AccountsFilterBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Payment no., payee, source ref…">
           <Select value={sourceType} onValueChange={setSourceType}>
             <SelectTrigger className="h-8 w-[150px] text-xs bg-white">
               <SelectValue placeholder="Source type" />
@@ -147,13 +154,17 @@ export default function PaymentsPageClient() {
               <SelectItem value="cancelled" className="text-xs">Cancelled</SelectItem>
             </SelectContent>
           </Select>
-          <Input type="date" className="h-8 w-[130px] text-xs bg-white" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <Input type="date" className="h-8 w-[130px] text-xs bg-white" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-        </ModuleFiltersBar>
+          <AccountsListingDateFilter
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
+        </AccountsFilterBar>
 
         <div className="page-shell overflow-hidden">
           <div className="overflow-x-auto max-h-[calc(100vh-300px)]">
-            <table className="accounts-table w-full text-table min-w-[1700px]">
+            <table className="accounts-table w-full min-w-[1700px]">
               <thead className="border-b">
                 <tr>
                   {[
@@ -184,7 +195,7 @@ export default function PaymentsPageClient() {
               <tbody>
                 {visible.length === 0 ? (
                   <tr>
-                    <td colSpan={14} className="py-12 text-center text-xs text-muted-foreground">
+                    <td colSpan={14} className="accounts-table-empty">
                       No payments. Approved claims and purchase invoices sync here automatically.
                     </td>
                   </tr>
@@ -192,7 +203,7 @@ export default function PaymentsPageClient() {
                   visible.map((r) => {
                     const matchCtx = getPurchasePaymentMatchContext(r);
                     return (
-                    <tr key={r.id} className="border-b hover:bg-brand-50/25">
+                    <tr key={r.id} className="accounts-table-row group">
                       <td className="px-2.5 py-2 text-xs font-mono font-medium">{r.paymentNo}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.paymentDate}</td>
                       <td className="px-2.5 py-2 text-xs">{payeeDisplay(r)}</td>
@@ -214,35 +225,25 @@ export default function PaymentsPageClient() {
                       <td className="px-2.5 py-2">
                         <PaymentStatusBadge status={r.paymentStatus} />
                       </td>
-                      <td className="px-2.5 py-2 sticky right-0 bg-white">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button type="button" className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted">
-                              <MoreVertical className="w-3.5 h-3.5" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-44">
-                            {getPaymentRowActions(r).map((a) => {
-                              if (a === "view")
-                                return (
-                                  <DropdownMenuItem key="view" asChild>
-                                    <Link href={`${PAYMENTS_LIST_PATH}/${r.id}`} className="text-xs gap-2">
-                                      <Eye className="w-3.5 h-3.5" /> View
-                                    </Link>
-                                  </DropdownMenuItem>
-                                );
-                              if (a === "edit")
-                                return (
-                                  <DropdownMenuItem key="edit" asChild>
-                                    <Link href={`${PAYMENTS_LIST_PATH}/${r.id}/edit`} className="text-xs gap-2">
-                                      <Pencil className="w-3.5 h-3.5" /> Edit
-                                    </Link>
-                                  </DropdownMenuItem>
-                                );
+                      <td className={cn("px-2.5 py-2 sticky right-0 bg-white", accountsActionColClass("multi"))}>
+                        <AccountsTableActionCell>
+                          {getPaymentRowActions(r).includes("view") && (
+                            <AccountsViewAction href={`${PAYMENTS_LIST_PATH}/${r.id}`} />
+                          )}
+                          {getPaymentRowActions(r).includes("edit") && (
+                            <AccountsEditAction href={`${PAYMENTS_LIST_PATH}/${r.id}/edit`} />
+                          )}
+                          {getPaymentRowActions(r).some(
+                            (a) => a !== "view" && a !== "edit",
+                          ) && (
+                            <AccountsMoreActions contentClassName="w-44">
+                              {getPaymentRowActions(r)
+                                .filter((a) => a !== "view" && a !== "edit")
+                                .map((a) => {
                               if (a === "pay")
                                 return (
                                   <DropdownMenuItem key="pay" className="text-xs gap-2 text-brand-700" onClick={() => setPayTarget(r)}>
-                                    <Banknote className="w-3.5 h-3.5" /> Record Payment
+                                    <Banknote className="w-4 h-4" /> Record Payment
                                   </DropdownMenuItem>
                                 );
                               if (a === "cancel")
@@ -257,13 +258,14 @@ export default function PaymentsPageClient() {
                                       }
                                     }}
                                   >
-                                    <XCircle className="w-3.5 h-3.5" /> Cancel
+                                    <XCircle className="w-4 h-4" /> Cancel
                                   </DropdownMenuItem>
                                 );
                               return null;
                             })}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                            </AccountsMoreActions>
+                          )}
+                        </AccountsTableActionCell>
                       </td>
                     </tr>
                   );

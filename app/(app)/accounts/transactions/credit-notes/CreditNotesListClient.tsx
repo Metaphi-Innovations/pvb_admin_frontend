@@ -4,21 +4,42 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Eye, FileSpreadsheet, MoreVertical, Pencil, Plus, Search, XCircle } from "lucide-react";
+  AccountsEditAction,
+  AccountsMoreActions,
+  AccountsTableActionCell,
+  AccountsViewAction,
+  accountsActionColClass,
+} from "@/components/accounts/AccountsTableActions";
+import { Plus, XCircle } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
-import { ReportDateRangeFilter, useReportDateRange } from "@/components/accounts/ReportFilters";
+import {
+  AccountsTable,
+  AccountsTableBody,
+  AccountsTableCell,
+  AccountsTableHead,
+  AccountsTableHeadCell,
+  AccountsTableHeadRow,
+  AccountsTableRow,
+} from "@/components/accounts/AccountsTable";
+import {
+  AccountsTableEmpty,
+  AccountsTableListing,
+  AccountsTablePagination,
+} from "@/components/accounts/AccountsTableListing";
+import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
+import {
+  ReportFilterRow,
+  ReportSearchFilter,
+} from "@/components/accounts/ReportFilters";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { useClientMounted } from "@/lib/use-client-mounted";
+import { NoteWorkflowBadge } from "../../components/NoteWorkflowBadge";
 import { CreditNoteCancelDialog } from "../../credit-notes/components/CreditNoteCancelDialog";
 import {
+  CREDIT_NOTE_SOURCE_LABELS,
   cancelCreditNote,
   filterCreditNotesListing,
   getCreditNoteRowActions,
@@ -33,11 +54,14 @@ const LIST_PATH = CREDIT_NOTES_LIST_PATH;
 export default function CreditNotesListClient() {
   const router = useRouter();
   const mounted = useClientMounted();
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [records, setRecords] = useState<CreditNoteRecord[]>([]);
   const [search, setSearch] = useState("");
   const [cancelTarget, setCancelTarget] = useState<CreditNoteRecord | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const refresh = useCallback(() => {
     if (!mounted) return;
@@ -56,18 +80,22 @@ export default function CreditNotesListClient() {
     [records, search, dateFrom, dateTo, mounted],
   );
 
-  const handleExport = async () => {
+  useEffect(() => {
+    setPage(1);
+  }, [search, dateFrom, dateTo, pageSize]);
+
+  const pagedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return visible.slice(start, start + pageSize);
+  }, [visible, page, pageSize]);
+
+  const handleExportExcel = async () => {
     setExporting(true);
     try {
       await exportCreditNotesToExcel(visible);
     } finally {
       setExporting(false);
     }
-  };
-
-  const handleTodayDateChange = (value: string) => {
-    setDateFrom(value);
-    setDateTo(value);
   };
 
   return (
@@ -77,159 +105,134 @@ export default function CreditNotesListClient() {
         title="Credit Notes"
         description="Sales credit notes — reduces customer outstanding."
         actions={
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              disabled={exporting || visible.length === 0}
-              onClick={handleExport}
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-              {exporting ? "Exporting…" : "Export"}
-            </Button>
-            <Button
-              size="sm"
-              className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
-              onClick={() => router.push(`${LIST_PATH}/new`)}
-            >
-              <Plus className="w-3.5 h-3.5" /> New
-            </Button>
-          </>
+          <Button
+            size="sm"
+            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
+            onClick={() => router.push(`${LIST_PATH}/new`)}
+          >
+            <Plus className="w-4 h-4" /> New
+          </Button>
         }
         filters={
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="relative flex-1 min-w-[200px] max-w-sm">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-              <Input
-                className="h-8 text-xs pl-8"
-                placeholder="Search CN no., customer, invoice ref…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+          <ReportFilterRow
+            end={
+              <AccountsExportMenu
+                onExcel={handleExportExcel}
+                onPdf={handleExportExcel}
+                disabled={exporting || visible.length === 0}
               />
-            </div>
-            <ReportDateRangeFilter
-              preset={preset}
+            }
+          >
+            <AccountsListingDateFilter
               dateFrom={dateFrom}
               dateTo={dateTo}
-              onPresetChange={setPreset}
               onDateFromChange={setDateFrom}
               onDateToChange={setDateTo}
             />
-            {preset === "today" && (
-              <div className="space-y-1">
-                <Label className="text-[10px] font-medium uppercase text-muted-foreground">Date</Label>
-                <Input
-                  type="date"
-                  className="h-8 text-xs w-36"
-                  value={dateFrom}
-                  onChange={(e) => handleTodayDateChange(e.target.value)}
-                />
-              </div>
-            )}
-          </div>
+            <ReportSearchFilter
+              value={search}
+              onChange={setSearch}
+              placeholder="Search CN no., source, invoice, return, customer, scheme…"
+              className="min-w-[200px] flex-1 max-w-md"
+            />
+          </ReportFilterRow>
         }
         layout="split"
         className="h-full min-h-0"
       >
-        <div className="flex-1 overflow-auto min-h-0">
-          <table className="accounts-table w-full text-table min-w-[900px]">
-            <thead className="border-b border-border/60">
-              <tr>
-                {["Date", "Credit Note No.", "Reference Number", "Customer Name", "Amount", ""].map((h) => (
-                  <th
-                    key={h || "actions"}
-                    className={`px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap ${
-                      h === "Amount" || h === "" ? "text-right" : "text-left"
-                    }`}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
+        <AccountsTableListing
+          footer={
+            mounted && visible.length > 0 ? (
+              <AccountsTablePagination
+                page={page}
+                pageSize={pageSize}
+                totalRecords={visible.length}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                recordLabel="credit notes"
+              />
+            ) : null
+          }
+        >
+          <AccountsTable minWidth={1200}>
+            <AccountsTableHead>
+              <AccountsTableHeadRow>
+                <AccountsTableHeadCell uppercase>Credit Note No.</AccountsTableHeadCell>
+                <AccountsTableHeadCell uppercase>Source</AccountsTableHeadCell>
+                <AccountsTableHeadCell uppercase>Against Invoice</AccountsTableHeadCell>
+                <AccountsTableHeadCell uppercase className="accounts-col-party">Customer</AccountsTableHeadCell>
+                <AccountsTableHeadCell uppercase>Date</AccountsTableHeadCell>
+                <AccountsTableHeadCell align="right" uppercase>Taxable</AccountsTableHeadCell>
+                <AccountsTableHeadCell align="right" uppercase>CGST</AccountsTableHeadCell>
+                <AccountsTableHeadCell align="right" uppercase>SGST</AccountsTableHeadCell>
+                <AccountsTableHeadCell align="right" uppercase>IGST</AccountsTableHeadCell>
+                <AccountsTableHeadCell align="right" uppercase>Total</AccountsTableHeadCell>
+                <AccountsTableHeadCell uppercase>Status</AccountsTableHeadCell>
+                <AccountsTableHeadCell align="right" uppercase className={accountsActionColClass("multi")}>
+                  Actions
+                </AccountsTableHeadCell>
+              </AccountsTableHeadRow>
+            </AccountsTableHead>
+            <AccountsTableBody>
               {!mounted ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-16 text-center text-xs text-muted-foreground">
-                    Loading credit notes…
-                  </td>
-                </tr>
+                <AccountsTableEmpty colSpan={12} message="Loading credit notes…" />
               ) : visible.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-16 text-center">
-                    <p className="text-sm font-medium text-foreground">No credit notes found</p>
-                    <p className="text-xs text-muted-foreground mt-1">Adjust filters or create a new credit note.</p>
-                  </td>
-                </tr>
+                <AccountsTableEmpty
+                  colSpan={12}
+                  message="No records found."
+                  onClear={search || dateFrom || dateTo ? () => { setSearch(""); setDateFrom(""); setDateTo(""); } : undefined}
+                />
               ) : (
-                visible.map((r) => (
-                  <tr key={r.id} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-2.5 text-xs tabular-nums">{r.creditNoteDate}</td>
-                    <td className="px-4 py-2.5 text-xs font-mono font-semibold text-brand-700">
+                pagedRows.map((r) => (
+                  <AccountsTableRow key={r.id}>
+                    <AccountsTableCell mono className="font-semibold text-brand-700">
                       <Link href={`${LIST_PATH}/${r.id}`} className="hover:underline">
                         {r.creditNoteNo}
                       </Link>
-                    </td>
-                    <td className="px-4 py-2.5 text-xs font-mono">{r.sourceInvoiceNo || "—"}</td>
-                    <td className="px-4 py-2.5 text-xs font-medium">{r.customerName}</td>
-                    <td className="px-4 py-2.5 text-xs text-right tabular-nums font-medium">
+                    </AccountsTableCell>
+                    <AccountsTableCell className="text-xs">{CREDIT_NOTE_SOURCE_LABELS[r.source]}</AccountsTableCell>
+                    <AccountsTableCell mono>{r.sourceInvoiceNo || "—"}</AccountsTableCell>
+                    <AccountsTableCell className="accounts-col-party font-medium">{r.customerName}</AccountsTableCell>
+                    <AccountsTableCell className="tabular-nums">{r.creditNoteDate}</AccountsTableCell>
+                    <AccountsTableCell align="right" money>{formatINR(r.taxableValue)}</AccountsTableCell>
+                    <AccountsTableCell align="right" money>{formatINR(r.cgstAmount)}</AccountsTableCell>
+                    <AccountsTableCell align="right" money>{formatINR(r.sgstAmount)}</AccountsTableCell>
+                    <AccountsTableCell align="right" money>{formatINR(r.igstAmount)}</AccountsTableCell>
+                    <AccountsTableCell align="right" money className="font-medium">
                       {formatINR(r.currentCreditAmount)}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      <div className="flex items-center justify-end gap-0.5">
-                        <Link
-                          href={`${LIST_PATH}/${r.id}`}
-                          title="View"
-                          className="p-1.5 hover:bg-muted rounded-md transition-colors"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                        </Link>
+                    </AccountsTableCell>
+                    <AccountsTableCell><NoteWorkflowBadge status={r.status} /></AccountsTableCell>
+                    <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
+                      <AccountsTableActionCell>
+                        <AccountsViewAction href={`${LIST_PATH}/${r.id}`} />
                         {getCreditNoteRowActions(r).includes("edit") && (
-                          <Link
-                            href={`${LIST_PATH}/${r.id}/edit`}
-                            title="Edit"
-                            className="p-1.5 hover:bg-muted rounded-md transition-colors"
-                          >
-                            <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                          </Link>
+                          <AccountsEditAction href={`${LIST_PATH}/${r.id}/edit`} />
                         )}
                         {getCreditNoteRowActions(r).some((a) => a !== "view" && a !== "edit") && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button
-                                type="button"
-                                title="More actions"
-                                className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted"
-                              >
-                                <MoreVertical className="w-3.5 h-3.5" />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-40">
-                              {getCreditNoteRowActions(r)
-                                .filter((a) => a !== "view" && a !== "edit")
-                                .map((a) =>
-                                  a === "cancel" ? (
-                                    <DropdownMenuItem
-                                      key="cancel"
-                                      className="text-xs gap-2 text-red-600"
-                                      onClick={() => setCancelTarget(r)}
-                                    >
-                                      <XCircle className="w-3.5 h-3.5" /> Cancel
-                                    </DropdownMenuItem>
-                                  ) : null,
-                                )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <AccountsMoreActions contentClassName="w-40">
+                            {getCreditNoteRowActions(r)
+                              .filter((a) => a !== "view" && a !== "edit")
+                              .map((a) =>
+                                a === "cancel" ? (
+                                  <DropdownMenuItem
+                                    key="cancel"
+                                    className="text-xs gap-2 text-red-600"
+                                    onClick={() => setCancelTarget(r)}
+                                  >
+                                    <XCircle className="w-4 h-4" /> Cancel
+                                  </DropdownMenuItem>
+                                ) : null,
+                              )}
+                          </AccountsMoreActions>
                         )}
-                      </div>
-                    </td>
-                  </tr>
+                      </AccountsTableActionCell>
+                    </AccountsTableCell>
+                  </AccountsTableRow>
                 ))
               )}
-            </tbody>
-          </table>
-        </div>
+            </AccountsTableBody>
+          </AccountsTable>
+        </AccountsTableListing>
       </AccountsPageShell>
 
       <CreditNoteCancelDialog

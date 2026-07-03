@@ -73,7 +73,7 @@ export function MoneyCell({ amount, side, className, dashIfZero, as = "td" }: Mo
   }
 
   return (
-    <td className={cn(MONEY_CELL_CLASS, "px-4 py-3.5", className)}>
+    <td className={cn(MONEY_CELL_CLASS, className)}>
       {content}
     </td>
   );

@@ -2,12 +2,14 @@
 
 import { Download, FileDown, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ACCOUNTS_ACTION_BUTTON_CLASS } from "@/lib/accounts/accounts-typography";
 
 export interface AccountsExportMenuProps {
   onExcel?: () => void;
@@ -35,21 +37,21 @@ export function AccountsExportMenu({
         <Button
           variant="outline"
           size="sm"
-          className="h-7 text-xs gap-1 px-2.5"
+          className={cn(ACCOUNTS_ACTION_BUTTON_CLASS, "text-xs px-2.5")}
           disabled={disabled}
         >
-          <Download className="w-3.5 h-3.5" /> {label}
+          <Download className="w-4 h-4" /> {label}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
         {handleExcel && (
-          <DropdownMenuItem className="text-xs gap-2" onClick={handleExcel}>
-            <FileSpreadsheet className="w-3.5 h-3.5" /> Export Excel
+          <DropdownMenuItem className="text-[13px] gap-2" onClick={handleExcel}>
+            <FileSpreadsheet className="w-4 h-4" /> Export Excel
           </DropdownMenuItem>
         )}
         {handlePdf && (
-          <DropdownMenuItem className="text-xs gap-2" onClick={handlePdf}>
-            <FileDown className="w-3.5 h-3.5" /> Export PDF
+          <DropdownMenuItem className="text-[13px] gap-2" onClick={handlePdf}>
+            <FileDown className="w-4 h-4" /> Export PDF
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

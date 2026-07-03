@@ -4,15 +4,22 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ModuleFiltersBar } from "@/components/module/ModuleFiltersBar";
+import { AccountsFilterBar } from "@/components/accounts/AccountsFilterBar";
+import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Eye, FileSpreadsheet, MoreVertical, Pencil, Plus, XCircle } from "lucide-react";
+import {
+  AccountsEditAction,
+  AccountsMoreActions,
+  AccountsTableActionCell,
+  AccountsViewAction,
+  accountsActionColClass,
+} from "@/components/accounts/AccountsTableActions";
+import { FileSpreadsheet, Plus, XCircle } from "lucide-react";
 import { SectionTabs } from "../components/AccountsUI";
 import { NoteWorkflowBadge } from "../components/NoteWorkflowBadge";
 import { CreditNoteCancelDialog } from "./components/CreditNoteCancelDialog";
@@ -20,12 +27,14 @@ import {
   cancelCreditNote,
   computeCreditNoteTabCounts,
   filterCreditNotes,
+  filterCreditNotesListing,
   getCreditNoteRowActions,
   loadCreditNotes,
   type CreditNoteRecord,
 } from "./credit-notes-data";
 import { exportCreditNotesToExcel } from "./credit-notes-export";
 import { CREDIT_NOTES_BREADCRUMB, CREDIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
+import { cn } from "@/lib/utils";
 
 const TABS = [
   { id: "all", label: "All" },
@@ -39,6 +48,8 @@ export default function CreditNotesPageClient() {
   const [records, setRecords] = useState<CreditNoteRecord[]>([]);
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [cancelTarget, setCancelTarget] = useState<CreditNoteRecord | null>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -47,7 +58,10 @@ export default function CreditNotesPageClient() {
     refresh();
   }, [refresh]);
 
-  const visible = useMemo(() => filterCreditNotes(records, { tab, search }), [records, tab, search]);
+  const visible = useMemo(() => {
+    const tabFiltered = filterCreditNotes(records, { tab, search: "" });
+    return filterCreditNotesListing(tabFiltered, { search, dateFrom, dateTo });
+  }, [records, tab, search, dateFrom, dateTo]);
   const counts = useMemo(() => computeCreditNoteTabCounts(records), [records]);
 
   const handleExport = async () => {
@@ -71,16 +85,16 @@ export default function CreditNotesPageClient() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs gap-1.5"
+                className="h-9 text-[13px] font-medium gap-1.5"
                 disabled={exporting || visible.length === 0}
                 onClick={handleExport}
               >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <FileSpreadsheet className="w-4 h-4" />
                 {exporting ? "Exporting…" : "Export"}
               </Button>
-              <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5" asChild>
+              <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5" asChild>
                 <Link href={`${CREDIT_NOTES_LIST_PATH}/new`}>
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-4 h-4" />
                   Create Credit Note
                 </Link>
               </Button>
@@ -90,15 +104,22 @@ export default function CreditNotesPageClient() {
 
         <SectionTabs tabs={TABS} active={tab} onChange={setTab} counts={counts} />
 
-        <ModuleFiltersBar
+        <AccountsFilterBar
           searchValue={search}
           onSearchChange={setSearch}
           searchPlaceholder="CN no., customer, invoice ref., SO ref…"
-        />
+        >
+          <AccountsListingDateFilter
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
+        </AccountsFilterBar>
 
         <div className="page-shell overflow-hidden">
           <div className="overflow-x-auto max-h-[calc(100vh-300px)]">
-            <table className="accounts-table w-full text-table min-w-[1280px]">
+            <table className="accounts-table w-full min-w-[1280px]">
               <thead className="border-b border-border">
                 <tr>
                   {[
@@ -125,13 +146,13 @@ export default function CreditNotesPageClient() {
               <tbody>
                 {visible.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-12 text-center text-xs text-muted-foreground">
+                    <td colSpan={10} className="accounts-table-empty">
                       No credit notes. Click Create Credit Note to add one.
                     </td>
                   </tr>
                 ) : (
                   visible.map((r) => (
-                    <tr key={r.id} className="border-b border-border/50 hover:bg-brand-50/25">
+                    <tr key={r.id} className="accounts-table-row group">
                       <td className="px-2.5 py-2 text-xs font-mono font-medium">{r.creditNoteNo}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.creditNoteDate}</td>
                       <td className="px-2.5 py-2 text-xs">{r.customerName}</td>
@@ -145,39 +166,17 @@ export default function CreditNotesPageClient() {
                       </td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.createdBy}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.updatedBy}</td>
-                      <td className="px-2.5 py-2 sticky right-0 bg-white">
-                        <div className="flex items-center justify-end gap-0.5">
-                          <Link
-                            href={`${CREDIT_NOTES_LIST_PATH}/${r.id}`}
-                            title="View"
-                            className="p-1.5 hover:bg-muted rounded-md transition-colors"
-                          >
-                            <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                          </Link>
+                      <td className={cn("px-2.5 py-2 sticky right-0 bg-white", accountsActionColClass("multi"))}>
+                        <AccountsTableActionCell>
+                          <AccountsViewAction href={`${CREDIT_NOTES_LIST_PATH}/${r.id}`} />
                           {getCreditNoteRowActions(r).includes("edit") && (
-                            <Link
-                              href={`${CREDIT_NOTES_LIST_PATH}/${r.id}/edit`}
-                              title="Edit"
-                              className="p-1.5 hover:bg-muted rounded-md transition-colors"
-                            >
-                              <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                            </Link>
+                            <AccountsEditAction href={`${CREDIT_NOTES_LIST_PATH}/${r.id}/edit`} />
                           )}
                           {getCreditNoteRowActions(r).some((a) => a !== "view" && a !== "edit") && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button
-                                  type="button"
-                                  title="More actions"
-                                  className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted"
-                                >
-                                  <MoreVertical className="w-3.5 h-3.5" />
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-40">
-                                {getCreditNoteRowActions(r)
-                                  .filter((a) => a !== "view" && a !== "edit")
-                                  .map((a) => {
+                            <AccountsMoreActions contentClassName="w-40">
+                              {getCreditNoteRowActions(r)
+                                .filter((a) => a !== "view" && a !== "edit")
+                                .map((a) => {
                               if (a === "cancel")
                                 return (
                                   <DropdownMenuItem
@@ -185,15 +184,14 @@ export default function CreditNotesPageClient() {
                                     className="text-xs gap-2 text-red-600"
                                     onClick={() => setCancelTarget(r)}
                                   >
-                                    <XCircle className="w-3.5 h-3.5" /> Cancel
+                                    <XCircle className="w-4 h-4" /> Cancel
                                   </DropdownMenuItem>
                                 );
                               return null;
                             })}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            </AccountsMoreActions>
                           )}
-                        </div>
+                        </AccountsTableActionCell>
                       </td>
                     </tr>
                   ))

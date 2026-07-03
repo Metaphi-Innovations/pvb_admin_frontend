@@ -28,8 +28,8 @@ import {
 } from "@/components/accounts/AccountsTable";
 import {
   AccountsTablePagination,
-  AccountsTableToolbar,
 } from "@/components/accounts/AccountsTableListing";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { cn } from "@/lib/utils";
 import {
   exportReceivablesToExcel,
@@ -240,7 +240,9 @@ export default function CustomerAgeingClient() {
       title="Customer Ageing"
       description="Customer dues grouped by ageing buckets as on the selected date."
       filters={
-        <ReportFilterRow>
+        <ReportFilterRow
+          end={<AccountsExportMenu onExcel={handleExcel} onPdf={handlePdf} disabled={rows.length === 0} />}
+        >
           <ReportFinancialYearFilter value={financialYear} onChange={setFinancialYear} />
           <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
           <ReportCustomerFilter value={customerId} onChange={setCustomerId} customers={customers} />
@@ -251,14 +253,13 @@ export default function CustomerAgeingClient() {
       className="h-full min-h-0"
     >
       <div className="flex flex-col flex-1 min-h-0">
-        <AccountsTableToolbar onExcel={handleExcel} onPdf={handlePdf} />
         <AccountsTableScroll>
           <AccountsRichTable
             columns={columns}
             rows={pagedRows}
             minWidth={1000}
             getRowKey={(r) => r.customerId}
-            emptyMessage="No ageing balances found."
+            emptyMessage="No records found."
             onRowClick={(r) => router.push(`/accounts/receivables/outstanding/${r.customerId}`)}
           />
         </AccountsTableScroll>

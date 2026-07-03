@@ -138,7 +138,7 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
             </div>
           )}
           {(tab === "transactions" || tab === "bankbook") && (
-            <table className="accounts-table w-full text-xs min-w-[720px]">
+            <table className="accounts-table w-full min-w-[720px]">
               <thead className="border-b">
                 <tr>
                   {["Date", "Voucher Type", "Voucher No", "Particulars", "Debit", "Credit"].map((h) => (
@@ -148,7 +148,7 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
               </thead>
               <tbody>
                 {transactions.map((row) => (
-                  <tr key={row.id} className="border-b border-border/30 hover:bg-brand-50/20">
+                  <tr key={row.id} className="accounts-table-row">
                     <td className="px-3 py-2">{row.date}</td>
                     <td className="px-3 py-2">{row.voucherType}</td>
                     <td className="px-3 py-2">{row.voucherNo}</td>
@@ -178,7 +178,7 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
             </div>
           )}
           {tab === "statement" && (
-            <table className="accounts-table w-full text-xs min-w-[800px]">
+            <table className="accounts-table w-full min-w-[800px]">
               <thead className="border-b">
                 <tr>
                   {["Date", "Voucher Type", "Voucher No", "Particulars", "Debit", "Credit", "Running Balance"].map((h) => (
@@ -188,7 +188,7 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
               </thead>
               <tbody>
                 {statement.map((row, i) => (
-                  <tr key={i} className="border-b border-border/30">
+                  <tr key={i} className="accounts-table-row">
                     <td className="px-3 py-2">{row.date}</td>
                     <td className="px-3 py-2">{row.voucherType}</td>
                     <td className="px-3 py-2">{row.voucherNo}</td>

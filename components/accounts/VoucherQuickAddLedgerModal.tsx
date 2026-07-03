@@ -170,7 +170,7 @@ export function VoucherQuickAddLedgerSheet({
                     name="quick-add-balance-type"
                     checked={form.balanceType === bt}
                     onChange={() => setField({ balanceType: bt })}
-                    className="w-3.5 h-3.5 accent-brand-600"
+                    className="w-4 h-4 accent-brand-600"
                   />
                   <span className={cn(form.balanceType === bt && "font-medium text-foreground")}>
                     {bt}
@@ -198,14 +198,14 @@ export function VoucherQuickAddLedgerSheet({
           <Button
             variant="outline"
             size="sm"
-            className="h-8 text-xs"
+            className="h-9 text-[13px] font-medium"
             onClick={() => handleOpenChange(false)}
           >
             Cancel
           </Button>
           <Button
             size="sm"
-            className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
             onClick={handleSave}
             disabled={!form.ledgerName.trim() || !form.parentGroupId}
           >

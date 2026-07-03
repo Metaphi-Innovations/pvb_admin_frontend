@@ -1,3 +1,4 @@
+import { demoAddDays, demoDateAt, demoFinancialYearStart, demoToday, demoTimestamp } from "@/lib/accounts/demo-date-utils";
 /**
  * Banking module demo seed — bank book (50+), cash book (20+), fund transfers (10).
  * Runs as part of accounts demo seed; idempotent via version key.
@@ -22,17 +23,21 @@ import {
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
 
-export const BANKING_DEMO_SEED_VERSION = "2026-jul-fund-transfer-v2";
+import { getDemoBankLedgers } from "@/lib/accounts/bank-ledger-resolver";
+
+export const BANKING_DEMO_SEED_VERSION = "relative-dates-v3";
 const VERSION_KEY = "ds_banking_demo_seed_version";
 const FUND_TRANSFER_SEED_KEY = "ds_fund_transfer_demo_seed_version";
-export const FUND_TRANSFER_DEMO_SEED_VERSION = "2026-jul-ft-v2";
+export const FUND_TRANSFER_DEMO_SEED_VERSION = "relative-dates-v3";
 
-function findBankLedger(accountNumberSuffix: string) {
-  const master = loadBankAccountMasters().find((m) =>
-    m.accountNumber.replace(/\D/g, "").endsWith(accountNumberSuffix.replace(/\D/g, "")),
-  );
-  if (!master) return null;
-  return loadChartOfAccounts().find((r) => r.id === master.coaLedgerId) ?? null;
+const BANKING_DEMO_VOUCHER_PREFIXES = ["RV-", "PV-", "FT-", "CSH-", "CV-", "JV-000"];
+
+function removeBankingDemoVouchers(): void {
+  const list = loadVouchers().filter((v) => {
+    const no = v.voucherNumber ?? "";
+    return !BANKING_DEMO_VOUCHER_PREFIXES.some((prefix) => no.startsWith(prefix));
+  });
+  saveVouchers(list);
 }
 
 function findCashLedger(namePart: string) {
@@ -165,15 +170,11 @@ export function ensureDemoBankAccounts(): void {
   ensureDemoBankCoaStructure();
 }
 
-function seedBankBookTransactions(): void {
-  if (loadVouchers().some((v) => v.voucherNumber === "RV-0001")) return;
+function seedBankBookTransactions(force = false): void {
+  if (!force && loadVouchers().some((v) => v.voucherNumber === "RV-0001")) return;
 
-  const hdfc = findBankLedger("7890");
-  const icici = findBankLedger("5678");
-  const sbi = findBankLedger("4321");
-  const axis = findBankLedger("8901");
-  const kotak = findBankLedger("3210");
-  if (!hdfc || !icici || !sbi) return;
+  const { hdfc, icici, sbi, axis, kotak } = getDemoBankLedgers();
+  if (!hdfc) return;
 
   const abc = findCustomerLedger("ABC Agro");
   const krishna = findCustomerLedger("Krishna Retail");
@@ -194,18 +195,18 @@ function seedBankBookTransactions(): void {
     no: string;
     narration: string;
   }> = [
-    { bank: hdfc, party: abc, amount: 185000, date: "2026-04-08", ref: "NEFT-001", no: "RV-0001", narration: "Sales collection — ABC Agro Distributor" },
-    { bank: hdfc, party: krishna, amount: 92000, date: "2026-04-12", ref: "NEFT-002", no: "RV-0002", narration: "Customer receipt — Krishna Retail Store" },
-    { bank: icici, party: greenHarvest, amount: 145000, date: "2026-04-15", ref: "NEFT-003", no: "RV-0003", narration: "Sales collection — Green Harvest Agro" },
-    { bank: icici, party: abc, amount: 68000, date: "2026-04-22", ref: "NEFT-004", no: "RV-0004", narration: "Farmer collection — ABC Agro partial" },
-    { bank: sbi, party: krishna, amount: 54000, date: "2026-05-03", ref: "NEFT-005", no: "RV-0005", narration: "Cash sales collection deposited" },
-    { bank: hdfc, party: greenHarvest, amount: 210000, date: "2026-05-10", ref: "NEFT-006", no: "RV-0006", narration: "Sales collection — bulk urea order" },
-    { bank: icici, party: abc, amount: 125000, date: "2026-05-18", ref: "NEFT-007", no: "RV-0007", narration: "Customer receipt against INV-2026-003" },
-    { bank: sbi, party: krishna, amount: 78000, date: "2026-05-25", ref: "NEFT-008", no: "RV-0008", narration: "Sales collection — Krishna Retail" },
-    { bank: hdfc, party: greenHarvest, amount: 95000, date: "2026-06-02", ref: "NEFT-009", no: "RV-0009", narration: "Collection against outstanding invoice" },
-    { bank: icici, party: abc, amount: 156000, date: "2026-06-08", ref: "NEFT-010", no: "RV-0010", narration: "Sales collection — distributor payment" },
-    { bank: kotak, party: krishna, amount: 42000, date: "2026-06-12", ref: "NEFT-011", no: "RV-0011", narration: "Customer receipt — retail counter" },
-    { bank: hdfc, party: abc, amount: 88000, date: "2026-06-15", ref: "NEFT-012", no: "RV-0012", narration: "Farmer collection — seasonal payment" },
+    { bank: hdfc, party: abc, amount: 185000, date: demoDateAt(0), ref: "NEFT-001", no: "RV-0001", narration: "Sales collection — ABC Agro Distributor" },
+    { bank: hdfc, party: krishna, amount: 92000, date: demoDateAt(1), ref: "NEFT-002", no: "RV-0002", narration: "Customer receipt — Krishna Retail Store" },
+    { bank: icici, party: greenHarvest, amount: 145000, date: demoDateAt(2), ref: "NEFT-003", no: "RV-0003", narration: "Sales collection — Green Harvest Agro" },
+    { bank: icici, party: abc, amount: 68000, date: demoDateAt(3), ref: "NEFT-004", no: "RV-0004", narration: "Farmer collection — ABC Agro partial" },
+    { bank: sbi, party: krishna, amount: 54000, date: demoDateAt(4), ref: "NEFT-005", no: "RV-0005", narration: "Cash sales collection deposited" },
+    { bank: hdfc, party: greenHarvest, amount: 210000, date: demoDateAt(5), ref: "NEFT-006", no: "RV-0006", narration: "Sales collection — bulk urea order" },
+    { bank: icici, party: abc, amount: 125000, date: demoDateAt(6), ref: "NEFT-007", no: "RV-0007", narration: "Customer receipt against INV-2026-003" },
+    { bank: sbi, party: krishna, amount: 78000, date: demoDateAt(7), ref: "NEFT-008", no: "RV-0008", narration: "Sales collection — Krishna Retail" },
+    { bank: hdfc, party: greenHarvest, amount: 95000, date: demoDateAt(8), ref: "NEFT-009", no: "RV-0009", narration: "Collection against outstanding invoice" },
+    { bank: icici, party: abc, amount: 156000, date: demoDateAt(9), ref: "NEFT-010", no: "RV-0010", narration: "Sales collection — distributor payment" },
+    { bank: kotak, party: krishna, amount: 42000, date: demoDateAt(10), ref: "NEFT-011", no: "RV-0011", narration: "Customer receipt — retail counter" },
+    { bank: hdfc, party: abc, amount: 88000, date: demoDateAt(11), ref: "NEFT-012", no: "RV-0012", narration: "Farmer collection — seasonal payment" },
   ];
 
   for (const r of receipts) {
@@ -222,16 +223,16 @@ function seedBankBookTransactions(): void {
     no: string;
     narration: string;
   }> = [
-    { bank: hdfc, party: agrochem, amount: 245000, date: "2026-04-10", ref: "PAY-001", no: "PV-0001", narration: "Supplier payment — AgroChem Traders" },
-    { bank: icici, party: greenField, amount: 118000, date: "2026-04-18", ref: "PAY-002", no: "PV-0002", narration: "Supplier payment — GreenField Suppliers" },
-    { bank: sbi, party: agrochem, amount: 86000, date: "2026-04-28", ref: "PAY-003", no: "PV-0003", narration: "Supplier payment — fertilizer purchase" },
-    { bank: hdfc, party: greenField, amount: 195000, date: "2026-05-05", ref: "PAY-004", no: "PV-0004", narration: "Supplier payment — seed procurement" },
-    { bank: axis, party: agrochem, amount: 320000, date: "2026-05-12", ref: "PAY-005", no: "PV-0005", narration: "Salary disbursement via Axis account" },
-    { bank: icici, party: greenField, amount: 142000, date: "2026-05-20", ref: "PAY-006", no: "PV-0006", narration: "Supplier payment — pesticide stock" },
-    { bank: hdfc, party: agrochem, amount: 98000, date: "2026-05-28", ref: "PAY-007", no: "PV-0007", narration: "Supplier payment — partial settlement" },
-    { bank: sbi, party: greenField, amount: 76000, date: "2026-06-03", ref: "PAY-008", no: "PV-0008", narration: "Supplier payment — operations account" },
-    { bank: icici, party: agrochem, amount: 210000, date: "2026-06-10", ref: "PAY-009", no: "PV-0009", narration: "Supplier payment — bulk DAP order" },
-    { bank: hdfc, party: greenField, amount: 134000, date: "2026-06-18", ref: "PAY-010", no: "PV-0010", narration: "Supplier payment — June settlement" },
+    { bank: hdfc, party: agrochem, amount: 245000, date: demoDateAt(12), ref: "PAY-001", no: "PV-0001", narration: "Supplier payment — AgroChem Traders" },
+    { bank: icici, party: greenField, amount: 118000, date: demoDateAt(13), ref: "PAY-002", no: "PV-0002", narration: "Supplier payment — GreenField Suppliers" },
+    { bank: sbi, party: agrochem, amount: 86000, date: demoDateAt(14), ref: "PAY-003", no: "PV-0003", narration: "Supplier payment — fertilizer purchase" },
+    { bank: hdfc, party: greenField, amount: 195000, date: demoDateAt(15), ref: "PAY-004", no: "PV-0004", narration: "Supplier payment — seed procurement" },
+    { bank: axis, party: agrochem, amount: 320000, date: demoDateAt(16), ref: "PAY-005", no: "PV-0005", narration: "Salary disbursement via Axis account" },
+    { bank: icici, party: greenField, amount: 142000, date: demoDateAt(17), ref: "PAY-006", no: "PV-0006", narration: "Supplier payment — pesticide stock" },
+    { bank: hdfc, party: agrochem, amount: 98000, date: demoDateAt(18), ref: "PAY-007", no: "PV-0007", narration: "Supplier payment — partial settlement" },
+    { bank: sbi, party: greenField, amount: 76000, date: demoDateAt(19), ref: "PAY-008", no: "PV-0008", narration: "Supplier payment — operations account" },
+    { bank: icici, party: agrochem, amount: 210000, date: demoDateAt(20), ref: "PAY-009", no: "PV-0009", narration: "Supplier payment — bulk DAP order" },
+    { bank: hdfc, party: greenField, amount: 134000, date: demoDateAt(21), ref: "PAY-010", no: "PV-0010", narration: "Supplier payment — June settlement" },
   ];
 
   for (const p of payments) {
@@ -240,14 +241,14 @@ function seedBankBookTransactions(): void {
   }
 
   const transfers = [
-    { from: hdfc, to: icici, amount: 200000, date: "2026-04-20", no: "FT-0001" },
-    { from: icici, to: sbi, amount: 125000, date: "2026-04-28", no: "FT-0002" },
-    { from: hdfc, to: axis, amount: 175000, date: "2026-05-08", no: "FT-0003" },
-    { from: sbi, to: kotak, amount: 85000, date: "2026-05-15", no: "FT-0004" },
-    { from: icici, to: hdfc, amount: 95000, date: "2026-05-22", no: "FT-0005" },
-    { from: hdfc, to: sbi, amount: 110000, date: "2026-06-01", no: "FT-0006" },
-    { from: axis, to: icici, amount: 65000, date: "2026-06-08", no: "FT-0007" },
-    { from: kotak, to: hdfc, amount: 45000, date: "2026-06-12", no: "FT-0008" },
+    { from: hdfc, to: icici, amount: 200000, date: demoDateAt(22), no: "FT-0001" },
+    { from: icici, to: sbi, amount: 125000, date: demoDateAt(23), no: "FT-0002" },
+    { from: hdfc, to: axis, amount: 175000, date: demoDateAt(24), no: "FT-0003" },
+    { from: sbi, to: kotak, amount: 85000, date: demoDateAt(25), no: "FT-0004" },
+    { from: icici, to: hdfc, amount: 95000, date: demoDateAt(26), no: "FT-0005" },
+    { from: hdfc, to: sbi, amount: 110000, date: demoDateAt(27), no: "FT-0006" },
+    { from: axis, to: icici, amount: 65000, date: demoDateAt(28), no: "FT-0007" },
+    { from: kotak, to: hdfc, amount: 45000, date: demoDateAt(29), no: "FT-0008" },
   ];
 
   for (const t of transfers) {
@@ -271,21 +272,23 @@ function seedBankBookTransactions(): void {
         { ledgerId: bankCharges.id, ledgerName: bankCharges.accountName, debit: 2500, credit: 0 },
         { ledgerId: hdfc.id, ledgerName: hdfc.accountName, debit: 0, credit: 2500 },
       ],
-      "2026-05-05",
+      demoDateAt(7),
       "BCHG-MAY",
       "JV-0001",
-      "Bank service charges — May 2026",
+      "Bank service charges — May",
     );
-    seedJournal(
-      [
-        { ledgerId: bankCharges.id, ledgerName: bankCharges.accountName, debit: 1800, credit: 0 },
-        { ledgerId: icici.id, ledgerName: icici.accountName, debit: 0, credit: 1800 },
-      ],
-      "2026-06-05",
-      "BCHG-JUN",
-      "JV-0002",
-      "Bank charges — ICICI collection account",
-    );
+    if (icici) {
+      seedJournal(
+        [
+          { ledgerId: bankCharges.id, ledgerName: bankCharges.accountName, debit: 1800, credit: 0 },
+          { ledgerId: icici.id, ledgerName: icici.accountName, debit: 0, credit: 1800 },
+        ],
+        demoDateAt(3),
+        "BCHG-JUN",
+        "JV-0002",
+        "Bank charges — ICICI collection account",
+      );
+    }
   }
 
   if (interestIncome && hdfc) {
@@ -294,28 +297,30 @@ function seedBankBookTransactions(): void {
         { ledgerId: hdfc.id, ledgerName: hdfc.accountName, debit: 8500, credit: 0 },
         { ledgerId: interestIncome.id, ledgerName: interestIncome.accountName, debit: 0, credit: 8500 },
       ],
-      "2026-05-30",
+      demoDateAt(2),
       "INT-MAY",
       "JV-0003",
       "Interest credit — HDFC current account",
     );
-    seedJournal(
-      [
-        { ledgerId: icici.id, ledgerName: icici.accountName, debit: 4200, credit: 0 },
-        { ledgerId: interestIncome.id, ledgerName: interestIncome.accountName, debit: 0, credit: 4200 },
-      ],
-      "2026-06-30",
-      "INT-JUN",
-      "JV-0004",
-      "Interest credit — ICICI collection account",
-    );
+    if (icici) {
+      seedJournal(
+        [
+          { ledgerId: icici.id, ledgerName: icici.accountName, debit: 4200, credit: 0 },
+          { ledgerId: interestIncome.id, ledgerName: interestIncome.accountName, debit: 0, credit: 4200 },
+        ],
+        demoDateAt(0),
+        "INT-JUN",
+        "JV-0004",
+        "Interest credit — ICICI collection account",
+      );
+    }
   }
 
   const miscJournals = [
-    { bank: hdfc, expense: findExpenseLedger("Rent"), amount: 45000, date: "2026-04-05", no: "JV-0005", narration: "April rent — Head Office" },
-    { bank: sbi, expense: findExpenseLedger("Electricity"), amount: 18500, date: "2026-05-08", no: "JV-0006", narration: "Warehouse electricity — May" },
-    { bank: icici, expense: findExpenseLedger("Marketing"), amount: 28000, date: "2026-05-15", no: "JV-0007", narration: "Marketing campaign payment" },
-    { bank: hdfc, expense: findExpenseLedger("Transport"), amount: 32000, date: "2026-06-02", no: "JV-0008", narration: "Logistics and freight charges" },
+    { bank: hdfc, expense: findExpenseLedger("Rent"), amount: 45000, date: demoDateAt(30), no: "JV-0005", narration: "April rent — Head Office" },
+    { bank: sbi, expense: findExpenseLedger("Electricity"), amount: 18500, date: demoDateAt(31), no: "JV-0006", narration: "Warehouse electricity — May" },
+    { bank: icici, expense: findExpenseLedger("Marketing"), amount: 28000, date: demoDateAt(32), no: "JV-0007", narration: "Marketing campaign payment" },
+    { bank: hdfc, expense: findExpenseLedger("Transport"), amount: 32000, date: demoDateAt(33), no: "JV-0008", narration: "Logistics and freight charges" },
   ];
 
   for (const j of miscJournals) {
@@ -346,7 +351,7 @@ function seedCashBookTransactions(): void {
   );
   const officeExpense = findExpenseLedger("Office") ?? findExpenseLedger("Stationery");
   const transportExpense = findExpenseLedger("Transport");
-  const hdfc = findBankLedger("7890");
+  const { hdfc } = getDemoBankLedgers();
 
   const cashEntries: Array<{
     cash: ChartOfAccount | null;
@@ -357,26 +362,26 @@ function seedCashBookTransactions(): void {
     no: string;
     narration: string;
   }> = [
-    { cash: pettyCash, type: "receipt", counterparty: salesIncome ? { id: salesIncome.id, name: salesIncome.accountName } : null, amount: 12500, date: "2026-04-03", no: "CSH-0001", narration: "Cash sales — counter collection" },
-    { cash: pettyCash, type: "payment", counterparty: officeExpense ? { id: officeExpense.id, name: officeExpense.accountName } : null, amount: 3200, date: "2026-04-08", no: "CSH-0002", narration: "Petty cash expenses — stationery" },
-    { cash: branchCash, type: "receipt", counterparty: salesIncome ? { id: salesIncome.id, name: salesIncome.accountName } : null, amount: 28500, date: "2026-04-12", no: "CSH-0003", narration: "Cash sales — branch counter" },
-    { cash: pettyCash, type: "payment", counterparty: officeExpense ? { id: officeExpense.id, name: officeExpense.accountName } : null, amount: 1800, date: "2026-04-15", no: "CSH-0004", narration: "Office expenses — courier charges" },
-    { cash: fieldCash, type: "receipt", counterparty: findCustomerLedger("Yavatmal") ? { id: findCustomerLedger("Yavatmal")!.id, name: findCustomerLedger("Yavatmal")!.accountName } : null, amount: 45000, date: "2026-04-20", no: "CSH-0005", narration: "Farmer collections — field staff" },
-    { cash: pettyCash, type: "payment", counterparty: transportExpense ? { id: transportExpense.id, name: transportExpense.accountName } : null, amount: 5600, date: "2026-04-25", no: "CSH-0006", narration: "Transport charges — local delivery" },
-    { cash: branchCash, type: "receipt", counterparty: salesIncome ? { id: salesIncome.id, name: salesIncome.accountName } : null, amount: 18700, date: "2026-05-02", no: "CSH-0007", narration: "Cash sales — weekend counter" },
-    { cash: pettyCash, type: "payment", counterparty: officeExpense ? { id: officeExpense.id, name: officeExpense.accountName } : null, amount: 2400, date: "2026-05-08", no: "CSH-0008", narration: "Petty cash expenses — tea and refreshments" },
-    { cash: fieldCash, type: "receipt", counterparty: findCustomerLedger("Bharat") ? { id: findCustomerLedger("Bharat")!.id, name: findCustomerLedger("Bharat")!.accountName } : null, amount: 32000, date: "2026-05-12", no: "CSH-0009", narration: "Farmer collections — Vidarbha region" },
-    { cash: pettyCash, type: "payment", counterparty: officeExpense ? { id: officeExpense.id, name: officeExpense.accountName } : null, amount: 4500, date: "2026-05-18", no: "CSH-0010", narration: "Office expenses — printing" },
-    { cash: branchCash, type: "receipt", counterparty: salesIncome ? { id: salesIncome.id, name: salesIncome.accountName } : null, amount: 22400, date: "2026-05-22", no: "CSH-0011", narration: "Cash sales — branch collection" },
-    { cash: pettyCash, type: "payment", counterparty: transportExpense ? { id: transportExpense.id, name: transportExpense.accountName } : null, amount: 3800, date: "2026-05-28", no: "CSH-0012", narration: "Petty cash — auto fare" },
-    { cash: fieldCash, type: "receipt", counterparty: findCustomerLedger("Konkan") ? { id: findCustomerLedger("Konkan")!.id, name: findCustomerLedger("Konkan")!.accountName } : null, amount: 18500, date: "2026-06-03", no: "CSH-0013", narration: "Farmer collections — Konkan depot" },
-    { cash: pettyCash, type: "payment", counterparty: officeExpense ? { id: officeExpense.id, name: officeExpense.accountName } : null, amount: 2900, date: "2026-06-08", no: "CSH-0014", narration: "Office expenses — maintenance" },
-    { cash: branchCash, type: "receipt", counterparty: salesIncome ? { id: salesIncome.id, name: salesIncome.accountName } : null, amount: 31200, date: "2026-06-12", no: "CSH-0015", narration: "Cash sales — branch weekend" },
-    { cash: pettyCash, type: "payment", counterparty: officeExpense ? { id: officeExpense.id, name: officeExpense.accountName } : null, amount: 1500, date: "2026-06-15", no: "CSH-0016", narration: "Petty cash expenses — misc" },
-    { cash: fieldCash, type: "receipt", counterparty: findCustomerLedger("Shree") ? { id: findCustomerLedger("Shree")!.id, name: findCustomerLedger("Shree")!.accountName } : null, amount: 28000, date: "2026-06-18", no: "CSH-0017", narration: "Farmer collections — seed orders" },
-    { cash: branchCash, type: "receipt", counterparty: salesIncome ? { id: salesIncome.id, name: salesIncome.accountName } : null, amount: 15600, date: "2026-06-20", no: "CSH-0018", narration: "Cash sales — end of month" },
-    { cash: pettyCash, type: "payment", counterparty: transportExpense ? { id: transportExpense.id, name: transportExpense.accountName } : null, amount: 4200, date: "2026-06-22", no: "CSH-0019", narration: "Transport — local pickup" },
-    { cash: pettyCash, type: "payment", counterparty: officeExpense ? { id: officeExpense.id, name: officeExpense.accountName } : null, amount: 2100, date: "2026-06-25", no: "CSH-0020", narration: "Office expenses — cleaning supplies" },
+    { cash: pettyCash, type: "receipt", counterparty: salesIncome ? { id: salesIncome.id, name: salesIncome.accountName } : null, amount: 12500, date: demoDateAt(34), no: "CSH-0001", narration: "Cash sales — counter collection" },
+    { cash: pettyCash, type: "payment", counterparty: officeExpense ? { id: officeExpense.id, name: officeExpense.accountName } : null, amount: 3200, date: demoDateAt(35), no: "CSH-0002", narration: "Petty cash expenses — stationery" },
+    { cash: branchCash, type: "receipt", counterparty: salesIncome ? { id: salesIncome.id, name: salesIncome.accountName } : null, amount: 28500, date: demoDateAt(36), no: "CSH-0003", narration: "Cash sales — branch counter" },
+    { cash: pettyCash, type: "payment", counterparty: officeExpense ? { id: officeExpense.id, name: officeExpense.accountName } : null, amount: 1800, date: demoDateAt(37), no: "CSH-0004", narration: "Office expenses — courier charges" },
+    { cash: fieldCash, type: "receipt", counterparty: findCustomerLedger("Yavatmal") ? { id: findCustomerLedger("Yavatmal")!.id, name: findCustomerLedger("Yavatmal")!.accountName } : null, amount: 45000, date: demoDateAt(38), no: "CSH-0005", narration: "Farmer collections — field staff" },
+    { cash: pettyCash, type: "payment", counterparty: transportExpense ? { id: transportExpense.id, name: transportExpense.accountName } : null, amount: 5600, date: demoDateAt(39), no: "CSH-0006", narration: "Transport charges — local delivery" },
+    { cash: branchCash, type: "receipt", counterparty: salesIncome ? { id: salesIncome.id, name: salesIncome.accountName } : null, amount: 18700, date: demoDateAt(40), no: "CSH-0007", narration: "Cash sales — weekend counter" },
+    { cash: pettyCash, type: "payment", counterparty: officeExpense ? { id: officeExpense.id, name: officeExpense.accountName } : null, amount: 2400, date: demoDateAt(41), no: "CSH-0008", narration: "Petty cash expenses — tea and refreshments" },
+    { cash: fieldCash, type: "receipt", counterparty: findCustomerLedger("Bharat") ? { id: findCustomerLedger("Bharat")!.id, name: findCustomerLedger("Bharat")!.accountName } : null, amount: 32000, date: demoDateAt(42), no: "CSH-0009", narration: "Farmer collections — Vidarbha region" },
+    { cash: pettyCash, type: "payment", counterparty: officeExpense ? { id: officeExpense.id, name: officeExpense.accountName } : null, amount: 4500, date: demoDateAt(43), no: "CSH-0010", narration: "Office expenses — printing" },
+    { cash: branchCash, type: "receipt", counterparty: salesIncome ? { id: salesIncome.id, name: salesIncome.accountName } : null, amount: 22400, date: demoDateAt(44), no: "CSH-0011", narration: "Cash sales — branch collection" },
+    { cash: pettyCash, type: "payment", counterparty: transportExpense ? { id: transportExpense.id, name: transportExpense.accountName } : null, amount: 3800, date: demoDateAt(45), no: "CSH-0012", narration: "Petty cash — auto fare" },
+    { cash: fieldCash, type: "receipt", counterparty: findCustomerLedger("Konkan") ? { id: findCustomerLedger("Konkan")!.id, name: findCustomerLedger("Konkan")!.accountName } : null, amount: 18500, date: demoDateAt(46), no: "CSH-0013", narration: "Farmer collections — Konkan depot" },
+    { cash: pettyCash, type: "payment", counterparty: officeExpense ? { id: officeExpense.id, name: officeExpense.accountName } : null, amount: 2900, date: demoDateAt(47), no: "CSH-0014", narration: "Office expenses — maintenance" },
+    { cash: branchCash, type: "receipt", counterparty: salesIncome ? { id: salesIncome.id, name: salesIncome.accountName } : null, amount: 31200, date: demoDateAt(48), no: "CSH-0015", narration: "Cash sales — branch weekend" },
+    { cash: pettyCash, type: "payment", counterparty: officeExpense ? { id: officeExpense.id, name: officeExpense.accountName } : null, amount: 1500, date: demoDateAt(49), no: "CSH-0016", narration: "Petty cash expenses — misc" },
+    { cash: fieldCash, type: "receipt", counterparty: findCustomerLedger("Shree") ? { id: findCustomerLedger("Shree")!.id, name: findCustomerLedger("Shree")!.accountName } : null, amount: 28000, date: demoDateAt(50), no: "CSH-0017", narration: "Farmer collections — seed orders" },
+    { cash: branchCash, type: "receipt", counterparty: salesIncome ? { id: salesIncome.id, name: salesIncome.accountName } : null, amount: 15600, date: demoDateAt(51), no: "CSH-0018", narration: "Cash sales — end of month" },
+    { cash: pettyCash, type: "payment", counterparty: transportExpense ? { id: transportExpense.id, name: transportExpense.accountName } : null, amount: 4200, date: demoDateAt(52), no: "CSH-0019", narration: "Transport — local pickup" },
+    { cash: pettyCash, type: "payment", counterparty: officeExpense ? { id: officeExpense.id, name: officeExpense.accountName } : null, amount: 2100, date: demoDateAt(53), no: "CSH-0020", narration: "Office expenses — cleaning supplies" },
   ];
 
   for (const e of cashEntries) {
@@ -410,7 +415,7 @@ function seedCashBookTransactions(): void {
 
   if (hdfc && pettyCash) {
     const v = createVoucher("contra", {
-      date: "2026-05-10",
+      date: demoDateAt(54),
       referenceNo: "FT-0009",
       narration: "Cash deposit to HDFC Bank",
       status: "posted",
@@ -427,10 +432,7 @@ function seedFundTransferRecords(): void {
   if (typeof window === "undefined") return;
   if (localStorage.getItem(FUND_TRANSFER_SEED_KEY) === FUND_TRANSFER_DEMO_SEED_VERSION) return;
 
-  const hdfc = findBankLedger("7890");
-  const icici = findBankLedger("5678");
-  const sbi = findBankLedger("4321");
-  const axis = findBankLedger("8901");
+  const { hdfc, icici, sbi, axis } = getDemoBankLedgers();
   const pettyCash = findCashLedger("Petty");
   if (!hdfc || !icici || !sbi || !axis || !pettyCash) return;
 
@@ -450,7 +452,7 @@ function seedFundTransferRecords(): void {
       from: hdfc.id,
       to: icici.id,
       amount: 100000,
-      date: "2026-04-20",
+      date: demoDateAt(55),
       transferNo: "FT-0001",
       referenceNo: "NEFT-HDFC-ICICI-0420",
       narration: "HDFC → ICICI working capital transfer",
@@ -461,7 +463,7 @@ function seedFundTransferRecords(): void {
       from: icici.id,
       to: sbi.id,
       amount: 125000,
-      date: "2026-04-28",
+      date: demoDateAt(56),
       transferNo: "FT-0002",
       referenceNo: "RTGS-ICICI-SBI-0428",
       narration: "ICICI → SBI operations funding",
@@ -472,7 +474,7 @@ function seedFundTransferRecords(): void {
       from: hdfc.id,
       to: axis.id,
       amount: 175000,
-      date: "2026-05-08",
+      date: demoDateAt(57),
       transferNo: "FT-0003",
       referenceNo: "NEFT-HDFC-AXIS-0508",
       narration: "HDFC → Axis OD account salary funding",
@@ -483,7 +485,7 @@ function seedFundTransferRecords(): void {
       from: pettyCash.id,
       to: hdfc.id,
       amount: 50000,
-      date: "2026-05-10",
+      date: demoDateAt(58),
       transferNo: "FT-0004",
       referenceNo: "",
       narration: "Cash deposit to HDFC Bank Current Account",
@@ -494,7 +496,7 @@ function seedFundTransferRecords(): void {
       from: sbi.id,
       to: icici.id,
       amount: 85000,
-      date: "2026-05-15",
+      date: demoDateAt(59),
       transferNo: "FT-0005",
       referenceNo: "NEFT-SBI-ICICI-0515",
       narration: "SBI → ICICI collection sweep",
@@ -505,7 +507,7 @@ function seedFundTransferRecords(): void {
       from: icici.id,
       to: pettyCash.id,
       amount: 25000,
-      date: "2026-05-20",
+      date: demoDateAt(60),
       transferNo: "FT-0006",
       referenceNo: "",
       narration: "Cash withdrawal from ICICI for petty cash replenishment",
@@ -516,7 +518,7 @@ function seedFundTransferRecords(): void {
       from: icici.id,
       to: hdfc.id,
       amount: 95000,
-      date: "2026-05-22",
+      date: demoDateAt(61),
       transferNo: "FT-0007",
       referenceNo: "IMPS-ICICI-HDFC-0522",
       narration: "ICICI → HDFC surplus transfer",
@@ -527,7 +529,7 @@ function seedFundTransferRecords(): void {
       from: hdfc.id,
       to: sbi.id,
       amount: 110000,
-      date: "2026-06-01",
+      date: demoDateAt(62),
       transferNo: "FT-0008",
       referenceNo: "NEFT-HDFC-SBI-0601",
       narration: "HDFC → SBI vendor payment buffer",
@@ -538,7 +540,7 @@ function seedFundTransferRecords(): void {
       from: axis.id,
       to: icici.id,
       amount: 65000,
-      date: "2026-06-08",
+      date: demoDateAt(63),
       transferNo: "FT-0009",
       referenceNo: "UPI-AXIS-ICICI-0608",
       narration: "Axis OD → ICICI quick transfer",
@@ -549,7 +551,7 @@ function seedFundTransferRecords(): void {
       from: pettyCash.id,
       to: icici.id,
       amount: 35000,
-      date: "2026-06-12",
+      date: demoDateAt(64),
       transferNo: "FT-0010",
       referenceNo: "",
       narration: "Cash deposit to ICICI Bank Current Account",
@@ -560,7 +562,7 @@ function seedFundTransferRecords(): void {
       from: hdfc.id,
       to: axis.id,
       amount: 78000,
-      date: "2026-06-15",
+      date: demoDateAt(65),
       transferNo: "FT-0011",
       referenceNo: "CHQ-784521",
       narration: "Cheque transfer HDFC → Axis OD account",
@@ -571,7 +573,7 @@ function seedFundTransferRecords(): void {
       from: sbi.id,
       to: hdfc.id,
       amount: 142000,
-      date: "2026-06-18",
+      date: demoDateAt(66),
       transferNo: "FT-0012",
       referenceNo: "RTGS-SBI-HDFC-0618",
       narration: "SBI → HDFC end-of-month consolidation",
@@ -582,7 +584,7 @@ function seedFundTransferRecords(): void {
       from: icici.id,
       to: axis.id,
       amount: 92000,
-      date: "2026-06-22",
+      date: demoDateAt(67),
       transferNo: "FT-0013",
       referenceNo: "NEFT-ICICI-AXIS-0622",
       narration: "ICICI → Axis payment account top-up",
@@ -593,7 +595,7 @@ function seedFundTransferRecords(): void {
       from: hdfc.id,
       to: pettyCash.id,
       amount: 18000,
-      date: "2026-06-25",
+      date: demoDateAt(68),
       transferNo: "FT-0014",
       referenceNo: "",
       narration: "ATM cash withdrawal for field collections float",
@@ -604,7 +606,7 @@ function seedFundTransferRecords(): void {
       from: hdfc.id,
       to: icici.id,
       amount: 45000,
-      date: "2026-06-28",
+      date: demoDateAt(69),
       transferNo: "FT-0015",
       referenceNo: "NEFT-HDFC-ICICI-0628",
       narration: "Cancelled transfer — duplicate entry reversed",
@@ -644,10 +646,16 @@ function seedFundTransferRecords(): void {
 
 export function seedBankingDemoData(force = false): void {
   if (typeof window === "undefined") return;
-  if (!force && localStorage.getItem(VERSION_KEY) === BANKING_DEMO_SEED_VERSION) return;
+  const stored = localStorage.getItem(VERSION_KEY);
+  if (!force && stored === BANKING_DEMO_SEED_VERSION) return;
+
+  if (force || stored !== BANKING_DEMO_SEED_VERSION) {
+    removeBankingDemoVouchers();
+    localStorage.removeItem(FUND_TRANSFER_SEED_KEY);
+  }
 
   ensureDemoBankAccounts();
-  seedBankBookTransactions();
+  seedBankBookTransactions(force);
   seedCashBookTransactions();
   seedFundTransferRecords();
 
@@ -656,6 +664,13 @@ export function seedBankingDemoData(force = false): void {
 
 export function ensureBankingDemoOnPageLoad(): void {
   ensureDemoBankAccounts();
+  if (typeof window !== "undefined") {
+    const storedVersion = localStorage.getItem(VERSION_KEY);
+    if (storedVersion !== BANKING_DEMO_SEED_VERSION) {
+      seedBankingDemoData(true);
+      return;
+    }
+  }
   if (loadBankAccountMasters().length === 0) {
     seedBankingDemoData(true);
     return;

@@ -1,3 +1,4 @@
+import { demoDateAt } from "@/lib/accounts/demo-date-utils";
 /**
  * Bank Book demo seed — ensures voucher-backed demo data for Bank Book only.
  * Creates transactions through Receipt, Payment, Contra, Journal, and Fund Transfer vouchers.
@@ -10,19 +11,11 @@ import {
   saveVouchers,
 } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { ensureBankingDemoOnPageLoad } from "@/lib/accounts/banking-demo-seed";
-import { loadBankAccountMasters } from "@/lib/accounts/bank-accounts-data";
+import { getDemoBankLedgers } from "@/lib/accounts/bank-ledger-resolver";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 
-const BANK_BOOK_DEMO_VERSION = "2026-jul-bank-book-v1";
+const BANK_BOOK_DEMO_VERSION = "relative-dates-v2";
 const VERSION_KEY = "ds_bank_book_demo_seed_version";
-
-function findBankLedger(accountNumberSuffix: string): ChartOfAccount | null {
-  const master = loadBankAccountMasters().find((m) =>
-    m.accountNumber.replace(/\D/g, "").endsWith(accountNumberSuffix.replace(/\D/g, "")),
-  );
-  if (!master) return null;
-  return loadChartOfAccounts().find((r) => r.id === master.coaLedgerId) ?? null;
-}
 
 function findCashLedger(namePart: string): ChartOfAccount | null {
   return (
@@ -44,9 +37,7 @@ function setVoucherNumber(voucherId: number, voucherNumber: string): void {
 function seedContraVouchers(): void {
   if (loadVouchers().some((v) => v.voucherNumber === "CV-0001")) return;
 
-  const hdfc = findBankLedger("7890");
-  const icici = findBankLedger("5678");
-  const sbi = findBankLedger("4321");
+  const { hdfc, icici, sbi } = getDemoBankLedgers();
   const pettyCash = findCashLedger("Petty");
   if (!hdfc || !icici || !sbi || !pettyCash) return;
 
@@ -59,7 +50,7 @@ function seedContraVouchers(): void {
     amount: number;
   }> = [
     {
-      date: "2026-04-06",
+      date: demoDateAt(0),
       no: "CV-0001",
       narration: "Cash withdrawal for petty cash replenishment",
       debitLedger: pettyCash,
@@ -67,7 +58,7 @@ function seedContraVouchers(): void {
       amount: 15000,
     },
     {
-      date: "2026-04-25",
+      date: demoDateAt(1),
       no: "CV-0002",
       narration: "Counter cash deposit — branch collection",
       debitLedger: hdfc,
@@ -75,7 +66,7 @@ function seedContraVouchers(): void {
       amount: 22000,
     },
     {
-      date: "2026-05-14",
+      date: demoDateAt(2),
       no: "CV-0003",
       narration: "Cash withdrawal — field staff imprest",
       debitLedger: pettyCash,
@@ -83,7 +74,7 @@ function seedContraVouchers(): void {
       amount: 18000,
     },
     {
-      date: "2026-06-06",
+      date: demoDateAt(3),
       no: "CV-0004",
       narration: "Cash deposit — weekend counter collections",
       debitLedger: sbi,

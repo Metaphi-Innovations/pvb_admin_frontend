@@ -24,6 +24,7 @@ import {
   ReportAsOnDateFilter,
   ReportFinancialYearFilter,
   ReportVendorFilter,
+  ReportSearchFilter,
 } from "@/components/accounts/ReportFilters";
 import {
   AccountsRichTable,
@@ -32,8 +33,8 @@ import {
 } from "@/components/accounts/AccountsTable";
 import {
   AccountsTablePagination,
-  AccountsTableToolbar,
 } from "@/components/accounts/AccountsTableListing";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { cn } from "@/lib/utils";
 
 export default function VendorAgeingClient() {
@@ -162,29 +163,32 @@ export default function VendorAgeingClient() {
       title="Supplier Ageing"
       description="Supplier outstanding grouped by ageing buckets as on the selected date."
       filters={
-        <ReportFilterRow>
+        <ReportFilterRow
+          end={
+            <AccountsExportMenu
+              onExcel={handleExportExcel}
+              onPdf={handleExportPdf}
+              disabled={exporting || rows.length === 0}
+            />
+          }
+        >
           <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
           <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
           <ReportVendorFilter value={vendorId} onChange={setVendorId} vendors={filterOptions.vendors} />
+          <ReportSearchFilter value={search} onChange={setSearch} placeholder="Search supplier…" />
         </ReportFilterRow>
       }
       layout="split"
       className="h-full min-h-0"
     >
       <div className="flex flex-col flex-1 min-h-0">
-        <AccountsTableToolbar
-          search={{ value: search, onChange: setSearch, placeholder: "Search supplier…" }}
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          exportDisabled={exporting || rows.length === 0}
-        />
         <AccountsTableScroll>
           <AccountsRichTable
             columns={columns}
             rows={pagedRows}
             minWidth={1100}
             getRowKey={(r) => r.vendorId}
-            emptyMessage="No supplier ageing data for the selected filters."
+            emptyMessage="No records found."
             onRowClick={(r) => router.push(`/accounts/payables/outstanding/${r.vendorId}`)}
           />
         </AccountsTableScroll>

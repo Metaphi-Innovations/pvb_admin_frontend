@@ -16,6 +16,7 @@ import {
   buildBatchAllocationMap,
   buildFefoRecommendedSelections,
   buildPackingSummaryLines,
+  buildPurchaseReturnBatchSelections,
   getPackingBatchInventoryRows,
   getSelectedPackingQty,
   isBatchAllocationComplete,
@@ -23,6 +24,15 @@ import {
   validateSelectedPackingLines,
   type PackingSummaryLine,
 } from "../../lib/packing-batch-allocation";
+import {
+  getPackingDocumentNo,
+  getPackingDocumentNoLabel,
+  getPackingPartyLabel,
+  getPackingPartyValue,
+  getPackingWarehouseLabel,
+  getPackingWarehouseValue,
+  isPurchaseReturnDoc,
+} from "../../lib/packing-document-labels";
 
 function buildInitialSelection(products: SalesOrderRecord["products"]): Record<string, boolean> {
   return products.reduce<Record<string, boolean>>((acc, p) => {
@@ -48,23 +58,26 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
   const [createdPackingNo, setCreatedPackingNo] = useState("");
 
   const warehouseName = order
-    ? order.sourceDocumentType === "Stock Transfer"
+    ? order.sourceDocumentType === "Stock Transfer" || isPurchaseReturnDoc(order)
       ? order.sourceWarehouse ?? order.warehouse
       : order.warehouse
     : "";
-  const customerName = order
-    ? order.sourceDocumentType === "Stock Transfer"
-      ? order.targetWarehouse ?? order.customer
-      : order.customer
-    : "";
+  const customerName = order ? getPackingPartyValue(order) : "";
 
-  const applyFefoPreselect = (sku: string, productName: string, qty: number) => {
+  const applyBatchPreselect = (sku: string, productName: string, qty: number, product?: SalesOrderRecord["products"][number]) => {
     if (qty <= 0) {
       setBatchSelections((prev) => {
         const next = { ...prev };
         delete next[sku];
         return next;
       });
+      return;
+    }
+    if (order && isPurchaseReturnDoc(order) && product?.batchNumber) {
+      setBatchSelections((prev) => ({
+        ...prev,
+        [sku]: buildPurchaseReturnBatchSelections(product, qty),
+      }));
       return;
     }
     const rows = getPackingBatchInventoryRows(productName, warehouseName, undefined, sku);
@@ -84,12 +97,16 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
       record.products.forEach((p) => {
         initialQty[p.sku] = p.pendingQty;
         if (p.pendingQty > 0) {
-          const wh =
-            record.sourceDocumentType === "Stock Transfer"
-              ? record.sourceWarehouse ?? record.warehouse
-              : record.warehouse;
-          const rows = getPackingBatchInventoryRows(p.product, wh, undefined, p.sku);
-          initialSelections[p.sku] = buildFefoRecommendedSelections(rows, p.pendingQty);
+          if (isPurchaseReturnDoc(record) && p.batchNumber) {
+            initialSelections[p.sku] = buildPurchaseReturnBatchSelections(p, p.pendingQty);
+          } else {
+            const wh =
+              record.sourceDocumentType === "Stock Transfer" || isPurchaseReturnDoc(record)
+                ? record.sourceWarehouse ?? record.warehouse
+                : record.warehouse;
+            const rows = getPackingBatchInventoryRows(p.product, wh, undefined, p.sku);
+            initialSelections[p.sku] = buildFefoRecommendedSelections(rows, p.pendingQty);
+          }
         }
       });
       setPackingQty(initialQty);
@@ -100,6 +117,10 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
         const stocks = getSellableQcPassedStockList();
         const stockMap: Record<string, number> = {};
         record.products.forEach((p) => {
+          if (isPurchaseReturnDoc(record)) {
+            stockMap[p.sku] = p.pendingQty;
+            return;
+          }
           const matched = stocks.filter(
             (s) => s.product === p.product && s.warehouse === record.warehouse,
           );
@@ -124,6 +145,7 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
       selectedSkus,
       batchSelections,
       warehouseName,
+      order.sourceDocumentType,
     );
 
     const qtyMap: Record<string, number> = {};
@@ -193,6 +215,7 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
       packingQty,
       batchSelections,
       warehouseName,
+      order.sourceDocumentType,
     );
     setBatchErrors(batchValidation.batchErrors);
     if (!batchValidation.valid) {
@@ -225,7 +248,7 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
       const product = order?.products.find((p) => p.sku === sku);
       if (product) {
         setPackingQty((prev) => ({ ...prev, [sku]: product.pendingQty }));
-        applyFefoPreselect(sku, product.product, product.pendingQty);
+        applyBatchPreselect(sku, product.product, product.pendingQty, product);
       }
     }
   };
@@ -240,8 +263,12 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
       next[p.sku] = checked;
       nextQty[p.sku] = checked ? p.pendingQty : 0;
       if (checked && p.pendingQty > 0) {
-        const rows = getPackingBatchInventoryRows(p.product, warehouseName, undefined, p.sku);
-        nextBatch[p.sku] = buildFefoRecommendedSelections(rows, p.pendingQty);
+        if (isPurchaseReturnDoc(order) && p.batchNumber) {
+          nextBatch[p.sku] = buildPurchaseReturnBatchSelections(p, p.pendingQty);
+        } else {
+          const rows = getPackingBatchInventoryRows(p.product, warehouseName, undefined, p.sku);
+          nextBatch[p.sku] = buildFefoRecommendedSelections(rows, p.pendingQty);
+        }
       }
     });
 
@@ -270,7 +297,7 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
 
     const product = order?.products.find((p) => p.sku === sku);
     if (product && selectedSkus[sku]) {
-      applyFefoPreselect(sku, product.product, num);
+      applyBatchPreselect(sku, product.product, num, product);
     }
 
     if (batchErrors[sku]) {
@@ -356,52 +383,31 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
               </div>
               <div>
                 <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                  {order.sourceDocumentType === "Stock Transfer"
-                    ? "Source Document No."
-                    : order.sourceDocumentType === "Sample Order"
-                      ? "Sample Order No"
-                      : "Sales Order No"}
+                  {getPackingDocumentNoLabel(order.sourceDocumentType)}
                 </p>
                 <Input
-                  value={
-                    order.sourceDocumentType === "Stock Transfer"
-                      ? order.sourceDocumentNo
-                      : order.salesOrderNo
-                  }
+                  value={getPackingDocumentNo(order)}
                   disabled
                   className="h-8 text-xs bg-slate-50 font-mono font-bold mt-1.5"
                 />
               </div>
               <div>
                 <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                  {order.sourceDocumentType === "Stock Transfer"
-                    ? "Target Warehouse"
-                    : order.sourceDocumentType === "Sample Order"
-                      ? "Issued To Employee"
-                      : "Customer"}
+                  {getPackingPartyLabel(order.sourceDocumentType)}
                 </p>
                 <Input
-                  value={
-                    order.sourceDocumentType === "Stock Transfer"
-                      ? order.targetWarehouse
-                      : order.customer
-                  }
+                  value={getPackingPartyValue(order)}
                   disabled
                   className="h-8 text-xs bg-slate-50 font-medium mt-1.5"
                 />
               </div>
               <div>
                 <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                  {order.sourceDocumentType === "Stock Transfer" ||
-                  order.sourceDocumentType === "Sample Order"
-                    ? "Source Warehouse"
-                    : "Warehouse"}
+                  {getPackingWarehouseLabel(order.sourceDocumentType)}
                 </p>
                 <div className="flex items-center gap-1.5 h-8 border border-input px-3 rounded-md bg-slate-50 text-xs text-muted-foreground font-medium mt-1.5">
                   <Building className="w-3.5 h-3.5 text-muted-foreground/60" />
-                  {order.sourceDocumentType === "Stock Transfer"
-                    ? order.sourceWarehouse
-                    : order.sourceWarehouse || order.warehouse}
+                  {getPackingWarehouseValue(order)}
                 </div>
               </div>
               <div>
@@ -418,6 +424,51 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
                 </div>
               </div>
             </div>
+
+            {isPurchaseReturnDoc(order) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 pt-1">
+                <div>
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                    Reference PO No.
+                  </p>
+                  <Input
+                    value={order.poNumber ?? "—"}
+                    disabled
+                    className="h-8 text-xs bg-slate-50 font-mono font-bold mt-1.5"
+                  />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                    Supplier Code
+                  </p>
+                  <Input
+                    value={order.supplierCode ?? "—"}
+                    disabled
+                    className="h-8 text-xs bg-slate-50 font-mono font-medium mt-1.5"
+                  />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                    Return Date
+                  </p>
+                  <Input
+                    value={order.orderDate}
+                    disabled
+                    className="h-8 text-xs bg-slate-50 font-medium mt-1.5"
+                  />
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                    Initiated By
+                  </p>
+                  <Input
+                    value={order.initiatedBy ?? "—"}
+                    disabled
+                    className="h-8 text-xs bg-slate-50 font-medium mt-1.5"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <PackingProductLinesSection
@@ -433,9 +484,19 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
             onQtyChange={handleQtyChange}
             onBatchSelectionsChange={(sku, selections) => {
               setBatchSelections((prev) => ({ ...prev, [sku]: selections }));
-              
+
               const totalAllocated = Object.values(selections).reduce((a, b) => a + b, 0);
               setPackingQty((prev) => ({ ...prev, [sku]: totalAllocated }));
+
+              if (order && isPurchaseReturnDoc(order)) {
+                const product = order.products.find((p) => p.sku === sku);
+                const pendingQty = product?.pendingQty ?? 0;
+                let err = "";
+                if (totalAllocated > pendingQty) {
+                  err = `Cannot exceed return quantity of ${pendingQty}`;
+                }
+                setValidationErrors((prev) => ({ ...prev, [sku]: err }));
+              }
               
               if (batchErrors[sku]) {
                 setBatchErrors((prev) => {
@@ -463,7 +524,11 @@ export default function CreatePackingPage({ params }: { params: { id: string } }
         lines={summaryLines}
         onClose={() => {
           setSummaryOpen(false);
-          router.push("/warehouse/packing");
+          if (order.sourceDocumentType === "Purchase Return") {
+            router.push("/warehouse/packing/purchase-return");
+          } else {
+            router.push("/warehouse/packing");
+          }
         }}
       />
     </>

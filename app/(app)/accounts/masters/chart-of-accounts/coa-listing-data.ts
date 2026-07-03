@@ -1,11 +1,9 @@
 import type { ChartOfAccount } from "../../data";
 
 import {
-
+  formatCoaHierarchyPath,
   getDirectChildren,
-
-  nodeMatchesSearch,
-
+  getSearchMatchingNodes,
 } from "./chart-of-accounts-data";
 
 import { ledgerHasChildLedgers } from "@/lib/accounts/coa-hierarchy";
@@ -19,13 +17,39 @@ import {
 } from "@/lib/accounts/ledger-transaction-date-filter";
 
 import { fromSignedBalance, openingSignedBalance, toSignedBalance } from "@/lib/accounts/running-balance";
+import { buildBundledCoaDemoLedgers } from "./coa-demo-bundle";
+import { getBundledDemoTransactions } from "./coa-demo-transactions";
 
+function coaListingMovementMapForRange(
+  from: string,
+  to: string,
+): Map<number, { totalDebit: number; totalCredit: number }> {
+  const map = ledgerMovementMapForRange(from, to);
 
+  for (const ledger of buildBundledCoaDemoLedgers()) {
+    const rows = getBundledDemoTransactions(ledger.id);
+    let totalDebit = 0;
+    let totalCredit = 0;
+    for (const row of rows) {
+      if (row.date < from || row.date > to) continue;
+      totalDebit += row.debit;
+      totalCredit += row.credit;
+    }
+    if (totalDebit === 0 && totalCredit === 0) continue;
+    const cur = map.get(ledger.id) ?? { totalDebit: 0, totalCredit: 0 };
+    map.set(ledger.id, {
+      totalDebit: cur.totalDebit + totalDebit,
+      totalCredit: cur.totalCredit + totalCredit,
+    });
+  }
+
+  return map;
+}
 
 export interface CoaListingRow {
-
   node: ChartOfAccount;
-
+  parentGroupName: string;
+  hierarchyPath: string;
   openingAmount: number;
 
   openingSide: "Debit" | "Credit";
@@ -253,7 +277,7 @@ export function computeCoaListingSummary(
   dateTo: string,
   hasSearch: boolean,
 ): CoaListingSummary {
-  const movementMap = ledgerMovementMapForRange(dateFrom, dateTo);
+  const movementMap = coaListingMovementMapForRange(dateFrom, dateTo);
   const balances =
     hasSearch || showRoot || !selectedNode
       ? sumRowBalances(rows)
@@ -273,64 +297,57 @@ export function computeCoaListingSummary(
 
  */
 
-export function buildCoaListingRows(
-
+function listingMetaForNode(
   records: ChartOfAccount[],
+  node: ChartOfAccount,
+): Pick<CoaListingRow, "parentGroupName" | "hierarchyPath"> {
+  const parent = node.parentAccountId
+    ? records.find((r) => r.id === node.parentAccountId)
+    : null;
+  return {
+    parentGroupName: parent?.accountName ?? "",
+    hierarchyPath: formatCoaHierarchyPath(records, node.id),
+  };
+}
 
+export function buildCoaListingRows(
+  records: ChartOfAccount[],
   parentNodeId: number | null,
-
   dateFrom: string,
-
   dateTo: string,
-
   options: { search?: string } = {},
-
 ): CoaListingRow[] {
-
   const search = options.search?.trim() ?? "";
+  const movementMap = coaListingMovementMapForRange(dateFrom, dateTo);
 
-  const movementMap = ledgerMovementMapForRange(dateFrom, dateTo);
-
-
+  if (search) {
+    return getSearchMatchingNodes(records, search).map((node) => {
+      const childCount = getDirectChildren(records, node.id).length;
+      return {
+        node,
+        ...listingMetaForNode(records, node),
+        ...balancesForNode(records, node, movementMap),
+        hasChildren: childCount > 0,
+      };
+    });
+  }
 
   const children =
-
     parentNodeId == null
-
       ? records
-
           .filter((r) => r.nodeLevel === "primary_head")
-
           .sort((a, b) => a.accountCode.localeCompare(b.accountCode))
-
       : getDirectChildren(records, parentNodeId);
 
-
-
-  const filtered = search
-
-    ? children.filter((node) => nodeMatchesSearch(records, node, search))
-
-    : children;
-
-
-
-  return filtered.map((node) => {
-
+  return children.map((node) => {
     const childCount = getDirectChildren(records, node.id).length;
-
     return {
-
       node,
-
+      ...listingMetaForNode(records, node),
       ...balancesForNode(records, node, movementMap),
-
       hasChildren: childCount > 0,
-
     };
-
   });
-
 }
 
 

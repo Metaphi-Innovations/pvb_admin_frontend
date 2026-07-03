@@ -126,7 +126,7 @@ export function CoaLedgerDetailPanel({
                   onClick={onEditLedger}
                   aria-label="Edit ledger"
                 >
-                  <Pencil className="w-3.5 h-3.5" />
+                  <Pencil className="w-4 h-4" />
                 </Button>
               )}
               {onDeleteLedger && (
@@ -138,7 +138,7 @@ export function CoaLedgerDetailPanel({
                   onClick={onDeleteLedger}
                   aria-label="Delete ledger"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-4 h-4" />
                 </Button>
               )}
             </div>

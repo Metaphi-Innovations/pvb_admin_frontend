@@ -98,12 +98,12 @@ export default function VendorOutstandingDetailClient() {
       actions={
         <div className="flex items-center gap-2">
           <Link href="/accounts/payables/outstanding">
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
-              <ArrowLeft className="w-3.5 h-3.5" /> Back
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1">
+              <ArrowLeft className="w-4 h-4" /> Back
             </Button>
           </Link>
           <Link href={`/accounts/payables/payment-allocation?vendorId=${vendor.id}`}>
-            <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white">
+            <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white">
               Go to Payment Allocation
             </Button>
           </Link>
@@ -148,7 +148,7 @@ export default function VendorOutstandingDetailClient() {
               />
             </div>
             <div className="flex gap-2 pt-1">
-              <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
+              <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" asChild>
                 <Link href={`/accounts/purchase-invoices/${highlightedBill.billId}`}>
                   View Purchase Invoice
                 </Link>
@@ -197,7 +197,7 @@ export default function VendorOutstandingDetailClient() {
             </p>
           </div>
           <div className="overflow-x-auto">
-            <table className="accounts-table w-full text-table min-w-[900px]">
+            <table className="accounts-table w-full min-w-[900px]">
               <thead className="border-b">
                 <tr>
                   {[
@@ -221,7 +221,7 @@ export default function VendorOutstandingDetailClient() {
                   <tr
                     key={bill.billId}
                     className={cn(
-                      "border-b border-border/40 hover:bg-muted/20",
+                      "accounts-table-row group",
                       bill.billId === highlightBillId && "bg-brand-50/50",
                     )}
                   >
@@ -264,7 +264,7 @@ export default function VendorOutstandingDetailClient() {
             </p>
           </div>
           <div className="overflow-x-auto">
-            <table className="accounts-table w-full text-table min-w-[800px]">
+            <table className="accounts-table w-full min-w-[800px]">
               <thead className="border-b">
                 <tr>
                   {["Payment No.", "Date", "Amount", "Allocated", "Bank Account", "Reference", "Status"].map(
@@ -285,7 +285,7 @@ export default function VendorOutstandingDetailClient() {
                   </tr>
                 ) : (
                   paymentHistory.map((p) => (
-                    <tr key={p.paymentNo} className="border-b border-border/40 hover:bg-muted/20">
+                    <tr key={p.paymentNo} className="accounts-table-row group">
                       <td className="px-3 py-2.5 text-xs font-mono font-semibold">{p.paymentNo}</td>
                       <td className="px-3 py-2.5 text-xs tabular-nums">{formatReportDate(p.paymentDate)}</td>
                       <td className={cn("px-3 py-2.5 text-xs text-right", MONEY_CELL_CLASS)}>

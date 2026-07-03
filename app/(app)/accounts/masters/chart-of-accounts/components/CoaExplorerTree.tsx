@@ -9,6 +9,7 @@ import {
   countLedgersUnder,
   getDirectChildren,
   getSearchVisibleIds,
+  nodeMatchesSearch,
 } from "../chart-of-accounts-data";
 import { CoaAddLedgerHoverAction } from "./CoaAddLedgerHoverAction";
 import { CoaLevelBadge } from "./CoaLevelBadge";
@@ -69,6 +70,7 @@ interface TreeNodeProps {
   expandedIds: Set<number>;
   selectedId: number | null;
   visibleIds: Set<number> | null;
+  searchQuery: string;
   variant: "panel" | "sidebar";
   canCreate?: boolean;
   highlightedLedgerId?: number | null;
@@ -87,6 +89,7 @@ function TreeNode({
   expandedIds,
   selectedId,
   visibleIds,
+  searchQuery,
   variant,
   canCreate = false,
   highlightedLedgerId = null,
@@ -109,6 +112,8 @@ function TreeNode({
   const showExpandChevron = coaNodeShowsExpandChevron(node, records, hasChildren);
   const allowAdd = canCreate && onAddLedger != null && canAddLedgerUnder(node, records);
   const isHighlighted = highlightedLedgerId === node.id;
+  const isSearchMatch =
+    Boolean(searchQuery.trim()) && nodeMatchesSearch(records, node, searchQuery);
 
   if (visibleIds && !visibleIds.has(node.id)) return null;
 
@@ -138,9 +143,10 @@ function TreeNode({
                 !isSidebar && isPrimaryHead && "hover:border-l-orange-300",
               ),
           isHighlighted && "bg-brand-50/80 ring-1 ring-brand-300/70",
+          isSearchMatch && !isSelected && "bg-brand-50/60",
         )}
         style={{
-          minHeight: isSidebar ? 30 : undefined,
+          minHeight: isSidebar ? 28 : undefined,
           paddingLeft: isSidebar ? coaSidebarIndentPx(depth) : undefined,
         }}
       >
@@ -187,7 +193,7 @@ function TreeNode({
             onClick={handleClick}
             className={cn(
               "flex flex-1 min-w-0 text-left items-center",
-              isSidebar ? "gap-1.5 py-1 pr-1" : "items-start gap-2 py-1.5 pr-2",
+              isSidebar ? "gap-1.5 py-0.5 pr-1" : "items-start gap-2 py-1.5 pr-2",
             )}
           >
             <Icon
@@ -247,6 +253,7 @@ function TreeNode({
               expandedIds={expandedIds}
               selectedId={selectedId}
               visibleIds={visibleIds}
+              searchQuery={searchQuery}
               variant={variant}
               canCreate={canCreate}
               highlightedLedgerId={highlightedLedgerId}
@@ -330,6 +337,7 @@ export function CoaExplorerTree({
               expandedIds={expandedIds}
               selectedId={selectedId}
               visibleIds={visibleIds}
+              searchQuery={search}
               variant={variant}
               canCreate={canCreate}
               highlightedLedgerId={highlightedLedgerId}
