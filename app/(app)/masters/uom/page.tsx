@@ -83,7 +83,7 @@ function validateUOMForm(form: UOMForm): Record<string, string> {
 export default function UOMPage() {
   const [records, setRecords] = useState<UOMMaster[]>([]);
   const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "uomId", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "unitName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -121,17 +121,6 @@ export default function UOMPage() {
   };
 
   const columns: ColumnConfig<UOMMaster>[] = [
-    {
-      key: "uomId",
-      header: "Unit ID",
-      sortable: true,
-      filterable: true,
-      filterType: "text",
-      width: "110px",
-      render: (val, row) => (
-        <span className="font-mono text-xs text-brand-700">{row.uomId}</span>
-      ),
-    },
     {
       key: "unitName",
       header: "Unit Name",
@@ -236,7 +225,6 @@ export default function UOMPage() {
       const q = String(filters.search).trim().toLowerCase();
       result = result.filter(
         (r) =>
-          r.uomId.toLowerCase().includes(q) ||
           r.unitName.toLowerCase().includes(q) ||
           r.shortName.toLowerCase().includes(q)
       );
@@ -359,12 +347,11 @@ export default function UOMPage() {
 
   const handleExport = () => {
     try {
-      const headers = ["ID", "Unit ID", "Unit Name", "Short Name", "UOM", "Conversion Unit", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
+      const headers = ["ID", "Unit Name", "Short Name", "UOM", "Conversion Unit", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
       const csvRows = [headers.join(",")];
       for (const r of records) {
         const row = [
           r.id,
-          `"${r.uomId.replace(/"/g, '""')}"`,
           `"${r.unitName.replace(/"/g, '""')}"`,
           `"${r.shortName.replace(/"/g, '""')}"`,
           `"${(r.uom || "").replace(/"/g, '""')}"`,
@@ -398,8 +385,6 @@ export default function UOMPage() {
       : sheetMode === "edit"
       ? "Edit Unit"
       : "View Unit";
-
-  const nextAutoCode = generateUOMCode(nextUOMId(records));
 
   return (
     <AppLayout>
@@ -440,7 +425,7 @@ export default function UOMPage() {
           addLabel="Add Unit"
           onExport={handleExport}
           emptyMessage="units"
-          searchPlaceholder="Search Unit ID, Name, Short Name..."
+          searchPlaceholder="Search unit name, short name..."
           currentFilters={filters}
           currentSort={sort}
         />
@@ -458,10 +443,9 @@ export default function UOMPage() {
           active
             ? buildSimpleMasterViewDrawer<UOMMaster>({
                 drawerTitle: "Unit",
-                getRecordCode: (r) => r.uomId,
+                getRecordCode: (r) => r.unitName,
                 basicInfo: (r) => [
                   { label: "Unit Name", value: r.unitName },
-                  { label: "Unit ID", value: r.uomId, mono: true },
                   { label: "Short Name", value: r.shortName },
                   { label: "UOM", value: r.uom || "—" },
                   { label: "Conversion Unit", value: String(r.conversionUnit ?? 1) },
@@ -474,14 +458,6 @@ export default function UOMPage() {
           <div className="space-y-4">
             {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
             <MasterFormGrid>
-              <div className="col-span-2 space-y-1">
-                <Label className="text-xs font-medium">Unit ID</Label>
-                <Input
-                  value={sheetMode === "add" ? nextAutoCode : active?.uomId || ""}
-                  disabled
-                  className="h-8 text-xs cursor-not-allowed bg-muted/30 text-muted-foreground"
-                />
-              </div>
               <div className="col-span-2 space-y-1">
                 <Label className="text-xs font-medium">
                   Unit Name <span className="text-red-500">*</span>

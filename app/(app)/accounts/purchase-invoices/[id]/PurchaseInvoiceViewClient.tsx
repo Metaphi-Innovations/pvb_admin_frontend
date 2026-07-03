@@ -83,7 +83,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
           <Button
             variant="outline"
             size="sm"
-            className="mt-4 h-8 text-xs"
+            className="mt-4 h-9 text-[13px] font-medium"
             onClick={() => router.push("/accounts/purchase-invoices")}
           >
             Back to List
@@ -108,36 +108,36 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Purchase Invoices", invoice.invoiceNo)}
       title={invoice.invoiceNo}
-      description={`Vendor Invoice: ${invoice.vendorInvoiceNo || "—"} · ${invoice.vendorName}`}
+      description={`Supplier Invoice: ${invoice.vendorInvoiceNo || "—"} · ${invoice.vendorName}`}
       actions={
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
-            className="h-8 text-xs gap-1.5"
+            className="h-9 text-[13px] font-medium gap-1.5"
             onClick={() => router.push("/accounts/purchase-invoices")}
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
+            <ArrowLeft className="w-4 h-4" />
             Back
           </Button>
           {invoice.source === "manual_entry" && (
             <Button
               variant="outline"
               size="sm"
-              className="h-8 text-xs gap-1.5"
+              className="h-9 text-[13px] font-medium gap-1.5"
               onClick={() => router.push(`/accounts/purchase-invoices/${invoice.id}/edit`)}
             >
-              <Pencil className="w-3.5 h-3.5" />
+              <Pencil className="w-4 h-4" />
               Edit
             </Button>
           )}
           <Button
             variant="outline"
             size="sm"
-            className="h-8 text-xs gap-1.5 text-amber-700 border-amber-200 hover:bg-amber-50"
+            className="h-9 text-[13px] font-medium gap-1.5 text-amber-700 border-amber-200 hover:bg-amber-50"
             onClick={() => router.push(`/accounts/debit-notes/new?purchaseInvoiceId=${invoice.id}`)}
           >
-            <FileMinus className="w-3.5 h-3.5" />
+            <FileMinus className="w-4 h-4" />
             Debit Note
           </Button>
         </div>
@@ -177,9 +177,9 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
 
         {/* Vendor & Invoice Info */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Section title="Vendor Details">
+          <Section title="Supplier Details">
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Vendor Name" value={invoice.vendorName} />
+              <Field label="Supplier Name" value={invoice.vendorName} />
               <Field label="GSTIN" value={invoice.vendorGst} />
               <Field label="PO Number" value={invoice.poNumber} />
               <Field label="GRN Number" value={invoice.grnNo} />
@@ -188,7 +188,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
           <Section title="Invoice Details">
             <div className="grid grid-cols-2 gap-3">
               <Field label="Invoice No (Internal)" value={invoice.invoiceNo} />
-              <Field label="Vendor Invoice No" value={invoice.vendorInvoiceNo} />
+              <Field label="Supplier Invoice No" value={invoice.vendorInvoiceNo} />
               <Field label="Invoice Date" value={invoice.invoiceDate} />
               <Field label="Source" value={invoice.source === "po_invoice" ? "GRN-Based" : "Manual Entry"} />
             </div>
@@ -198,7 +198,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
         {/* Line Items */}
         <Section title="Items Received">
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="accounts-table w-full">
               <thead>
                 <tr className="border-b border-border/60 bg-muted/30">
                   <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">#</th>
@@ -265,10 +265,10 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
           </Section>
         </div>
 
-        {/* Vendor Ledger Impact */}
-        <Section title="Vendor Ledger Entry">
+        {/* Supplier Ledger Impact */}
+        <Section title="Supplier Ledger Entry">
           <div className="rounded-lg bg-muted/30 border border-border/40 overflow-hidden">
-            <table className="w-full text-xs">
+            <table className="accounts-table w-full">
               <thead>
                 <tr className="border-b border-border/30 bg-muted/50">
                   <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Date</th>

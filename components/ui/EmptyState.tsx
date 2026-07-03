@@ -91,7 +91,30 @@ export function EmptyState({
 
 // ── Preset variants ───────────────────────────────────────────────────────────
 
-export function EmptySearch({ onClear }: { onClear?: () => void }) {
+export function EmptySearch({
+  onClear,
+  compact,
+}: {
+  onClear?: () => void;
+  compact?: boolean;
+}) {
+  if (compact) {
+    return (
+      <div className="py-6 text-center text-xs text-muted-foreground">
+        No records found.
+        {onClear && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="block mx-auto mt-1.5 text-brand-600 hover:underline"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <EmptyState
       icon={FileSearch}

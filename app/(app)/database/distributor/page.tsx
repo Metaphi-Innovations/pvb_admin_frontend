@@ -26,29 +26,38 @@ import { cn } from "@/lib/utils";
 
 import {
   type Distributor,
+  type DistributorConversionStatus,
   loadDistributors,
   saveDistributors,
+  getConversionStatusLabel,
   VIEW_DISTRIBUTOR_STORAGE_KEY,
 } from "./distributor-data";
+import {
+  computeDistributorAssessment,
+  formatAmountInCrores,
+  formatCategoryLabel,
+  parseCompaniesDealingIn,
+  parseMonetaryValueInCrores,
+} from "@/lib/distributor/distributor-scoring";
+import { CONVERT_DISTRIBUTOR_STORAGE_KEY } from "@/lib/distributor/distributor-conversion";
+import { formatIndianMobile } from "../farmer/farmer-utils";
+import { CompanyChips } from "./components/CompanyChips";
+import {
+  ConversionStatusBadge,
+  DistributorCategoryBadge,
+} from "./components/DistributorCategoryBadge";
 
 const PER_PAGE = 10;
 
-function parseBusinessValueInLakhs(value: string) {
-  const numericValue = Number.parseFloat(value.replace(/[^\d.]/g, ""));
-  if (Number.isNaN(numericValue)) return 0;
-  return value.toLowerCase().includes("cr") ? numericValue * 100 : numericValue;
-}
+type ScoreRangeFilter = "" | "80+" | "70-79" | "below70";
 
 function parseFarmerNetwork(value: string) {
   const numericValue = Number.parseInt(value.replace(/[^\d]/g, ""), 10);
   return Number.isNaN(numericValue) ? 0 : numericValue;
 }
 
-function formatBusinessValueFromLakhs(valueInLakhs: number) {
-  if (valueInLakhs >= 100) {
-    return `Rs ${(valueInLakhs / 100).toFixed(2)} Cr`;
-  }
-  return `Rs ${valueInLakhs.toFixed(0)} Lakh`;
+function formatCombinedTurnoverInCrores(totalCrores: number) {
+  return `₹${totalCrores.toFixed(2)} Cr`;
 }
 
 function KpiCard({
@@ -65,7 +74,7 @@ function KpiCard({
   color?: string;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-white p-3">
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-white p-3 shadow-sm">
       <div
         className={cn(
           "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg",
@@ -82,12 +91,20 @@ function KpiCard({
   );
 }
 
+type DistributorRow = Distributor & {
+  _computedCategory: string;
+  _computedScore: number;
+  _conversionStatus: DistributorConversionStatus;
+  _companies: string[];
+};
+
 export default function DistributorPage() {
   const router = useRouter();
   const [distributors, setDistributors] = useState<Distributor[]>([]);
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortState>({ key: "firmName", direction: "asc" });
   const [page, setPage] = useState(1);
+  const [scoreRange, setScoreRange] = useState<ScoreRangeFilter>("");
   const [toast, setToast] = useState<{
     msg: string;
     type: "success" | "info";
@@ -104,15 +121,24 @@ export default function DistributorPage() {
 
   const states = useMemo(
     () =>
-      [...new Set(distributors.map((distributor) => distributor.state))]
-        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+      [...new Set(distributors.map((d) => d.state))].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: "base" }),
+      ),
     [distributors],
   );
 
-  const categories = useMemo(
+  const tableRows = useMemo<DistributorRow[]>(
     () =>
-      [...new Set(distributors.map((distributor) => distributor.distributorCategory))]
-        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+      distributors.map((distributor) => {
+        const assessment = computeDistributorAssessment(distributor);
+        return {
+          ...distributor,
+          _computedCategory: assessment.category,
+          _computedScore: assessment.weightedScore,
+          _conversionStatus: distributor.conversionStatus ?? "not_converted",
+          _companies: parseCompaniesDealingIn(distributor.companiesDealingIn),
+        };
+      }),
     [distributors],
   );
 
@@ -120,21 +146,19 @@ export default function DistributorPage() {
     () => ({
       total: distributors.length,
       totalFarmerNetwork: distributors.reduce(
-        (sum, distributor) => sum + parseFarmerNetwork(distributor.farmerNetwork),
+        (sum, d) => sum + parseFarmerNetwork(d.farmerNetwork),
         0,
       ),
       averageYearsInBusiness:
         distributors.length > 0
           ? Math.round(
-              distributors.reduce(
-                (sum, distributor) => sum + distributor.yearsInBusiness,
-                0,
-              ) / distributors.length,
+              distributors.reduce((sum, d) => sum + d.yearsInBusiness, 0) /
+                distributors.length,
             )
           : 0,
-      totalTurnoverDisplay: formatBusinessValueFromLakhs(
+      totalTurnoverDisplay: formatCombinedTurnoverInCrores(
         distributors.reduce(
-          (sum, distributor) => sum + parseBusinessValueInLakhs(distributor.annualTurnover),
+          (sum, d) => sum + parseMonetaryValueInCrores(d.annualTurnover),
           0,
         ),
       ),
@@ -142,7 +166,7 @@ export default function DistributorPage() {
     [distributors],
   );
 
-  const columns = useMemo<ColumnConfig<Distributor>[]>(
+  const columns = useMemo<ColumnConfig<DistributorRow>[]>(
     () => [
       {
         key: "firmName",
@@ -150,26 +174,31 @@ export default function DistributorPage() {
         sortable: true,
         filterable: true,
         filterType: "text",
-        width: "190px",
+        width: "160px",
         render: (_, row) => (
           <p className="text-xs font-semibold text-foreground">{row.firmName}</p>
         ),
       },
       {
         key: "contactPersonName",
-        header: "Contact Person Name",
+        header: "Contact Person",
         sortable: true,
         filterable: true,
         filterType: "text",
-        width: "170px",
+        width: "130px",
       },
       {
         key: "phoneNumber",
-        header: "Phone Number",
+        header: "Mobile Number",
         sortable: true,
         filterable: true,
         filterType: "text",
-        width: "145px",
+        width: "130px",
+        render: (_, row) => (
+          <span className="font-mono text-xs text-foreground whitespace-nowrap">
+            {formatIndianMobile(row.phoneNumber)}
+          </span>
+        ),
       },
       {
         key: "district",
@@ -177,7 +206,7 @@ export default function DistributorPage() {
         sortable: true,
         filterable: true,
         filterType: "text",
-        width: "140px",
+        width: "110px",
       },
       {
         key: "state",
@@ -186,53 +215,92 @@ export default function DistributorPage() {
         filterable: true,
         filterType: "dropdown",
         filterOptions: states.map((state) => ({ label: state, value: state })),
-        width: "140px",
+        width: "100px",
       },
       {
         key: "companiesDealingIn",
-        header: "Companies He Is Dealing In",
-        sortable: true,
+        header: "Companies Dealing In",
+        sortable: false,
         filterable: true,
         filterType: "text",
-        width: "220px",
-        render: (_, row) => (
-          <span className="block max-w-[220px] truncate" title={row.companiesDealingIn}>
-            {row.companiesDealingIn}
-          </span>
-        ),
+        width: "200px",
+        render: (_, row) => <CompanyChips companies={row._companies} />,
       },
       {
         key: "annualTurnover",
         header: "Annual Turnover",
         sortable: true,
-        filterable: true,
-        filterType: "text",
-        width: "135px",
-        align: "left",
+        filterable: false,
+        width: "115px",
+        render: (_, row) => (
+          <span className="text-xs text-foreground whitespace-nowrap">
+            {formatAmountInCrores(row.annualTurnover)}
+          </span>
+        ),
+      },
+      {
+        key: "annualBusinessPotential",
+        header: "Business Plan",
+        sortable: true,
+        filterable: false,
+        width: "110px",
+        render: (_, row) => (
+          <span className="text-xs text-foreground whitespace-nowrap">
+            {formatAmountInCrores(row.annualBusinessPotential)}
+          </span>
+        ),
       },
       {
         key: "farmerNetwork",
         header: "Farmer Network",
         sortable: true,
-        filterable: true,
-        filterType: "text",
-        width: "130px",
-        align: "left",
+        filterable: false,
+        width: "110px",
       },
       {
-        key: "distributorCategory",
-        header: "Distributor Category",
+        key: "_computedScore",
+        header: "Score",
+        sortable: true,
+        filterable: false,
+        width: "70px",
+        render: (_, row) => (
+          <span className="text-xs font-semibold tabular-nums text-foreground">
+            {row._computedScore.toFixed(2)}
+          </span>
+        ),
+      },
+      {
+        key: "_computedCategory",
+        header: "Category",
         sortable: true,
         filterable: true,
         filterType: "dropdown",
-        filterOptions: categories.map((category) => ({ label: category, value: category })),
-        width: "145px",
+        filterOptions: ["A", "B", "C"].map((c) => ({
+          label: formatCategoryLabel(c as "A" | "B" | "C"),
+          value: c,
+        })),
+        width: "100px",
+        render: (_, row) => (
+          <DistributorCategoryBadge category={row._computedCategory as "A" | "B" | "C"} />
+        ),
+      },
+      {
+        key: "_conversionStatus",
+        header: "Conversion Status",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: (
+          ["not_converted", "draft_customer", "customer_completed"] as DistributorConversionStatus[]
+        ).map((s) => ({ label: getConversionStatusLabel(s), value: s })),
+        width: "140px",
+        render: (_, row) => <ConversionStatusBadge status={row._conversionStatus} />,
       },
     ],
-    [categories, states],
+    [states],
   );
 
-  const actions = useMemo<ActionItemConfig<Distributor>[]>(
+  const actions = useMemo<ActionItemConfig<DistributorRow>[]>(
     () => [
       {
         label: "View",
@@ -263,11 +331,17 @@ export default function DistributorPage() {
         },
       },
       {
-        label: "Add Customer",
+        label: "Convert to Customer",
         action: "add-customer",
         icon: UserPlus,
-        onClick: () => {
-          router.push("/masters/customers/new");
+        onClick: (distributor) => {
+          if (typeof window !== "undefined") {
+            window.sessionStorage.setItem(
+              CONVERT_DISTRIBUTOR_STORAGE_KEY,
+              String(distributor.id),
+            );
+          }
+          router.push(`/masters/customers/new?fromDistributor=${distributor.id}`);
         },
       },
       {
@@ -283,11 +357,9 @@ export default function DistributorPage() {
             return;
           }
           setDistributors((current) => {
-            const updatedDistributors = current.filter(
-              (item) => item.id !== distributor.id,
-            );
-            saveDistributors(updatedDistributors);
-            return updatedDistributors;
+            const updated = current.filter((item) => item.id !== distributor.id);
+            saveDistributors(updated);
+            return updated;
           });
           showToast("Distributor removed from the current listing.");
         },
@@ -297,21 +369,19 @@ export default function DistributorPage() {
   );
 
   const filtered = useMemo(() => {
-    let result = [...distributors];
+    let result = [...tableRows];
 
     if (filters.search) {
       const query = String(filters.search).trim().toLowerCase();
-      result = result.filter((distributor) =>
+      result = result.filter((d) =>
         [
-          distributor.firmName,
-          distributor.contactPersonName,
-          distributor.phoneNumber,
-          distributor.village,
-          distributor.town,
-          distributor.city,
-          distributor.district,
-          distributor.state,
-          distributor.companiesDealingIn,
+          d.firmName,
+          d.contactPersonName,
+          d.phoneNumber,
+          d.village,
+          d.district,
+          d.state,
+          d.companiesDealingIn,
         ]
           .join(" ")
           .toLowerCase()
@@ -321,23 +391,38 @@ export default function DistributorPage() {
 
     result = applyFilters(result, filters);
 
+    if (scoreRange === "80+") {
+      result = result.filter((d) => d._computedScore >= 80);
+    } else if (scoreRange === "70-79") {
+      result = result.filter((d) => d._computedScore >= 70 && d._computedScore < 80);
+    } else if (scoreRange === "below70") {
+      result = result.filter((d) => d._computedScore < 70);
+    }
+
     if (sort.key && sort.direction !== "none") {
       result.sort((a, b) => {
         if (sort.key === "annualTurnover") {
           const diff =
-            parseBusinessValueInLakhs(a.annualTurnover) -
-            parseBusinessValueInLakhs(b.annualTurnover);
+            parseMonetaryValueInCrores(a.annualTurnover) -
+            parseMonetaryValueInCrores(b.annualTurnover);
           return sort.direction === "asc" ? diff : -diff;
         }
-
-        if (sort.key === "farmerNetwork") {
+        if (sort.key === "annualBusinessPotential") {
           const diff =
-            parseFarmerNetwork(a.farmerNetwork) - parseFarmerNetwork(b.farmerNetwork);
+            parseMonetaryValueInCrores(a.annualBusinessPotential) -
+            parseMonetaryValueInCrores(b.annualBusinessPotential);
           return sort.direction === "asc" ? diff : -diff;
         }
-
-        const aValue = String(a[sort.key as keyof Distributor] ?? "").toLowerCase();
-        const bValue = String(b[sort.key as keyof Distributor] ?? "").toLowerCase();
+        if (sort.key === "_computedScore") {
+          const diff = a._computedScore - b._computedScore;
+          return sort.direction === "asc" ? diff : -diff;
+        }
+        if (sort.key === "farmerNetwork") {
+          const diff = parseFarmerNetwork(a.farmerNetwork) - parseFarmerNetwork(b.farmerNetwork);
+          return sort.direction === "asc" ? diff : -diff;
+        }
+        const aValue = String(a[sort.key as keyof DistributorRow] ?? "").toLowerCase();
+        const bValue = String(b[sort.key as keyof DistributorRow] ?? "").toLowerCase();
         return sort.direction === "asc"
           ? aValue.localeCompare(bValue)
           : bValue.localeCompare(aValue);
@@ -345,7 +430,7 @@ export default function DistributorPage() {
     }
 
     return result;
-  }, [distributors, filters, sort]);
+  }, [tableRows, filters, sort, scoreRange]);
 
   const paginated = useMemo(() => {
     const startOffset = (page - 1) * PER_PAGE;
@@ -354,20 +439,28 @@ export default function DistributorPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [filters, sort]);
+  }, [filters, sort, scoreRange]);
 
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
-    if (page > totalPages) {
-      setPage(totalPages);
-    }
+    if (page > totalPages) setPage(totalPages);
   }, [filtered.length, page]);
+
+  const scoreRangeOptions: { value: ScoreRangeFilter; label: string }[] = [
+    { value: "", label: "All Scores" },
+    { value: "80+", label: "Score ≥ 80 (Cat A)" },
+    { value: "70-79", label: "Score 70–79 (Cat B)" },
+    { value: "below70", label: "Score < 70 (Cat C)" },
+  ];
 
   return (
     <AppLayout>
-      <div className="space-y-5">
+      <div className="space-y-4">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Distributor Listing</h1>
+          <h1 className="text-xl font-bold text-foreground">Distributor Database</h1>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            SFA Mobile raw submissions · Score, category &amp; credit calculated in ERP
+          </p>
         </div>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -392,7 +485,26 @@ export default function DistributorPage() {
           />
         </div>
 
-        <MasterListing<Distributor>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-medium text-muted-foreground">Score range:</span>
+          {scoreRangeOptions.map((opt) => (
+            <button
+              key={opt.value || "all"}
+              type="button"
+              onClick={() => setScoreRange(opt.value)}
+              className={cn(
+                "h-7 rounded-lg border px-2.5 text-xs font-medium transition-colors",
+                scoreRange === opt.value
+                  ? "border-brand-400 bg-brand-50 text-brand-700"
+                  : "border-border text-muted-foreground hover:bg-muted",
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        <MasterListing<DistributorRow>
           columns={columns}
           data={paginated}
           totalRecords={filtered.length}
@@ -403,8 +515,10 @@ export default function DistributorPage() {
           onFilterChange={setFilters}
           actions={actions}
           emptyMessage="distributors"
+          onAdd={() => router.push("/database/distributor/new")}
+          addLabel="Add Distributor"
           onExport={() => {}}
-          searchPlaceholder="Search by firm name, contact person, phone number, village, or company..."
+          searchPlaceholder="Search firm, contact, mobile, district, state, company…"
           currentFilters={filters}
           currentSort={sort}
         />

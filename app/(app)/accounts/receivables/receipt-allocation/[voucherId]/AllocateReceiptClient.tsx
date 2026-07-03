@@ -14,6 +14,7 @@ import {
 import { formatMoney } from "@/lib/accounts/money-format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Checkbox } from "@/components/ui/checkbox";
 
 export default function AllocateReceiptClient() {
@@ -95,7 +96,7 @@ export default function AllocateReceiptClient() {
       setError(err);
       return;
     }
-    router.push("/accounts/receivables/receipt-allocation");
+    router.push(`/accounts/receivables/receipt-allocation?customer=${record.customerId}`);
   };
 
   return (
@@ -108,8 +109,8 @@ export default function AllocateReceiptClient() {
       description={`Allocate ${record.receiptNo} against open invoices for ${record.customerName}.`}
       actions={
         <Link href="/accounts/receivables/receipt-allocation">
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
-            <ArrowLeft className="w-3.5 h-3.5" /> Back
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1">
+            <ArrowLeft className="w-4 h-4" /> Back
           </Button>
         </Link>
       }
@@ -145,8 +146,8 @@ export default function AllocateReceiptClient() {
         {error && <p className="text-xs text-red-600">{error}</p>}
 
         <div className="rounded-lg border border-border/60 overflow-hidden">
-          <table className="w-full text-table">
-            <thead className="bg-muted/20 border-b">
+          <table className="accounts-table w-full">
+            <thead className="border-b">
               <tr>
                 {["Select", "Invoice No", "Invoice Date", "Due Date", "Invoice Amt", "Already Paid", "Outstanding", "Allocation"].map((h) => (
                   <th key={h} className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">{h}</th>
@@ -169,15 +170,11 @@ export default function AllocateReceiptClient() {
                   <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.paidAmount)}</td>
                   <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.outstanding)}</td>
                   <td className="px-3 py-2.5">
-                    <Input
-                      type="number"
-                      min={0}
-                      max={inv.outstanding}
-                      step="0.01"
-                      className="h-8 text-xs w-28"
+                    <AccountsMoneyInput
+                      className="h-9 text-[13px] font-medium w-28"
                       disabled={!selected[inv.invoiceId]}
                       value={amounts[inv.invoiceId] ?? ""}
-                      onChange={(e) => setAmounts((a) => ({ ...a, [inv.invoiceId]: e.target.value }))}
+                      onChange={(v) => setAmounts((a) => ({ ...a, [inv.invoiceId]: String(v) }))}
                     />
                   </td>
                 </tr>

@@ -1,71 +1,41 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { Info } from "lucide-react";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  customerMasterToTransactionFields,
-  type CustomerTransactionFields,
-} from "@/lib/accounts/transaction-master-fetch";
 import type { Customer } from "@/app/(app)/masters/customers/customer-data";
 import {
   formatCustomerDropdownLabel,
   formatCustomerDropdownSublabel,
 } from "@/lib/masters/entity-display";
 import { SearchableSelect } from "@/app/(app)/accounts/credit-notes/components/SearchableSelect";
+import CustomerInfoDialog from "@/app/(app)/sales/orders/components/CustomerInfoDialog";
+import BillToShipToSection from "@/app/(app)/sales/orders/components/BillToShipToSection";
+import {
+  formatAddressCompact,
+  getCustomerAddressesForSalesOrder,
+  getDefaultBillShipAddressIds,
+  type SalesOrderCustomerAddress,
+} from "@/app/(app)/sales/orders/sales-order-address-utils";
+import { INVOICE_FORM_LABEL_CLASS } from "@/app/(app)/accounts/components/InvoiceFormLayout";
 
-function DetailField({
-  label,
-  value,
-  className,
-  mono,
-}: {
-  label: string;
-  value?: string | null;
-  className?: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className={className}>
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      <p
-        className={`text-xs font-medium py-1.5 px-2.5 bg-muted/25 rounded-md border border-border/50 min-h-[32px] flex items-center mt-1 ${mono ? "font-mono" : ""}`}
-      >
-        {value?.trim() ? value : "—"}
-      </p>
-    </div>
-  );
-}
-
-function AddressField({ label, value }: { label: string; value?: string }) {
-  return (
-    <div className="space-y-1">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      <p className="text-xs py-2 px-2.5 bg-muted/25 rounded-md border border-border/50 min-h-[48px] whitespace-pre-wrap mt-1">
-        {value?.trim() ? value : "—"}
-      </p>
-    </div>
-  );
+export function formatInvoiceAddress(addr: SalesOrderCustomerAddress | undefined): string {
+  if (!addr) return "";
+  return formatAddressCompact(addr).lines.join(", ");
 }
 
 export interface SalesInvoiceCustomerSectionProps {
   customers: Customer[];
   customerId: string;
-  onCustomerIdChange: (id: string, fields: CustomerTransactionFields | null) => void;
-  fields: CustomerTransactionFields | null;
+  onCustomerIdChange: (
+    id: string,
+    customer: Customer | null,
+    addressDefaults?: { billToId: string; shipToId: string; billingAddress: string; shippingAddress: string },
+  ) => void;
   billToId: string;
   shipToId: string;
   onBillToChange: (id: string, address: string) => void;
   onShipToChange: (id: string, address: string) => void;
-  billingAddress: string;
-  shippingAddress: string;
   disabled?: boolean;
 }
 
@@ -73,15 +43,24 @@ export function SalesInvoiceCustomerSection({
   customers,
   customerId,
   onCustomerIdChange,
-  fields,
   billToId,
   shipToId,
   onBillToChange,
   onShipToChange,
-  billingAddress,
-  shippingAddress,
   disabled,
 }: SalesInvoiceCustomerSectionProps) {
+  const [customerInfoOpen, setCustomerInfoOpen] = useState(false);
+
+  const selectedCustomer = useMemo(
+    () => customers.find((c) => c.id === Number(customerId)) ?? null,
+    [customers, customerId],
+  );
+
+  const customerAddresses = useMemo(
+    () => (selectedCustomer ? getCustomerAddressesForSalesOrder(selectedCustomer) : []),
+    [selectedCustomer],
+  );
+
   const options = useMemo(
     () =>
       customers.map((c) => ({
@@ -93,104 +72,77 @@ export function SalesInvoiceCustomerSection({
   );
 
   const handleSelect = (id: string) => {
-    const c = customers.find((x) => x.id === Number(id));
-    onCustomerIdChange(id, c ? customerMasterToTransactionFields(c) : null);
+    const c = customers.find((x) => x.id === Number(id)) ?? null;
+    if (!c) {
+      onCustomerIdChange(id, null);
+      return;
+    }
+    const addresses = getCustomerAddressesForSalesOrder(c);
+    const { billToAddressId, shipToAddressId } = getDefaultBillShipAddressIds(addresses);
+    const billAddr = addresses.find((a) => a.id === billToAddressId);
+    const shipAddr = addresses.find((a) => a.id === shipToAddressId);
+    onCustomerIdChange(id, c, {
+      billToId: billToAddressId,
+      shipToId: shipToAddressId,
+      billingAddress: formatInvoiceAddress(billAddr),
+      shippingAddress: formatInvoiceAddress(shipAddr),
+    });
+  };
+
+  const handleBillToChange = (id: string) => {
+    const addr = customerAddresses.find((a) => a.id === id);
+    onBillToChange(id, formatInvoiceAddress(addr));
+  };
+
+  const handleShipToChange = (id: string) => {
+    const addr = customerAddresses.find((a) => a.id === id);
+    onShipToChange(id, formatInvoiceAddress(addr));
   };
 
   return (
-    <div className="space-y-3">
-      <p className="text-[11px] text-muted-foreground">
-        Customer details are loaded from{" "}
-        <Link href="/masters/customers" className="text-brand-700 hover:underline">
-          Customer Master
-        </Link>
-        . To update master data, edit the customer record.
-      </p>
-
-      <SearchableSelect
-        label="Customer Name"
-        options={options}
-        value={customerId}
-        onChange={handleSelect}
-        placeholder="Search customer…"
-        disabled={disabled}
-        required
-      />
-
-      {fields && (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            <DetailField label="Customer Code" value={fields.customerCode} mono />
-            <DetailField label="Customer Ledger" value={fields.receivableLedger} />
-            <DetailField label="GSTIN" value={fields.customerGst} mono />
-            <DetailField label="PAN" value={fields.pan} mono />
-            <DetailField label="State" value={fields.state} />
-            <DetailField label="Contact Person" value={fields.contactPerson} />
-            <DetailField label="Mobile" value={fields.customerMobile} />
-            <DetailField label="Email" value={fields.customerEmail} />
-            <DetailField label="Credit Days" value={String(fields.creditDays)} />
-            <DetailField label="Payment Terms" value={fields.paymentTerms} />
-          </div>
-
-          {(fields.billToOptions.length > 0 || fields.shipToOptions.length > 0) && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {fields.billToOptions.length > 0 && (
-                <div className="space-y-1">
-                  <Label className="text-xs">Bill To</Label>
-                  <Select
-                    value={billToId}
-                    disabled={disabled}
-                    onValueChange={(id) => {
-                      const opt = fields.billToOptions.find((o) => o.id === id);
-                      onBillToChange(id, opt?.formatted ?? "");
-                    }}
-                  >
-                    <SelectTrigger className="h-9 text-xs">
-                      <SelectValue placeholder="Select billing location…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {fields.billToOptions.map((o) => (
-                        <SelectItem key={o.id} value={o.id} className="text-xs">
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              {fields.shipToOptions.length > 0 && (
-                <div className="space-y-1">
-                  <Label className="text-xs">Ship To</Label>
-                  <Select
-                    value={shipToId}
-                    disabled={disabled}
-                    onValueChange={(id) => {
-                      const opt = fields.shipToOptions.find((o) => o.id === id);
-                      onShipToChange(id, opt?.formatted ?? "");
-                    }}
-                  >
-                    <SelectTrigger className="h-9 text-xs">
-                      <SelectValue placeholder="Select delivery location…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {fields.shipToOptions.map((o) => (
-                        <SelectItem key={o.id} value={o.id} className="text-xs">
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-1.5">
+          <Label className={INVOICE_FORM_LABEL_CLASS}>
+            Customer Name <span className="text-red-500">*</span>
+          </Label>
+          {selectedCustomer && (
+            <button
+              type="button"
+              onClick={() => setCustomerInfoOpen(true)}
+              className="flex items-center justify-center w-5 h-5 transition-colors rounded-full shadow-sm bg-brand-600 hover:bg-brand-700"
+              title="View customer details"
+            >
+              <Info className="w-3 h-3 text-white" />
+            </button>
           )}
+        </div>
+        <SearchableSelect
+          label=""
+          options={options}
+          value={customerId}
+          onChange={handleSelect}
+          placeholder="Search customer…"
+          disabled={disabled}
+        />
+      </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <AddressField label="Billing Address" value={billingAddress} />
-            <AddressField label="Shipping Address" value={shippingAddress} />
-          </div>
-        </>
+      {selectedCustomer && customerAddresses.length > 0 && (
+        <BillToShipToSection
+          addresses={customerAddresses}
+          billToAddressId={billToId}
+          shipToAddressId={shipToId}
+          onBillToChange={handleBillToChange}
+          onShipToChange={handleShipToChange}
+          emptyHint="No Bill To / Ship To addresses found for this customer."
+        />
       )}
+
+      <CustomerInfoDialog
+        customer={selectedCustomer}
+        open={customerInfoOpen}
+        onOpenChange={setCustomerInfoOpen}
+      />
     </div>
   );
 }

@@ -36,7 +36,7 @@ export function formatVendorDropdownLabel(vendor: Vendor): string {
 }
 
 export function formatVendorDropdownSublabel(vendor: Vendor): string {
-  return `Vendor Type: ${vendor.vendorType || "—"}`;
+  return `Supplier Type: ${vendor.vendorType || "—"}`;
 }
 
 export function vendorMatchesTransactionSearch(

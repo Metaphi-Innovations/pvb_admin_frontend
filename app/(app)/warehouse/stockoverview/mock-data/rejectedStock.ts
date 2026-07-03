@@ -2,6 +2,19 @@ import { RejectedStockRecord } from "../types";
 
 export const SEED_REJECTED_STOCK: RejectedStockRecord[] = [
   {
+    id: "rejected-qc-3-B-CP-24A",
+    product: "Chlorpyrifos 20 EC",
+    warehouse: "Central Warehouse",
+    batchNumber: "B-CP-24A",
+    rejectedQuantity: 1,
+    rejectionReason: "Leakage",
+    qcNumber: "QC-2024-003",
+    inspectionDate: "2024-01-29",
+    inspector: "QC Inspector",
+    remarks: "1 unit returned via PRET-2024-0001; 1 unit balance pending return.",
+    status: "Rejected",
+  },
+  {
     id: "rj-1",
     product: "Urea 50kg",
     warehouse: "Central Warehouse",
@@ -50,8 +63,8 @@ export const SEED_REJECTED_STOCK: RejectedStockRecord[] = [
     qcNumber: "QC-2026-012",
     inspectionDate: "2026-05-28",
     inspector: "Rita M.",
-    remarks: "Returned to Vendor (M/s GreenFert Corp) under challan RV-2605.",
-    status: "Returned To Vendor",
+    remarks: "Returned to Supplier (M/s GreenFert Corp) under challan RV-2605.",
+    status: "Returned To Supplier",
   },
   {
     id: "rj-5",

@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 
 interface PaginationProps {
   page: number;
@@ -23,6 +23,8 @@ interface PaginationProps {
   onPageSizeChange?: (pageSize: number) => void;
   onPageJumpError?: (message: string) => void;
   recordLabel?: string;
+  /** compact = accounts-style footer without page-jump input */
+  variant?: "full" | "compact";
 }
 
 export function Pagination({
@@ -33,7 +35,9 @@ export function Pagination({
   onPageSizeChange,
   onPageJumpError,
   recordLabel = "records",
+  variant = "full",
 }: PaginationProps) {
+  const isCompact = variant === "compact";
   const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
   const startItem = totalRecords === 0 ? 0 : (page - 1) * pageSize + 1;
   const endItem = Math.min(page * pageSize, totalRecords);
@@ -76,9 +80,14 @@ export function Pagination({
   };
 
   return (
-    <div className="px-4 py-2.5 border-t border-border bg-muted/20 flex items-center justify-between flex-wrap gap-x-3 gap-y-2">
-      <div className="flex items-center gap-3 flex-wrap">
-        <p className="text-[11px] text-muted-foreground whitespace-nowrap">
+    <div
+      className={cn(
+        "flex-shrink-0 border-t border-border bg-muted/20 flex items-center flex-wrap gap-x-2 gap-y-1",
+        isCompact ? "px-4 py-2.5 justify-between" : "px-4 py-2.5 justify-between",
+      )}
+    >
+      <div className={cn("flex items-center flex-wrap", isCompact ? "gap-2" : "gap-3")}>
+        <p className="text-xs text-muted-foreground whitespace-nowrap">
           {totalRecords === 0 ? (
             <>Showing <span className="font-medium text-foreground">0</span> {recordLabel}</>
           ) : (
@@ -93,13 +102,15 @@ export function Pagination({
         </p>
 
         {onPageSizeChange && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-muted-foreground whitespace-nowrap">Rows per page:</span>
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+              {isCompact ? "Rows:" : "Rows per page:"}
+            </span>
             <Select
               value={String(pageSize)}
               onValueChange={(val) => onPageSizeChange(Number(val))}
             >
-              <SelectTrigger className="h-7 w-[52px] text-[11px] rounded-lg border-border bg-white px-2">
+              <SelectTrigger className="h-6 w-[46px] text-[10px] rounded border-border bg-white px-1.5">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="!min-w-[75px] !w-[75px]">
@@ -114,106 +125,118 @@ export function Pagination({
         )}
       </div>
 
-      <div className="flex items-center gap-1 flex-wrap">
+      <div className={cn("flex items-center flex-wrap", isCompact ? "gap-0.5 ml-auto" : "gap-1")}>
         <Button
           variant="outline"
           size="icon"
-          className="h-7 w-7 rounded-lg border-border"
+          className={cn("rounded border-border", isCompact ? "h-6 w-6" : "h-6 w-6")}
           disabled={page <= 1 || totalRecords === 0}
           onClick={() => onPageChange(page - 1)}
           aria-label="Previous page"
         >
-          <ChevronLeft className="w-3.5 h-3.5" />
+          <ChevronLeft className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
         </Button>
 
-        {totalRecords > 0 && pageNumbers[0] > 1 && (
+        {isCompact ? (
+          totalRecords > 0 && (
+            <span className="h-6 min-w-[1.5rem] px-1.5 inline-flex items-center justify-center text-[10px] font-semibold rounded bg-brand-600 text-white">
+              {page}
+            </span>
+          )
+        ) : (
           <>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-7 w-7 text-xs rounded-lg border-border"
-              onClick={() => onPageChange(1)}
-            >
-              1
-            </Button>
-            {pageNumbers[0] > 2 && (
-              <span className="text-xs text-muted-foreground px-0.5 select-none">…</span>
-            )}
-          </>
-        )}
-
-        {totalRecords > 0 &&
-          pageNumbers.map((p) => {
-            const isCurrent = p === page;
-            return (
-              <Button
-                key={p}
-                variant={isCurrent ? "default" : "outline"}
-                size="icon"
-                className={cn(
-                  "h-7 w-7 text-xs rounded-lg border-border",
-                  isCurrent && "bg-brand-600 hover:bg-brand-700 text-white border-brand-600 font-semibold",
+            {totalRecords > 0 && pageNumbers[0] > 1 && (
+              <>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-6 w-6 text-[10px] rounded border-border"
+                  onClick={() => onPageChange(1)}
+                >
+                  1
+                </Button>
+                {pageNumbers[0] > 2 && (
+                  <span className="text-xs text-muted-foreground px-0.5 select-none">…</span>
                 )}
-                onClick={() => onPageChange(p)}
-              >
-                {p}
-              </Button>
-            );
-          })}
-
-        {totalRecords > 0 && pageNumbers[pageNumbers.length - 1] < totalPages && (
-          <>
-            {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && (
-              <span className="text-xs text-muted-foreground px-0.5 select-none">…</span>
+              </>
             )}
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-7 w-7 text-xs rounded-lg border-border"
-              onClick={() => onPageChange(totalPages)}
-            >
-              {totalPages}
-            </Button>
+
+            {totalRecords > 0 &&
+              pageNumbers.map((p) => {
+                const isCurrent = p === page;
+                return (
+                  <Button
+                    key={p}
+                    variant={isCurrent ? "default" : "outline"}
+                    size="icon"
+                    className={cn(
+                      "h-6 w-6 text-[10px] rounded border-border",
+                      isCurrent && "bg-brand-600 hover:bg-brand-700 text-white border-brand-600 font-semibold",
+                    )}
+                    onClick={() => onPageChange(p)}
+                  >
+                    {p}
+                  </Button>
+                );
+              })}
+
+            {totalRecords > 0 && pageNumbers[pageNumbers.length - 1] < totalPages && (
+              <>
+                {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && (
+                  <span className="text-xs text-muted-foreground px-0.5 select-none">…</span>
+                )}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-6 w-6 text-[10px] rounded border-border"
+                  onClick={() => onPageChange(totalPages)}
+                >
+                  {totalPages}
+                </Button>
+              </>
+            )}
           </>
         )}
 
         <Button
           variant="outline"
           size="icon"
-          className="h-7 w-7 rounded-lg border-border"
+          className={cn("rounded border-border", isCompact ? "h-6 w-6" : "h-6 w-6")}
           disabled={page >= totalPages || totalRecords === 0}
           onClick={() => onPageChange(page + 1)}
           aria-label="Next page"
         >
-          <ChevronRight className="w-3.5 h-3.5" />
+          <ChevronRight className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
         </Button>
 
-        <div className="flex items-center gap-1 ml-1 pl-1 border-l border-border/60">
-          <span className="text-[11px] text-muted-foreground whitespace-nowrap">Go to</span>
-          <input
-            type="text"
-            inputMode="numeric"
-            value={pageInput}
-            onChange={(e) => setPageInput(e.target.value.replace(/\D/g, ""))}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handlePageJump();
-              }
-            }}
-            className="h-7 w-10 px-1.5 text-xs text-center border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-brand-300"
-            aria-label="Page number"
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 px-2 text-[11px] rounded-lg border-border"
-            disabled={totalRecords === 0}
-            onClick={handlePageJump}
-          >
-            Go
-          </Button>
-        </div>
+        {!isCompact && (
+          <div className="flex items-center gap-1 ml-1 pl-1 border-l border-border/60">
+            <span className="text-[10px] text-muted-foreground whitespace-nowrap">Go to</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={pageInput}
+              onChange={(e) => setPageInput(e.target.value.replace(/\D/g, ""))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handlePageJump();
+                }
+              }}
+              className="h-6 w-9 px-1 text-[10px] text-center border border-border rounded bg-white focus:outline-none focus:ring-2 focus:ring-brand-300"
+              aria-label="Page number"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 px-1.5 text-[10px] rounded border-border"
+              disabled={totalRecords === 0}
+              onClick={handlePageJump}
+            >
+              Go
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

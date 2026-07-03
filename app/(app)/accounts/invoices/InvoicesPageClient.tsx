@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ModuleFiltersBar } from "@/components/module/ModuleFiltersBar";
+import { AccountsFilterBar } from "@/components/accounts/AccountsFilterBar";
+import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,17 +19,20 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AccountsEditAction,
+  AccountsMoreActions,
+  AccountsTableActionCell,
+  AccountsViewAction,
+  accountsActionColClass,
+} from "@/components/accounts/AccountsTableActions";
 import {
   Banknote,
   Download,
-  Eye,
   FileSpreadsheet,
   FileText,
   Mail,
-  MoreVertical,
-  Pencil,
   Plus,
   Receipt,
   Send,
@@ -54,6 +58,7 @@ import { exportInvoicesToExcel } from "./invoices-export";
 import { downloadInvoicePdf } from "./invoice-pdf";
 import { formatINR, INVOICES_BREADCRUMB, INVOICES_LIST_PATH, INVOICE_AMOUNT_LABELS } from "./invoice-utils";
 import { getInvoiceAmountBreakup } from "./invoices-data";
+import { cn } from "@/lib/utils";
 
 const TABS = [
   { id: "all", label: "All Invoices" },
@@ -113,16 +118,16 @@ export default function InvoicesPageClient() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs gap-1.5"
+                className="h-9 text-[13px] font-medium gap-1.5"
                 disabled={exporting || visible.length === 0}
                 onClick={handleExport}
               >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <FileSpreadsheet className="w-4 h-4" />
                 {exporting ? "Exporting…" : "Export Excel"}
               </Button>
-              <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" asChild>
+              <Button size="sm" className="h-9 text-[13px] font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" asChild>
                 <Link href={`${INVOICES_LIST_PATH}/new`}>
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-4 h-4" />
                   Create Invoice
                 </Link>
               </Button>
@@ -132,50 +137,54 @@ export default function InvoicesPageClient() {
 
         <SectionTabs tabs={TABS} active={tab} onChange={setTab} counts={counts} />
 
-        <ModuleFiltersBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Invoice no., customer…">
+        <AccountsFilterBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Invoice no., customer…">
+          <AccountsListingDateFilter
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
           <Select value={invoiceStatus} onValueChange={setInvoiceStatus}>
-            <SelectTrigger className="h-8 w-[130px] text-xs bg-white">
+            <SelectTrigger className="accounts-filter-control mt-0 w-[130px]">
               <SelectValue placeholder="Invoice status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all" className="text-xs">All Invoice Status</SelectItem>
-              <SelectItem value="draft" className="text-xs">Draft</SelectItem>
-              <SelectItem value="sent" className="text-xs">Sent</SelectItem>
-              <SelectItem value="cancelled" className="text-xs">Cancelled</SelectItem>
+              <SelectItem value="all" className="text-[13px]">All Invoice Status</SelectItem>
+              <SelectItem value="draft" className="text-[13px]">Draft</SelectItem>
+              <SelectItem value="sent" className="text-[13px]">Sent</SelectItem>
+              <SelectItem value="cancelled" className="text-[13px]">Cancelled</SelectItem>
             </SelectContent>
           </Select>
           <Select value={paymentStatus} onValueChange={setPaymentStatus}>
-            <SelectTrigger className="h-8 w-[140px] text-xs bg-white">
+            <SelectTrigger className="accounts-filter-control mt-0 w-[140px]">
               <SelectValue placeholder="Payment status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all" className="text-xs">All Payment Status</SelectItem>
-              <SelectItem value="unpaid" className="text-xs">Unpaid</SelectItem>
-              <SelectItem value="partially_paid" className="text-xs">Partially Paid</SelectItem>
-              <SelectItem value="paid" className="text-xs">Paid</SelectItem>
+              <SelectItem value="all" className="text-[13px]">All Payment Status</SelectItem>
+              <SelectItem value="unpaid" className="text-[13px]">Unpaid</SelectItem>
+              <SelectItem value="partially_paid" className="text-[13px]">Partially Paid</SelectItem>
+              <SelectItem value="paid" className="text-[13px]">Paid</SelectItem>
             </SelectContent>
           </Select>
           <Select value={createdBy} onValueChange={setCreatedBy}>
-            <SelectTrigger className="h-8 w-[120px] text-xs bg-white">
+            <SelectTrigger className="accounts-filter-control mt-0 w-[120px]">
               <SelectValue placeholder="Created by" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all" className="text-xs">All Users</SelectItem>
+              <SelectItem value="all" className="text-[13px]">All Users</SelectItem>
               {creators.map((c) => (
-                <SelectItem key={c} value={c} className="text-xs">
+                <SelectItem key={c} value={c} className="text-[13px]">
                   {c}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Input type="date" className="h-8 w-[130px] text-xs" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <Input type="date" className="h-8 w-[130px] text-xs" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-        </ModuleFiltersBar>
+        </AccountsFilterBar>
 
         <div className="page-shell overflow-hidden">
           <div className="overflow-x-auto max-h-[calc(100vh-300px)]">
-            <table className="w-full text-table min-w-[1680px]">
-              <thead className="sticky top-0 z-10 bg-white border-b border-border">
+            <table className="accounts-table w-full min-w-[1680px]">
+              <thead className="border-b border-border">
                 <tr>
                   {[
                     "Invoice No.",
@@ -205,7 +214,7 @@ export default function InvoicesPageClient() {
               <tbody>
                 {visible.length === 0 ? (
                   <tr>
-                    <td colSpan={14} className="py-12 text-center text-xs text-muted-foreground">
+                    <td colSpan={14} className="accounts-table-empty">
                       No invoices yet. Create your first customer invoice.
                     </td>
                   </tr>
@@ -213,7 +222,7 @@ export default function InvoicesPageClient() {
                   visible.map((r) => {
                     const { taxableValue, gstAmount, invoiceTotal } = getInvoiceAmountBreakup(r);
                     return (
-                    <tr key={r.id} className="border-b border-border/50 hover:bg-brand-50/25">
+                    <tr key={r.id} className="accounts-table-row group">
                       <td className="px-2.5 py-2 text-xs font-mono font-medium">{r.invoiceNo}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.invoiceDate}</td>
                       <td className="px-2.5 py-2 text-xs">{r.customerName}</td>
@@ -231,41 +240,31 @@ export default function InvoicesPageClient() {
                       </td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.createdBy}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.updatedBy}</td>
-                      <td className="px-2.5 py-2 sticky right-0 bg-white">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button type="button" className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted">
-                              <MoreVertical className="w-3.5 h-3.5" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-44">
-                            {getInvoiceRowActions(r).map((a) => {
-                              if (a === "view")
-                                return (
-                                  <DropdownMenuItem key="view" asChild>
-                                    <Link href={`${INVOICES_LIST_PATH}/${r.id}`} className="text-xs gap-2">
-                                      <Eye className="w-3.5 h-3.5" /> View
-                                    </Link>
-                                  </DropdownMenuItem>
-                                );
-                              if (a === "edit")
-                                return (
-                                  <DropdownMenuItem key="edit" asChild>
-                                    <Link href={`${INVOICES_LIST_PATH}/${r.id}/edit`} className="text-xs gap-2">
-                                      <Pencil className="w-3.5 h-3.5" /> Edit
-                                    </Link>
-                                  </DropdownMenuItem>
-                                );
+                      <td className={cn("px-2.5 py-2 sticky right-0 bg-white", accountsActionColClass("multi"))}>
+                        <AccountsTableActionCell>
+                          {getInvoiceRowActions(r).includes("view") && (
+                            <AccountsViewAction href={`${INVOICES_LIST_PATH}/${r.id}`} />
+                          )}
+                          {getInvoiceRowActions(r).includes("edit") && (
+                            <AccountsEditAction href={`${INVOICES_LIST_PATH}/${r.id}/edit`} />
+                          )}
+                          {getInvoiceRowActions(r).some(
+                            (a) => a !== "view" && a !== "edit",
+                          ) && (
+                            <AccountsMoreActions contentClassName="w-44">
+                              {getInvoiceRowActions(r)
+                                .filter((a) => a !== "view" && a !== "edit")
+                                .map((a) => {
                               if (a === "pdf")
                                 return (
                                   <DropdownMenuItem key="pdf" className="text-xs gap-2" onClick={() => downloadInvoicePdf(r)}>
-                                    <Download className="w-3.5 h-3.5" /> Download PDF
+                                    <Download className="w-4 h-4" /> Download PDF
                                   </DropdownMenuItem>
                                 );
                               if (a === "email")
                                 return (
                                   <DropdownMenuItem key="email" className="text-xs gap-2 text-muted-foreground" disabled>
-                                    <Mail className="w-3.5 h-3.5" /> Send Email (soon)
+                                    <Mail className="w-4 h-4" /> Send Email (soon)
                                   </DropdownMenuItem>
                                 );
                               if (a === "receive")
@@ -275,7 +274,7 @@ export default function InvoicesPageClient() {
                                     className="text-xs gap-2 text-brand-700"
                                     onClick={() => setReceiveTarget(r)}
                                   >
-                                    <Banknote className="w-3.5 h-3.5" /> Receive Payment
+                                    <Banknote className="w-4 h-4" /> Receive Payment
                                   </DropdownMenuItem>
                                 );
                               if (a === "cancel")
@@ -285,7 +284,7 @@ export default function InvoicesPageClient() {
                                     className="text-xs gap-2 text-red-600"
                                     onClick={() => setCancelTarget(r)}
                                   >
-                                    <XCircle className="w-3.5 h-3.5" /> Cancel
+                                    <XCircle className="w-4 h-4" /> Cancel
                                   </DropdownMenuItem>
                                 );
                               if (a === "post")
@@ -298,7 +297,7 @@ export default function InvoicesPageClient() {
                                       refresh();
                                     }}
                                   >
-                                    <Send className="w-3.5 h-3.5" /> Post Invoice
+                                    <Send className="w-4 h-4" /> Post Invoice
                                   </DropdownMenuItem>
                                 );
                               if (a === "credit_note")
@@ -308,14 +307,15 @@ export default function InvoicesPageClient() {
                                       href={`/accounts/transactions/credit-notes/new?invoiceId=${r.id}`}
                                       className="text-xs gap-2"
                                     >
-                                      <Receipt className="w-3.5 h-3.5" /> Create Credit Note
+                                      <Receipt className="w-4 h-4" /> Create Credit Note
                                     </Link>
                                   </DropdownMenuItem>
                                 );
                               return null;
                             })}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                            </AccountsMoreActions>
+                          )}
+                        </AccountsTableActionCell>
                       </td>
                     </tr>
                     );

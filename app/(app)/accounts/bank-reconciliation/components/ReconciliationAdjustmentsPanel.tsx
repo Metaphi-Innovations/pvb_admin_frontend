@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -135,14 +136,14 @@ export function ReconciliationAdjustmentsPanel({
                   onClick={() => removeRow(row.id)}
                   aria-label="Remove adjustment"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
               <Select
                 value={row.adjustmentTypeId}
                 onValueChange={(v) => updateRow(row.id, { adjustmentTypeId: v })}
               >
-                <SelectTrigger className="h-8 text-xs">
+                <SelectTrigger className="h-9 text-[13px] font-medium">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -168,13 +169,10 @@ export function ReconciliationAdjustmentsPanel({
 
               <div className="space-y-1">
                 <Label className="text-[10px]">Amount</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  className="h-8 text-xs tabular-nums"
+                <AccountsMoneyInput
+                  className="h-9 text-[13px] font-medium tabular-nums"
                   value={row.amount || ""}
-                  onChange={(e) => updateRow(row.id, { amount: Number(e.target.value) || 0 })}
+                  onChange={(v) => updateRow(row.id, { amount: v })}
                 />
               </div>
             </div>

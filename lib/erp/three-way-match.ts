@@ -1,13 +1,13 @@
 /**
- * Shared ERP integration: PO ↔ GRN ↔ QC ↔ Vendor Invoice (Accounts Purchase).
+ * Shared ERP integration: PO ↔ GRN ↔ QC ↔ Supplier Invoice (Accounts Purchase).
  * Used by Procurement, Warehouse (reference), and Accounts modules.
  */
 import { listPurchaseInvoicesByPO, type PurchaseInvoiceRecord } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
 import { getPOById, type PurchaseOrder, type POLineItem } from "@/app/(app)/procurement/purchase-orders/po-data";
-import { getGrnRecords } from "@/app/(app)/warehouse/grnqc/grn/mock-data";
-import type { GrnRecord } from "@/app/(app)/warehouse/grnqc/grn/types";
-import { getQcRecords } from "@/app/(app)/warehouse/grnqc/qc/mock-data";
-import type { QcRecord } from "@/app/(app)/warehouse/grnqc/qc/types";
+import { getGrnRecords } from "@/app/(app)/warehouse/grn/mock-data";
+import type { GrnRecord } from "@/app/(app)/warehouse/grn/types";
+import { getQcRecords } from "@/app/(app)/warehouse/qc/mock-data";
+import type { QcRecord } from "@/app/(app)/warehouse/qc/types";
 
 export type ThreeWayMatchStatus = "pending" | "matched" | "partial_match" | "mismatch";
 

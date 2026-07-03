@@ -12,9 +12,9 @@ import {
   formatCustomerDropdownSublabel,
 } from "@/lib/masters/entity-display";
 import { SearchableSelect } from "@/app/(app)/accounts/credit-notes/components/SearchableSelect";
-import { MasterReadOnlyField, MasterReadOnlyAddress } from "./MasterReadOnlyField";
+import { MasterReadOnlyField } from "./MasterReadOnlyField";
 import { PartyBranchAddressSelector } from "./PartyBranchAddressSelector";
-import { MasterFetchedBadge } from "./MasterFetchedBadge";
+import { PartyAddressDetailCards } from "./PartyAddressDetailCards";
 
 export interface CustomerMasterPanelProps {
   customers: Customer[];
@@ -30,6 +30,8 @@ export interface CustomerMasterPanelProps {
   disabled?: boolean;
   allowSelect?: boolean;
   title?: string;
+  /** Structured Bill To / Ship To cards with company, address, GSTIN */
+  showStructuredAddresses?: boolean;
 }
 
 export function CustomerMasterPanel({
@@ -46,6 +48,7 @@ export function CustomerMasterPanel({
   disabled,
   allowSelect = true,
   title = "Customer",
+  showStructuredAddresses = false,
 }: CustomerMasterPanelProps) {
   const options = useMemo(
     () =>
@@ -64,16 +67,13 @@ export function CustomerMasterPanel({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] text-muted-foreground">
-          {title} data is loaded from{" "}
-          <Link href="/masters/customers" className="text-brand-700 hover:underline">
-            Customer Master
-          </Link>
-          . Edit master records there — not on this form.
-        </p>
-        <MasterFetchedBadge />
-      </div>
+      <p className="text-[11px] text-muted-foreground">
+        {title} data is loaded from{" "}
+        <Link href="/masters/customers" className="text-brand-700 hover:underline">
+          Customer Master
+        </Link>
+        . Edit master records there — not on this form.
+      </p>
 
       {allowSelect ? (
         <div className="max-w-md">
@@ -115,10 +115,30 @@ export function CustomerMasterPanel({
             disabled={disabled}
           />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <MasterReadOnlyAddress label="Billing Address" value={billingAddress} />
-            <MasterReadOnlyAddress label="Shipping Address" value={shippingAddress} />
-          </div>
+          {showStructuredAddresses ? (
+            <PartyAddressDetailCards
+              billToOptions={fields.billToOptions}
+              shipToOptions={fields.shipToOptions}
+              billToId={billToId}
+              shipToId={shipToId}
+              gstin={fields.customerGst}
+            />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Billing Address</p>
+                <p className="text-xs py-2 px-2.5 bg-muted/25 rounded-md border border-border/50 min-h-[48px] whitespace-pre-wrap">
+                  {billingAddress?.trim() ? billingAddress : "—"}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Shipping Address</p>
+                <p className="text-xs py-2 px-2.5 bg-muted/25 rounded-md border border-border/50 min-h-[48px] whitespace-pre-wrap">
+                  {shippingAddress?.trim() ? shippingAddress : "—"}
+                </p>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

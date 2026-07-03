@@ -82,8 +82,8 @@ export default function PaymentViewPageClient({ paymentId }: { paymentId: number
       }
       headerActions={
         actions.includes("pay") ? (
-          <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1" onClick={() => setPayOpen(true)}>
-            <Banknote className="w-3.5 h-3.5" /> Record Payment
+          <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1" onClick={() => setPayOpen(true)}>
+            <Banknote className="w-4 h-4" /> Record Payment
           </Button>
         ) : undefined
       }
@@ -135,7 +135,7 @@ export default function PaymentViewPageClient({ paymentId }: { paymentId: number
             <h2 className="text-sm font-semibold">Procurement Match (before payment)</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <DetailRow label="PO No." value={matchCtx.poNumber} />
-              <DetailRow label="Vendor Invoice No." value={matchCtx.vendorInvoiceNo} />
+              <DetailRow label="Supplier Invoice No." value={matchCtx.vendorInvoiceNo} />
               <DetailRow label="Purchase No." value={matchCtx.purchaseNo} />
               <DetailRow label="3-Way Match" value={<ThreeWayMatchStatusBadge status={matchCtx.matchStatus} />} />
             </div>
@@ -170,7 +170,7 @@ export default function PaymentViewPageClient({ paymentId }: { paymentId: number
           {record.installments.length === 0 ? (
             <p className="text-xs text-muted-foreground">No payments recorded yet. Balance {formatINR(balance)}.</p>
           ) : (
-            <table className="w-full text-xs">
+            <table className="accounts-table w-full">
               <thead className="border-b">
                 <tr>
                   {["Date", "Amount", "Mode", "Reference", "Transaction", "Entered By"].map((h) => (

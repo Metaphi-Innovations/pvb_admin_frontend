@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronsUpDown } from "lucide-react";
 import { StatusBadge as SharedStatusBadge } from "@/components/ui/StatusBadge";
 import type { StatusKey } from "@/lib/tokens";
+import { AccountsTableHeadCell } from "@/components/accounts/AccountsTable";
 
 export function SortTh({
   label,
@@ -23,15 +24,12 @@ export function SortTh({
 }) {
   const active = sortKey === colKey;
   return (
-    <th
+    <AccountsTableHeadCell
       onClick={() => onSort(colKey)}
-      className={cn(
-        "px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground cursor-pointer whitespace-nowrap",
-        align === "right" && "text-right",
-        align === "center" && "text-center",
-        align === "left" && "text-left",
-        active && "text-brand-700",
-      )}
+      align={align}
+      sorted={active}
+      uppercase
+      className="cursor-pointer select-none"
     >
       <span className="inline-flex items-center gap-1">
         {label}
@@ -41,7 +39,7 @@ export function SortTh({
           <ChevronsUpDown className="w-3 h-3 opacity-40" />
         )}
       </span>
-    </th>
+    </AccountsTableHeadCell>
   );
 }
 
@@ -50,6 +48,7 @@ const STATUS_MAP: Record<string, StatusKey> = {
   inactive: "inactive",
   approved: "approved",
   posted: "approved",
+  completed: "approved",
   draft: "draft",
   rejected: "rejected",
   sent: "approved",
@@ -74,6 +73,9 @@ const STATUS_MAP: Record<string, StatusKey> = {
   promise_to_pay: "pending",
   partially_collected: "partial",
   collected: "closed",
+  not_contacted: "pending",
+  follow_up_scheduled: "partial",
+  part_payment_received: "partial",
   escalated: "rejected",
   overdue: "rejected",
 };
@@ -89,26 +91,31 @@ export function SectionTabs({
   active,
   onChange,
   counts,
+  compact,
 }: {
   tabs: { id: string; label: string }[];
   active: string;
   onChange: (id: string) => void;
   counts?: Record<string, number>;
+  compact?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-1 border-b border-border/60 overflow-x-auto">
+    <div className="flex items-center gap-0 border-b border-border/60 overflow-x-auto">
       {tabs.map((t) => (
         <button
           key={t.id}
           type="button"
           onClick={() => onChange(t.id)}
           className={cn(
-            "px-3 py-2 text-xs font-medium whitespace-nowrap border-b-2 -mb-px",
-            active === t.id ? "border-brand-600 text-brand-700" : "border-transparent text-muted-foreground hover:text-foreground",
+            "font-medium whitespace-nowrap border-b-2 -mb-px text-[13px] leading-none",
+            compact ? "px-2.5 py-2" : "px-3 py-2",
+            active === t.id
+              ? "border-brand-600 text-brand-700"
+              : "border-transparent text-slate-600 hover:text-slate-800",
           )}
         >
           {t.label}
-          {counts && <span className="ml-1.5 opacity-70">{counts[t.id] ?? 0}</span>}
+          {counts && <span className="ml-1 opacity-70">{counts[t.id] ?? 0}</span>}
         </button>
       ))}
     </div>

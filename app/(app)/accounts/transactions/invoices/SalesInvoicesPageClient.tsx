@@ -5,10 +5,14 @@ import {
   loadInvoices,
   markInvoiceSent,
   saveInvoices,
-  getInvoiceAmountBreakup,
 } from "@/app/(app)/accounts/invoices/invoices-data";
 import { salesInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { resolveInvoiceDocumentType } from "@/lib/accounts/invoice-type";
+import {
+  formatInvoiceGstBreakup,
+  getInvoiceGstBreakup,
+} from "@/lib/accounts/invoice-gst-breakup";
 
 export default function SalesInvoicesPageClient() {
   return (
@@ -17,6 +21,8 @@ export default function SalesInvoicesPageClient() {
         section: "Transactions",
         title: "Sales Invoices",
         description: "Create and post sales tax invoices with ledger impact.",
+        showInvoiceTypeColumn: true,
+        invoiceListingMode: true,
         loadData: loadInvoices,
         newHref: "/accounts/transactions/invoices/new",
         editHref: (id) => `/accounts/transactions/invoices/${id}/edit`,
@@ -29,31 +35,40 @@ export default function SalesInvoicesPageClient() {
         canEdit: (r) => r.status === "draft",
         canDelete: (r) => r.status === "draft",
         getRow: (inv) => {
-          const { taxableValue, gstAmount, invoiceTotal } = getInvoiceAmountBreakup(inv);
+          const gst = getInvoiceGstBreakup(inv);
+          const formatted = formatInvoiceGstBreakup(gst);
+          const invoiceType = resolveInvoiceDocumentType(inv);
           return {
             id: inv.id,
             number: inv.invoiceNo,
             date: inv.invoiceDate,
             party: inv.customerName,
-            amount: formatMoney(invoiceTotal),
-            taxableValue: formatMoney(taxableValue),
-            gstAmount: formatMoney(gstAmount),
-            invoiceTotal: formatMoney(invoiceTotal),
+            sourceNo: inv.salesOrderNo ?? inv.referenceNo ?? "—",
+            dispatchNo: inv.dispatchNo ?? "—",
+            invoiceType,
+            amount: formatted.invoiceTotal,
+            taxableValue: formatted.taxableValue,
+            cgst: formatted.cgst,
+            sgst: formatted.sgst,
+            igst: formatted.igst,
+            invoiceTotal: formatted.invoiceTotal,
             status: inv.invoiceStatus,
             viewHref: `/accounts/transactions/invoices/${inv.id}`,
             viewFields: [
-              { label: "Taxable Value", value: formatMoney(taxableValue) },
-              { label: "GST Amount", value: formatMoney(gstAmount) },
-              { label: "Invoice Total (Incl. GST)", value: formatMoney(invoiceTotal) },
+              { label: "Taxable Value", value: formatted.taxableValue },
+              { label: "CGST", value: formatted.cgst },
+              { label: "SGST", value: formatted.sgst },
+              { label: "IGST", value: formatted.igst },
+              { label: "Invoice Value", value: formatted.invoiceTotal },
               { label: "Due Date", value: inv.dueDate },
               { label: "Payment Status", value: inv.paymentStatus },
               { label: "Reference", value: inv.referenceNo || "—" },
             ],
             impactLines: salesInvoiceImpactResolved({
               customerName: inv.customerName,
-              taxable: taxableValue,
-              taxAmount: gstAmount,
-              grandTotal: invoiceTotal,
+              taxable: gst.taxableValue,
+              taxAmount: gst.cgst + gst.sgst + gst.igst,
+              grandTotal: gst.invoiceTotal,
             }),
           };
         },

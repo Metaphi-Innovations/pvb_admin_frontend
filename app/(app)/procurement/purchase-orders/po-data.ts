@@ -3,7 +3,9 @@ import { amountInWords, calcLineAmounts, nextId, round2, todayStr } from "@/lib/
 import type { ActivityEntry } from "@/lib/procurement/types";
 import type { POShortCloseInfo } from "./po-qty";
 import type { PackagingUom, ProcurementAdditionalCharge } from "@/lib/procurement/procurement-line-utils";
-import { calcTotalQtyBase, sumAdditionalCharges, enrichProductForProcurement } from "@/lib/procurement/procurement-line-utils";
+import { calcPackingToBaseQty, sumAdditionalCharges, sumAdditionalChargeTaxes, enrichProductForProcurement } from "@/lib/procurement/procurement-line-utils";
+import { findProductRef } from "@/lib/pricing/resolve-pricing";
+import type { PODiscountType } from "@/lib/procurement/utils";
 import type { PriceSource } from "@/lib/pricing/resolve-pricing";
 
 export type { POShortCloseInfo } from "./po-qty";
@@ -49,6 +51,8 @@ export interface POLineItem {
   productName: string;
   description: string;
   sku: string;
+  category: string;
+  hsnCode: string;
   baseUnit: string;
   packagingUnit: string;
   conversionQty: number;
@@ -57,7 +61,10 @@ export interface POLineItem {
   uom: string;
   orderedQty: number;
   unitPrice: number;
+  discountType: PODiscountType;
   discountPct: number;
+  discountFlatAmount: number;
+  discountAmount: number;
   cgstPct: number;
   sgstPct: number;
   igstPct: number;
@@ -65,6 +72,7 @@ export interface POLineItem {
   taxAmount: number;
   netAmount: number;
   deliverySchedule: string;
+  remarks: string;
   prLineUid?: string;
   /** Fallback when GRN not linked by PO number */
   receivedQty?: number;
@@ -128,6 +136,8 @@ export interface PurchaseOrder {
   notes: string;
   sourcePrId: number | null;
   sourcePrNumber: string;
+  billToAddressId?: string;
+  shipToAddressId?: string;
   billing: typeof COMPANY_BILLING;
   shipping: {
     shipToLocation: string;
@@ -157,14 +167,40 @@ export interface PurchaseOrder {
 
 const STORAGE_KEY = "ds_procurement_purchase_orders_v2";
 
+function parseGstRate(gstRate?: string): number {
+  const n = parseFloat(String(gstRate ?? "").replace(/%/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function gstSplitFromProduct(productId: number): { cgstPct: number; sgstPct: number; igstPct: number } {
+  const gst = parseGstRate(findProductRef(productId)?.gstRate);
+  if (gst <= 0) return { cgstPct: 0, sgstPct: 0, igstPct: 0 };
+  return { cgstPct: gst / 2, sgstPct: gst / 2, igstPct: 0 };
+}
+
 function migratePOLine(line: Partial<POLineItem>): POLineItem {
   const enriched = line.productId ? enrichProductForProcurement(line.productId) : null;
   const orderUom = (line.orderUom ?? (line.uom as PackagingUom) ?? "Unit") as PackagingUom;
   const orderedQtyPack = line.orderedQtyPack ?? line.orderedQty ?? 1;
-  const conversionQty = line.conversionQty ?? enriched?.conversionQty ?? 1;
-  const orderedQty =
-    line.orderedQty ??
-    calcTotalQtyBase(orderUom, orderedQtyPack, conversionQty);
+  const conversionQty = enriched?.conversionQty ?? line.conversionQty ?? 1;
+  const orderedQty = calcPackingToBaseQty(orderedQtyPack, conversionQty);
+  const productGst = line.productId ? gstSplitFromProduct(line.productId) : null;
+  const discountType = (line.discountType ?? "percentage") as PODiscountType;
+  const discountPct = line.discountPct ?? 0;
+  const discountFlatAmount = line.discountFlatAmount ?? 0;
+  const cgstPct = line.cgstPct ?? productGst?.cgstPct ?? 9;
+  const sgstPct = line.sgstPct ?? productGst?.sgstPct ?? 9;
+  const igstPct = line.igstPct ?? productGst?.igstPct ?? 0;
+  const calc = calcLineAmounts({
+    orderedQty,
+    unitPrice: line.unitPrice ?? 0,
+    discountType,
+    discountPct,
+    discountFlatAmount,
+    cgstPct,
+    sgstPct,
+    igstPct,
+  });
   return {
     uid: line.uid ?? `pl-${Date.now()}`,
     productId: line.productId ?? 0,
@@ -179,20 +215,31 @@ function migratePOLine(line: Partial<POLineItem>): POLineItem {
     orderedQtyPack,
     uom: line.uom ?? orderUom,
     orderedQty,
-    unitPrice: line.unitPrice ?? 0,
-    discountPct: line.discountPct ?? 0,
-    cgstPct: line.cgstPct ?? 9,
-    sgstPct: line.sgstPct ?? 9,
-    igstPct: line.igstPct ?? 0,
-    grossAmount: line.grossAmount ?? 0,
-    taxAmount: line.taxAmount ?? 0,
-    netAmount: line.netAmount ?? 0,
+    unitPrice: line.unitPrice ?? enriched?.ratePerSku ?? 0,
+    discountType,
+    discountPct,
+    discountFlatAmount,
+    discountAmount: calc.discountAmount,
+    cgstPct,
+    sgstPct,
+    igstPct,
+    grossAmount: calc.grossAmount,
+    taxAmount: calc.taxAmount,
+    netAmount: calc.netAmount,
     deliverySchedule: line.deliverySchedule ?? "",
+    remarks: line.remarks ?? "",
     prLineUid: line.prLineUid,
     receivedQty: line.receivedQty,
     shortClosedQty: line.shortClosedQty,
     cpSource: line.cpSource,
+    category: line.category ?? enriched?.category ?? "",
+    hsnCode: line.hsnCode ?? enriched?.hsnCode ?? "",
   };
+}
+
+/** Enrich a line with current product master data and recalculated amounts. */
+export function enrichPOLineItem(line: POLineItem): POLineItem {
+  return migratePOLine(line);
 }
 
 function migratePO(po: PurchaseOrder): PurchaseOrder {
@@ -229,7 +276,9 @@ function buildSummary(
     const c = calcLineAmounts({
       orderedQty: l.orderedQty,
       unitPrice: l.unitPrice,
+      discountType: l.discountType,
       discountPct: l.discountPct,
+      discountFlatAmount: l.discountFlatAmount,
       cgstPct: l.cgstPct,
       sgstPct: l.sgstPct,
       igstPct: l.igstPct,
@@ -246,10 +295,11 @@ function buildSummary(
   totalDiscount = round2(totalDiscount);
   const productTotal = round2(taxableValue);
   const additionalChargesTotal = round2(sumAdditionalCharges(additionalCharges));
+  const chargeTaxes = sumAdditionalChargeTaxes(additionalCharges);
   taxableValue = round2(productTotal + additionalChargesTotal);
-  totalCgst = round2(totalCgst);
-  totalSgst = round2(totalSgst);
-  totalIgst = round2(totalIgst);
+  totalCgst = round2(totalCgst + chargeTaxes.totalCgst);
+  totalSgst = round2(totalSgst + chargeTaxes.totalSgst);
+  totalIgst = round2(totalIgst + chargeTaxes.totalIgst);
   const grandTotal = round2(taxableValue + totalCgst + totalSgst + totalIgst);
 
   return {
@@ -272,13 +322,16 @@ export function recalcPOLines(lines: POLineItem[]): POLineItem[] {
     const c = calcLineAmounts({
       orderedQty: l.orderedQty,
       unitPrice: l.unitPrice,
+      discountType: l.discountType,
       discountPct: l.discountPct,
+      discountFlatAmount: l.discountFlatAmount,
       cgstPct: l.cgstPct,
       sgstPct: l.sgstPct,
       igstPct: l.igstPct,
     });
     return {
       ...l,
+      discountAmount: c.discountAmount,
       grossAmount: c.grossAmount,
       taxAmount: c.taxAmount,
       netAmount: c.netAmount,
@@ -346,7 +399,7 @@ const RAW_SEED = [
     ] as POLineItem[],
     terms: [],
     attachments: [],
-    additionalCharges: [{ uid: "c1", chargeName: "Freight Charges", amount: 500, remarks: "" }],
+    additionalCharges: [{ uid: "c1", chargeName: "Freight Charges", amount: 500, remarks: "", gstMasterId: 4, cgstPct: 9, sgstPct: 9, igstPct: 0 }],
     otherCharges: 500,
     summary: buildSummary(
       [

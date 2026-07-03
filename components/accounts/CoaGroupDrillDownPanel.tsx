@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,8 +19,8 @@ function PostingEntriesTable({ rows, emptyLabel }: { rows: CoaPostingRow[]; empt
     return <p className="text-sm text-muted-foreground py-6 text-center px-6">{emptyLabel}</p>;
   }
   return (
-    <table className="w-full text-sm">
-      <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
+    <table className="accounts-table w-full">
+      <thead className="border-b border-border/40">
         <tr>
           {["Date", "Voucher", "Reference", "Particulars", "Debit", "Credit"].map((h) => (
             <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
@@ -82,8 +83,8 @@ function LedgerBalanceTable({
     return <p className="text-sm text-muted-foreground py-6 text-center">No ledgers under this group yet.</p>;
   }
   return (
-    <table className="w-full text-sm">
-      <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
+    <table className="accounts-table w-full">
+      <thead className="border-b border-border/40">
         <tr>
           {["Ledger", "Balance"].map((h) => (
             <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
@@ -138,7 +139,7 @@ function LedgerList({
           <button
             key={l.id}
             type="button"
-            onClick={() => (onSelect ? onSelect(l) : router.push(`/accounts/masters/ledgers/${l.id}`))}
+            onClick={() => (onSelect ? onSelect(l) : router.push(buildGeneralLedgerHref(l.id)))}
             className="w-full flex items-center justify-between gap-4 px-6 py-3 text-left hover:bg-orange-50/30 transition-colors"
           >
             <div className="min-w-0">
@@ -241,24 +242,21 @@ export function CoaGroupDrillDownPanel({
         }
         actions={
           <>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
-              <Link href="/warehouse/batch-register">Stock Ledger</Link>
+            <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
+              <Link href="/warehouse/stockoverview">Stock Position</Link>
             </Button>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
-              <Link href="/warehouse/batch-register">Batch Register</Link>
-            </Button>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+            <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
               <Link href="/accounts/reports/stock-valuation">Stock Valuation</Link>
             </Button>
-            <Button asChild size="sm" className="h-8 text-xs bg-brand-600 text-white">
+            <Button asChild size="sm" className="h-9 text-[13px] font-medium bg-brand-600 text-white">
               <Link href="/masters/products">Open Product Master</Link>
             </Button>
           </>
         }
       >
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
+          <table className="accounts-table w-full">
+            <thead className="border-b border-border/40">
               <tr>
                 {["Product", "Available Qty", "UOM", "CP", "Value"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
@@ -309,24 +307,24 @@ export function CoaGroupDrillDownPanel({
         }
         actions={
           <>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+            <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
               <Link href="/accounts/receivables/outstanding">Customer Ledger</Link>
             </Button>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+            <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
               <Link href="/accounts/receivables/outstanding">Outstanding Report</Link>
             </Button>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
-              <Link href="/accounts/receivables/ageing">Aging Report</Link>
+            <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
+              <Link href="/accounts/receivables/outstanding?tab=ageing">Aging Report</Link>
             </Button>
-            <Button asChild size="sm" className="h-8 text-xs bg-brand-600 text-white">
+            <Button asChild size="sm" className="h-9 text-[13px] font-medium bg-brand-600 text-white">
               <Link href="/masters/customers">Open Customer Master</Link>
             </Button>
           </>
         }
       >
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
+          <table className="accounts-table w-full">
+            <thead className="border-b border-border/40">
               <tr>
                 {["Customer", "Outstanding", "Aging Days"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
@@ -361,7 +359,7 @@ export function CoaGroupDrillDownPanel({
           title="Trade Payables / Sundry Creditors"
           summary={
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <SummaryField label="Total Vendors" value={context.totalVendors} />
+              <SummaryField label="Total Suppliers" value={context.totalVendors} />
               <SummaryField label="Total Outstanding" value={formatMoney(context.totalPayable)} />
               <SummaryField label="Due This Week" value={formatMoney(context.dueThisWeek)} />
               <SummaryField label="Overdue Payable" value={formatMoney(context.overdueBills)} />
@@ -369,22 +367,22 @@ export function CoaGroupDrillDownPanel({
           }
           actions={
             <>
-              <Button asChild variant="outline" size="sm" className="h-8 text-xs">
-                <Link href="/accounts/payables/outstanding">View Vendor Ledger</Link>
+              <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
+                <Link href="/accounts/payables/outstanding">View Supplier Ledger</Link>
               </Button>
-              <Button asChild size="sm" className="h-8 text-xs bg-brand-600 text-white">
-                <Link href="/masters/vendors">Open Vendor Master</Link>
+              <Button asChild size="sm" className="h-9 text-[13px] font-medium bg-brand-600 text-white">
+                <Link href="/masters/vendors">Open Supplier Master</Link>
               </Button>
-              <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+              <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
                 <Link href="/accounts/vouchers/payment/new">Create Payment</Link>
               </Button>
             </>
           }
         >
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
+          <table className="accounts-table w-full">
+            <thead className="border-b border-border/40">
               <tr>
-                {["Vendor", "Outstanding", "Last Bill", "Due Date", "Aging"].map((h) => (
+                {["Supplier", "Outstanding", "Last Bill", "Due Date", "Aging"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
                     {h}
                   </th>
@@ -431,21 +429,21 @@ export function CoaGroupDrillDownPanel({
         }
         actions={
           <>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+            <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
               <Link href="/accounts/reports/bank-book">View Ledger</Link>
             </Button>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+            <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
               <Link href="/accounts/reports/bank-book">View Transactions</Link>
             </Button>
-            <Button asChild size="sm" className="h-8 text-xs bg-brand-600 text-white">
+            <Button asChild size="sm" className="h-9 text-[13px] font-medium bg-brand-600 text-white">
               <Link href="/accounts/banking/bank-accounts">Open Banking Module</Link>
             </Button>
           </>
         }
       >
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
+          <table className="accounts-table w-full">
+            <thead className="border-b border-border/40">
               <tr>
                 {["Bank Name", "Account No", "Opening Balance", "Current Balance"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
@@ -502,12 +500,12 @@ export function CoaGroupDrillDownPanel({
             <LedgerList ledgers={context.salesLedgers} onSelect={onSelectLedger} />
           </TabsContent>
           <TabsContent value="register" className="flex-1 overflow-auto m-0 p-6">
-            <Button asChild size="sm" className="h-8 text-xs bg-brand-600 text-white">
+            <Button asChild size="sm" className="h-9 text-[13px] font-medium bg-brand-600 text-white">
               <Link href="/accounts/reports/sales-register">Sales Register</Link>
             </Button>
           </TabsContent>
           <TabsContent value="invoices" className="flex-1 overflow-auto m-0 p-6">
-            <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+            <Button asChild size="sm" variant="outline" className="h-9 text-[13px] font-medium">
               <Link href="/accounts/transactions/invoices">Sales Invoices</Link>
             </Button>
           </TabsContent>
@@ -525,7 +523,7 @@ export function CoaGroupDrillDownPanel({
             <SummaryField label="Total Purchases" value={formatMoney(context.totalPurchases)} />
             <SummaryField label="Taxable Purchases" value={formatMoney(context.taxablePurchases)} />
             <SummaryField label="GST Input" value={formatMoney(context.gstInput)} />
-            <SummaryField label="Pending Vendor Bills" value={context.pendingVendorBills} />
+            <SummaryField label="Pending Supplier Bills" value={context.pendingVendorBills} />
           </div>
         </div>
         <Tabs value={tab} onValueChange={setTab} className="flex flex-col flex-1 min-h-0">
@@ -544,14 +542,52 @@ export function CoaGroupDrillDownPanel({
             <LedgerList ledgers={context.purchaseLedgers} onSelect={onSelectLedger} />
           </TabsContent>
           <TabsContent value="register" className="flex-1 overflow-auto m-0 p-6">
-            <Button asChild size="sm" className="h-8 text-xs bg-brand-600 text-white">
+            <Button asChild size="sm" className="h-9 text-[13px] font-medium bg-brand-600 text-white">
               <Link href="/accounts/reports/purchase-register">Purchase Register</Link>
             </Button>
           </TabsContent>
           <TabsContent value="invoices" className="flex-1 overflow-auto m-0 p-6">
-            <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+            <Button asChild size="sm" variant="outline" className="h-9 text-[13px] font-medium">
               <Link href="/accounts/transactions/purchase">Purchase Invoices</Link>
             </Button>
+          </TabsContent>
+        </Tabs>
+      </div>
+    );
+  }
+
+  if (context.kind === "tds_payable") {
+    return (
+      <div className="flex flex-col flex-1 min-h-0 border-t border-border/40">
+        <div className="flex-shrink-0 px-6 py-4 bg-brand-50/20 border-b border-border/40">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-800 mb-3">
+            TDS Payable
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
+            <SummaryField label="Total Balance" value={formatMoney(context.totalTdsPayable)} />
+            <SummaryField label="Sections" value={String(context.sectionCount)} />
+            <SummaryField label="Postings" value={String(context.postedEntries.length)} />
+          </div>
+          <Button asChild size="sm" variant="outline" className="h-9 text-[13px] font-medium">
+            <Link href="/accounts/reports/tds-party-wise">TDS Party-wise Report</Link>
+          </Button>
+        </div>
+        <Tabs value={tab} onValueChange={setTab} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-shrink-0 px-6 border-b border-border/40">
+            <TabsList className="bg-transparent p-0 h-auto border-0 gap-4">
+              <TabsTrigger value="postings" className="text-sm data-[state=active]:text-orange-700">
+                TDS Postings
+              </TabsTrigger>
+              <TabsTrigger value="ledgers" className="text-sm data-[state=active]:text-orange-700">
+                Section Ledgers
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent value="postings" className="flex-1 overflow-auto m-0">
+            <PostingEntriesTable rows={context.postedEntries} emptyLabel="No TDS postings yet." />
+          </TabsContent>
+          <TabsContent value="ledgers" className="flex-1 overflow-auto m-0">
+            <LedgerList ledgers={context.tdsLedgers} onSelect={onSelectLedger} />
           </TabsContent>
         </Tabs>
       </div>
@@ -570,7 +606,7 @@ export function CoaGroupDrillDownPanel({
             <SummaryField label="Input GST" value={formatMoney(context.inputGstCredit)} />
             <SummaryField label="Net" value={formatMoney(context.netPayable)} />
           </div>
-          <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+          <Button asChild size="sm" variant="outline" className="h-9 text-[13px] font-medium">
             <Link href="/accounts/reports/gst">GST Summary Report</Link>
           </Button>
         </div>
@@ -625,13 +661,13 @@ export function CoaGroupDrillDownPanel({
         }
         actions={
           <>
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={onViewLedgerStatement}>
+            <Button type="button" variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={onViewLedgerStatement}>
               View Ledger
             </Button>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+            <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
               <Link href="/accounts/vouchers">View Transactions</Link>
             </Button>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+            <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
               <Link href="/accounts/vouchers/journal">Journal Entries</Link>
             </Button>
           </>
@@ -661,13 +697,13 @@ export function CoaGroupDrillDownPanel({
         }
         actions={
           <>
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={onViewLedgerStatement}>
+            <Button type="button" variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={onViewLedgerStatement}>
               View Cash Ledger
             </Button>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+            <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
               <Link href="/accounts/vouchers">Cash Transactions</Link>
             </Button>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+            <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
               <Link href="/accounts/reports/cash-book">Cash Book</Link>
             </Button>
           </>
@@ -694,18 +730,18 @@ export function CoaGroupDrillDownPanel({
         }
         actions={
           <>
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={onViewLedgerStatement}>
+            <Button type="button" variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={onViewLedgerStatement}>
               View Ledger
             </Button>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+            <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
               <Link href="/accounts/reports/ledger">Deposit Register</Link>
             </Button>
           </>
         }
       >
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
+          <table className="accounts-table w-full">
+            <thead className="border-b border-border/40">
               <tr>
                 {["Deposit Name", "Amount", "Due Date"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
@@ -741,24 +777,24 @@ export function CoaGroupDrillDownPanel({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <SummaryField label="Total Outstanding" value={formatMoney(context.totalOutstanding)} />
             <SummaryField label="Employee Advances" value={formatMoney(context.employeeAdvances)} />
-            <SummaryField label="Vendor Advances" value={formatMoney(context.vendorAdvances)} />
+            <SummaryField label="Supplier Advances" value={formatMoney(context.vendorAdvances)} />
             <SummaryField label="Other Advances" value={formatMoney(context.otherAdvances)} />
           </div>
         }
         actions={
           <>
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={onViewLedgerStatement}>
+            <Button type="button" variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={onViewLedgerStatement}>
               View Ledger
             </Button>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+            <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
               <Link href="/accounts/reports/ledger">Recovery Tracking</Link>
             </Button>
           </>
         }
       >
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
+          <table className="accounts-table w-full">
+            <thead className="border-b border-border/40">
               <tr>
                 {["Party", "Type", "Outstanding"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
@@ -799,10 +835,10 @@ export function CoaGroupDrillDownPanel({
         }
         actions={
           <>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+            <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
               <Link href="/accounts/reports/ledger">Ledger Statement</Link>
             </Button>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+            <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
               <Link href="/accounts/vouchers">Transactions</Link>
             </Button>
           </>
@@ -828,18 +864,18 @@ export function CoaGroupDrillDownPanel({
         }
         actions={
           <>
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={onViewLedgerStatement}>
+            <Button type="button" variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={onViewLedgerStatement}>
               View Ledger
             </Button>
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+            <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
               <Link href="/accounts/reports/ledger">Amortization Schedule</Link>
             </Button>
           </>
         }
       >
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0">
+          <table className="accounts-table w-full">
+            <thead className="border-b border-border/40">
               <tr>
                 {["Expense", "Original Amount", "Balance Remaining"].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase text-muted-foreground">
@@ -879,11 +915,11 @@ export function CoaGroupDrillDownPanel({
         }
         actions={
           <>
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={onViewLedgerStatement}>
+            <Button type="button" variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={onViewLedgerStatement}>
               View Ledger
             </Button>
             {context.customerMasterHref && (
-              <Button asChild size="sm" className="h-8 text-xs bg-brand-600 text-white">
+              <Button asChild size="sm" className="h-9 text-[13px] font-medium bg-brand-600 text-white">
                 <Link href={context.customerMasterHref}>Open Customer Master</Link>
               </Button>
             )}
@@ -898,8 +934,8 @@ export function CoaGroupDrillDownPanel({
             {context.recentInvoices.length === 0 ? (
               <p className="text-sm text-muted-foreground">No invoices yet.</p>
             ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50/80 border-b">
+              <table className="accounts-table w-full">
+                <thead className="border-b">
                   <tr>
                     {["Date", "Invoice", "Amount"].map((h) => (
                       <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">
@@ -927,8 +963,8 @@ export function CoaGroupDrillDownPanel({
             {context.recentReceipts.length === 0 ? (
               <p className="text-sm text-muted-foreground">No receipts yet.</p>
             ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50/80 border-b">
+              <table className="accounts-table w-full">
+                <thead className="border-b">
                   <tr>
                     {["Date", "Voucher", "Amount"].map((h) => (
                       <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">
@@ -958,19 +994,19 @@ export function CoaGroupDrillDownPanel({
     return (
       <div className="flex-shrink-0 px-6 py-4 border-b border-border/40 bg-brand-50/20">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-800 mb-3">
-          Vendor Ledger — {context.nodeName}
+          Supplier Ledger — {context.nodeName}
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <SummaryField label="Outstanding" value={formatMoney(context.outstanding)} />
           <SummaryField label="Bills" value={context.billCount} />
           <SummaryField label="Payments" value={context.paymentCount} />
           <div className="flex items-end">
-            <Button asChild variant="outline" size="sm" className="h-8 text-xs w-full">
-              <Link href="/accounts/payables/ageing">Ageing</Link>
+            <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium w-full">
+              <Link href="/accounts/payables/outstanding?tab=ageing">Ageing</Link>
             </Button>
           </div>
           <div className="flex items-end">
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs w-full" onClick={onViewLedgerStatement}>
+            <Button type="button" variant="outline" size="sm" className="h-9 text-[13px] font-medium w-full" onClick={onViewLedgerStatement}>
               Ledger Statement
             </Button>
           </div>
@@ -982,29 +1018,10 @@ export function CoaGroupDrillDownPanel({
   if (isNamedAccountingGroup(context) && GENERIC_KINDS.has(context.kind)) {
     return (
       <div className="flex flex-col flex-1 min-h-0 border-t border-border/40 overflow-auto">
-        <DashboardShell
-          title={context.nodeName}
-          summary={
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {context.highlights.map((h) => (
-                <SummaryField
-                  key={h.label}
-                  label={h.label}
-                  value={typeof h.value === "number" && h.label.toLowerCase().includes("ledger") || h.label.includes("Count") || h.label.includes("Invoices") || h.label.includes("Bills") || h.label.includes("Ledgers") || h.label.includes("Vendors") || h.label.includes("Employees")
-                    ? h.value
-                    : formatMoney(h.value)}
-                />
-              ))}
-            </div>
-          }
-        >
-          <p className="px-4 py-2 text-xs text-muted-foreground border-b border-border/30">
-            Entry: {context.entryNote}
-          </p>
-        </DashboardShell>
         <CoaGroupAccountingFooter
           accounting={context.accounting}
           onSelectLedger={onSelectLedgerById}
+          showLedgerSearch
         />
       </div>
     );

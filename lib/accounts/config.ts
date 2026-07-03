@@ -1,4 +1,8 @@
 export const ACCOUNTS_CURRENT_USER = "Admin";
+/** Demo maker — Rahul Sharma (Accounts Executive) */
+export const ACCOUNTS_CURRENT_EMPLOYEE_ID = 11;
+/** Demo checker — Priya Mehta (Accounts Manager) */
+export const ACCOUNTS_CHECKER_EMPLOYEE_ID = 12;
 /** Allow editing payment records after Payment Done / Cancelled */
 export const ACCOUNTS_PAYMENT_ADMIN = true;
 /** Allow editing invoices after Paid / Cancelled */

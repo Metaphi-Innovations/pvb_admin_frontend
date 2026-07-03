@@ -115,7 +115,7 @@ export default function VendorMasterPage() {
   const columns: ColumnConfig<Vendor>[] = [
     {
       key: "vendorCode",
-      header: "Vendor Code",
+      header: "Supplier Code",
       sortable: true,
       filterable: true,
       filterType: "text",
@@ -126,7 +126,7 @@ export default function VendorMasterPage() {
     },
     {
       key: "vendorName",
-      header: "Vendor Name",
+      header: "Supplier Name",
       sortable: true,
       filterable: true,
       filterType: "text",
@@ -143,7 +143,7 @@ export default function VendorMasterPage() {
     },
     {
       key: "vendorType",
-      header: "Vendor Type",
+      header: "Supplier Type",
       sortable: true,
       filterable: true,
       filterType: "text",
@@ -278,9 +278,9 @@ export default function VendorMasterPage() {
 
   const handleExport = () => {
     const rows = filtered.map((row) => ({
-      "Vendor Code": row.vendorCode || "",
-      "Vendor Name": row.vendorName,
-      "Vendor Type": row.vendorType || "",
+      "Supplier Code": row.vendorCode || "",
+      "Supplier Name": row.vendorName,
+      "Supplier Type": row.vendorType || "",
       "Contact Person": row.contactPerson || "",
       "Mobile Number": `${row.mobileCountryCode} ${row.mobile || ""}`.trim(),
       "GST Number": row.gstNumber || "",
@@ -319,12 +319,12 @@ export default function VendorMasterPage() {
     <AppLayout>
       <div className="space-y-5">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Vendor Master</h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">Manage vendors and supplier information</p>
+          <h1 className="text-xl font-bold text-foreground">Supplier Master</h1>
+          <p className="mt-0.5 text-xs text-muted-foreground">Manage supplier information for procurement and accounts payable</p>
         </div>
 
         <div className="grid grid-cols-3 gap-3">
-          <MiniKPICard label="Total Vendors" value={records.length} icon={Building2} accent={true} />
+          <MiniKPICard label="Total Suppliers" value={records.length} icon={Building2} accent={true} />
           <MiniKPICard label="Active" value={records.filter((v) => v.status === "active").length} icon={CheckCircle2} accent={false} />
           <MiniKPICard label="Inactive" value={records.filter((v) => v.status === "inactive").length} icon={XCircle} accent={false} />
         </div>
@@ -341,10 +341,10 @@ export default function VendorMasterPage() {
           onFilterChange={setFilters}
           actions={actions}
           onAdd={() => router.push("/masters/vendors/new")}
-          addLabel="Create Vendor"
+          addLabel="Create Supplier"
           onExport={handleExport}
-          emptyMessage="vendors"
-          searchPlaceholder="Search vendor code, name, type, contact, GST…"
+          emptyMessage="suppliers"
+          searchPlaceholder="Search supplier code, name, type, contact, GST…"
           currentFilters={filters}
           currentSort={sort}
         />
@@ -358,7 +358,7 @@ export default function VendorMasterPage() {
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-50 border border-amber-200">
                   <AlertTriangle className="w-4 h-4 text-amber-500" />
                 </div>
-                Deactivate Vendor?
+                Deactivate Supplier?
               </DialogTitle>
               <DialogDescription className="pt-1 text-xs">
                 <strong className="text-foreground">{deleteTarget.vendorName}</strong> will be marked as inactive.

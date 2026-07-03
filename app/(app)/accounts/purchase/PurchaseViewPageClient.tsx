@@ -124,8 +124,8 @@ export default function PurchaseViewPageClient({ purchaseId }: { purchaseId: num
             <h2 className="text-sm font-semibold">PO Invoice Integration</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <DetailRow label="PO No." value={record.poNumber} />
-              <DetailRow label="Vendor Invoice No." value={record.vendorInvoiceNo} />
-              <DetailRow label="Vendor" value={record.vendorName} />
+              <DetailRow label="Supplier Invoice No." value={record.vendorInvoiceNo} />
+              <DetailRow label="Supplier" value={record.vendorName} />
               <DetailRow label="Invoice Amount" value={formatINR(record.subtotal)} />
               <DetailRow label="Purchase No." value={record.invoiceNo} />
               <DetailRow label="Purchase Status" value={PURCHASE_PAYMENT_STATUS_LABELS[payStatus]} />
@@ -147,9 +147,9 @@ export default function PurchaseViewPageClient({ purchaseId }: { purchaseId: num
           </div>
         ) : (
           <div className="rounded-lg border bg-white p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <DetailRow label="Vendor" value={record.vendorName} />
-            <DetailRow label="Vendor Invoice No." value={record.vendorInvoiceNo} />
-            <DetailRow label="Vendor Invoice Date" value={record.invoiceDate} />
+            <DetailRow label="Supplier" value={record.vendorName} />
+            <DetailRow label="Supplier Invoice No." value={record.vendorInvoiceNo} />
+            <DetailRow label="Supplier Invoice Date" value={record.invoiceDate} />
             <DetailRow label="Purchase No." value={record.invoiceNo} />
             <DetailRow label="Invoice Amount" value={formatINR(record.subtotal)} />
             <DetailRow label="GST Amount" value={formatINR(record.taxAmount)} />
@@ -161,7 +161,7 @@ export default function PurchaseViewPageClient({ purchaseId }: { purchaseId: num
         {record.lineItems.length > 0 && (
           <div className="bg-white rounded-lg border p-4 overflow-x-auto">
             <h2 className="text-sm font-semibold mb-3">Products (from PO)</h2>
-            <table className="w-full text-xs min-w-[640px]">
+            <table className="accounts-table w-full min-w-[640px]">
               <thead className="border-b">
                 <tr>
                   {["Product", "Qty", "UOM", "Rate", "GST %", "Line Amt"].map((h) => (
@@ -196,10 +196,10 @@ export default function PurchaseViewPageClient({ purchaseId }: { purchaseId: num
               {record.attachment.dataUrl && (
                 <>
                   <button type="button" className="p-1 hover:bg-muted rounded" onClick={() => window.open(record.attachment!.dataUrl, "_blank")}>
-                    <Eye className="w-3.5 h-3.5" />
+                    <Eye className="w-4 h-4" />
                   </button>
                   <a href={record.attachment.dataUrl} download={record.attachment.fileName} className="p-1 hover:bg-muted rounded">
-                    <Download className="w-3.5 h-3.5" />
+                    <Download className="w-4 h-4" />
                   </a>
                 </>
               )}

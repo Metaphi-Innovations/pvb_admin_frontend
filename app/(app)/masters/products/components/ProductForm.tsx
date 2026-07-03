@@ -4,12 +4,11 @@ import React, { useMemo, useRef, useState } from "react";
 import {
 	AlertCircle,
 	Eye,
-	Download,
 	Image as ImageIcon,
 	Upload,
 	X,
-	ExternalLink,
 	Plus,
+	ExternalLink,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,46 +21,64 @@ import {
 } from "@/components/ui/dialog";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { cn } from "@/lib/utils";
-import { loadUOMMasters } from "../../uom/uom-data";
 import { loadHSNMasters } from "../../hsn/hsn-data";
 import {
 	type Product,
 	type ProductImage,
 	type ProductUrl,
 	type ProductStatus,
+	AUTHORITY_OPTIONS,
+	PRODUCT_PACKAGING_UNIT_OPTIONS,
+	PRODUCT_UNIT_OPTIONS,
+	calculateNetWeightPerPackagingUnit,
 	createProductImageFromFile,
 	createProductUrl,
+	formatNetWeightDisplay,
 	getImagePreviewUrl,
+	getMouFromUnit,
 	isAllowedProductImageFile,
 	isValidProductUrl,
 	loadActiveCategoryOptions,
 	loadActiveCfuOptions,
 	loadActiveFormOptions,
 	loadActiveSegmentOptions,
+	loadActiveSupplierOptions,
+	loadProducts,
+	generateProductCode,
+	normalizeProductUnit,
+	resolveProductCodeForSave,
 	resolveProductTaxFromHsn,
+	resolveSupplierCode,
 	todayStr,
 } from "../product-data";
 import { resolveProductAccountingDefaults } from "@/lib/accounts/erp-accounting-mapping";
+import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
 
 export interface ProductFormValues {
+	productCode: string;
+	supplier: string;
+	supplierCode: string;
 	productName: string;
 	scientificName: string;
-	category: string;
 	segment: string;
+	category: string;
 	form: string;
 	cfu: string;
+	authority: string;
+	sku: string;
 	hsnCode: string;
 	hsnId: string;
 	gstRate: string;
 	gstId: string;
-	sku: string;
-	status: ProductStatus;
+	packSize: string;
 	baseUnit: string;
+	mou: string;
+	unitPerCase: string;
 	packagingUnit: string;
-	conversionQuantity: string;
-	unitSize: string;
-	netWeight: string;
+	netWeightPerPackagingUnit: string;
 	grossWeight: string;
+	mrp: string;
+	status: ProductStatus;
 	inventoryAccount: string;
 	salesAccount: string;
 	purchaseAccount: string;
@@ -69,28 +86,34 @@ export interface ProductFormValues {
 }
 
 export const DEFAULT_PRODUCT_FORM: ProductFormValues = {
+	productCode: "",
+	supplier: "",
+	supplierCode: "",
 	productName: "",
 	scientificName: "",
-	category: "",
 	segment: "",
+	category: "",
 	form: "",
 	cfu: "",
+	authority: "",
+	sku: "",
 	hsnCode: "",
 	hsnId: "",
 	gstRate: "",
 	gstId: "",
-	sku: "",
-	status: "active",
+	packSize: "",
 	baseUnit: "",
+	mou: "",
+	unitPerCase: "",
 	packagingUnit: "",
-	conversionQuantity: "",
+	netWeightPerPackagingUnit: "",
+	grossWeight: "",
+	mrp: "",
+	status: "active",
 	inventoryAccount: "",
 	salesAccount: "",
 	purchaseAccount: "",
 	cogsAccount: "",
-	unitSize: "",
-	netWeight: "",
-	grossWeight: "",
 };
 
 export function productToFormValues(product: Product): ProductFormValues {
@@ -99,14 +122,27 @@ export function productToFormValues(product: Product): ProductFormValues {
 			? resolveProductTaxFromHsn(product.hsnCode)
 			: null;
 	const acctDefaults = resolveProductAccountingDefaults();
+	const packSize = product.packSize ?? product.unitSize;
+	const unitPerCase = product.unitPerCase ?? product.unitsPerCase;
+	const baseUnit = normalizeProductUnit(product.baseUnit ?? "");
+	const mou = getMouFromUnit(baseUnit) ?? normalizeProductUnit(product.mou ?? "");
+	const netWeight =
+		calculateNetWeightPerPackagingUnit(packSize, unitPerCase, baseUnit) ??
+		product.netWeightPerPackagingUnit ??
+		product.netWeight;
 
 	return {
+		productCode: product.productCode || "",
+		supplier: product.supplier ?? "",
+		supplierCode: product.supplierCode ?? "",
 		productName: product.productName,
 		scientificName: product.scientificName ?? "",
-		category: product.category,
 		segment: product.segment,
+		category: product.category,
 		form: product.form ?? product.formulation ?? "",
 		cfu: product.cfu ?? "",
+		authority: product.authority ?? "",
+		sku: product.sku ?? "",
 		hsnCode: product.hsnCode,
 		hsnId: tax ? String(tax.hsnId) : product.hsnId ? String(product.hsnId) : "",
 		gstRate: tax?.gstRate ?? product.gstRate,
@@ -115,21 +151,21 @@ export function productToFormValues(product: Product): ProductFormValues {
 			: product.gstId
 				? String(product.gstId)
 				: "",
-		sku: product.sku,
-		status: product.status,
-		baseUnit: product.baseUnit ?? "",
+		packSize: packSize !== undefined ? String(packSize) : "",
+		baseUnit,
+		mou,
+		unitPerCase: unitPerCase !== undefined ? String(unitPerCase) : "",
 		packagingUnit: product.packagingUnit ?? "",
-		conversionQuantity:
-			product.conversionQuantity !== undefined
-				? String(product.conversionQuantity)
-				: "",
+		netWeightPerPackagingUnit:
+			netWeight !== undefined ? String(netWeight) : "",
+		grossWeight:
+			product.grossWeight !== undefined ? String(product.grossWeight) : "",
+		mrp: product.mrp !== undefined ? String(product.mrp) : "",
+		status: product.status,
 		inventoryAccount: product.inventoryAccount ?? acctDefaults.inventoryAccount,
 		salesAccount: product.salesAccount ?? acctDefaults.salesAccount,
 		purchaseAccount: product.purchaseAccount ?? acctDefaults.purchaseAccount,
 		cogsAccount: product.cogsAccount ?? acctDefaults.cogsAccount,
-		unitSize: product.unitSize !== undefined ? String(product.unitSize) : "",
-		netWeight: product.netWeight !== undefined ? String(product.netWeight) : "",
-		grossWeight: product.grossWeight !== undefined ? String(product.grossWeight) : "",
 	};
 }
 
@@ -163,6 +199,7 @@ function SelectField({
 	placeholder,
 	disabled,
 	error,
+	className,
 }: {
 	label: string;
 	required?: boolean;
@@ -172,9 +209,10 @@ function SelectField({
 	placeholder?: string;
 	disabled?: boolean;
 	error?: string;
+	className?: string;
 }) {
 	return (
-		<div className='space-y-1'>
+		<div className={cn("space-y-1", className)}>
 			<Label className='text-xs font-medium'>
 				{label}
 				{required && <span className='text-red-500 ml-0.5'>*</span>}
@@ -193,6 +231,28 @@ function SelectField({
 	);
 }
 
+function applyPackagingCalculations(values: ProductFormValues): ProductFormValues {
+	const next = { ...values };
+	const packSize = parseFloat(next.packSize);
+	const unitPerCase = parseFloat(next.unitPerCase);
+	const baseUnit = normalizeProductUnit(next.baseUnit);
+
+	if (baseUnit) {
+		next.baseUnit = baseUnit;
+		next.mou = getMouFromUnit(baseUnit) ?? "";
+	}
+
+	const calculated = calculateNetWeightPerPackagingUnit(
+		isNaN(packSize) ? undefined : packSize,
+		isNaN(unitPerCase) ? undefined : unitPerCase,
+		baseUnit || undefined,
+	);
+	next.netWeightPerPackagingUnit =
+		calculated !== undefined ? String(calculated) : "";
+
+	return next;
+}
+
 export function ProductForm({
 	form,
 	onChange,
@@ -205,6 +265,7 @@ export function ProductForm({
 	onUrlAdd,
 	onUrlRemove,
 	readOnly,
+	isNew,
 }: {
 	form: ProductFormValues;
 	onChange: (form: ProductFormValues) => void;
@@ -217,71 +278,77 @@ export function ProductForm({
 	onUrlAdd?: (item: ProductUrl) => void;
 	onUrlRemove?: (id: string) => void;
 	readOnly?: boolean;
+	isNew?: boolean;
 }) {
 	const set = <K extends keyof ProductFormValues>(
 		key: K,
 		value: ProductFormValues[K],
 	) => {
-		const newForm = { ...form, [key]: value };
-
-		// Auto-calculate Net Weight and Gross Weight
-		const unitSizeNum = parseFloat(newForm.unitSize);
-		const convQtyNum = parseFloat(newForm.conversionQuantity);
-		const uom = (newForm.baseUnit || "").trim().toUpperCase();
-		const isWeightOrVolume = ["KG", "KG.", "KGS", "LITER", "LITERS", "LTR", "LTRS", "GM", "GRAM", "GRAMS", "ML"].includes(uom);
-
-		if (isWeightOrVolume) {
-			if (!isNaN(unitSizeNum) && !isNaN(convQtyNum)) {
-				let calculatedNet = unitSizeNum * convQtyNum;
-				const isGramsOrMl = ["GM", "GRAM", "GRAMS", "ML"].includes(uom);
-				if (isGramsOrMl) {
-					calculatedNet = calculatedNet / 1000;
-				}
-				const netStr = calculatedNet.toFixed(2);
-				newForm.netWeight = netStr;
-
-				// Default grossWeight to netWeight if empty or previously matched netWeight
-				if (!form.grossWeight || form.grossWeight === form.netWeight) {
-					newForm.grossWeight = netStr;
-				}
-			}
-		} else {
-			// If baseUnit was changed to a discrete unit, do NOT auto-calculate. Let user input it.
-			// If they update netWeight, default grossWeight to match it
-			if (key === "netWeight") {
-				if (!form.grossWeight || form.grossWeight === form.netWeight) {
-					newForm.grossWeight = String(value);
-				}
-			}
+		let next = { ...form, [key]: value } as ProductFormValues;
+		if (key === "packSize" || key === "unitPerCase" || key === "baseUnit") {
+			next = applyPackagingCalculations(next);
 		}
-
-		onChange(newForm);
+		onChange(next);
 		onClearError(key);
+	};
+
+	const handleCategoryChange = (category: string) => {
+		const next = { ...form, category };
+		if (isNew && category) {
+			next.productCode = generateProductCode(category, loadProducts());
+			onClearError("productCode");
+		}
+		onChange(next);
+		onClearError("category");
+	};
+
+	const handleSupplierChange = (supplier: string) => {
+		const code = resolveSupplierCode(supplier);
+		onChange({
+			...form,
+			supplier,
+			supplierCode: code || form.supplierCode,
+		});
+		onClearError("supplier");
+		onClearError("supplierCode");
 	};
 
 	const segmentOptions = useMemo(() => loadActiveSegmentOptions(), []);
 	const categoryOptions = useMemo(() => loadActiveCategoryOptions(), []);
 	const formOptions = useMemo(() => loadActiveFormOptions(), []);
 	const cfuOptions = useMemo(() => loadActiveCfuOptions(), []);
+	const supplierOptions = useMemo(() => loadActiveSupplierOptions(), []);
 
 	const hsnMasters = typeof window !== "undefined" ? loadHSNMasters() : [];
 	const hsnOptions = hsnMasters
 		.filter((h) => h.status === "active")
-		.map((h) => ({
-			value: h.hsnCode,
-			label: h.hsnCode,
-		}));
+		.map((h) => ({ value: h.hsnCode, label: h.hsnCode }));
+
+	const unitOptions = useMemo(() => [...PRODUCT_UNIT_OPTIONS], []);
 
 	const packagingUnitOptions = useMemo(() => {
-		const base = [
-			{ value: "Box", label: "Box" },
-			{ value: "Case", label: "Case" },
-		];
-		if (form.packagingUnit && !base.some((o) => o.value === form.packagingUnit)) {
-			return [{ value: form.packagingUnit, label: form.packagingUnit }, ...base];
+		const base = [...PRODUCT_PACKAGING_UNIT_OPTIONS];
+		if (
+			form.packagingUnit &&
+			!base.some((o) => o.value === form.packagingUnit)
+		) {
+			return [
+				{ value: form.packagingUnit, label: form.packagingUnit },
+				...base,
+			];
 		}
 		return base;
 	}, [form.packagingUnit]);
+
+	const netWeightDisplay = formatNetWeightDisplay(
+		form.packSize && !isNaN(Number(form.packSize))
+			? Number(form.packSize)
+			: undefined,
+		form.unitPerCase && !isNaN(Number(form.unitPerCase))
+			? Number(form.unitPerCase)
+			: undefined,
+		form.baseUnit,
+	);
 
 	const handleHSNChange = (hsnCode: string) => {
 		if (!hsnCode) {
@@ -308,22 +375,7 @@ export function ProductForm({
 			errors[key] && "border-red-400 focus-visible:ring-red-300",
 		);
 
-	const uomData = typeof window !== "undefined" ? loadUOMMasters() : [];
-	const uomOptions =
-		uomData.length > 0
-			? uomData
-				.filter((u) => u.status === "active")
-				.map((u) => ({ value: u.shortName, label: u.shortName }))
-			: [
-				{ value: "KG", label: "KG" },
-				{ value: "Gram", label: "Gram" },
-				{ value: "Liter", label: "Liter" },
-				{ value: "ML", label: "ML" },
-				{ value: "Packet", label: "Packet" },
-				{ value: "Bottle", label: "Bottle" },
-				{ value: "Box", label: "Box" },
-				{ value: "Drum", label: "Drum" },
-			];
+	const formGrid = "grid grid-cols-2 md:grid-cols-4 gap-3";
 
 	const decimalInput = (key: keyof ProductFormValues, value: string) =>
 		set(
@@ -334,36 +386,11 @@ export function ProductForm({
 		);
 
 	const imageInputRef = useRef<HTMLInputElement | null>(null);
-	const openImagePicker = () => imageInputRef.current?.click();
 	const [linkUrl, setLinkUrl] = useState("");
 	const [linkUrlError, setLinkUrlError] = useState("");
 	const [urlDialogOpen, setUrlDialogOpen] = useState(false);
 	const [previewImage, setPreviewImage] = useState<ProductImage | null>(null);
 	const [uploadingImages, setUploadingImages] = useState(false);
-
-	const openExternal = (url?: string) => {
-		if (!url) return;
-		const trimmedUrl = url.trim();
-		const isAbsoluteUrl =
-			/^https?:\/\//i.test(trimmedUrl) ||
-			/^blob:/i.test(trimmedUrl) ||
-			/^data:/i.test(trimmedUrl);
-		const safeUrl = isAbsoluteUrl ? trimmedUrl : `https://${trimmedUrl}`;
-		window.open(safeUrl, "_blank", "noopener,noreferrer");
-	};
-
-	const downloadImage = (image: ProductImage) => {
-		const url = getImagePreviewUrl(image);
-		if (!url) return;
-		const anchor = document.createElement("a");
-		anchor.href = url;
-		anchor.download = image.name || "product-image";
-		anchor.target = "_blank";
-		anchor.rel = "noopener noreferrer";
-		document.body.appendChild(anchor);
-		anchor.click();
-		document.body.removeChild(anchor);
-	};
 
 	const handleImageFiles = async (files: File[]) => {
 		const valid = files.filter(isAllowedProductImageFile);
@@ -395,550 +422,539 @@ export function ProductForm({
 
 	return (
 		<div className='w-full space-y-4'>
-			<div className='pt-1 space-y-4'>
-				{/* Basic Product Information */}
-				<div>
-					<SectionHead label='Basic Product Information' />
-					<div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3'>
-						<div className='space-y-1'>
-							<Label className='text-xs font-medium'>
-								Product Name <span className='text-red-500'>*</span>
-							</Label>
-							<Input
-								value={form.productName}
-								onChange={(e) => set("productName", e.target.value)}
-								placeholder='e.g. NutriGrow WS 19:19:19'
-								className={inputCls("productName")}
-								disabled={readOnly}
-							/>
-							<FieldError msg={errors.productName} />
-						</div>
-
-						<div className='space-y-1'>
-							<Label className='text-xs font-medium'>Scientific Name</Label>
-							<Input
-								value={form.scientificName}
-								onChange={(e) => set("scientificName", e.target.value)}
-								placeholder='e.g. Trichoderma viride'
-								className={inputCls("scientificName")}
-								disabled={readOnly}
-							/>
-						</div>
-
-						<SelectField
-							label='Segment'
-							required
-							value={form.segment}
-							onChange={(value) => set("segment", value)}
-							options={segmentOptions}
-							placeholder='Select segment…'
+			{/* Basic & classification */}
+			<div>
+				<SectionHead label='Product Information' />
+				<div className={formGrid}>
+					<div className='space-y-1 md:col-span-1'>
+						<Label className='text-xs font-medium'>
+							Product Code <span className='text-red-500'>*</span>
+						</Label>
+						<Input
+							value={form.productCode}
+							onChange={(e) =>
+								set("productCode", e.target.value.toUpperCase())
+							}
+							placeholder='Auto-generated from category — editable'
+							className={cn("font-mono", inputCls("productCode"))}
 							disabled={readOnly}
-							error={errors.segment}
 						/>
-
-						<SelectField
-							label='Category'
-							required
-							value={form.category}
-							onChange={(value) => set("category", value)}
-							options={categoryOptions}
-							placeholder='Select category…'
-							disabled={readOnly}
-							error={errors.category}
-						/>
-
-						<SelectField
-							label='Form'
-							required
-							value={form.form}
-							onChange={(value) => set("form", value)}
-							options={formOptions}
-							placeholder='Select form…'
-							disabled={readOnly}
-							error={errors.form}
-						/>
-
-						<SelectField
-							label='CFU'
-							value={form.cfu}
-							onChange={(value) => set("cfu", value)}
-							options={cfuOptions}
-							placeholder='Select CFU…'
-							disabled={readOnly}
-							error={errors.cfu}
-						/>
-					</div>
-				</div>
-
-				{/* Tax & Compliance */}
-				<div className='pt-3 border-t border-border/60'>
-					<SectionHead
-						label='Tax & Compliance'
-						sub='Pricing (CP, DP, RP, MRP) is maintained in Pricing Master.'
-					/>
-					<div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3'>
-						<div className='space-y-1'>
-							<Label className='text-xs font-medium'>
-								SKU <span className='text-red-500'>*</span>
-							</Label>
-							<Input
-								value={form.sku}
-								onChange={(e) => set("sku", e.target.value.toUpperCase())}
-								placeholder='e.g. FERT-WSF-019'
-								className={cn("font-mono", inputCls("sku"))}
-								disabled={readOnly}
-							/>
-							<FieldError msg={errors.sku} />
-						</div>
-
-						<SelectField
-							label='HSN Code'
-							required
-							value={form.hsnCode}
-							onChange={handleHSNChange}
-							options={hsnOptions}
-							placeholder='Select HSN code…'
-							disabled={readOnly}
-							error={errors.hsnCode}
-						/>
-
-						<div className='space-y-1'>
-							<Label className='text-xs font-medium'>
-								GST <span className='text-red-500'>*</span>
-							</Label>
-							<Input
-								value={form.gstRate}
-								readOnly
-								disabled
-								placeholder='Select HSN code first'
-								className={cn(
-									"h-8 text-xs bg-muted/30 cursor-not-allowed",
-									errors.gstRate && "border-red-400",
-								)}
-							/>
-							<p className='text-[10px] text-muted-foreground leading-snug'>
-								GST is auto-filled from selected HSN code.
-							</p>
-							<FieldError msg={errors.gstRate} />
-						</div>
-					</div>
-				</div>
-
-
-
-				{/* Packaging Information */}
-				<div className='pt-3 border-t border-border/60'>
-					<SectionHead label='Packaging Information' />
-					<div className='grid grid-cols-1 md:grid-cols-4 gap-3'>
-						<div className='space-y-1'>
-							<Label className='text-xs font-medium'>
-								Unit Size <span className='text-red-500'>*</span>
-							</Label>
-							<Input
-								value={form.unitSize}
-								onChange={(e) =>
-									decimalInput("unitSize", e.target.value)
-								}
-								placeholder='e.g. 500'
-								className={inputCls("unitSize")}
-								inputMode='decimal'
-								disabled={readOnly}
-							/>
-							<FieldError msg={errors.unitSize} />
-						</div>
-
-						<SelectField
-							label='Base Unit'
-							required
-							value={form.baseUnit}
-							onChange={(value) => set("baseUnit", value)}
-							options={uomOptions}
-							placeholder='Select base unit…'
-							disabled={readOnly}
-							error={errors.baseUnit}
-						/>
-
-						<SelectField
-							label='Packaging Unit'
-							required
-							value={form.packagingUnit}
-							onChange={(value) => set("packagingUnit", value)}
-							options={packagingUnitOptions}
-							placeholder='Select packaging unit…'
-							disabled={readOnly}
-							error={errors.packagingUnit}
-						/>
-
-						<div className='space-y-1'>
-							<Label className='text-xs font-medium'>
-								Conversion Quantity <span className='text-red-500'>*</span>
-							</Label>
-							<Input
-								value={form.conversionQuantity}
-								onChange={(e) =>
-									decimalInput("conversionQuantity", e.target.value)
-								}
-								placeholder='e.g. 25'
-								className={inputCls("conversionQuantity")}
-								inputMode='decimal'
-								disabled={readOnly}
-							/>
-							<FieldError msg={errors.conversionQuantity} />
-						</div>
+						<p className='text-[10px] text-muted-foreground leading-snug'>
+							Auto-filled when category is selected. You can edit if needed.
+						</p>
+						<FieldError msg={errors.productCode} />
 					</div>
 
-					<div className='grid grid-cols-1 md:grid-cols-2 gap-3 mt-3'>
-						<div className='space-y-1'>
-							{(() => {
-								const uom = (form.baseUnit || "").trim().toUpperCase();
-								const isWeightOrVolume = ["KG", "KG.", "KGS", "LITER", "LITERS", "LTR", "LTRS", "GM", "GRAM", "GRAMS", "ML"].includes(uom);
-								return (
-									<>
-										<Label className='text-xs font-medium'>
-											Net Weight per Packaging Unit (KG) <span className='text-red-500'>*</span>
-										</Label>
-										<Input
-											value={form.netWeight}
-											onChange={(e) =>
-												decimalInput("netWeight", e.target.value)
-											}
-											placeholder='e.g. 10'
-											className={cn(
-												inputCls("netWeight"),
-												isWeightOrVolume && "bg-muted/30 cursor-not-allowed"
-											)}
-											inputMode='decimal'
-											disabled={readOnly || isWeightOrVolume}
-											readOnly={isWeightOrVolume}
-										/>
-										{isWeightOrVolume && (
-											<p className='text-[10px] text-muted-foreground leading-snug'>
-												Auto-calculated from Unit Size & Conversion Quantity.
-											</p>
-										)}
-										<FieldError msg={errors.netWeight} />
-									</>
-								);
-							})()}
-						</div>
-
-						<div className='space-y-1'>
-							<Label className='text-xs font-medium'>
-								Gross Weight per Packaging Unit (KG) <span className='text-red-500'>*</span>
-							</Label>
-							<Input
-								value={form.grossWeight}
-								onChange={(e) =>
-									decimalInput("grossWeight", e.target.value)
-								}
-								placeholder='e.g. 10.5'
-								className={inputCls("grossWeight")}
-								inputMode='decimal'
-								disabled={readOnly}
-							/>
-							<FieldError msg={errors.grossWeight} />
-						</div>
-					</div>
-				</div>
-
-				{/* Media & Documents */}
-				<div className='pt-3 border-t border-border/60 space-y-3'>
-					<SectionHead
-						label='Media & Documents'
-						sub='Product images and external document links.'
+					<SelectField
+						label='Supplier'
+						value={form.supplier}
+						onChange={handleSupplierChange}
+						options={supplierOptions}
+						placeholder='Select supplier…'
+						disabled={readOnly}
+						error={errors.supplier}
+						className='md:col-span-2'
 					/>
 
-					<div className='space-y-2'>
-						<div className='flex items-center justify-between gap-2'>
-							<p className='text-[11px] font-semibold text-foreground'>Product Images</p>
-							{!readOnly && (
-								<div className='flex items-center gap-2'>
-									<input
-										ref={imageInputRef}
-										type='file'
-										accept='image/jpeg,image/jpg,image/png,image/webp,.jpg,.jpeg,.png,.webp'
-										multiple
-										className='hidden'
-										onChange={(e) => {
-											void handleImageFiles(Array.from(e.target.files ?? []));
-											e.currentTarget.value = "";
-										}}
-									/>
-									<Button
-										type='button'
-										variant='outline'
-										size='sm'
-										className='h-7 px-2.5 text-[11px] border-brand-300 hover:bg-brand-50 hover:text-brand-700'
-										onClick={openImagePicker}
-										disabled={uploadingImages}
-									>
-										<Upload className='w-3 h-3 mr-1.5 text-brand-600' />
-										{uploadingImages ? "Uploading…" : "Upload Images"}
-									</Button>
-								</div>
-							)}
-						</div>
-
-						{productImages.length === 0 && readOnly ? (
-							<p className='text-xs text-muted-foreground py-3 text-center border border-dashed border-border/60 rounded-lg bg-muted/10'>
-								No product images uploaded
-							</p>
-						) : (
-							<div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5'>
-								{productImages.map((image) => {
-									const preview = getImagePreviewUrl(image);
-									return (
-										<div
-											key={image.id}
-											className='flex flex-col overflow-hidden border rounded-lg border-border/60 bg-white shadow-sm'
-										>
-											<button
-												type='button'
-												className='relative h-[88px] w-full bg-muted/20 group/thumb'
-												onClick={() => setPreviewImage(image)}
-												title='Click to preview'
-											>
-												{preview ? (
-													<img
-														src={preview}
-														alt={image.name}
-														className='object-cover w-full h-full'
-													/>
-												) : (
-													<div className='flex items-center justify-center w-full h-full text-muted-foreground'>
-														<ImageIcon className='w-5 h-5' />
-													</div>
-												)}
-												<span className='absolute bottom-1 right-1 rounded px-1.5 py-0.5 text-[9px] font-medium bg-black/55 text-white opacity-0 group-hover/thumb:opacity-100 transition-opacity'>
-													Click to preview
-												</span>
-											</button>
-											<div className='px-2 py-1.5 space-y-1 border-t border-border/40'>
-												<p
-													className='text-[10px] font-medium truncate text-foreground'
-													title={image.name}
-												>
-													{image.name}
-												</p>
-												<p className='text-[9px] text-muted-foreground'>
-													{image.size || "—"}
-												</p>
-												<div className='flex items-center gap-1 pt-0.5'>
-													<Button
-														type='button'
-														variant='outline'
-														size='sm'
-														className='h-6 flex-1 px-1 text-[9px] gap-1'
-														onClick={() => setPreviewImage(image)}
-													>
-														<Eye className='w-3 h-3 shrink-0' />
-														Preview
-													</Button>
-													<Button
-														type='button'
-														variant='outline'
-														size='sm'
-														className='h-6 w-7 px-0 shrink-0'
-														onClick={() => downloadImage(image)}
-														title='Download'
-													>
-														<Download className='w-3 h-3' />
-													</Button>
-													{!readOnly && (
-														<Button
-															type='button'
-															variant='outline'
-															size='sm'
-															className='h-6 w-7 px-0 shrink-0 text-red-600 hover:text-red-700 hover:bg-red-50'
-															onClick={() => onImageRemove?.(image.id)}
-															title='Delete'
-														>
-															<X className='w-3 h-3' />
-														</Button>
-													)}
-												</div>
-											</div>
-										</div>
-									);
-								})}
-
-								{!readOnly && (
-									<button
-										type='button'
-										onClick={openImagePicker}
-										disabled={uploadingImages}
-										className='flex flex-col items-center justify-center h-[118px] border border-dashed rounded-lg border-border/70 bg-muted/10 text-muted-foreground hover:border-brand-300 hover:bg-brand-50/40 hover:text-brand-700 transition-colors'
-									>
-										<Plus className='w-4 h-4 mb-1' />
-										<span className='text-[10px] font-medium'>Upload</span>
-									</button>
-								)}
-							</div>
-						)}
-
-						{productImages.length === 0 && !readOnly && (
-							<p className='text-[10px] text-muted-foreground'>
-								No product images uploaded. JPG, JPEG, PNG, WEBP supported.
-							</p>
-						)}
+					<div className='space-y-1 md:col-span-1'>
+						<Label className='text-xs font-medium'>Supplier Code</Label>
+						<Input
+							value={form.supplierCode}
+							onChange={(e) =>
+								set("supplierCode", e.target.value.toUpperCase())
+							}
+							placeholder='Auto-filled from supplier'
+							className={cn("font-mono", inputCls("supplierCode"))}
+							disabled={readOnly}
+						/>
 					</div>
 
-					<div className='pt-2 space-y-2 border-t border-border/40'>
-						<div className='flex items-center justify-between gap-2'>
-							<p className='text-[11px] font-semibold text-foreground'>Document URLs</p>
-							{!readOnly && (
-								<Button
-									type='button'
-									variant='outline'
-									size='sm'
-									className='h-7 px-2.5 text-[11px] border-border hover:bg-muted/30'
-									onClick={() => {
-										setLinkUrl("");
-										setLinkUrlError("");
-										setUrlDialogOpen(true);
-									}}
-								>
-									<Plus className='w-3 h-3 mr-1.5 text-muted-foreground' /> Add URL
-								</Button>
-							)}
-						</div>
+					<div className='space-y-1 md:col-span-2'>
+						<Label className='text-xs font-medium'>
+							Product Name <span className='text-red-500'>*</span>
+						</Label>
+						<Input
+							value={form.productName}
+							onChange={(e) => set("productName", e.target.value)}
+							placeholder='e.g. NutriGrow WS 19:19:19'
+							className={inputCls("productName")}
+							disabled={readOnly}
+						/>
+						<FieldError msg={errors.productName} />
+					</div>
 
-						{productUrls.length === 0 ? (
-							<p className='text-xs text-muted-foreground py-3 text-center border border-dashed border-border/60 rounded-lg bg-muted/10'>
-								No document URLs added
-							</p>
-						) : (
-							<div className='overflow-hidden border rounded-lg border-border/60'>
-								<table className='w-full text-xs'>
-									<thead>
-										<tr className='border-b bg-muted/30 border-border/50'>
-											<th className='w-12 px-2 py-1.5 text-left text-[10px] font-semibold text-muted-foreground'>
-												Sr No
-											</th>
-											<th className='px-2 py-1.5 text-left text-[10px] font-semibold text-muted-foreground'>
-												URL
-											</th>
-											<th className='w-24 px-2 py-1.5 text-center text-[10px] font-semibold text-muted-foreground'>
-												Open Link
-											</th>
-											{!readOnly && (
-												<th className='w-16 px-2 py-1.5 text-center text-[10px] font-semibold text-muted-foreground'>
-													Delete
-												</th>
-											)}
-										</tr>
-									</thead>
-									<tbody>
-										{productUrls.map((item, index) => (
-											<tr key={item.id} className='border-b border-border/40 last:border-0'>
-												<td className='px-2 py-2 text-[11px] text-muted-foreground tabular-nums'>
-													{index + 1}
-												</td>
-												<td className='px-2 py-2'>
-													<p className='text-[11px] text-foreground truncate max-w-[280px] md:max-w-md' title={item.url}>
-														{item.url}
-													</p>
-												</td>
-												<td className='px-2 py-2 text-center'>
-													<Button
-														type='button'
-														variant='ghost'
-														size='icon'
-														className='w-7 h-7 text-brand-600 hover:text-brand-700 hover:bg-brand-50'
-														onClick={() => openExternal(item.url)}
-														title='Open link'
-													>
-														<ExternalLink className='w-3.5 h-3.5' />
-													</Button>
-												</td>
-												{!readOnly && (
-													<td className='px-2 py-2 text-center'>
-														<Button
-															type='button'
-															variant='ghost'
-															size='icon'
-															className='w-7 h-7 hover:bg-red-50 text-muted-foreground hover:text-red-600'
-															onClick={() => onUrlRemove?.(item.id)}
-															title='Delete'
-														>
-															<X className='w-3.5 h-3.5' />
-														</Button>
-													</td>
-												)}
-											</tr>
-										))}
-									</tbody>
-								</table>
-							</div>
-						)}
+					<div className='space-y-1 md:col-span-1'>
+						<Label className='text-xs font-medium'>Scientific Name</Label>
+						<Input
+							value={form.scientificName}
+							onChange={(e) => set("scientificName", e.target.value)}
+							placeholder='e.g. Trichoderma viride'
+							className={inputCls("scientificName")}
+							disabled={readOnly}
+						/>
+					</div>
+
+					<div className='space-y-1 md:col-span-1'>
+						<Label className='text-xs font-medium'>
+							SKU <span className='text-red-500'>*</span>
+						</Label>
+						<Input
+							value={form.sku}
+							onChange={(e) => set("sku", e.target.value.toUpperCase())}
+							placeholder='e.g. FERT-WSF-019'
+							className={cn("font-mono", inputCls("sku"))}
+							disabled={readOnly}
+						/>
+						<FieldError msg={errors.sku} />
+					</div>
+
+					<SelectField
+						label='Segment'
+						required
+						value={form.segment}
+						onChange={(v) => set("segment", v)}
+						options={segmentOptions}
+						placeholder='Select segment…'
+						disabled={readOnly}
+						error={errors.segment}
+					/>
+
+					<SelectField
+						label='Category'
+						required
+						value={form.category}
+						onChange={handleCategoryChange}
+						options={categoryOptions}
+						placeholder='Select category…'
+						disabled={readOnly}
+						error={errors.category}
+					/>
+
+					<SelectField
+						label='Form'
+						required
+						value={form.form}
+						onChange={(v) => set("form", v)}
+						options={formOptions}
+						placeholder='Select form…'
+						disabled={readOnly}
+						error={errors.form}
+					/>
+
+					<SelectField
+						label='CFU'
+						value={form.cfu}
+						onChange={(v) => set("cfu", v)}
+						options={cfuOptions}
+						placeholder='Select CFU…'
+						disabled={readOnly}
+					/>
+
+					<SelectField
+						label='Authority'
+						value={form.authority}
+						onChange={(v) => set("authority", v)}
+						options={AUTHORITY_OPTIONS.map((o) => ({
+							value: o.value,
+							label: o.label,
+						}))}
+						placeholder='Select authority…'
+						disabled={readOnly}
+					/>
+				</div>
+			</div>
+
+			{/* Tax */}
+			<div className='pt-3 border-t border-border/60'>
+				<SectionHead label='Tax & Compliance' />
+				<div className={formGrid}>
+					<SelectField
+						label='HSN Code'
+						required
+						value={form.hsnCode}
+						onChange={handleHSNChange}
+						options={hsnOptions}
+						placeholder='Select HSN code…'
+						disabled={readOnly}
+						error={errors.hsnCode}
+					/>
+
+					<div className='space-y-1'>
+						<Label className='text-xs font-medium'>
+							GST % <span className='text-red-500'>*</span>
+						</Label>
+						<Input
+							value={form.gstRate}
+							readOnly
+							disabled
+							placeholder='Auto from HSN'
+							className='h-8 text-xs bg-muted/30 cursor-not-allowed'
+						/>
+						<FieldError msg={errors.gstRate} />
 					</div>
 				</div>
 			</div>
 
-			<Dialog
-				open={!!previewImage}
-				onOpenChange={(open) => {
-					if (!open) setPreviewImage(null);
-				}}
-			>
-				<DialogContent className='z-[500] max-w-3xl p-4 bg-white border shadow-lg border-border rounded-xl'>
-					<DialogHeader className='pb-2 border-b border-border/50'>
-						<DialogTitle className='text-sm font-semibold truncate text-foreground'>
-							{previewImage?.name ?? "Image preview"}
-						</DialogTitle>
-					</DialogHeader>
-					<div className='flex items-center justify-center min-h-[200px] py-4 rounded-lg bg-muted/5'>
-						{previewImage && getImagePreviewUrl(previewImage) ? (
-							<img
-								src={getImagePreviewUrl(previewImage)}
-								alt={previewImage.name}
-								className='max-h-[70vh] max-w-full object-contain'
-							/>
-						) : (
-							<p className='text-sm text-muted-foreground'>Preview unavailable</p>
-						)}
+			{/* Packaging */}
+			<div className='pt-3 border-t border-border/60'>
+				<SectionHead label='Packaging & Weight' />
+				<div className={formGrid}>
+					<div className='space-y-1'>
+						<Label className='text-xs font-medium'>
+							Pack Size <span className='text-red-500'>*</span>
+						</Label>
+						<Input
+							value={form.packSize}
+							onChange={(e) => decimalInput("packSize", e.target.value)}
+							placeholder='e.g. 250, 500, 1'
+							className={inputCls("packSize")}
+							inputMode='decimal'
+							disabled={readOnly}
+						/>
+						<FieldError msg={errors.packSize} />
 					</div>
-				</DialogContent>
-			</Dialog>
 
-			<Dialog open={urlDialogOpen} onOpenChange={setUrlDialogOpen}>
-				<DialogContent className='max-w-md p-4 bg-white border border-border rounded-xl shadow-lg'>
-					<DialogHeader className='pb-2'>
-						<DialogTitle className='text-sm font-semibold'>Add URL</DialogTitle>
-					</DialogHeader>
-					<div className='space-y-2'>
-						<div className='space-y-1'>
-							<Label className='text-xs font-medium'>
-								URL <span className='text-red-500'>*</span>
-							</Label>
+					<SelectField
+						label='Unit'
+						required
+						value={form.baseUnit}
+						onChange={(v) => set("baseUnit", v)}
+						options={unitOptions}
+						placeholder='Select unit…'
+						disabled={readOnly}
+						error={errors.baseUnit}
+					/>
+
+					<SelectField
+						label='Packaging Unit'
+						required
+						value={form.packagingUnit}
+						onChange={(v) => set("packagingUnit", v)}
+						options={packagingUnitOptions}
+						placeholder='Select packaging unit…'
+						disabled={readOnly}
+						error={errors.packagingUnit}
+					/>
+
+					<div className='space-y-1'>
+						<Label className='text-xs font-medium'>
+							Unit per Case <span className='text-red-500'>*</span>
+						</Label>
+						<Input
+							value={form.unitPerCase}
+							onChange={(e) => decimalInput("unitPerCase", e.target.value)}
+							placeholder='e.g. 12'
+							className={inputCls("unitPerCase")}
+							inputMode='decimal'
+							disabled={readOnly}
+						/>
+						<FieldError msg={errors.unitPerCase} />
+					</div>
+
+					<div className='space-y-1'>
+						<Label className='text-xs font-medium'>Net Weight</Label>
+						<Input
+							value={netWeightDisplay}
+							readOnly
+							disabled
+							placeholder='Pack Size × Unit per Case'
+							className='h-8 text-xs bg-muted/30 cursor-not-allowed'
+						/>
+						<p className='text-[10px] text-muted-foreground'>
+							Auto-calculated value in MoU
+						</p>
+					</div>
+
+					<div className='space-y-1'>
+						<Label className='text-xs font-medium'>MoU</Label>
+						<Input
+							value={form.mou}
+							readOnly
+							disabled
+							placeholder='Auto from Unit'
+							className='h-8 text-xs bg-muted/30 cursor-not-allowed'
+						/>
+						<p className='text-[10px] text-muted-foreground'>
+							Auto-populated from selected Unit
+						</p>
+					</div>
+
+					<div className='space-y-1'>
+						<Label className='text-xs font-medium'>Gross Weight</Label>
+						<div className='relative'>
 							<Input
-								value={linkUrl}
-								onChange={(e) => {
-									setLinkUrl(e.target.value);
-									if (linkUrlError) setLinkUrlError("");
-								}}
-								placeholder='Enter URL'
-								className={cn("h-8 text-xs", linkUrlError && "border-red-400")}
+								value={form.grossWeight}
+								onChange={(e) => decimalInput("grossWeight", e.target.value)}
+								placeholder='Manual entry'
+								className={cn(inputCls("grossWeight"), form.mou && "pr-14")}
+								inputMode='decimal'
+								disabled={readOnly}
 							/>
-							{linkUrlError && <FieldError msg={linkUrlError} />}
+							{form.mou ? (
+								<span className='absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none'>
+									{form.mou}
+								</span>
+							) : null}
 						</div>
-						<div className='flex justify-end gap-2 pt-1'>
+						<p className='text-[10px] text-muted-foreground'>
+							{form.mou
+								? `Enter weight in ${form.mou}`
+								: "Select Unit to set the weight unit"}
+						</p>
+						<FieldError msg={errors.grossWeight} />
+					</div>
+
+					<div className='space-y-1'>
+						<Label className='text-xs font-medium'>MRP</Label>
+						<IndianRupeeInput
+							value={
+								form.mrp && !isNaN(Number(form.mrp)) ? Number(form.mrp) : 0
+							}
+							onChange={(v) => set("mrp", v > 0 ? String(v) : "")}
+							disabled={readOnly}
+							className={cn(
+								inputCls("mrp"),
+								"h-8 text-xs font-normal rounded-input",
+							)}
+							placeholder='₹ 0'
+						/>
+						<p className='text-[10px] text-muted-foreground'>
+							Other pricing is maintained in Pricing Master.
+						</p>
+						<FieldError msg={errors.mrp} />
+					</div>
+				</div>
+			</div>
+
+			{/* Images */}
+			<div className='pt-3 border-t border-border/60 space-y-3'>
+				<SectionHead label='Product Images' />
+				<div className='flex items-center justify-between gap-2'>
+					<p className='text-[11px] text-muted-foreground'>
+						JPG, PNG, WEBP supported
+					</p>
+					{!readOnly && (
+						<>
+							<input
+								ref={imageInputRef}
+								type='file'
+								accept='image/jpeg,image/jpg,image/png,image/webp'
+								multiple
+								className='hidden'
+								onChange={(e) => {
+									void handleImageFiles(Array.from(e.target.files ?? []));
+									e.currentTarget.value = "";
+								}}
+							/>
 							<Button
 								type='button'
 								variant='outline'
 								size='sm'
-								className='h-8 text-xs'
+								className='h-7 px-2.5 text-[11px]'
+								onClick={() => imageInputRef.current?.click()}
+								disabled={uploadingImages}
+							>
+								<Upload className='w-3 h-3 mr-1.5' />
+								{uploadingImages ? "Uploading…" : "Upload Images"}
+							</Button>
+						</>
+					)}
+				</div>
+
+				{productImages.length === 0 ? (
+					<p className='text-xs text-muted-foreground py-3 text-center border border-dashed border-border/60 rounded-lg bg-muted/10'>
+						No product images uploaded
+					</p>
+				) : (
+					<div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5'>
+						{productImages.map((image) => {
+							const preview = getImagePreviewUrl(image);
+							return (
+								<div
+									key={image.id}
+									className='flex flex-col overflow-hidden border rounded-lg border-border/60 bg-white'
+								>
+									<button
+										type='button'
+										className='relative h-[88px] w-full bg-muted/20'
+										onClick={() => setPreviewImage(image)}
+									>
+										{preview ? (
+											<img
+												src={preview}
+												alt={image.name}
+												className='object-cover w-full h-full'
+											/>
+										) : (
+											<ImageIcon className='w-5 h-5 m-auto text-muted-foreground' />
+										)}
+									</button>
+									<div className='px-2 py-1.5 border-t border-border/40 flex gap-1'>
+										<Button
+											type='button'
+											variant='outline'
+											size='sm'
+											className='h-6 flex-1 text-[9px]'
+											onClick={() => setPreviewImage(image)}
+										>
+											<Eye className='w-3 h-3 mr-1' /> View
+										</Button>
+										{!readOnly && (
+											<Button
+												type='button'
+												variant='outline'
+												size='sm'
+												className='h-6 w-7 px-0 text-red-600'
+												onClick={() => onImageRemove?.(image.id)}
+											>
+												<X className='w-3 h-3' />
+											</Button>
+										)}
+									</div>
+								</div>
+							);
+						})}
+						{!readOnly && (
+							<button
+								type='button'
+								onClick={() => imageInputRef.current?.click()}
+								className='flex flex-col items-center justify-center h-[118px] border border-dashed rounded-lg border-border/70 bg-muted/10 text-muted-foreground hover:border-brand-300'
+							>
+								<Plus className='w-4 h-4 mb-1' />
+								<span className='text-[10px]'>Upload</span>
+							</button>
+						)}
+					</div>
+				)}
+			</div>
+
+			{/* Document URLs */}
+			<div className='pt-3 border-t border-border/60 space-y-2'>
+				<div className='flex items-center justify-between'>
+					<SectionHead label='Document URL' />
+					{!readOnly && (
+						<Button
+							type='button'
+							variant='outline'
+							size='sm'
+							className='h-7 px-2.5 text-[11px]'
+							onClick={() => {
+								setLinkUrl("");
+								setLinkUrlError("");
+								setUrlDialogOpen(true);
+							}}
+						>
+							<Plus className='w-3 h-3 mr-1.5' /> Add URL
+						</Button>
+					)}
+				</div>
+
+				{productUrls.length === 0 ? (
+					<p className='text-xs text-muted-foreground py-3 text-center border border-dashed border-border/60 rounded-lg bg-muted/10'>
+						No document URLs added
+					</p>
+				) : (
+					<div className='overflow-hidden border rounded-lg border-border/60'>
+						<table className='w-full text-xs'>
+							<thead>
+								<tr className='border-b bg-muted/30'>
+									<th className='px-2 py-1.5 text-left text-[10px] font-semibold text-muted-foreground'>
+										URL
+									</th>
+									<th className='w-20 px-2 py-1.5 text-center text-[10px] font-semibold text-muted-foreground'>
+										Open
+									</th>
+									{!readOnly && (
+										<th className='w-16 px-2 py-1.5 text-center text-[10px] font-semibold text-muted-foreground'>
+											Remove
+										</th>
+									)}
+								</tr>
+							</thead>
+							<tbody>
+								{productUrls.map((item) => (
+									<tr key={item.id} className='border-b border-border/40 last:border-0'>
+										<td className='px-2 py-2 truncate max-w-md' title={item.url}>
+											{item.url}
+										</td>
+										<td className='px-2 py-2 text-center'>
+											<Button
+												type='button'
+												variant='ghost'
+												size='icon'
+												className='w-7 h-7'
+												onClick={() =>
+													window.open(item.url, "_blank", "noopener,noreferrer")
+												}
+											>
+												<ExternalLink className='w-3.5 h-3.5' />
+											</Button>
+										</td>
+										{!readOnly && (
+											<td className='px-2 py-2 text-center'>
+												<Button
+													type='button'
+													variant='ghost'
+													size='icon'
+													className='w-7 h-7 text-red-600'
+													onClick={() => onUrlRemove?.(item.id)}
+												>
+													<X className='w-3.5 h-3.5' />
+												</Button>
+											</td>
+										)}
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
+				)}
+			</div>
+
+			<Dialog open={!!previewImage} onOpenChange={(o) => !o && setPreviewImage(null)}>
+				<DialogContent className='max-w-3xl p-4'>
+					<DialogHeader>
+						<DialogTitle className='text-sm truncate'>
+							{previewImage?.name}
+						</DialogTitle>
+					</DialogHeader>
+					{previewImage && (
+						<img
+							src={getImagePreviewUrl(previewImage)}
+							alt={previewImage.name}
+							className='max-h-[70vh] w-full object-contain'
+						/>
+					)}
+				</DialogContent>
+			</Dialog>
+
+			<Dialog open={urlDialogOpen} onOpenChange={setUrlDialogOpen}>
+				<DialogContent className='max-w-md p-4'>
+					<DialogHeader>
+						<DialogTitle className='text-sm'>Add Document URL</DialogTitle>
+					</DialogHeader>
+					<div className='space-y-2'>
+						<Input
+							value={linkUrl}
+							onChange={(e) => {
+								setLinkUrl(e.target.value);
+								if (linkUrlError) setLinkUrlError("");
+							}}
+							placeholder='https://…'
+							className={cn("h-8 text-xs", linkUrlError && "border-red-400")}
+						/>
+						{linkUrlError && <FieldError msg={linkUrlError} />}
+						<div className='flex justify-end gap-2'>
+							<Button
+								type='button'
+								variant='outline'
+								size='sm'
 								onClick={() => setUrlDialogOpen(false)}
 							>
 								Cancel
 							</Button>
-							<Button
-								type='button'
-								size='sm'
-								className='h-8 text-xs text-white bg-brand-600 hover:bg-brand-700'
-								onClick={handleAddUrl}
-							>
-								Add URL
+							<Button type='button' size='sm' onClick={handleAddUrl}>
+								Add
 							</Button>
 						</div>
 					</div>
@@ -952,42 +968,41 @@ export function validateProductForm(
 	form: ProductFormValues,
 ): Record<string, string> {
 	const errors: Record<string, string> = {};
+	const productCode = resolveProductCodeForSave(form.category, form.productCode);
+
 	if (!form.productName.trim()) errors.productName = "Product name is required";
 	if (!form.segment) errors.segment = "Segment is required";
 	if (!form.category) errors.category = "Category is required";
 	if (!form.form) errors.form = "Form is required";
+	if (!productCode) {
+		errors.productCode = "Product code is required";
+	}
+	if (!form.sku.trim()) errors.sku = "SKU is required";
 	if (!form.hsnCode.trim()) errors.hsnCode = "HSN code is required";
 	else if (!form.gstRate?.trim()) {
 		errors.gstRate =
 			"Selected HSN does not have a GST rate mapped. Choose another HSN code.";
 	}
-	if (!form.sku.trim()) errors.sku = "SKU is required";
-	if (!form.baseUnit) errors.baseUnit = "Base unit is required";
+	if (!form.packSize) {
+		errors.packSize = "Pack size is required";
+	} else if (isNaN(Number(form.packSize)) || Number(form.packSize) <= 0) {
+		errors.packSize = "Must be a positive number";
+	}
+	if (!form.baseUnit) errors.baseUnit = "Unit is required";
 	if (!form.packagingUnit) errors.packagingUnit = "Packaging unit is required";
-	if (!form.unitSize) {
-		errors.unitSize = "Unit size is required";
-	} else if (isNaN(Number(form.unitSize)) || Number(form.unitSize) <= 0) {
-		errors.unitSize = "Must be a positive number";
+	if (!form.unitPerCase) {
+		errors.unitPerCase = "Unit per case is required";
+	} else if (isNaN(Number(form.unitPerCase)) || Number(form.unitPerCase) <= 0) {
+		errors.unitPerCase = "Must be a positive number";
 	}
-	if (!form.conversionQuantity) {
-		errors.conversionQuantity = "Conversion quantity is required";
-	} else if (
-		isNaN(Number(form.conversionQuantity)) ||
-		Number(form.conversionQuantity) <= 0
+	if (
+		form.grossWeight &&
+		(isNaN(Number(form.grossWeight)) || Number(form.grossWeight) <= 0)
 	) {
-		errors.conversionQuantity = "Must be a positive number";
-	}
-	if (!form.netWeight) {
-		errors.netWeight = "Net weight is required";
-	} else if (isNaN(Number(form.netWeight)) || Number(form.netWeight) <= 0) {
-		errors.netWeight = "Must be a positive number";
-	}
-	if (!form.grossWeight) {
-		errors.grossWeight = "Gross weight is required";
-	} else if (isNaN(Number(form.grossWeight)) || Number(form.grossWeight) <= 0) {
 		errors.grossWeight = "Must be a positive number";
-	} else if (Number(form.grossWeight) < Number(form.netWeight)) {
-		errors.grossWeight = "Gross weight cannot be less than Net weight";
+	}
+	if (form.mrp && (isNaN(Number(form.mrp)) || Number(form.mrp) < 0)) {
+		errors.mrp = "MRP must be a valid amount";
 	}
 	return errors;
 }
@@ -1000,8 +1015,27 @@ export function formValuesToProduct(
 		productUrls?: ProductUrl[];
 	},
 ): Product {
+	const productCode = resolveProductCodeForSave(form.category, form.productCode);
+	const parseOptionalNum = (val: string) =>
+		val && !isNaN(Number(val)) ? Number(val) : undefined;
+
+	const packSize = parseOptionalNum(form.packSize);
+	const unitPerCase = parseOptionalNum(form.unitPerCase);
+	const baseUnit = normalizeProductUnit(form.baseUnit);
+	const mou =
+		getMouFromUnit(baseUnit) ?? (form.mou.trim() || undefined);
+	const netWeightPerPackagingUnit =
+		calculateNetWeightPerPackagingUnit(packSize, unitPerCase, baseUnit) ??
+		parseOptionalNum(form.netWeightPerPackagingUnit);
+	const grossWeight = parseOptionalNum(form.grossWeight);
+	const mrp = parseOptionalNum(form.mrp);
+	const acctDefaults = resolveProductAccountingDefaults();
+
 	return {
 		id: base.id,
+		productCode,
+		supplier: form.supplier.trim() || undefined,
+		supplierCode: form.supplierCode.trim().toUpperCase() || undefined,
 		productId: base.productId ?? "",
 		productName: form.productName.trim(),
 		scientificName: form.scientificName.trim() || undefined,
@@ -1010,11 +1044,20 @@ export function formValuesToProduct(
 		segment: form.segment,
 		form: form.form,
 		cfu: form.cfu.trim() || undefined,
+		authority: form.authority.trim() || undefined,
+		sku: form.sku.trim().toUpperCase(),
 		hsnCode: form.hsnCode.trim(),
 		hsnId: form.hsnId ? Number(form.hsnId) : undefined,
 		gstRate: form.gstRate,
 		gstId: form.gstId ? Number(form.gstId) : undefined,
-		sku: form.sku.trim().toUpperCase(),
+		packSize,
+		baseUnit,
+		mou,
+		unitPerCase,
+		packagingUnit: form.packagingUnit,
+		netWeightPerPackagingUnit,
+		grossWeight,
+		mrp,
 		status: form.status,
 		createdBy: base.createdBy ?? "Admin",
 		createdDate: base.createdDate ?? todayStr(),
@@ -1022,17 +1065,15 @@ export function formValuesToProduct(
 		updatedDate: todayStr(),
 		productImages: base.productImages ?? [],
 		productUrls: base.productUrls ?? [],
-		baseUnit: form.baseUnit,
-		packagingUnit: form.packagingUnit,
-		conversionQuantity: form.conversionQuantity
-			? Number(form.conversionQuantity)
-			: undefined,
-		inventoryAccount: form.inventoryAccount.trim() || resolveProductAccountingDefaults().inventoryAccount,
-		salesAccount: form.salesAccount.trim() || resolveProductAccountingDefaults().salesAccount,
-		purchaseAccount: form.purchaseAccount.trim() || resolveProductAccountingDefaults().purchaseAccount,
-		cogsAccount: form.cogsAccount.trim() || resolveProductAccountingDefaults().cogsAccount,
-		unitSize: form.unitSize ? Number(form.unitSize) : undefined,
-		netWeight: form.netWeight ? Number(form.netWeight) : undefined,
-		grossWeight: form.grossWeight ? Number(form.grossWeight) : undefined,
+		unitSize: packSize,
+		conversionQuantity: unitPerCase,
+		unitsPerCase: unitPerCase,
+		netWeight: netWeightPerPackagingUnit,
+		vendorProductCode: form.supplierCode.trim() || undefined,
+		inventoryAccount:
+			form.inventoryAccount.trim() || acctDefaults.inventoryAccount,
+		salesAccount: form.salesAccount.trim() || acctDefaults.salesAccount,
+		purchaseAccount: form.purchaseAccount.trim() || acctDefaults.purchaseAccount,
+		cogsAccount: form.cogsAccount.trim() || acctDefaults.cogsAccount,
 	};
 }

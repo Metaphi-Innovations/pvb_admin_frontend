@@ -11,7 +11,7 @@ import {
   type Customer,
   type CustomerStatus,
   CUSTOMER_TYPE_LABELS,
-  PAYMENT_TERMS_OPTIONS,
+  formatPaymentTerms,
   formatMobile,
   formatCreditLimit,
   getActiveGSTMasters,
@@ -57,8 +57,7 @@ export default function CustomerInfoDialog({ customer, open, onOpenChange }: Cus
 
   const gst = getActiveGSTMasters().find(g => g.id === customer.gstMasterId);
   const tds = getActiveTDSMasters().find(t => t.id === customer.tdsMasterId);
-  const payLabel =
-    PAYMENT_TERMS_OPTIONS.find(p => p.value === customer.paymentTerms)?.label ?? customer.paymentTerms;
+  const payLabel = formatPaymentTerms(customer.paymentTerms);
   const st = STATUS_CFG[customer.status];
 
   return (

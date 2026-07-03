@@ -4,11 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Check, ChevronDown, ChevronRight, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Plus } from "lucide-react";
 import { getBankAccountByLedgerId } from "@/lib/accounts/bank-accounts-data";
 import { formatBankAccountMaster } from "@/lib/accounts/bank-account-display";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
-import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { hierarchyBreadcrumb } from "@/lib/accounts/coa-hierarchy";
 import {
   buildCoaHierarchyTree,
@@ -16,6 +15,9 @@ import {
   filterCoaHierarchyTree,
   type CoaHierarchyNode,
 } from "@/lib/accounts/voucher-ledger-groups";
+import { useCoaRecords } from "@/lib/accounts/use-coa-records";
+import type { VoucherLedgerScope } from "@/lib/accounts/voucher-quick-add-ledger";
+import { VoucherQuickAddLedgerSheet } from "@/components/accounts/VoucherQuickAddLedgerModal";
 
 interface GroupedLedgerSelectProps {
   value: number | null;
@@ -27,6 +29,10 @@ interface GroupedLedgerSelectProps {
   className?: string;
   contentClassName?: string;
   ledgerFilter?: (ledger: ChartOfAccount) => boolean;
+  /** Restrict quick-add parent options (receipt/payment/contra line context) */
+  quickAddScope?: VoucherLedgerScope;
+  /** Show ➕ Create New Ledger — default true when not disabled/read-only */
+  enableQuickAdd?: boolean;
 }
 
 function HierarchyNodeRow({
@@ -69,7 +75,7 @@ function HierarchyNodeRow({
           )}
           {displayName}
         </span>
-        {selected && <Check className="w-3.5 h-3.5 text-brand-600 shrink-0" />}
+        {selected && <Check className="w-4 h-4 text-brand-600 shrink-0" />}
       </button>
     );
   }
@@ -85,9 +91,9 @@ function HierarchyNodeRow({
         style={{ paddingLeft: pad }}
       >
         {isOpen ? (
-          <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+          <ChevronDown className="w-4 h-4 shrink-0" />
         ) : (
-          <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+          <ChevronRight className="w-4 h-4 shrink-0" />
         )}
         <span className="truncate">{node.label}</span>
       </button>
@@ -117,14 +123,19 @@ export function GroupedLedgerSelect({
   className,
   contentClassName,
   ledgerFilter,
+  quickAddScope,
+  enableQuickAdd = true,
 }: GroupedLedgerSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+
+  const coaRecords = useCoaRecords();
 
   const tree = useMemo(
-    () => buildCoaHierarchyTree(undefined, ledgerFilter),
-    [ledgerFilter],
+    () => buildCoaHierarchyTree(coaRecords, ledgerFilter),
+    [coaRecords, ledgerFilter],
   );
 
   useEffect(() => {
@@ -144,20 +155,19 @@ export function GroupedLedgerSelect({
 
   const selectedLabel = useMemo(() => {
     if (!value) return null;
-    const records = loadChartOfAccounts();
-    const ledger = records.find((r) => r.id === value);
+    const ledger = coaRecords.find((r) => r.id === value);
     if (!ledger) return null;
     const bankMaster = getBankAccountByLedgerId(ledger.id);
     if (bankMaster) return formatBankAccountMaster(bankMaster);
     return ledger.accountCode
       ? `${ledger.accountCode} · ${ledger.accountName}`
       : ledger.accountName;
-  }, [value]);
+  }, [value, coaRecords]);
 
   const selectedPath = useMemo(() => {
     if (!value) return "";
-    return hierarchyBreadcrumb(loadChartOfAccounts(), value);
-  }, [value]);
+    return hierarchyBreadcrumb(coaRecords, value);
+  }, [value, coaRecords]);
 
   const toggleGroup = useCallback((key: string) => {
     setExpanded((prev) => {
@@ -173,6 +183,17 @@ export function GroupedLedgerSelect({
     setOpen(false);
     setSearch("");
   };
+
+  const handleQuickAddCreated = (ledger: ChartOfAccount) => {
+    if (!ledgerFilter || ledgerFilter(ledger)) {
+      onChange(ledger);
+    }
+    setQuickAddOpen(false);
+    setOpen(false);
+    setSearch("");
+  };
+
+  const showQuickAdd = enableQuickAdd && !disabled;
 
   return (
     <div className="space-y-1.5">
@@ -210,7 +231,7 @@ export function GroupedLedgerSelect({
           >
             {selectedLabel || placeholder}
           </span>
-          <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          <ChevronsUpDown className="w-4 h-4 text-muted-foreground shrink-0" />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -222,7 +243,7 @@ export function GroupedLedgerSelect({
             placeholder="Search accounts…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-8 text-xs"
+            className="h-9 text-[13px] font-medium"
             autoFocus
           />
         </div>
@@ -243,8 +264,33 @@ export function GroupedLedgerSelect({
             ))
           )}
         </div>
+        {showQuickAdd && (
+          <div className="border-t border-border/60 p-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setSearch("");
+                setQuickAddOpen(true);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4 shrink-0" />
+              Create New Sub Group Ledger
+            </button>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
+
+      {showQuickAdd && (
+        <VoucherQuickAddLedgerSheet
+          open={quickAddOpen}
+          onOpenChange={setQuickAddOpen}
+          scope={quickAddScope}
+          onCreated={handleQuickAddCreated}
+        />
+      )}
     </div>
   );
 }

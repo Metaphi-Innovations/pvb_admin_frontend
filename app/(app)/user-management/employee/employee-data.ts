@@ -77,16 +77,38 @@ export interface Employee {
   // Address (structured — preferred)
   currentAddressLine1?: string;
   currentAddressLine2?: string;
+  currentPincode?: string;
+  currentCity?: string;
+  currentTown?: string;
+  currentDistrict?: string;
+  currentState?: string;
+  /** @deprecated use currentCity / currentTown */
+  currentCityTownLocality?: string;
+  permanentAddressLine1?: string;
+  permanentAddressLine2?: string;
+  permanentPincode?: string;
+  permanentCity?: string;
+  permanentTown?: string;
+  permanentDistrict?: string;
+  permanentState?: string;
+  /** @deprecated use permanentCity / permanentTown */
+  permanentCityTownLocality?: string;
+  emergencyAddressLine1?: string;
+  emergencyAddressLine2?: string;
+  emergencyPincode?: string;
+  emergencyCity?: string;
+  emergencyTown?: string;
+  emergencyDistrict?: string;
+  emergencyState?: string;
+  /** @deprecated use emergencyCity / emergencyTown */
+  emergencyCityTownLocality?: string;
+  /** @deprecated legacy geo-node IDs */
   currentStateId?: number | null;
   currentCityId?: number | null;
   currentPincodeId?: number | null;
-  permanentAddressLine1?: string;
-  permanentAddressLine2?: string;
   permanentStateId?: number | null;
   permanentCityId?: number | null;
   permanentPincodeId?: number | null;
-  emergencyAddressLine1?: string;
-  emergencyAddressLine2?: string;
   emergencyStateId?: number | null;
   emergencyCityId?: number | null;
   emergencyPincodeId?: number | null;
@@ -135,6 +157,7 @@ export interface Employee {
   approvalLevel3Role?: string;
   // Legacy fields (kept for backward compat)
   designation?: string;
+  branch?: string;
   workLocation?: string;
   city?: string;
   pincode?: string;
@@ -249,7 +272,7 @@ export const PERMISSION_REGISTRY: PermModule[] = [
       { id: "hsnTax",           label: "HSN / Tax",         actions: ["view","create","edit","delete","export"] },
       { id: "customerCategory", label: "Customer Category", actions: ["view","create","edit","delete"] },
       { id: "customerMaster",   label: "Customer Master",   actions: ["view","create","edit","delete"] },
-      { id: "vendorCategory",   label: "Vendor Category",   actions: ["view","create","edit","delete"] },
+      { id: "vendorCategory",   label: "Supplier Category",   actions: ["view","create","edit","delete"] },
       { id: "warehouseMaster",  label: "Warehouse",         actions: ["view","create","edit","delete"] },
       { id: "uomMaster",        label: "Units of Measure",  actions: ["view","create","edit","delete"] },
       { id: "distributors",     label: "Distributors",      actions: ["view","create","edit","delete","export"] },
@@ -263,9 +286,9 @@ export const PERMISSION_REGISTRY: PermModule[] = [
       { id: "rfq",                 label: "RFQ",                  actions: ["view","create","edit","delete","approve","export"] },
       { id: "purchaseOrder",       label: "Purchase Order",       actions: ["view","create","edit","delete","approve","export"] },
       { id: "grn",                 label: "Goods Receipt (GRN)",  actions: ["view","create","edit","delete","approve","export"] },
-      { id: "vendorBill",          label: "Vendor Bills",         actions: ["view","create","edit","delete","approve","export"] },
-      { id: "vendorReturn",        label: "Vendor Returns",       actions: ["view","create","edit","delete","approve","export"] },
-      { id: "vendorManagement",    label: "Vendor Management",    actions: ["view","create","edit","delete","export"] },
+      { id: "vendorBill",          label: "Supplier Bills",         actions: ["view","create","edit","delete","approve","export"] },
+      { id: "vendorReturn",        label: "Supplier Returns",       actions: ["view","create","edit","delete","approve","export"] },
+      { id: "vendorManagement",    label: "Supplier Management",    actions: ["view","create","edit","delete","export"] },
       { id: "stockLedger",         label: "Stock Ledger",         actions: ["view","export"] },
     ],
   },
@@ -548,6 +571,23 @@ export function validateEmailUnique(email: string, employees: Employee[], exclud
   return exists ? "Email already in use" : null;
 }
 
+export function formatEmployeeRoleLabel(employee: Pick<Employee, "roleType" | "role">): string {
+  const role = employee.role?.trim();
+  const roleType = employee.roleType?.trim();
+  if (roleType && role) return `${roleType} - ${role}`;
+  return role || roleType || "—";
+}
+
+export function formatEmployeeMobile(
+  mobile?: string,
+  countryCode = "+91",
+): string {
+  const digits = (mobile || "").replace(/\D/g, "");
+  if (!digits) return "—";
+  const code = countryCode || "+91";
+  return `${code} ${digits}`;
+}
+
 export function validateMobile(mobile: string): string | null {
   if (!mobile.trim()) return "Mobile is required";
   if (!/^\d{10}$/.test(mobile)) return "Must be exactly 10 digits";
@@ -600,6 +640,7 @@ export const SEED_EMPLOYEES: Employee[] = [
     employeeType: "Full-time",
     departmentId: 1,
     department: "Sales",
+    branch: "Mumbai HO",
     roleType: "Field User",
     salesType: "Retail Sales",
     roleId: 106,
@@ -641,6 +682,7 @@ export const SEED_EMPLOYEES: Employee[] = [
     documents: [
       {
         id: "doc-seed-1",
+        documentName: "Aadhaar Card",
         documentType: "Aadhaar Card",
         documentNumber: "XXXX-XXXX-1234",
         status: "verified",
@@ -654,6 +696,7 @@ export const SEED_EMPLOYEES: Employee[] = [
       },
       {
         id: "doc-seed-2",
+        documentName: "PAN Card",
         documentType: "PAN Card",
         documentNumber: "ABCDE1234F",
         status: "uploaded",
@@ -665,6 +708,7 @@ export const SEED_EMPLOYEES: Employee[] = [
       },
       {
         id: "doc-seed-3",
+        documentName: "Photograph",
         documentType: "Photograph",
         status: "uploaded",
         fileName: "rajesh-photo.png",
@@ -779,7 +823,7 @@ export const SEED_EMPLOYEES: Employee[] = [
     emergencyContactName: "Suresh Desai", emergencyContactMobile: "8765432116",
     emergencyContactRelation: "Parent",
     currentAddress: "567 Garden View, Bangalore 560038",
-    reportingManagerId: 7, reportingManager: "Vikram Rao", status: "draft",
+    reportingManagerId: 7, reportingManager: "Vikram Rao", status: "inactive",
     joiningDate: "2024-01-01", createdBy: "Admin", createdDate: "2024-02-15",
     updatedBy: "Admin", updatedDate: "2024-02-15", lastStatusChange: "2024-02-15",
   },
@@ -812,12 +856,71 @@ export const SEED_EMPLOYEES: Employee[] = [
     joiningDate: "2023-06-01", createdBy: "Admin", createdDate: "2024-02-25",
     updatedBy: "Admin", updatedDate: "2024-02-25", lastStatusChange: "2024-02-25",
   },
+  {
+    id: 11, employeeId: "EMP-0011", firstName: "Rahul", lastName: "Sharma",
+    fullName: "Rahul Sharma", email: "rahul.sharma@paramverse.bio",
+    mobile: "8765432120", countryCode: "+91", bloodGroup: "B+", gender: "Male",
+    dob: "1991-03-12", employeeType: "Full-time",
+    departmentId: 3, department: "Accounts", roleType: "Admin User",
+    roleId: 206, role: "Accounts Executive",
+    approvalLevel1Id: 12, approvalLevel1Name: "Priya Mehta", approvalLevel1Role: "Accounts Manager",
+    approvalLevel2Id: 13, approvalLevel2Name: "Rajesh Malhotra", approvalLevel2Role: "Finance Manager",
+    approvalLevel3Id: 14, approvalLevel3Name: "Anita Deshmukh", approvalLevel3Role: "CFO",
+    emergencyContactName: "Sunita Sharma", emergencyContactMobile: "8765432121",
+    emergencyContactRelation: "Spouse",
+    currentAddress: "45 Finance Lane, Mumbai 400001",
+    reportingManagerId: 12, reportingManager: "Priya Mehta", status: "active",
+    joiningDate: "2022-04-01", createdBy: "Admin", createdDate: "2024-03-01",
+    updatedBy: "Admin", updatedDate: "2024-03-01", lastStatusChange: "2024-03-01",
+  },
+  {
+    id: 12, employeeId: "EMP-0012", firstName: "Priya", lastName: "Mehta",
+    fullName: "Priya Mehta", email: "priya.mehta@paramverse.bio",
+    mobile: "8765432122", countryCode: "+91", bloodGroup: "A+", gender: "Female",
+    dob: "1986-07-18", employeeType: "Full-time",
+    departmentId: 3, department: "Accounts", roleType: "Admin User",
+    roleId: 202, role: "Accounts Manager",
+    emergencyContactName: "Vikram Mehta", emergencyContactMobile: "8765432123",
+    emergencyContactRelation: "Spouse",
+    currentAddress: "12 Accounts Tower, Mumbai 400002",
+    reportingManagerId: 13, reportingManager: "Rajesh Malhotra", status: "active",
+    joiningDate: "2018-01-15", createdBy: "Admin", createdDate: "2024-03-01",
+    updatedBy: "Admin", updatedDate: "2024-03-01", lastStatusChange: "2024-03-01",
+  },
+  {
+    id: 13, employeeId: "EMP-0013", firstName: "Rajesh", lastName: "Malhotra",
+    fullName: "Rajesh Malhotra", email: "rajesh.malhotra@paramverse.bio",
+    mobile: "8765432124", countryCode: "+91", bloodGroup: "O+", gender: "Male",
+    dob: "1980-11-02", employeeType: "Full-time",
+    departmentId: 3, department: "Accounts", roleType: "Admin User",
+    roleId: 205, role: "Finance Manager",
+    emergencyContactName: "Kavita Malhotra", emergencyContactMobile: "8765432125",
+    emergencyContactRelation: "Spouse",
+    currentAddress: "88 Corporate Heights, Mumbai 400003",
+    reportingManagerId: 14, reportingManager: "Anita Deshmukh", status: "active",
+    joiningDate: "2015-06-01", createdBy: "Admin", createdDate: "2024-03-01",
+    updatedBy: "Admin", updatedDate: "2024-03-01", lastStatusChange: "2024-03-01",
+  },
+  {
+    id: 14, employeeId: "EMP-0014", firstName: "Anita", lastName: "Deshmukh",
+    fullName: "Anita Deshmukh", email: "anita.deshmukh@paramverse.bio",
+    mobile: "8765432126", countryCode: "+91", bloodGroup: "AB+", gender: "Female",
+    dob: "1978-05-22", employeeType: "Full-time",
+    departmentId: 3, department: "Accounts", roleType: "Admin User",
+    roleId: 301, role: "CFO",
+    emergencyContactName: "Ramesh Deshmukh", emergencyContactMobile: "8765432127",
+    emergencyContactRelation: "Spouse",
+    currentAddress: "1 Executive Plaza, Mumbai 400004",
+    reportingManagerId: null, reportingManager: "", status: "active",
+    joiningDate: "2012-03-10", createdBy: "Admin", createdDate: "2024-03-01",
+    updatedBy: "Admin", updatedDate: "2024-03-01", lastStatusChange: "2024-03-01",
+  },
 ];
 
 // ── localStorage Helpers ──────────────────────────────────────────────────────
 
 const EMPLOYEE_KEY = "ds_employees";
-const EMPLOYEE_VERSION = 6;
+const EMPLOYEE_VERSION = 7;
 
 interface StoredEmployeeData {
   version: number;
@@ -843,6 +946,20 @@ export function loadEmployees(): Employee[] {
     }
     const parsed = JSON.parse(raw) as StoredEmployeeData;
     if (parsed.version !== EMPLOYEE_VERSION) {
+      if (parsed.version === 6 && Array.isArray(parsed.employees)) {
+        const existingIds = new Set(parsed.employees.map((e: Employee) => e.id));
+        const newAccountsTeam = SEED_EMPLOYEES.filter((e) => e.id >= 11 && !existingIds.has(e.id));
+        const migrated = [...parsed.employees, ...newAccountsTeam].map((e: Employee) => ({
+          ...e,
+          documents: e.documents ?? [],
+          activityLog: e.activityLog ?? [],
+        }));
+        localStorage.setItem(
+          EMPLOYEE_KEY,
+          JSON.stringify({ version: EMPLOYEE_VERSION, employees: migrated }),
+        );
+        return migrated;
+      }
       if (parsed.version === 5 && Array.isArray(parsed.employees)) {
         const migrated = parsed.employees.map((e: Employee) => ({
           ...e,

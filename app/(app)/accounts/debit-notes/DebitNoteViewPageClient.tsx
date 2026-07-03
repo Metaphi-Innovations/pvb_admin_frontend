@@ -3,14 +3,19 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Calendar, CheckCircle, Download, Eye, Pencil, PlayCircle } from "lucide-react";
+import { Calendar, Download, Eye, Pencil, PlayCircle } from "lucide-react";
 import { RecordDetailPage } from "@/components/record-detail";
-import { NoteWorkflowBadge } from "../components/NoteWorkflowBadge";
+import { AccountsVoucherStatusBadge } from "@/components/accounts/AccountsVoucherStatusBadge";
+import { AccountsDocumentWorkflowSection } from "@/components/accounts/AccountsDocumentWorkflowSection";
 import {
-  approveDebitNote,
+  canEditAccountsDocument,
+  resolveWorkflowStatus,
+} from "@/lib/accounts/accounts-maker-checker";
+import {
+  canEditDebitNote,
+  DEBIT_NOTE_SOURCE_LABELS,
   getDebitNoteById,
   processDebitNote,
-  REFERENCE_TYPE_LABELS,
   totalRejectedQtyFromLines,
   type DebitNoteRecord,
 } from "./debit-notes-data";
@@ -26,18 +31,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-medium mt-0.5">{value || "—"}</p>
     </div>
   );
-}
-
-function workflowStatusLabel(status: string) {
-  return status.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function workflowStatusVariant(status: string): "active" | "inactive" | "draft" | "blocked" | "neutral" {
-  if (status === "draft") return "draft";
-  if (status === "pending_approval") return "neutral";
-  if (status === "approved" || status === "processed") return "active";
-  if (status === "cancelled") return "blocked";
-  return "neutral";
 }
 
 export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: number }) {
@@ -59,7 +52,8 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
 
   if (!record) return null;
 
-  const canEdit = record.status === "draft" || record.status === "pending_approval";
+  const canEdit = canEditDebitNote(record) && canEditAccountsDocument(record.workflow, record.status);
+  const displayStatus = resolveWorkflowStatus(record.workflow, record.status);
 
   return (
     <RecordDetailPage
@@ -68,40 +62,28 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
       listLabel="Debit Notes"
       recordName={record.vendorName}
       recordCode={record.debitNoteNo}
-      statusLabel={workflowStatusLabel(record.status)}
-      statusVariant={workflowStatusVariant(record.status)}
+      statusLabel={displayStatus.replaceAll("_", " ")}
+      statusVariant={displayStatus === "posted" ? "active" : displayStatus === "draft" ? "draft" : "neutral"}
       metaItems={[
         { icon: Calendar, label: record.debitNoteDate },
-        { label: REFERENCE_TYPE_LABELS[record.againstType] },
+        { label: DEBIT_NOTE_SOURCE_LABELS[record.source] },
       ]}
       onEdit={canEdit ? () => router.push(`${DEBIT_NOTES_LIST_PATH}/${record.id}/edit`) : undefined}
       headerActions={
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => downloadDebitNotePdf(record)}>
-            <Download className="w-3.5 h-3.5" /> Download PDF
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1" onClick={() => downloadDebitNotePdf(record)}>
+            <Download className="w-4 h-4" /> Download PDF
           </Button>
-          {(record.status === "draft" || record.status === "pending_approval") && (
+          {displayStatus === "posted" && record.status === "approved" && (
             <Button
               size="sm"
-              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
-              onClick={() => {
-                approveDebitNote(record.id);
-                refresh();
-              }}
-            >
-              <CheckCircle className="w-3.5 h-3.5" /> Approve
-            </Button>
-          )}
-          {record.status === "approved" && (
-            <Button
-              size="sm"
-              className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1"
+              className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
               onClick={() => {
                 processDebitNote(record.id);
                 refresh();
               }}
             >
-              <PlayCircle className="w-3.5 h-3.5" /> Mark Processed
+              <PlayCircle className="w-4 h-4" /> Mark Processed
             </Button>
           )}
         </div>
@@ -145,7 +127,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
     >
       <div className="space-y-4">
         <LedgerImpactPreview
-          title="Accounting Entry — reduces vendor outstanding"
+          title="Accounting Entry — reduces supplier outstanding"
           lines={debitNoteImpactResolved({
             vendorName: record.vendorName,
             taxable: record.taxableAmount,
@@ -153,25 +135,37 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
             grandTotal: record.currentDebitAmount,
           })}
         />
-        <NoteWorkflowBadge status={record.status} />
+        <AccountsVoucherStatusBadge workflow={record.workflow} legacyStatus={record.status} />
+
+        <AccountsDocumentWorkflowSection
+          category="debit_note"
+          documentId={record.id}
+          workflow={record.workflow}
+          legacyStatus={record.status}
+          onUpdated={refresh}
+        />
 
         <div className="rounded-lg border border-border/60 bg-white p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <DetailRow label="Vendor" value={record.vendorName} />
+          <DetailRow label="Source" value={DEBIT_NOTE_SOURCE_LABELS[record.source]} />
+          <DetailRow
+            label="Reference Document"
+            value={record.source === "purchase_return" ? record.sourceReturnNo ?? "" : record.reason}
+          />
+          <DetailRow label="Supplier" value={record.vendorName} />
+          <DetailRow label="Purchase Return Reference" value={record.sourceReturnNo ?? ""} />
+          <DetailRow label="Purchase Invoice Reference" value={record.sourceInvoiceNo} />
           <DetailRow label="Debit Note Date" value={record.debitNoteDate} />
-          <DetailRow label="Reference Type" value={REFERENCE_TYPE_LABELS[record.againstType]} />
-          <DetailRow label="Purchase Invoice No." value={record.sourceInvoiceNo} />
-          <DetailRow label="PO No." value={record.sourcePoNo} />
-          <DetailRow label="GRN No." value={record.sourceGrnNo} />
-          <DetailRow label="QC Reference" value={record.sourceQcNo} />
-          <DetailRow label="Rejected Qty" value={String(totalRejectedQtyFromLines(record.lineItems) || "—")} />
-          <DetailRow label="Debit Amount" value={formatINR(record.currentDebitAmount)} />
-          <DetailRow label="Reason" value={record.reason} />
+          <DetailRow label="Taxable Value" value={formatINR(record.taxableAmount)} />
+          <DetailRow label="CGST" value={formatINR(record.cgstAmount)} />
+          <DetailRow label="SGST" value={formatINR(record.sgstAmount)} />
+          <DetailRow label="IGST" value={formatINR(record.igstAmount)} />
+          <DetailRow label="Total" value={formatINR(record.currentDebitAmount)} />
         </div>
 
         {record.againstType !== "standalone_adjustment" && record.lineItems.length > 0 && (
           <div className="bg-white rounded-lg border border-border/60 p-4 overflow-x-auto">
             <h2 className="text-sm font-semibold mb-3">Line Items</h2>
-            <table className="w-full text-xs min-w-[720px]">
+            <table className="accounts-table w-full min-w-[720px]">
               <thead className="border-b">
                 <tr>
                   {["Product", "Inv Qty", "Return Qty", "UOM", "Rate", "GST %", "Debit Amount"].map((h) => (
@@ -209,10 +203,10 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
                   {att.dataUrl && (
                     <>
                       <button type="button" className="p-1 hover:bg-muted rounded" onClick={() => window.open(att.dataUrl, "_blank")}>
-                        <Eye className="w-3.5 h-3.5" />
+                        <Eye className="w-4 h-4" />
                       </button>
                       <a href={att.dataUrl} download={att.fileName} className="p-1 hover:bg-muted rounded">
-                        <Download className="w-3.5 h-3.5" />
+                        <Download className="w-4 h-4" />
                       </a>
                     </>
                   )}

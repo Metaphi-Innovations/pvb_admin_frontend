@@ -6,6 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  ACCOUNTS_FILTER_CONTROL_CLASS,
+  ACCOUNTS_FILTER_LABEL_CLASS,
+  ReportDateRangeFilter,
+  ReportSearchFilter,
+  useReportDateRange,
+} from "@/components/accounts/ReportFilters";
+import {
+  AccountsTableEmpty,
+  AccountsTableListing,
+  AccountsListingCountFooter,
+  AccountsListingToolbar,
+} from "@/components/accounts/AccountsTableListing";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -15,8 +28,17 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, X, Check, FileText, Calendar, Ban } from "lucide-react";
+import { Search, X, Check, Ban } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  AccountsTable,
+  AccountsTableBody,
+  AccountsTableCell,
+  AccountsTableHead,
+  AccountsTableHeadCell,
+  AccountsTableHeadRow,
+  AccountsTableRow,
+} from "@/components/accounts/AccountsTable";
 import {
   loadBankTransactions,
   filterTransactions,
@@ -218,7 +240,7 @@ function CategorizationPanel({ transaction, open, onClose, onSave }: Categorizat
                   onChange={(e) => setLedgerSearch(e.target.value)}
                   disabled={transaction.status === "reconciled"}
                 />
-                <Search className="absolute right-2.5 top-2.5 w-3.5 h-3.5 text-muted-foreground" />
+                <Search className="absolute right-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
               </div>
               {selectedLedger && (
                 <div className="mt-2 rounded-md bg-brand-50 border border-brand-200 px-3 py-2">
@@ -314,7 +336,7 @@ function CategorizationPanel({ transaction, open, onClose, onSave }: Categorizat
                   onClick={handleSave}
                   disabled={!category || !ledgerId || saving}
                 >
-                  <Check className="w-3.5 h-3.5 mr-1.5" />
+                  <Check className="w-4 h-4 mr-1.5" />
                   Categorize
                 </Button>
                 <Button
@@ -335,7 +357,7 @@ function CategorizationPanel({ transaction, open, onClose, onSave }: Categorizat
                   onClick={handleReconcile}
                   disabled={saving}
                 >
-                  <Check className="w-3.5 h-3.5 mr-1.5" />
+                  <Check className="w-4 h-4 mr-1.5" />
                   Reconcile
                 </Button>
                 <Button
@@ -345,7 +367,7 @@ function CategorizationPanel({ transaction, open, onClose, onSave }: Categorizat
                   onClick={handleUncategorize}
                   disabled={saving}
                 >
-                  <Ban className="w-3.5 h-3.5 mr-1.5" />
+                  <Ban className="w-4 h-4 mr-1.5" />
                   Uncategorize
                 </Button>
               </>
@@ -368,6 +390,7 @@ function CategorizationPanel({ transaction, open, onClose, onSave }: Categorizat
 }
 
 export function BankTransactionsClient() {
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const [filters, setFilters] = useState<TransactionFilters>({ status: "all" });
   const [selectedTransaction, setSelectedTransaction] = useState<BankTransaction | null>(null);
@@ -375,14 +398,19 @@ export function BankTransactionsClient() {
 
   const bankAccounts = useMemo(() => listBankAccountSelectOptions(), []);
 
+  const activeFilters = useMemo(
+    () => ({ ...filters, startDate: dateFrom, endDate: dateTo }),
+    [filters, dateFrom, dateTo],
+  );
+
   const refresh = () => {
-    const filtered = filterTransactions(filters);
+    const filtered = filterTransactions(activeFilters);
     setTransactions(filtered);
   };
 
   React.useEffect(() => {
-    refresh();
-  }, [filters]);
+    setTransactions(filterTransactions(activeFilters));
+  }, [activeFilters]);
 
   const openCategorization = (transaction: BankTransaction) => {
     setSelectedTransaction(transaction);
@@ -399,19 +427,18 @@ export function BankTransactionsClient() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Filters */}
-      <div className="flex-shrink-0 px-6 py-4 border-b border-border/40 bg-white">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground uppercase">Bank Account</Label>
+    <AccountsTableListing
+      toolbar={
+        <AccountsListingToolbar>
+          <div className="space-y-1 min-w-[140px]">
+            <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Bank Account</Label>
             <Select
               value={filters.bankAccountId?.toString() || "all"}
               onValueChange={(v) =>
                 setFilters({ ...filters, bankAccountId: v === "all" ? undefined : parseInt(v) })
               }
             >
-              <SelectTrigger className="h-8 text-xs">
+              <SelectTrigger className={cn(ACCOUNTS_FILTER_CONTROL_CLASS, "mt-0 w-[140px]")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -424,14 +451,13 @@ export function BankTransactionsClient() {
               </SelectContent>
             </Select>
           </div>
-
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground uppercase">Status</Label>
+          <div className="space-y-1 min-w-[120px]">
+            <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Status</Label>
             <Select
               value={filters.status || "all"}
               onValueChange={(v) => setFilters({ ...filters, status: v as TransactionStatus | "all" })}
             >
-              <SelectTrigger className="h-8 text-xs">
+              <SelectTrigger className={cn(ACCOUNTS_FILTER_CONTROL_CLASS, "mt-0 w-[120px]")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -442,117 +468,77 @@ export function BankTransactionsClient() {
               </SelectContent>
             </Select>
           </div>
-
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground uppercase">Start Date</Label>
-            <Input
-              type="date"
-              className="h-8 text-xs"
-              value={filters.startDate || ""}
-              onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground uppercase">End Date</Label>
-            <Input
-              type="date"
-              className="h-8 text-xs"
-              value={filters.endDate || ""}
-              onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground uppercase">Search</Label>
-            <div className="relative">
-              <Input
-                className="h-8 text-xs pr-8"
-                placeholder="Narration, reference..."
-                value={filters.search || ""}
-                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-              />
-              {filters.search ? (
-                <button
-                  type="button"
-                  onClick={() => setFilters({ ...filters, search: "" })}
-                  className="absolute right-2 top-2 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              ) : (
-                <Search className="absolute right-2 top-2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Transactions Table */}
-      <div className="flex-1 overflow-auto">
-        {transactions.length === 0 ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <FileText className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
-              <p className="text-sm font-medium text-muted-foreground">No transactions found</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Import bank statement to get started
-              </p>
-            </div>
-          </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0 z-10">
-              <tr>
-                {["Date", "Narration", "Reference No", "Debit", "Credit", "Balance", "Ledger", "Status", ""].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold uppercase text-muted-foreground whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {transactions.map((txn) => (
-                <tr
-                  key={txn.id}
-                  className="border-b border-border/30 hover:bg-orange-50/20 transition-colors cursor-pointer"
-                  onClick={() => openCategorization(txn)}
-                >
-                  <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="w-3 h-3" />
-                      {txn.transactionDate}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-xs max-w-[300px]">
-                    <p className="truncate font-medium">{txn.narration}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{txn.bankAccountName}</p>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{txn.referenceNo || "—"}</td>
-                  <td className="px-4 py-3 text-xs text-right tabular-nums font-medium text-red-600">
-                    {txn.debit > 0 ? formatMoney(txn.debit) : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-right tabular-nums font-medium text-green-600">
-                    {txn.credit > 0 ? formatMoney(txn.credit) : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-right tabular-nums">{formatMoney(txn.balance)}</td>
-                  <td className="px-4 py-3 text-xs">
-                    {txn.ledgerName || <span className="text-muted-foreground">—</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={txn.status} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <Button size="sm" variant="ghost" className="h-7 text-xs">
-                      View
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+          <ReportDateRangeFilter
+            preset={preset}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onPresetChange={setPreset}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
+          <ReportSearchFilter
+            value={filters.search || ""}
+            onChange={(value) => setFilters({ ...filters, search: value })}
+            placeholder="Narration, reference…"
+            className="min-w-[200px] flex-1 max-w-md"
+          />
+        </AccountsListingToolbar>
+      }
+      footer={
+        transactions.length > 0 ? (
+          <AccountsListingCountFooter>
+            Showing <span className="font-medium text-foreground">{transactions.length}</span> transactions
+          </AccountsListingCountFooter>
+        ) : undefined
+      }
+    >
+      <AccountsTable minWidth={960}>
+        <AccountsTableHead>
+          <AccountsTableHeadRow>
+            <AccountsTableHeadCell uppercase>Date</AccountsTableHeadCell>
+            <AccountsTableHeadCell uppercase className="accounts-col-wide">Narration</AccountsTableHeadCell>
+            <AccountsTableHeadCell uppercase>Reference No</AccountsTableHeadCell>
+            <AccountsTableHeadCell align="right" uppercase>Debit</AccountsTableHeadCell>
+            <AccountsTableHeadCell align="right" uppercase>Credit</AccountsTableHeadCell>
+            <AccountsTableHeadCell align="right" uppercase>Balance</AccountsTableHeadCell>
+            <AccountsTableHeadCell uppercase>Ledger</AccountsTableHeadCell>
+            <AccountsTableHeadCell uppercase>Status</AccountsTableHeadCell>
+            <AccountsTableHeadCell className="accounts-col-actions" />
+          </AccountsTableHeadRow>
+        </AccountsTableHead>
+        <AccountsTableBody>
+          {transactions.length === 0 ? (
+            <AccountsTableEmpty colSpan={9} message="No transactions found. Import a bank statement to get started." />
+          ) : (
+            transactions.map((txn) => (
+              <AccountsTableRow
+                key={txn.id}
+                className="cursor-pointer"
+                onClick={() => openCategorization(txn)}
+              >
+                <AccountsTableCell>{txn.transactionDate}</AccountsTableCell>
+                <AccountsTableCell wrap>
+                  <span className="font-medium line-clamp-1">{txn.narration}</span>
+                  <span className="text-[10px] text-muted-foreground">{txn.bankAccountName}</span>
+                </AccountsTableCell>
+                <AccountsTableCell>{txn.referenceNo || "—"}</AccountsTableCell>
+                <AccountsTableCell align="right" className="text-red-600 font-medium tabular-nums">
+                  {txn.debit > 0 ? formatMoney(txn.debit) : "—"}
+                </AccountsTableCell>
+                <AccountsTableCell align="right" className="text-emerald-600 font-medium tabular-nums">
+                  {txn.credit > 0 ? formatMoney(txn.credit) : "—"}
+                </AccountsTableCell>
+                <AccountsTableCell align="right" money>{formatMoney(txn.balance)}</AccountsTableCell>
+                <AccountsTableCell>{txn.ledgerName || "—"}</AccountsTableCell>
+                <AccountsTableCell>
+                  <StatusBadge status={txn.status} />
+                </AccountsTableCell>
+                <AccountsTableCell />
+              </AccountsTableRow>
+            ))
+          )}
+        </AccountsTableBody>
+      </AccountsTable>
 
       <CategorizationPanel
         transaction={selectedTransaction}
@@ -560,6 +546,6 @@ export function BankTransactionsClient() {
         onClose={closeCategorization}
         onSave={handleSave}
       />
-    </div>
+    </AccountsTableListing>
   );
 }

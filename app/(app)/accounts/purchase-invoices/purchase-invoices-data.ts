@@ -1,5 +1,7 @@
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import { splitInvoiceGst } from "@/lib/accounts/invoice-gst-breakup";
 import { getActiveVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { buildPurchaseInvoiceSeedRecords } from "./purchase-invoice-seed";
 import {
   getPOById,
   loadPurchaseOrders,
@@ -11,6 +13,7 @@ import { todayStr } from "@/lib/procurement/utils";
 import type { ProcurementAdditionalCharge } from "@/lib/procurement/procurement-line-utils";
 import { sumAdditionalCharges } from "@/lib/procurement/procurement-line-utils";
 import { maybePostPurchaseInvoice } from "@/lib/accounts/document-posting-bridge";
+import type { AccountsDocumentWorkflow } from "@/lib/accounts/accounts-maker-checker";
 
 export type PurchaseDebitStatus = "no_debit" | "partially_debited" | "fully_debited";
 export type POCreditDebitStatus = "open" | "partially_returned" | "closed";
@@ -94,6 +97,7 @@ export interface PurchaseInvoiceRecord {
   attachment: PurchaseAttachment | null;
   ocrPayload?: PurchaseInvoiceOcrPayload | null;
   matchStatus?: "pending" | "matched" | "partial_match" | "mismatch";
+  workflow?: AccountsDocumentWorkflow;
   activity?: Array<{ date: string; time?: string; action: string; by: string; remarks?: string }>;
   createdBy: string;
   updatedBy: string;
@@ -168,6 +172,24 @@ function normalizePI(rec: PurchaseInvoiceRecord): PurchaseInvoiceRecord {
   };
 }
 
+export function isGrnPurchaseInvoice(rec: PurchaseInvoiceRecord): boolean {
+  return rec.source !== "manual_entry" && Boolean(rec.grnId?.trim() && rec.grnNo?.trim());
+}
+
+export function getPurchaseInvoiceGstBreakup(rec: PurchaseInvoiceRecord) {
+  const taxableValue = rec.subtotal ?? rec.productAmount ?? 0;
+  const { cgst, sgst, igst } = splitInvoiceGst(rec.taxAmount ?? 0, false);
+  return { taxableValue, cgst, sgst, igst };
+}
+
+export function getPurchaseInvoicePaymentStatus(
+  rec: Pick<PurchaseInvoiceRecord, "amountPaid" | "grandTotal">,
+): "paid" | "partial" | "unpaid" {
+  if (rec.amountPaid >= rec.grandTotal && rec.grandTotal > 0) return "paid";
+  if (rec.amountPaid > 0) return "partial";
+  return "unpaid";
+}
+
 export function loadPurchaseInvoices(): PurchaseInvoiceRecord[] {
   if (typeof window === "undefined") return [];
   try {
@@ -178,13 +200,23 @@ export function loadPurchaseInvoices(): PurchaseInvoiceRecord[] {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
       return migrated;
     }
-    const list: PurchaseInvoiceRecord[] = raw ? JSON.parse(raw) : [];
+    let list: PurchaseInvoiceRecord[] = raw ? JSON.parse(raw) : [];
+    if (list.length === 0) {
+      list = buildPurchaseInvoiceSeedRecords();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+      return list.map(normalizePI);
+    }
     const normalized = list.map(normalizePI);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
     return normalized;
   } catch {
     return [];
   }
+}
+
+/** Listing scope — GRN-linked purchase invoices only. */
+export function loadGrnPurchaseInvoices(): PurchaseInvoiceRecord[] {
+  return loadPurchaseInvoices().filter(isGrnPurchaseInvoice);
 }
 
 export function savePurchaseInvoices(records: PurchaseInvoiceRecord[]): void {
@@ -246,7 +278,7 @@ function appendPOVendorInvoiceActivity(
       ...po.activity,
       {
         date: todayStr(),
-        action: replaced ? "Vendor Invoice Replaced" : "Vendor Invoice Uploaded",
+        action: replaced ? "Supplier Invoice Replaced" : "Supplier Invoice Uploaded",
         by: ACCOUNTS_CURRENT_USER,
         note: `${vendorInvoiceNo} → ${purchaseNo}`,
       },
@@ -264,12 +296,12 @@ export function createPurchaseFromPOUpload(
   if (!po) throw new Error("Purchase order not found.");
   const allowed: PurchaseOrder["status"][] = ["approved", "invoice_uploaded"];
   if (!allowed.includes(po.status)) {
-    throw new Error("Vendor invoice can be uploaded only after PO is approved.");
+    throw new Error("Supplier invoice can be uploaded only after PO is approved.");
   }
   if (listPurchaseInvoicesByPO(poId).length > 0) {
     throw new Error("Invoice already uploaded for this PO. Use replace instead.");
   }
-  if (!input.vendorInvoiceNo.trim()) throw new Error("Vendor invoice number is required.");
+  if (!input.vendorInvoiceNo.trim()) throw new Error("Supplier invoice number is required.");
   if (input.totalAmount <= 0) throw new Error("Total amount must be greater than zero.");
 
   const all = loadPurchaseInvoices();
@@ -333,7 +365,7 @@ export function replacePurchaseFromPOUpload(
   const existing = listPurchaseInvoicesByPO(poId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
   if (!existing) throw new Error("No invoice found to replace.");
 
-  if (!input.vendorInvoiceNo.trim()) throw new Error("Vendor invoice number is required.");
+  if (!input.vendorInvoiceNo.trim()) throw new Error("Supplier invoice number is required.");
   if (input.totalAmount <= 0) throw new Error("Total amount must be greater than zero.");
 
   const all = loadPurchaseInvoices();
@@ -366,8 +398,8 @@ export function replacePurchaseFromPOUpload(
 
 export function createManualPurchaseEntry(input: ManualPurchaseInput): PurchaseInvoiceRecord {
   const vendor = getActiveVendors().find((v) => v.id === input.vendorId);
-  if (!vendor) throw new Error("Vendor not found.");
-  if (!input.vendorInvoiceNo.trim()) throw new Error("Vendor invoice number is required.");
+  if (!vendor) throw new Error("Supplier not found.");
+  if (!input.vendorInvoiceNo.trim()) throw new Error("Supplier invoice number is required.");
   if (!input.remarks.trim()) throw new Error("Remarks are required.");
   if (input.totalAmount <= 0) throw new Error("Total amount must be greater than zero.");
 
@@ -433,7 +465,7 @@ export function updateManualPurchaseEntry(
   }
 
   const vendor = getActiveVendors().find((v) => v.id === input.vendorId);
-  if (!vendor) throw new Error("Vendor not found.");
+  if (!vendor) throw new Error("Supplier not found.");
 
   const updated = normalizePI({
     ...cur,
@@ -460,18 +492,22 @@ export function filterPurchaseInvoices(
   records: PurchaseInvoiceRecord[],
   filters: {
     search: string;
-    source: string;
-    vendor: string;
+    source?: string;
+    vendor?: string;
     dateFrom: string;
     dateTo: string;
+    status?: string;
   },
 ): PurchaseInvoiceRecord[] {
-  let r = records;
+  let r = records.filter(isGrnPurchaseInvoice);
   if (filters.source && filters.source !== "all") {
     r = r.filter((x) => x.source === filters.source);
   }
   if (filters.vendor && filters.vendor !== "all") {
     r = r.filter((x) => x.vendorName === filters.vendor);
+  }
+  if (filters.status && filters.status !== "all") {
+    r = r.filter((x) => getPurchaseInvoicePaymentStatus(x) === filters.status);
   }
   if (filters.dateFrom) r = r.filter((x) => x.invoiceDate >= filters.dateFrom);
   if (filters.dateTo) r = r.filter((x) => x.invoiceDate <= filters.dateTo);
@@ -482,6 +518,7 @@ export function filterPurchaseInvoices(
         x.invoiceNo.toLowerCase().includes(q) ||
         x.vendorInvoiceNo.toLowerCase().includes(q) ||
         x.vendorName.toLowerCase().includes(q) ||
+        x.grnNo.toLowerCase().includes(q) ||
         x.poNumber.toLowerCase().includes(q),
     );
   }
@@ -572,13 +609,13 @@ export type GrnPurchaseInput = {
  * Returns GRNs with status qc_completed that do NOT yet have a purchase invoice.
  * Reads from warehouse GRN storage.
  */
-export function getGrnsPendingInvoice(): import("@/app/(app)/warehouse/grnqc/grn/types").GrnRecord[] {
+export function getGrnsPendingInvoice(): import("@/app/(app)/warehouse/grn/types").GrnRecord[] {
   if (typeof window === "undefined") return [];
   try {
-    const { getGrnRecords } = require("@/app/(app)/warehouse/grnqc/grn/mock-data");
+    const { getGrnRecords } = require("@/app/(app)/warehouse/grn/mock-data");
     const all = loadPurchaseInvoices();
     const invoicedGrnIds = new Set(all.map((p) => p.grnId).filter(Boolean));
-    return (getGrnRecords() as import("@/app/(app)/warehouse/grnqc/grn/types").GrnRecord[]).filter(
+    return (getGrnRecords() as import("@/app/(app)/warehouse/grn/types").GrnRecord[]).filter(
       (g) => g.status === "qc_completed" && !invoicedGrnIds.has(g.id),
     );
   } catch {
@@ -588,8 +625,8 @@ export function getGrnsPendingInvoice(): import("@/app/(app)/warehouse/grnqc/grn
 
 /** Create a purchase invoice from a received GRN */
 export function createPurchaseFromGrn(input: GrnPurchaseInput): PurchaseInvoiceRecord {
-  if (!input.vendorId) throw new Error("Vendor is required.");
-  if (!input.vendorInvoiceNo.trim()) throw new Error("Vendor invoice number is required.");
+  if (!input.vendorId) throw new Error("Supplier is required.");
+  if (!input.vendorInvoiceNo.trim()) throw new Error("Supplier invoice number is required.");
   if (!input.lineItems.length) throw new Error("At least one line item is required.");
 
   const all = loadPurchaseInvoices();

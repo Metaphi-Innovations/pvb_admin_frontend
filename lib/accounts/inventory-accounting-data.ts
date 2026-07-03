@@ -5,7 +5,7 @@
 
 import { getQcPassedStockRecords } from "@/app/(app)/warehouse/stockoverview/mock-data";
 import type { QcPassedStockRecord } from "@/app/(app)/warehouse/stockoverview/types";
-import { getGrnRecords } from "@/app/(app)/warehouse/grnqc/grn/mock-data";
+import { getGrnRecords } from "@/app/(app)/warehouse/grn/mock-data";
 import { getDispatchRecords } from "@/app/(app)/warehouse/dispatch/mock-data";
 import { loadPricingRecords, findActivePricingForStock, ensurePricingDemoSeed } from "@/app/(app)/masters/pricing/pricing-data";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
@@ -822,7 +822,7 @@ export function ensureInventoryAccountingLedgers(): void {
   let changed = false;
   for (const spec of DEMO_LEDGER_SPECS) {
     const subGroup = records.find(
-      (r) => r.nodeLevel === "sub_group" && r.accountName === spec.subGroup,
+      (r) => r.nodeLevel === "account_group" && r.accountName === spec.subGroup,
     );
     if (!subGroup) continue;
     const exists = records.some(

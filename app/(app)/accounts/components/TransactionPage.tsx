@@ -145,8 +145,8 @@ export function TransactionPage({
 
         <div className="bg-white border border-border/60 rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-sm">
-              <thead className="bg-muted/20 border-b border-border/60">
+            <table className="accounts-table w-full min-w-[980px] text-sm">
+              <thead className="border-b border-border/60">
                 <tr>
                   <SortTh label={`${title} No.`} colKey="number" sortKey={sortKey} sortDir={sortDir} onSort={(k) => { setSortKey(k); setSortDir(sortDir === "asc" ? "desc" : "asc"); }} />
                   <SortTh label="Date" colKey="date" sortKey={sortKey} sortDir={sortDir} onSort={(k) => { setSortKey(k); setSortDir(sortDir === "asc" ? "desc" : "asc"); }} />
@@ -163,7 +163,7 @@ export function TransactionPage({
               </thead>
               <tbody>
                 {visible.map((r) => (
-                  <tr key={r.id} className="border-b border-border/40 last:border-0 h-11">
+                  <tr key={r.id} className="accounts-table-row group">
                     <td className="px-3 py-2 text-xs font-mono">{r.number}</td>
                     <td className="px-3 py-2 text-xs text-muted-foreground">{r.date}</td>
                     <td className="px-3 py-2 text-xs">{r.party}</td>

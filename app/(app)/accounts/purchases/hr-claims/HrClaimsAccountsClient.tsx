@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,11 @@ import {
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { SectionTabs, StatusBadge } from "../../components/AccountsUI";
+import {
+  ReportFilterRow,
+  ReportDateRangeFilter,
+  useReportDateRange,
+} from "@/components/accounts/ReportFilters";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import {
   claimApprovedImpactResolved,
@@ -59,6 +65,7 @@ export default function HrClaimsAccountsClient() {
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab") ?? "pending";
   const [tab, setTab] = useState(initialTab);
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [expenses, setExpenses] = useState(() => loadExpenses());
   const [payOpen, setPayOpen] = useState(false);
@@ -87,6 +94,8 @@ export default function HrClaimsAccountsClient() {
 
   const rows = useMemo(() => {
     return expenses.filter((ex) => {
+      if (dateFrom && ex.expenseDate < dateFrom) return false;
+      if (dateTo && ex.expenseDate > dateTo) return false;
       if (tab === "pending") {
         return ["submitted", "pending_approval"].includes(ex.status);
       }
@@ -95,7 +104,7 @@ export default function HrClaimsAccountsClient() {
       if (tab === "paid") return ex.paidStatus === "paid" || ex.status === "paid";
       return true;
     });
-  }, [expenses, tab]);
+  }, [expenses, tab, dateFrom, dateTo]);
 
   const selected = rows.find((r) => r.id === selectedId) ?? rows[0] ?? null;
   const approvedAmt = selected ? getApprovedAmount(selected) : 0;
@@ -133,6 +142,18 @@ export default function HrClaimsAccountsClient() {
       breadcrumbs={accountsBreadcrumb("Claims", "Employee Claims")}
       title="Expense / Claims from HR"
       description="Pending → Claims Payable → Payment Voucher → Paid Claims."
+      filters={
+        <ReportFilterRow>
+          <ReportDateRangeFilter
+            preset={preset}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onPresetChange={setPreset}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
+        </ReportFilterRow>
+      }
       layout="split"
     >
       <div className="flex flex-col lg:flex-row flex-1 min-h-0">
@@ -141,8 +162,8 @@ export default function HrClaimsAccountsClient() {
             <SectionTabs tabs={TABS} active={tab} onChange={setTab} counts={tabCounts} />
           </div>
           <div className="overflow-auto flex-1">
-            <table className="w-full text-xs min-w-[640px]">
-              <thead className="bg-muted/20 border-b sticky top-0">
+            <table className="accounts-table w-full min-w-[640px]">
+              <thead className="border-b">
                 <tr>
                   {["Claim No", "Employee", "Department", "Type", "Approved", "Status"].map((h) => (
                     <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground uppercase text-[10px]">{h}</th>
@@ -152,7 +173,7 @@ export default function HrClaimsAccountsClient() {
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-3 py-12 text-center text-muted-foreground text-xs">
+                    <td colSpan={6} className="accounts-table-empty">
                       No claims in this stage.
                     </td>
                   </tr>
@@ -160,7 +181,10 @@ export default function HrClaimsAccountsClient() {
                   rows.map((ex) => (
                     <tr
                       key={ex.id}
-                      className={`border-b border-border/30 cursor-pointer hover:bg-brand-50/30 ${selected?.id === ex.id ? "bg-brand-50/50" : ""}`}
+                      className={cn(
+                        "accounts-table-row group cursor-pointer",
+                        selected?.id === ex.id && "is-selected",
+                      )}
                       onClick={() => setSelectedId(ex.id)}
                     >
                       <td className="px-3 py-2 font-mono">{ex.expenseNumber}</td>
@@ -198,7 +222,7 @@ export default function HrClaimsAccountsClient() {
               {tab === "payable" && selected.paidStatus !== "paid" && (
                 <Button
                   size="sm"
-                  className="w-full h-8 text-xs mt-2 bg-brand-600 hover:bg-brand-700 text-white"
+                  className="w-full h-9 text-[13px] font-medium mt-2 bg-brand-600 hover:bg-brand-700 text-white"
                   onClick={() => {
                     setPayError(null);
                     setPaymentRef("");
@@ -251,12 +275,12 @@ export default function HrClaimsAccountsClient() {
             </p>
             <div className="space-y-1">
               <Label className="text-[11px]">Payment Date</Label>
-              <Input className="h-8 text-xs" type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+              <Input className="h-9 text-[13px] font-medium" type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-[11px]">Payment Mode</Label>
               <Select value={paymentMode} onValueChange={(v) => setPaymentMode(v as PaymentMode)}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-9 text-[13px] font-medium"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {PAYMENT_MODES.map((m) => (
                     <SelectItem key={m} value={m} className="text-xs">{m}</SelectItem>
@@ -267,7 +291,7 @@ export default function HrClaimsAccountsClient() {
             <div className="space-y-1">
               <Label className="text-[11px]">Bank Ledger (Paid From)</Label>
               <Select value={bankLedgerId} onValueChange={setBankLedgerId}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select bank ledger" /></SelectTrigger>
+                <SelectTrigger className="h-9 text-[13px] font-medium"><SelectValue placeholder="Select bank ledger" /></SelectTrigger>
                 <SelectContent>
                   {bankLedgers.map((l) => (
                     <SelectItem key={l.id} value={String(l.id)} className="text-xs">{l.accountName}</SelectItem>
@@ -277,14 +301,14 @@ export default function HrClaimsAccountsClient() {
             </div>
             <div className="space-y-1">
               <Label className="text-[11px]">Reference No.</Label>
-              <Input className="h-8 text-xs" value={paymentRef} onChange={(e) => setPaymentRef(e.target.value)} placeholder="UTR / Cheque no." />
+              <Input className="h-9 text-[13px] font-medium" value={paymentRef} onChange={(e) => setPaymentRef(e.target.value)} placeholder="UTR / Cheque no." />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setPayOpen(false)}>Cancel</Button>
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => setPayOpen(false)}>Cancel</Button>
             <Button
               size="sm"
-              className="h-8 text-xs bg-brand-600 text-white"
+              className="h-9 text-[13px] font-medium bg-brand-600 text-white"
               disabled={!bankLedgerId}
               onClick={handlePay}
             >

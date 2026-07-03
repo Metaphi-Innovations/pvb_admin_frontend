@@ -58,6 +58,8 @@ import {
 
   ClipboardCheck,
 
+  History,
+
 } from "lucide-react";
 
 
@@ -88,7 +90,7 @@ export interface AccountsNavLink {
 
 
 
-export type AccountsNavGroupId = "masters" | "transactions" | "receivables" | "payables" | "banking" | "reports";
+export type AccountsNavGroupId = "coa" | "transactions" | "receivables" | "payables" | "banking" | "reports";
 
 
 
@@ -142,14 +144,6 @@ export const VOUCHER_NAV_ITEMS: AccountsNavLink[] = [
 
 
 
-export const LEDGERS_NAV_ITEMS: AccountsNavLink[] = [
-
-  { label: "All Ledgers", href: "/accounts/masters/ledgers", icon: BookMarked },
-
-];
-
-
-
 export const SALES_NAV_ITEMS: AccountsNavLink[] = [
 
   { label: "Pending Tax Invoices", href: "/accounts/sales/pending-tax-invoices", icon: ClipboardList },
@@ -174,9 +168,9 @@ export const SALES_SIDEBAR_ITEMS: AccountsNavLink[] = [
 
 /** Trimmed purchases sidebar */
 export const PURCHASES_SIDEBAR_ITEMS: AccountsNavLink[] = [
-  { label: "Pending Vendor Bills", href: "/accounts/purchases/pending-vendor-bills", icon: ClipboardList },
+  { label: "Pending Supplier Bills", href: "/accounts/purchases/pending-vendor-bills", icon: ClipboardList },
   { label: "Purchase Invoices", href: "/accounts/purchase-invoices", icon: Truck },
-  { label: "Vendor Outstanding", href: "/accounts/payables/outstanding", icon: Truck },
+  { label: "Supplier Outstanding", href: "/accounts/payables/outstanding", icon: Truck },
   { label: "Debit Notes", href: "/accounts/transactions/debit-notes", icon: FileText },
 ];
 
@@ -236,13 +230,13 @@ export function isChartOfAccountsRoute(pathname: string): boolean {
 
 export const PURCHASES_NAV_ITEMS: AccountsNavLink[] = [
 
-  { label: "Pending Vendor Bills", href: "/accounts/purchases/pending-vendor-bills", icon: ClipboardList },
+  { label: "Pending Supplier Bills", href: "/accounts/purchases/pending-vendor-bills", icon: ClipboardList },
 
   { label: "Purchase Invoices", href: "/accounts/purchase-invoices", icon: Truck },
 
   { label: "Purchase Register", href: "/accounts/reports/purchase-register", icon: Receipt },
 
-  { label: "Vendor Outstanding", href: "/accounts/payables/outstanding", icon: Truck },
+  { label: "Supplier Outstanding", href: "/accounts/payables/outstanding", icon: Truck },
 
 ];
 
@@ -284,9 +278,13 @@ export const CLAIMS_SIDEBAR_ITEMS: AccountsNavLink[] = [
 
 export const BANKING_NAV_ITEMS: AccountsNavLink[] = [
 
+  { label: "Bank Accounts", href: "/accounts/banking/bank-accounts", icon: Landmark },
+
   { label: "Bank Book", href: "/accounts/reports/bank-book", icon: BookOpen },
 
   { label: "Cash Book", href: "/accounts/reports/cash-book", icon: Banknote },
+
+  { label: "Fund Transfer", href: "/accounts/banking/fund-transfer", icon: ArrowLeftRight },
 
   { label: "Bank Reconciliation", href: "/accounts/banking/reconciliation", icon: Scale },
 
@@ -302,8 +300,6 @@ export const REPORTS_NAV_ITEMS: AccountsNavLink[] = [
 
   { label: "Balance Sheet", href: "/accounts/reports/balance-sheet", icon: FileSpreadsheet },
 
-  { label: "Customer Outstanding", href: "/accounts/receivables/outstanding", icon: Users },
-
   { label: "GST Summary", href: "/accounts/reports/gst", icon: Layers },
 
   { label: "Sales Register", href: "/accounts/reports/sales-register", icon: Receipt },
@@ -318,11 +314,12 @@ export const REPORTS_NAV_ITEMS: AccountsNavLink[] = [
 
 
 
-/** Demo accounting menu — Masters */
-export const ACCOUNTS_MASTERS_NAV: AccountsNavLink[] = [
-  { label: "Chart of Accounts", href: CHART_OF_ACCOUNTS_HREF, icon: FolderTree },
-  { label: "Ledgers", href: "/accounts/masters/ledgers", icon: BookMarked },
-];
+/** Chart of Accounts — sole accounting master (sidebar top-level link + mega-menu tab). */
+export const ACCOUNTS_COA_NAV: AccountsNavLink = {
+  label: "Chart of Accounts",
+  href: CHART_OF_ACCOUNTS_HREF,
+  icon: FolderTree,
+};
 
 /** Demo accounting menu — Transactions */
 export const ACCOUNTS_TRANSACTIONS_NAV: AccountsNavLink[] = [
@@ -347,8 +344,9 @@ export const ACCOUNTS_RECEIVABLES_NAV: AccountsNavLink[] = [
 
 /** Demo accounting menu — Payables */
 export const ACCOUNTS_PAYABLES_NAV: AccountsNavLink[] = [
-  { label: "Vendor Outstanding", href: "/accounts/payables/outstanding", icon: Truck },
-  { label: "Vendor Ageing", href: "/accounts/payables/ageing", icon: CalendarRange },
+  { label: "Supplier Outstanding", href: "/accounts/payables/outstanding", icon: Truck },
+  { label: "Supplier Ageing", href: "/accounts/payables/ageing", icon: CalendarRange },
+  { label: "Payment Allocation", href: "/accounts/payables/payment-allocation", icon: Receipt },
 ];
 
 /** Demo accounting menu — Banking */
@@ -369,16 +367,20 @@ export const ACCOUNTS_REPORTS_NAV: AccountsNavLink[] = [
   { label: "General Ledger", href: "/accounts/reports/ledger", icon: BookOpen },
   { label: "Day Book", href: "/accounts/reports/day-book", icon: BookMarked },
   { label: "GST Summary", href: "/accounts/reports/gst", icon: Layers },
+  { label: "TDS Summary", href: "/accounts/reports/tds-party-wise", icon: FileText },
   { label: "Sales Register", href: "/accounts/reports/sales-register", icon: Receipt },
   { label: "Purchase Register", href: "/accounts/reports/purchase-register", icon: Receipt },
   { label: "Stock Valuation", href: "/accounts/reports/stock-valuation", icon: BarChart3 },
   { label: "Inventory Register", href: "/accounts/reports/inventory-register", icon: Package },
-  { label: "Customer Outstanding", href: "/accounts/receivables/outstanding", icon: Users },
-  { label: "Vendor Outstanding", href: "/accounts/payables/outstanding", icon: Truck },
+  { label: "Customer Ledger", href: "/accounts/reports/customer-ledger", icon: Users },
+  { label: "Supplier Ledger", href: "/accounts/reports/supplier-ledger", icon: Truck },
+  { label: "Journal Register", href: "/accounts/reports/journal-register", icon: NotebookPen },
+  { label: "Stock Ledger", href: "/accounts/reports/stock-ledger", icon: Boxes },
+  { label: "Audit Trail", href: "/accounts/reports/audit-trail", icon: History },
 ];
 
 export const ACCOUNTS_NAV_GROUPS: AccountsNavGroup[] = [
-  { id: "masters", label: "Masters", icon: FolderTree, items: ACCOUNTS_MASTERS_NAV },
+  { id: "coa", label: "Chart of Accounts", icon: FolderTree, items: [ACCOUNTS_COA_NAV] },
   { id: "transactions", label: "Transactions", icon: ArrowLeftRight, items: ACCOUNTS_TRANSACTIONS_NAV },
   { id: "receivables", label: "Receivables", icon: Users, items: ACCOUNTS_RECEIVABLES_NAV },
   { id: "payables", label: "Payables", icon: Truck, items: ACCOUNTS_PAYABLES_NAV },
@@ -386,27 +388,36 @@ export const ACCOUNTS_NAV_GROUPS: AccountsNavGroup[] = [
   { id: "reports", label: "Reports", icon: BarChart3, items: ACCOUNTS_REPORTS_NAV },
 ];
 
+/** Collapsible sidebar groups (Chart of Accounts is rendered as a top-level link). */
+export const ACCOUNTS_SIDEBAR_GROUPS: AccountsNavGroup[] = ACCOUNTS_NAV_GROUPS.filter(
+  (g) => g.id !== "coa",
+);
 
-
-export const ACCOUNTS_NAV_ITEMS = ACCOUNTS_NAV_GROUPS.flatMap((g) => g.items);
+export const ACCOUNTS_NAV_ITEMS = [ACCOUNTS_COA_NAV, ...ACCOUNTS_NAV_GROUPS.flatMap((g) => g.items)];
 
 
 
 /** Map route prefixes to sidebar group for pages not listed in nav items. */
 const ROUTE_GROUP_PREFIXES: { prefix: string; groupId: AccountsNavGroupId }[] = [
-  { prefix: CHART_OF_ACCOUNTS_HREF, groupId: "masters" },
-  { prefix: "/accounts/masters/", groupId: "masters" },
-  { prefix: "/accounts/settings", groupId: "masters" },
+  { prefix: CHART_OF_ACCOUNTS_HREF, groupId: "coa" },
+  { prefix: "/accounts/masters/chart-of-accounts", groupId: "coa" },
+  { prefix: "/accounts/masters/ledgers", groupId: "coa" },
+  { prefix: "/accounts/masters/gst", groupId: "coa" },
+  { prefix: "/accounts/masters/hsn", groupId: "coa" },
+  { prefix: "/accounts/masters/bank-accounts", groupId: "coa" },
+  { prefix: "/accounts/masters/", groupId: "coa" },
+  { prefix: "/accounts/settings", groupId: "coa" },
   { prefix: "/accounts/transactions/", groupId: "transactions" },
   { prefix: "/accounts/vouchers", groupId: "transactions" },
   { prefix: "/accounts/sales/", groupId: "transactions" },
   { prefix: "/accounts/purchases/", groupId: "transactions" },
+  { prefix: "/accounts/purchase-invoices", groupId: "transactions" },
   { prefix: "/accounts/receivables/", groupId: "receivables" },
   { prefix: "/accounts/payables/", groupId: "payables" },
   { prefix: "/accounts/banking/", groupId: "banking" },
   { prefix: "/accounts/bank-reconciliation", groupId: "banking" },
   { prefix: "/accounts/reports/", groupId: "reports" },
-  { prefix: "/accounts/dashboard", groupId: "masters" },
+  { prefix: "/accounts/dashboard", groupId: "coa" },
 ];
 
 
@@ -423,7 +434,7 @@ export function resolveAccountsNavGroupId(pathname: string): AccountsNavGroupId 
 
   }
 
-  return "masters";
+  return "coa";
 
 }
 
@@ -529,37 +540,25 @@ export function isAccountsNavActive(pathname: string, href: string): boolean {
 
   if (href === CHART_OF_ACCOUNTS_HREF && pathname.startsWith(CHART_OF_ACCOUNTS_HREF)) return true;
 
-  if (href.startsWith("/accounts/masters/ledgers") && pathname.startsWith("/accounts/masters/ledgers")) {
-
-    if (typeof window === "undefined") {
-
-      return href === "/accounts/masters/ledgers" && pathname === href;
-
-    }
-
-    const params = new URLSearchParams(window.location.search);
-
-    if (href.includes("type=")) {
-
-      const expected = new URLSearchParams(href.split("?")[1] ?? "");
-
-      for (const [k, v] of expected.entries()) {
-
-        if (params.get(k) !== v) return false;
-
-      }
-
-      return pathname === "/accounts/masters/ledgers" || pathname.startsWith("/accounts/masters/ledgers/");
-
-    }
-
-    return pathname === "/accounts/masters/ledgers" && !params.get("type");
-
-  }
-
   if (href.startsWith("/accounts/masters/") && pathname.startsWith(hrefBase)) return true;
 
   if (href.startsWith("/accounts/reports/") && pathname === hrefBase) return true;
+
+  if (
+    href === "/accounts/receivables/outstanding" &&
+    (pathname.startsWith("/accounts/receivables/outstanding") ||
+      pathname.startsWith("/accounts/receivables/ageing"))
+  ) {
+    return true;
+  }
+
+  if (
+    href === "/accounts/payables/outstanding" &&
+    (pathname.startsWith("/accounts/payables/outstanding") ||
+      pathname.startsWith("/accounts/payables/ageing"))
+  ) {
+    return true;
+  }
 
   if (href.startsWith("/accounts/receivables/") && pathname.startsWith(hrefBase)) return true;
 
@@ -588,11 +587,11 @@ export function isAccountsNavActive(pathname: string, href: string): boolean {
 
 
 const GROUP_DESCRIPTIONS: Record<AccountsNavGroupId, string> = {
-  masters: "Chart of accounts and ledgers — accounting structure and balances.",
+  coa: "Assets, liabilities, income and expense ledgers — the sole accounting master.",
   transactions: "Sales, purchase, credit/debit notes, vouchers, and journal entries.",
-  receivables: "Customer outstanding, ageing, collections and receipt allocation.",
-  payables: "Vendor outstanding and ageing reports.",
-  banking: "Bank accounts, books, fund transfers and reconciliation.",
+  receivables: "Customer outstanding, collections and receipt allocation.",
+  payables: "Supplier outstanding and payment tracking.",
+  banking: "Company bank accounts, bank book, cash book, fund transfers and reconciliation.",
   reports: "Trial balance, P&L, balance sheet and financial reports.",
 };
 
@@ -602,7 +601,7 @@ const GROUP_DESCRIPTIONS: Record<AccountsNavGroupId, string> = {
 
 const NAV_ITEM_SHORT_DESCRIPTIONS: Record<string, string> = {
 
-  "Chart of Accounts": "View-only account hierarchy",
+  "Chart of Accounts": "Assets, liabilities, income and expense ledgers",
 
   "Cost Centers": "Department and cost allocation structure",
 
@@ -616,15 +615,13 @@ const NAV_ITEM_SHORT_DESCRIPTIONS: Record<string, string> = {
 
   "Customer Outstanding": "Open customer balances",
 
-  "Pending Vendor Bills": "GRN-completed bills to enter",
+  "Pending Supplier Bills": "GRN-completed bills to enter",
 
-  "Purchase Invoices": "Vendor bills and GST input",
+  "Purchase Invoices": "Supplier bills and GST input",
 
   "Purchase Register": "All purchase voucher summary",
 
-  "Vendor Outstanding": "Open vendor balances",
-
-  "All Ledgers": "Filter by customer, vendor, bank and more",
+  "Supplier Outstanding": "Open supplier balances",
 
   "Inventory Ledger": "Stock ledger under COA",
 
@@ -632,11 +629,23 @@ const NAV_ITEM_SHORT_DESCRIPTIONS: Record<string, string> = {
 
   "Claims Register": "Paid employee claims history",
 
+  "Bank Accounts": "Company bank ledgers for receipts, payments and reconciliation",
+
   "Bank Reconciliation": "Match bank statement lines",
 
   "Trial Balance": "Debit/credit summary by ledger",
 
   "GST Summary": "Output and input GST summary",
+
+  "Customer Ledger": "Customer account voucher ledger",
+
+  "Supplier Ledger": "Supplier account voucher ledger",
+
+  "Journal Register": "All journal voucher lines",
+
+  "Stock Ledger": "Item-wise stock movement register",
+
+  "Audit Trail": "Accounting actions and change log",
 
 };
 
@@ -664,8 +673,8 @@ const SETUP_LINK_DESCRIPTIONS: Record<string, string> = {
 
 /** Left / right column order for mega-menu (remaining groups split evenly) */
 const MEGA_MENU_COLUMN_ORDER: Partial<Record<AccountsNavGroupId, { left: string[]; right: string[] }>> = {
-  masters: {
-    left: ["Chart of Accounts", "Ledgers"],
+  coa: {
+    left: ["Chart of Accounts"],
     right: [],
   },
   transactions: {
@@ -673,20 +682,39 @@ const MEGA_MENU_COLUMN_ORDER: Partial<Record<AccountsNavGroupId, { left: string[
     right: ["Receipt Voucher", "Payment Voucher", "Journal Voucher", "Contra Voucher"],
   },
   receivables: {
-    left: ["Customer Outstanding", "Customer Ageing"],
-    right: ["Collection Tracking", "Receipt Allocation"],
+    left: ["Customer Outstanding", "Customer Ageing", "Collection Tracking"],
+    right: ["Receipt Allocation"],
   },
   payables: {
-    left: ["Vendor Outstanding"],
-    right: ["Vendor Ageing"],
+    left: ["Supplier Outstanding", "Supplier Ageing"],
+    right: ["Payment Allocation"],
   },
   banking: {
     left: ["Bank Accounts", "Bank Book", "Cash Book"],
     right: ["Fund Transfer", "Bank Reconciliation"],
   },
   reports: {
-    left: ["Trial Balance", "Profit & Loss", "Balance Sheet", "Cash Flow", "General Ledger", "Day Book"],
-    right: ["GST Summary", "Sales Register", "Purchase Register", "Stock Valuation", "Customer Outstanding"],
+    left: [
+      "Trial Balance",
+      "Profit & Loss",
+      "Balance Sheet",
+      "Cash Flow",
+      "General Ledger",
+      "Day Book",
+      "Customer Ledger",
+      "Supplier Ledger",
+      "Journal Register",
+    ],
+    right: [
+      "GST Summary",
+      "TDS Summary",
+      "Sales Register",
+      "Purchase Register",
+      "Stock Valuation",
+      "Inventory Register",
+      "Stock Ledger",
+      "Audit Trail",
+    ],
   },
 };
 

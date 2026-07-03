@@ -184,7 +184,7 @@ export function RejectedListing({ rejectedForWarehouse }: RejectedListingProps) 
         onSortChange={setSort}
         onFilterChange={setFilters}
         actions={actions}
-        emptyMessage="rejected stock records"
+        emptyMessage=""
         searchPlaceholder="Search Rejected Stock..."
       />
     </div>

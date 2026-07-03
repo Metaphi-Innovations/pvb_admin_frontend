@@ -5,62 +5,232 @@ import {
   saveVouchers,
   type AccountingVoucher,
 } from "@/app/(app)/accounts/vouchers/voucher-data";
-import { loadChartOfAccounts, nextId } from "@/app/(app)/accounts/data";
+import { loadChartOfAccounts, nextId, type ChartOfAccount } from "@/app/(app)/accounts/data";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
-import { listBankAccountSelectOptions } from "@/lib/accounts/bank-accounts-data";
+import {
+  listBankAccountSelectOptions,
+  loadBankAccountMasters,
+} from "@/lib/accounts/bank-accounts-data";
+import { isBankAccountLedger } from "@/lib/accounts/bank-coa-utils";
+import { computeLedgerCurrentBalance } from "@/app/(app)/accounts/masters/ledgers/ledgers-utils";
+import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 
-export type FundTransferType =
-  | "bank_to_bank"
-  | "cash_to_bank"
-  | "bank_to_cash"
-  | "branch_transfer";
+export type FundTransferMode =
+  | "neft"
+  | "rtgs"
+  | "imps"
+  | "upi"
+  | "cheque"
+  | "cash_deposit"
+  | "cash_withdrawal";
 
-export type FundTransferStatus = "draft" | "posted" | "cancelled";
+export type FundTransferStatus = "completed" | "cancelled";
 
 export interface FundTransferRecord {
   id: number;
   transferDate: string;
-  transferType: FundTransferType;
+  transferNo: string;
+  transferMode: FundTransferMode;
   fromAccountId: number;
   fromAccountName: string;
   toAccountId: number;
   toAccountName: string;
   amount: number;
-  referenceNumber: string;
-  remarks: string;
+  referenceNo: string;
+  narration: string;
+  attachmentName?: string;
+  attachmentDataUrl?: string;
   status: FundTransferStatus;
   voucherId: number | null;
-  branch: string;
+  financialYearId: number | null;
   createdBy: string;
   updatedBy: string;
+  createdDate: string;
+  updatedDate: string;
 }
 
 export interface CreateFundTransferInput {
   transferDate: string;
-  transferType: FundTransferType;
+  transferMode: FundTransferMode;
   fromAccountId: number;
   toAccountId: number;
   amount: number;
-  referenceNumber: string;
-  remarks: string;
-  post?: boolean;
+  referenceNo: string;
+  narration: string;
+  attachmentName?: string;
+  attachmentDataUrl?: string;
 }
 
-const STORAGE_KEY = "ds_accounts_fund_transfers_v1";
+export interface FundTransferFilters {
+  search?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  financialYearId?: number | "all";
+  fromAccountId?: number | "all";
+  toAccountId?: number | "all";
+  transferMode?: FundTransferMode | "all";
+}
 
-export const FUND_TRANSFER_TYPE_LABELS: Record<FundTransferType, string> = {
-  bank_to_bank: "Bank to Bank",
-  cash_to_bank: "Cash to Bank",
-  bank_to_cash: "Bank to Cash",
-  branch_transfer: "Branch Transfer",
+export interface FundTransferAccountingLine {
+  ledgerName: string;
+  debit: number;
+  credit: number;
+}
+
+const STORAGE_KEY = "ds_accounts_fund_transfers_v2";
+
+export const FUND_TRANSFER_MODE_LABELS: Record<FundTransferMode, string> = {
+  neft: "NEFT",
+  rtgs: "RTGS",
+  imps: "IMPS",
+  upi: "UPI",
+  cheque: "Cheque",
+  cash_deposit: "Cash Deposit",
+  cash_withdrawal: "Cash Withdrawal",
 };
+
+export const FUND_TRANSFER_MODES = Object.keys(FUND_TRANSFER_MODE_LABELS) as FundTransferMode[];
+
+const REFERENCE_REQUIRED_MODES: FundTransferMode[] = ["neft", "rtgs", "imps", "upi", "cheque"];
+
+function todayStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function isCashLedger(ledger: ChartOfAccount): boolean {
+  const cashIds = new Set(getLedgersUnderSubGroupName("Cash-in-Hand").map((l) => l.id));
+  return cashIds.has(ledger.id);
+}
+
+export function formatTransferAccountName(ledgerId: number): string {
+  const master = loadBankAccountMasters().find((m) => m.coaLedgerId === ledgerId);
+  if (master) {
+    const typeLabel =
+      master.accountType === "OD"
+        ? "OD Account"
+        : master.accountType === "CC"
+          ? "CC Account"
+          : master.accountType === "Savings"
+            ? "Savings Account"
+            : "Current Account";
+    return `${master.bankName} ${typeLabel}`;
+  }
+
+  const ledger = loadChartOfAccounts().find((r) => r.id === ledgerId);
+  if (!ledger) return `Ledger #${ledgerId}`;
+  if (ledger.accountName.toLowerCase().includes("petty")) return "Cash in Hand";
+  return ledger.accountName;
+}
+
+export function listAllTransferAccountOptions(): { id: number; label: string }[] {
+  const bankOptions = listBankAccountSelectOptions().map((b) => ({
+    id: b.coaLedgerId,
+    label: formatTransferAccountName(b.coaLedgerId),
+  }));
+  const cashOptions = getLedgersUnderSubGroupName("Cash-in-Hand").map((l) => ({
+    id: l.id,
+    label: formatTransferAccountName(l.id),
+  }));
+  const seen = new Set<number>();
+  return [...bankOptions, ...cashOptions].filter((o) => {
+    if (seen.has(o.id)) return false;
+    seen.add(o.id);
+    return true;
+  });
+}
+
+export function listTransferAccountOptions(mode: FundTransferMode): {
+  from: { id: number; label: string }[];
+  to: { id: number; label: string }[];
+} {
+  const bankOptions = listBankAccountSelectOptions().map((b) => ({
+    id: b.coaLedgerId,
+    label: formatTransferAccountName(b.coaLedgerId),
+  }));
+  const cashOptions = getLedgersUnderSubGroupName("Cash-in-Hand").map((l) => ({
+    id: l.id,
+    label: formatTransferAccountName(l.id),
+  }));
+
+  switch (mode) {
+    case "cash_deposit":
+      return { from: cashOptions, to: bankOptions };
+    case "cash_withdrawal":
+      return { from: bankOptions, to: cashOptions };
+    default:
+      return { from: bankOptions, to: bankOptions };
+  }
+}
+
+export function getAvailableTransferBalance(ledgerId: number): number {
+  const ledger = loadChartOfAccounts().find((r) => r.id === ledgerId);
+  if (!ledger) return 0;
+  const bal = computeLedgerCurrentBalance(ledger);
+  return bal.balanceType === "Debit" ? bal.amount : 0;
+}
+
+function resolveFinancialYearId(date: string): number | null {
+  const fy = loadFinancialYears().find((y) => date >= y.startDate && date <= y.endDate);
+  return fy?.id ?? null;
+}
+
+function normalizeLegacyRecord(raw: Record<string, unknown>): FundTransferRecord | null {
+  if (!raw.id || !raw.transferDate) return null;
+
+  const legacyType = raw.transferType as string | undefined;
+  const legacyStatus = raw.status as string | undefined;
+  const legacyMode = raw.transferMode as FundTransferMode | undefined;
+
+  let transferMode: FundTransferMode = legacyMode ?? "neft";
+  if (!legacyMode && legacyType) {
+    if (legacyType === "cash_to_bank") transferMode = "cash_deposit";
+    else if (legacyType === "bank_to_cash") transferMode = "cash_withdrawal";
+    else transferMode = "neft";
+  }
+
+  const status: FundTransferStatus = legacyStatus === "cancelled" ? "cancelled" : "completed";
+
+  const transferNo =
+    (raw.transferNo as string) ||
+    (raw.referenceNumber as string) ||
+    generateTransferNo([]);
+
+  return {
+    id: Number(raw.id),
+    transferDate: String(raw.transferDate),
+    transferNo,
+    transferMode,
+    fromAccountId: Number(raw.fromAccountId),
+    fromAccountName: String(raw.fromAccountName ?? formatTransferAccountName(Number(raw.fromAccountId))),
+    toAccountId: Number(raw.toAccountId),
+    toAccountName: String(raw.toAccountName ?? formatTransferAccountName(Number(raw.toAccountId))),
+    amount: Number(raw.amount),
+    referenceNo: String(raw.referenceNo ?? raw.referenceNumber ?? ""),
+    narration: String(raw.narration ?? raw.remarks ?? ""),
+    attachmentName: raw.attachmentName as string | undefined,
+    attachmentDataUrl: raw.attachmentDataUrl as string | undefined,
+    status,
+    voucherId: raw.voucherId != null ? Number(raw.voucherId) : null,
+    financialYearId:
+      raw.financialYearId != null
+        ? Number(raw.financialYearId)
+        : resolveFinancialYearId(String(raw.transferDate)),
+    createdBy: String(raw.createdBy ?? ACCOUNTS_CURRENT_USER),
+    updatedBy: String(raw.updatedBy ?? ACCOUNTS_CURRENT_USER),
+    createdDate: String(raw.createdDate ?? raw.transferDate ?? todayStr()),
+    updatedDate: String(raw.updatedDate ?? raw.transferDate ?? todayStr()),
+  };
+}
 
 function loadAll(): FundTransferRecord[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw) as FundTransferRecord[];
+    const parsed = JSON.parse(raw) as unknown[];
+    return parsed
+      .map((item) => normalizeLegacyRecord(item as Record<string, unknown>))
+      .filter((r): r is FundTransferRecord => r != null);
   } catch {
     return [];
   }
@@ -72,57 +242,84 @@ function saveAll(list: FundTransferRecord[]) {
 }
 
 export function loadFundTransfers(): FundTransferRecord[] {
-  return loadAll().sort((a, b) => b.transferDate.localeCompare(a.transferDate));
+  return loadAll().sort((a, b) => {
+    const dateCmp = b.transferDate.localeCompare(a.transferDate);
+    if (dateCmp !== 0) return dateCmp;
+    return b.transferNo.localeCompare(a.transferNo);
+  });
 }
 
 export function getFundTransferById(id: number): FundTransferRecord | undefined {
   return loadAll().find((t) => t.id === id);
 }
 
-export function listTransferAccountOptions(transferType: FundTransferType): {
-  from: { id: number; label: string }[];
-  to: { id: number; label: string }[];
-} {
-  const bankOptions = listBankAccountSelectOptions().map((b) => ({
-    id: b.coaLedgerId,
-    label: b.label,
-  }));
-  const cashOptions = getLedgersUnderSubGroupName("Cash-in-Hand").map((l) => ({
-    id: l.id,
-    label: l.accountName,
-  }));
-
-  switch (transferType) {
-    case "bank_to_bank":
-      return { from: bankOptions, to: bankOptions };
-    case "cash_to_bank":
-      return { from: cashOptions, to: bankOptions };
-    case "bank_to_cash":
-      return { from: bankOptions, to: cashOptions };
-    case "branch_transfer":
-      return { from: cashOptions, to: cashOptions };
-  }
-}
-
-function resolveAccountName(ledgerId: number): string {
-  const ledger = loadChartOfAccounts().find((r) => r.id === ledgerId);
-  return ledger?.accountName ?? `Ledger #${ledgerId}`;
-}
-
-function generateReference(existing: FundTransferRecord[]): string {
-  const nums = existing
-    .map((t) => t.referenceNumber.match(/FT-(\d+)/)?.[1])
+export function generateTransferNo(existing?: FundTransferRecord[]): string {
+  const list = existing ?? loadAll();
+  const nums = list
+    .map((t) => t.transferNo.match(/FT-(\d+)/)?.[1])
     .filter(Boolean)
     .map((n) => parseInt(n!, 10));
   const next = nums.length ? Math.max(...nums) + 1 : 1;
   return `FT-${String(next).padStart(4, "0")}`;
 }
 
+export function peekNextTransferNo(): string {
+  return generateTransferNo();
+}
+
+export function validateFundTransferInput(
+  input: CreateFundTransferInput,
+  options?: { skipBalanceCheck?: boolean },
+): string | null {
+  if (!input.transferDate) return "Transfer date is required.";
+  if (!input.fromAccountId || !input.toAccountId) return "From Account and To Account are required.";
+  if (input.fromAccountId === input.toAccountId) return "From Account and To Account cannot be the same.";
+  if (!input.amount || input.amount <= 0) return "Amount must be greater than zero.";
+
+  const fromLedger = loadChartOfAccounts().find((r) => r.id === input.fromAccountId);
+  const toLedger = loadChartOfAccounts().find((r) => r.id === input.toAccountId);
+  if (!fromLedger || !toLedger) return "Selected account could not be found.";
+
+  const fromIsCash = isCashLedger(fromLedger);
+  const fromIsBank = isBankAccountLedger(fromLedger);
+  const toIsCash = isCashLedger(toLedger);
+  const toIsBank = isBankAccountLedger(toLedger);
+
+  if (input.transferMode === "cash_deposit") {
+    if (!fromIsCash || !toIsBank) {
+      return "Cash Deposit requires From Account as Cash and To Account as Bank.";
+    }
+  } else if (input.transferMode === "cash_withdrawal") {
+    if (!fromIsBank || !toIsCash) {
+      return "Cash Withdrawal requires From Account as Bank and To Account as Cash.";
+    }
+  } else {
+    if (!fromIsBank || !toIsBank) {
+      return "This transfer mode requires both accounts to be bank accounts.";
+    }
+  }
+
+  if (REFERENCE_REQUIRED_MODES.includes(input.transferMode) && !input.referenceNo.trim()) {
+    return `Reference No. is required for ${FUND_TRANSFER_MODE_LABELS[input.transferMode]}.`;
+  }
+
+  if (!options?.skipBalanceCheck) {
+    const available = getAvailableTransferBalance(input.fromAccountId);
+    if (input.amount > available) {
+      return `Insufficient balance in ${formatTransferAccountName(input.fromAccountId)}. Available: ₹${available.toLocaleString("en-IN")}.`;
+    }
+  }
+
+  return null;
+}
+
 function postTransferVoucher(transfer: FundTransferRecord): AccountingVoucher {
   const voucher = createVoucher("contra", {
     date: transfer.transferDate,
-    referenceNo: transfer.referenceNumber,
-    narration: transfer.remarks || `Fund transfer ${transfer.fromAccountName} → ${transfer.toAccountName}`,
+    referenceNo: transfer.referenceNo || transfer.transferNo,
+    narration:
+      transfer.narration ||
+      `Fund transfer ${transfer.fromAccountName} → ${transfer.toAccountName}`,
     status: "posted",
     lines: [
       {
@@ -131,7 +328,7 @@ function postTransferVoucher(transfer: FundTransferRecord): AccountingVoucher {
         ledgerName: transfer.toAccountName,
         debit: transfer.amount,
         credit: 0,
-        remarks: `Transfer in — ${transfer.referenceNumber}`,
+        remarks: `Transfer in — ${transfer.transferNo}`,
       },
       {
         id: 2,
@@ -139,7 +336,7 @@ function postTransferVoucher(transfer: FundTransferRecord): AccountingVoucher {
         ledgerName: transfer.fromAccountName,
         debit: 0,
         credit: transfer.amount,
-        remarks: `Transfer out — ${transfer.referenceNumber}`,
+        remarks: `Transfer out — ${transfer.transferNo}`,
       },
     ],
   });
@@ -147,72 +344,150 @@ function postTransferVoucher(transfer: FundTransferRecord): AccountingVoucher {
   const list = loadVouchers();
   const idx = list.findIndex((v) => v.id === voucher.id);
   if (idx >= 0) {
-    list[idx] = { ...list[idx], voucherNumber: transfer.referenceNumber };
+    list[idx] = { ...list[idx], voucherNumber: transfer.transferNo };
     saveVouchers(list);
   }
-  return { ...voucher, voucherNumber: transfer.referenceNumber };
+  return { ...voucher, voucherNumber: transfer.transferNo };
+}
+
+export function buildAccountingEntryPreview(
+  transfer: Pick<
+    FundTransferRecord,
+    "fromAccountName" | "toAccountName" | "amount"
+  >,
+): FundTransferAccountingLine[] {
+  return [
+    { ledgerName: transfer.toAccountName, debit: transfer.amount, credit: 0 },
+    { ledgerName: transfer.fromAccountName, debit: 0, credit: transfer.amount },
+  ];
+}
+
+export function filterFundTransfers(
+  records: FundTransferRecord[],
+  filters: FundTransferFilters,
+): FundTransferRecord[] {
+  const q = filters.search?.trim().toLowerCase() ?? "";
+
+  return records.filter((r) => {
+    if (filters.dateFrom && r.transferDate < filters.dateFrom) return false;
+    if (filters.dateTo && r.transferDate > filters.dateTo) return false;
+    if (
+      filters.financialYearId &&
+      filters.financialYearId !== "all" &&
+      r.financialYearId !== filters.financialYearId
+    ) {
+      return false;
+    }
+    if (
+      filters.fromAccountId &&
+      filters.fromAccountId !== "all" &&
+      r.fromAccountId !== filters.fromAccountId
+    ) {
+      return false;
+    }
+    if (
+      filters.toAccountId &&
+      filters.toAccountId !== "all" &&
+      r.toAccountId !== filters.toAccountId
+    ) {
+      return false;
+    }
+    if (
+      filters.transferMode &&
+      filters.transferMode !== "all" &&
+      r.transferMode !== filters.transferMode
+    ) {
+      return false;
+    }
+    if (q) {
+      const haystack = [
+        r.transferNo,
+        r.referenceNo,
+        r.fromAccountName,
+        r.toAccountName,
+        r.narration,
+        FUND_TRANSFER_MODE_LABELS[r.transferMode],
+        r.status,
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+export type FundTransferSortKey =
+  | "transferDate"
+  | "transferNo"
+  | "fromAccountName"
+  | "toAccountName"
+  | "amount"
+  | "transferMode"
+  | "referenceNo"
+  | "status";
+
+export function sortFundTransfers(
+  records: FundTransferRecord[],
+  sortKey: FundTransferSortKey,
+  sortDir: "asc" | "desc",
+): FundTransferRecord[] {
+  const dir = sortDir === "asc" ? 1 : -1;
+  return [...records].sort((a, b) => {
+    const av = (a as unknown as Record<string, unknown>)[sortKey];
+    const bv = (b as unknown as Record<string, unknown>)[sortKey];
+    if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
+    return String(av ?? "").localeCompare(String(bv ?? "")) * dir;
+  });
 }
 
 export function createFundTransfer(input: CreateFundTransferInput): FundTransferRecord {
-  if (input.fromAccountId === input.toAccountId) {
-    throw new Error("From and To accounts must be different.");
-  }
-  if (input.amount <= 0) throw new Error("Transfer amount must be greater than zero.");
-  if (!input.transferDate) throw new Error("Transfer date is required.");
+  const validationError = validateFundTransferInput(input);
+  if (validationError) throw new Error(validationError);
 
   const list = loadAll();
-  const fromName = resolveAccountName(input.fromAccountId);
-  const toName = resolveAccountName(input.toAccountId);
+  const fromName = formatTransferAccountName(input.fromAccountId);
+  const toName = formatTransferAccountName(input.toAccountId);
+  const now = todayStr();
 
   const row: FundTransferRecord = {
     id: nextId(list),
     transferDate: input.transferDate,
-    transferType: input.transferType,
+    transferNo: generateTransferNo(list),
+    transferMode: input.transferMode,
     fromAccountId: input.fromAccountId,
     fromAccountName: fromName,
     toAccountId: input.toAccountId,
     toAccountName: toName,
     amount: input.amount,
-    referenceNumber: input.referenceNumber.trim() || generateReference(list),
-    remarks: input.remarks.trim(),
-    status: input.post ? "posted" : "draft",
+    referenceNo: input.referenceNo.trim(),
+    narration: input.narration.trim(),
+    attachmentName: input.attachmentName,
+    attachmentDataUrl: input.attachmentDataUrl,
+    status: "completed",
     voucherId: null,
-    branch: "Head Office",
+    financialYearId: resolveFinancialYearId(input.transferDate),
     createdBy: ACCOUNTS_CURRENT_USER,
     updatedBy: ACCOUNTS_CURRENT_USER,
+    createdDate: now,
+    updatedDate: now,
   };
 
-  if (input.post) {
-    const voucher = postTransferVoucher(row);
-    row.voucherId = voucher.id;
-    row.status = "posted";
-  }
+  const voucher = postTransferVoucher(row);
+  row.voucherId = voucher.id;
 
   list.push(row);
   saveAll(list);
   return row;
 }
 
-export function postFundTransfer(id: number): FundTransferRecord {
-  const list = loadAll();
-  const idx = list.findIndex((t) => t.id === id);
-  if (idx < 0) throw new Error("Fund transfer not found.");
-  const transfer = list[idx];
-  if (transfer.status === "posted") return transfer;
-  if (transfer.status === "cancelled") throw new Error("Cancelled transfers cannot be posted.");
-
-  const voucher = postTransferVoucher(transfer);
-  list[idx] = {
-    ...transfer,
-    status: "posted",
-    voucherId: voucher.id,
-    updatedBy: ACCOUNTS_CURRENT_USER,
-  };
-  saveAll(list);
-  return list[idx];
-}
-
 export function saveFundTransferSeed(records: FundTransferRecord[]): void {
   if (typeof window === "undefined") return;
   saveAll(records);
 }
+
+/** @deprecated Use FUND_TRANSFER_MODE_LABELS */
+export const FUND_TRANSFER_TYPE_LABELS = FUND_TRANSFER_MODE_LABELS;
+
+/** @deprecated Use FundTransferMode */
+export type FundTransferType = FundTransferMode;

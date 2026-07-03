@@ -1,7 +1,7 @@
-"use client";
+import { redirect } from "next/navigation";
+import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 
-import LedgersPageClient from "./LedgersPageClient";
-
-export default function LedgersPage() {
-  return <LedgersPageClient />;
+/** Ledger maintenance lives in Chart of Accounts — no separate Ledger Master. */
+export default function LedgersRedirectPage() {
+  redirect(CHART_OF_ACCOUNTS_HREF);
 }

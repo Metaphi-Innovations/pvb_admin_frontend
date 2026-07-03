@@ -1,9 +1,15 @@
 import { findLedgerById, validatePostingLedgerId } from "@/lib/accounts/coa-hierarchy";
 import { validateVoucherContactLines } from "@/lib/accounts/voucher-ledger-groups";
-import { formatMoney } from "@/lib/accounts/money-format";
+import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
 import type { RecordStatus } from "../data";
 import { loadChartOfAccounts, nextId } from "../data";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import type { AccountsDocumentWorkflow } from "@/lib/accounts/accounts-maker-checker";
+import {
+  canEditAccountsDocument,
+  resolveWorkflowStatus,
+} from "@/lib/accounts/accounts-maker-checker";
+import { attachWorkflowOnCreate } from "@/lib/accounts/accounts-workflow-persist";
 import {
   type VoucherTypeCode,
   loadFinancialYears,
@@ -25,6 +31,8 @@ export interface VoucherLine {
   contactName?: string;
 }
 
+export type VoucherEntryMode = "simple" | "double";
+
 export interface AccountingVoucher {
   id: number;
   voucherType: VoucherTypeCode;
@@ -38,6 +46,11 @@ export interface AccountingVoucher {
   totalDebit: number;
   totalCredit: number;
   status: RecordStatus;
+  /** Simple vs double entry UI mode — receipt, payment, contra only */
+  entryMode?: VoucherEntryMode;
+  /** Payment mode for receipt/payment simple entry */
+  paymentMode?: string;
+  workflow?: AccountsDocumentWorkflow;
   createdBy: string;
   updatedBy: string;
 }
@@ -84,6 +97,8 @@ function normalizeVoucher(v: AccountingVoucher): AccountingVoucher {
     ...v,
     financialYearId: v.financialYearId ?? null,
     financialYearName: v.financialYearName ?? "",
+    entryMode: v.entryMode,
+    paymentMode: v.paymentMode,
   };
 }
 
@@ -104,14 +119,67 @@ export function generateVoucherNumber(type: VoucherTypeCode, existing: Accountin
   return `${prefix}-${String(next).padStart(4, "0")}`;
 }
 
+export function lineDebitAmount(line: Pick<VoucherLine, "debit">): number {
+  return roundMoney(line.debit);
+}
+
+export function lineCreditAmount(line: Pick<VoucherLine, "credit">): number {
+  return roundMoney(line.credit);
+}
+
 export function calcLineTotals(lines: VoucherLine[]) {
-  const totalDebit = lines.reduce((s, l) => s + (Number(l.debit) || 0), 0);
-  const totalCredit = lines.reduce((s, l) => s + (Number(l.credit) || 0), 0);
+  const totalDebit = roundMoney(lines.reduce((s, l) => s + lineDebitAmount(l), 0));
+  const totalCredit = roundMoney(lines.reduce((s, l) => s + lineCreditAmount(l), 0));
   return { totalDebit, totalCredit };
+}
+
+export function voucherAmountDifference(totalDebit: number, totalCredit: number): number {
+  return roundMoney(Math.abs(roundMoney(totalDebit) - roundMoney(totalCredit)));
+}
+
+export function isVoucherBalanced(totalDebit: number, totalCredit: number): boolean {
+  return voucherAmountDifference(totalDebit, totalCredit) === 0;
+}
+
+function linesWithAmount(lines: VoucherLine[]): VoucherLine[] {
+  return lines.filter((l) => lineDebitAmount(l) > 0 || lineCreditAmount(l) > 0);
+}
+
+function postedVoucherLines(lines: VoucherLine[]): VoucherLine[] {
+  return lines.filter(
+    (l) => l.ledgerId && (lineDebitAmount(l) > 0 || lineCreditAmount(l) > 0),
+  );
+}
+
+export function normalizeVoucherLineAmounts(line: VoucherLine): VoucherLine {
+  return {
+    ...line,
+    debit: lineDebitAmount(line),
+    credit: lineCreditAmount(line),
+  };
 }
 
 export function validateVoucherDraft(v: Pick<AccountingVoucher, "date">): string | null {
   if (!v.date) return "Voucher date is required.";
+  return null;
+}
+
+/** Draft save — allows single-sided / unbalanced entries */
+export function validateVoucherDraftForSave(
+  v: Pick<AccountingVoucher, "date" | "lines">,
+): string | null {
+  const dateErr = validateVoucherDraft(v);
+  if (dateErr) return dateErr;
+  const hasEntry = v.lines.some(
+    (l) =>
+      l.ledgerId ||
+      Boolean(l.ledgerName?.trim()) ||
+      lineDebitAmount(l) > 0 ||
+      lineCreditAmount(l) > 0,
+  );
+  if (!hasEntry) {
+    return "Add at least one ledger line with a debit or credit amount.";
+  }
   return null;
 }
 
@@ -120,13 +188,19 @@ export function validateVoucherLines(
   lines: VoucherLine[],
   records = loadChartOfAccounts(),
 ): string | null {
-  const active = lines.filter((l) => (Number(l.debit) || 0) > 0 || (Number(l.credit) || 0) > 0);
+  const active = linesWithAmount(lines);
   if (active.length < 2) {
     return "At least two ledger lines with debit or credit are required.";
   }
   for (const line of active) {
+    if (!line.ledgerId) {
+      return "Select a ledger for every row with an amount.";
+    }
     const ledgerErr = validatePostingLedgerId(line.ledgerId, records);
     if (ledgerErr) return ledgerErr;
+    if (lineDebitAmount(line) <= 0 && lineCreditAmount(line) <= 0) {
+      return "Each ledger line must have an amount greater than zero.";
+    }
   }
   return null;
 }
@@ -137,12 +211,25 @@ export function normalizeVoucherLines(
 ): VoucherLine[] {
   return lines.map((line) => {
     const ledger = line.ledgerId ? findLedgerById(line.ledgerId, records) : null;
-    return {
+    return normalizeVoucherLineAmounts({
       ...line,
-      ledgerId: ledger?.id ?? null,
+      ledgerId: ledger?.id ?? line.ledgerId ?? null,
       ledgerName: ledger?.accountName ?? line.ledgerName,
-    };
+    });
   });
+}
+
+/** Keep rows with any entered data when saving a draft */
+export function compactDraftVoucherLines(lines: VoucherLine[]): VoucherLine[] {
+  const meaningful = lines.filter(
+    (l) =>
+      l.ledgerId ||
+      Boolean(l.ledgerName?.trim()) ||
+      lineDebitAmount(l) > 0 ||
+      lineCreditAmount(l) > 0 ||
+      Boolean(l.remarks?.trim()),
+  );
+  return meaningful.length > 0 ? meaningful : lines.slice(0, Math.max(1, lines.length));
 }
 
 export function validateVoucherForPost(
@@ -153,11 +240,9 @@ export function validateVoucherForPost(
   const records = loadChartOfAccounts();
   const lineErr = validateVoucherLines(v.lines, records);
   if (lineErr) return lineErr;
-  const filled = v.lines.filter(
-    (l) => l.ledgerId && ((Number(l.debit) || 0) > 0 || (Number(l.credit) || 0) > 0),
-  );
+  const filled = postedVoucherLines(v.lines);
   const { totalDebit, totalCredit } = calcLineTotals(filled);
-  if (Math.abs(totalDebit - totalCredit) > 0.01) {
+  if (!isVoucherBalanced(totalDebit, totalCredit)) {
     return `Debit (${formatMoney(totalDebit)}) must equal Credit (${formatMoney(totalCredit)}).`;
   }
   if (totalDebit === 0) return "Voucher amount cannot be zero.";
@@ -166,13 +251,48 @@ export function validateVoucherForPost(
   return null;
 }
 
+/** Post validation for voucher entry screens — allows one-sided / unbalanced entries. */
+export function validateVoucherEntryForPost(
+  v: Pick<AccountingVoucher, "lines" | "date">,
+): string | null {
+  const dateErr = validateVoucherDraft(v);
+  if (dateErr) return dateErr;
+
+  const records = loadChartOfAccounts();
+  const filled = postedVoucherLines(v.lines.map(normalizeVoucherLineAmounts));
+
+  if (filled.length === 0) {
+    return "Add at least one ledger line with a debit or credit amount.";
+  }
+
+  for (const line of filled) {
+    if (!line.ledgerId) {
+      return "Select a ledger for every row with an amount.";
+    }
+    const ledgerErr = validatePostingLedgerId(line.ledgerId, records);
+    if (ledgerErr) return ledgerErr;
+    if (lineDebitAmount(line) <= 0 && lineCreditAmount(line) <= 0) {
+      return "Amount must be greater than zero.";
+    }
+  }
+
+  return null;
+}
+
+/** Lines to persist when posting — drops empty rows */
+export function compactPostedVoucherLines(lines: VoucherLine[]): VoucherLine[] {
+  return postedVoucherLines(lines.map(normalizeVoucherLineAmounts));
+}
+
 /** @deprecated use validateVoucherForPost */
 export function validateVoucher(v: Pick<AccountingVoucher, "lines" | "date" | "narration">): string | null {
   return validateVoucherForPost(v);
 }
 
+let emptyLineSeq = 0;
+
 export const EMPTY_LINE = (): VoucherLine => ({
-  id: Date.now(),
+  id: Date.now() + ++emptyLineSeq,
   ledgerId: null,
   ledgerName: "",
   debit: 0,
@@ -225,6 +345,349 @@ export function createVoucher(type: VoucherTypeCode, partial: CreateVoucherInput
   };
   list.push(row);
   saveVouchers(list);
+  attachWorkflowOnCreate(
+    type === "journal"
+      ? "journal_entry"
+      : type === "receipt"
+        ? "receipt_voucher"
+        : type === "payment"
+          ? "payment_voucher"
+          : "journal_entry",
+    row.id,
+  );
   return row;
+}
+
+export interface SimpleCashVoucherInput {
+  partyLedgerId: number | null;
+  partyLedgerName: string;
+  bankCashLedgerId: number | null;
+  bankCashLedgerName: string;
+  amount: number;
+  referenceNo?: string;
+  /** Payment only — expense ledger when paying a direct expense */
+  expenseHeadLedgerId?: number | null;
+  expenseHeadLedgerName?: string;
+  tdsAmount?: number;
+  tdsLedgerId?: number | null;
+  tdsLedgerName?: string;
+}
+
+function nextLineId(offset = 0): number {
+  return Date.now() + offset;
+}
+
+/** Receipt: Dr Bank/Cash (+ Dr TDS Receivable) · Cr Party */
+export function buildReceiptVoucherLines(input: SimpleCashVoucherInput): VoucherLine[] {
+  const net = roundMoney(input.amount);
+  const tds = roundMoney(input.tdsAmount ?? 0);
+  const gross = roundMoney(net + tds);
+  const remarks = input.referenceNo?.trim() ?? "";
+  const lines: VoucherLine[] = [];
+
+  if (input.bankCashLedgerId && net > 0) {
+    lines.push({
+      id: nextLineId(),
+      ledgerId: input.bankCashLedgerId,
+      ledgerName: input.bankCashLedgerName,
+      debit: net,
+      credit: 0,
+      remarks,
+    });
+  }
+  if (input.tdsLedgerId && tds > 0) {
+    lines.push({
+      id: nextLineId(1),
+      ledgerId: input.tdsLedgerId,
+      ledgerName: input.tdsLedgerName ?? "",
+      debit: tds,
+      credit: 0,
+      remarks: "TDS",
+    });
+  }
+  if (input.partyLedgerId && gross > 0) {
+    lines.push({
+      id: nextLineId(2),
+      ledgerId: input.partyLedgerId,
+      ledgerName: input.partyLedgerName,
+      debit: 0,
+      credit: gross,
+      remarks,
+    });
+  }
+  return lines;
+}
+
+/** Payment: Dr Party/Expense (+ gross includes TDS) · Cr Bank/Cash · Cr TDS Payable */
+export function buildPaymentVoucherLines(input: SimpleCashVoucherInput): VoucherLine[] {
+  const net = roundMoney(input.amount);
+  const tds = roundMoney(input.tdsAmount ?? 0);
+  const gross = roundMoney(net + tds);
+  const remarks = input.referenceNo?.trim() ?? "";
+  const debitLedgerId = input.expenseHeadLedgerId ?? input.partyLedgerId;
+  const debitLedgerName = input.expenseHeadLedgerName ?? input.partyLedgerName;
+  const lines: VoucherLine[] = [];
+
+  if (debitLedgerId && gross > 0) {
+    lines.push({
+      id: nextLineId(),
+      ledgerId: debitLedgerId,
+      ledgerName: debitLedgerName,
+      debit: gross,
+      credit: 0,
+      remarks,
+    });
+  }
+  if (input.bankCashLedgerId && net > 0) {
+    lines.push({
+      id: nextLineId(1),
+      ledgerId: input.bankCashLedgerId,
+      ledgerName: input.bankCashLedgerName,
+      debit: 0,
+      credit: net,
+      remarks,
+    });
+  }
+  if (input.tdsLedgerId && tds > 0) {
+    lines.push({
+      id: nextLineId(2),
+      ledgerId: input.tdsLedgerId,
+      ledgerName: input.tdsLedgerName ?? "",
+      debit: 0,
+      credit: tds,
+      remarks: "TDS",
+    });
+  }
+  return lines;
+}
+
+export function validatePaymentVoucherForPost(input: SimpleCashVoucherInput): string | null {
+  const debitId = input.expenseHeadLedgerId ?? input.partyLedgerId;
+  if (!debitId) return "Paid To or Expense Head is required.";
+  if (!input.bankCashLedgerId) return "Paid From / Bank or Cash Ledger is required.";
+  if (!(Number(input.amount) > 0)) return "Amount must be greater than zero.";
+  const tds = roundMoney(input.tdsAmount ?? 0);
+  if (tds > 0 && !input.tdsLedgerId) return "TDS ledger is required when TDS amount is entered.";
+  return null;
+}
+
+export function validateReceiptVoucherForPost(input: SimpleCashVoucherInput): string | null {
+  if (!input.partyLedgerId) return "Received From / Party Ledger is required.";
+  if (!input.bankCashLedgerId) return "Deposit To / Bank or Cash Ledger is required.";
+  if (!(Number(input.amount) > 0)) return "Amount must be greater than zero.";
+  const tds = roundMoney(input.tdsAmount ?? 0);
+  if (tds > 0 && !input.tdsLedgerId) return "TDS ledger is required when TDS amount is entered.";
+  return null;
+}
+
+export function canEditVoucher(voucher: AccountingVoucher): boolean {
+  return canEditAccountsDocument(voucher.workflow, voucher.status);
+}
+
+export interface SimpleContraVoucherInput {
+  fromLedgerId: number | null;
+  fromLedgerName: string;
+  toLedgerId: number | null;
+  toLedgerName: string;
+  amount: number;
+  referenceNo?: string;
+}
+
+/** Contra: Dr Transfer To · Cr Transfer From */
+export function buildContraVoucherLines(input: SimpleContraVoucherInput): VoucherLine[] {
+  const amount = roundMoney(input.amount);
+  const lines: VoucherLine[] = [];
+  if (input.toLedgerId) {
+    lines.push({
+      id: nextLineId(),
+      ledgerId: input.toLedgerId,
+      ledgerName: input.toLedgerName,
+      debit: amount,
+      credit: 0,
+      remarks: input.referenceNo?.trim() ?? "",
+    });
+  }
+  if (input.fromLedgerId) {
+    lines.push({
+      id: nextLineId(1),
+      ledgerId: input.fromLedgerId,
+      ledgerName: input.fromLedgerName,
+      debit: 0,
+      credit: amount,
+      remarks: input.referenceNo?.trim() ?? "",
+    });
+  }
+  return lines;
+}
+
+export function validateContraVoucherForPost(input: SimpleContraVoucherInput): string | null {
+  if (!input.fromLedgerId) return "Transfer From ledger is required.";
+  if (!input.toLedgerId) return "Transfer To ledger is required.";
+  if (input.fromLedgerId === input.toLedgerId) {
+    return "Transfer From and Transfer To must be different ledgers.";
+  }
+  if (!(Number(input.amount) > 0)) return "Amount must be greater than zero.";
+  return null;
+}
+
+export function parseContraVoucherFromLines(lines: VoucherLine[]): SimpleContraVoucherInput {
+  const active = lines.filter(
+    (l) => l.ledgerId && (lineDebitAmount(l) > 0 || lineCreditAmount(l) > 0),
+  );
+  const debitLine = active.find((l) => lineDebitAmount(l) > 0);
+  const creditLine = active.find((l) => lineCreditAmount(l) > 0);
+  let amount = 0;
+  if (debitLine) amount = lineDebitAmount(debitLine);
+  else if (creditLine) amount = lineCreditAmount(creditLine);
+
+  return {
+    fromLedgerId: creditLine?.ledgerId ?? null,
+    fromLedgerName: creditLine?.ledgerName ?? "",
+    toLedgerId: debitLine?.ledgerId ?? null,
+    toLedgerName: debitLine?.ledgerName ?? "",
+    amount: roundMoney(amount),
+  };
+}
+
+export function inferVoucherEntryMode(voucher: AccountingVoucher): VoucherEntryMode {
+  if (voucher.entryMode) return voucher.entryMode;
+  if (voucher.voucherType === "journal") return "double";
+
+  const active = postedVoucherLines(voucher.lines);
+  if (active.length === 2 || active.length === 3) {
+    if (voucher.voucherType === "receipt" || voucher.voucherType === "payment") {
+      const parsed = parseCashVoucherFromLines(voucher.lines, voucher.voucherType);
+      const debitId =
+        voucher.voucherType === "payment"
+          ? parsed.expenseHeadLedgerId ?? parsed.partyLedgerId
+          : parsed.partyLedgerId;
+      if (debitId && parsed.bankCashLedgerId && parsed.amount > 0) {
+        return "simple";
+      }
+    }
+    if (voucher.voucherType === "contra") {
+      const parsed = parseContraVoucherFromLines(voucher.lines);
+      if (parsed.fromLedgerId && parsed.toLedgerId && parsed.amount > 0) {
+        return "simple";
+      }
+    }
+  }
+  return "double";
+}
+
+export function parseCashVoucherFromLines(
+  lines: VoucherLine[],
+  mode: "receipt" | "payment",
+): SimpleCashVoucherInput {
+  const active = lines.filter(
+    (l) => l.ledgerId && (lineDebitAmount(l) > 0 || lineCreditAmount(l) > 0),
+  );
+
+  const isTdsLine = (l: VoucherLine) =>
+    l.remarks?.toLowerCase().includes("tds") ||
+    l.ledgerName.toLowerCase().includes("tds");
+
+  let partyLedgerId: number | null = null;
+  let partyLedgerName = "";
+  let expenseHeadLedgerId: number | null = null;
+  let expenseHeadLedgerName = "";
+  let bankCashLedgerId: number | null = null;
+  let bankCashLedgerName = "";
+  let tdsLedgerId: number | null = null;
+  let tdsLedgerName = "";
+  let amount = 0;
+  let tdsAmount = 0;
+
+  if (mode === "receipt") {
+    const creditLine = active.find((l) => lineCreditAmount(l) > 0 && !isTdsLine(l));
+    const debitLines = active.filter((l) => lineDebitAmount(l) > 0);
+    const tdsLine = debitLines.find(isTdsLine);
+    const bankLine = debitLines.find((l) => !isTdsLine(l));
+
+    if (creditLine?.ledgerId) {
+      partyLedgerId = creditLine.ledgerId;
+      partyLedgerName = creditLine.ledgerName;
+    }
+    if (bankLine?.ledgerId) {
+      bankCashLedgerId = bankLine.ledgerId;
+      bankCashLedgerName = bankLine.ledgerName;
+      amount = lineDebitAmount(bankLine);
+    }
+    if (tdsLine?.ledgerId) {
+      tdsLedgerId = tdsLine.ledgerId;
+      tdsLedgerName = tdsLine.ledgerName;
+      tdsAmount = lineDebitAmount(tdsLine);
+    }
+    if (!amount && creditLine) {
+      amount = roundMoney(lineCreditAmount(creditLine) - tdsAmount);
+    }
+  } else {
+    const debitLine = active.find((l) => lineDebitAmount(l) > 0 && !isTdsLine(l));
+    const creditLines = active.filter((l) => lineCreditAmount(l) > 0);
+    const tdsLine = creditLines.find(isTdsLine);
+    const bankLine = creditLines.find((l) => !isTdsLine(l));
+
+    if (debitLine?.ledgerId) {
+      partyLedgerId = debitLine.ledgerId;
+      partyLedgerName = debitLine.ledgerName;
+      const gross = lineDebitAmount(debitLine);
+      if (bankLine) {
+        amount = lineCreditAmount(bankLine);
+        tdsAmount = tdsLine ? lineCreditAmount(tdsLine) : roundMoney(gross - amount);
+      } else {
+        amount = gross;
+      }
+    }
+    if (bankLine?.ledgerId) {
+      bankCashLedgerId = bankLine.ledgerId;
+      bankCashLedgerName = bankLine.ledgerName;
+      if (!amount) amount = lineCreditAmount(bankLine);
+    }
+    if (tdsLine?.ledgerId) {
+      tdsLedgerId = tdsLine.ledgerId;
+      tdsLedgerName = tdsLine.ledgerName;
+      tdsAmount = lineCreditAmount(tdsLine);
+    }
+  }
+
+  return {
+    partyLedgerId,
+    partyLedgerName,
+    expenseHeadLedgerId,
+    expenseHeadLedgerName,
+    bankCashLedgerId,
+    bankCashLedgerName,
+    amount: roundMoney(amount),
+    tdsAmount: roundMoney(tdsAmount),
+    tdsLedgerId,
+    tdsLedgerName,
+  };
+}
+
+export type UpdateVoucherInput = Partial<
+  Omit<AccountingVoucher, "id" | "voucherNumber" | "voucherType" | "createdBy">
+>;
+
+export function updateVoucher(id: number, partial: UpdateVoucherInput): AccountingVoucher {
+  const list = loadVouchers();
+  const idx = list.findIndex((v) => v.id === id);
+  if (idx < 0) throw new Error("Voucher not found.");
+  const current = list[idx];
+  if (!canEditVoucher(current)) throw new Error("This voucher cannot be edited.");
+
+  const records = loadChartOfAccounts();
+  const lines = partial.lines ? normalizeVoucherLines(partial.lines, records) : current.lines;
+  const { totalDebit, totalCredit } = calcLineTotals(lines);
+  const updated: AccountingVoucher = {
+    ...current,
+    ...partial,
+    lines,
+    totalDebit,
+    totalCredit,
+    updatedBy: ACCOUNTS_CURRENT_USER,
+  };
+  list[idx] = updated;
+  saveVouchers(list);
+  return updated;
 }
 

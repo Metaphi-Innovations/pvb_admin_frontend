@@ -1,13 +1,14 @@
 "use client";
 
 import React from "react";
-import { Button } from "@/components/ui/button";
-import { Download } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { MiniKPICard } from "@/components/ui/KPICard";
-import { cn } from "@/lib/utils";
-import { MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
+import { AccountsSummaryBar } from "@/components/accounts/AccountsSummaryBar";
+import { AccountsColumnarTable } from "@/components/accounts/AccountsTable";
+import {
+  AccountsTableListing,
+  AccountsListingToolbar,
+} from "@/components/accounts/AccountsTableListing";
 import type { LucideIcon } from "lucide-react";
 
 export interface ReportColumn {
@@ -23,6 +24,7 @@ export interface ReportKpi {
   value: string;
   icon: LucideIcon;
   accent?: boolean;
+  warn?: boolean;
 }
 
 export interface AccountsReportShellProps {
@@ -34,6 +36,10 @@ export interface AccountsReportShellProps {
   rows: Record<string, string | number>[];
   filters?: React.ReactNode;
   emptyMessage?: string;
+  onRowClick?: (row: Record<string, string | number>, index: number) => void;
+  getRowKey?: (row: Record<string, string | number>, index: number) => string | number;
+  clickableColumnKeys?: string[];
+  rowActionFooter?: React.ReactNode;
 }
 
 export function AccountsReportShell({
@@ -44,7 +50,11 @@ export function AccountsReportShell({
   columns,
   rows,
   filters,
-  emptyMessage = "No data for selected filters.",
+  emptyMessage = "No records found.",
+  onRowClick,
+  getRowKey,
+  clickableColumnKeys,
+  rowActionFooter,
 }: AccountsReportShellProps) {
   const exportCsv = () => {
     const header = columns.map((c) => c.label).join(",") + "\n";
@@ -65,68 +75,48 @@ export function AccountsReportShell({
       breadcrumbs={accountsBreadcrumb(section, title)}
       title={title}
       description={description}
-      actions={
-        <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={exportCsv}>
-          <Download className="w-3.5 h-3.5" /> Export
-        </Button>
-      }
-      filters={filters}
+      hideDescription
       layout="split"
       className="h-full min-h-0"
     >
-      {kpis && kpis.length > 0 && (
-        <div className="flex-shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 border-b border-border/60 bg-muted/10">
-          {kpis.map((k) => (
-            <MiniKPICard key={k.label} label={k.label} value={k.value} icon={k.icon} accent={k.accent} />
-          ))}
-        </div>
-      )}
-      <div className="flex-1 overflow-auto min-h-0">
-        {rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-            <p className="text-sm font-medium text-foreground">{emptyMessage}</p>
-          </div>
-        ) : (
-          <table className="w-full text-table">
-            <thead className="bg-muted/20 border-b border-border/60 sticky top-0 z-10">
-              <tr>
-                {columns.map((c) => (
-                  <th
-                    key={c.key}
-                    className={cn(
-                      "px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground",
-                      c.align === "right" && "text-right",
-                      c.align === "center" && "text-center",
-                      (!c.align || c.align === "left") && "text-left",
-                    )}
-                  >
-                    {c.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => (
-                <tr key={i} className="border-b border-border/40 hover:bg-muted/20">
-                  {columns.map((c) => (
-                    <td
-                      key={c.key}
-                      className={cn(
-                        "px-4 py-2.5 text-xs text-foreground",
-                        c.align === "right" && "text-right",
-                        c.money && MONEY_AMOUNT_CLASS,
-                        c.mono && "font-mono",
-                      )}
-                    >
-                      {row[c.key] ?? "—"}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <AccountsTableListing
+        toolbar={
+          <AccountsListingToolbar
+            onExcel={exportCsv}
+            onPdf={exportCsv}
+            exportDisabled={rows.length === 0}
+          >
+            {filters}
+          </AccountsListingToolbar>
+        }
+        summary={
+          kpis && kpis.length > 0 ? (
+            <AccountsSummaryBar
+              items={kpis.map((k) => ({
+                label: k.label,
+                value: k.value,
+                warn: k.warn,
+              }))}
+            />
+          ) : undefined
+        }
+        footer={rowActionFooter}
+      >
+        <AccountsColumnarTable
+          columns={columns.map((c) => ({
+            key: c.key,
+            label: c.label,
+            align: c.align,
+            money: c.money,
+            mono: c.mono,
+          }))}
+          rows={rows}
+          emptyMessage={emptyMessage}
+          onRowClick={onRowClick}
+          getRowKey={getRowKey}
+          clickableColumnKeys={clickableColumnKeys}
+        />
+      </AccountsTableListing>
     </AccountsPageShell>
   );
 }

@@ -9,7 +9,6 @@ import {
   UserCheck,
   Wallet,
   CalendarDays,
-  Settings,
   Palette,
   CalendarCheck,
   Settings2,
@@ -88,8 +87,8 @@ export const NAV_ITEMS: NavItem[] = [
       { label: "Segment", href: "/masters/segment" },
       { label: "TDS", href: "/masters/tds" },
       { label: "Unit", href: "/masters/uom" },
-      { label: "Vendor Type", href: "/masters/vendor-type" },
-      { label: "Vendor Master", href: "/masters/vendors" },
+      { label: "Supplier Type", href: "/masters/vendor-type" },
+      { label: "Supplier Master", href: "/masters/vendors" },
       { label: "Warehouse", href: "/masters/warehouse" },
     ],
   },
@@ -109,6 +108,8 @@ export const NAV_ITEMS: NavItem[] = [
     icon: BarChart3,
     children: [
       { label: "Sales Orders", href: "/sales/orders" },
+      { label: "Sample Orders", href: "/sales/sample-order" },
+      { label: "Stock Transfer", href: "/sales/stock-transfer" },
       // { label: "Invoices", href: "/sales/invoices" },
       // { label: "Dispatch", href: "/sales/dispatch" },
       // { label: "Collections", href: "/sales/collections" },
@@ -121,8 +122,8 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Warehouse",
     icon: Warehouse,
     children: [
-      { label: "GRN & QC", href: "/warehouse/grnqc" },
-      { label: "Batch Register", href: "/warehouse/batch-register" },
+      { label: "GRN", href: "/warehouse/grn" },
+      { label: "QC", href: "/warehouse/qc" },
       { label: "Packing", href: "/warehouse/packing" },
       { label: "Dispatch", href: "/warehouse/dispatch" },
       { label: "Reorder Level", href: "/warehouse/reorder-level" },
@@ -192,28 +193,6 @@ export const NAV_ITEMS: NavItem[] = [
   //   icon: Palette,
   //   href: "/template",
   // },
-  {
-    id: "settings",
-    label: "Settings",
-    icon: Settings,
-    iconOnly: true,
-    href: "/settings",
-    menuLayout: "sidebar",
-    groupedChildren: [
-      {
-        label: "GST & Tax Configuration",
-        description:
-          "Financial-year wise LUT records, company GSTIN mapping, and SEZ supply rules.",
-        icon: Receipt,
-        children: [
-          {
-            label: "GST & Tax Configuration",
-            href: "/settings/gst-tax-configuration",
-          },
-        ],
-      },
-    ],
-  },
 ];
 
 export function collectNavHrefs(items: NavItem[] = NAV_ITEMS): string[] {
@@ -225,4 +204,7 @@ export function collectNavHrefs(items: NavItem[] = NAV_ITEMS): string[] {
   }
   return Array.from(hrefs);
 }
+
+
+
 

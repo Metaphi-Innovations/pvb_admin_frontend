@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { AccountsFormLayout } from "../../expenses/components/AccountsFormLayout";
 import {
@@ -95,13 +96,10 @@ export default function AccountItemFormClient({ itemId }: { itemId?: number }) {
       code={form.sku}
       footer={
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => router.push("/accounts/masters/items")}>
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => router.push("/accounts/masters/items")}>
             Cancel
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => save(true)}>
-            Save Draft
-          </Button>
-          <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={() => save(false)}>
+          <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white" onClick={() => save(false)}>
             Save Item
           </Button>
         </div>
@@ -112,27 +110,27 @@ export default function AccountItemFormClient({ itemId }: { itemId?: number }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1 sm:col-span-2">
               <Label className="text-xs">Item Name *</Label>
-              <Input className="h-8 text-xs" value={form.itemName ?? ""} onChange={(e) => set("itemName", e.target.value)} />
+              <Input className="h-9 text-[13px] font-medium" value={form.itemName ?? ""} onChange={(e) => set("itemName", e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">SKU / Item Code</Label>
-              <Input className="h-8 text-xs font-mono" value={form.sku ?? ""} onChange={(e) => set("sku", e.target.value)} />
+              <Input className="h-9 text-[13px] font-medium font-mono" value={form.sku ?? ""} onChange={(e) => set("sku", e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Category</Label>
-              <Input className="h-8 text-xs" value={form.category ?? ""} onChange={(e) => set("category", e.target.value)} />
+              <Input className="h-9 text-[13px] font-medium" value={form.category ?? ""} onChange={(e) => set("category", e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">HSN Code</Label>
-              <Input className="h-8 text-xs font-mono" value={form.hsnCode ?? ""} onChange={(e) => set("hsnCode", e.target.value)} />
+              <Input className="h-9 text-[13px] font-medium font-mono" value={form.hsnCode ?? ""} onChange={(e) => set("hsnCode", e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">GST Rate</Label>
-              <Input className="h-8 text-xs" value={form.gstRate ?? ""} onChange={(e) => set("gstRate", e.target.value)} />
+              <Input className="h-9 text-[13px] font-medium" value={form.gstRate ?? ""} onChange={(e) => set("gstRate", e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Unit</Label>
-              <Input className="h-8 text-xs" value={form.unit ?? ""} onChange={(e) => set("unit", e.target.value)} />
+              <Input className="h-9 text-[13px] font-medium" value={form.unit ?? ""} onChange={(e) => set("unit", e.target.value)} />
             </div>
           </div>
         </Section>
@@ -140,11 +138,11 @@ export default function AccountItemFormClient({ itemId }: { itemId?: number }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Opening Quantity</Label>
-              <Input type="number" className="h-8 text-xs" value={form.openingQty ?? 0} onChange={(e) => set("openingQty", Number(e.target.value))} />
+              <Input type="number" className="h-9 text-[13px] font-medium" value={form.openingQty ?? 0} onChange={(e) => set("openingQty", Number(e.target.value))} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Opening Rate</Label>
-              <Input type="number" className="h-8 text-xs" value={form.openingRate ?? 0} onChange={(e) => set("openingRate", Number(e.target.value))} />
+              <AccountsMoneyInput className="h-9 text-[13px] font-medium" value={form.openingRate ?? 0} onChange={(v) => set("openingRate", v)} />
             </div>
             <div className="space-y-1 sm:col-span-2">
               <Label className="text-xs">Valuation Method</Label>
@@ -162,11 +160,11 @@ export default function AccountItemFormClient({ itemId }: { itemId?: number }) {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Default Sales Ledger</Label>
-              <Input className="h-8 text-xs" value={form.defaultSalesLedger ?? ""} onChange={(e) => set("defaultSalesLedger", e.target.value)} />
+              <Input className="h-9 text-[13px] font-medium" value={form.defaultSalesLedger ?? ""} onChange={(e) => set("defaultSalesLedger", e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Default Purchase Ledger</Label>
-              <Input className="h-8 text-xs" value={form.defaultPurchaseLedger ?? ""} onChange={(e) => set("defaultPurchaseLedger", e.target.value)} />
+              <Input className="h-9 text-[13px] font-medium" value={form.defaultPurchaseLedger ?? ""} onChange={(e) => set("defaultPurchaseLedger", e.target.value)} />
             </div>
           </div>
         </Section>

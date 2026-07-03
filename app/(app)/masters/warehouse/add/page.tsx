@@ -18,6 +18,7 @@ import {
 	WarehouseForm,
 	validateWarehouseForm,
 	INITIAL_FORM,
+	warehouseFormToRecordFields,
 	type WarehouseFormValues,
 } from "../components/WarehouseForm";
 
@@ -57,28 +58,10 @@ export default function AddWarehousePage() {
 			return;
 		}
 		const nextIdVal = nextWarehouseId(records);
-		const primaryContact = form.contacts.find((c) => c.isPrimary) || form.contacts[0];
 		const newRecord: WarehouseMaster = {
 			id: nextIdVal,
 			warehouseCode: generateWarehouseCode(nextIdVal),
-			warehouseName: form.warehouseName,
-			warehouseType: form.warehouseType,
-			gstApplicable: form.gstApplicable,
-			gstNumber: form.gstNumber,
-			contactPerson: primaryContact ? primaryContact.contactPerson : "",
-			mobileNumber: primaryContact ? primaryContact.mobileNumber : "",
-			emailAddress: primaryContact ? primaryContact.emailAddress : "",
-			address: form.address,
-			state: form.state,
-			district: form.district,
-			city: form.city,
-			pincode: form.pincode,
-			manager: form.manager,
-			status: form.status,
-			operatedBy: form.operatedBy,
-			customerType: form.operatedBy === "C&F Agent" ? form.customerType : undefined,
-			contacts: form.contacts,
-			documents: form.documents || [],
+			...warehouseFormToRecordFields(form),
 			createdBy: "Admin",
 			createdDate: todayStr(),
 			updatedBy: "Admin",
@@ -89,18 +72,14 @@ export default function AddWarehousePage() {
 		setTimeout(() => router.push("/masters/warehouse"), 900);
 	};
 
-	const autoCode = generateWarehouseCode(nextWarehouseId(records));
-
 	return (
 		<FormContainer
 			title="Add Warehouse"
 			description="Masters → Warehouse Master → Add"
+			compact
 			onBack={() => router.back()}
 			actions={
 				<div className="flex items-center gap-2">
-					<span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
-						{autoCode}
-					</span>
 					<Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
 						Discard
 					</Button>
@@ -118,7 +97,6 @@ export default function AddWarehousePage() {
 				onChange={setForm}
 				errors={errors}
 				onClearError={clearErr}
-				warehouseCode={autoCode}
 			/>
 
 			{/* Toast */}

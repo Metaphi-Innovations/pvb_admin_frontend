@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PRFormLayout } from "../../components/PRFormLayout";
 import {
@@ -13,6 +13,8 @@ import { formToPR, submitPR, todayStr } from "../../components/pr-form-utils";
 import { getPRById, loadPurchaseRequests, savePurchaseRequests } from "../../pr-data";
 import { CURRENT_USER } from "@/lib/procurement/config";
 
+const EDITABLE_STATUSES = ["draft", "rejected"] as const;
+
 export default function EditPRPage() {
   const params = useParams();
   const router = useRouter();
@@ -23,12 +25,28 @@ export default function EditPRPage() {
   useEffect(() => {
     const p = getPRById(id);
     setPr(p);
-    if (p) setForm(prToFormValues(p));
-  }, [id]);
+    if (!p) return;
+    if (!EDITABLE_STATUSES.includes(p.status as (typeof EDITABLE_STATUSES)[number])) {
+      router.replace(`/procurement/purchase-requests/${id}`);
+      return;
+    }
+    setForm(prToFormValues(p));
+  }, [id, router]);
+
+  const canEdit = useMemo(
+    () => !!pr && EDITABLE_STATUSES.includes(pr.status as (typeof EDITABLE_STATUSES)[number]),
+    [pr],
+  );
 
   if (!form || !pr) {
     return (
       <div className="p-8 text-sm text-muted-foreground">Purchase request not found.</div>
+    );
+  }
+
+  if (!canEdit) {
+    return (
+      <div className="p-8 text-sm text-muted-foreground">This purchase request cannot be edited.</div>
     );
   }
 
@@ -45,7 +63,7 @@ export default function EditPRPage() {
       approvedBy: pr.approvedBy,
       approvedDate: pr.approvedDate,
     });
-    if (asSubmit && ["draft", "rejected"].includes(pr.status)) record = submitPR(record);
+    if (asSubmit) record = submitPR(record);
     savePurchaseRequests(loadPurchaseRequests().map((p) => (p.id === id ? record : p)));
     router.push(
       `/procurement/purchase-requests?toast=${asSubmit ? "pr-submitted" : "pr-saved"}`,
@@ -59,10 +77,10 @@ export default function EditPRPage() {
       status={pr.status}
       footer={
         <PRFormFooter
-          onCancel={() => router.push("/procurement/purchase-requests")}
+          onCancel={() => router.push(`/procurement/purchase-requests/${id}`)}
           onSaveDraft={() => persist(false)}
           onSubmit={() => persist(true)}
-          showSubmit={["draft", "rejected"].includes(pr.status)}
+          showSubmit
           saveLabel="Update Purchase Request"
         />
       }

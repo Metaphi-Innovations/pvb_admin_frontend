@@ -18,7 +18,7 @@ export function exportPOListingCsv(records: PurchaseOrder[]): void {
   const headers = [
     "PO No.",
     "PO Date",
-    "Vendor",
+    "Supplier",
     "PR No.",
     "Total Items",
     "PO Amount",

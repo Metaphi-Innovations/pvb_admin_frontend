@@ -162,7 +162,7 @@ function findSubGroup(records: ChartOfAccount[], nameIncludes: string): ChartOfA
   const q = nameIncludes.toLowerCase();
   return (
     records.find(
-      (r) => r.nodeLevel === "sub_group" && r.accountName.toLowerCase().includes(q),
+      (r) => r.nodeLevel === "account_group" && r.accountName.toLowerCase().includes(q),
     ) ?? null
   );
 }
@@ -243,7 +243,7 @@ export function validateLedgerMetaForSave(
       return "Create customers from Sales → Customer Master. A receivable ledger is created automatically.";
     }
     if (meta.ledgerType === "Vendor") {
-      return "Create vendors from Procurement → Vendor Master. A payable ledger is created automatically.";
+      return "Create suppliers from Procurement → Supplier Master. A payable ledger is created automatically.";
     }
     return "Create bank accounts from Banking → Bank Accounts. Recommended: use Banking module instead of Ledgers.";
   }

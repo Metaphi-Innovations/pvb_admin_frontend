@@ -64,12 +64,12 @@ export function SalesInvoiceAccountingPanel({
           </div>
           {state.isPosted ? (
             <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1">
-              <CheckCircle2 className="w-3.5 h-3.5" />
+              <CheckCircle2 className="w-4 h-4" />
               Posted · {state.voucherNumber}
             </span>
           ) : state.isDraft ? (
             <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">
-              <FileText className="w-3.5 h-3.5" />
+              <FileText className="w-4 h-4" />
               Draft — not posted
             </span>
           ) : null}
@@ -112,7 +112,7 @@ export function SalesInvoiceAccountingPanel({
               Posted Ledger Entries
             </p>
             <div className="overflow-x-auto rounded-md border border-border/50">
-              <table className="w-full text-xs min-w-[520px]">
+              <table className="accounts-table w-full min-w-[520px]">
                 <thead>
                   <tr className="border-b border-border/60 bg-muted/20">
                     <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Account</th>

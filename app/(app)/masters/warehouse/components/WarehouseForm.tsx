@@ -3,7 +3,6 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
 	Popover,
 	PopoverContent,
@@ -23,24 +22,35 @@ import {
 	Plus,
 } from "lucide-react";
 import {
-	WAREHOUSE_TYPES,
 	WAREHOUSE_STATUSES,
 	OPERATED_BY_OPTIONS,
-	STATE_OPTIONS,
-	MANAGER_OPTIONS,
-	getDistrictsForState,
-	getCitiesForDistrict,
-	type WarehouseType,
 	type WarehouseStatus,
 	type OperatedBy,
 	type WarehouseContact,
 	type WarehouseDocument,
+	type WarehouseMaster,
 } from "../warehouse-data";
 import { loadCustomers } from "../../customers/customer-data";
+import { validateGSTIN, validateIFSC } from "../../customers/customer-data";
 import { loadCustomerTypes } from "../../customer-types/customer-type-data";
-import { CompactToggle } from "../../vendors/components/CompactToggle";
 import { loadDocumentTypes } from "../../document-types/document-type-data";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+import { ErpFormSection } from "@/components/masters/erp/ErpFormSection";
+import { BranchAddressFields } from "@/components/masters/erp/BranchAddressFields";
+import type { BranchAddress } from "@/app/(app)/masters/customers/components/CustomerForm";
+import {
+	loadGeoNodes,
+	getStateSelectOptions,
+} from "@/app/(app)/masters/geography/geo-data";
+import {
+	GstRegistrationFields,
+	GstRegisteredToggleControl,
+} from "@/components/masters/GstRegistrationFields";
+import { BankDetailsFields } from "@/components/masters/BankDetailsFields";
+import {
+	fetchGstRegistrationDetailsAsync,
+	GST_REGISTRATION_TYPE_DEFAULT,
+} from "@/lib/masters/gst-compliance";
 
 const PHONE_COUNTRY_CODES = [
 	{ code: "+91", label: "🇮🇳 +91 (India)" },
@@ -103,15 +113,25 @@ function CountryCodePicker({
 
 export interface WarehouseFormValues {
 	warehouseName: string;
-	warehouseType: WarehouseType;
 	gstApplicable: boolean;
-	gstNumber: string;
+	gstRegistrationType: string;
+	gstin: string;
+	registeredLegalName: string;
+	registeredAddress: string;
+	accountHolderName: string;
+	bankName: string;
+	branch: string;
+	accountNumber: string;
+	confirmAccountNumber: string;
+	ifscCode: string;
+	swiftCode: string;
 	address: string;
+	addressLine2: string;
+	town: string;
 	state: string;
 	district: string;
 	city: string;
 	pincode: string;
-	manager: string;
 	status: WarehouseStatus;
 	operatedBy: OperatedBy;
 	customerType: string;
@@ -121,15 +141,25 @@ export interface WarehouseFormValues {
 
 export const INITIAL_FORM: WarehouseFormValues = {
 	warehouseName: "",
-	warehouseType: "Central Warehouse",
-	gstApplicable: true,
-	gstNumber: "",
+	gstApplicable: false,
+	gstRegistrationType: GST_REGISTRATION_TYPE_DEFAULT,
+	gstin: "",
+	registeredLegalName: "",
+	registeredAddress: "",
+	accountHolderName: "",
+	bankName: "",
+	branch: "",
+	accountNumber: "",
+	confirmAccountNumber: "",
+	ifscCode: "",
+	swiftCode: "",
 	address: "",
+	addressLine2: "",
+	town: "",
 	state: "",
 	district: "",
 	city: "",
 	pincode: "",
-	manager: "",
 	status: "active",
 	operatedBy: "Self",
 	customerType: "",
@@ -137,8 +167,10 @@ export const INITIAL_FORM: WarehouseFormValues = {
 		{
 			id: "CON-1",
 			contactPerson: "",
+			designation: "",
 			mobileNumber: "",
 			emailAddress: "",
+			alternateContact: "",
 			isPrimary: true,
 			mobileCountryCode: "+91",
 		},
@@ -146,10 +178,118 @@ export const INITIAL_FORM: WarehouseFormValues = {
 	documents: [],
 };
 
-function validateWarehouseGST(v: string): boolean {
-	return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(
-		v.trim().toUpperCase(),
-	);
+export function warehouseRecordToForm(record: WarehouseMaster): WarehouseFormValues {
+	let contacts = record.contacts;
+	if (!contacts || contacts.length === 0) {
+		contacts = [
+			{
+				id: "CON-1",
+				contactPerson: record.contactPerson || "",
+				designation: record.manager || "",
+				mobileNumber: record.mobileNumber || "",
+				emailAddress: record.emailAddress || "",
+				alternateContact: "",
+				isPrimary: true,
+				mobileCountryCode: "+91",
+			},
+		];
+	}
+
+	return {
+		warehouseName: record.warehouseName,
+		gstApplicable: record.gstApplicable ?? !!record.gstNumber?.trim(),
+		gstRegistrationType: record.gstRegistrationType || GST_REGISTRATION_TYPE_DEFAULT,
+		gstin: record.gstNumber || "",
+		registeredLegalName: record.registeredLegalName || "",
+		registeredAddress: record.registeredAddress || "",
+		accountHolderName: record.accountHolderName || "",
+		bankName: record.bankName || "",
+		branch: record.branch || "",
+		accountNumber: record.accountNumber || "",
+		confirmAccountNumber: record.accountNumber || "",
+		ifscCode: record.ifscCode || "",
+		swiftCode: record.swiftCode || "",
+		address: record.address,
+		addressLine2: record.addressLine2 || "",
+		town: record.town || "",
+		state: record.state,
+		district: record.district,
+		city: record.city,
+		pincode: record.pincode,
+		status: record.status,
+		operatedBy: record.operatedBy,
+		customerType: record.customerType || "",
+		contacts,
+		documents: record.documents || [],
+	};
+}
+
+export function warehouseFormToRecordFields(
+	form: WarehouseFormValues,
+): Pick<
+	WarehouseMaster,
+	| "warehouseName"
+	| "warehouseType"
+	| "gstApplicable"
+	| "gstNumber"
+	| "gstRegistrationType"
+	| "registeredLegalName"
+	| "registeredAddress"
+	| "accountHolderName"
+	| "bankName"
+	| "branch"
+	| "accountNumber"
+	| "ifscCode"
+	| "swiftCode"
+	| "contactPerson"
+	| "mobileNumber"
+	| "emailAddress"
+	| "address"
+	| "addressLine2"
+	| "town"
+	| "state"
+	| "district"
+	| "city"
+	| "pincode"
+	| "manager"
+	| "status"
+	| "operatedBy"
+	| "customerType"
+	| "contacts"
+	| "documents"
+> {
+	const primaryContact = form.contacts.find((c) => c.isPrimary) || form.contacts[0];
+	return {
+		warehouseName: form.warehouseName,
+		warehouseType: "Central Warehouse",
+		gstApplicable: form.gstApplicable,
+		gstNumber: form.gstApplicable ? form.gstin.trim().toUpperCase() : "",
+		gstRegistrationType: form.gstApplicable ? form.gstRegistrationType : GST_REGISTRATION_TYPE_DEFAULT,
+		registeredLegalName: form.gstApplicable ? form.registeredLegalName.trim() : "",
+		registeredAddress: form.gstApplicable ? form.registeredAddress.trim() : "",
+		accountHolderName: form.accountHolderName.trim(),
+		bankName: form.bankName.trim(),
+		branch: form.branch.trim(),
+		accountNumber: form.accountNumber.trim(),
+		ifscCode: form.ifscCode.trim().toUpperCase(),
+		swiftCode: form.swiftCode.trim(),
+		contactPerson: primaryContact?.contactPerson ?? "",
+		mobileNumber: primaryContact?.mobileNumber ?? "",
+		emailAddress: primaryContact?.emailAddress ?? "",
+		address: form.address.trim(),
+		addressLine2: form.addressLine2.trim(),
+		town: form.town.trim(),
+		state: form.state,
+		district: form.district,
+		city: form.city,
+		pincode: form.pincode,
+		manager: primaryContact?.designation?.trim() || "",
+		status: form.status,
+		operatedBy: form.operatedBy,
+		customerType: form.operatedBy === "C&F Agent" ? form.customerType : undefined,
+		contacts: form.contacts,
+		documents: form.documents || [],
+	};
 }
 
 export function validateWarehouseForm(
@@ -159,14 +299,29 @@ export function validateWarehouseForm(
 	if (!form.warehouseName.trim())
 		e.warehouseName = "Warehouse Name is required";
 	if (form.gstApplicable) {
-		if (!form.gstNumber.trim()) {
-			e.gstNumber = "GST Number is required when GST Applicable is ON";
-		} else if (!validateWarehouseGST(form.gstNumber)) {
-			e.gstNumber = "Enter a valid GST number";
+		if (!form.gstRegistrationType.trim()) {
+			e.gstRegistrationType = "Registration type is required";
+		}
+		if (!form.gstin.trim()) {
+			e.gstin = "GSTIN is required when GST is applicable";
+		} else if (!validateGSTIN(form.gstin)) {
+			e.gstin = "Enter a valid 15-character GSTIN";
 		}
 	}
+	if (form.accountNumber && form.accountNumber !== form.confirmAccountNumber) {
+		e.confirmAccountNumber = "Account number mismatch";
+	}
+	if (form.ifscCode.trim() && !validateIFSC(form.ifscCode)) {
+		e.ifscCode = "Invalid IFSC format";
+	}
+	if (!form.address.trim())
+		e.address = "Address Line 1 is required";
 	if (form.pincode.trim() && !/^\d{6}$/.test(form.pincode.trim()))
 		e.pincode = "Enter valid 6-digit pincode";
+	if (form.pincode.trim().length === 6 && !form.state.trim())
+		e.state = "State is required for a valid pincode";
+	if (form.pincode.trim().length === 6 && !form.city.trim())
+		e.city = "City is required for a valid pincode";
 	if (form.operatedBy === "C&F Agent" && !form.customerType?.trim()) {
 		e.customerType = "C&F Agent is required for C&F operated warehouse.";
 	}
@@ -341,7 +496,7 @@ function SectionHead({
 	required?: boolean;
 }) {
 	return (
-		<div className='mb-2.5 mt-0.5'>
+		<div className='mb-1.5'>
 			<p className='flex items-center text-xs font-bold tracking-wider uppercase text-foreground'>
 				{label}
 				{required && <span className='ml-1 text-red-500'>*</span>}
@@ -629,18 +784,17 @@ export function WarehouseForm({
 	onChange,
 	errors,
 	onClearError,
-	warehouseCode,
 }: {
 	form: WarehouseFormValues;
 	onChange: (f: WarehouseFormValues) => void;
 	errors: Record<string, string>;
 	onClearError: (key: string) => void;
-	warehouseCode: string;
 }) {
 	const [toast, setToast] = useState<{
 		msg: string;
 		type: "success" | "error";
 	} | null>(null);
+	const [fetchingGst, setFetchingGst] = useState(false);
 
 	React.useEffect(() => {
 		if (!toast) return;
@@ -892,8 +1046,10 @@ export function WarehouseForm({
 			{
 				id: newId,
 				contactPerson: "",
+				designation: "",
 				mobileNumber: "",
 				emailAddress: "",
+				alternateContact: "",
 				isPrimary: false,
 				mobileCountryCode: "+91",
 			},
@@ -929,8 +1085,82 @@ export function WarehouseForm({
 		setToast({ msg: "Primary contact updated.", type: "success" });
 	};
 
-	const districts = getDistrictsForState(form.state);
-	const cities = getCitiesForDistrict(form.district);
+	const [geoNodes] = useState(() =>
+		typeof window !== "undefined" ? loadGeoNodes() : [],
+	);
+	const stateOptions = useMemo(
+		() => getStateSelectOptions(geoNodes),
+		[geoNodes],
+	);
+
+	const warehouseAddress = useMemo<BranchAddress>(
+		() => ({
+			address: form.address,
+			addressLine2: form.addressLine2,
+			country: "India",
+			district: form.district,
+			town: form.town,
+			city: form.city,
+			state: form.state,
+			pincode: form.pincode,
+		}),
+		[
+			form.address,
+			form.addressLine2,
+			form.district,
+			form.town,
+			form.city,
+			form.state,
+			form.pincode,
+		],
+	);
+
+	const updateWarehouseAddress = (addr: BranchAddress) => {
+		onChange({
+			...form,
+			address: addr.address,
+			addressLine2: addr.addressLine2 ?? "",
+			district: addr.district ?? "",
+			town: addr.town ?? "",
+			city: addr.city,
+			state: addr.state,
+			pincode: addr.pincode,
+		});
+		if (errors.address) onClearError("address");
+		if (errors.pincode) onClearError("pincode");
+		if (errors.state) onClearError("state");
+		if (errors.city) onClearError("city");
+		if (errors.town) onClearError("town");
+		if (errors.district) onClearError("district");
+	};
+
+	const handleFetchGst = async () => {
+		if (!form.gstin.trim()) {
+			setToast({ msg: "Enter GSTIN before fetching details.", type: "error" });
+			return;
+		}
+		if (!validateGSTIN(form.gstin)) {
+			setToast({ msg: "Enter a valid 15-character GSTIN.", type: "error" });
+			return;
+		}
+		setFetchingGst(true);
+		try {
+			const details = await fetchGstRegistrationDetailsAsync(form.gstin);
+			if (!details) {
+				setToast({ msg: "Could not fetch GST details. Check GSTIN format.", type: "error" });
+				return;
+			}
+			onChange({
+				...form,
+				registeredLegalName: details.legalBusinessName || details.tradeName || "",
+				registeredAddress: details.registeredAddress || "",
+				warehouseName: form.warehouseName.trim() || details.tradeName || details.legalBusinessName || "",
+			});
+			setToast({ msg: "GST details fetched and applied.", type: "success" });
+		} finally {
+			setFetchingGst(false);
+		}
+	};
 
 	const inputCls = (key: string) =>
 		cn(
@@ -939,7 +1169,7 @@ export function WarehouseForm({
 		);
 
 	return (
-		<div className='w-full space-y-5'>
+		<div className='w-full space-y-3'>
 			{/* ── Section 1: Basic Details ─────────────────────────── */}
 			<div>
 				<SectionHead
@@ -947,24 +1177,9 @@ export function WarehouseForm({
 					sub='Identity, classification, and operational status'
 					required
 				/>
-				<div className='grid grid-cols-12 gap-3'>
-					{/* Warehouse Code */}
-					<div className='col-span-1 space-y-1'>
-						<Label className='text-xs font-medium'>Warehouse Code</Label>
-						<Input
-							value={warehouseCode}
-							disabled
-							className='h-8 font-mono text-xs cursor-not-allowed bg-muted/30 text-muted-foreground'
-						/>
-					</div>
-
+				<div className='grid grid-cols-12 gap-2.5'>
 					{/* Warehouse Name */}
-					<div
-						className={cn(
-							form.operatedBy === "C&F Agent" ? "col-span-2" : "col-span-2",
-							"space-y-1",
-						)}
-					>
+					<div className='col-span-12 sm:col-span-4 space-y-1'>
 						<Label className='text-xs font-medium'>
 							Warehouse Name <span className='text-red-500'>*</span>
 						</Label>
@@ -977,26 +1192,8 @@ export function WarehouseForm({
 						<FieldError msg={errors.warehouseName} />
 					</div>
 
-					{/* Warehouse Type */}
-					<div
-						className={cn(
-							form.operatedBy === "C&F Agent" ? "col-span-2" : "col-span-2",
-						)}
-					>
-						<AC
-							label='Warehouse Type'
-							value={form.warehouseType}
-							onChange={(v) => set("warehouseType", v as WarehouseType)}
-							options={WAREHOUSE_TYPES.filter(Boolean).map((t) => ({
-								value: t,
-								label: t,
-							}))}
-							placeholder='Select type…'
-						/>
-					</div>
-
 					{/* Operated By */}
-					<div className='col-span-2'>
+					<div className='col-span-12 sm:col-span-4'>
 						<AC
 							label='Operated By'
 							value={form.operatedBy}
@@ -1011,7 +1208,7 @@ export function WarehouseForm({
 
 					{/* Customer Name (Conditional) */}
 					{form.operatedBy === "C&F Agent" && (
-						<div className='col-span-2 space-y-1'>
+						<div className='col-span-12 sm:col-span-4 space-y-1'>
 							<AC
 								label='C&F Agent'
 								value={form.customerType}
@@ -1030,57 +1227,18 @@ export function WarehouseForm({
 							)}
 						</div>
 					)}
-
-					{/* GST Applicable Toggle */}
-					<div className='col-span-1 space-y-1'>
-						<Label className='text-xs font-medium'>GST Applicable</Label>
-						<div className='flex items-center h-8'>
-							<CompactToggle
-								checked={form.gstApplicable}
-								onCheckedChange={(c) => {
-									set("gstApplicable", c);
-									if (!c) {
-										set("gstNumber", "");
-									}
-								}}
-							/>
-						</div>
-					</div>
-
-					{/* GST Number */}
-					{form.gstApplicable && (
-						<div className='col-span-2 space-y-1'>
-							<Label className='text-xs font-medium'>
-								GST Number <span className='text-red-500'>*</span>
-							</Label>
-							<Input
-								value={form.gstNumber}
-								onChange={(e) => set("gstNumber", e.target.value.toUpperCase())}
-								placeholder='e.g., 27AABCT1234F1ZA'
-								className={cn(
-									"h-8 font-mono text-xs",
-									errors.gstNumber &&
-										"border-red-400 focus-visible:ring-red-300",
-								)}
-								maxLength={15}
-							/>
-							<FieldError msg={errors.gstNumber} />
-						</div>
-					)}
 				</div>
 			</div>
 
 			{/* ── Section 2: Contact Details ────────────────────────── */}
-			<div className='pt-4 border-t border-border/60'>
-				<div className='flex items-center justify-between mb-3'>
-					<SectionHead
-						label='Contact Details'
-						sub='Add one or more warehouse contact persons.'
-						required
-					/>
-				</div>
+			<div className='pt-3 border-t border-border/60'>
+				<SectionHead
+					label='Contact Details'
+					sub='Add one or more warehouse contact persons.'
+					required
+				/>
 
-				<div className='space-y-3'>
+				<div className='space-y-2'>
 					{form.contacts.map((contact, index) => {
 						const nameErr = errors[`contactPerson_${index}`];
 						const mobErr = errors[`mobileNumber_${index}`];
@@ -1089,9 +1247,9 @@ export function WarehouseForm({
 						return (
 							<div
 								key={contact.id}
-								className='p-3 space-y-3 border border-border/80 bg-slate-50/50 rounded-xl'
+								className='p-2.5 space-y-2 border border-border/80 bg-slate-50/50 rounded-lg'
 							>
-								<div className='grid items-end grid-cols-1 gap-3 md:grid-cols-12'>
+								<div className='grid items-end grid-cols-1 gap-2.5 md:grid-cols-12'>
 									{/* Contact Person */}
 									<div className='col-span-1 space-y-1 md:col-span-2'>
 										<Label className='text-xs font-medium'>
@@ -1109,6 +1267,19 @@ export function WarehouseForm({
 											)}
 										/>
 										<FieldError msg={nameErr} />
+									</div>
+
+									{/* Designation */}
+									<div className='col-span-1 space-y-1 md:col-span-2'>
+										<Label className='text-xs font-medium'>Designation</Label>
+										<Input
+											value={contact.designation || ""}
+											onChange={(e) =>
+												updateContact(index, "designation", e.target.value)
+											}
+											placeholder='e.g., Warehouse Manager'
+											className='h-8 text-xs'
+										/>
 									</div>
 
 									{/* Mobile Number */}
@@ -1162,8 +1333,26 @@ export function WarehouseForm({
 										<FieldError msg={emailErr} />
 									</div>
 
+									{/* Alternate Contact */}
+									<div className='col-span-1 space-y-1 md:col-span-2'>
+										<Label className='text-xs font-medium'>Alternate Contact</Label>
+										<Input
+											value={contact.alternateContact || ""}
+											onChange={(e) =>
+												updateContact(
+													index,
+													"alternateContact",
+													e.target.value.replace(/\D/g, "").slice(0, 10),
+												)
+											}
+											placeholder='10-digit mobile'
+											className='h-8 text-xs'
+											inputMode='numeric'
+										/>
+									</div>
+
 									{/* Primary Radio & Remove Button */}
-									<div className='flex items-center col-span-1 gap-3 pt-2 pb-2 md:col-span-2 md:pt-0'>
+									<div className='flex items-center col-span-1 gap-2 md:col-span-2'>
 										{/* Primary Toggle */}
 										<label className='inline-flex items-center gap-1.5 cursor-pointer text-xs font-medium text-foreground select-none'>
 											<input
@@ -1194,7 +1383,7 @@ export function WarehouseForm({
 					})}
 				</div>
 
-				<div className='mt-3'>
+				<div className='mt-2'>
 					<Button
 						type='button'
 						variant='outline'
@@ -1225,124 +1414,116 @@ export function WarehouseForm({
 			)}
 
 			{/* ── Section 3: Address Details ────────────────────────── */}
-			<div className='pt-4 border-t border-border/60'>
+			<div className='pt-3 border-t border-border/60'>
 				<SectionHead
 					label='Address & Location Details'
 					sub='Warehouse location and postal address'
 				/>
 
-				<div className='grid grid-cols-12 gap-3'>
-					{/* Address Textarea */}
-					<div className='col-span-5 space-y-1 '>
-						<Label className='text-xs font-medium'>Address</Label>
-						<Textarea
-							value={form.address}
-							onChange={(e) => set("address", e.target.value)}
-							placeholder='Street address, building, area...'
-							rows={2}
-							className='text-xs resize-none rounded-lg min-h-[100px]'
-						/>
-					</div>
-				</div>
-
-				<div className='grid grid-cols-12 gap-3 mt-2'>
-					{/* State */}
-					<div className='col-span-2'>
-						<AC
-							label='State'
-							value={form.state}
-							onChange={(v) => set("state", v)}
-							options={STATE_OPTIONS.filter(Boolean).map((s) => ({
-								value: s,
-								label: s,
-							}))}
-							placeholder='Select state…'
-						/>
-					</div>
-
-					{/* District */}
-					<div className='col-span-2'>
-						<AC
-							label='District'
-							value={form.district}
-							onChange={(v) => set("district", v)}
-							disabled={!form.state}
-							options={districts
-								.filter(Boolean)
-								.map((d) => ({ value: d, label: d }))}
-							placeholder={
-								form.state ? "Select district…" : "Select state first"
-							}
-						/>
-					</div>
-
-					{/* City */}
-					<div className='col-span-2'>
-						<AC
-							label='City'
-							value={form.city}
-							onChange={(v) => set("city", v)}
-							disabled={!form.district}
-							options={cities
-								.filter(Boolean)
-								.map((c) => ({ value: c, label: c }))}
-							placeholder={
-								form.district ? "Select city…" : "Select district first"
-							}
-						/>
-					</div>
-
-					{/* Pincode */}
-					<div className='col-span-2 space-y-1'>
-						<Label className='text-xs font-medium'>Pincode</Label>
-						<Input
-							value={form.pincode}
-							onChange={(e) =>
-								set("pincode", e.target.value.replace(/\D/g, ""))
-							}
-							placeholder='e.g., 411028'
-							maxLength={6}
-							className={inputCls("pincode")}
-						/>
-						<FieldError msg={errors.pincode} />
-					</div>
-				</div>
-			</div>
-
-			{/* ── Section 4: Management Details ─────────────────────── */}
-			<div className='pt-4 border-t border-border/60'>
-				<SectionHead
-					label='Management Details'
-					sub='Assigned warehouse manager and contact point'
+				<BranchAddressFields
+					address={warehouseAddress}
+					onChange={updateWarehouseAddress}
+					stateOptions={stateOptions}
+					showDistrict
+					errors={{
+						address: errors.address,
+						pincode: errors.pincode,
+						state: errors.state,
+						city: errors.city,
+						town: errors.town,
+						district: errors.district,
+					}}
 				/>
-				<div className='grid grid-cols-12 gap-3'>
-					{/* Manager */}
-					<div className='col-span-2'>
-						<AC
-							label='Manager'
-							value={form.manager}
-							onChange={(v) => set("manager", v)}
-							options={MANAGER_OPTIONS.filter(Boolean).map((m) => ({
-								value: m,
-								label: m,
-							}))}
-							placeholder='Select manager…'
-						/>
-					</div>
-				</div>
 			</div>
 
-			{/* ── Section 5: Documents ─────────────────────────────── */}
-			<div className='pt-4 border-t border-border/60'>
-				<div className='flex items-center justify-between mb-3'>
-					<SectionHead
-						label='Warehouse Documents'
-						sub='Upload related documents, GST certificates, agreements etc.'
+			{/* ── Section 4: GST & Tax Details ──────────────────────── */}
+			<div className='pt-3 border-t border-border/60'>
+				<ErpFormSection
+					title='GST & Tax Details'
+					headerRight={
+						<div className='ml-auto'>
+							<GstRegisteredToggleControl
+							label='GST Applicable'
+							active={form.gstApplicable}
+							onChange={(yes) => {
+								onChange({
+									...form,
+									gstApplicable: yes,
+									gstRegistrationType: yes
+										? form.gstRegistrationType || GST_REGISTRATION_TYPE_DEFAULT
+										: GST_REGISTRATION_TYPE_DEFAULT,
+									gstin: yes ? form.gstin : "",
+									registeredLegalName: yes ? form.registeredLegalName : "",
+									registeredAddress: yes ? form.registeredAddress : "",
+								});
+								if (!yes) onClearError("gstin");
+							}}
+						/>
+						</div>
+					}
+				>
+					<GstRegistrationFields
+						showRegisteredToggle={false}
+						values={{
+							gstRegistered: form.gstApplicable,
+							gstRegistrationType: form.gstRegistrationType,
+							gstin: form.gstin,
+							registeredLegalName: form.registeredLegalName,
+							registeredAddress: form.registeredAddress,
+						}}
+						onChange={(gst) => {
+							onChange({
+								...form,
+								gstApplicable: gst.gstRegistered,
+								gstRegistrationType: gst.gstRegistrationType,
+								gstin: gst.gstin,
+								registeredLegalName: gst.registeredLegalName ?? "",
+								registeredAddress: gst.registeredAddress ?? "",
+							});
+							if (!gst.gstRegistered) onClearError("gstin");
+						}}
+						errors={errors}
+						fetchingGst={fetchingGst}
+						onFetchGst={handleFetchGst}
+						inputClassName='h-8 text-xs'
 					/>
-				</div>
+				</ErpFormSection>
+			</div>
 
-				<div className='p-3 mb-3 border rounded-lg border-border bg-muted/25'>
-					<div className='grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto]'>
+			{/* ── Section 5: Bank Details ─────────────────────────── */}
+			<div className='pt-3 border-t border-border/60'>
+				<ErpFormSection title='Bank Details'>
+					<BankDetailsFields
+						values={{
+							accountHolderName: form.accountHolderName,
+							bankName: form.bankName,
+							branch: form.branch,
+							accountNumber: form.accountNumber,
+							confirmAccountNumber: form.confirmAccountNumber,
+							ifscCode: form.ifscCode,
+							swiftCode: form.swiftCode,
+						}}
+						onChange={(bank) =>
+							onChange({
+								...form,
+								...bank,
+							})
+						}
+						errors={errors}
+						inputClassName='h-8 text-xs'
+					/>
+				</ErpFormSection>
+			</div>
+
+			{/* ── Section 6: Documents ─────────────────────────────── */}
+			<div className='pt-3 border-t border-border/60'>
+				<SectionHead
+					label='Warehouse Documents'
+					sub='Upload related documents, GST certificates, agreements etc.'
+				/>
+
+				<div className='p-2.5 mb-2 border rounded-lg border-border bg-muted/25'>
+					<div className='grid grid-cols-1 gap-2.5 md:grid-cols-[minmax(0,1fr)_auto]'>
 						<div className='space-y-1'>
 							<label className='text-xs font-medium text-foreground'>
 								Document Types

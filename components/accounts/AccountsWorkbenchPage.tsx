@@ -3,8 +3,14 @@
 import React from "react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { cn } from "@/lib/utils";
-import { MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
+import {
+  AccountsColumnarTable,
+} from "@/components/accounts/AccountsTable";
+import {
+  AccountsTableListing,
+  AccountsListingToolbar,
+  AccountsListingCountFooter,
+} from "@/components/accounts/AccountsTableListing";
 
 export interface WorkbenchColumn {
   key: string;
@@ -21,6 +27,9 @@ export interface AccountsWorkbenchPageProps {
   columns: WorkbenchColumn[];
   rows: Record<string, string | number>[];
   actions?: React.ReactNode;
+  filters?: React.ReactNode;
+  onExcel?: () => void;
+  onPdf?: () => void;
   emptyMessage?: string;
 }
 
@@ -31,6 +40,9 @@ export function AccountsWorkbenchPage({
   columns,
   rows,
   actions,
+  filters,
+  onExcel,
+  onPdf,
   emptyMessage = "No records found.",
 }: AccountsWorkbenchPageProps) {
   return (
@@ -38,59 +50,39 @@ export function AccountsWorkbenchPage({
       breadcrumbs={accountsBreadcrumb(section, title)}
       title={title}
       description={description}
+      hideDescription
       actions={actions}
       layout="split"
       className="h-full min-h-0"
     >
-      <div className="flex-1 overflow-auto min-h-0">
-        {rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-            <p className="text-sm font-medium text-foreground">{emptyMessage}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Data appears when related vouchers are posted in the system.
-            </p>
-          </div>
-        ) : (
-          <table className="w-full text-table">
-            <thead className="bg-muted/20 border-b border-border/60 sticky top-0 z-10">
-              <tr>
-                {columns.map((c) => (
-                  <th
-                    key={c.key}
-                    className={cn(
-                      "px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground",
-                      c.align === "right" && "text-right",
-                      c.align === "center" && "text-center",
-                      (!c.align || c.align === "left") && "text-left",
-                    )}
-                  >
-                    {c.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => (
-                <tr key={i} className="border-b border-border/40 hover:bg-muted/20">
-                  {columns.map((c) => (
-                    <td
-                      key={c.key}
-                      className={cn(
-                        "px-4 py-2.5 text-xs text-foreground",
-                        c.align === "right" && "text-right",
-                        c.money && MONEY_AMOUNT_CLASS,
-                        c.mono && "font-mono",
-                      )}
-                    >
-                      {row[c.key] ?? "—"}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <AccountsTableListing
+        toolbar={
+          filters || onExcel || onPdf ? (
+            <AccountsListingToolbar onExcel={onExcel} onPdf={onPdf} exportDisabled={rows.length === 0}>
+              {filters}
+            </AccountsListingToolbar>
+          ) : undefined
+        }
+        footer={
+          rows.length > 0 ? (
+            <AccountsListingCountFooter>
+              Showing <span className="font-medium text-foreground">{rows.length}</span> records
+            </AccountsListingCountFooter>
+          ) : undefined
+        }
+      >
+        <AccountsColumnarTable
+          columns={columns.map((c) => ({
+            key: c.key,
+            label: c.label,
+            align: c.align,
+            money: c.money,
+            mono: c.mono,
+          }))}
+          rows={rows}
+          emptyMessage={emptyMessage}
+        />
+      </AccountsTableListing>
     </AccountsPageShell>
   );
 }

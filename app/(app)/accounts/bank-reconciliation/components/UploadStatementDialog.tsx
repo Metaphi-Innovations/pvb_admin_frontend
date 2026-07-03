@@ -25,16 +25,21 @@ export function UploadStatementDialog({
   onOpenChange,
   onSuccess,
   preset,
+  defaultBankAccountId,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onSuccess: (statementId: number) => void;
   preset?: BankStatement | null;
+  /** Pre-select bank without locking fields (manual reconciliation upload). */
+  defaultBankAccountId?: number;
 }) {
   const accounts = loadBankAccounts();
   const currentYear = new Date().getFullYear();
 
-  const [bankAccountId, setBankAccountId] = useState(String(preset?.bankAccountId ?? accounts[0]?.id ?? ""));
+  const [bankAccountId, setBankAccountId] = useState(
+    String(preset?.bankAccountId ?? defaultBankAccountId ?? accounts[0]?.id ?? ""),
+  );
   const [month, setMonth] = useState(String(preset?.month ?? new Date().getMonth() + 1));
   const [year, setYear] = useState(String(preset?.year ?? currentYear));
   const [statementName, setStatementName] = useState(preset?.statementName ?? "");
@@ -50,8 +55,10 @@ export function UploadStatementDialog({
       setMonth(String(preset.month));
       setYear(String(preset.year));
       setStatementName(preset.statementName);
+    } else if (defaultBankAccountId) {
+      setBankAccountId(String(defaultBankAccountId));
     }
-  }, [open, preset]);
+  }, [open, preset, defaultBankAccountId]);
 
   const reset = () => {
     setError("");
@@ -64,6 +71,11 @@ export function UploadStatementDialog({
   const doUpload = async (overwrite: boolean) => {
     if (!file || !bankAccountId || !statementName.trim()) {
       setError("Please fill all required fields and select a file.");
+      return;
+    }
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!["csv", "xls", "xlsx"].includes(ext)) {
+      setError("Invalid file format. Please upload a CSV, XLS, or XLSX bank statement.");
       return;
     }
     setBusy(true);
@@ -82,7 +94,11 @@ export function UploadStatementDialog({
           setOverwriteOpen(true);
           return;
         }
-        setError(result.code === "empty" ? "No valid rows found in file." : "Invalid bank account.");
+        setError(
+          result.code === "empty"
+            ? "Statement uploaded but no transactions were found. Please check file format."
+            : "Invalid bank account selected.",
+        );
         return;
       }
       setOverwriteOpen(false);
@@ -120,7 +136,7 @@ export function UploadStatementDialog({
             <div className="space-y-1">
               <Label className="text-xs">Bank Account</Label>
               <Select value={bankAccountId} onValueChange={setBankAccountId} disabled={!!preset}>
-                <SelectTrigger className="h-8 text-xs">
+                <SelectTrigger className="h-9 text-[13px] font-medium">
                   <SelectValue placeholder="Select bank" />
                 </SelectTrigger>
                 <SelectContent>
@@ -136,7 +152,7 @@ export function UploadStatementDialog({
               <div className="space-y-1">
                 <Label className="text-xs">Month</Label>
                 <Select value={month} onValueChange={setMonth} disabled={!!preset}>
-                  <SelectTrigger className="h-8 text-xs">
+                  <SelectTrigger className="h-9 text-[13px] font-medium">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -151,7 +167,7 @@ export function UploadStatementDialog({
               <div className="space-y-1">
                 <Label className="text-xs">Year</Label>
                 <Select value={year} onValueChange={setYear} disabled={!!preset}>
-                  <SelectTrigger className="h-8 text-xs">
+                  <SelectTrigger className="h-9 text-[13px] font-medium">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -167,7 +183,7 @@ export function UploadStatementDialog({
             <div className="space-y-1">
               <Label className="text-xs">Statement Name</Label>
               <Input
-                className="h-8 text-xs"
+                className="h-9 text-[13px] font-medium"
                 value={statementName}
                 onChange={(e) => setStatementName(e.target.value)}
                 placeholder="e.g. HDFC June 2026"
@@ -178,19 +194,19 @@ export function UploadStatementDialog({
               <Input
                 type="file"
                 accept=".xlsx,.xls,.csv"
-                className="h-8 text-xs"
+                className="h-9 text-[13px] font-medium"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />
             </div>
             {error && <p className="text-xs text-red-600">{error}</p>}
           </div>
           <DialogFooter>
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button
               size="sm"
-              className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+              className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
               disabled={busy}
               onClick={handleSubmit}
             >
@@ -210,12 +226,12 @@ export function UploadStatementDialog({
             and matching data for this month. Do you want to continue?
           </p>
           <DialogFooter>
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setOverwriteOpen(false)}>
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => setOverwriteOpen(false)}>
               Cancel
             </Button>
             <Button
               size="sm"
-              className="h-8 text-xs bg-amber-600 hover:bg-amber-700 text-white"
+              className="h-9 text-[13px] font-medium bg-amber-600 hover:bg-amber-700 text-white"
               disabled={busy}
               onClick={() => void doUpload(true)}
             >

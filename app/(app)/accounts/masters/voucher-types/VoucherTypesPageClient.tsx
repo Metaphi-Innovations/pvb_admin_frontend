@@ -40,8 +40,8 @@ export default function VoucherTypesPageClient() {
         layout="split"
       >
         <div className="flex-1 overflow-auto min-h-0">
-          <table className="w-full text-table">
-            <thead className="bg-muted/20 border-b border-border/60 sticky top-0">
+          <table className="accounts-table w-full">
+            <thead className="border-b border-border/60">
               <tr>
                 <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Voucher Type</th>
                 <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Prefix</th>
@@ -53,7 +53,7 @@ export default function VoucherTypesPageClient() {
             </thead>
             <tbody>
               {records.map((vt) => (
-                <tr key={vt.id} className="border-b border-border/40 hover:bg-muted/20">
+                <tr key={vt.id} className="accounts-table-row group">
                   <td className="px-4 py-3 text-sm font-medium">
                     <span className="inline-flex items-center gap-1.5">
                       {vt.name}
@@ -89,7 +89,7 @@ export default function VoucherTypesPageClient() {
               <div className="space-y-1">
                 <Label className="text-[11px]">Prefix</Label>
                 <Input
-                  className="h-8 text-xs font-mono"
+                  className="h-9 text-[13px] font-medium font-mono"
                   value={edit.prefix}
                   onChange={(e) => setEdit({ ...edit, prefix: e.target.value.toUpperCase() })}
                 />
@@ -100,7 +100,7 @@ export default function VoucherTypesPageClient() {
                   value={edit.numberingType}
                   onValueChange={(v) => setEdit({ ...edit, numberingType: v as "auto" | "manual" })}
                 >
-                  <SelectTrigger className="h-8 text-xs">
+                  <SelectTrigger className="h-9 text-[13px] font-medium">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -112,7 +112,7 @@ export default function VoucherTypesPageClient() {
               <div className="space-y-1">
                 <Label className="text-[11px]">Starting Number</Label>
                 <Input
-                  className="h-8 text-xs"
+                  className="h-9 text-[13px] font-medium"
                   type="number"
                   min={1}
                   value={edit.startingNumber}
@@ -134,7 +134,7 @@ export default function VoucherTypesPageClient() {
             </SheetBody>
           )}
           <SheetFooter>
-            <Button size="sm" className="h-8 text-xs bg-brand-600 text-white" onClick={save}>Save</Button>
+            <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 text-white" onClick={save}>Save</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

@@ -30,22 +30,22 @@ export function POWorkflowPanel({
 
   return (
     <div className="space-y-3">
-      {/* Vendor Invoice */}
+      {/* Supplier Invoice */}
       <section className="rounded-lg border border-border/80 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-brand-600" />
-            <h3 className="text-xs font-semibold">Vendor Invoice</h3>
+            <h3 className="text-xs font-semibold">Supplier Invoice</h3>
           </div>
           <StatusPill status={wf.invoiceStatus} config={INVOICE_STATUS_CFG} />
         </div>
         {canUploadInvoice && (
           <Button variant="outline" size="sm" className="h-8 text-xs w-full mb-3" onClick={onUploadInvoice}>
-            <Upload className="w-3.5 h-3.5 mr-1" /> Upload Vendor Invoice
+            <Upload className="w-3.5 h-3.5 mr-1" /> Upload Supplier Invoice
           </Button>
         )}
         {vendorInvoices.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground">No vendor invoice uploaded. Upload against this PO to create Accounts → Purchase entry.</p>
+          <p className="text-[11px] text-muted-foreground">No supplier invoice uploaded. Upload against this PO to create Accounts → Purchase entry.</p>
         ) : (
           <div className="space-y-2">
             {vendorInvoices.map((inv) => (
@@ -69,7 +69,7 @@ export function POWorkflowPanel({
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2">
             <Package className="w-4 h-4 text-cyan-600" />
-            <h3 className="text-xs font-semibold">Warehouse GRN & QC</h3>
+            <h3 className="text-xs font-semibold">Warehouse GRN</h3>
           </div>
           <StatusPill status={wf.grnStatus} config={GRN_STATUS_CFG} />
         </div>
@@ -88,9 +88,14 @@ export function POWorkflowPanel({
         ) : (
           <p className="text-[10px] text-muted-foreground">GRN created in Warehouse module will appear here.</p>
         )}
-        <Link href="/warehouse/grnqc" className="text-[10px] text-brand-600 hover:underline mt-2 inline-block">
-          View Warehouse GRN & QC →
-        </Link>
+        <div className="flex items-center gap-3 mt-2">
+          <Link href="/warehouse/grn" className="text-[10px] text-brand-600 hover:underline inline-block">
+            View GRN →
+          </Link>
+          <Link href="/warehouse/qc" className="text-[10px] text-brand-600 hover:underline inline-block">
+            View QC →
+          </Link>
+        </div>
       </section>
 
       {/* 3-Way Match */}

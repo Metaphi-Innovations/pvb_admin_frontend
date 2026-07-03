@@ -8,19 +8,26 @@ import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { SectionTabs } from "@/app/(app)/accounts/components/AccountsUI";
 import { LedgerTransactionsTable } from "@/components/accounts/LedgerTransactionsTable";
+import {
+  LedgerTransactionDateFilter,
+  useLedgerTransactionDateFilter,
+} from "@/components/accounts/LedgerTransactionDateFilter";
 import { loadChartOfAccounts } from "../../../data";
 import { computeLedgerBalanceBreakdown } from "../ledgers-utils";
 import {
-  buildLedgerStatement,
+  buildLedgerStatementForDateRange,
   collectLedgerTransactions,
   getLedgerById,
-  ledgerMovementTotals,
   ledgerOutstanding,
   parentGroupLabel,
   primaryHeadForLedger,
   resolveLedgerType,
   type LedgerTypeLabel,
 } from "@/lib/accounts/ledger-detail-utils";
+import {
+  computePeriodClosingBalance,
+  ledgerMovementTotalsForRange,
+} from "@/lib/accounts/ledger-transaction-date-filter";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { loadLedgerMeta } from "@/lib/accounts/ledger-metadata";
 import { resolveCoaMasterLink } from "@/lib/accounts/coa-master-link";
@@ -48,6 +55,7 @@ export default function LedgerDetailClient({
   const router = useRouter();
   const [tab, setTab] = useState(initialTab === "statement" ? "transactions" : initialTab);
   const [records, setRecords] = useState(() => loadChartOfAccounts());
+  const { applied, draft, setPreset, setDraftFrom, setDraftTo, apply } = useLedgerTransactionDateFilter();
 
   useEffect(() => {
     setRecords(loadChartOfAccounts());
@@ -77,12 +85,19 @@ export default function LedgerDetailClient({
     [ledger],
   );
   const statement = useMemo(
-    () => (ledger ? buildLedgerStatement(ledger, transactions) : []),
-    [ledger, transactions],
+    () =>
+      ledger
+        ? buildLedgerStatementForDateRange(ledger, transactions, applied.from, applied.to)
+        : [],
+    [ledger, transactions, applied.from, applied.to],
   );
   const { totalDebit, totalCredit } = useMemo(
-    () => ledgerMovementTotals(transactions),
-    [transactions],
+    () => ledgerMovementTotalsForRange(transactions, applied.from, applied.to),
+    [transactions, applied.from, applied.to],
+  );
+  const periodClosing = useMemo(
+    () => (ledger ? computePeriodClosingBalance(ledger, totalDebit, totalCredit) : null),
+    [ledger, totalDebit, totalCredit],
   );
 
   const tabs = useMemo(() => {
@@ -143,12 +158,12 @@ export default function LedgerDetailClient({
                 label: "Opening Balance",
                 value: <MoneyAmount amount={ledger.openingBalance} side={ledger.balanceType} />,
               },
-              { label: "Total Debit", value: formatMoney(totalDebit), accent: "debit" },
-              { label: "Total Credit", value: formatMoney(totalCredit), accent: "credit" },
+              { label: "Period Debit", value: formatMoney(totalDebit), accent: "debit" },
+              { label: "Period Credit", value: formatMoney(totalCredit), accent: "credit" },
               {
                 label: "Closing Balance",
-                value: balance ? (
-                  <MoneyAmount amount={balance.currentBalance.amount} side={balance.currentBalance.balanceType} />
+                value: periodClosing ? (
+                  <MoneyAmount amount={periodClosing.amount} side={periodClosing.balanceType} />
                 ) : (
                   "—"
                 ),
@@ -191,10 +206,21 @@ export default function LedgerDetailClient({
 
         <div className="flex-1 overflow-auto p-4">
           {tab === "transactions" && (
-            <LedgerTransactionsTable
-              rows={statement}
-              emptyLabel="No vouchers or source documents linked to this ledger yet. Post sales invoices, purchase bills, or vouchers to see the audit trail here."
-            />
+            <div className="space-y-4">
+              <LedgerTransactionDateFilter
+                preset={draft.preset}
+                dateFrom={draft.from}
+                dateTo={draft.to}
+                onPresetChange={setPreset}
+                onDateFromChange={setDraftFrom}
+                onDateToChange={setDraftTo}
+                onApply={apply}
+              />
+              <LedgerTransactionsTable
+                rows={statement}
+                emptyLabel="No vouchers or source documents linked to this ledger yet. Post sales invoices, purchase bills, or vouchers to see the audit trail here."
+              />
+            </div>
           )}
 
           {tab === "type-detail" && (
@@ -316,7 +342,7 @@ function DetailTable({
       <p className="text-sm font-medium text-foreground px-4 py-2.5 border-b border-border/40 bg-muted/10">
         {title}
       </p>
-      <table className="w-full text-xs">
+      <table className="accounts-table w-full">
         <thead>
           <tr className="border-b border-border/40 bg-muted/5">
             {columns.map((c) => (
@@ -688,7 +714,7 @@ function PurchaseLedgerDetail({ ledgerName }: { ledgerName: string }) {
   return (
     <DetailTable
       title="Bill-wise Purchases"
-      columns={["Date", "Bill No", "Vendor", "GRN/PO", "Taxable", "GST", "Total"]}
+      columns={["Date", "Bill No", "Supplier", "GRN/PO", "Taxable", "GST", "Total"]}
       rows={bills.map((b) => [
         b.invoiceDate,
         b.invoiceNo,

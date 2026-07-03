@@ -24,6 +24,8 @@ interface FormContainerProps {
   activeTab?: string;
   onTabChange?: (value: string) => void;
   noCard?: boolean;
+  /** Tighter header and card padding for dense full-page forms */
+  compact?: boolean;
 }
 
 export function FormContainer({
@@ -38,6 +40,7 @@ export function FormContainer({
   activeTab,
   onTabChange,
   noCard = false,
+  compact = false,
 }: FormContainerProps) {
   const tabList = tabs && tabs.length > 0 && (
     <TabsList className="bg-muted/50 p-0.5 border border-border/60 rounded-xl inline-flex h-auto">
@@ -59,9 +62,15 @@ export function FormContainer({
 
   return (
     <AppLayout>
-      <div className="w-full space-y-6">
+      <div className={compact ? "w-full space-y-3" : "w-full space-y-6"}>
         {/* Header Block */}
-        <div className="flex items-center justify-between border-b pb-4">
+        <div
+          className={
+            compact
+              ? "flex items-center justify-between border-b pb-2.5"
+              : "flex items-center justify-between border-b pb-4"
+          }
+        >
           <div className="flex items-center gap-3">
             {onBack && (
               <Button
@@ -105,7 +114,13 @@ export function FormContainer({
             {noCard ? (
               children
             ) : (
-              <div className="bg-white rounded-xl border border-border p-6 shadow-sm space-y-6">
+              <div
+                className={
+                  compact
+                    ? "bg-white rounded-xl border border-border p-4 shadow-sm"
+                    : "bg-white rounded-xl border border-border p-6 shadow-sm space-y-6"
+                }
+              >
                 {children}
               </div>
             )}
@@ -113,7 +128,13 @@ export function FormContainer({
         ) : noCard ? (
           children
         ) : (
-          <div className="bg-white rounded-xl border border-border p-6 shadow-sm space-y-6">
+          <div
+            className={
+              compact
+                ? "bg-white rounded-xl border border-border p-4 shadow-sm"
+                : "bg-white rounded-xl border border-border p-6 shadow-sm space-y-6"
+            }
+          >
             {children}
           </div>
         )}

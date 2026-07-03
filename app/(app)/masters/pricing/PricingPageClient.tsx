@@ -1,17 +1,22 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   CheckCircle2,
   Edit2,
   Eye,
   IndianRupee,
+  Info,
   X,
   Trash2,
   AlertTriangle,
+  ListChecks,
+  CalendarClock,
+  CalendarX,
+  Layers,
 } from "lucide-react";
 import {
   Dialog,
@@ -21,40 +26,35 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { MasterFormGrid, MasterField, compactInput } from "@/components/masters/MasterModule";
 import { MasterListingSheets } from "@/components/masters/MasterListingSheets";
+import { PricingForm as PricingFormFields } from "./components/PricingForm";
 import { MasterDrawerSection } from "@/components/masters/MasterRecordDrawer";
 import {
   DEFAULT_PRICING_FORM,
+  PRICING_CUSTOMER_TYPES,
+  PRICING_STATES,
+  PRICING_STORAGE_KEY,
+  computePricingDashboardStats,
+  findDuplicateActivePricing,
   formToPricing,
   formatIndianRupeeDisplay,
-  PRICING_SEED,
-  PRICING_STORAGE_KEY,
-  pricingToForm,
-  resolveProductForPricing,
-  validatePricingForm,
+  getSellingPriceFromRecord,
   loadActiveProductOptions,
-  findActivePricingForProduct,
-  parseGstPct,
+  loadActiveSupplierFilterOptions,
+  loadPricingRecords,
+  pricingToForm,
+  validatePricingForm,
   type PricingForm,
   type PricingRecord,
 } from "./pricing-data";
-import {
-  loadMasterRecords,
-  saveMasterRecords,
-  masterToday,
-  type MasterStatus,
-} from "@/lib/masters/common";
+import { saveMasterRecords, masterToday, type MasterStatus } from "@/lib/masters/common";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { applyFilters } from "@/components/listing/filter-utils";
-import { ListingUserCell, AuditUserRow, ListingStatusToggle, isActiveStatus } from "@/components/listing";
+import { AuditUserRow, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 import { ListingContainer } from "@/components/layout/ListingContainer";
-import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
+import { MiniKPICard } from "@/components/ui/KPICard";
 import { MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
-
-
 
 interface ToastState {
   msg: string;
@@ -87,15 +87,15 @@ function MoneyCell({ value }: { value: number }) {
 }
 
 export default function PricingMasterPage() {
+  const router = useRouter();
   const [records, setRecords] = useState<PricingRecord[]>([]);
   const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "sku", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "productCode", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
 
-
-  const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
+  const [sheetMode, setSheetMode] = useState<"edit" | "view" | null>(null);
   const [active, setActive] = useState<PricingRecord | null>(null);
   const [form, setForm] = useState<PricingForm>(DEFAULT_PRICING_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -103,8 +103,32 @@ export default function PricingMasterPage() {
 
   const productOptions = useMemo(() => loadActiveProductOptions(), [sheetMode]);
 
+  const categoryFilterOptions = useMemo(
+    () =>
+      [...new Set(records.map((r) => r.category).filter(Boolean))]
+        .sort()
+        .map((c) => ({ label: c, value: c })),
+    [records],
+  );
+
+  const segmentFilterOptions = useMemo(
+    () =>
+      [...new Set(records.map((r) => r.segment).filter(Boolean))]
+        .sort()
+        .map((s) => ({ label: s, value: s })),
+    [records],
+  );
+
+  const supplierFilterOptions = useMemo(
+    () =>
+      loadActiveSupplierFilterOptions().map((s) => ({ label: s, value: s })),
+    [records],
+  );
+
+  const dashboardStats = useMemo(() => computePricingDashboardStats(records), [records]);
+
   useEffect(() => {
-    setRecords(loadMasterRecords<PricingRecord>(PRICING_STORAGE_KEY, PRICING_SEED));
+    setRecords(loadPricingRecords());
   }, []);
 
   useEffect(() => {
@@ -113,16 +137,23 @@ export default function PricingMasterPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-
-
   const toggleStatus = (record: PricingRecord) => {
     const nextStatus: MasterStatus = record.status === "active" ? "inactive" : "active";
 
     if (nextStatus === "active") {
-      const duplicate = findActivePricingForProduct(record.productId, records, record.id);
+      const duplicate = findDuplicateActivePricing(
+        {
+          productId: String(record.productId),
+          customerType: record.customerType,
+          state: record.state,
+          status: "active",
+        },
+        records,
+        record.id,
+      );
       if (duplicate) {
         setToast({
-          msg: `Cannot activate — "${duplicate.sku}" already has an active pricing record.`,
+          msg: `Cannot activate — an active rule already exists for this product, state, and customer type.`,
           type: "error",
         });
         return;
@@ -132,11 +163,11 @@ export default function PricingMasterPage() {
     const updated = records.map((item) =>
       item.id === record.id
         ? {
-          ...item,
-          status: nextStatus,
-          updatedBy: "Admin User",
-          updatedAt: masterToday(),
-        }
+            ...item,
+            status: nextStatus,
+            updatedBy: "Admin User",
+            updatedAt: masterToday(),
+          }
         : item,
     );
     setRecords(updated);
@@ -147,23 +178,21 @@ export default function PricingMasterPage() {
     });
   };
 
-
-
-  const columns: ColumnConfig<PricingRecord>[] = [
+  const columns: ColumnConfig<PricingRecord>[] = useMemo(() => [
     {
-      key: "sku",
-      header: "SKU",
+      key: "productCode",
+      header: "Product Code",
       sortable: true,
       filterable: true,
       filterType: "text",
-      width: "130px",
+      width: "120px",
       render: (_val, row) => (
         <button
           type="button"
           onClick={() => openView(row)}
-          className="text-xs font-mono font-semibold text-foreground hover:text-brand-600 hover:underline text-left"
+          className="text-left text-xs font-mono font-semibold text-foreground hover:text-brand-600 hover:underline"
         >
-          {row.sku}
+          {row.productCode || row.sku}
         </button>
       ),
     },
@@ -173,75 +202,118 @@ export default function PricingMasterPage() {
       sortable: true,
       filterable: true,
       filterType: "text",
-      width: "200px",
+      width: "170px",
       render: (_val, row) => (
         <span className="text-xs font-medium text-foreground">{row.productName}</span>
       ),
     },
     {
-      key: "baseUnit",
-      header: "Base Unit",
+      key: "supplierName",
+      header: "Supplier Name",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: supplierFilterOptions,
+      width: "140px",
+      render: (_val, row) => <span className="text-xs">{row.supplierName || "—"}</span>,
+    },
+    {
+      key: "supplierCode",
+      header: "Supplier Code",
+      sortable: true,
+      filterable: true,
+      filterType: "text",
+      width: "110px",
+      render: (_val, row) => (
+        <span className="text-xs font-mono">{row.supplierCode || "—"}</span>
+      ),
+    },
+    {
+      key: "state",
+      header: "State",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: PRICING_STATES.map((s) => ({ label: s, value: s })),
+      width: "120px",
+      render: (_val, row) => <span className="text-xs">{row.state || "—"}</span>,
+    },
+    {
+      key: "customerType",
+      header: "Customer Type",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: PRICING_CUSTOMER_TYPES.map((t) => ({ label: t, value: t })),
+      width: "110px",
+      render: (_val, row) => <span className="text-xs">{row.customerType}</span>,
+    },
+    {
+      key: "category",
+      header: "Category",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: categoryFilterOptions,
+      width: "100px",
+      render: (_val, row) => <span className="text-xs">{row.category || "—"}</span>,
+    },
+    {
+      key: "segment",
+      header: "Segment",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: segmentFilterOptions,
+      width: "100px",
+      render: (_val, row) => <span className="text-xs">{row.segment || "—"}</span>,
+    },
+    {
+      key: "packSize",
+      header: "Pack Size",
       sortable: true,
       width: "90px",
-      render: (_val, row) => <span className="text-xs">{row.baseUnit || "—"}</span>,
+      render: (_val, row) => <span className="text-xs">{row.packSize || "—"}</span>,
     },
     {
-      key: "uom",
-      header: "UOM",
+      key: "unit",
+      header: "Unit",
       sortable: true,
-      width: "72px",
-      render: (_val, row) => <span className="text-xs">{row.uom || "—"}</span>,
+      width: "80px",
+      render: (_val, row) => (
+        <span className="text-xs">{row.unit || row.mou || row.baseUnit || "—"}</span>
+      ),
     },
-
+    {
+      key: "gstPct",
+      header: "GST %",
+      sortable: true,
+      width: "70px",
+      render: (_val, row) => <span className="text-xs">{row.gstPct || "—"}</span>,
+    },
     {
       key: "costPrice",
-      header: "CP",
+      header: "Cost Price",
       sortable: true,
-      width: "120px",
+      width: "100px",
       align: "right",
       render: (_val, row) => <MoneyCell value={row.costPrice} />,
     },
     {
-      key: "distributorPrice",
-      header: "Distributor Price (DP)",
+      key: "dealerPrice",
+      header: "Dealer Price",
       sortable: true,
-      width: "140px",
+      width: "110px",
       align: "right",
-      render: (_val, row) => <MoneyCell value={row.distributorPrice} />,
-    },
-    {
-      key: "retailPrice",
-      header: "Retail Price (RP)",
-      sortable: true,
-      width: "130px",
-      align: "right",
-      render: (_val, row) => <MoneyCell value={row.retailPrice} />,
+      render: (_val, row) => <MoneyCell value={row.dealerPrice || getSellingPriceFromRecord(row)} />,
     },
     {
       key: "mrp",
       header: "MRP",
       sortable: true,
-      width: "110px",
+      width: "100px",
       align: "right",
       render: (_val, row) => <MoneyCell value={row.mrp} />,
-    },
-    {
-      key: "createdBy",
-      header: "Created By",
-      sortable: true,
-      width: "150px",
-      render: (_val, row) => (
-        <ListingUserCell name={row.createdBy} date={row.createdAt} />
-      ),
-    },
-    {
-      key: "updatedBy",
-      header: "Updated By",
-      sortable: true,
-      width: "150px",
-      render: (_val, row) => (
-        <ListingUserCell name={row.updatedBy} date={row.updatedAt} />
-      ),
     },
     {
       key: "status",
@@ -261,21 +333,11 @@ export default function PricingMasterPage() {
         />
       ),
     },
-  ];
+  ], [categoryFilterOptions, segmentFilterOptions, supplierFilterOptions]);
 
   const actions: ActionItemConfig<PricingRecord>[] = [
-    {
-      label: "View",
-      action: "view",
-      icon: Eye,
-      onClick: (row) => openView(row),
-    },
-    {
-      label: "Edit",
-      action: "edit",
-      icon: Edit2,
-      onClick: (row) => openEdit(row),
-    },
+    { label: "View", action: "view", icon: Eye, onClick: (row) => openView(row) },
+    { label: "Edit", action: "edit", icon: Edit2, onClick: (row) => openEdit(row) },
     {
       label: "Delete",
       action: "delete",
@@ -292,8 +354,12 @@ export default function PricingMasterPage() {
       const q = String(filters.search).trim().toLowerCase();
       result = result.filter(
         (r) =>
+          r.productCode.toLowerCase().includes(q) ||
           r.sku.toLowerCase().includes(q) ||
-          r.productName.toLowerCase().includes(q),
+          r.productName.toLowerCase().includes(q) ||
+          (r.supplierName || "").toLowerCase().includes(q) ||
+          (r.supplierCode || "").toLowerCase().includes(q) ||
+          (r.hsnCode || "").toLowerCase().includes(q),
       );
     }
 
@@ -301,14 +367,22 @@ export default function PricingMasterPage() {
 
     if (sort.key && sort.direction !== "none") {
       result.sort((a, b) => {
-        const key = sort.key as keyof PricingRecord;
-        let aVal: string | number = a[key] as string | number;
-        let bVal: string | number = b[key] as string | number;
+        let aVal: string | number;
+        let bVal: string | number;
+        if (sort.key === "dealerPrice") {
+          aVal = getSellingPriceFromRecord(a);
+          bVal = getSellingPriceFromRecord(b);
+        } else {
+          aVal = a[sort.key as keyof PricingRecord] as string | number;
+          bVal = b[sort.key as keyof PricingRecord] as string | number;
+        }
         if (typeof aVal === "number" && typeof bVal === "number") {
           const cmp = aVal - bVal;
           return sort.direction === "asc" ? cmp : -cmp;
         }
-        const cmp = String(aVal ?? "").toLowerCase().localeCompare(String(bVal ?? "").toLowerCase());
+        const cmp = String(aVal ?? "")
+          .toLowerCase()
+          .localeCompare(String(bVal ?? "").toLowerCase());
         return sort.direction === "asc" ? cmp : -cmp;
       });
     }
@@ -324,13 +398,6 @@ export default function PricingMasterPage() {
   useEffect(() => {
     setPage(1);
   }, [filters, sort, pageSize]);
-
-  const openAdd = () => {
-    setForm({ ...DEFAULT_PRICING_FORM });
-    setErrors({});
-    setActive(null);
-    setSheetMode("add");
-  };
 
   const openEdit = (row: PricingRecord) => {
     setForm(pricingToForm(row));
@@ -351,70 +418,21 @@ export default function PricingMasterPage() {
     setErrors({});
   };
 
-  const handleProductChange = (productId: string) => {
-    const product = resolveProductForPricing(productId);
-    if (!product) {
-      setForm((prev) => ({
-        ...prev,
-        productId: "",
-        productName: "",
-        sku: "",
-        segment: "",
-        category: "",
-      }));
-      return;
-    }
-    setForm((prev) => ({
-      ...prev,
-      productId,
-      productName: product.productName,
-      sku: product.sku,
-      segment: product.segment,
-      category: product.category,
-      baseUnit: product.baseUnit || prev.baseUnit,
-      uom: product.packagingUnit || prev.uom,
-      packSize: product.conversionQuantity
-        ? `${product.conversionQuantity} ${product.baseUnit || ""}`.trim()
-        : product.packagingUnit || prev.packSize,
-      unitsPerCase: product.conversionQuantity || prev.unitsPerCase,
-      gstPct: parseGstPct(product.gstRate) || prev.gstPct,
-    }));
-    setErrors((prev) => {
-      const next = { ...prev };
-      delete next.productId;
-      return next;
-    });
-  };
-
   const persist = () => {
-    const mode = sheetMode === "add" ? "add" : "edit";
-    const list = loadMasterRecords<PricingRecord>(PRICING_STORAGE_KEY, PRICING_SEED);
-    const fieldErrors = validatePricingForm(
-      form,
-      list,
-      mode === "edit" ? active?.id : undefined,
-    );
+    if (!active) return;
+    const list = loadPricingRecords();
+    const fieldErrors = validatePricingForm(form, list, active.id);
     if (Object.keys(fieldErrors).length > 0) {
       setErrors(fieldErrors);
       return;
     }
 
-    let updatedList: PricingRecord[];
-    if (mode === "add") {
-      const id = list.length ? Math.max(...list.map((r) => r.id)) + 1 : 1;
-      updatedList = [...list, formToPricing(form, id)];
-      setToast({ msg: "Pricing record added successfully", type: "success" });
-    } else if (active) {
-      updatedList = list.map((r) =>
-        r.id === active.id ? formToPricing(form, active.id, active) : r,
-      );
-      setToast({ msg: "Pricing record updated successfully", type: "success" });
-    } else {
-      return;
-    }
-
+    const updatedList = list.map((r) =>
+      r.id === active.id ? formToPricing(form, active.id, active) : r,
+    );
     saveMasterRecords(PRICING_STORAGE_KEY, updatedList);
     setRecords(updatedList);
+    setToast({ msg: "Pricing rule updated successfully", type: "success" });
     closeSheet();
   };
 
@@ -423,57 +441,57 @@ export default function PricingMasterPage() {
     const updated = records.map((r) =>
       r.id === deleteTarget.id
         ? {
-          ...r,
-          status: "inactive" as MasterStatus,
-          updatedBy: "Admin User",
-          updatedAt: masterToday(),
-        }
+            ...r,
+            status: "inactive" as MasterStatus,
+            updatedBy: "Admin User",
+            updatedAt: masterToday(),
+          }
         : r,
     );
     saveMasterRecords(PRICING_STORAGE_KEY, updated);
     setRecords(updated);
     setDeleteTarget(null);
-    setToast({ msg: `"${deleteTarget.sku}" marked as inactive`, type: "success" });
+    setToast({ msg: `"${deleteTarget.productName}" marked as inactive`, type: "success" });
   };
 
   const handleExport = () => {
     try {
       const headers = [
-        "SKU",
+        "Product Code",
         "Product Name",
-        "Base Unit",
-        "UOM",
-        "Units Per Case",
+        "Supplier Name",
+        "Supplier Code",
+        "State",
+        "Customer Type",
+        "Category",
+        "Segment",
+        "Pack Size",
+        "Unit",
         "GST %",
-        "Cost Price (CP)",
-        "Distributor Price (DP)",
-        "Retail Price (RP)",
+        "Cost Price",
+        "Dealer Price",
         "MRP",
         "Status",
-        "Created By",
-        "Updated By",
-        "Created At",
-        "Updated At",
       ];
       const csvRows = [headers.join(",")];
       for (const r of records) {
         csvRows.push(
           [
-            r.sku,
+            r.productCode || r.sku,
             `"${r.productName.replace(/"/g, '""')}"`,
-            r.baseUnit,
-            r.uom,
-            r.unitsPerCase,
+            `"${(r.supplierName || "").replace(/"/g, '""')}"`,
+            r.supplierCode,
+            r.state,
+            r.customerType,
+            r.category,
+            r.segment,
+            r.packSize,
+            r.unit || r.mou || r.baseUnit,
             r.gstPct,
             r.costPrice,
-            r.distributorPrice,
-            r.retailPrice,
+            r.dealerPrice || getSellingPriceFromRecord(r),
             r.mrp,
             r.status,
-            r.createdBy,
-            r.updatedBy,
-            r.createdAt,
-            r.updatedAt,
           ].join(","),
         );
       }
@@ -490,63 +508,128 @@ export default function PricingMasterPage() {
     }
   };
 
-  const sheetTitle =
-    sheetMode === "add"
-      ? "Add Pricing"
-      : sheetMode === "edit"
-        ? "Edit Pricing"
-        : "View Pricing";
+  const sheetTitle = sheetMode === "edit" ? "Edit Pricing" : "View Pricing";
 
   const viewDrawer = active
     ? {
-      title: active.productName,
-      subtitle: active.sku,
-      status: active.status,
-      basicInfo: [
-        { label: "SKU", value: active.sku },
-        { label: "Product Name", value: active.productName },
-        { label: "Base Unit", value: active.baseUnit || "—" },
-        { label: "UOM", value: active.uom || "—" },
-        { label: "Units Per Case", value: String(active.unitsPerCase ?? "—") },
-        { label: "Segment", value: active.segment || "—" },
-        { label: "Category", value: active.category || "—" },
-        { label: "Cost Price (CP)", value: formatIndianRupeeDisplay(active.costPrice) },
-        { label: "Distributor Price (DP)", value: formatIndianRupeeDisplay(active.distributorPrice) },
-        { label: "Retail Price (RP)", value: formatIndianRupeeDisplay(active.retailPrice) },
-        { label: "MRP", value: formatIndianRupeeDisplay(active.mrp) },
-        { label: "GST %", value: active.gstPct != null ? `${active.gstPct}%` : "—" },
-      ],
-      showDescription: false,
-      children: (
-        <MasterDrawerSection title="Audit Information">
-          <div className="space-y-4">
-            <AuditUserRow label="Created By" name={active.createdBy} />
-            <div className="space-y-1">
-              <p className="text-[11px] text-muted-foreground">Created Date</p>
-              <p className="text-sm font-medium text-foreground font-mono">
-                {active.createdAt}
-              </p>
-            </div>
-            <AuditUserRow label="Updated By" name={active.updatedBy} />
-            <div className="space-y-1">
-              <p className="text-[11px] text-muted-foreground">Updated Date</p>
-              <p className="text-sm font-medium text-foreground font-mono">
-                {active.updatedAt}
-              </p>
-            </div>
-          </div>
-        </MasterDrawerSection>
-      ),
-    }
-    : { title: "Pricing", basicInfo: [] };
+        title: active.productName,
+        subtitle: `${active.productCode || active.sku} · ${active.state} · ${active.customerType}`,
+        status: active.status,
+        basicInfo: [],
+        showDescription: false,
+        children: (
+          <>
+            <MasterDrawerSection title="Product Information">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                {[
+                  { label: "Product Code", value: active.productCode || active.sku },
+                  { label: "Product Name", value: active.productName },
+                  { label: "Supplier Name", value: active.supplierName || "—" },
+                  { label: "Supplier Code", value: active.supplierCode || "—" },
+                  { label: "SKU", value: active.sku },
+                  { label: "Category", value: active.category || "—" },
+                  { label: "Segment", value: active.segment || "—" },
+                  { label: "Pack Size", value: active.packSize || "—" },
+                  { label: "Unit", value: active.unit || active.mou || active.baseUnit || "—" },
+                  { label: "HSN", value: active.hsnCode || "—" },
+                  { label: "GST %", value: active.gstPct || "—" },
+                ].map((item) => (
+                  <div key={item.label} className="space-y-0.5">
+                    <p className="text-[11px] text-muted-foreground">{item.label}</p>
+                    <p className="font-medium text-foreground">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+            </MasterDrawerSection>
 
-  const hierarchyError = errors.pricingHierarchy;
+            <MasterDrawerSection title="Pricing Rule">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                {[
+                  { label: "State", value: active.state },
+                  { label: "Customer Type", value: active.customerType },
+                  { label: "Cost Price", value: formatIndianRupeeDisplay(active.costPrice) },
+                  {
+                    label: "Dealer Price",
+                    value: formatIndianRupeeDisplay(
+                      active.dealerPrice || getSellingPriceFromRecord(active),
+                    ),
+                  },
+                  { label: "MRP", value: formatIndianRupeeDisplay(active.mrp) },
+                  {
+                    label: "Status",
+                    value: active.status === "active" ? "Active" : "Inactive",
+                  },
+                ].map((item) => (
+                  <div key={item.label} className="space-y-0.5">
+                    <p className="text-[11px] text-muted-foreground">{item.label}</p>
+                    <p className="font-medium text-foreground">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+            </MasterDrawerSection>
+
+            <MasterDrawerSection title="Audit Information">
+              <div className="space-y-4">
+                <AuditUserRow label="Created By" name={active.createdBy} />
+                <div className="space-y-1">
+                  <p className="text-[11px] text-muted-foreground">Created Date</p>
+                  <p className="text-sm font-medium text-foreground font-mono">{active.createdAt}</p>
+                </div>
+                <AuditUserRow label="Updated By" name={active.updatedBy} />
+                <div className="space-y-1">
+                  <p className="text-[11px] text-muted-foreground">Updated Date</p>
+                  <p className="text-sm font-medium text-foreground font-mono">{active.updatedAt}</p>
+                </div>
+              </div>
+            </MasterDrawerSection>
+          </>
+        ),
+      }
+    : { title: "Pricing", basicInfo: [] };
 
   return (
     <ListingContainer
       title="Pricing Master"
       titleIcon={IndianRupee}
+      metrics={
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <MiniKPICard
+            label="Total Price Rules"
+            value={dashboardStats.totalRules}
+            icon={ListChecks}
+            accent
+          />
+          <MiniKPICard
+            label="Active Prices"
+            value={dashboardStats.activePrices}
+            icon={CheckCircle2}
+          />
+          <MiniKPICard
+            label="Expired Prices"
+            value={dashboardStats.expiredPrices}
+            icon={CalendarX}
+          />
+          <MiniKPICard
+            label="Upcoming Prices"
+            value={dashboardStats.upcomingPrices}
+            icon={CalendarClock}
+          />
+          <MiniKPICard
+            label="Bulk Price Lists"
+            value={dashboardStats.bulkPriceLists}
+            icon={Layers}
+          />
+        </div>
+      }
     >
+      <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50/80 px-3 py-2.5 text-xs text-blue-900">
+        <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-600" />
+        <p>
+          Sales price will be picked based on Product + Customer Type + State.
+          Sales Order integration will be handled later.
+        </p>
+      </div>
+
       <MasterListing<PricingRecord>
         columns={columns}
         data={paginated}
@@ -558,11 +641,11 @@ export default function PricingMasterPage() {
         onSortChange={setSort}
         onFilterChange={setFilters}
         actions={actions}
-        onAdd={openAdd}
+        onAdd={() => router.push("/masters/pricing/add")}
         addLabel="Add Pricing"
         onExport={handleExport}
-        emptyMessage="pricing records"
-        searchPlaceholder="Search SKU or product name..."
+        emptyMessage="pricing rules"
+        searchPlaceholder="Search product code, name, supplier, SKU, or HSN..."
         currentFilters={filters}
         currentSort={sort}
       />
@@ -578,126 +661,23 @@ export default function PricingMasterPage() {
         viewDrawer={viewDrawer}
         statusActive={form.status === "active"}
         onStatusChange={
-          sheetMode === "add" || sheetMode === "edit"
+          sheetMode === "edit"
             ? (isActive) =>
-              setForm((prev) => ({
-                ...prev,
-                status: isActive ? "active" : "inactive",
-              }))
+                setForm((prev) => ({
+                  ...prev,
+                  status: isActive ? "active" : "inactive",
+                }))
             : undefined
         }
         formContent={
-          sheetMode !== "view" ? (
-            <div className="space-y-4">
-              <MasterFormGrid>
-                <MasterField
-                  label="Product / SKU"
-                  required
-                  error={errors.productId}
-                  className="sm:col-span-2"
-                >
-                  <AutocompleteSelect
-                    disabled={sheetMode === "edit"}
-                    value={form.productId}
-                    onChange={(value) => handleProductChange(String(value))}
-                    options={productOptions}
-                    placeholder="Search product or SKU..."
-                  />
-                </MasterField>
-
-                {form.productId && (
-                  <>
-                    <MasterField label="Product Name" className="sm:col-span-2">
-                      <Input
-                        readOnly
-                        className={cn(compactInput(), "bg-muted/20")}
-                        value={form.productName}
-                      />
-                    </MasterField>
-                    <MasterField label="Segment">
-                      <Input
-                        readOnly
-                        className={cn(compactInput(), "bg-muted/20")}
-                        value={form.segment || "—"}
-                      />
-                    </MasterField>
-                    <MasterField label="Category">
-                      <Input
-                        readOnly
-                        className={cn(compactInput(), "bg-muted/20")}
-                        value={form.category || "—"}
-                      />
-                    </MasterField>
-                    <MasterField label="SKU">
-                      <Input
-                        readOnly
-                        className={cn(compactInput(), "bg-muted/20 font-mono")}
-                        value={form.sku || "—"}
-                      />
-                    </MasterField>
-                    <MasterField label="Base Unit">
-                      <Input
-                        readOnly
-                        className={cn(compactInput(), "bg-muted/20")}
-                        value={form.baseUnit || "—"}
-                      />
-                    </MasterField>
-                    <MasterField label="Units Per Case">
-                      <Input
-                        readOnly
-                        className={cn(compactInput(), "bg-muted/20")}
-                        value={form.unitsPerCase || ""}
-                      />
-                    </MasterField>
-                  </>
-                )}
-                <MasterField label="Cost Price (CP)" required error={errors.costPrice}>
-                  <IndianRupeeInput
-                    value={form.costPrice}
-                    onChange={(v) => setForm((prev) => ({ ...prev, costPrice: v }))}
-                  />
-                </MasterField>
-
-                <MasterField label="Distributor Price (DP)" required error={errors.distributorPrice}>
-                  <IndianRupeeInput
-                    value={form.distributorPrice}
-                    onChange={(v) => setForm((prev) => ({ ...prev, distributorPrice: v }))}
-                  />
-                </MasterField>
-
-                <MasterField label="Retail Price (RP)" required error={errors.retailPrice}>
-                  <IndianRupeeInput
-                    value={form.retailPrice}
-                    onChange={(v) => setForm((prev) => ({ ...prev, retailPrice: v }))}
-                  />
-                </MasterField>
-
-                <MasterField label="MRP" required error={errors.mrp}>
-                  <IndianRupeeInput
-                    value={form.mrp}
-                    onChange={(v) => setForm((prev) => ({ ...prev, mrp: v }))}
-                  />
-                </MasterField>
-
-                <MasterField label="GST %">
-                  <Input
-                    type="number"
-                    min={0}
-                    className={compactInput()}
-                    value={form.gstPct || ""}
-                    onChange={(e) =>
-                      setForm((prev) => ({ ...prev, gstPct: parseFloat(e.target.value) || 0 }))
-                    }
-                  />
-                </MasterField>
-              </MasterFormGrid>
-
-              {hierarchyError && (
-                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                  {hierarchyError}
-                </p>
-              )}
-            </div>
+          sheetMode === "edit" ? (
+            <PricingFormFields
+              form={form}
+              onChange={setForm}
+              errors={errors}
+              productOptions={productOptions}
+              mode="edit"
+            />
           ) : null
         }
       />
@@ -714,7 +694,7 @@ export default function PricingMasterPage() {
             <DialogDescription className="text-xs pt-1">
               {deleteTarget && (
                 <>
-                  Pricing for <strong className="text-foreground">{deleteTarget.sku}</strong> will be
+                  <strong className="text-foreground">{deleteTarget.productName}</strong> will be
                   marked as inactive.
                 </>
               )}

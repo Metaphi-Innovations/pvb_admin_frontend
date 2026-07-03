@@ -30,6 +30,8 @@ export interface ProductPackingConfig {
   unitsPerPackingUnit: number;
 }
 
+export type InventoryType = "original" | "sales_return" | "sample_return";
+
 export interface InventoryCarton {
   id: string;
   productId: number;
@@ -43,6 +45,7 @@ export interface InventoryCarton {
   unitsPerPackingUnit: number;
   availablePackingQty: number;
   availableBaseQty: number;
+  inventoryType: InventoryType;
 }
 
 export interface CartonAllocation {
@@ -55,6 +58,7 @@ export interface CartonAllocation {
   unitsPerPackingUnit: number;
   availablePackingQty: number;
   availableBaseQty: number;
+  inventoryType: InventoryType;
   suggestedPackingQty: number;
   suggestedBaseQty: number;
   allocatedPackingQty: number;
@@ -107,20 +111,62 @@ const PRODUCT_PACKING_CONFIG: ProductPackingConfig[] = [
 ];
 
 const INVENTORY_CARTONS: InventoryCarton[] = [
-  { id: "c1", productId: 1, batchNumber: "NPK-2401-A", expiryDate: "2025-06-30", warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub", cartonNumber: "BX-NPK-001", packingUnit: "Bag", baseUnit: "KG", unitsPerPackingUnit: 50, availablePackingQty: 1, availableBaseQty: 50 },
-  { id: "c2", productId: 1, batchNumber: "NPK-2401-A", expiryDate: "2025-06-30", warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub", cartonNumber: "BX-NPK-002", packingUnit: "Bag", baseUnit: "KG", unitsPerPackingUnit: 50, availablePackingQty: 1, availableBaseQty: 50 },
-  { id: "c3", productId: 1, batchNumber: "NPK-2402-B", expiryDate: "2025-09-15", warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub", cartonNumber: "BX-NPK-003", packingUnit: "Bag", baseUnit: "KG", unitsPerPackingUnit: 50, availablePackingQty: 1, availableBaseQty: 50 },
-  { id: "c4", productId: 2, batchNumber: "DAP-2310-C", expiryDate: "2025-04-20", warehouseCode: "WH-0002", warehouseName: "Western Regional Depot", cartonNumber: "BX-DAP-001", packingUnit: "Bag", baseUnit: "KG", unitsPerPackingUnit: 50, availablePackingQty: 1, availableBaseQty: 50 },
-  { id: "c5", productId: 2, batchNumber: "DAP-2401-D", expiryDate: "2025-11-01", warehouseCode: "WH-0002", warehouseName: "Western Regional Depot", cartonNumber: "BX-DAP-002", packingUnit: "Bag", baseUnit: "KG", unitsPerPackingUnit: 50, availablePackingQty: 1, availableBaseQty: 50 },
-  { id: "c6", productId: 3, batchNumber: "URE-2403-E", expiryDate: "2025-08-10", warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub", cartonNumber: "BX-URE-001", packingUnit: "Bag", baseUnit: "KG", unitsPerPackingUnit: 50, availablePackingQty: 1, availableBaseQty: 50 },
-  { id: "c7", productId: 3, batchNumber: "URE-2403-E", expiryDate: "2025-08-10", warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub", cartonNumber: "BX-URE-002", packingUnit: "Bag", baseUnit: "KG", unitsPerPackingUnit: 50, availablePackingQty: 1, availableBaseQty: 50 },
-  { id: "c8", productId: 4, batchNumber: "CHL-2308-F", expiryDate: "2025-03-15", warehouseCode: "WH-0003", warehouseName: "South Zone Warehouse", cartonNumber: "CT-CHL-001", packingUnit: "Box", baseUnit: "LTR", unitsPerPackingUnit: 20, availablePackingQty: 1, availableBaseQty: 20 },
-  { id: "c9", productId: 4, batchNumber: "CHL-2308-F", expiryDate: "2025-03-15", warehouseCode: "WH-0003", warehouseName: "South Zone Warehouse", cartonNumber: "CT-CHL-002", packingUnit: "Box", baseUnit: "LTR", unitsPerPackingUnit: 20, availablePackingQty: 1, availableBaseQty: 20 },
-  { id: "c10", productId: 4, batchNumber: "CHL-2401-G", expiryDate: "2026-01-20", warehouseCode: "WH-0003", warehouseName: "South Zone Warehouse", cartonNumber: "CT-CHL-003", packingUnit: "Box", baseUnit: "LTR", unitsPerPackingUnit: 20, availablePackingQty: 1, availableBaseQty: 20 },
-  { id: "c11", productId: 6, batchNumber: "TOM-2401-H", expiryDate: "2025-12-31", warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub", cartonNumber: "CT-TOM-001", packingUnit: "Carton", baseUnit: "PKT", unitsPerPackingUnit: 50, availablePackingQty: 1, availableBaseQty: 50 },
-  { id: "c12", productId: 6, batchNumber: "TOM-2401-H", expiryDate: "2025-12-31", warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub", cartonNumber: "CT-TOM-002", packingUnit: "Carton", baseUnit: "PKT", unitsPerPackingUnit: 50, availablePackingQty: 1, availableBaseQty: 50 },
-  { id: "c13", productId: 8, batchNumber: "VER-2402-I", expiryDate: "2025-07-01", warehouseCode: "WH-0002", warehouseName: "Western Regional Depot", cartonNumber: "BG-VER-001", packingUnit: "Bag", baseUnit: "KG", unitsPerPackingUnit: 25, availablePackingQty: 1, availableBaseQty: 25 },
-  { id: "c14", productId: 11, batchNumber: "MOP-2401-J", expiryDate: "2025-05-25", warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub", cartonNumber: "BG-MOP-001", packingUnit: "Bag", baseUnit: "KG", unitsPerPackingUnit: 50, availablePackingQty: 1, availableBaseQty: 50 },
+  { id: "c1", productId: 1, batchNumber: "NPK-2401-A", expiryDate: "2025-06-30", warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub", cartonNumber: "BX-NPK-001", packingUnit: "Bag", baseUnit: "KG", unitsPerPackingUnit: 50, availablePackingQty: 1, availableBaseQty: 50, inventoryType: "original" },
+  { id: "c2", productId: 1, batchNumber: "NPK-2401-A", expiryDate: "2025-06-30", warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub", cartonNumber: "BX-NPK-002", packingUnit: "Bag", baseUnit: "KG", unitsPerPackingUnit: 50, availablePackingQty: 1, availableBaseQty: 50, inventoryType: "original" },
+  { id: "c3", productId: 1, batchNumber: "NPK-2402-B", expiryDate: "2025-09-15", warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub", cartonNumber: "BX-NPK-003", packingUnit: "Bag", baseUnit: "KG", unitsPerPackingUnit: 50, availablePackingQty: 1, availableBaseQty: 50, inventoryType: "original" },
+  ...Array.from({ length: 7 }, (_, i) => {
+    const n = i + 4;
+    const batchSuffix = String.fromCharCode(65 + (Math.floor(i / 26) % 26)) + String.fromCharCode(65 + (i % 26));
+    const batchNum = `NPK-24${String(Math.floor(i / 5 + 3)).padStart(2, "0")}-${batchSuffix}`;
+    const month = String((i % 12) + 1).padStart(2, "0");
+    const year = 2025 + Math.floor(i / 12);
+    const expiry = `${year}-${month}-15`;
+    return {
+      id: `c${n}x`,
+      productId: 1,
+      batchNumber: batchNum,
+      expiryDate: expiry,
+      warehouseCode: "WH-0001",
+      warehouseName: "Central Distribution Hub",
+      cartonNumber: `BX-NPK-${String(n).padStart(3, "0")}`,
+      packingUnit: "Bag",
+      baseUnit: "KG",
+      unitsPerPackingUnit: 50,
+      availablePackingQty: 1,
+      availableBaseQty: 50,
+      inventoryType: i % 3 === 0 ? "sales_return" : i % 3 === 1 ? "sample_return" : ("original" as InventoryType),
+    };
+  }),
+  { id: "c4", productId: 2, batchNumber: "DAP-2310-C", expiryDate: "2025-04-20", warehouseCode: "WH-0002", warehouseName: "Western Regional Depot", cartonNumber: "BX-DAP-001", packingUnit: "Bag", baseUnit: "KG", unitsPerPackingUnit: 50, availablePackingQty: 1, availableBaseQty: 50, inventoryType: "original" },
+  { id: "c5", productId: 2, batchNumber: "DAP-2401-D", expiryDate: "2025-11-01", warehouseCode: "WH-0002", warehouseName: "Western Regional Depot", cartonNumber: "BX-DAP-002", packingUnit: "Bag", baseUnit: "KG", unitsPerPackingUnit: 50, availablePackingQty: 1, availableBaseQty: 50, inventoryType: "original" },
+  ...Array.from({ length: 10 }, (_, i) => {
+    const batchLetters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
+    const batch = `URE-24${String(Math.floor(i / 10) + 1).padStart(2, "0")}-${batchLetters[i % 10]}`;
+    const month = String((i % 12) + 1).padStart(2, "0");
+    const year = 2025 + Math.floor(i / 12);
+    return {
+      id: `c-ure-${i + 1}`,
+      productId: 3,
+      batchNumber: batch,
+      expiryDate: `${year}-${month}-10`,
+      warehouseCode: "WH-0001",
+      warehouseName: "Central Distribution Hub",
+      cartonNumber: `BX-URE-${String(i + 1).padStart(3, "0")}`,
+      packingUnit: "Bag",
+      baseUnit: "KG",
+      unitsPerPackingUnit: 50,
+      availablePackingQty: 2,
+      availableBaseQty: 100,
+      inventoryType: "original" as InventoryType,
+    };
+  }),
+  { id: "c8", productId: 4, batchNumber: "CHL-2308-F", expiryDate: "2025-03-15", warehouseCode: "WH-0003", warehouseName: "South Zone Warehouse", cartonNumber: "CT-CHL-001", packingUnit: "Box", baseUnit: "LTR", unitsPerPackingUnit: 20, availablePackingQty: 1, availableBaseQty: 20, inventoryType: "sales_return" },
+  { id: "c9", productId: 4, batchNumber: "CHL-2308-F", expiryDate: "2025-03-15", warehouseCode: "WH-0003", warehouseName: "South Zone Warehouse", cartonNumber: "CT-CHL-002", packingUnit: "Box", baseUnit: "LTR", unitsPerPackingUnit: 20, availablePackingQty: 1, availableBaseQty: 20, inventoryType: "sample_return" },
+  { id: "c10", productId: 4, batchNumber: "CHL-2401-G", expiryDate: "2026-01-20", warehouseCode: "WH-0003", warehouseName: "South Zone Warehouse", cartonNumber: "CT-CHL-003", packingUnit: "Box", baseUnit: "LTR", unitsPerPackingUnit: 20, availablePackingQty: 1, availableBaseQty: 20, inventoryType: "original" },
+  { id: "c11", productId: 6, batchNumber: "TOM-2401-H", expiryDate: "2025-12-31", warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub", cartonNumber: "CT-TOM-001", packingUnit: "Carton", baseUnit: "PKT", unitsPerPackingUnit: 50, availablePackingQty: 1, availableBaseQty: 50, inventoryType: "original" },
+  { id: "c12", productId: 6, batchNumber: "TOM-2401-H", expiryDate: "2025-12-31", warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub", cartonNumber: "CT-TOM-002", packingUnit: "Carton", baseUnit: "PKT", unitsPerPackingUnit: 50, availablePackingQty: 1, availableBaseQty: 50, inventoryType: "original" },
+  { id: "c13", productId: 8, batchNumber: "VER-2402-I", expiryDate: "2025-07-01", warehouseCode: "WH-0002", warehouseName: "Western Regional Depot", cartonNumber: "BG-VER-001", packingUnit: "Bag", baseUnit: "KG", unitsPerPackingUnit: 25, availablePackingQty: 1, availableBaseQty: 25, inventoryType: "original" },
+  { id: "c14", productId: 11, batchNumber: "MOP-2401-J", expiryDate: "2025-05-25", warehouseCode: "WH-0001", warehouseName: "Central Distribution Hub", cartonNumber: "BG-MOP-001", packingUnit: "Bag", baseUnit: "KG", unitsPerPackingUnit: 50, availablePackingQty: 1, availableBaseQty: 50, inventoryType: "original" },
 ];
 
 const STORAGE_KEY = "ds_sales_packing_lists";
@@ -154,6 +200,7 @@ function cartonToAllocation(carton: InventoryCarton, suggestedPacking: number, s
     unitsPerPackingUnit: carton.unitsPerPackingUnit,
     availablePackingQty: carton.availablePackingQty,
     availableBaseQty: carton.availableBaseQty,
+    inventoryType: carton.inventoryType,
     suggestedPackingQty: suggestedPacking,
     suggestedBaseQty: suggestedBase,
     allocatedPackingQty: suggestedPacking,
@@ -327,3 +374,70 @@ export function savePackingList(list: PackingList): void {
 export function getPackingListById(id: number): PackingList | undefined {
   return loadPackingLists().find(l => l.id === id);
 }
+
+export function buildAllCartonAllocationsForProduct(
+  productId: number,
+  orderedBaseQty: number,
+  warehouseCode: string
+): { allocations: CartonAllocation[]; hasPackingConfig: boolean; packingUnit: string; baseUnit: string; unitsPerPackingUnit: number } {
+  const suggestion = suggestFefoCartonAllocations(productId, orderedBaseQty, warehouseCode);
+  const allCartons = getCartonsForProductInWarehouse(productId, warehouseCode)
+    .sort((a, b) => {
+      const exp = a.expiryDate.localeCompare(b.expiryDate);
+      if (exp !== 0) return exp;
+      return a.batchNumber.localeCompare(b.batchNumber);
+    });
+
+  const config = getProductPackingConfig(productId);
+  const unitsPerPackingUnit = config?.unitsPerPackingUnit ?? 1;
+
+  const allocations = allCartons.map(carton => {
+    const suggested = suggestion.allocations.find(a => a.cartonId === carton.id);
+    return {
+      cartonId: carton.id,
+      batchNumber: carton.batchNumber,
+      expiryDate: carton.expiryDate,
+      cartonNumber: carton.cartonNumber,
+      packingUnit: carton.packingUnit,
+      baseUnit: carton.baseUnit,
+      unitsPerPackingUnit: carton.unitsPerPackingUnit,
+      availablePackingQty: carton.availablePackingQty,
+      availableBaseQty: carton.availableBaseQty,
+      inventoryType: carton.inventoryType,
+      suggestedPackingQty: suggested ? suggested.suggestedPackingQty : 0,
+      suggestedBaseQty: suggested ? suggested.suggestedBaseQty : 0,
+      allocatedPackingQty: suggested ? suggested.allocatedPackingQty : 0,
+      allocatedBaseQty: suggested ? suggested.allocatedBaseQty : 0,
+    };
+  });
+
+  return {
+    allocations,
+    hasPackingConfig: suggestion.hasPackingConfig,
+    packingUnit: suggestion.packingUnit,
+    baseUnit: suggestion.baseUnit,
+    unitsPerPackingUnit
+  };
+}
+
+export function buildAllPackingListLines(order: SalesOrder, warehouseCode: string): PackingListLine[] {
+  const hydrated = hydrateOrderLineItems(order);
+  return hydrated.lineItems
+    .filter((l): l is SalesOrderLineItem & { productId: number } => l.productId != null && l.quantity > 0)
+    .map(line => {
+      const allAllocations = buildAllCartonAllocationsForProduct(line.productId, line.quantity, warehouseCode);
+      return {
+        lineItemId: line.id,
+        productId: line.productId,
+        productCode: line.productCode,
+        productName: line.productName,
+        packingUnit: allAllocations.packingUnit,
+        baseUnit: allAllocations.baseUnit,
+        unitsPerPackingUnit: allAllocations.unitsPerPackingUnit,
+        orderedBaseQty: line.quantity,
+        hasPackingConfig: allAllocations.hasPackingConfig,
+        allocations: allAllocations.allocations,
+      };
+    });
+}
+

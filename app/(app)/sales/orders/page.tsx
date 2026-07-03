@@ -34,7 +34,8 @@ import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListing } from "@/components/listing/MasterListing";
 import type { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
 import CancelOrderDialog from "./components/CancelOrderDialog";
-import PackingListDialog from "./components/PackingListDialog";
+import { SalesReturnTab } from "./components/SalesReturnTab";
+import { getSalesReturnRecords } from "./sales-return-data";
 import { downloadProformaInvoice } from "./pi-document";
 import {
   type SalesOrder,
@@ -64,18 +65,20 @@ const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
 
 const FILTER_STATUSES: OrderStatus[] = [...ORDER_STATUS_OPTIONS.map((o) => o.value), "dispatched", "delivered"];
 
-type OrderListTab = "pending" | "completed" | "approval";
-
-const COMPLETED_ORDER_STATUSES: OrderStatus[] = ["confirmed", "delivered"];
+type OrderListTab = "all" | "draft" | "pending_approval" | "rejected" | "sales_return";
 
 function matchesOrderTab(order: SalesOrder, tab: OrderListTab): boolean {
   switch (tab) {
-    case "pending":
-      return order.status !== "cancelled" && !COMPLETED_ORDER_STATUSES.includes(order.status);
-    case "completed":
-      return COMPLETED_ORDER_STATUSES.includes(order.status);
-    case "approval":
-      return isApprovalRelatedOrder(order);
+    case "all":
+      return true;
+    case "draft":
+      return order.status === "draft";
+    case "pending_approval":
+      return order.status === "pending_approval";
+    case "rejected":
+      return order.status === "rejected";
+    default:
+      return true;
   }
 }
 
@@ -162,25 +165,27 @@ export default function SalesOrdersPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [orders, setOrders] = useState<SalesOrder[]>([]);
-  const [activeTab, setActiveTab] = useState<OrderListTab>("pending");
+  const [activeTab, setActiveTab] = useState<OrderListTab>("all");
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortState>({ key: "orderDate", direction: "desc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
+  const [salesReturnCount, setSalesReturnCount] = useState(0);
+
   const [cancelOrder, setCancelOrder] = useState<SalesOrder | null>(null);
-  const [packingOrder, setPackingOrder] = useState<SalesOrder | null>(null);
 
   const refreshOrders = () => setOrders(loadOrders());
 
   useEffect(() => {
     refreshOrders();
+    setSalesReturnCount(getSalesReturnRecords().length);
   }, []);
 
   useEffect(() => {
     const tab = searchParams.get("tab");
-    if (tab === "pending" || tab === "completed" || tab === "approval") {
+    if (tab === "all" || tab === "draft" || tab === "pending_approval" || tab === "rejected" || tab === "sales_return") {
       setActiveTab(tab as OrderListTab);
     }
     const toastType = searchParams.get("toast");
@@ -262,6 +267,16 @@ export default function SalesOrdersPage() {
     totalValue: orders.reduce((s, o) => s + o.totalAmount, 0),
   };
 
+  const tabCounts = useMemo(() => {
+    return {
+      all: orders.length,
+      draft: orders.filter((o) => o.status === "draft").length,
+      pending_approval: orders.filter((o) => o.status === "pending_approval").length,
+      rejected: orders.filter((o) => o.status === "rejected").length,
+      sales_return: salesReturnCount,
+    };
+  }, [orders, salesReturnCount]);
+
   const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
 
   const handleTabChange = (tab: string) => {
@@ -270,7 +285,7 @@ export default function SalesOrdersPage() {
     router.replace(`/sales/orders?tab=${tab}`, { scroll: false });
   };
 
-  const isApprovalTab = activeTab === "approval";
+  const isApprovalTab = activeTab === "pending_approval";
 
   const customerOptions = useMemo(() => {
     return Array.from(new Set(orders.map((o) => o.customerName)))
@@ -441,7 +456,7 @@ export default function SalesOrdersPage() {
               <button
                 type="button"
                 disabled={!packingAllowed}
-                onClick={() => setPackingOrder(hydrated)}
+                onClick={() => router.push(`/sales/orders/${hydrated.id}/packing-list/new`)}
                 className={cn(
                   "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
                   !packingAllowed ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
@@ -495,33 +510,39 @@ export default function SalesOrdersPage() {
         </div>
       }
       tabs={[
-        { value: "pending", label: "Pending Order" },
-        { value: "completed", label: "Order Completed" },
-        { value: "approval", label: "Approval" },
+        { value: "all", label: `Sales (${tabCounts.all})` },
+        { value: "draft", label: `Draft (${tabCounts.draft})` },
+        { value: "pending_approval", label: `Approval (${tabCounts.pending_approval})` },
+        { value: "rejected", label: `Rejected (${tabCounts.rejected})` },
+        { value: "sales_return", label: `Sales Return (${tabCounts.sales_return})` },
       ]}
       activeTab={activeTab}
       onTabChange={handleTabChange}
     >
-      <div>
-        <MasterListing<SalesOrder>
-          columns={columns}
-          data={paginated}
-          totalRecords={filtered.length}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-          onSortChange={setSort}
-          onFilterChange={setFilters}
-          emptyMessage="orders"
-          searchPlaceholder="Search orders, customers…"
-          currentFilters={filters}
-          currentSort={sort}
-          onAdd={() => router.push("/sales/orders/add")}
-          addLabel="New Order"
-          onExport={() => console.log("Exporting sales orders...")}
-        />
-      </div>
+      {activeTab === "sales_return" ? (
+        <SalesReturnTab onCountChange={setSalesReturnCount} />
+      ) : (
+        <div>
+          <MasterListing<SalesOrder>
+            columns={columns}
+            data={paginated}
+            totalRecords={filtered.length}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            onSortChange={setSort}
+            onFilterChange={setFilters}
+            emptyMessage=""
+            searchPlaceholder="Search orders, customers…"
+            currentFilters={filters}
+            currentSort={sort}
+            onAdd={() => router.push("/sales/orders/add")}
+            addLabel="New Order"
+            onExport={() => console.log("Exporting sales orders...")}
+          />
+        </div>
+      )}
 
       <CancelOrderDialog
         order={cancelOrder}
@@ -530,16 +551,6 @@ export default function SalesOrdersPage() {
         onSuccess={() => {
           refreshOrders();
           showToast("Sales order cancelled successfully.");
-        }}
-      />
-
-      <PackingListDialog
-        order={packingOrder}
-        open={!!packingOrder}
-        onClose={() => setPackingOrder(null)}
-        onSuccess={(updatedOrder, list) => {
-          refreshOrders();
-          showToast(`Packing list ${list.packingListNumber} generated for ${updatedOrder.soNumber}.`);
         }}
       />
 

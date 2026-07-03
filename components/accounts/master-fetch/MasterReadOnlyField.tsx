@@ -1,5 +1,9 @@
 import { Label } from "@/components/ui/label";
-import { MasterFetchedBadge } from "./MasterFetchedBadge";
+import { cn } from "@/lib/utils";
+import {
+  INVOICE_FORM_LABEL_CLASS,
+  INVOICE_FORM_READONLY_CLASS,
+} from "@/app/(app)/accounts/components/InvoiceFormLayout";
 
 export function MasterReadOnlyField({
   label,
@@ -14,12 +18,13 @@ export function MasterReadOnlyField({
 }) {
   return (
     <div className={className}>
-      <div className="flex items-center gap-1.5 mb-1">
-        <Label className="text-xs text-muted-foreground">{label}</Label>
-        <MasterFetchedBadge />
-      </div>
+      <Label className={cn(INVOICE_FORM_LABEL_CLASS, "mb-1 block")}>{label}</Label>
       <p
-        className={`text-xs font-medium py-1.5 px-2.5 bg-muted/25 rounded-md border border-border/50 min-h-[32px] flex items-center ${mono ? "font-mono" : ""}`}
+        className={cn(
+          INVOICE_FORM_READONLY_CLASS,
+          "min-h-9 flex items-center px-2.5 text-sm",
+          mono && "font-mono",
+        )}
       >
         {value?.trim() ? value : "—"}
       </p>
@@ -37,12 +42,14 @@ export function MasterReadOnlyAddress({
   className?: string;
 }) {
   return (
-    <div className={`space-y-1 ${className ?? ""}`}>
-      <div className="flex items-center gap-1.5">
-        <Label className="text-xs text-muted-foreground">{label}</Label>
-        <MasterFetchedBadge />
-      </div>
-      <p className="text-xs py-2 px-2.5 bg-muted/25 rounded-md border border-border/50 min-h-[48px] whitespace-pre-wrap">
+    <div className={cn("space-y-1", className)}>
+      <Label className={INVOICE_FORM_LABEL_CLASS}>{label}</Label>
+      <p
+        className={cn(
+          INVOICE_FORM_READONLY_CLASS,
+          "min-h-[72px] px-2.5 py-2 text-sm whitespace-pre-wrap",
+        )}
+      >
         {value?.trim() ? value : "—"}
       </p>
     </div>

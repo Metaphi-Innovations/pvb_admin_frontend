@@ -90,7 +90,7 @@ export default function ViewStockDetailsPage({ params }: { params: { id: string 
           ...(type === "grn-pending"
             ? [
                 { label: "Received Qty", value: `${grnData.receivedQuantity ?? "—"} Units`, highlight: true },
-                { label: "Vendor", value: String(grnData.vendor ?? "—") },
+                { label: "Supplier", value: String(grnData.vendor ?? "—") },
                 { label: "GRN Date", value: String(grnData.grnDate ?? "—") },
               ]
             : []),
@@ -103,7 +103,7 @@ export default function ViewStockDetailsPage({ params }: { params: { id: string 
                   icon: ClipboardCheck,
                   variant: "primary" as const,
                   onClick: () =>
-                    router.push(`/warehouse/grnqc/qc/create?grnId=${String(grnData.grnNo ?? "")}`),
+                    router.push(`/warehouse/qc/create?grnId=${String(grnData.grnNo ?? "")}`),
                 },
               ]
             : [],
@@ -301,7 +301,7 @@ export default function ViewStockDetailsPage({ params }: { params: { id: string 
                     <p className="text-xs font-mono font-bold text-brand-700 mt-1">{(data as any).grnNo}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Vendor</p>
+                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Supplier</p>
                     <p className="text-xs font-bold text-foreground mt-1">{(data as any).vendor}</p>
                   </div>
                   <div>

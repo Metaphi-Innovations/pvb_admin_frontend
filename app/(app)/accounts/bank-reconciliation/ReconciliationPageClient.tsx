@@ -5,7 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ModuleFiltersBar } from "@/components/module/ModuleFiltersBar";
+import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
+import {
+  ReportFilterRow,
+  ReportSearchFilter,
+  ACCOUNTS_FILTER_CONTROL_CLASS,
+  ACCOUNTS_FILTER_LABEL_CLASS,
+} from "@/components/accounts/ReportFilters";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -22,7 +29,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FileSpreadsheet, FlaskConical, Landmark, MoreVertical, Plus, Trash2, Upload } from "lucide-react";
-import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { seedDummyBankReconciliation } from "./bank-reconciliation-demo";
 import {
@@ -35,6 +41,8 @@ import {
 } from "./bank-reconciliation-data";
 import { exportAllReconciliationData, exportStatementsListToExcel } from "./bank-reconciliation-export";
 import { UploadStatementDialog } from "./components/UploadStatementDialog";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { MONTH_NAMES, monthYearLabel, RECONCILIATION_BREADCRUMB, RECONCILIATION_LIST_PATH } from "./reconciliation-utils";
 
 interface ReconciliationPageClientProps {
@@ -122,94 +130,109 @@ export default function ReconciliationPageClient({ embedded = false }: Reconcili
       <Button
         variant="outline"
         size="sm"
-        className="h-8 text-xs gap-1.5"
+        className="h-9 text-[13px] font-medium gap-1.5"
         disabled={exporting || visible.length === 0}
         onClick={handleExportList}
       >
-        <FileSpreadsheet className="w-3.5 h-3.5" />
+        <FileSpreadsheet className="w-4 h-4" />
         Export List
       </Button>
-      <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" disabled={exporting} onClick={handleExportAll}>
-        <FileSpreadsheet className="w-3.5 h-3.5" />
+      <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1.5" disabled={exporting} onClick={handleExportAll}>
+        <FileSpreadsheet className="w-4 h-4" />
         Export All Entries
       </Button>
       <Button
         variant="outline"
         size="sm"
-        className="h-8 text-xs gap-1.5"
+        className="h-9 text-[13px] font-medium gap-1.5"
         onClick={() => {
           const { statementId } = seedDummyBankReconciliation(true);
           refresh();
           router.push(`${RECONCILIATION_LIST_PATH}/${statementId}`);
         }}
       >
-        <FlaskConical className="w-3.5 h-3.5" />
+        <FlaskConical className="w-4 h-4" />
         Load demo entries
       </Button>
       <Button
         size="sm"
-        className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+        className="h-9 text-[13px] font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
         onClick={() => {
           setReuploadPreset(null);
           setUploadOpen(true);
         }}
       >
-        <Upload className="w-3.5 h-3.5" />
+        <Upload className="w-4 h-4" />
         Upload Statement
       </Button>
     </div>
   );
 
   const filterBar = (
-    <ModuleFiltersBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Bank account, statement name…">
-      <Select value={bankFilter} onValueChange={setBankFilter}>
-        <SelectTrigger className="h-8 w-[160px] text-xs bg-white">
-          <SelectValue placeholder="Bank" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all" className="text-xs">All banks</SelectItem>
-          {accounts.map((a) => (
-            <SelectItem key={a.id} value={String(a.id)} className="text-xs">
-              {a.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select value={monthFilter} onValueChange={setMonthFilter}>
-        <SelectTrigger className="h-8 w-[130px] text-xs bg-white">
-          <SelectValue placeholder="Month" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all" className="text-xs">All months</SelectItem>
-          {MONTH_NAMES.map((m, i) => (
-            <SelectItem key={m} value={String(i + 1)} className="text-xs">
-              {m}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select value={yearFilter} onValueChange={setYearFilter}>
-        <SelectTrigger className="h-8 w-[100px] text-xs bg-white">
-          <SelectValue placeholder="Year" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all" className="text-xs">All years</SelectItem>
-          {years.map((y) => (
-            <SelectItem key={y} value={String(y)} className="text-xs">
-              {y}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </ModuleFiltersBar>
+    <ReportFilterRow>
+      <ReportSearchFilter
+        value={search}
+        onChange={setSearch}
+        placeholder="Bank account, statement name…"
+        className="min-w-[200px] flex-1 max-w-md"
+      />
+      <div className="space-y-1 min-w-[160px]">
+        <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Bank</Label>
+        <Select value={bankFilter} onValueChange={setBankFilter}>
+          <SelectTrigger className={cn(ACCOUNTS_FILTER_CONTROL_CLASS, "mt-0 w-[160px]")}>
+            <SelectValue placeholder="All banks" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All banks</SelectItem>
+            {accounts.map((a) => (
+              <SelectItem key={a.id} value={String(a.id)}>
+                {a.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1 min-w-[130px]">
+        <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Month</Label>
+        <Select value={monthFilter} onValueChange={setMonthFilter}>
+          <SelectTrigger className={cn(ACCOUNTS_FILTER_CONTROL_CLASS, "mt-0 w-[130px]")}>
+            <SelectValue placeholder="All months" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All months</SelectItem>
+            {MONTH_NAMES.map((m, i) => (
+              <SelectItem key={m} value={String(i + 1)}>
+                {m}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1 min-w-[100px]">
+        <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Year</Label>
+        <Select value={yearFilter} onValueChange={setYearFilter}>
+          <SelectTrigger className={cn(ACCOUNTS_FILTER_CONTROL_CLASS, "mt-0 w-[100px]")}>
+            <SelectValue placeholder="All years" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All years</SelectItem>
+            {years.map((y) => (
+              <SelectItem key={y} value={String(y)}>
+                {y}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </ReportFilterRow>
   );
 
   const listContent = grouped.length === 0 ? (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <Landmark className="w-10 h-10 text-muted-foreground/40 mb-3" />
       <p className="text-sm text-muted-foreground">No bank statements yet. Upload a monthly statement to begin.</p>
-      <Button size="sm" className="mt-4 h-8 text-xs bg-brand-600 text-white" onClick={() => setUploadOpen(true)}>
-        <Plus className="w-3.5 h-3.5 mr-1" />
+      <Button size="sm" className="mt-4 h-9 text-[13px] font-medium bg-brand-600 text-white" onClick={() => setUploadOpen(true)}>
+        <Plus className="w-4 h-4 mr-1" />
         Upload Statement
       </Button>
     </div>
@@ -220,8 +243,8 @@ export default function ReconciliationPageClient({ embedded = false }: Reconcili
           <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-0.5">{period}</h2>
           <div className="bg-white border border-border/60 rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-table min-w-[1200px]">
-                <thead className="bg-muted/20 border-b border-border/60">
+              <table className="accounts-table w-full min-w-[1200px]">
+                <thead className="border-b border-border/60">
                   <tr>
                     {[
                       "Bank Account",
@@ -247,7 +270,7 @@ export default function ReconciliationPageClient({ embedded = false }: Reconcili
                 </thead>
                 <tbody>
                   {rows.map((s) => (
-                    <tr key={s.id} className="border-b border-border/40 hover:bg-muted/20">
+                    <tr key={s.id} className="accounts-table-row group">
                       <td className="px-2.5 py-2 text-xs font-medium">{s.bankAccountName}</td>
                       <td className="px-2.5 py-2 text-xs">{MONTH_NAMES[s.month - 1]}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{s.year}</td>
@@ -266,7 +289,7 @@ export default function ReconciliationPageClient({ embedded = false }: Reconcili
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-7 w-7">
-                              <MoreVertical className="w-3.5 h-3.5" />
+                              <MoreVertical className="w-4 h-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-44">
@@ -335,10 +358,10 @@ export default function ReconciliationPageClient({ embedded = false }: Reconcili
             <strong>{deleteTarget?.statementName}</strong>. This cannot be undone.
           </p>
           <DialogFooter>
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => setDeleteTarget(null)}>
               Cancel
             </Button>
-            <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" onClick={confirmDelete}>
+            <Button size="sm" className="h-9 text-[13px] font-medium bg-red-600 hover:bg-red-700 text-white" onClick={confirmDelete}>
               Delete
             </Button>
           </DialogFooter>
@@ -357,8 +380,11 @@ export default function ReconciliationPageClient({ embedded = false }: Reconcili
           actions={headerActions}
           filters={filterBar}
           layout="split"
+          className="h-full min-h-0"
         >
-          <div className="flex-1 overflow-auto min-h-0">{listContent}</div>
+          <AccountsListingTableCard className="flex-1 min-h-0">
+            <div className="flex-1 overflow-auto min-h-0">{listContent}</div>
+          </AccountsListingTableCard>
         </AccountsPageShell>
         {dialogs}
       </>

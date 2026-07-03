@@ -1,6 +1,6 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { computeInvoiceTaxBreakup } from "@/lib/accounts/bank-recon-matching";
 import type { UnpaidInvoiceOption } from "../bank-reconciliation-data";
@@ -93,14 +93,10 @@ export function InvoiceAllocationPanel({
                   </p>
                 </button>
                 <div className="flex flex-col items-end gap-1 shrink-0">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={Math.min(inv.balance, transactionAmount)}
-                    step="0.01"
+                  <AccountsMoneyInput
                     className="h-8 w-28 text-xs text-right tabular-nums"
                     value={allocations[key] ?? ""}
-                    onChange={(e) => onAllocationChange(key, e.target.value)}
+                    onChange={(v) => onAllocationChange(key, String(v))}
                     placeholder="0"
                   />
                   <button

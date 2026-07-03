@@ -26,7 +26,7 @@ export function AccountsFormLayout({
 
   return (
     <div className="min-h-full bg-background flex flex-col -m-3">
-        <header className="bg-white/95 backdrop-blur-sm border-b border-border/60 px-6 py-3 flex-shrink-0 sticky top-0 z-20">
+        <header className="bg-white border-b border-border px-6 py-3 flex-shrink-0 sticky top-0 z-20 shadow-sm">
           <div className={`${fullWidth ? "w-full max-w-none" : "max-w-[1100px]"} mx-auto w-full flex items-center justify-between gap-4`}>
             <div className="flex items-center gap-3 min-w-0">
               <button

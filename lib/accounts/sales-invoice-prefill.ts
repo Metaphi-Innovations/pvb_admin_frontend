@@ -52,7 +52,7 @@ function linesFromOrder(order: SalesOrder): { lines: InvoiceLineItem[]; errors: 
     const master = masterId ? loadProducts().find((p) => p.id === masterId) : undefined;
     const pricing = master ? findActivePricingForStock(master.sku, master.productName) : undefined;
     const taxPct =
-      pricing?.gstPct ??
+      pricing?.gstPct ? parseTaxPct(pricing.gstPct) :
       (() => {
         const taxable = Math.max(0, (l.lineTotal ?? 0) - (l.gstAmount ?? 0));
         if (taxable > 0 && l.gstAmount) {
@@ -109,6 +109,7 @@ function prefillFromOrderOnly(order: SalesOrder): SalesInvoicePrefill {
   const { lines, errors } = linesFromOrder(order);
 
   return {
+    invoiceType: "sales",
     salesOrderId: order.id,
     salesOrderNo: order.soNumber,
     sourceDispatchId: "",
@@ -139,6 +140,7 @@ function prefillFromOrderOnly(order: SalesOrder): SalesInvoicePrefill {
     receivableLedger: ledger?.accountName ?? custFields.receivableLedger,
     lineItems: lines,
     lineErrors: errors,
+    nearExpirySchemes: [],
   };
 }
 

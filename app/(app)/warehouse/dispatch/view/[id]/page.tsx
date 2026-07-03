@@ -8,6 +8,9 @@ import { useRouter, useParams } from "next/navigation";
 import { getDispatchById } from "../../services";
 import { DispatchRecord } from "../../types";
 import { DELIVERY_STATUS_BADGE_CONFIG } from "../../constants";
+import { NearExpirySchemeBadge } from "../../components/NearExpirySchemeBadge";
+import { NearExpirySchemeInfoPanel } from "../../components/NearExpirySchemeInfoPanel";
+import { formatBatchExpiryDate } from "../../near-expiry-dispatch";
 
 export default function ViewDispatchPage() {
   const router = useRouter();
@@ -40,6 +43,14 @@ export default function ViewDispatchPage() {
     record.deliveryStatus === "Cancelled" || record.deliveryStatus === "Returned" ? "blocked" :
     record.deliveryStatus === "Pending Dispatch" ? "draft" : "neutral";
 
+  const schemeEntriesBySku = (record.nearExpirySchemes ?? []).reduce<
+    Record<string, NonNullable<DispatchRecord["nearExpirySchemes"]>>
+  >((map, entry) => {
+    if (!map[entry.sku]) map[entry.sku] = [];
+    map[entry.sku]!.push(entry);
+    return map;
+  }, {});
+
   return (
     <RecordDetailPage
       listHref="/warehouse/dispatch"
@@ -49,7 +60,10 @@ export default function ViewDispatchPage() {
       statusLabel={statusConfig.label}
       statusVariant={statusVariant}
       metaItems={[
-        { icon: User, label: record.customer },
+        { 
+          icon: record.sourceDocumentType === "Stock Transfer" ? Building : User, 
+          label: record.sourceDocumentType === "Stock Transfer" ? (record.targetWarehouse || record.customer) : record.customer 
+        },
         { icon: Building, label: record.warehouse },
         { icon: Calendar, label: record.dispatchDate },
       ]}
@@ -79,9 +93,21 @@ export default function ViewDispatchPage() {
         {/* Summary Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Sales Order No", value: record.salesOrderNumber, icon: Package },
-            { label: "Customer", value: record.customer, icon: User },
-            { label: "Warehouse", value: record.warehouse, icon: Building },
+            { 
+              label: record.sourceDocumentType === "Stock Transfer" ? "Stock Transfer No" : "Sales Order No", 
+              value: record.salesOrderNumber, 
+              icon: Package 
+            },
+            { 
+              label: record.sourceDocumentType === "Stock Transfer" ? "Target Warehouse" : "Customer", 
+              value: record.sourceDocumentType === "Stock Transfer" ? (record.targetWarehouse || record.customer) : record.customer, 
+              icon: record.sourceDocumentType === "Stock Transfer" ? Building : User 
+            },
+            { 
+              label: record.sourceDocumentType === "Stock Transfer" ? "Source Warehouse" : "Warehouse", 
+              value: record.warehouse, 
+              icon: Building 
+            },
             { label: "Dispatch Date", value: record.dispatchDate, icon: Calendar },
           ].map(card => (
             <div key={card.label} className="bg-white border border-border rounded-xl p-4 shadow-sm">
@@ -127,7 +153,9 @@ export default function ViewDispatchPage() {
                   <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Product</th>
                   <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">SKU</th>
                   <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Packed Qty</th>
+                  <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Batch</th>
                   <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Dispatch Qty</th>
+                  <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Scheme</th>
                 </tr>
               </thead>
               <tbody>
@@ -136,13 +164,30 @@ export default function ViewDispatchPage() {
                     <td className="py-3 px-3 text-xs font-bold">{p.product}</td>
                     <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{p.sku}</td>
                     <td className="py-3 px-3 text-xs font-bold text-center">{p.packedQty}</td>
+                    <td className="py-3 px-3 text-[10px] text-muted-foreground font-mono">
+                      {p.batchNo ? (
+                        <div>
+                          {p.batchNo}
+                          {p.batchExpiryDate ? ` · ${formatBatchExpiryDate(p.batchExpiryDate)}` : ""}
+                        </div>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td className="py-3 px-3 text-xs font-bold text-center">{p.dispatchQty}</td>
+                    <td className="py-3 px-3">
+                      <NearExpirySchemeBadge entries={schemeEntriesBySku[p.sku] ?? []} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </div>
+
+        {record.nearExpirySchemes && record.nearExpirySchemes.length > 0 && (
+          <NearExpirySchemeInfoPanel entries={record.nearExpirySchemes} />
+        )}
 
         {/* Delivery Details (if delivered) */}
         {record.deliveryDetails && (

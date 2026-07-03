@@ -1,12 +1,14 @@
 "use client";
 
 import React from "react";
-import { Button } from "@/components/ui/button";
-import { Download } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
+import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
-import { cn } from "@/lib/utils";
+import {
+  AccountsColumnarTable,
+  AccountsTableScroll,
+} from "@/components/accounts/AccountsTable";
 
 interface Column {
   key: string;
@@ -53,65 +55,32 @@ export function AccountingReportPage({
       breadcrumbs={accountsBreadcrumb("Reports", title)}
       title={title}
       description={description}
-      actions={
-        <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={exportCsv}>
-          <Download className="w-3.5 h-3.5" /> Export
-        </Button>
+      filters={
+        <div className="flex flex-wrap items-end gap-2 w-full">
+          {filters}
+          <div className="ml-auto flex items-end gap-1.5 flex-shrink-0">
+            <AccountsExportMenu onExcel={exportCsv} onPdf={exportCsv} disabled={rows.length === 0} />
+          </div>
+        </div>
       }
-      filters={filters}
       layout="split"
       className="h-full min-h-0"
     >
-      <div className="flex-1 overflow-auto min-h-0">
-        <table className="w-full text-table">
-          <thead className="bg-muted/20 border-b border-border/60 sticky top-0 z-10">
-            <tr>
-              {columns.map((c) => (
-                <th
-                  key={c.key}
-                  className={cn(
-                    "px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground",
-                    c.align === "right" && "text-right",
-                    c.align === "center" && "text-center",
-                    (!c.align || c.align === "left") && "text-left",
-                  )}
-                >
-                  {c.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={columns.length} className="px-4 py-16 text-center text-sm text-muted-foreground">
-                  No transactions for this period.
-                </td>
-              </tr>
-            ) : (
-              rows.map((row, i) => (
-                <tr key={i} className="border-b border-border/40 hover:bg-muted/20">
-                  {columns.map((c) => (
-                    <td
-                      key={c.key}
-                      className={cn(
-                        "px-4 py-3.5 text-xs",
-                        c.align === "right" && "text-right",
-                        c.align === "center" && "text-center",
-                        (!c.align || c.align === "left") && "text-left",
-                        (c.money || c.mono) && MONEY_AMOUNT_CLASS,
-                      )}
-                    >
-                      {row[c.key] ?? "—"}
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-          {footer && <tfoot className="bg-muted/15 border-t border-border/60">{footer}</tfoot>}
-        </table>
-      </div>
+      <AccountsListingTableCard className="flex-1 min-h-0">
+        <AccountsTableScroll>
+          <AccountsColumnarTable
+            columns={columns.map((c) => ({
+              key: c.key,
+              label: c.label,
+              align: c.align,
+              money: c.money ?? c.mono,
+            }))}
+            rows={rows}
+            emptyMessage="No records found."
+            footer={footer}
+          />
+        </AccountsTableScroll>
+      </AccountsListingTableCard>
     </AccountsPageShell>
   );
 }

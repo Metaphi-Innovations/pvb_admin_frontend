@@ -4,10 +4,11 @@ import { TransactionListPage } from "@/app/(app)/accounts/components/Transaction
 import {
   loadPurchaseInvoices,
   savePurchaseInvoices,
+  getPurchaseInvoiceGstBreakup,
 } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
 import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { maybePostPurchaseInvoice } from "@/lib/accounts/document-posting-bridge";
-import { formatMoney } from "@/lib/accounts/money-format";
+import { formatInvoiceGstBreakup } from "@/lib/accounts/invoice-gst-breakup";
 
 export default function PurchaseInvoicesPageClient() {
   return (
@@ -16,6 +17,7 @@ export default function PurchaseInvoicesPageClient() {
         section: "Transactions",
         title: "Purchase Invoices",
         description: "Create and post purchase bills with ledger impact.",
+        gstSplitColumns: true,
         loadData: loadPurchaseInvoices,
         newHref: "/accounts/transactions/purchase/new",
         editHref: (id) => `/accounts/transactions/purchase/${id}/edit`,
@@ -29,21 +31,42 @@ export default function PurchaseInvoicesPageClient() {
         canPost: (r) => r.status === "draft" || r.status === "no_debit",
         canDelete: (r) => r.status === "draft" || r.status === "no_debit",
         canEdit: (r) => r.status === "draft" || r.status === "no_debit",
-        getRow: (inv) => ({
-          id: inv.id,
-          number: inv.invoiceNo,
-          date: inv.invoiceDate,
-          party: inv.vendorName,
-          amount: formatMoney(inv.grandTotal),
-          status: inv.source === "manual_entry" ? "draft" : (inv.debitStatus === "no_debit" ? "posted" : inv.debitStatus),
-          viewHref: `/accounts/transactions/purchase/${inv.id}`,
-          impactLines: purchaseInvoiceImpactResolved({
-            vendorName: inv.vendorName,
-            taxable: inv.subtotal,
-            taxAmount: inv.taxAmount,
-            grandTotal: inv.grandTotal,
-          }),
-        }),
+        getRow: (inv) => {
+          const gst = getPurchaseInvoiceGstBreakup(inv);
+          const formatted = formatInvoiceGstBreakup({
+            ...gst,
+            invoiceTotal: inv.grandTotal,
+            interstate: gst.igst > 0,
+          });
+          return {
+            id: inv.id,
+            number: inv.invoiceNo,
+            date: inv.invoiceDate,
+            party: inv.vendorName,
+            taxableValue: formatted.taxableValue,
+            cgst: formatted.cgst,
+            sgst: formatted.sgst,
+            igst: formatted.igst,
+            invoiceTotal: formatted.invoiceTotal,
+            amount: formatted.invoiceTotal,
+            status: inv.source === "manual_entry" ? "draft" : (inv.debitStatus === "no_debit" ? "posted" : inv.debitStatus),
+            viewHref: `/accounts/transactions/purchase/${inv.id}`,
+            viewFields: [
+              { label: "Taxable Value", value: formatted.taxableValue },
+              { label: "Input CGST", value: formatted.cgst },
+              { label: "Input SGST", value: formatted.sgst },
+              { label: "Input IGST", value: formatted.igst },
+              { label: "Invoice Value", value: formatted.invoiceTotal },
+              { label: "Vendor Invoice No.", value: inv.vendorInvoiceNo || "—" },
+            ],
+            impactLines: purchaseInvoiceImpactResolved({
+              vendorName: inv.vendorName,
+              taxable: inv.subtotal,
+              taxAmount: inv.taxAmount,
+              grandTotal: inv.grandTotal,
+            }),
+          };
+        },
       }}
     />
   );

@@ -6,13 +6,13 @@ export const BANK_ACCOUNTS_SUB_GROUP_NAME = "Bank Accounts";
 export function getBankAccountsSubGroup(records: ChartOfAccount[]): ChartOfAccount | null {
   return (
     records.find(
-      (r) => r.nodeLevel === "sub_group" && r.accountName === BANK_ACCOUNTS_SUB_GROUP_NAME,
+      (r) => r.nodeLevel === "account_group" && r.accountName === BANK_ACCOUNTS_SUB_GROUP_NAME,
     ) ?? null
   );
 }
 
 export function isBankAccountsSubGroup(node: ChartOfAccount): boolean {
-  return node.nodeLevel === "sub_group" && node.accountName === BANK_ACCOUNTS_SUB_GROUP_NAME;
+  return node.nodeLevel === "account_group" && node.accountName === BANK_ACCOUNTS_SUB_GROUP_NAME;
 }
 
 export function isBankGroupNode(node: ChartOfAccount): boolean {

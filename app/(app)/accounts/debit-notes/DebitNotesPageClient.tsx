@@ -4,16 +4,23 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ModuleFiltersBar } from "@/components/module/ModuleFiltersBar";
+import { AccountsFilterBar } from "@/components/accounts/AccountsFilterBar";
+import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AccountsEditAction,
+  AccountsMoreActions,
+  AccountsTableActionCell,
+  AccountsViewAction,
+  accountsActionColClass,
+} from "@/components/accounts/AccountsTableActions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CheckCircle, Download, Eye, FileSpreadsheet, MoreVertical, Pencil, PlayCircle, Plus, XCircle } from "lucide-react";
+import { CheckCircle, Download, FileSpreadsheet, PlayCircle, Plus, XCircle } from "lucide-react";
 import { SectionTabs } from "../components/AccountsUI";
 import { NoteWorkflowBadge } from "../components/NoteWorkflowBadge";
 import { DebitNoteCancelDialog } from "./components/DebitNoteCancelDialog";
@@ -32,6 +39,7 @@ import {
 import { exportDebitNotesToExcel } from "./debit-notes-export";
 import { downloadDebitNotePdf } from "./debit-note-pdf";
 import { DEBIT_NOTES_BREADCRUMB, DEBIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
+import { cn } from "@/lib/utils";
 
 const TABS = [
   { id: "all", label: "All" },
@@ -92,23 +100,23 @@ export default function DebitNotesPageClient() {
       <div className="max-w-[1600px] mx-auto space-y-3">
         <PageHeader
           title="Debit Notes"
-          description="Vendor debits for purchase returns, short supply, and billing corrections."
+          description="Supplier debits for purchase returns, short supply, and billing corrections."
           breadcrumbs={DEBIT_NOTES_BREADCRUMB}
           actions={
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs gap-1.5"
+                className="h-9 text-[13px] font-medium gap-1.5"
                 disabled={exporting || visible.length === 0}
                 onClick={handleExport}
               >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <FileSpreadsheet className="w-4 h-4" />
                 {exporting ? "Exporting…" : "Export Excel"}
               </Button>
-              <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5" asChild>
+              <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5" asChild>
                 <Link href={`${DEBIT_NOTES_LIST_PATH}/new`}>
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-4 h-4" />
                   Create Debit Note
                 </Link>
               </Button>
@@ -118,11 +126,11 @@ export default function DebitNotesPageClient() {
 
         <SectionTabs tabs={TABS} active={tab} onChange={setTab} counts={counts} />
 
-        <ModuleFiltersBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Debit note no., vendor, reference…">
+        <AccountsFilterBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Debit note no., supplier, reference…">
           <Select value={vendor} onValueChange={setVendor}>
-            <SelectTrigger className="h-8 w-[140px] text-xs bg-white"><SelectValue placeholder="Vendor" /></SelectTrigger>
+            <SelectTrigger className="h-8 w-[140px] text-xs bg-white"><SelectValue placeholder="Supplier" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all" className="text-xs">All vendors</SelectItem>
+              <SelectItem value="all" className="text-xs">All suppliers</SelectItem>
               {vendorNames.map((v) => (
                 <SelectItem key={v} value={v} className="text-xs">{v}</SelectItem>
               ))}
@@ -138,8 +146,12 @@ export default function DebitNotesPageClient() {
             </SelectContent>
           </Select>
           <InputFilter placeholder="Reference no." value={referenceNo} onChange={setReferenceNo} />
-          <InputFilter type="date" value={dateFrom} onChange={setDateFrom} className="w-[130px]" />
-          <InputFilter type="date" value={dateTo} onChange={setDateTo} className="w-[130px]" />
+          <AccountsListingDateFilter
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="h-8 w-[120px] text-xs bg-white"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
@@ -151,17 +163,17 @@ export default function DebitNotesPageClient() {
               <SelectItem value="cancelled" className="text-xs">Cancelled</SelectItem>
             </SelectContent>
           </Select>
-        </ModuleFiltersBar>
+        </AccountsFilterBar>
 
         <div className="page-shell overflow-hidden">
           <div className="overflow-x-auto max-h-[calc(100vh-320px)]">
-            <table className="w-full text-table min-w-[1320px]">
-              <thead className="sticky top-0 z-10 bg-white border-b">
+            <table className="accounts-table w-full min-w-[1320px]">
+              <thead className="border-b">
                 <tr>
                   {[
                     "Debit Note No.",
                     "Date",
-                    "Vendor",
+                    "Supplier",
                     "Reference Type",
                     "Purchase Inv. No.",
                     "PO No.",
@@ -183,13 +195,13 @@ export default function DebitNotesPageClient() {
               <tbody>
                 {visible.length === 0 ? (
                   <tr>
-                    <td colSpan={14} className="py-12 text-center text-xs text-muted-foreground">
+                    <td colSpan={14} className="accounts-table-empty">
                       No debit notes. Click Create Debit Note to add one.
                     </td>
                   </tr>
                 ) : (
                   visible.map((r) => (
-                    <tr key={r.id} className="border-b hover:bg-brand-50/25">
+                    <tr key={r.id} className="accounts-table-row group">
                       <td className="px-2.5 py-2 text-xs font-mono font-medium">{r.debitNoteNo}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.debitNoteDate}</td>
                       <td className="px-2.5 py-2 text-xs">{r.vendorName}</td>
@@ -203,31 +215,17 @@ export default function DebitNotesPageClient() {
                       <td className="px-2.5 py-2"><NoteWorkflowBadge status={r.status} /></td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.createdBy}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.updatedBy}</td>
-                      <td className="px-2.5 py-2 sticky right-0 bg-white">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button type="button" className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted">
-                              <MoreVertical className="w-3.5 h-3.5" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-44">
-                            {getDebitNoteRowActions(r).map((a) => {
-                              if (a === "view")
-                                return (
-                                  <DropdownMenuItem key="view" asChild>
-                                    <Link href={`${DEBIT_NOTES_LIST_PATH}/${r.id}`} className="text-xs gap-2">
-                                      <Eye className="w-3.5 h-3.5" /> View
-                                    </Link>
-                                  </DropdownMenuItem>
-                                );
-                              if (a === "edit")
-                                return (
-                                  <DropdownMenuItem key="edit" asChild>
-                                    <Link href={`${DEBIT_NOTES_LIST_PATH}/${r.id}/edit`} className="text-xs gap-2">
-                                      <Pencil className="w-3.5 h-3.5" /> Edit
-                                    </Link>
-                                  </DropdownMenuItem>
-                                );
+                      <td className={cn("px-2.5 py-2 sticky right-0 bg-white", accountsActionColClass("multi"))}>
+                        <AccountsTableActionCell>
+                          <AccountsViewAction href={`${DEBIT_NOTES_LIST_PATH}/${r.id}`} />
+                          {getDebitNoteRowActions(r).includes("edit") && (
+                            <AccountsEditAction href={`${DEBIT_NOTES_LIST_PATH}/${r.id}/edit`} />
+                          )}
+                          {getDebitNoteRowActions(r).some((a) => a !== "view" && a !== "edit") && (
+                            <AccountsMoreActions contentClassName="w-44">
+                              {getDebitNoteRowActions(r)
+                                .filter((a) => a !== "view" && a !== "edit")
+                                .map((a) => {
                               if (a === "approve")
                                 return (
                                   <DropdownMenuItem
@@ -238,7 +236,7 @@ export default function DebitNotesPageClient() {
                                       refresh();
                                     }}
                                   >
-                                    <CheckCircle className="w-3.5 h-3.5" /> Approve
+                                    <CheckCircle className="w-4 h-4" /> Approve
                                   </DropdownMenuItem>
                                 );
                               if (a === "process")
@@ -251,25 +249,26 @@ export default function DebitNotesPageClient() {
                                       refresh();
                                     }}
                                   >
-                                    <PlayCircle className="w-3.5 h-3.5" /> Mark Processed
+                                    <PlayCircle className="w-4 h-4" /> Mark Processed
                                   </DropdownMenuItem>
                                 );
                               if (a === "cancel")
                                 return (
                                   <DropdownMenuItem key="cancel" className="text-xs gap-2 text-red-600" onClick={() => setCancelTarget(r)}>
-                                    <XCircle className="w-3.5 h-3.5" /> Cancel
+                                    <XCircle className="w-4 h-4" /> Cancel
                                   </DropdownMenuItem>
                                 );
                               if (a === "pdf")
                                 return (
                                   <DropdownMenuItem key="pdf" className="text-xs gap-2" onClick={() => downloadDebitNotePdf(r)}>
-                                    <Download className="w-3.5 h-3.5" /> Download PDF
+                                    <Download className="w-4 h-4" /> Download PDF
                                   </DropdownMenuItem>
                                 );
                               return null;
                             })}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                            </AccountsMoreActions>
+                          )}
+                        </AccountsTableActionCell>
                       </td>
                     </tr>
                   ))

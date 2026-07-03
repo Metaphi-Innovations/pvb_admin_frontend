@@ -13,7 +13,7 @@ export function ErpPartyAccountingCard({
 }: {
   title: string;
   summary: PartyAccountingSummary;
-  partyLabel: "Customer" | "Vendor";
+  partyLabel: "Customer" | "Supplier";
 }) {
   const outstandingLabel = partyLabel === "Customer" ? "Outstanding Balance" : "Outstanding Payable";
 
