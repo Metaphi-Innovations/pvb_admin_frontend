@@ -1,6 +1,9 @@
 /** Shared demo bank account specifications for Banking module seeding. */
 
 import type { BankAccountType } from "@/lib/accounts/bank-accounts-data";
+import { demoFinancialYearStart } from "@/lib/accounts/demo-date-utils";
+
+const DEMO_OPENING_DATE = demoFinancialYearStart();
 
 export interface DemoBankAccountSpec {
   bankName: string;
@@ -25,7 +28,7 @@ export const DEMO_BANK_SPECS: DemoBankAccountSpec[] = [
     branchName: "FC Road, Pune",
     accountType: "Current",
     openingBalance: 2000000,
-    openingBalanceDate: "2026-04-01",
+    openingBalanceDate: DEMO_OPENING_DATE,
     balanceType: "Debit",
     defaultForReceipts: true,
     defaultForPayments: false,
@@ -38,7 +41,7 @@ export const DEMO_BANK_SPECS: DemoBankAccountSpec[] = [
     branchName: "Camp, Pune",
     accountType: "Current",
     openingBalance: 850000,
-    openingBalanceDate: "2026-04-01",
+    openingBalanceDate: DEMO_OPENING_DATE,
     balanceType: "Debit",
     defaultForReceipts: false,
     defaultForPayments: false,
@@ -51,7 +54,7 @@ export const DEMO_BANK_SPECS: DemoBankAccountSpec[] = [
     branchName: "Shivaji Nagar, Pune",
     accountType: "Current",
     openingBalance: 525000,
-    openingBalanceDate: "2026-04-01",
+    openingBalanceDate: DEMO_OPENING_DATE,
     balanceType: "Debit",
     defaultForReceipts: false,
     defaultForPayments: false,
@@ -64,7 +67,7 @@ export const DEMO_BANK_SPECS: DemoBankAccountSpec[] = [
     branchName: "Koregaon Park, Pune",
     accountType: "OD",
     openingBalance: 375000,
-    openingBalanceDate: "2026-04-01",
+    openingBalanceDate: DEMO_OPENING_DATE,
     balanceType: "Debit",
     defaultForReceipts: false,
     defaultForPayments: true,
@@ -77,7 +80,7 @@ export const DEMO_BANK_SPECS: DemoBankAccountSpec[] = [
     branchName: "Aundh, Pune",
     accountType: "CC",
     openingBalance: 220000,
-    openingBalanceDate: "2026-04-01",
+    openingBalanceDate: DEMO_OPENING_DATE,
     balanceType: "Debit",
     defaultForReceipts: false,
     defaultForPayments: false,

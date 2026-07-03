@@ -124,7 +124,7 @@ export default function AccountingSettingsPageClient() {
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Ledger Mappings
             </h3>
-            <table className="accounts-table w-full text-table border border-border/60 rounded-lg overflow-hidden">
+            <table className="accounts-table w-full border border-border/60 rounded-lg overflow-hidden">
               <thead>
                 <tr>
                   <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Key</th>

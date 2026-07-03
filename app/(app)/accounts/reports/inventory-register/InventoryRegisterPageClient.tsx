@@ -28,15 +28,15 @@ import {
 } from "@/components/accounts/AccountsTableListing";
 import {
   ReportFilterRow,
-  ReportFinancialYearFilter,
-  ReportFromToDateFilter,
+  ReportDateRangeFilter,
   ReportSearchFilter,
+  useReportDateRange,
+  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
+  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
 import { EmptySearch } from "@/components/ui/EmptyState";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
-import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import {
@@ -59,15 +59,10 @@ import {
   exportInventoryRegisterToPdf,
 } from "./inventory-register-export";
 
-const filterLabelClass = "text-[10px] font-medium uppercase text-muted-foreground leading-none";
-const filterControlClass = "h-7 text-xs mt-0";
-
 export default function InventoryRegisterPageClient() {
   const mounted = useClientMounted();
 
-  const [dateFrom, setDateFrom] = useState("2025-04-01");
-  const [dateTo, setDateTo] = useState("2026-03-31");
-  const [financialYearId, setFinancialYearId] = useState("all");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [warehouse, setWarehouse] = useState("all");
   const [productId, setProductId] = useState("all");
   const [category, setCategory] = useState("all");
@@ -80,10 +75,6 @@ export default function InventoryRegisterPageClient() {
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
 
-  useEffect(() => {
-    const activeFyId = getActiveFinancialYearId();
-    if (activeFyId) setFinancialYearId(String(activeFyId));
-  }, []);
 
   const sourceRows = useMemo(() => (mounted ? buildInventoryRegisterRows() : []), [mounted]);
 
@@ -91,7 +82,7 @@ export default function InventoryRegisterPageClient() {
     () => ({
       dateFrom,
       dateTo,
-      financialYearId,
+      financialYearId: "all",
       warehouse,
       productId,
       category,
@@ -102,7 +93,6 @@ export default function InventoryRegisterPageClient() {
     [
       dateFrom,
       dateTo,
-      financialYearId,
       warehouse,
       productId,
       category,
@@ -129,7 +119,6 @@ export default function InventoryRegisterPageClient() {
   }, [
     dateFrom,
     dateTo,
-    financialYearId,
     warehouse,
     productId,
     category,
@@ -152,8 +141,7 @@ export default function InventoryRegisterPageClient() {
     productId !== "all" ||
     category !== "all" ||
     batchNo !== "all" ||
-    transactionType !== "all" ||
-    financialYearId !== "all";
+    transactionType !== "all";
 
   const clearFilters = () => {
     setSearch("");
@@ -162,8 +150,6 @@ export default function InventoryRegisterPageClient() {
     setCategory("all");
     setBatchNo("all");
     setTransactionType("all");
-    const activeFyId = getActiveFinancialYearId();
-    setFinancialYearId(activeFyId ? String(activeFyId) : "all");
   };
 
   const handleSort = useCallback((key: string) => {
@@ -179,11 +165,6 @@ export default function InventoryRegisterPageClient() {
   }, []);
 
   const exportMeta = useMemo(() => {
-    const years = loadFinancialYears();
-    const fy =
-      financialYearId === "all"
-        ? "All years"
-        : (years.find((y) => String(y.id) === financialYearId)?.name ?? financialYearId);
     const product =
       productId === "all"
         ? "All"
@@ -195,7 +176,7 @@ export default function InventoryRegisterPageClient() {
     return {
       dateFrom,
       dateTo,
-      financialYear: fy,
+      financialYear: "",
       warehouse: warehouse === "all" ? "All" : warehouse,
       product,
       category: category === "all" ? "All" : category,
@@ -206,7 +187,6 @@ export default function InventoryRegisterPageClient() {
   }, [
     dateFrom,
     dateTo,
-    financialYearId,
     warehouse,
     productId,
     category,
@@ -235,19 +215,21 @@ export default function InventoryRegisterPageClient() {
       breadcrumbs={accountsBreadcrumb("Reports", "Inventory Register")}
       title="Inventory Register"
       description="Read-only stock movement register with running balance by product, batch, and warehouse."
-      actions={
-        <AccountsExportMenu
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          disabled={exporting || filteredRows.length === 0}
-        />
-      }
       filters={
-        <ReportFilterRow>
-          <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
-          <ReportFromToDateFilter
+        <ReportFilterRow
+          end={
+            <AccountsExportMenu
+              onExcel={handleExportExcel}
+              onPdf={handleExportPdf}
+              disabled={exporting || filteredRows.length === 0}
+            />
+          }
+        >
+          <ReportDateRangeFilter
+            preset={preset}
             dateFrom={dateFrom}
             dateTo={dateTo}
+            onPresetChange={setPreset}
             onDateFromChange={setDateFrom}
             onDateToChange={setDateTo}
           />

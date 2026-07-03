@@ -1,23 +1,31 @@
-import { normalizeDebitNote, REFERENCE_TYPE_LABELS, type DebitNoteRecord } from "./debit-notes-data";
+import {
+  DEBIT_NOTE_SOURCE_LABELS,
+  normalizeDebitNote,
+  type DebitNoteRecord,
+} from "./debit-notes-data";
 
 export async function exportDebitNotesToExcel(records: DebitNoteRecord[]): Promise<void> {
   const XLSX = await import("xlsx");
   const rows = records.map((r) => {
     const rec = normalizeDebitNote(r);
+    const refDoc =
+      rec.source === "purchase_return"
+        ? rec.sourceReturnNo ?? ""
+        : rec.reason;
     return {
       "Debit Note No.": rec.debitNoteNo,
+      Source: DEBIT_NOTE_SOURCE_LABELS[rec.source],
+      "Reference Document": refDoc,
+      "Purchase Invoice": rec.sourceInvoiceNo || "",
+      "Purchase Return No.": rec.sourceReturnNo || "",
+      Supplier: rec.vendorName,
       Date: rec.debitNoteDate,
-      Vendor: rec.vendorName,
-      "Reference Type": REFERENCE_TYPE_LABELS[rec.againstType],
-      "Reference No.": rec.sourceInvoiceNo || rec.sourcePoNo || "—",
-      "PO No.": rec.sourcePoNo || "—",
-      Reason: rec.reason,
-      "Taxable Amount": rec.taxableAmount,
-      "GST Amount": rec.gstAmount,
-      "Total Debit Amount": rec.currentDebitAmount,
+      "Taxable Value": rec.taxableAmount,
+      CGST: rec.cgstAmount,
+      SGST: rec.sgstAmount,
+      IGST: rec.igstAmount,
+      Total: rec.currentDebitAmount,
       Status: rec.status.replaceAll("_", " "),
-      "Created By": rec.createdBy,
-      "Updated By": rec.updatedBy,
     };
   });
   const sheet = XLSX.utils.json_to_sheet(rows);

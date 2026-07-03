@@ -6,6 +6,7 @@ import React, { useRef } from "react";
 import { Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isoToDisplayDate } from "@/lib/accounts/date-display";
+import { ACCOUNTS_FILTER_CONTROL_CLASS } from "@/lib/accounts/accounts-typography";
 
 export interface AccountsDateInputProps {
   value: string;
@@ -15,6 +16,7 @@ export interface AccountsDateInputProps {
   id?: string;
   disabled?: boolean;
   "aria-label"?: string;
+  /** @deprecated ignored — compact filter sizing is always used */
   size?: "compact" | "default";
 }
 
@@ -26,55 +28,57 @@ export function AccountsDateInput({
   id,
   disabled,
   "aria-label": ariaLabel,
-  size = "compact",
 }: AccountsDateInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const display = value ? isoToDisplayDate(value) : "";
 
-  const openPicker = () => {
+  const openPicker = (e?: React.MouseEvent | React.KeyboardEvent) => {
+    e?.stopPropagation();
     if (disabled) return;
     const input = inputRef.current;
     if (!input) return;
+    input.focus();
     try {
       input.showPicker?.();
     } catch {
-      input.focus();
+      input.click();
     }
   };
 
   return (
     <div
       className={cn(
-        "relative flex items-center w-full rounded-md border border-border bg-background text-left",
+        "accounts-date-filter-input relative flex items-center rounded-md border border-[#E5E7EB] bg-white text-left",
         "hover:bg-muted/20 transition-colors",
         "focus-within:ring-2 focus-within:ring-brand-300 focus-within:border-brand-400",
-        size === "compact" ? "h-7" : "h-8",
+        ACCOUNTS_FILTER_CONTROL_CLASS,
         disabled && "opacity-50 cursor-not-allowed",
         className,
       )}
-      onClick={openPicker}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          openPicker();
-        }
-      }}
-      role="button"
-      tabIndex={disabled ? -1 : 0}
-      aria-label={ariaLabel}
     >
-      <Calendar
-        className={cn(
-          "absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none flex-shrink-0",
-          size === "compact" ? "w-3 h-3" : "w-3.5 h-3.5",
-        )}
-      />
+      <span
+        onClick={openPicker}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") openPicker(e);
+        }}
+        role="button"
+        tabIndex={disabled ? -1 : 0}
+        className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[#6B7280] hover:text-[#1F2937] transition-colors flex-shrink-0 z-[1] cursor-pointer"
+        aria-label={ariaLabel ? `${ariaLabel} — open calendar` : "Open calendar"}
+      >
+        <Calendar className="w-3.5 h-3.5" />
+      </span>
       <span
         className={cn(
-          "pl-7 pr-2 truncate w-full",
-          size === "compact" ? "text-xs" : "text-xs",
-          display ? "text-foreground" : "text-muted-foreground",
+          "accounts-date-display pl-7 pr-1.5 w-full cursor-pointer",
+          display ? "text-[#1F2937]" : "text-[#6B7280]",
         )}
+        onClick={openPicker}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") openPicker(e);
+        }}
+        role="button"
+        tabIndex={disabled ? -1 : 0}
       >
         {display || placeholder}
       </span>
@@ -85,10 +89,8 @@ export function AccountsDateInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        tabIndex={-1}
-        aria-hidden
+        aria-label={ariaLabel}
         className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-        onClick={(e) => e.stopPropagation()}
       />
     </div>
   );

@@ -1,24 +1,16 @@
 "use client";
 
 import React from "react";
-import { Plus, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
-import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
+import { AccountsListingFilterCard } from "@/components/accounts/AccountsListingHeader";
 import {
-  DATE_RANGE_PRESET_OPTIONS,
-  resolveDateRangePreset,
-  type DateRangePresetId,
-} from "@/lib/accounts/report-date-presets";
+  ReportDateRangeFilter,
+  ReportSearchFilter,
+} from "@/components/accounts/ReportFilters";
+import type { DateRangePresetId } from "@/lib/accounts/report-date-presets";
+import { ACCOUNTS_ACTION_BUTTON_CLASS } from "@/lib/accounts/accounts-typography";
 import { cn } from "@/lib/utils";
 
 interface CoaListingToolbarProps {
@@ -35,6 +27,7 @@ interface CoaListingToolbarProps {
   exportDisabled?: boolean;
   canCreate?: boolean;
   onNewLedger?: () => void;
+  searchPlaceholder?: string;
 }
 
 export function CoaListingToolbar({
@@ -51,80 +44,44 @@ export function CoaListingToolbar({
   exportDisabled,
   canCreate,
   onNewLedger,
+  searchPlaceholder = "Search accounts…",
 }: CoaListingToolbarProps) {
-  const handlePresetChange = (value: DateRangePresetId) => {
-    onPresetChange(value);
-    if (value !== "custom") {
-      const { from, to } = resolveDateRangePreset(value);
-      onDateFromChange(from);
-      onDateToChange(to);
-    }
-  };
-
   return (
-    <div className="flex-shrink-0 flex items-center gap-3 px-3 py-2 border-b border-border/60 bg-white">
-      <div className="flex items-center gap-3 flex-1 min-w-0">
-        <div className="relative w-full min-w-[240px] max-w-md flex-1">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <Input
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search accounts…"
-            className="h-8 w-full pl-9 pr-3 text-xs rounded-lg border-border bg-white"
-          />
-        </div>
-
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <Label className="text-xs font-medium text-muted-foreground whitespace-nowrap mb-0">
-            Date Range
-          </Label>
-          <Select value={preset} onValueChange={(v) => handlePresetChange(v as DateRangePresetId)}>
-            <SelectTrigger className="h-8 w-[148px] text-xs rounded-lg border-border bg-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {DATE_RANGE_PRESET_OPTIONS.map((o) => (
-                <SelectItem key={o.id} value={o.id} className="text-xs">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {preset === "custom" && (
-            <div className="flex items-center gap-1.5">
-              <AccountsDateInput
-                value={dateFrom}
-                onChange={onDateFromChange}
-                className="w-[118px]"
-                size="default"
-                aria-label="From date"
-              />
-              <AccountsDateInput
-                value={dateTo}
-                onChange={onDateToChange}
-                className="w-[118px]"
-                size="default"
-                aria-label="To date"
-              />
-            </div>
+    <AccountsListingFilterCard
+      actions={
+        <>
+          {canCreate && onNewLedger && (
+            <Button
+              type="button"
+              size="sm"
+              className={cn(
+                ACCOUNTS_ACTION_BUTTON_CLASS,
+                "bg-[#FF7A00] hover:bg-brand-700 text-white border-0 px-2.5",
+              )}
+              onClick={onNewLedger}
+            >
+              <Plus className="w-4 h-4" />
+              New Ledger
+            </Button>
           )}
-        </div>
-      </div>
-
-      <div className={cn("flex items-center gap-2 flex-shrink-0 ml-auto pl-2")}>
-        {canCreate && onNewLedger && (
-          <Button
-            type="button"
-            size="sm"
-            className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-            onClick={onNewLedger}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            New Ledger
-          </Button>
-        )}
-        <AccountsExportMenu onExcel={onExcel} onPdf={onPdf} disabled={exportDisabled} />
-      </div>
-    </div>
+          <AccountsExportMenu onExcel={onExcel} onPdf={onPdf} disabled={exportDisabled} />
+        </>
+      }
+    >
+      <ReportDateRangeFilter
+        preset={preset}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onPresetChange={onPresetChange}
+        onDateFromChange={onDateFromChange}
+        onDateToChange={onDateToChange}
+      />
+      <ReportSearchFilter
+        value={search}
+        onChange={onSearchChange}
+        placeholder={searchPlaceholder}
+        className="min-w-[180px] flex-1 max-w-sm"
+      />
+    </AccountsListingFilterCard>
   );
 }

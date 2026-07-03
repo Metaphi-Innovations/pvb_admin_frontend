@@ -163,7 +163,7 @@ export function TransactionPage({
               </thead>
               <tbody>
                 {visible.map((r) => (
-                  <tr key={r.id} className="border-b border-border/40 last:border-0 h-11">
+                  <tr key={r.id} className="accounts-table-row group">
                     <td className="px-3 py-2 text-xs font-mono">{r.number}</td>
                     <td className="px-3 py-2 text-xs text-muted-foreground">{r.date}</td>
                     <td className="px-3 py-2 text-xs">{r.party}</td>

@@ -106,12 +106,12 @@ export function PaymentInstallmentModal({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Payment Date</Label>
-              <Input type="date" className="h-8 text-xs" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+              <Input type="date" className="h-9 text-[13px] font-medium" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Payment Mode</Label>
               <Select value={paymentMode} onValueChange={(v) => setPaymentMode(v as PaymentMode)}>
-                <SelectTrigger className="h-8 text-xs">
+                <SelectTrigger className="h-9 text-[13px] font-medium">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -127,17 +127,17 @@ export function PaymentInstallmentModal({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Reference Number</Label>
-              <Input className="h-8 text-xs" value={paymentReferenceNo} onChange={(e) => setPaymentReferenceNo(e.target.value)} />
+              <Input className="h-9 text-[13px] font-medium" value={paymentReferenceNo} onChange={(e) => setPaymentReferenceNo(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Transaction Number</Label>
-              <Input className="h-8 text-xs" value={transactionNo} onChange={(e) => setTransactionNo(e.target.value)} />
+              <Input className="h-9 text-[13px] font-medium" value={transactionNo} onChange={(e) => setTransactionNo(e.target.value)} />
             </div>
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Amount (max {formatINR(maxPay)})</Label>
             <AccountsMoneyInput
-              className="h-8 text-xs"
+              className="h-9 text-[13px] font-medium"
               value={amount}
               onChange={(v) => {
                 setAmount(String(v));
@@ -152,12 +152,12 @@ export function PaymentInstallmentModal({
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
         <DialogFooter className="px-5 py-3 border-t bg-muted/20">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onClose}>
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={onClose}>
             Cancel
           </Button>
           <Button
             size="sm"
-            className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
             disabled={!valid}
             onClick={() => {
               if (amt > maxPay) {

@@ -25,13 +25,13 @@ import { AccountsVoucherStatusBadge } from "./AccountsVoucherStatusBadge";
 
 function StepIcon({ state }: { state: AccountsApprovalStep["state"] }) {
   if (state === "created" || state === "approved") {
-    return <Check className="w-3.5 h-3.5" />;
+    return <Check className="w-4 h-4" />;
   }
   if (state === "pending") {
-    return <Loader2 className="w-3.5 h-3.5 animate-spin" />;
+    return <Loader2 className="w-4 h-4 animate-spin" />;
   }
   if (state === "rejected" || state === "sent_back") {
-    return <X className="w-3.5 h-3.5" />;
+    return <X className="w-4 h-4" />;
   }
   return <span className="w-2 h-2 rounded-full bg-muted-foreground/30" />;
 }
@@ -186,7 +186,7 @@ export function AccountsMakerCheckerPanel({
             <Button
               variant="outline"
               size="sm"
-              className="h-8 text-xs"
+              className="h-9 text-[13px] font-medium"
               disabled={saving}
               onClick={onSaveDraft}
             >
@@ -196,22 +196,22 @@ export function AccountsMakerCheckerPanel({
           {canSubmit && status === "draft" && onSubmitForApproval && (
             <Button
               size="sm"
-              className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
+              className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
               disabled={saving}
               onClick={() => onSubmitForApproval(remarks)}
             >
-              <CheckCircle className="w-3.5 h-3.5" /> Submit for Approval
+              <CheckCircle className="w-4 h-4" /> Submit for Approval
             </Button>
           )}
           {canSubmit && status === "sent_back" && onResubmit && (
             <Button
               variant="outline"
               size="sm"
-              className="h-8 text-xs gap-1.5"
+              className="h-9 text-[13px] font-medium gap-1.5"
               disabled={saving}
               onClick={() => onResubmit(remarks)}
             >
-              <RotateCcw className="w-3.5 h-3.5" /> Resubmit for Approval
+              <RotateCcw className="w-4 h-4" /> Resubmit for Approval
             </Button>
           )}
           {isViewOnly && (
@@ -223,42 +223,42 @@ export function AccountsMakerCheckerPanel({
             <>
               <Button
                 size="sm"
-                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                className="h-9 text-[13px] font-medium bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
                 disabled={saving}
                 onClick={() => onApprove?.(remarks)}
               >
-                <CheckCircle className="w-3.5 h-3.5" /> Approve
+                <CheckCircle className="w-4 h-4" /> Approve
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs text-red-600 gap-1.5"
+                className="h-9 text-[13px] font-medium text-red-600 gap-1.5"
                 disabled={saving}
                 onClick={() => {
                   setConfirmRemarks(remarks);
                   setConfirm("reject");
                 }}
               >
-                <X className="w-3.5 h-3.5" /> Reject
+                <X className="w-4 h-4" /> Reject
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs text-navy-700 gap-1.5"
+                className="h-9 text-[13px] font-medium text-navy-700 gap-1.5"
                 disabled={saving}
                 onClick={() => {
                   setConfirmRemarks(remarks);
                   setConfirm("send_back");
                 }}
               >
-                <RotateCcw className="w-3.5 h-3.5" /> Send Back
+                <RotateCcw className="w-4 h-4" /> Send Back
               </Button>
             </>
           )}
           {status === "rejected" && onDuplicate && (
             <Button
               size="sm"
-              className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+              className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
               onClick={onDuplicate}
             >
               Duplicate &amp; Create New
@@ -320,13 +320,13 @@ export function AccountsMakerCheckerPanel({
             placeholder="Enter remarks…"
           />
           <div className="flex items-center justify-end gap-2 pt-2">
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setConfirm(null)}>
+            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => setConfirm(null)}>
               Cancel
             </Button>
             <Button
               size="sm"
               className={cn(
-                "h-8 text-xs text-white",
+                "h-9 text-[13px] font-medium text-white",
                 confirm === "reject" ? "bg-red-600 hover:bg-red-700" : "bg-navy-600 hover:bg-navy-700",
               )}
               disabled={!confirmRemarks.trim()}

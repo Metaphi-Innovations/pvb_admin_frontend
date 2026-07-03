@@ -44,10 +44,10 @@ export function CoaListingTable({
 }: CoaListingTableProps) {
   if (rows.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-14 px-4">
-        <p className="text-sm font-medium text-foreground">{emptyMessage}</p>
+      <div className="flex flex-col items-center justify-center py-6 px-4">
+        <p className="text-[13px] font-medium text-slate-800">{emptyMessage}</p>
         {!isSearchMode && (
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-sm text-slate-500 mt-1">
             Select a group in the sidebar or clear search to browse accounts.
           </p>
         )}
@@ -97,7 +97,7 @@ export function CoaListingTable({
                 className={cn(
                   "group",
                   drillable && "cursor-pointer",
-                  isHighlighted && "bg-brand-50/80 ring-1 ring-inset ring-brand-300/70",
+                  isHighlighted && "is-selected",
                 )}
                 onClick={() => drillable && onDrillInto(node)}
               >

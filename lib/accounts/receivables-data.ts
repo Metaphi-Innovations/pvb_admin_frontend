@@ -16,6 +16,7 @@ import {
   type AccountingVoucher,
 } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { loadCreditNotes } from "@/app/(app)/accounts/credit-notes/credit-notes-data";
+import { tryAutoCreditNoteOnPayment } from "@/lib/accounts/credit-note-integration";
 import { findErpPartyLink } from "@/lib/accounts/erp-party-links";
 import { syncCustomerLedger } from "@/lib/accounts/erp-accounting-mapping";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
@@ -898,6 +899,11 @@ export function applyReceiptAllocation(
     };
   }
   saveInvoices(invoices);
+
+  for (const line of lines) {
+    tryAutoCreditNoteOnPayment(line.invoiceId, record.receiptDate, line.amount);
+  }
+
   return null;
 }
 

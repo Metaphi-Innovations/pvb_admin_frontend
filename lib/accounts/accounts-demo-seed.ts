@@ -33,8 +33,10 @@ import {
   type PurchaseInvoiceRecord,
 } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
 import { saveCreditNotes } from "@/app/(app)/accounts/credit-notes/credit-notes-data";
+import { buildCreditNotesSeed } from "@/app/(app)/accounts/credit-notes/credit-notes-seed";
 import { saveDebitNotes } from "@/app/(app)/accounts/debit-notes/debit-notes-data";
-import { saveExpenses } from "@/app/(app)/accounts/expenses/expense-data";
+import { buildDebitNotesSeed } from "@/app/(app)/accounts/debit-notes/debit-notes-seed";
+import { getExpensesSeedData, saveExpenses } from "@/app/(app)/accounts/expenses/expense-data";
 import { saveVouchers, createVoucher, loadVouchers } from "@/app/(app)/accounts/vouchers/voucher-data";
 import {
   loadChartOfAccounts,
@@ -69,11 +71,21 @@ import {
 } from "@/lib/accounts/ledger-balance-seed";
 import { seedReceivablesDemoData } from "@/lib/accounts/receivables-demo-seed";
 import { seedPayablesDemoData } from "@/lib/accounts/payables-demo-seed";
+import { resolveDefaultDemoBankLedger } from "@/lib/accounts/bank-ledger-resolver";
+import { ensureFinancialYearsCurrent } from "@/app/(app)/accounts/masters/masters-data";
 import type { CreditNoteRecord } from "@/app/(app)/accounts/credit-notes/credit-notes-data";
 import { findErpPartyLink } from "@/lib/accounts/erp-party-links";
 import { COA_DEMO_LEDGER_SEEDS } from "@/app/(app)/accounts/masters/coa-demo-ledgers";
+import {
+  applyRelativeInvoiceDates,
+  applyRelativePurchaseDates,
+  demoDateAt,
+  demoDocNo,
+  demoFinancialYearStart,
+  demoTimestamp,
+} from "@/lib/accounts/demo-date-utils";
 
-export const ACCOUNTS_DEMO_SEED_VERSION = "2026-jun-demo-v16";
+export const ACCOUNTS_DEMO_SEED_VERSION = "relative-dates-v4";
 const VERSION_KEY = "ds_accounts_demo_seed_version";
 
 // ── Demo master specs (5 each) ───────────────────────────────────────────────
@@ -284,7 +296,7 @@ type DemoSalesInvoiceSpec = {
   amountCredited?: number;
 };
 
-const DEMO_SALES_INVOICES: DemoSalesInvoiceSpec[] = [
+const DEMO_SALES_INVOICES_RAW: DemoSalesInvoiceSpec[] = [
   {
     id: 1,
     invoiceNo: "INV-2026-001",
@@ -431,8 +443,12 @@ const DEMO_SALES_INVOICES: DemoSalesInvoiceSpec[] = [
   },
 ] as const;
 
+function getDemoSalesInvoices(): DemoSalesInvoiceSpec[] {
+  return applyRelativeInvoiceDates(DEMO_SALES_INVOICES_RAW, 0, "INV", new Date(), 3);
+}
+
 /** Purchase invoices linked to the demo GRNs (GRN-001 to GRN-005) */
-const DEMO_PURCHASE_INVOICES: Array<{
+const DEMO_PURCHASE_INVOICES_RAW: Array<{
   id: number;
   invoiceNo: string;
   vendorId: number;
@@ -514,6 +530,10 @@ const DEMO_PURCHASE_INVOICES: Array<{
     ],
   },
 ];
+
+function getDemoPurchaseInvoices() {
+  return applyRelativePurchaseDates(DEMO_PURCHASE_INVOICES_RAW, 12, new Date(), 3);
+}
 
 // ── COA helpers (add ledgers only — never modify structure) ─────────────────
 
@@ -912,7 +932,7 @@ function buildSalesInvoice(
 }
 
 function buildPurchaseInvoice(
-  spec: (typeof DEMO_PURCHASE_INVOICES)[number],
+  spec: ReturnType<typeof getDemoPurchaseInvoices>[number],
   vendorName: string,
   vendorGst: string,
 ): PurchaseInvoiceRecord {
@@ -980,12 +1000,7 @@ function buildPurchaseInvoice(
 }
 
 function resolveBankLedger(): ChartOfAccount | null {
-  return (
-    findLedgerByName("HDFC Current Account (xxxx7890)") ??
-    findLedgerByName("HDFC Current Account") ??
-    findLedgerByName("HDFC Bank") ??
-    resolveMappingLedger("bank_ledger", "HDFC Bank", { createIfMissing: true })
-  );
+  return resolveDefaultDemoBankLedger();
 }
 
 function seedCustomerReceipt(
@@ -1086,89 +1101,26 @@ function postAllTransactions(invoices: InvoiceRecord[]): void {
     maybePostSalesInvoice(inv);
   }
 
-  seedCustomerReceipt("ABC Agro Distributor", 80000, "2026-04-20", "NEFT-ABC-001", "INV-2026-001", "RV-2026-001");
-  seedCustomerReceipt("ABC Agro Distributor", 45000, "2026-05-15", "NEFT-ABC-002", "INV-2026-002", "RV-2026-002");
-  seedCustomerReceipt("Krishna Retail Store", 118000, "2026-05-05", "NEFT-KRS-001", "INV-2026-006", "RV-2026-003");
-  seedCustomerReceipt("Green Harvest Agro", 90000, "2026-05-18", "NEFT-GHA-001", "INV-2026-004", "RV-2026-004");
-  seedCustomerReceipt("Yavatmal Cotton FPO", 50000, "2026-06-08", "NEFT-YCF-001", "INV-2026-008", "RV-2026-005");
-  seedCustomerReceipt("Vidarbha Agro Mart", 60000, "2026-06-12", "NEFT-VAM-001", "INV-2026-011", "RV-2026-006");
-}
-
-function buildDemoCreditNotes(): CreditNoteRecord[] {
-  return [
-    {
-      id: 1,
-      creditNoteNo: "CN-2026-001",
-      creditNoteDate: "2026-04-25",
-      againstType: "sales_invoice",
-      sourceInvoiceId: 1,
-      sourceInvoiceNo: "INV-2026-001",
-      sourceOrderId: null,
-      sourceOrderNo: "",
-      customerId: 1,
-      customerName: "ABC Agro Distributor",
-      receivableLedger: "ABC Agro Distributor",
-      originalAmount: 150000,
-      alreadyAdjustedAmount: 0,
-      currentCreditAmount: 20000,
-      balanceAfterAdjustment: 130000,
-      taxCreditAmount: 3051,
-      lineItems: [],
-      reason: "Sales return",
-      remarks: "Return of damaged bags — credit against INV-2026-001",
-      status: "approved",
-      activity: [
-        {
-          at: "2026-04-25T10:00:00.000Z",
-          action: "approved",
-          by: ACCOUNTS_CURRENT_USER,
-          detail: "Credit note posted against INV-2026-001",
-        },
-      ],
-      createdBy: ACCOUNTS_CURRENT_USER,
-      updatedBy: ACCOUNTS_CURRENT_USER,
-      approvedBy: ACCOUNTS_CURRENT_USER,
-      approvedAt: "2026-04-25T10:00:00.000Z",
-      createdAt: "2026-04-25T09:00:00.000Z",
-      updatedAt: "2026-04-25T10:00:00.000Z",
-    },
-    {
-      id: 2,
-      creditNoteNo: "CN-2026-002",
-      creditNoteDate: "2026-06-01",
-      againstType: "sales_invoice",
-      sourceInvoiceId: 7,
-      sourceInvoiceNo: "INV-2026-007",
-      sourceOrderId: null,
-      sourceOrderNo: "",
-      customerId: 3,
-      customerName: "Yavatmal Cotton FPO",
-      receivableLedger: "Yavatmal Cotton FPO",
-      originalAmount: 145000,
-      alreadyAdjustedAmount: 0,
-      currentCreditAmount: 15000,
-      balanceAfterAdjustment: 130000,
-      taxCreditAmount: 2288,
-      lineItems: [],
-      reason: "Rate difference",
-      remarks: "Rate difference adjustment on bulk urea supply",
-      status: "approved",
-      activity: [
-        {
-          at: "2026-06-01T10:00:00.000Z",
-          action: "approved",
-          by: ACCOUNTS_CURRENT_USER,
-          detail: "Credit note approved — pending invoice adjustment in receivables view",
-        },
-      ],
-      createdBy: ACCOUNTS_CURRENT_USER,
-      updatedBy: ACCOUNTS_CURRENT_USER,
-      approvedBy: ACCOUNTS_CURRENT_USER,
-      approvedAt: "2026-06-01T10:00:00.000Z",
-      createdAt: "2026-06-01T09:00:00.000Z",
-      updatedAt: "2026-06-01T10:00:00.000Z",
-    },
+  const receiptSpecs = [
+    { customer: "ABC Agro Distributor", amount: 80000, invoiceId: 1, ref: "NEFT-ABC-001", rvSeq: 1 },
+    { customer: "ABC Agro Distributor", amount: 45000, invoiceId: 2, ref: "NEFT-ABC-002", rvSeq: 2 },
+    { customer: "Krishna Retail Store", amount: 118000, invoiceId: 6, ref: "NEFT-KRS-001", rvSeq: 3 },
+    { customer: "Green Harvest Agro", amount: 90000, invoiceId: 4, ref: "NEFT-GHA-001", rvSeq: 4 },
+    { customer: "Yavatmal Cotton FPO", amount: 50000, invoiceId: 8, ref: "NEFT-YCF-001", rvSeq: 5 },
+    { customer: "Vidarbha Agro Mart", amount: 60000, invoiceId: 11, ref: "NEFT-VAM-001", rvSeq: 6 },
   ];
+  for (const spec of receiptSpecs) {
+    const inv = invoices.find((i) => i.id === spec.invoiceId);
+    if (!inv) continue;
+    seedCustomerReceipt(
+      spec.customer,
+      spec.amount,
+      inv.invoiceDate,
+      spec.ref,
+      inv.invoiceNo,
+      demoDocNo("RV", spec.rvSeq),
+    );
+  }
 }
 
 function ensureAutoPostingEnabled(): void {
@@ -1195,12 +1147,13 @@ export function seedAccountsDemoData(force = false): void {
   if (!force && localStorage.getItem(VERSION_KEY) === ACCOUNTS_DEMO_SEED_VERSION) return;
 
   try {
+    ensureFinancialYearsCurrent();
     ensureAutoPostingEnabled();
     seedDemoMasters();
 
     const customers = loadCustomers();
     const allDemoInvoiceSpecs: DemoSalesInvoiceSpec[] = [
-      ...DEMO_SALES_INVOICES,
+      ...getDemoSalesInvoices(),
       ...CREDIT_LIMIT_DEMO_INVOICE_SPECS,
     ];
     const demoInvoiceIds = new Set<number>(
@@ -1219,10 +1172,10 @@ export function seedAccountsDemoData(force = false): void {
     });
 
     saveInvoices([...invoices, ...preservedInvoices]);
-    const creditNotes = buildDemoCreditNotes();
+    const creditNotes = buildCreditNotesSeed();
     saveCreditNotes(creditNotes);
-    saveDebitNotes([]);
-    saveExpenses([]);
+    saveDebitNotes(buildDebitNotesSeed());
+    saveExpenses(getExpensesSeedData());
 
     postAllTransactions(invoices);
 

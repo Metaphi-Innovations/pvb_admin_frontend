@@ -45,15 +45,14 @@ import {
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
-  ReportFinancialYearFilter,
   ReportCustomerFilter,
   ReportSearchFilter,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 import {
   AccountsTablePagination,
-  AccountsTableToolbar,
 } from "@/components/accounts/AccountsTableListing";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
   AccountsTable,
   AccountsTableBody,
@@ -93,7 +92,6 @@ function formatReportDate(value: string): string {
 
 export default function CollectionTrackingClient() {
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
-  const [financialYear, setFinancialYear] = useState("all");
   const [customerId, setCustomerId] = useState("all");
   const [collectionStatus, setCollectionStatus] = useState("all");
   const [search, setSearch] = useState("");
@@ -107,7 +105,7 @@ export default function CollectionTrackingClient() {
 
   useEffect(() => {
     setPage(1);
-  }, [dateFrom, dateTo, financialYear, customerId, collectionStatus, search, pageSize]);
+  }, [dateFrom, dateTo, customerId, collectionStatus, search, pageSize]);
 
   const records = useMemo(() => loadCollectionFollowUps(), [refreshKey]);
   const customers = useMemo(() => loadCustomers(), []);
@@ -308,13 +306,14 @@ export default function CollectionTrackingClient() {
       title="Collection Tracking"
       description="Track collection follow-ups for overdue and pending customer invoices."
       actions={
-        <Button size="sm" className="h-8 text-xs gap-1 bg-brand-600 hover:bg-brand-700 text-white" onClick={openAdd}>
-          <Plus className="w-3.5 h-3.5" /> Add Follow-up
+        <Button size="sm" className="h-9 text-[13px] font-medium gap-1 bg-brand-600 hover:bg-brand-700 text-white" onClick={openAdd}>
+          <Plus className="w-4 h-4" /> Add Follow-up
         </Button>
       }
       filters={
-        <ReportFilterRow>
-          <ReportFinancialYearFilter value={financialYear} onChange={setFinancialYear} />
+        <ReportFilterRow
+          end={<AccountsExportMenu onExcel={handleExcel} onPdf={handlePdf} disabled={filteredRecords.length === 0} />}
+        >
           <ReportCustomerFilter value={customerId} onChange={setCustomerId} customers={customers} />
           <div className="space-y-1 min-w-[160px]">
             <Label className="text-[10px] font-medium uppercase text-muted-foreground leading-none">
@@ -347,7 +346,6 @@ export default function CollectionTrackingClient() {
       className="h-full min-h-0"
     >
       <div className="flex flex-col flex-1 min-h-0">
-        <AccountsTableToolbar onExcel={handleExcel} onPdf={handlePdf} />
         <AccountsTableScroll className="flex-1 min-h-0">
           <AccountsTable minWidth={1280}>
             <AccountsTableHead>
@@ -378,7 +376,7 @@ export default function CollectionTrackingClient() {
               {pagedRecords.length === 0 ? (
                 <AccountsTableRow>
                   <AccountsTableCell colSpan={11} className="accounts-table-empty">
-                    No collection follow-ups found.
+                    No records found.
                   </AccountsTableCell>
                 </AccountsTableRow>
               ) : (
@@ -436,7 +434,7 @@ export default function CollectionTrackingClient() {
                         <AccountsMoreActions contentClassName="w-52">
                           <DropdownMenuItem onClick={() => openEdit(r)}>Update Status</DropdownMenuItem>
                           <DropdownMenuItem onClick={() => openHistory(r)}>
-                            <History className="w-3.5 h-3.5 mr-2" /> View History
+                            <History className="w-4 h-4 mr-2" /> View History
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => quickStatus(r, "promise_to_pay")}>
                             Mark Promise To Pay
@@ -481,7 +479,7 @@ export default function CollectionTrackingClient() {
                 value={form.customerId}
                 onValueChange={(v) => setForm((f) => ({ ...f, customerId: v, invoiceId: "" }))}
               >
-                <SelectTrigger className="h-8 text-xs mt-1">
+                <SelectTrigger className="h-9 text-[13px] font-medium mt-1">
                   <SelectValue placeholder="Select customer" />
                 </SelectTrigger>
                 <SelectContent>
@@ -499,7 +497,7 @@ export default function CollectionTrackingClient() {
                 value={form.invoiceId || "none"}
                 onValueChange={(v) => setForm((f) => ({ ...f, invoiceId: v === "none" ? "" : v }))}
               >
-                <SelectTrigger className="h-8 text-xs mt-1">
+                <SelectTrigger className="h-9 text-[13px] font-medium mt-1">
                   <SelectValue placeholder="All outstanding" />
                 </SelectTrigger>
                 <SelectContent>
@@ -517,7 +515,7 @@ export default function CollectionTrackingClient() {
                 <Label className="text-xs">Follow-up Date *</Label>
                 <Input
                   type="date"
-                  className="h-8 text-xs mt-1"
+                  className="h-9 text-[13px] font-medium mt-1"
                   value={form.followUpDate}
                   onChange={(e) => setForm((f) => ({ ...f, followUpDate: e.target.value }))}
                 />
@@ -525,7 +523,7 @@ export default function CollectionTrackingClient() {
               <div>
                 <Label className="text-xs">Assigned To *</Label>
                 <Select value={form.assignedTo} onValueChange={(v) => setForm((f) => ({ ...f, assignedTo: v }))}>
-                  <SelectTrigger className="h-8 text-xs mt-1">
+                  <SelectTrigger className="h-9 text-[13px] font-medium mt-1">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -545,7 +543,7 @@ export default function CollectionTrackingClient() {
                   value={form.status}
                   onValueChange={(v) => setForm((f) => ({ ...f, status: v as CollectionFollowUpStatus }))}
                 >
-                  <SelectTrigger className="h-8 text-xs mt-1">
+                  <SelectTrigger className="h-9 text-[13px] font-medium mt-1">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -561,7 +559,7 @@ export default function CollectionTrackingClient() {
                 <Label className="text-xs">Next Follow-up Date</Label>
                 <Input
                   type="date"
-                  className="h-8 text-xs mt-1"
+                  className="h-9 text-[13px] font-medium mt-1"
                   value={form.nextFollowUpDate}
                   onChange={(e) => setForm((f) => ({ ...f, nextFollowUpDate: e.target.value }))}
                 />

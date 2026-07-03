@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -12,7 +12,7 @@ import {
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { SortTh, StatusBadge } from "../../components/AccountsUI";
-import { canEditVoucher, getVouchersByType, type VoucherTypeCode } from "../voucher-data";
+import { canEditVoucher, type VoucherTypeCode } from "../voucher-data";
 import {
   AccountsTable,
   AccountsTableBody,
@@ -22,9 +22,17 @@ import {
   AccountsTableHeadRow,
   AccountsTableRow,
 } from "@/components/accounts/AccountsTable";
-import { AccountsTableListing, AccountsTableToolbar } from "@/components/accounts/AccountsTableListing";
-import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
-
+import {
+  ACCOUNTS_DEFAULT_PAGE_SIZE,
+  AccountsTableListing,
+  AccountsTablePagination,
+  AccountsTableToolbar,
+} from "@/components/accounts/AccountsTableListing";
+import {
+  ReportDateRangeFilter,
+  useReportDateRange,
+} from "@/components/accounts/ReportFilters";
+import { accountsDataService } from "@/lib/accounts/accounts-data-service";
 interface VoucherListClientProps {
   voucherType: VoucherTypeCode;
   embedded?: boolean;
@@ -36,13 +44,14 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
   const listRefreshKey = searchParams.get("t");
   const mounted = useClientMounted();
   const [search, setSearch] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
   const [sortKey, setSortKey] = useState("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(ACCOUNTS_DEFAULT_PAGE_SIZE);
 
   const records = useMemo(
-    () => (mounted ? getVouchersByType(voucherType) : []),
+    () => (mounted ? accountsDataService.getVouchersByType(voucherType) : []),
     [voucherType, mounted, listRefreshKey],
   );
 
@@ -68,6 +77,15 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
     return r;
   }, [records, search, dateFrom, dateTo, sortKey, sortDir]);
 
+  const paged = useMemo(
+    () => visible.slice((page - 1) * pageSize, page * pageSize),
+    [visible, page, pageSize],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, dateFrom, dateTo, pageSize, voucherType]);
+
   const handleSort = (k: string) => {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
@@ -87,14 +105,30 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
               placeholder: "Search voucher no., narration…",
             }}
             filters={
-              <AccountsListingDateFilter
+              <ReportDateRangeFilter
+                preset={preset}
                 dateFrom={dateFrom}
                 dateTo={dateTo}
+                onPresetChange={setPreset}
                 onDateFromChange={setDateFrom}
                 onDateToChange={setDateTo}
               />
             }
           />
+        }
+        footer={
+          mounted && visible.length > 0 ? (
+            <AccountsTablePagination
+              page={page}
+              pageSize={pageSize}
+              totalRecords={visible.length}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPage(1);
+              }}
+            />
+          ) : undefined
         }
       >
         <AccountsTable minWidth={900}>
@@ -123,7 +157,7 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
                 </AccountsTableCell>
               </AccountsTableRow>
             ) : (
-              visible.map((v) => (
+              paged.map((v) => (
                 <AccountsTableRow key={v.id}>
                   <AccountsTableCell className="tabular-nums">{v.date}</AccountsTableCell>
                   <AccountsTableCell mono>

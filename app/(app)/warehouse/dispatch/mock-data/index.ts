@@ -158,7 +158,7 @@ export const SEED_DISPATCHES: DispatchRecord[] = [
     driverName: "Sanjay Dutt",
     transporterName: "VRL Logistics",
     dispatchDate: "2026-06-10",
-    deliveryStatus: "Pending Dispatch",
+    deliveryStatus: "Delivered",
     warehouse: "Central Warehouse",
     sourceWarehouse: "Central Warehouse",
     targetWarehouse: "West Zone Depot",
@@ -179,12 +179,12 @@ export const SEED_DISPATCHES: DispatchRecord[] = [
     target_warehouse_name: "West Zone Depot",
     total_items: 1,
     total_quantity: 300,
-    dispatch_status: "Pending Dispatch",
+    dispatch_status: "Delivered",
   }
 ];
 
 const KEY_DISPATCHES = "ds_dispatch_records";
-const DISPATCH_DATA_VERSION = 5;
+const DISPATCH_DATA_VERSION = 6;
 const DISPATCH_VERSION_KEY = "ds_dispatch_records_version";
 
 export function getDispatchRecords(): DispatchRecord[] {

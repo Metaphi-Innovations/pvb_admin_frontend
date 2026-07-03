@@ -35,12 +35,12 @@ import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { SortTh, StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
 import {
   ReportFilterRow,
-  ReportFinancialYearFilter,
-  ReportFromToDateFilter,
+  ReportDateRangeFilter,
+  useReportDateRange,
+  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
+  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
 import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
-import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
-import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { ensureBankingDemoOnPageLoad } from "@/lib/accounts/banking-demo-seed";
 import {
   FUND_TRANSFER_MODE_LABELS,
@@ -58,16 +58,11 @@ import {
 } from "@/lib/accounts/fund-transfer-export";
 import { cn } from "@/lib/utils";
 
-const filterLabelClass = "text-[10px] font-medium uppercase text-muted-foreground leading-none";
-const filterControlClass = "h-7 text-xs mt-0";
-
 export default function FundTransferPageClient() {
   const router = useRouter();
   const [refreshKey, setRefreshKey] = useState(0);
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
   const [search, setSearch] = useState("");
-  const [dateFrom, setDateFrom] = useState("2026-04-01");
-  const [dateTo, setDateTo] = useState("2026-06-30");
-  const [financialYearId, setFinancialYearId] = useState("all");
   const [fromAccountId, setFromAccountId] = useState("all");
   const [toAccountId, setToAccountId] = useState("all");
   const [transferMode, setTransferMode] = useState("all");
@@ -82,24 +77,7 @@ export default function FundTransferPageClient() {
     setRefreshKey((k) => k + 1);
   }, []);
 
-  useEffect(() => {
-    const activeFyId = getActiveFinancialYearId();
-    const years = loadFinancialYears();
-    const activeFy = years.find((fy) => fy.id === activeFyId) ?? years.find((fy) => fy.status === "active");
-    if (activeFy) {
-      setFinancialYearId(String(activeFy.id));
-      setDateFrom(activeFy.startDate);
-      setDateTo(activeFy.endDate > "2026-06-30" ? "2026-06-30" : activeFy.endDate);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (financialYearId === "all") return;
-    const fy = loadFinancialYears().find((y) => String(y.id) === financialYearId);
-    if (!fy) return;
-    setDateFrom(fy.startDate);
-    setDateTo(fy.endDate);
-  }, [financialYearId]);
+  
 
   const records = useMemo(() => {
     void refreshKey;
@@ -114,12 +92,12 @@ export default function FundTransferPageClient() {
         search,
         dateFrom,
         dateTo,
-        financialYearId: financialYearId === "all" ? "all" : Number(financialYearId),
+        financialYearId: "all",
         fromAccountId: fromAccountId === "all" ? "all" : Number(fromAccountId),
         toAccountId: toAccountId === "all" ? "all" : Number(toAccountId),
         transferMode: transferMode === "all" ? "all" : (transferMode as FundTransferMode),
       }),
-    [records, search, dateFrom, dateTo, financialYearId, fromAccountId, toAccountId, transferMode],
+    [records, search, dateFrom, dateTo, fromAccountId, toAccountId, transferMode],
   );
 
   const sorted = useMemo(
@@ -136,22 +114,19 @@ export default function FundTransferPageClient() {
     Boolean(search.trim()) ||
     fromAccountId !== "all" ||
     toAccountId !== "all" ||
-    transferMode !== "all" ||
-    financialYearId !== (getActiveFinancialYearId() ? String(getActiveFinancialYearId()) : "all");
+    transferMode !== "all";
 
   const clearFilters = useCallback(() => {
     setSearch("");
     setFromAccountId("all");
     setToAccountId("all");
     setTransferMode("all");
-    const activeFyId = getActiveFinancialYearId();
-    setFinancialYearId(activeFyId ? String(activeFyId) : "all");
     setPage(1);
   }, []);
 
   useEffect(() => {
     setPage(1);
-  }, [search, dateFrom, dateTo, financialYearId, fromAccountId, toAccountId, transferMode, pageSize]);
+  }, [search, dateFrom, dateTo, fromAccountId, toAccountId, transferMode, pageSize]);
 
   const handleSort = (key: string) => {
     const k = key as FundTransferSortKey;
@@ -161,11 +136,6 @@ export default function FundTransferPageClient() {
       setSortDir("asc");
     }
   };
-
-  const financialYearLabel = useMemo(() => {
-    if (financialYearId === "all") return "All years";
-    return loadFinancialYears().find((fy) => String(fy.id) === financialYearId)?.name ?? "—";
-  }, [financialYearId]);
 
   const fromAccountLabel = useMemo(() => {
     if (fromAccountId === "all") return "All accounts";
@@ -186,13 +156,13 @@ export default function FundTransferPageClient() {
     () => ({
       dateFrom,
       dateTo,
-      financialYear: financialYearLabel,
+      financialYear: "",
       fromAccount: fromAccountLabel,
       toAccount: toAccountLabel,
       transferMode: modeLabel,
       search: search.trim(),
     }),
-    [dateFrom, dateTo, financialYearLabel, fromAccountLabel, toAccountLabel, modeLabel, search],
+    [dateFrom, dateTo, fromAccountLabel, toAccountLabel, modeLabel, search],
   );
 
   const handleExportExcel = async () => {
@@ -224,10 +194,10 @@ export default function FundTransferPageClient() {
       actions={
         <Button
           size="sm"
-          className="h-7 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1"
+          className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
           onClick={() => router.push("/accounts/banking/fund-transfer/new")}
         >
-          <Plus className="w-3.5 h-3.5" /> New Transfer
+          <Plus className="w-4 h-4" /> New Transfer
         </Button>
       }
       toolbar={
@@ -241,10 +211,11 @@ export default function FundTransferPageClient() {
       }
       filters={
         <ReportFilterRow>
-          <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
-          <ReportFromToDateFilter
+          <ReportDateRangeFilter
+            preset={preset}
             dateFrom={dateFrom}
             dateTo={dateTo}
+            onPresetChange={setPreset}
             onDateFromChange={setDateFrom}
             onDateToChange={setDateTo}
           />
@@ -315,7 +286,7 @@ export default function FundTransferPageClient() {
           ) : null
         }
       >
-        <AccountsTable className="w-full text-table">
+        <AccountsTable className="w-full">
           <AccountsTableHead>
             <AccountsTableHeadRow>
               <SortTh label="Transfer Date" colKey="transferDate" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />

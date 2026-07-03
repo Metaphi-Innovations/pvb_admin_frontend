@@ -91,12 +91,12 @@ function BankAccountCard({ account, bookBalance, uncategorizedCount }: BankAccou
           <p className="text-[10px] text-muted-foreground uppercase">Uncategorized</p>
           <div className="flex items-center gap-1.5 mt-1">
             <span className="text-sm font-semibold">{uncategorizedCount}</span>
-            {uncategorizedCount > 0 && <AlertCircle className="w-3.5 h-3.5 text-orange-500" />}
+            {uncategorizedCount > 0 && <AlertCircle className="w-4 h-4 text-orange-500" />}
           </div>
         </div>
       </div>
       <Link href={`/accounts/banking/transactions?bankAccountId=${account.id}`}>
-        <Button size="sm" variant="outline" className="w-full mt-3 h-8 text-xs">
+        <Button size="sm" variant="outline" className="w-full mt-3 h-9 text-[13px] font-medium">
           View Transactions
           <ArrowRight className="w-3 h-3 ml-1.5" />
         </Button>
@@ -178,7 +178,7 @@ export function BankReconciliationDashboard() {
         <div className="flex gap-2">
           <Link href="/accounts/banking/statement-import">
             <Button size="sm" className="h-9 text-xs gap-1.5">
-              <Upload className="w-3.5 h-3.5" />
+              <Upload className="w-4 h-4" />
               Import Statement
             </Button>
           </Link>
@@ -254,7 +254,7 @@ export function BankReconciliationDashboard() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-foreground">Bank Accounts</h2>
           <Link href="/accounts/banking/bank-accounts">
-            <Button size="sm" variant="ghost" className="h-8 text-xs">
+            <Button size="sm" variant="ghost" className="h-9 text-[13px] font-medium">
               View All
               <ArrowRight className="w-3 h-3 ml-1" />
             </Button>
@@ -277,7 +277,7 @@ export function BankReconciliationDashboard() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-foreground">Recent Transactions</h2>
           <Link href="/accounts/banking/transactions">
-            <Button size="sm" variant="ghost" className="h-8 text-xs">
+            <Button size="sm" variant="ghost" className="h-9 text-[13px] font-medium">
               View All
               <ArrowRight className="w-3 h-3 ml-1" />
             </Button>

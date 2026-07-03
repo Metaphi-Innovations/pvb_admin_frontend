@@ -60,7 +60,7 @@ export function SearchableSelect({
             <span className={cn("truncate", selected ? "text-foreground" : "text-muted-foreground")}>
               {selected?.label || placeholder}
             </span>
-            <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <ChevronsUpDown className="w-4 h-4 text-muted-foreground shrink-0" />
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
@@ -69,7 +69,7 @@ export function SearchableSelect({
               placeholder="Search…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              className="h-7 text-xs"
+              className="h-9 text-[13px] font-medium"
               autoFocus
             />
           </div>

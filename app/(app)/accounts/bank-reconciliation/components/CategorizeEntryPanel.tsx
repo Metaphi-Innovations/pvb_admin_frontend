@@ -620,10 +620,10 @@ export function CategorizeEntryPanel({
               type="button"
               variant="outline"
               size="sm"
-              className="h-8 text-xs w-full"
+              className="h-9 text-[13px] font-medium w-full"
               onClick={() => setCreateLedgerOpen(true)}
             >
-              <Plus className="w-3.5 h-3.5 mr-1" />
+              <Plus className="w-4 h-4 mr-1" />
               Create Expense Ledger
             </Button>
           )}
@@ -641,7 +641,7 @@ export function CategorizeEntryPanel({
             <Button
               variant="secondary"
               size="sm"
-              className="h-8 text-xs flex-1"
+              className="h-9 text-[13px] font-medium flex-1"
               disabled={!canReconcile || entry.matchStatus === "reconciled"}
               onClick={() => {
                 if (!validation.canReconcile) {
@@ -657,7 +657,7 @@ export function CategorizeEntryPanel({
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 text-xs flex-1"
+              className="h-9 text-[13px] font-medium flex-1"
               onClick={() => {
                 entries.forEach((e) => ignoreBankEntry(e.id));
                 onUpdated();
@@ -669,7 +669,7 @@ export function CategorizeEntryPanel({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs flex-1"
+                className="h-9 text-[13px] font-medium flex-1"
                 onClick={() => {
                   entries.forEach((e) => resetEntryMatch(e.id));
                   onUpdated();

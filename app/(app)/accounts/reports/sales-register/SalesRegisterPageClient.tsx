@@ -4,10 +4,7 @@ import {
   RegisterReportPageClient,
   type RegisterReportPageConfig,
 } from "../register-shared/RegisterReportPageClient";
-import {
-  buildSalesRegisterDemoRows,
-  SALES_REGISTER_PARTY_OPTIONS,
-} from "./sales-register-data";
+import { buildSalesRegisterDemoRows } from "./sales-register-data";
 
 const config: RegisterReportPageConfig = {
   mode: "sales",
@@ -15,7 +12,6 @@ const config: RegisterReportPageConfig = {
   description: "Read-only register of sales invoices with taxable value, GST, and payment status.",
   breadcrumbSection: "Sales",
   partyLabel: "Customer",
-  partyOptions: SALES_REGISTER_PARTY_OPTIONS,
   buildRows: buildSalesRegisterDemoRows,
   viewHref: (row) => `/accounts/transactions/invoices/${row.id}`,
   exportFilePrefix: "Sales_Register",

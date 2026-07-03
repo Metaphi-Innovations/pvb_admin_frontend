@@ -145,7 +145,7 @@ export function ReconcileEntrySheet({
 
           {error && (
             <p className="text-xs text-red-500 flex items-center gap-1">
-              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
               {error}
             </p>
           )}
@@ -197,17 +197,17 @@ export function ReconcileEntrySheet({
         </SheetBody>
 
         <SheetFooter>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => onOpenChange(false)}>
             {isView ? "Close" : "Cancel"}
           </Button>
           {!isView && (
             <Button
               size="sm"
-              className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+              className="h-9 text-[13px] font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
               disabled={busy || !bankProcessingDate}
               onClick={handleReconcile}
             >
-              <Check className="w-3.5 h-3.5" />
+              <Check className="w-4 h-4" />
               Mark as Reconciled
             </Button>
           )}

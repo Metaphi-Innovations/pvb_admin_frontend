@@ -77,7 +77,7 @@ export function CreateLedgerModal({
           <div className="space-y-1">
             <Label className="text-xs">Ledger Name</Label>
             <Input
-              className="h-8 text-xs"
+              className="h-9 text-[13px] font-medium"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Bank Charges"
@@ -86,7 +86,7 @@ export function CreateLedgerModal({
           <div className="space-y-1">
             <Label className="text-xs">Account Type</Label>
             <Select value={accountType} onValueChange={(v) => setAccountType(v as AccountType)}>
-              <SelectTrigger className="h-8 text-xs">
+              <SelectTrigger className="h-9 text-[13px] font-medium">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -109,12 +109,12 @@ export function CreateLedgerModal({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
             size="sm"
-            className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
             onClick={handleSave}
             disabled={!name.trim()}
           >

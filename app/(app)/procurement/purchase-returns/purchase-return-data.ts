@@ -15,6 +15,7 @@ import {
 } from "./purchase-return-calc";
 import { getPOById } from "../purchase-orders/po-data";
 import { addPurchaseReturnToPackingQueue } from "./purchase-return-packing-sync";
+import { attachDebitNoteToPurchaseReturn } from "@/lib/accounts/purchase-return-debit-bridge";
 
 export type PurchaseReturnStatus =
   | "draft"
@@ -86,6 +87,8 @@ export interface PurchaseReturn {
   updatedBy: string;
   updatedDate: string;
   activity: PurchaseReturnActivity[];
+  debitNoteId?: number | null;
+  debitNoteNo?: string;
 }
 
 const STORAGE_KEY = "ds_procurement_purchase_returns_v1";
@@ -395,6 +398,12 @@ export function approvePurchaseReturn(record: PurchaseReturn): PurchaseReturn {
     withRecalc({ ...record, status: "approved" }),
     "Approved",
   );
+
+  updated = attachDebitNoteToPurchaseReturn(updated);
+  if (updated.debitNoteNo) {
+    updated = appendActivity(updated, `Debit Note ${updated.debitNoteNo} auto-generated`);
+  }
+
   const idx = list.findIndex((r) => r.id === updated.id);
   if (idx >= 0) list[idx] = updated;
   savePurchaseReturns(list);

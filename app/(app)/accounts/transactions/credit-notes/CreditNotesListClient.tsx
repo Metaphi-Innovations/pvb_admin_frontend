@@ -4,9 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import {
   AccountsEditAction,
   AccountsMoreActions,
@@ -29,13 +27,19 @@ import {
   AccountsTableEmpty,
   AccountsTableListing,
   AccountsTablePagination,
-  AccountsTableToolbar,
 } from "@/components/accounts/AccountsTableListing";
 import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
+import {
+  ReportFilterRow,
+  ReportSearchFilter,
+} from "@/components/accounts/ReportFilters";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { useClientMounted } from "@/lib/use-client-mounted";
+import { NoteWorkflowBadge } from "../../components/NoteWorkflowBadge";
 import { CreditNoteCancelDialog } from "../../credit-notes/components/CreditNoteCancelDialog";
 import {
+  CREDIT_NOTE_SOURCE_LABELS,
   cancelCreditNote,
   filterCreditNotesListing,
   getCreditNoteRowActions,
@@ -103,32 +107,35 @@ export default function CreditNotesListClient() {
         actions={
           <Button
             size="sm"
-            className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
+            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
             onClick={() => router.push(`${LIST_PATH}/new`)}
           >
-            <Plus className="w-3.5 h-3.5" /> New
+            <Plus className="w-4 h-4" /> New
           </Button>
         }
-        toolbar={
-          <AccountsTableToolbar
-            placement="page-header"
-            search={{
-              value: search,
-              onChange: setSearch,
-              placeholder: "Search CN no., customer, invoice ref…",
-            }}
-            filters={
-              <AccountsListingDateFilter
-                dateFrom={dateFrom}
-                dateTo={dateTo}
-                onDateFromChange={setDateFrom}
-                onDateToChange={setDateTo}
+        filters={
+          <ReportFilterRow
+            end={
+              <AccountsExportMenu
+                onExcel={handleExportExcel}
+                onPdf={handleExportExcel}
+                disabled={exporting || visible.length === 0}
               />
             }
-            onExcel={handleExportExcel}
-            onPdf={handleExportExcel}
-            exportDisabled={exporting || visible.length === 0}
-          />
+          >
+            <AccountsListingDateFilter
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onDateFromChange={setDateFrom}
+              onDateToChange={setDateTo}
+            />
+            <ReportSearchFilter
+              value={search}
+              onChange={setSearch}
+              placeholder="Search CN no., source, invoice, return, customer, scheme…"
+              className="min-w-[200px] flex-1 max-w-md"
+            />
+          </ReportFilterRow>
         }
         layout="split"
         className="h-full min-h-0"
@@ -147,14 +154,20 @@ export default function CreditNotesListClient() {
             ) : null
           }
         >
-          <AccountsTable minWidth={900}>
+          <AccountsTable minWidth={1200}>
             <AccountsTableHead>
               <AccountsTableHeadRow>
-                <AccountsTableHeadCell uppercase>Date</AccountsTableHeadCell>
                 <AccountsTableHeadCell uppercase>Credit Note No.</AccountsTableHeadCell>
-                <AccountsTableHeadCell uppercase>Reference Number</AccountsTableHeadCell>
-                <AccountsTableHeadCell uppercase className="accounts-col-party">Customer Name</AccountsTableHeadCell>
-                <AccountsTableHeadCell align="right" uppercase>Amount</AccountsTableHeadCell>
+                <AccountsTableHeadCell uppercase>Source</AccountsTableHeadCell>
+                <AccountsTableHeadCell uppercase>Against Invoice</AccountsTableHeadCell>
+                <AccountsTableHeadCell uppercase className="accounts-col-party">Customer</AccountsTableHeadCell>
+                <AccountsTableHeadCell uppercase>Date</AccountsTableHeadCell>
+                <AccountsTableHeadCell align="right" uppercase>Taxable</AccountsTableHeadCell>
+                <AccountsTableHeadCell align="right" uppercase>CGST</AccountsTableHeadCell>
+                <AccountsTableHeadCell align="right" uppercase>SGST</AccountsTableHeadCell>
+                <AccountsTableHeadCell align="right" uppercase>IGST</AccountsTableHeadCell>
+                <AccountsTableHeadCell align="right" uppercase>Total</AccountsTableHeadCell>
+                <AccountsTableHeadCell uppercase>Status</AccountsTableHeadCell>
                 <AccountsTableHeadCell align="right" uppercase className={accountsActionColClass("multi")}>
                   Actions
                 </AccountsTableHeadCell>
@@ -162,27 +175,33 @@ export default function CreditNotesListClient() {
             </AccountsTableHead>
             <AccountsTableBody>
               {!mounted ? (
-                <AccountsTableEmpty colSpan={6} message="Loading credit notes…" />
+                <AccountsTableEmpty colSpan={12} message="Loading credit notes…" />
               ) : visible.length === 0 ? (
                 <AccountsTableEmpty
-                  colSpan={6}
-                  message="No credit notes found. Adjust filters or create a new credit note."
+                  colSpan={12}
+                  message="No records found."
                   onClear={search || dateFrom || dateTo ? () => { setSearch(""); setDateFrom(""); setDateTo(""); } : undefined}
                 />
               ) : (
                 pagedRows.map((r) => (
                   <AccountsTableRow key={r.id}>
-                    <AccountsTableCell className="tabular-nums">{r.creditNoteDate}</AccountsTableCell>
                     <AccountsTableCell mono className="font-semibold text-brand-700">
                       <Link href={`${LIST_PATH}/${r.id}`} className="hover:underline">
                         {r.creditNoteNo}
                       </Link>
                     </AccountsTableCell>
+                    <AccountsTableCell className="text-xs">{CREDIT_NOTE_SOURCE_LABELS[r.source]}</AccountsTableCell>
                     <AccountsTableCell mono>{r.sourceInvoiceNo || "—"}</AccountsTableCell>
                     <AccountsTableCell className="accounts-col-party font-medium">{r.customerName}</AccountsTableCell>
+                    <AccountsTableCell className="tabular-nums">{r.creditNoteDate}</AccountsTableCell>
+                    <AccountsTableCell align="right" money>{formatINR(r.taxableValue)}</AccountsTableCell>
+                    <AccountsTableCell align="right" money>{formatINR(r.cgstAmount)}</AccountsTableCell>
+                    <AccountsTableCell align="right" money>{formatINR(r.sgstAmount)}</AccountsTableCell>
+                    <AccountsTableCell align="right" money>{formatINR(r.igstAmount)}</AccountsTableCell>
                     <AccountsTableCell align="right" money className="font-medium">
                       {formatINR(r.currentCreditAmount)}
                     </AccountsTableCell>
+                    <AccountsTableCell><NoteWorkflowBadge status={r.status} /></AccountsTableCell>
                     <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
                       <AccountsTableActionCell>
                         <AccountsViewAction href={`${LIST_PATH}/${r.id}`} />
@@ -200,7 +219,7 @@ export default function CreditNotesListClient() {
                                     className="text-xs gap-2 text-red-600"
                                     onClick={() => setCancelTarget(r)}
                                   >
-                                    <XCircle className="w-3.5 h-3.5" /> Cancel
+                                    <XCircle className="w-4 h-4" /> Cancel
                                   </DropdownMenuItem>
                                 ) : null,
                               )}

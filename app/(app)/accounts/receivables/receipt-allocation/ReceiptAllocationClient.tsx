@@ -23,6 +23,8 @@ import {
   ReportFinancialYearFilter,
   ReportCustomerFilter,
   ReportSearchFilter,
+  ReportDateRangeFilter,
+  useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 import {
   AccountsTable,
@@ -59,6 +61,7 @@ function formatReportDate(value: string): string {
 export default function ReceiptAllocationClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [financialYear, setFinancialYear] = useState("all");
   const [customerId, setCustomerId] = useState(() => {
     const fromUrl = searchParams.get("customer");
@@ -99,6 +102,8 @@ export default function ReceiptAllocationClient() {
     let rows = allReceipts;
     if (customerId) rows = rows.filter((r) => String(r.customerId) === customerId);
     if (receiptStatus !== "all") rows = rows.filter((r) => r.status === receiptStatus);
+    if (dateFrom) rows = rows.filter((r) => r.receiptDate >= dateFrom);
+    if (dateTo) rows = rows.filter((r) => r.receiptDate <= dateTo);
     const q = search.trim().toLowerCase();
     if (q) {
       rows = rows.filter(
@@ -109,7 +114,7 @@ export default function ReceiptAllocationClient() {
       );
     }
     return rows;
-  }, [allReceipts, customerId, receiptStatus, search]);
+  }, [allReceipts, customerId, receiptStatus, search, dateFrom, dateTo]);
 
   useEffect(() => {
     if (!summary?.unallocatedReceipts.length) {
@@ -189,6 +194,14 @@ export default function ReceiptAllocationClient() {
       description="Allocate customer receipt vouchers against open sales invoices."
       filters={
         <ReportFilterRow>
+          <ReportDateRangeFilter
+            preset={preset}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onPresetChange={setPreset}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
           <ReportFinancialYearFilter value={financialYear} onChange={setFinancialYear} />
           <ReportCustomerFilter
             value={customerId || "all"}
@@ -235,7 +248,7 @@ export default function ReceiptAllocationClient() {
             </div>
             <Button
               size="sm"
-              className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+              className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
               disabled={!activeReceipt}
               onClick={saveAllocation}
             >
@@ -324,7 +337,7 @@ export default function ReceiptAllocationClient() {
                       value={selectedReceiptId ? String(selectedReceiptId) : ""}
                       onValueChange={(v) => setSelectedReceiptId(Number(v))}
                     >
-                      <SelectTrigger className="h-8 text-xs">
+                      <SelectTrigger className="h-9 text-[13px] font-medium">
                         <SelectValue placeholder="Select receipt" />
                       </SelectTrigger>
                       <SelectContent>
@@ -404,7 +417,7 @@ export default function ReceiptAllocationClient() {
                         </AccountsTableCell>
                         <AccountsTableCell align="right">
                           <AccountsMoneyInput
-                            className="h-8 text-xs w-28 ml-auto"
+                            className="h-9 text-[13px] font-medium w-28 ml-auto"
                             disabled={!selected[inv.invoiceId] || !activeReceipt}
                             value={amounts[inv.invoiceId] ?? ""}
                             onChange={(v) => setAmounts((a) => ({ ...a, [inv.invoiceId]: String(v) }))}

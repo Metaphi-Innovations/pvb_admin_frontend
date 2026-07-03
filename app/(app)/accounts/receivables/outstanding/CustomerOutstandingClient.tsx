@@ -13,27 +13,25 @@ import {
 } from "@/lib/accounts/receivables-data";
 import { ensureReceivablesDemoData } from "@/lib/accounts/receivables-demo-seed";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
-import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { formatMoneyNumber, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
 import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
 import { StatusBadge, SortTh } from "@/app/(app)/accounts/components/AccountsUI";
 import {
   ReportFilterRow,
-  ReportFromToDateFilter,
-  ReportFinancialYearFilter,
+  ReportDateRangeFilter,
   ReportCustomerFilter,
   ReportSearchFilter,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 import {
   AccountsRichTable,
-  AccountsTableScroll,
   type AccountsRichColumnDef,
 } from "@/components/accounts/AccountsTable";
 import {
   AccountsTablePagination,
-  AccountsTableToolbar,
+  AccountsTableListing,
 } from "@/components/accounts/AccountsTableListing";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { cn } from "@/lib/utils";
 import {
   exportReceivablesToExcel,
@@ -79,8 +77,7 @@ function AmountCell({ amount, className }: { amount: number; className?: string 
 
 export default function CustomerOutstandingClient() {
   const router = useRouter();
-  const { dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
-  const [financialYear, setFinancialYear] = useState("all");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
   const [customerId, setCustomerId] = useState("all");
   const [paymentStatus, setPaymentStatus] = useState<ReceivableStatus | "all">("all");
   const [search, setSearch] = useState("");
@@ -96,10 +93,9 @@ export default function CustomerOutstandingClient() {
 
   useEffect(() => {
     setPage(1);
-  }, [dateFrom, dateTo, financialYear, customerId, paymentStatus, search, pageSize]);
+  }, [dateFrom, dateTo, customerId, paymentStatus, search, pageSize]);
 
   const customers = useMemo(() => loadCustomers(), []);
-  const financialYears = useMemo(() => loadFinancialYears(), []);
 
   const rows = useMemo(() => {
     const data = computeInvoiceOutstanding(asOnDate, {
@@ -107,7 +103,6 @@ export default function CustomerOutstandingClient() {
       status: paymentStatus,
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
-      financialYearId: financialYear === "all" ? undefined : Number(financialYear),
       search,
     });
 
@@ -119,7 +114,7 @@ export default function CustomerOutstandingClient() {
       return String(av).localeCompare(String(bv)) * dir;
     });
     return sorted;
-  }, [asOnDate, customerId, paymentStatus, dateFrom, dateTo, financialYear, search, sortKey, sortDir]);
+  }, [asOnDate, customerId, paymentStatus, dateFrom, dateTo, search, sortKey, sortDir]);
 
   const pagedRows = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -138,10 +133,6 @@ export default function CustomerOutstandingClient() {
   const exportMeta = useMemo(
     () => ({
       reportName: "Customer Outstanding",
-      financialYear:
-        financialYear === "all"
-          ? "All years"
-          : financialYears.find((fy) => String(fy.id) === financialYear)?.name ?? "—",
       dateFrom,
       dateTo,
       customer:
@@ -154,7 +145,7 @@ export default function CustomerOutstandingClient() {
           : PAYMENT_STATUS_OPTIONS.find((o) => o.value === paymentStatus)?.label ?? "—",
       search,
     }),
-    [financialYear, financialYears, dateFrom, dateTo, customerId, customers, paymentStatus, search],
+    [dateFrom, dateTo, customerId, customers, paymentStatus, search],
   );
 
   const handleExcel = () => {
@@ -328,12 +319,18 @@ export default function CustomerOutstandingClient() {
       breadcrumbs={accountsBreadcrumb("Receivables", "Customer Outstanding")}
       title="Customer Outstanding"
       description="Invoice-wise pending receivables from posted sales invoices."
+      hideDescription
       filters={
-        <ReportFilterRow>
-          <ReportFinancialYearFilter value={financialYear} onChange={setFinancialYear} />
-          <ReportFromToDateFilter
+        <ReportFilterRow
+          end={
+            <AccountsExportMenu onExcel={handleExcel} onPdf={handlePdf} disabled={rows.length === 0} />
+          }
+        >
+          <ReportDateRangeFilter
+            preset={preset}
             dateFrom={dateFrom}
             dateTo={dateTo}
+            onPresetChange={setPreset}
             onDateFromChange={setDateFrom}
             onDateToChange={setDateTo}
           />
@@ -360,30 +357,30 @@ export default function CustomerOutstandingClient() {
       layout="split"
       className="h-full min-h-0"
     >
-      <div className="flex flex-col flex-1 min-h-0">
-        <AccountsTableToolbar onExcel={handleExcel} onPdf={handlePdf} />
-        <AccountsTableScroll>
-          <AccountsRichTable
-            columns={columns}
-            rows={pagedRows}
-            minWidth={1280}
-            getRowKey={(r) => r.invoiceId}
-            emptyMessage="No outstanding invoices found."
-            onRowClick={(r) =>
-              router.push(`/accounts/receivables/outstanding/invoice/${r.invoiceId}`)
-            }
-          />
-        </AccountsTableScroll>
-        {rows.length > 0 && (
-          <AccountsTablePagination
-            page={page}
-            pageSize={pageSize}
-            totalRecords={rows.length}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-          />
-        )}
-      </div>
+      <AccountsTableListing
+        footer={
+          rows.length > 0 ? (
+            <AccountsTablePagination
+              page={page}
+              pageSize={pageSize}
+              totalRecords={rows.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+          ) : null
+        }
+      >
+        <AccountsRichTable
+          columns={columns}
+          rows={pagedRows}
+          minWidth={1280}
+          getRowKey={(r) => r.invoiceId}
+          emptyMessage="No records found."
+          onRowClick={(r) =>
+            router.push(`/accounts/receivables/outstanding/invoice/${r.invoiceId}`)
+          }
+        />
+      </AccountsTableListing>
     </AccountsPageShell>
   );
 }
