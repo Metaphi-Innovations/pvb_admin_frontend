@@ -49,6 +49,7 @@ export interface PackedProduct {
   packedQty: number;
   batchAllocations?: PackedBatchAllocation[];
   nearExpirySchemeEligible?: boolean;
+  lineId?: string;
 }
 
 export interface PackingNearExpirySchemeEntry {

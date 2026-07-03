@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getPackingUnionById } from "../../services";
-import { PackingRecordUnion, SalesOrderRecord, SalesOrderProduct } from "../../types";
+import { PackingRecordUnion, SalesOrderRecord, SalesOrderProduct, PackingRecord } from "../../types";
 import { STATUS_BADGE_CONFIG } from "../../constants";
 import { formatBatchExpiryDate } from "../../../dispatch/near-expiry-dispatch";
 import { NearExpirySchemeBadge } from "../../../dispatch/components/NearExpirySchemeBadge";
@@ -70,7 +70,7 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
 
   const { type, data } = unionRecord;
   const statusCfg = STATUS_BADGE_CONFIG[data.status] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: data.status };
-  const rowData = data as SalesOrderRecord & typeof data;
+  const rowData = data as any;
   const docType = rowData.sourceDocumentType;
   const isPurchaseReturn = isPurchaseReturnDoc(rowData);
   const isStockTransfer = isStockTransferDoc(rowData);

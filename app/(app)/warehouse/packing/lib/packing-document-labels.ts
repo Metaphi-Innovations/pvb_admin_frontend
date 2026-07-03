@@ -31,14 +31,14 @@ export function isSampleOrderDoc(
   return record.sourceDocumentType === "Sample Order";
 }
 
-export function getPackingSectionTitle(sourceDocumentType?: string): string {
+export function getPackingSectionTitle(sourceDocumentType?: SalesOrderRecord["sourceDocumentType"]): string {
   if (isPurchaseReturnDoc({ sourceDocumentType })) return "Purchase Return Information";
   if (isStockTransferDoc({ sourceDocumentType })) return "Stock Transfer Information";
   if (isSampleOrderDoc({ sourceDocumentType })) return "Sample Order Information";
   return "Sales Order Information";
 }
 
-export function getPackingDocumentNoLabel(sourceDocumentType?: string): string {
+export function getPackingDocumentNoLabel(sourceDocumentType?: SalesOrderRecord["sourceDocumentType"]): string {
   if (isPurchaseReturnDoc({ sourceDocumentType })) return "Purchase Return No.";
   if (isStockTransferDoc({ sourceDocumentType })) return "Source Document No.";
   if (isSampleOrderDoc({ sourceDocumentType })) return "Sample Order No";
@@ -52,7 +52,7 @@ export function getPackingDocumentNo(record: PackingDocRecord): string {
   return record.salesOrderNo;
 }
 
-export function getPackingPartyLabel(sourceDocumentType?: string): string {
+export function getPackingPartyLabel(sourceDocumentType?: SalesOrderRecord["sourceDocumentType"]): string {
   if (isPurchaseReturnDoc({ sourceDocumentType })) return "Supplier";
   if (isStockTransferDoc({ sourceDocumentType })) return "Target Warehouse";
   if (isSampleOrderDoc({ sourceDocumentType })) return "Issued To Employee";
@@ -64,7 +64,7 @@ export function getPackingPartyValue(record: PackingDocRecord): string {
   return record.customer;
 }
 
-export function getPackingWarehouseLabel(sourceDocumentType?: string): string {
+export function getPackingWarehouseLabel(sourceDocumentType?: SalesOrderRecord["sourceDocumentType"]): string {
   if (
     isStockTransferDoc({ sourceDocumentType }) ||
     isSampleOrderDoc({ sourceDocumentType }) ||
@@ -82,13 +82,13 @@ export function getPackingWarehouseValue(record: PackingDocRecord): string {
   return record.sourceWarehouse || record.warehouse;
 }
 
-export function getPackingQtyLabel(sourceDocumentType?: string): string {
+export function getPackingQtyLabel(sourceDocumentType?: SalesOrderRecord["sourceDocumentType"]): string {
   if (isPurchaseReturnDoc({ sourceDocumentType })) return "Return Qty";
   if (isStockTransferDoc({ sourceDocumentType })) return "Transfer Qty";
   return "Ordered Qty";
 }
 
-export function getPackingDateLabel(sourceDocumentType?: string): string {
+export function getPackingDateLabel(sourceDocumentType?: SalesOrderRecord["sourceDocumentType"]): string {
   if (isPurchaseReturnDoc({ sourceDocumentType })) return "Return Date";
   return "Document Date";
 }
