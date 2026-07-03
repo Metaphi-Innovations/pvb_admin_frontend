@@ -4,55 +4,95 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
 import { SearchableSelect } from "./components/SearchableSelect";
+import { CreditNoteCustomerSection } from "./components/CreditNoteCustomerSection";
+import { CreditNoteSchemeSelector } from "./components/CreditNoteSchemeSelector";
+import { buildCreditNoteLedgerImpact } from "./credit-note-accounting";
 import {
-  applyReturnQtyToLines,
   buildReferenceFromInvoice,
+  calcCreditLineAmounts,
   computeCreditNoteGstSplit,
   computeLineCreditAmount,
   createCreditNote,
   createEmptyCreditLine,
+  creditLinesForSchemeSettlement,
   getCreditNoteById,
   getCustomersForCreditNote,
   listInvoicesForReference,
   normalizeCreditLine,
   postCreditNote,
   previewToFormInput,
+  recalcAllCreditLines,
+  schemeDiscountPct,
   updateCreditNote,
   type CreditNoteLine,
   type CreditReferencePreview,
   type NoteWorkflowStatus,
 } from "./credit-notes-data";
 import { customerToInvoiceFields } from "../invoices/invoices-data";
-import { CustomerMasterPanel } from "@/components/accounts/master-fetch/CustomerMasterPanel";
 import {
   customerMasterToTransactionFields,
+  getProductsForSalesTransaction,
   type CustomerTransactionFields,
+  type TransactionProductOption,
 } from "@/lib/accounts/transaction-master-fetch";
 import { CREDIT_NOTES_BREADCRUMB, CREDIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
-import { creditNoteImpactResolved } from "@/lib/accounts/resolved-impact-previews";
-import { getActivePostingLedgers, getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
-import { StatusBadge } from "../components/AccountsUI";
-import { SchemeSettlementSelector } from "@/components/accounts/SchemeSettlementSelector";
+import { TransactionProductSelect } from "@/components/accounts/master-fetch/TransactionProductSelect";
 import {
-  validateSchemeSettlementAmount,
   isSchemeSettlementAlreadySettled,
   SCHEME_SETTLEMENT_ALREADY_SETTLED_MSG,
   findPendingSchemeSettlement,
   type PendingSchemeSettlementOption,
 } from "@/lib/accounts/scheme-settlement-data";
+
+function lineDisplayAmounts(line: CreditNoteLine) {
+  if (line.returnQty <= 0 || line.unitPrice <= 0) return null;
+  const gross = calcCreditLineAmounts(line);
+  if (line.creditAmount <= 0) {
+    return { ...gross, amount: 0 };
+  }
+  if (gross.amount <= 0 || Math.abs(line.creditAmount - gross.amount) < 0.01) {
+    return { ...gross, amount: line.creditAmount };
+  }
+  const ratio = line.creditAmount / gross.amount;
+  const taxable = Math.round(gross.taxable * ratio * 100) / 100;
+  const taxAmt = Math.round((line.creditAmount - taxable) * 100) / 100;
+  const discountAmt = Math.round(gross.discountAmt * ratio * 100) / 100;
+  return {
+    base: gross.base,
+    discountAmt,
+    taxable,
+    taxAmt,
+    amount: line.creditAmount,
+  };
+}
+
+const CREDIT_NOTE_COLUMNS: {
+  key: string;
+  label: string;
+  align: "left" | "right";
+  className?: string;
+}[] = [
+  { key: "product", label: "Product / Item", align: "left", className: "min-w-[140px]" },
+  { key: "sku", label: "SKU", align: "left", className: "min-w-[88px]" },
+  { key: "hsn", label: "HSN", align: "left", className: "min-w-[72px]" },
+  { key: "qty", label: "Qty", align: "right", className: "min-w-[80px] w-[80px]" },
+  { key: "rate", label: "Rate", align: "right", className: "min-w-[88px] w-[88px]" },
+  { key: "discPct", label: "Discount %", align: "right", className: "min-w-[80px] w-[80px]" },
+  { key: "discAmt", label: "Discount Amount", align: "right", className: "min-w-[100px]" },
+  { key: "taxable", label: "Taxable Value", align: "right", className: "min-w-[100px]" },
+  { key: "gstPct", label: "GST %", align: "right", className: "min-w-[64px] w-[64px]" },
+  { key: "gstAmt", label: "GST Amount", align: "right", className: "min-w-[88px]" },
+  { key: "total", label: "Total", align: "right", className: "min-w-[88px]" },
+  { key: "action", label: "", align: "right", className: "w-10" },
+];
 
 export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteId?: number }) {
   const router = useRouter();
@@ -60,16 +100,6 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
   const isEdit = creditNoteId != null;
   const customers = useMemo(() => getCustomersForCreditNote(), []);
   const invoices = useMemo(() => listInvoicesForReference(), []);
-  const receivableLedgers = useMemo(
-    () => getLedgersUnderSubGroupName("Trade Receivables / Sundry Debtors"),
-    [],
-  );
-  const salesReturnAccount = useMemo(
-    () =>
-      getActivePostingLedgers().find((l) => l.accountName.toLowerCase().includes("sales return"))
-        ?.accountName ?? "Sales Return",
-    [],
-  );
 
   const [creditNoteNo, setCreditNoteNo] = useState("");
   const [creditNoteDate, setCreditNoteDate] = useState(new Date().toISOString().slice(0, 10));
@@ -81,10 +111,7 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
   const [sourceOrderNo, setSourceOrderNo] = useState("");
   const [originalAmount, setOriginalAmount] = useState("");
   const [alreadyAdjusted, setAlreadyAdjusted] = useState("0");
-  const [receivableLedger, setReceivableLedger] = useState("");
-  const [salesperson, setSalesperson] = useState("");
   const [referenceNo, setReferenceNo] = useState("");
-  const [subject, setSubject] = useState("");
   const [billingAddress, setBillingAddress] = useState("");
   const [shippingAddress, setShippingAddress] = useState("");
   const [customerFields, setCustomerFields] = useState<CustomerTransactionFields | null>(null);
@@ -92,16 +119,22 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
   const [shipToId, setShipToId] = useState("");
   const [lines, setLines] = useState<CreditNoteLine[]>([createEmptyCreditLine()]);
   const [customerNotes, setCustomerNotes] = useState("");
-  const [termsAndConditions, setTermsAndConditions] = useState("");
   const [remarks, setRemarks] = useState("");
   const [status, setStatus] = useState<NoteWorkflowStatus>("draft");
   const [error, setError] = useState<string | null>(null);
   const [adjustment, setAdjustment] = useState(0);
   const [schemeSettlementKey, setSchemeSettlementKey] = useState("");
   const [schemeSelection, setSchemeSelection] = useState<PendingSchemeSettlementOption | null>(null);
-  const [schemeSettlementAmount, setSchemeSettlementAmount] = useState(0);
 
-  const readOnly = status === "approved";
+  const products = useMemo(
+    () => getProductsForSalesTransaction(customerId ? Number(customerId) : undefined),
+    [customerId],
+  );
+
+  const readOnly = isEdit && status === "cancelled";
+  const isInvoiceLinked = Boolean(referencePreview || sourceInvoiceId);
+  const isManualEntry = !lines.some((l) => l.invoiceQty > 0);
+  const canApplyScheme = lines.some((l) => l.productName.trim() && l.returnQty > 0);
 
   const invoiceOptions = useMemo(
     () =>
@@ -115,6 +148,8 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
 
   const selectedCustomer = customers.find((c) => c.id === Number(customerId));
   const alreadyAdjustedNum = parseFloat(alreadyAdjusted) || 0;
+  const customerLedgerName =
+    customerFields?.receivableLedger || selectedCustomer?.customerName || referencePreview?.customerName || "";
 
   const applyReferencePreview = (preview: CreditReferencePreview) => {
     setReferencePreview(preview);
@@ -125,9 +160,6 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
     if (pre.customerId) setCustomerId(String(pre.customerId));
     setOriginalAmount(String(pre.originalAmount ?? ""));
     setAlreadyAdjusted(String(pre.alreadyAdjustedAmount ?? 0));
-    if (preview.customerName) {
-      setReceivableLedger(preview.customerName);
-    }
     if (pre.lineItems?.length) {
       const normalized = pre.lineItems.map((l) => normalizeCreditLine(l));
       setLines(
@@ -150,7 +182,6 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
     setShipToId(fields.defaultShipToId);
     setBillingAddress(fields.billingAddress);
     setShippingAddress(fields.shippingAddress);
-    setReceivableLedger(fields.receivableLedger || fields.customerName);
   };
 
   const onInvoiceSelect = (id: string) => {
@@ -178,48 +209,79 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
   };
 
   const onSchemeChange = (key: string, opt: PendingSchemeSettlementOption | null) => {
-    setSchemeSettlementKey(key);
-    setSchemeSelection(opt);
     if (!opt) {
-      setLines([createEmptyCreditLine()]);
+      const prevScheme = schemeSelection;
+      const prevPct = prevScheme ? schemeDiscountPct(prevScheme) : 0;
+      setSchemeSettlementKey("");
+      setSchemeSelection(null);
+      setLines((prev) =>
+        recalcAllCreditLines(
+          prev.map((l) =>
+            prevPct > 0 && l.discountPct === prevPct ? { ...l, discountPct: 0 } : l,
+          ),
+          alreadyAdjustedNum,
+        ),
+      );
+      if (prevScheme && referenceInvoiceId === String(prevScheme.invoiceId)) {
+        setReferenceInvoiceId("");
+        setReferencePreview(null);
+        setSourceInvoiceId(null);
+        setSourceInvoiceNo("");
+        setSourceOrderNo("");
+        setOriginalAmount("");
+        setAlreadyAdjusted("0");
+      }
       return;
     }
-    setSchemeSettlementAmount(opt.estimatedBenefitAmount);
+
+    setSchemeSettlementKey(key);
+    setSchemeSelection(opt);
+    setReferenceInvoiceId(String(opt.invoiceId));
     setSourceInvoiceId(opt.invoiceId);
     setSourceInvoiceNo(opt.invoiceNo);
     setSourceOrderNo(opt.salesOrderNo);
-    setReferenceInvoiceId(String(opt.invoiceId));
-    setOriginalAmount(String(opt.estimatedBenefitAmount));
+
     const preview = buildReferenceFromInvoice(opt.invoiceId);
-    if (preview) setReferencePreview(preview);
+    const adjustedFromPreview = preview?.alreadyAdjustedAmount ?? alreadyAdjustedNum;
+    if (preview) {
+      setReferencePreview(preview);
+      setOriginalAmount(String(preview.originalAmount));
+      setAlreadyAdjusted(String(preview.alreadyAdjustedAmount));
+    }
+
+    const discountPct = schemeDiscountPct(opt);
+    const productKey = opt.product.trim().toLowerCase();
+
+    setLines((prev) => {
+      const hasEnteredLines = prev.some((l) => l.productName.trim() && l.returnQty > 0);
+      if (hasEnteredLines) {
+        const updated = prev.map((l) => {
+          if (!l.productName.trim()) return l;
+          const name = l.productName.trim().toLowerCase();
+          const matches =
+            !productKey ||
+            name === productKey ||
+            name.includes(productKey) ||
+            productKey.includes(name);
+          if (!matches) return l;
+          return { ...l, discountPct: discountPct > 0 ? discountPct : l.discountPct };
+        });
+        return recalcAllCreditLines(updated, adjustedFromPreview);
+      }
+      if (preview) {
+        return creditLinesForSchemeSettlement(preview.lineItems, opt);
+      }
+      return prev;
+    });
+
     const cust = customers.find(
       (c) => c.id === opt.customerId || c.customerName === opt.customerName,
     );
     if (cust) {
       const fields = customerMasterToTransactionFields(cust);
       onCustomerChange(String(cust.id), fields);
-    } else {
-      setReceivableLedger(opt.customerName);
     }
-    setSubject(`Near Expiry Scheme Settlement — ${opt.schemeCode}`);
-    setLines([
-      {
-        ...createEmptyCreditLine(),
-        productName: `${opt.product} — Near Expiry Scheme`,
-        description: `Scheme ${opt.schemeCode} · Batch ${opt.batchNumber}`,
-        creditAmount: opt.estimatedBenefitAmount,
-        reason: "Near Expiry Scheme Settlement",
-      },
-    ]);
   };
-
-  useEffect(() => {
-    if (!schemeSettlementKey || !schemeSelection) return;
-    setLines((prev) => {
-      if (prev.length !== 1 || !prev[0].productName.includes("Near Expiry Scheme")) return prev;
-      return [{ ...prev[0], creditAmount: schemeSettlementAmount }];
-    });
-  }, [schemeSettlementAmount, schemeSettlementKey, schemeSelection]);
 
   useEffect(() => {
     if (isEdit) return;
@@ -227,7 +289,14 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
     if (!invId) return;
     setReferenceInvoiceId(invId);
     const preview = buildReferenceFromInvoice(Number(invId));
-    if (preview) applyReferencePreview(preview);
+    if (preview) {
+      applyReferencePreview(preview);
+      const c = customers.find((x) => x.id === preview.customerId);
+      if (c) {
+        const fields = customerMasterToTransactionFields(c);
+        onCustomerChange(String(c.id), fields);
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit, searchParams]);
 
@@ -247,9 +316,6 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
     setReferenceInvoiceId(rec.sourceInvoiceId ? String(rec.sourceInvoiceId) : "");
     setOriginalAmount(String(rec.originalAmount));
     setAlreadyAdjusted(String(rec.alreadyAdjustedAmount));
-    setReceivableLedger(rec.receivableLedger ?? rec.customerName);
-    setSalesperson(rec.salesperson ?? "");
-    setSubject(rec.subject ?? "");
     setBillingAddress(rec.billingAddress ?? "");
     setShippingAddress(rec.shippingAddress ?? "");
     const c = rec.customerId ? customers.find((x) => x.id === rec.customerId) : undefined;
@@ -260,7 +326,6 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
       setShipToId(fields.defaultShipToId);
     }
     setCustomerNotes(rec.customerNotes ?? "");
-    setTermsAndConditions(rec.termsAndConditions ?? "");
     setRemarks(rec.remarks);
     setStatus(rec.status);
     const loadedLines = rec.lineItems.length
@@ -278,11 +343,10 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
     }
     if (rec.schemeSettlementKey) {
       setSchemeSettlementKey(rec.schemeSettlementKey);
-      setSchemeSettlementAmount(rec.schemeSettlementAmount ?? rec.currentCreditAmount);
       const pending = findPendingSchemeSettlement(rec.schemeSettlementKey);
       if (pending) setSchemeSelection(pending);
     }
-  }, [isEdit, creditNoteId, router]);
+  }, [isEdit, creditNoteId, router, customers]);
 
   const subTotal = lines.reduce((s, l) => s + l.creditAmount, 0);
   const grandTotal = Math.max(0, subTotal + adjustment);
@@ -290,30 +354,38 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
   const original = parseFloat(originalAmount) || grandTotal;
 
   const updateLine = (id: string, patch: Partial<CreditNoteLine>) => {
-    if ("returnQty" in patch) {
-      setLines((prev) => applyReturnQtyToLines(prev, id, patch.returnQty ?? 0, alreadyAdjustedNum));
-      return;
-    }
-    setLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+    setLines((prev) => {
+      const merged = prev.map((l) => (l.id === id ? { ...l, ...patch } : l));
+      return recalcAllCreditLines(merged, alreadyAdjustedNum);
+    });
+  };
+
+  const onProductSelect = (lineId: string, product: TransactionProductOption) => {
+    updateLine(lineId, {
+      productId: product.id,
+      productName: product.name,
+      sku: product.sku,
+      hsn: product.hsn,
+      unitPrice: product.unitPrice,
+      taxPct: product.taxPct,
+    });
   };
 
   const resolveCustomerName = (): string => {
     if (selectedCustomer) return customerToInvoiceFields(selectedCustomer).customerName;
+    if (customerFields?.customerName) return customerFields.customerName;
     if (referencePreview?.customerName) return referencePreview.customerName;
-    return receivableLedger || "";
+    return "";
   };
 
   const buildInput = (nextStatus: NoteWorkflowStatus) => ({
     creditNoteDate,
     customerId: customerId ? Number(customerId) : null,
     customerName: resolveCustomerName(),
-    receivableLedger,
-    salesperson,
-    subject,
+    receivableLedger: customerLedgerName,
     billingAddress,
     shippingAddress,
     customerNotes,
-    termsAndConditions,
     sourceInvoiceId,
     sourceInvoiceNo,
     sourceOrderId: null,
@@ -326,31 +398,27 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
     status: nextStatus,
     schemeSettlementKey: schemeSettlementKey || undefined,
     schemeCode: schemeSelection?.schemeCode,
-    schemeSettlementAmount: schemeSettlementKey ? schemeSettlementAmount : undefined,
+    schemeSettlementAmount: schemeSettlementKey ? grandTotal : undefined,
   });
 
   const postNote = () => {
     setError(null);
     try {
+      if (!resolveCustomerName().trim()) {
+        setError("Select a customer before posting.");
+        return;
+      }
       if (schemeSettlementKey && schemeSelection) {
         if (isSchemeSettlementAlreadySettled(schemeSettlementKey)) {
           setError(SCHEME_SETTLEMENT_ALREADY_SETTLED_MSG);
-          return;
-        }
-        const schemeErr = validateSchemeSettlementAmount(
-          schemeSettlementAmount,
-          schemeSelection.estimatedBenefitAmount,
-        );
-        if (schemeErr) {
-          setError(schemeErr);
           return;
         }
       }
       if (grandTotal <= 0) {
         setError(
           schemeSettlementKey
-            ? "Enter a settlement amount before posting."
-            : "Enter return quantity on at least one line before posting.",
+            ? "Enter return quantity on the scheme line before posting."
+            : "Enter quantity on at least one line before posting.",
         );
         return;
       }
@@ -368,11 +436,13 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
     }
   };
 
-  const impactLines = creditNoteImpactResolved({
-    customerName: resolveCustomerName() || "Customer",
+  const impactLines = buildCreditNoteLedgerImpact({
+    customerLedgerName: customerLedgerName,
+    customerName: resolveCustomerName(),
     taxable: gstSplit.taxable,
     taxAmount: gstSplit.taxAmount,
     grandTotal,
+    isSchemeSettlement: Boolean(schemeSettlementKey),
   });
 
   return (
@@ -399,9 +469,42 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
       }
     >
       <div className="bg-white border border-border/60 rounded-lg shadow-sm">
-        {/* Customer & header — Zoho-style */}
+        {/* Top section */}
         <div className="px-6 py-5 border-b border-border/60 space-y-4">
-          <CustomerMasterPanel
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs font-medium">Credit Note No.</Label>
+              <Input className="h-9 text-xs font-mono bg-muted/20" disabled value={isEdit ? creditNoteNo : "Auto-generated"} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-medium">Reference No.</Label>
+              <Input className="h-9 text-xs" value={referenceNo} onChange={(e) => setReferenceNo(e.target.value)} disabled={readOnly} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-medium">Credit Note Date</Label>
+              <Input type="date" className="h-9 text-xs" value={creditNoteDate} onChange={(e) => setCreditNoteDate(e.target.value)} disabled={readOnly} />
+            </div>
+            <div className="space-y-1">
+              <SearchableSelect
+                label="Original Invoice No."
+                value={referenceInvoiceId}
+                onChange={onInvoiceSelect}
+                options={invoiceOptions}
+                placeholder="Linked invoice (optional)"
+                disabled={readOnly || Boolean(schemeSettlementKey)}
+              />
+              {referencePreview && (
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  {formatINR(referencePreview.originalAmount)} · Credited {formatINR(referencePreview.alreadyAdjustedAmount)}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Customer section */}
+        <div className="px-6 py-5 border-b border-border/60">
+          <CreditNoteCustomerSection
             customers={customers}
             customerId={customerId}
             onCustomerIdChange={onCustomerChange}
@@ -420,150 +523,167 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
             shippingAddress={shippingAddress}
             disabled={readOnly}
           />
-          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-            <span className="px-2 py-0.5 rounded border bg-muted/30 font-medium">INR</span>
-            {status && <StatusBadge status={status} />}
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Credit Note#</Label>
-              <Input className="h-9 text-xs font-mono bg-muted/20" disabled value={isEdit ? creditNoteNo : "Auto-generated"} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Reference#</Label>
-              <Input className="h-9 text-xs" value={referenceNo} onChange={(e) => setReferenceNo(e.target.value)} disabled={readOnly} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Credit Note Date</Label>
-              <Input type="date" className="h-9 text-xs" value={creditNoteDate} onChange={(e) => setCreditNoteDate(e.target.value)} disabled={readOnly} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Accounts Receivable</Label>
-              <Select value={receivableLedger} onValueChange={setReceivableLedger} disabled={readOnly}>
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue placeholder="Select ledger" />
-                </SelectTrigger>
-                <SelectContent className="max-h-[200px]">
-                  {receivableLedgers.map((l) => (
-                    <SelectItem key={l.id} value={l.accountName} className="text-xs">{l.accountName}</SelectItem>
-                  ))}
-                  {receivableLedger && !receivableLedgers.some((l) => l.accountName === receivableLedger) && (
-                    <SelectItem value={receivableLedger} className="text-xs">{receivableLedger}</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-muted-foreground">Salesperson</Label>
-              <Input className="h-9 text-xs" value={salesperson} onChange={(e) => setSalesperson(e.target.value)} placeholder="Salesperson" disabled={readOnly} />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-[11px] text-muted-foreground">Subject</Label>
-            <Input className="h-9 text-xs" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Brief description for this credit note" disabled={readOnly} />
-          </div>
-
-          <div className="max-w-2xl">
-            <SchemeSettlementSelector
-              value={schemeSettlementKey}
-              onChange={onSchemeChange}
-              settlementAmount={schemeSettlementAmount}
-              onSettlementAmountChange={setSchemeSettlementAmount}
-              disabled={readOnly}
-              variant="credit_note"
-            />
-          </div>
-
-          <div className="max-w-md">
-            <SearchableSelect
-              label="Reference Invoice"
-              value={referenceInvoiceId}
-              onChange={onInvoiceSelect}
-              options={invoiceOptions}
-              placeholder="Select invoice to credit against"
-              disabled={readOnly || Boolean(schemeSettlementKey)}
-            />
-            {referencePreview && (
-              <p className="text-[10px] text-muted-foreground mt-1">
-                Invoice {referencePreview.sourceInvoiceNo} · {formatINR(referencePreview.originalAmount)} · Already credited {formatINR(referencePreview.alreadyAdjustedAmount)}
-              </p>
-            )}
-          </div>
         </div>
 
-        {/* Item grid + totals — Zoho layout */}
-        <div className="px-6 py-4 flex flex-col lg:flex-row gap-6">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-semibold uppercase text-muted-foreground">Item Table</h3>
-              {!readOnly && referencePreview && (
-                <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => setLines([...lines, createEmptyCreditLine()])}>
-                  <Plus className="w-3 h-3" /> Add New Row
+        {/* Item grid + totals */}
+        <div className="px-6 py-4 space-y-4">
+          <div className="w-full">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="text-xs font-semibold uppercase text-muted-foreground">
+                Credit Note Details
+              </h3>
+              {!readOnly && isManualEntry && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs gap-1 shrink-0"
+                  onClick={() => setLines([...lines, createEmptyCreditLine()])}
+                >
+                  <Plus className="w-3 h-3" /> Add Row
                 </Button>
               )}
             </div>
-            <div className="border border-border/60 rounded-lg overflow-x-auto">
-              <table className="w-full text-xs min-w-[900px]">
-                <thead className="bg-muted/25 border-b border-border/60">
+            <div className="w-full border border-border/60 rounded-xl bg-white shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[1080px] text-xs table-fixed">
+                <thead className="border-b border-border/60">
                   <tr>
-                    {["Item Details", "Account", "Inv Qty", "Return Qty", "Rate", "Discount %", "Amount (₹)", ""].map((h) => (
-                      <th key={h || "act"} className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap">
-                        {h}
+                    {CREDIT_NOTE_COLUMNS.map((col) => (
+                      <th
+                        key={col.key}
+                        className={cn(
+                          "px-3 py-2.5 text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap",
+                          col.align === "right" ? "text-right" : "text-left",
+                          col.className,
+                        )}
+                      >
+                        {col.label}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {lines.map((l) => (
-                    <tr key={l.id} className="border-b border-border/40 align-top">
-                      <td className="px-2 py-2 min-w-[180px]">
-                        <Input className="h-8 text-xs font-medium mb-1 bg-muted/10" readOnly value={l.productName} placeholder="Item" />
-                        <Textarea className="text-[11px] min-h-[40px] resize-none bg-muted/5" readOnly value={l.description} placeholder="Description" />
+                  {lines.map((l) => {
+                    const amounts = lineDisplayAmounts(l);
+                    return (
+                    <tr key={l.id} className="border-b border-border/40 hover:bg-muted/10">
+                      <td className={cn("px-3 py-2 align-middle", CREDIT_NOTE_COLUMNS[0].className)}>
+                        {isManualEntry && !readOnly ? (
+                          <TransactionProductSelect
+                            products={products}
+                            value={l.productId ?? null}
+                            onSelect={(p) => onProductSelect(l.id, p)}
+                            disabled={readOnly}
+                            placeholder="Select product…"
+                          />
+                        ) : (
+                          <p className="text-xs font-medium">{l.productName || "—"}</p>
+                        )}
                       </td>
-                      <td className="px-2 py-2 min-w-[120px]">
-                        <Input className="h-8 text-xs bg-muted/10" readOnly value={salesReturnAccount} />
+                      <td className={cn("px-3 py-2 align-middle", CREDIT_NOTE_COLUMNS[1].className)}>
+                        <p className="font-mono text-brand-700 text-xs truncate">{l.sku || "—"}</p>
                       </td>
-                      <td className="px-2 py-2">
-                        <Input className="h-8 w-16 text-xs bg-muted/10 text-right tabular-nums" readOnly value={l.invoiceQty || ""} />
+                      <td className={cn("px-3 py-2 align-middle", CREDIT_NOTE_COLUMNS[2].className)}>
+                        <p className="font-mono text-xs truncate">{l.hsn || "—"}</p>
                       </td>
-                      <td className="px-2 py-2">
+                      <td className={cn("px-3 py-2 align-middle text-right", CREDIT_NOTE_COLUMNS[3].className)}>
+                        <div className="flex flex-col items-end gap-0.5">
                         <Input
                           type="number"
                           min={0}
-                          max={l.invoiceQty || undefined}
-                          className="h-8 w-20 text-xs text-right tabular-nums"
+                          max={l.invoiceQty > 0 ? l.invoiceQty : undefined}
+                          className="h-8 w-full max-w-[72px] text-xs text-right tabular-nums"
                           value={l.returnQty || ""}
                           onChange={(e) => updateLine(l.id, { returnQty: parseFloat(e.target.value) || 0 })}
-                          disabled={readOnly || !l.productName}
+                          disabled={readOnly || (isInvoiceLinked && !l.productName)}
+                          placeholder={isManualEntry ? "0" : ""}
                         />
+                        {l.invoiceQty > 0 && (
+                          <span className="text-[10px] text-muted-foreground leading-none">of {l.invoiceQty}</span>
+                        )}
+                        </div>
                       </td>
-                      <td className="px-2 py-2">
-                        <Input className="h-8 w-24 text-xs bg-muted/10 text-right tabular-nums" readOnly value={l.unitPrice || ""} />
+                      <td className={cn("px-3 py-2 align-middle text-right", CREDIT_NOTE_COLUMNS[4].className)}>
+                        {isManualEntry && !readOnly ? (
+                          <AccountsMoneyInput
+                            className="h-8 w-full max-w-[80px] text-xs text-right tabular-nums ml-auto"
+                            value={l.unitPrice || ""}
+                            onChange={(v) => updateLine(l.id, { unitPrice: v })}
+                          />
+                        ) : (
+                          <p className="text-xs text-right tabular-nums font-mono">{l.unitPrice > 0 ? l.unitPrice.toFixed(2) : "—"}</p>
+                        )}
                       </td>
-                      <td className="px-2 py-2">
-                        <Input className="h-8 w-16 text-xs bg-muted/10 text-right tabular-nums" readOnly value={l.discountPct || ""} />
+                      <td className={cn("px-3 py-2 align-middle text-right", CREDIT_NOTE_COLUMNS[5].className)}>
+                        {schemeSettlementKey || isInvoiceLinked ? (
+                          <p className="text-xs text-right tabular-nums font-mono">
+                            {l.discountPct > 0 ? `${l.discountPct}%` : "—"}
+                          </p>
+                        ) : !readOnly ? (
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            className="h-8 w-full max-w-[64px] text-xs text-right tabular-nums ml-auto"
+                            value={l.discountPct || ""}
+                            onChange={(e) =>
+                              updateLine(l.id, { discountPct: parseFloat(e.target.value) || 0 })
+                            }
+                          />
+                        ) : (
+                          <p className="text-xs text-right tabular-nums font-mono">
+                            {l.discountPct > 0 ? `${l.discountPct}%` : "—"}
+                          </p>
+                        )}
                       </td>
-                      <td className="px-2 py-2">
-                        <Input className="h-8 w-28 text-xs bg-muted/10 text-right tabular-nums font-medium" readOnly value={l.creditAmount > 0 ? l.creditAmount.toFixed(2) : ""} />
+                      <td className={cn("px-3 py-2 align-middle text-right font-mono tabular-nums", CREDIT_NOTE_COLUMNS[6].className)}>
+                        <p className="text-xs">{amounts ? amounts.discountAmt.toFixed(2) : "—"}</p>
                       </td>
-                      <td className="px-2 py-2">
-                        {!readOnly && lines.length > 1 && (
+                      <td className={cn("px-3 py-2 align-middle text-right font-mono tabular-nums", CREDIT_NOTE_COLUMNS[7].className)}>
+                        <p className="text-xs">{amounts ? amounts.taxable.toFixed(2) : "—"}</p>
+                      </td>
+                      <td className={cn("px-3 py-2 align-middle text-right font-mono tabular-nums", CREDIT_NOTE_COLUMNS[8].className)}>
+                        <p className="text-xs">{l.taxPct > 0 ? `${l.taxPct}%` : "—"}</p>
+                      </td>
+                      <td className={cn("px-3 py-2 align-middle text-right font-mono tabular-nums", CREDIT_NOTE_COLUMNS[9].className)}>
+                        <p className="text-xs">{amounts ? amounts.taxAmt.toFixed(2) : "—"}</p>
+                      </td>
+                      <td className={cn("px-3 py-2 align-middle text-right font-mono tabular-nums font-semibold text-brand-700", CREDIT_NOTE_COLUMNS[10].className)}>
+                        <p className="text-xs">{amounts && amounts.amount > 0 ? amounts.amount.toFixed(2) : "—"}</p>
+                      </td>
+                      <td className={cn("px-3 py-2 align-middle", CREDIT_NOTE_COLUMNS[11].className)}>
+                        {!readOnly && isManualEntry && lines.length > 1 && (
                           <button type="button" className="w-8 h-8 flex items-center justify-center rounded hover:bg-red-50 text-red-600" onClick={() => setLines(lines.filter((x) => x.id !== l.id))}>
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
 
-          <div className="w-full lg:w-72 flex-shrink-0">
-            <div className="border border-border/60 rounded-lg p-4 bg-muted/5 space-y-2 text-xs sticky top-4">
+          <div className="space-y-4 border-t border-border/40 pt-4">
+            <div className="max-w-md">
+              <CreditNoteSchemeSelector
+                value={schemeSettlementKey}
+                onChange={onSchemeChange}
+                disabled={readOnly || !canApplyScheme}
+              />
+              {!readOnly && !canApplyScheme && (
+                <p className="text-[11px] text-muted-foreground mt-1.5">
+                  Add product details and quantities first, then apply a scheme code.
+                </p>
+              )}
+            </div>
+            <div className="flex justify-end">
+            <div className="w-full sm:w-80 shrink-0">
+              <div className="border border-border/60 rounded-lg p-4 bg-muted/5 space-y-2 text-xs">
               <div className="grid grid-cols-2 gap-2 text-[10px] uppercase text-muted-foreground font-semibold border-b pb-2">
                 <span />
                 <span className="text-right">Amount</span>
@@ -574,11 +694,10 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
               </div>
               <div className="flex justify-between items-center py-1 gap-2">
                 <span className="text-muted-foreground">Adjustment</span>
-                <Input
-                  type="number"
+                <AccountsMoneyInput
                   className="h-7 w-24 text-xs text-right tabular-nums ml-auto"
                   value={adjustment || ""}
-                  onChange={(e) => setAdjustment(parseFloat(e.target.value) || 0)}
+                  onChange={(v) => setAdjustment(v)}
                   disabled={readOnly}
                 />
               </div>
@@ -598,26 +717,22 @@ export default function CreditNoteFormPageClient({ creditNoteId }: { creditNoteI
                   </div>
                 </>
               )}
+              </div>
+            </div>
             </div>
           </div>
         </div>
 
-        {/* Ledger impact */}
         {grandTotal > 0 && (
           <div className="px-6 pb-4">
             <LedgerImpactPreview lines={impactLines} />
           </div>
         )}
 
-        {/* Notes */}
-        <div className="px-6 py-4 border-t border-border/60 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <Label className="text-[11px] text-muted-foreground">Customer Notes</Label>
+        <div className="px-6 py-4 border-t border-border/60">
+          <div className="space-y-1 max-w-xl">
+            <Label className="text-xs font-medium text-muted-foreground">Customer Notes</Label>
             <Textarea className="min-h-[72px] text-xs resize-none" value={customerNotes} onChange={(e) => setCustomerNotes(e.target.value)} placeholder="Notes visible to customer" disabled={readOnly} />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[11px] text-muted-foreground">Terms &amp; Conditions</Label>
-            <Textarea className="min-h-[72px] text-xs resize-none" value={termsAndConditions} onChange={(e) => setTermsAndConditions(e.target.value)} placeholder="Terms and conditions" disabled={readOnly} />
           </div>
         </div>
 

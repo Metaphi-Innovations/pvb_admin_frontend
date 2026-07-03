@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Search, X, Check, FileText, Calendar, Ban } from "lucide-react";
+import { AccountsFilterDateRangeSection } from "@/components/accounts/AccountsListingFilter";
 import { cn } from "@/lib/utils";
 import {
   loadBankTransactions,
@@ -443,23 +444,13 @@ export function BankTransactionsClient() {
             </Select>
           </div>
 
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground uppercase">Start Date</Label>
-            <Input
-              type="date"
-              className="h-8 text-xs"
-              value={filters.startDate || ""}
-              onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground uppercase">End Date</Label>
-            <Input
-              type="date"
-              className="h-8 text-xs"
-              value={filters.endDate || ""}
-              onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+          <div className="space-y-1 sm:col-span-2">
+            <AccountsFilterDateRangeSection
+              dateFrom={filters.startDate || ""}
+              dateTo={filters.endDate || ""}
+              onDateFromChange={(value) => setFilters({ ...filters, startDate: value })}
+              onDateToChange={(value) => setFilters({ ...filters, endDate: value })}
+              size="default"
             />
           </div>
 
@@ -501,8 +492,8 @@ export function BankTransactionsClient() {
             </div>
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/80 border-b border-border/40 sticky top-0 z-10">
+          <table className="accounts-table w-full text-sm">
+            <thead className="border-b border-border/40">
               <tr>
                 {["Date", "Narration", "Reference No", "Debit", "Credit", "Balance", "Ledger", "Status", ""].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold uppercase text-muted-foreground whitespace-nowrap">

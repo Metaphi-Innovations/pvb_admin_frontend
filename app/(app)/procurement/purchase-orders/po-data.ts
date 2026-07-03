@@ -3,7 +3,7 @@ import { amountInWords, calcLineAmounts, nextId, round2, todayStr } from "@/lib/
 import type { ActivityEntry } from "@/lib/procurement/types";
 import type { POShortCloseInfo } from "./po-qty";
 import type { PackagingUom, ProcurementAdditionalCharge } from "@/lib/procurement/procurement-line-utils";
-import { calcPackingToBaseQty, sumAdditionalCharges, enrichProductForProcurement } from "@/lib/procurement/procurement-line-utils";
+import { calcPackingToBaseQty, sumAdditionalCharges, sumAdditionalChargeTaxes, enrichProductForProcurement } from "@/lib/procurement/procurement-line-utils";
 import { findProductRef } from "@/lib/pricing/resolve-pricing";
 import type { PODiscountType } from "@/lib/procurement/utils";
 import type { PriceSource } from "@/lib/pricing/resolve-pricing";
@@ -136,6 +136,8 @@ export interface PurchaseOrder {
   notes: string;
   sourcePrId: number | null;
   sourcePrNumber: string;
+  billToAddressId?: string;
+  shipToAddressId?: string;
   billing: typeof COMPANY_BILLING;
   shipping: {
     shipToLocation: string;
@@ -293,10 +295,11 @@ function buildSummary(
   totalDiscount = round2(totalDiscount);
   const productTotal = round2(taxableValue);
   const additionalChargesTotal = round2(sumAdditionalCharges(additionalCharges));
+  const chargeTaxes = sumAdditionalChargeTaxes(additionalCharges);
   taxableValue = round2(productTotal + additionalChargesTotal);
-  totalCgst = round2(totalCgst);
-  totalSgst = round2(totalSgst);
-  totalIgst = round2(totalIgst);
+  totalCgst = round2(totalCgst + chargeTaxes.totalCgst);
+  totalSgst = round2(totalSgst + chargeTaxes.totalSgst);
+  totalIgst = round2(totalIgst + chargeTaxes.totalIgst);
   const grandTotal = round2(taxableValue + totalCgst + totalSgst + totalIgst);
 
   return {
@@ -396,7 +399,7 @@ const RAW_SEED = [
     ] as POLineItem[],
     terms: [],
     attachments: [],
-    additionalCharges: [{ uid: "c1", chargeName: "Freight Charges", amount: 500, remarks: "" }],
+    additionalCharges: [{ uid: "c1", chargeName: "Freight Charges", amount: 500, remarks: "", gstMasterId: 4, cgstPct: 9, sgstPct: 9, igstPct: 0 }],
     otherCharges: 500,
     summary: buildSummary(
       [

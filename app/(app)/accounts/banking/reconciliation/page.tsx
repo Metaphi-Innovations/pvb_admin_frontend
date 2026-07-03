@@ -1,10 +1,10 @@
 "use client";
 
 import { Suspense } from "react";
-import ReconciliationPageClient from "@/app/(app)/accounts/bank-reconciliation/ReconciliationPageClient";
+import ManualBankReconciliationPageClient from "@/app/(app)/accounts/bank-reconciliation/ManualBankReconciliationPageClient";
 
 function ReconciliationWrapper() {
-  return <ReconciliationPageClient embedded />;
+  return <ManualBankReconciliationPageClient />;
 }
 
 export default function BankReconciliationPage() {

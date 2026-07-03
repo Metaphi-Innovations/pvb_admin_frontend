@@ -2,7 +2,6 @@
 
 import React, { memo, useState } from "react";
 import { cn } from "@/lib/utils";
-import { AuthService } from "@/services/auth.service";
 import {
   Bell, ChevronDown, Calendar,
   AlertTriangle, Check, LogOut, User, Settings, Shield,
@@ -208,10 +207,12 @@ function FYSelector() {
 }
 
 function AppHeaderInner() {
-  const [userData, setUserData] = useState<any>(null);
+  const [userData, setUserData] = useState<{ username?: string; email?: string } | null>(null);
 
   React.useEffect(() => {
-    setUserData(AuthService.getUserData());
+    void import("@/services/auth.service").then(({ AuthService }) => {
+      setUserData(AuthService.getUserData());
+    });
   }, []);
 
   const username = userData?.username || "Admin";
@@ -312,7 +313,9 @@ function AppHeaderInner() {
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            onClick={() => AuthService.logout()}
+            onClick={() => {
+              void import("@/services/auth.service").then(({ AuthService }) => AuthService.logout());
+            }}
             className="text-xs gap-2 cursor-pointer text-red-500 focus:text-red-500 focus:bg-red-50"
           >
             <LogOut className="w-3.5 h-3.5" /> Sign Out

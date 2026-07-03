@@ -71,6 +71,18 @@
     background-color: #FFE4C4;
     color: #6B2D07;
   }
+
+  /* Hide number input spinners (debit/credit, qty, amount fields) */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
 }
 
 @layer components {
@@ -115,23 +127,29 @@
   }
 
   .master-listing-thead-row {
-    @apply bg-muted/40 border-b border-border;
+    @apply bg-white border-b border-border;
+  }
+
+  .master-listing-thead-row.sticky,
+  thead.sticky > .master-listing-thead-row,
+  thead.sticky.master-listing-thead-row {
+    box-shadow: 0 1px 0 0 hsl(var(--border));
   }
 
   .master-listing-th {
-    @apply bg-muted/40;
+    @apply bg-white;
   }
 
   .master-listing-th-sorted {
-    @apply bg-brand-50/60 text-brand-700;
+    @apply bg-brand-50 text-brand-700;
   }
 
   .master-listing-th-sticky {
-    @apply sticky right-0 z-20 bg-muted/40 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border;
+    @apply sticky right-0 z-20 bg-white shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border;
   }
 
   .master-listing-th-sticky-sorted {
-    @apply sticky right-0 z-20 bg-brand-50/60 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border;
+    @apply sticky right-0 z-20 bg-brand-50 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border;
   }
 
   .master-listing-row {
@@ -140,6 +158,139 @@
 
   .master-listing-td-sticky {
     @apply sticky right-0 z-10 bg-white shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border group-hover:bg-[#fbfaf7];
+  }
+
+  /* Accounts module — unified listing & report tables (Ledger, Day Book, Trial Balance, etc.)
+   * Sticky is applied per th — never on thead/tr (avoids header/first-row overlap in scroll containers).
+   * Row height lives on th/td only — never on tr. */
+  .accounts-table-scroll {
+    @apply flex-1 overflow-auto min-h-0;
+  }
+
+  .accounts-table {
+    @apply w-full text-table border-separate border-spacing-0;
+  }
+
+  .accounts-table-head {
+    @apply bg-white;
+  }
+
+  .accounts-table-head-row {
+    /* Intentionally no height — fixed height on tr causes sticky th / first-row overlap */
+  }
+
+  .accounts-table-th {
+    @apply px-5 py-3 whitespace-nowrap text-xs font-semibold text-foreground text-left;
+    @apply border-b border-border bg-muted/40;
+    height: auto;
+    min-height: 0;
+    box-sizing: border-box;
+    vertical-align: middle;
+  }
+
+  .accounts-table-th-inner {
+    @apply flex items-center;
+  }
+
+  .accounts-table-th-sticky {
+    @apply sticky top-0 z-30 bg-white;
+    box-shadow: 0 1px 0 0 hsl(var(--border));
+  }
+
+  .accounts-table-th-sorted {
+    @apply bg-brand-50 text-brand-700;
+    box-shadow: 0 1px 0 0 hsl(var(--border)), inset 0 -1px 0 0 rgb(244 121 32 / 0.12);
+  }
+
+  .accounts-table-th-sticky.accounts-table-th-sorted {
+    @apply bg-brand-50;
+  }
+
+  .accounts-table-th-uppercase {
+    @apply text-[10px] uppercase tracking-wide text-muted-foreground;
+  }
+
+  .accounts-table-body {
+    @apply bg-white;
+  }
+
+  .accounts-table-row {
+    @apply border-b border-border/60 bg-white transition-colors hover:bg-muted/20;
+  }
+
+  .accounts-table-td {
+    @apply px-5 py-4 text-xs text-foreground;
+    height: auto;
+    min-height: 0;
+    box-sizing: border-box;
+    vertical-align: middle;
+  }
+
+  .accounts-table-td-inner {
+    @apply flex items-center;
+  }
+
+  .accounts-table-empty {
+    @apply !h-auto !min-h-0 py-4 text-center text-xs text-muted-foreground;
+  }
+
+  .accounts-col-narrow {
+    @apply w-20 max-w-[5rem];
+  }
+
+  .accounts-col-status {
+    @apply min-w-[7rem];
+  }
+
+  .accounts-col-actions {
+    @apply min-w-[3rem] w-12;
+  }
+
+  .accounts-col-actions-wide {
+    @apply min-w-[7.5rem] w-[7.5rem];
+  }
+
+  .accounts-listing-card {
+    @apply border border-border rounded-xl bg-white shadow-sm overflow-hidden flex flex-col flex-1 min-h-0;
+  }
+
+  .accounts-col-wide {
+    min-width: 10rem;
+  }
+
+  .accounts-col-party {
+    min-width: 11rem;
+  }
+
+  .accounts-col-narration {
+    min-width: 14rem;
+  }
+
+  .accounts-table-foot {
+    @apply bg-muted/15 border-t border-border/60;
+  }
+
+  /* Legacy markup: thead/tr without component classes still get standard layout */
+  .accounts-table > thead > tr > th {
+    @apply px-5 py-3 whitespace-nowrap text-xs font-semibold text-foreground text-left;
+    @apply border-b border-border bg-muted/40 sticky top-0 z-30;
+    height: auto;
+    min-height: 0;
+    box-sizing: border-box;
+    vertical-align: middle;
+    box-shadow: 0 1px 0 0 hsl(var(--border));
+  }
+
+  .accounts-table > tbody > tr {
+    @apply border-b border-border/60 bg-white transition-colors hover:bg-muted/20;
+  }
+
+  .accounts-table > tbody > tr > td {
+    @apply px-5 py-4 text-xs text-foreground;
+    height: auto;
+    min-height: 0;
+    box-sizing: border-box;
+    vertical-align: middle;
   }
 
   .input-base {
@@ -159,6 +310,39 @@
 
   .nav-active-navy {
     @apply bg-gradient-to-r from-navy-50/80 to-white text-navy-800 border-l-2 border-navy-600 font-semibold;
+  }
+
+  /* Accounts module — two-panel shell (sidebar + content); plain CSS fallback if utilities fail */
+  .accounts-module-shell {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .accounts-module-sidebar {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    width: min(380px, 32vw);
+    min-width: 340px;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    background: #fff;
+    border-right: 1px solid hsl(var(--border) / 0.8);
+  }
+
+  .accounts-module-main {
+    display: flex;
+    flex: 1 1 0%;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+    background: rgb(248 250 252 / 0.4);
   }
 }
 

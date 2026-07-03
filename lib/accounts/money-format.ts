@@ -11,6 +11,22 @@ export const MONEY_CELL_CLASS =
 /** Input fields for debit/credit entry */
 export const MONEY_INPUT_CLASS = "text-right font-medium tabular-nums";
 
+/** Round to 2 decimal currency precision */
+export function roundMoney(amount: number): number {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n * 100) / 100;
+}
+
+/** Parse typed amount to 2-decimal number without changing user intent */
+export function parseMoneyInput(raw: string): number {
+  const sanitized = raw.replace(/[₹,\s]/g, "").trim();
+  if (!sanitized || sanitized === ".") return 0;
+  const n = parseFloat(sanitized);
+  if (!Number.isFinite(n)) return 0;
+  return roundMoney(n);
+}
+
 export function balanceSideLabel(side: BalanceSide): "Dr" | "Cr" {
   return side === "Debit" ? "Dr" : "Cr";
 }

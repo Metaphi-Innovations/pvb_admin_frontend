@@ -72,15 +72,24 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
       title={formatBankAccountMaster(account)}
       description={account.bankName}
       actions={
-        <button
-          type="button"
-          onClick={() =>
-            router.push(`/accounts/masters/chart-of-accounts?node=${ledger.id}`)
-          }
-          className="h-8 px-3 text-xs border border-border rounded-lg hover:bg-muted/40"
-        >
-          Open in COA
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => router.push(`/accounts/banking/bank-accounts/${accountId}/edit`)}
+            className="h-8 px-3 text-xs border border-border rounded-lg hover:bg-muted/40"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              router.push(`/accounts/masters/chart-of-accounts?node=${ledger.id}`)
+            }
+            className="h-8 px-3 text-xs border border-border rounded-lg hover:bg-muted/40"
+          >
+            Open in COA
+          </button>
+        </div>
       }
       layout="split"
     >
@@ -129,8 +138,8 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
             </div>
           )}
           {(tab === "transactions" || tab === "bankbook") && (
-            <table className="w-full text-xs min-w-[720px]">
-              <thead className="bg-muted/20 border-b sticky top-0">
+            <table className="accounts-table w-full text-xs min-w-[720px]">
+              <thead className="border-b">
                 <tr>
                   {["Date", "Voucher Type", "Voucher No", "Particulars", "Debit", "Credit"].map((h) => (
                     <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground uppercase text-[10px]">{h}</th>
@@ -169,8 +178,8 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
             </div>
           )}
           {tab === "statement" && (
-            <table className="w-full text-xs min-w-[800px]">
-              <thead className="bg-muted/20 border-b sticky top-0">
+            <table className="accounts-table w-full text-xs min-w-[800px]">
+              <thead className="border-b">
                 <tr>
                   {["Date", "Voucher Type", "Voucher No", "Particulars", "Debit", "Credit", "Running Balance"].map((h) => (
                     <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground uppercase text-[10px]">{h}</th>

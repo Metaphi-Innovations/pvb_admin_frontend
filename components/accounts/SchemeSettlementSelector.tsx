@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/app/(app)/accounts/credit-notes/components/SearchableSelect";
 import { formatNearExpiryBenefitLabel } from "@/app/(app)/warehouse/dispatch/near-expiry-dispatch";
@@ -64,7 +64,7 @@ export function SchemeSettlementSelector({
     }
     const opt = pending.find((o) => o.key === key) ?? null;
     onChange(key, opt);
-    if (opt) onSettlementAmountChange(opt.estimatedBenefitAmount);
+    if (opt && !isCreditNote) onSettlementAmountChange(opt.estimatedBenefitAmount);
   };
 
   const isCreditNote = variant === "credit_note";
@@ -111,24 +111,28 @@ export function SchemeSettlementSelector({
               label="Estimated Benefit Amount"
               value={formatSchemeRupee(selected.estimatedBenefitAmount)}
             />
-            <div>
-              <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                Settlement Amount
-              </Label>
-              <Input
-                type="number"
-                min={0}
-                max={maxAmount}
-                step="0.01"
-                className="mt-0.5 h-8 text-xs tabular-nums"
-                value={settlementAmount || ""}
-                onChange={(e) => onSettlementAmountChange(parseFloat(e.target.value) || 0)}
-                disabled={disabled}
-              />
-              <p className="text-[10px] text-muted-foreground mt-0.5">
-                Max {formatSchemeRupee(maxAmount)}
+            {isCreditNote ? (
+              <p className="text-[11px] text-muted-foreground sm:col-span-2 lg:col-span-4">
+                Enter <span className="font-medium text-foreground">Return Qty</span> in the item table below — credit
+                amount is calculated from quantity, rate, and discount (max benefit{" "}
+                {formatSchemeRupee(selected.estimatedBenefitAmount)}).
               </p>
-            </div>
+            ) : (
+              <div>
+                <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Settlement Amount
+                </Label>
+                <AccountsMoneyInput
+                  className="mt-0.5 h-8 text-xs tabular-nums"
+                  value={settlementAmount || ""}
+                  onChange={onSettlementAmountChange}
+                  disabled={disabled}
+                />
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Max {formatSchemeRupee(maxAmount)}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}

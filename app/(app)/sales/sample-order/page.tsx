@@ -40,9 +40,10 @@ import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListing } from "@/components/listing/MasterListing";
 import type { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
 import CancelOrderDialog from "./components/CancelOrderDialog";
-import PackingListDialog from "./components/PackingListDialog";
 import ApproveOrderDialog from "./components/ApproveOrderDialog";
 import RejectOrderDialog from "./components/RejectOrderDialog";
+import { SampleReturnTab } from "./components/SampleReturnTab";
+import { getSampleReturnRecords } from "./sample-return-data";
 import { downloadProformaInvoice } from "./pi-document";
 import {
   type SalesOrder,
@@ -220,7 +221,6 @@ export default function SalesOrdersPage() {
   }, [returnSearch]);
 
   const [cancelOrder, setCancelOrder] = useState<SalesOrder | null>(null);
-  const [packingOrder, setPackingOrder] = useState<SalesOrder | null>(null);
   const [approveOrder, setApproveOrder] = useState<SalesOrder | null>(null);
   const [rejectOrder, setRejectOrder] = useState<SalesOrder | null>(null);
 
@@ -323,7 +323,7 @@ export default function SalesOrdersPage() {
       draft: orders.filter((o) => o.status === "draft").length,
       pending_approval: orders.filter((o) => o.status === "pending_approval").length,
       rejected: orders.filter((o) => o.status === "rejected").length,
-      sales_return: SALES_RETURNS_SEED.length,
+      sales_return: getSampleReturnRecords().length,
     };
   }, [orders]);
 
@@ -528,7 +528,7 @@ export default function SalesOrdersPage() {
               <button
                 type="button"
                 disabled={!packingAllowed}
-                onClick={() => setPackingOrder(hydrated)}
+                onClick={() => router.push(`/sales/sample-order/${hydrated.id}/packing-list/new`)}
                 className={cn(
                   "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
                   !packingAllowed ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
@@ -586,78 +586,13 @@ export default function SalesOrdersPage() {
         { value: "draft", label: `Draft (${tabCounts.draft})` },
         { value: "pending_approval", label: `Approval (${tabCounts.pending_approval})` },
         { value: "rejected", label: `Rejected (${tabCounts.rejected})` },
-        // { value: "sales_return", label: `Sales Return (${tabCounts.sales_return})` },
+        { value: "sales_return", label: `Sample Return (${tabCounts.sales_return})` },
       ]}
       activeTab={activeTab}
       onTabChange={handleTabChange}
     >
       {activeTab === "sales_return" ? (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 min-w-[200px] max-w-xs">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-[9px] text-muted-foreground pointer-events-none" />
-              <Input
-                value={returnSearch}
-                onChange={(e) => setReturnSearch(e.target.value)}
-                placeholder="Search returns…"
-                className="pl-8 h-8 text-xs bg-white"
-              />
-            </div>
-          </div>
-
-          <div className="border border-border rounded-xl bg-white shadow-sm overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/40 border-b border-border">
-                  {["Return No.", "SO Reference", "Customer", "Return Date", "Reason", "Items", "Amount", "Status", ""].map((h, i) => (
-                    <th key={i} className={cn("px-4 py-3 text-left text-xs font-semibold text-foreground whitespace-nowrap", i === 8 && "w-10")}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {visibleReturns.map(rec => (
-                  <tr key={rec.id} className="border-b border-border/60 hover:bg-muted/20 transition-colors group">
-                    <td className="px-4 py-2"><span className="font-mono text-xs font-semibold text-brand-700">{rec.returnNumber}</span></td>
-                    <td className="px-4 py-2"><span className="font-mono text-xs text-muted-foreground">{rec.soNumber}</span></td>
-                    <td className="px-4 py-2 text-xs font-medium">{rec.customerName}</td>
-                    <td className="px-4 py-2 text-xs text-muted-foreground">{rec.returnDate}</td>
-                    <td className="px-4 py-2 text-xs text-muted-foreground">{rec.reason}</td>
-                    <td className="px-4 py-2 text-xs font-medium">{rec.items}</td>
-                    <td className="px-4 py-2 text-xs font-semibold">₹{rec.amount.toLocaleString("en-IN")}</td>
-                    <td className="px-4 py-2">
-                      {(() => {
-                        const cfg = RETURN_STATUS_CFG[rec.status] ?? RETURN_STATUS_CFG.pending;
-                        return (
-                          <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium", cfg.bg, cfg.text)}>
-                            <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
-                            {rec.status.charAt(0).toUpperCase() + rec.status.slice(1)}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-3 py-2.5 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button className="p-1.5 hover:bg-muted rounded-md transition-colors opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto">
-                            <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44 z-[200]">
-                          <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">Actions</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem className="cursor-pointer"><Eye className="w-3.5 h-3.5 mr-2" /> View</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="px-4 py-3 border-t border-border bg-muted/20">
-              <p className="text-[11px] text-muted-foreground">Showing <span className="font-medium text-foreground">{visibleReturns.length}</span> of <span className="font-medium text-foreground">{SALES_RETURNS_SEED.length}</span> returns</p>
-            </div>
-          </div>
-        </div>
+        <SampleReturnTab />
       ) : (
         <div>
           <MasterListing<SalesOrder>
@@ -688,16 +623,6 @@ export default function SalesOrdersPage() {
         onSuccess={() => {
           refreshOrders();
           showToast("Sample Order cancelled successfully.");
-        }}
-      />
-
-      <PackingListDialog
-        order={packingOrder}
-        open={!!packingOrder}
-        onClose={() => setPackingOrder(null)}
-        onSuccess={(updatedOrder, list) => {
-          refreshOrders();
-          showToast(`Packing list ${list.packingListNumber} generated for ${updatedOrder.soNumber}.`);
         }}
       />
 

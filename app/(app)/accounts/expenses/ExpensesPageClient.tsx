@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ModuleFiltersBar } from "@/components/module/ModuleFiltersBar";
+import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,9 +19,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Wallet, MoreVertical, Eye, Banknote, FileSpreadsheet } from "lucide-react";
+import {
+  AccountsMoreActions,
+  AccountsTableActionCell,
+  AccountsViewAction,
+  accountsActionColClass,
+} from "@/components/accounts/AccountsTableActions";
+import { Wallet, Banknote, FileSpreadsheet } from "lucide-react";
 import { SectionTabs } from "../components/AccountsUI";
 import {
   filterPayments,
@@ -37,6 +43,7 @@ import { FinancePaymentStatusBadge } from "./components/FinancePaymentStatusBadg
 import { FinancePaymentModal } from "./components/FinancePaymentModal";
 import { exportAccountPaymentsToExcel } from "./accounts-payment-export";
 import { EXPENSE_BREADCRUMB, EXPENSE_LIST_PATH, formatINR } from "./expense-utils";
+import { cn } from "@/lib/utils";
 
 const TABS = [
   { id: "all", label: "All" },
@@ -108,8 +115,12 @@ export default function ExpensesPageClient() {
               <SelectItem value="hr_tada_claim" className="text-xs">HR TA/DA Claims</SelectItem>
             </SelectContent>
           </Select>
-          <Input type="date" className="h-8 w-[130px] text-xs" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <Input type="date" className="h-8 w-[130px] text-xs" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <AccountsListingDateFilter
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
           <Button
             variant="outline"
             size="sm"
@@ -124,8 +135,8 @@ export default function ExpensesPageClient() {
 
         <div className="page-shell overflow-hidden">
           <div className="overflow-x-auto max-h-[calc(100vh-300px)]">
-            <table className="w-full text-table min-w-[1680px]">
-              <thead className="sticky top-0 z-10 bg-white border-b border-border">
+            <table className="accounts-table w-full text-table min-w-[1680px]">
+              <thead className="border-b border-border">
                 <tr>
                   {[
                     "Expense / Claim No.",
@@ -186,33 +197,22 @@ export default function ExpensesPageClient() {
                       <td className="px-2.5 py-2 text-xs font-mono text-muted-foreground">{r.paymentReferenceNo ?? "—"}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.approvedBy ?? "—"}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.paidBy ?? "—"}</td>
-                      <td className="px-2.5 py-2 sticky right-0 bg-white">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button type="button" className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted">
-                              <MoreVertical className="w-3.5 h-3.5" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-40">
-                            {getPaymentActions(r).map((a) =>
-                              a === "view" ? (
-                                <DropdownMenuItem key="view" asChild>
-                                  <Link href={`${EXPENSE_LIST_PATH}/${r.id}`} className="text-xs gap-2">
-                                    <Eye className="w-3.5 h-3.5" /> View
-                                  </Link>
-                                </DropdownMenuItem>
-                              ) : (
-                                <DropdownMenuItem
-                                  key="paid"
-                                  className="text-xs gap-2 text-brand-700"
-                                  onClick={() => setPaymentTarget(r)}
-                                >
-                                  <Banknote className="w-3.5 h-3.5" /> Mark as Paid
-                                </DropdownMenuItem>
-                              ),
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                      <td className={cn("px-2.5 py-2 sticky right-0 bg-white", accountsActionColClass("multi"))}>
+                        <AccountsTableActionCell>
+                          {getPaymentActions(r).includes("view") && (
+                            <AccountsViewAction href={`${EXPENSE_LIST_PATH}/${r.id}`} />
+                          )}
+                          {getPaymentActions(r).includes("mark_paid") && (
+                            <AccountsMoreActions contentClassName="w-40">
+                              <DropdownMenuItem
+                                className="text-xs gap-2 text-brand-700"
+                                onClick={() => setPaymentTarget(r)}
+                              >
+                                <Banknote className="w-3.5 h-3.5" /> Mark as Paid
+                              </DropdownMenuItem>
+                            </AccountsMoreActions>
+                          )}
+                        </AccountsTableActionCell>
                       </td>
                     </tr>
                   ))

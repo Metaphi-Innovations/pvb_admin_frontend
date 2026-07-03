@@ -4,6 +4,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Plus, Search, Check, ChevronsUpDown, Trash2 } from "lucide-react";
 import {
@@ -15,7 +16,6 @@ import {
   type InvoiceProductOption,
 } from "../invoices-data";
 import { formatINR } from "../invoice-utils";
-import { MasterFetchedBadge } from "@/components/accounts/master-fetch/MasterFetchedBadge";
 
 const NUM_INPUT_CLASS =
   "h-8 text-sm tabular-nums text-right min-w-[5.5rem] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
@@ -138,10 +138,7 @@ export function InvoiceLinesEditor({
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         {!hideMasterHint ? (
-          <div className="flex items-center gap-2 flex-wrap">
-            <MasterFetchedBadge />
-            <span className="text-xs text-muted-foreground">Products from Product Master</span>
-          </div>
+          <span className="text-xs text-muted-foreground">Products from Product Master</span>
         ) : (
           <span className="text-xs text-muted-foreground">
             {manualEntry ? "Add products for manual invoice." : "Line items from selected dispatch."}
@@ -156,7 +153,7 @@ export function InvoiceLinesEditor({
 
       <div className="overflow-x-auto border border-border/60 rounded-lg bg-white">
         <table className="w-full text-sm min-w-[960px]">
-          <thead className="bg-muted/40 border-b border-border/60">
+          <thead className="border-b border-border/60">
             <tr>
               {headers.map((h) => (
                 <th
@@ -227,13 +224,12 @@ export function InvoiceLinesEditor({
                       />
                     </td>
                     <td className="p-2 w-[108px]">
-                      <Input
-                        type="number"
-                        min={0}
+                      <AccountsMoneyInput
+                        compact={false}
                         className={cn(NUM_INPUT_CLASS, !manualEntry && "bg-muted/20")}
                         value={line.unitPrice || ""}
-                        readOnly={!manualEntry}
-                        onChange={(e) => update(line.id, { unitPrice: parseFloat(e.target.value) || 0 })}
+                        disabled={!manualEntry}
+                        onChange={(v) => update(line.id, { unitPrice: v })}
                       />
                     </td>
                     <td className="p-2 w-[96px]">

@@ -76,6 +76,7 @@ export default function AddWarehousePage() {
 		<FormContainer
 			title="Add Warehouse"
 			description="Masters → Warehouse Master → Add"
+			compact
 			onBack={() => router.back()}
 			actions={
 				<div className="flex items-center gap-2">

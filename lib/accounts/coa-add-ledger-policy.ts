@@ -44,6 +44,28 @@ export function resolveCoaAddLedgerPolicy(
 ): CoaAddLedgerPolicy {
   const names = [...pathNames(records, node.id), node.accountName];
 
+  if (names.includes("TDS Payable")) {
+    return {
+      blocked: true,
+      reason: "TDS section ledgers are provisioned from TDS Master configuration.",
+      alternatives: [
+        { label: "TDS Settings", href: "/masters/tds", variant: "primary" },
+        { label: "TDS Summary", href: "/accounts/reports/tds-party-wise" },
+      ],
+    };
+  }
+
+  if (names.includes("Duties & Taxes Payable") || names.includes("GST Payable")) {
+    return {
+      blocked: true,
+      reason: "GST tax ledgers are auto-created from GST Master configuration.",
+      alternatives: [
+        { label: "GST Settings", href: "/settings/gst-tax-configuration", variant: "primary" },
+        { label: "GST Summary", href: "/accounts/reports/gst" },
+      ],
+    };
+  }
+
   if (names.includes("Trade Receivables / Sundry Debtors")) {
     return {
       blocked: true,

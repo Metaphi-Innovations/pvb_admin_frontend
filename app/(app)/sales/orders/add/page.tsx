@@ -16,7 +16,6 @@ import { syncSchemeUtilizationFromOrder } from "@/app/(app)/masters/scheme/schem
 import {
 	type ProductCatalogItem,
 	buildOrderFromForm,
-	createEmptyLineItem,
 	generateOrderNumber,
 	loadOrders,
 	saveOrders,
@@ -46,7 +45,7 @@ export default function AddSalesOrderPage() {
 		salesManId: null,
 		deliveryDate: "",
 		status: "confirmed",
-		lineItems: [createEmptyLineItem()],
+		lineItems: [],
 		additionalExpenses: [],
 		warehouseId: null,
 		warehouseName: "",

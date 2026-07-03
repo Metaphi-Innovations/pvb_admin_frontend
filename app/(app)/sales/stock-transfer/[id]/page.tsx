@@ -38,7 +38,6 @@ import {
 } from "../stock-transfer-data";
 import { getProductById, calculateOrderTotalsSummary } from "@/app/(app)/sales/orders/orders-data";
 import { downloadTransferNote, printTransferPackingList } from "../transfer-note-document";
-import TransferPackingListDialog from "../components/TransferPackingListDialog";
 import CancelTransferDialog from "../components/CancelTransferDialog";
 
 function transferStatusVariant(status: TransferStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
@@ -57,7 +56,6 @@ export default function ViewStockTransferPage() {
   const [transfer, setTransfer] = useState<StockTransfer | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-  const [packingOpen, setPackingOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
 
   const refresh = () => {
@@ -134,7 +132,7 @@ export default function ViewStockTransferPage() {
     quickActions.push({
       label: "Generate Packing List",
       icon: Package,
-      onClick: () => setPackingOpen(true),
+      onClick: () => router.push(`/sales/stock-transfer/${transfer.id}/packing-list/new`),
     });
   }
   if (canCancelTransfer(transfer)) {
@@ -357,16 +355,7 @@ export default function ViewStockTransferPage() {
         )}
       </RecordDetailPage>
 
-      <TransferPackingListDialog
-        transfer={transfer}
-        open={packingOpen}
-        onClose={() => setPackingOpen(false)}
-        onSuccess={(updatedTransfer, list) => {
-          setTransfer(updatedTransfer);
-          setPackingOpen(false);
-          showToast(`Packing list ${list.packingListNumber} generated.`);
-        }}
-      />
+
 
       {toast && (
         <div

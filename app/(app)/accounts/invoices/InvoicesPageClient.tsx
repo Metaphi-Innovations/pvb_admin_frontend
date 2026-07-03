@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ModuleFiltersBar } from "@/components/module/ModuleFiltersBar";
+import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,17 +19,20 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AccountsEditAction,
+  AccountsMoreActions,
+  AccountsTableActionCell,
+  AccountsViewAction,
+  accountsActionColClass,
+} from "@/components/accounts/AccountsTableActions";
 import {
   Banknote,
   Download,
-  Eye,
   FileSpreadsheet,
   FileText,
   Mail,
-  MoreVertical,
-  Pencil,
   Plus,
   Receipt,
   Send,
@@ -54,6 +58,7 @@ import { exportInvoicesToExcel } from "./invoices-export";
 import { downloadInvoicePdf } from "./invoice-pdf";
 import { formatINR, INVOICES_BREADCRUMB, INVOICES_LIST_PATH, INVOICE_AMOUNT_LABELS } from "./invoice-utils";
 import { getInvoiceAmountBreakup } from "./invoices-data";
+import { cn } from "@/lib/utils";
 
 const TABS = [
   { id: "all", label: "All Invoices" },
@@ -168,14 +173,18 @@ export default function InvoicesPageClient() {
               ))}
             </SelectContent>
           </Select>
-          <Input type="date" className="h-8 w-[130px] text-xs" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <Input type="date" className="h-8 w-[130px] text-xs" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <AccountsListingDateFilter
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+          />
         </ModuleFiltersBar>
 
         <div className="page-shell overflow-hidden">
           <div className="overflow-x-auto max-h-[calc(100vh-300px)]">
-            <table className="w-full text-table min-w-[1680px]">
-              <thead className="sticky top-0 z-10 bg-white border-b border-border">
+            <table className="accounts-table w-full text-table min-w-[1680px]">
+              <thead className="border-b border-border">
                 <tr>
                   {[
                     "Invoice No.",
@@ -231,31 +240,21 @@ export default function InvoicesPageClient() {
                       </td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.createdBy}</td>
                       <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.updatedBy}</td>
-                      <td className="px-2.5 py-2 sticky right-0 bg-white">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button type="button" className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted">
-                              <MoreVertical className="w-3.5 h-3.5" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-44">
-                            {getInvoiceRowActions(r).map((a) => {
-                              if (a === "view")
-                                return (
-                                  <DropdownMenuItem key="view" asChild>
-                                    <Link href={`${INVOICES_LIST_PATH}/${r.id}`} className="text-xs gap-2">
-                                      <Eye className="w-3.5 h-3.5" /> View
-                                    </Link>
-                                  </DropdownMenuItem>
-                                );
-                              if (a === "edit")
-                                return (
-                                  <DropdownMenuItem key="edit" asChild>
-                                    <Link href={`${INVOICES_LIST_PATH}/${r.id}/edit`} className="text-xs gap-2">
-                                      <Pencil className="w-3.5 h-3.5" /> Edit
-                                    </Link>
-                                  </DropdownMenuItem>
-                                );
+                      <td className={cn("px-2.5 py-2 sticky right-0 bg-white", accountsActionColClass("multi"))}>
+                        <AccountsTableActionCell>
+                          {getInvoiceRowActions(r).includes("view") && (
+                            <AccountsViewAction href={`${INVOICES_LIST_PATH}/${r.id}`} />
+                          )}
+                          {getInvoiceRowActions(r).includes("edit") && (
+                            <AccountsEditAction href={`${INVOICES_LIST_PATH}/${r.id}/edit`} />
+                          )}
+                          {getInvoiceRowActions(r).some(
+                            (a) => a !== "view" && a !== "edit",
+                          ) && (
+                            <AccountsMoreActions contentClassName="w-44">
+                              {getInvoiceRowActions(r)
+                                .filter((a) => a !== "view" && a !== "edit")
+                                .map((a) => {
                               if (a === "pdf")
                                 return (
                                   <DropdownMenuItem key="pdf" className="text-xs gap-2" onClick={() => downloadInvoicePdf(r)}>
@@ -314,8 +313,9 @@ export default function InvoicesPageClient() {
                                 );
                               return null;
                             })}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                            </AccountsMoreActions>
+                          )}
+                        </AccountsTableActionCell>
                       </td>
                     </tr>
                     );

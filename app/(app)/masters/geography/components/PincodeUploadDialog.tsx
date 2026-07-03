@@ -202,7 +202,7 @@ export function PincodeUploadDialog({
               <TabsContent value="valid" className="m-0">
                 <div className="overflow-x-auto border border-border/60 rounded-lg max-h-[280px] overflow-y-auto">
                   <table className="w-full text-xs">
-                    <thead className="bg-muted/40 sticky top-0">
+                    <thead className="bg-white sticky top-0 z-10 border-b border-border shadow-[0_1px_0_0_hsl(var(--border))]">
                       <tr>
                         {["Pincode", "State", "District", "City", "Town"].map((h) => (
                           <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground">
@@ -240,7 +240,7 @@ export function PincodeUploadDialog({
               <TabsContent value="errors" className="m-0">
                 <div className="overflow-x-auto border border-border/60 rounded-lg max-h-[280px] overflow-y-auto">
                   <table className="w-full text-xs">
-                    <thead className="bg-muted/40 sticky top-0">
+                    <thead className="bg-white sticky top-0 z-10 border-b border-border shadow-[0_1px_0_0_hsl(var(--border))]">
                       <tr>
                         {["Row Number", "Pincode", "Town", "Error Reason"].map((h) => (
                           <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground">

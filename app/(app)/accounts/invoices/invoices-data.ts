@@ -10,6 +10,13 @@ import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import { resolveSalesUnitPrice } from "@/lib/pricing/resolve-pricing";
 import type { SezSupplyType } from "@/lib/masters/gst-compliance";
 import type { PaymentMode } from "../expenses/expense-data";
+import { attachWorkflowOnCreate } from "@/lib/accounts/accounts-workflow-persist";
+import {
+	calcAdditionalExpensesTotals,
+	deriveLegacyChargeFields,
+	resolveInvoiceAdditionalExpenses,
+	type InvoiceAdditionalExpense,
+} from "./invoice-additional-expenses";
 import { maybePostSalesInvoice } from "@/lib/accounts/document-posting-bridge";
 import { findPostedSalesInvoiceVoucher } from "@/lib/accounts/sales-invoice-accounting";
 import { customerMasterToTransactionFields } from "@/lib/accounts/transaction-master-fetch";
@@ -19,6 +26,7 @@ import {
   NEAR_EXPIRY_SETTLEMENT_REQUIRED_LABEL,
 } from "@/app/(app)/warehouse/dispatch/near-expiry-dispatch";
 import { mergeNearExpiryDemoSalesInvoice } from "@/lib/accounts/near-expiry-scheme-invoice-demo";
+import type { AccountsDocumentWorkflow } from "@/lib/accounts/accounts-maker-checker";
 
 export const SCHEME_SETTLEMENT_SETTLED_LABEL = "Settled";
 
@@ -145,6 +153,8 @@ export interface InvoiceRecord {
 	salesOrderNo?: string;
 	soAdjustmentStatus?: SOAdjustmentStatus;
 	invoiceStatus: InvoiceStatus;
+	/** Maker-checker workflow from User Management approver mapping */
+	workflow?: AccountsDocumentWorkflow;
 	paymentStatus: InvoicePaymentStatus;
 	collections: InvoiceCollectionEntry[];
 	attachments: InvoiceAttachment[];
@@ -172,6 +182,7 @@ export interface InvoiceRecord {
 	internalRemarks?: string;
 	shippingCharges?: number;
 	otherCharges?: number;
+	additionalExpenses?: InvoiceAdditionalExpense[];
 	roundOff?: number;
 	adjustment?: number;
 	tdsTcs?: number;
@@ -285,14 +296,30 @@ export function normalizeInvoice(rec: InvoiceRecord): InvoiceRecord {
 			creditedAmount: l.creditedAmount ?? 0,
 		}),
 	);
-	const totals = calculateInvoiceTotals(lines);
+	const lineTotals = calculateInvoiceTotals(lines);
+	const additionalExpenses = resolveInvoiceAdditionalExpenses(
+		rec.additionalExpenses,
+		rec.shippingCharges,
+		rec.otherCharges,
+	);
+	const expenseTotals = calcAdditionalExpensesTotals(additionalExpenses);
+	const legacyCharges = deriveLegacyChargeFields(additionalExpenses);
+
+	const subtotal = Math.round((lineTotals.subtotal + expenseTotals.taxableAmount) * 100) / 100;
+	const discountTotal = lineTotals.discountTotal;
+	const taxAmount =
+		Math.round((lineTotals.taxAmount + expenseTotals.gstAmount) * 100) / 100;
 	const chargeDelta =
-		(rec.shippingCharges ?? 0) +
-		(rec.otherCharges ?? 0) +
-		(rec.roundOff ?? 0) -
-		(rec.adjustment ?? 0) +
-		(rec.tdsTcs ?? 0);
-	const grandTotal = Math.round((totals.grandTotal + chargeDelta) * 100) / 100;
+		(rec.roundOff ?? 0) - (rec.adjustment ?? 0) + (rec.tdsTcs ?? 0);
+	const grandTotal = Math.round(
+		(lineTotals.subtotal -
+			lineTotals.discountTotal +
+			lineTotals.taxAmount +
+			expenseTotals.taxableAmount +
+			expenseTotals.gstAmount +
+			chargeDelta) *
+			100,
+	) / 100;
 	const amountReceived = rec.collections.reduce((s, c) => s + c.amount, 0);
 	const balanceAmount = Math.max(
 		0,
@@ -315,7 +342,12 @@ export function normalizeInvoice(rec: InvoiceRecord): InvoiceRecord {
 	return {
 		...rec,
 		lineItems: lines,
-		...totals,
+		additionalExpenses,
+		shippingCharges: legacyCharges.shippingCharges,
+		otherCharges: legacyCharges.otherCharges,
+		subtotal,
+		discountTotal,
+		taxAmount,
 		grandTotal,
 		amountReceived: Math.round(amountReceived * 100) / 100,
 		balanceAmount,
@@ -713,6 +745,7 @@ export type InvoiceFormInput = {
 	internalRemarks?: string;
 	shippingCharges?: number;
 	otherCharges?: number;
+	additionalExpenses?: InvoiceAdditionalExpense[];
 	roundOff?: number;
 	adjustment?: number;
 	tdsTcs?: number;
@@ -773,6 +806,7 @@ export function createInvoice(input: InvoiceFormInput): InvoiceRecord {
 	};
 	const rec = normalizeInvoice(base);
 	saveInvoices([...all, rec]);
+	attachWorkflowOnCreate("sales_invoice", rec.id);
 	if (rec.invoiceStatus === "sent") {
 		maybePostSalesInvoice(rec);
 	}

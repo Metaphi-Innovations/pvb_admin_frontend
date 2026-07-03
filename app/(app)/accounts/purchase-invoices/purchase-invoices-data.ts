@@ -11,6 +11,7 @@ import { todayStr } from "@/lib/procurement/utils";
 import type { ProcurementAdditionalCharge } from "@/lib/procurement/procurement-line-utils";
 import { sumAdditionalCharges } from "@/lib/procurement/procurement-line-utils";
 import { maybePostPurchaseInvoice } from "@/lib/accounts/document-posting-bridge";
+import type { AccountsDocumentWorkflow } from "@/lib/accounts/accounts-maker-checker";
 
 export type PurchaseDebitStatus = "no_debit" | "partially_debited" | "fully_debited";
 export type POCreditDebitStatus = "open" | "partially_returned" | "closed";
@@ -94,6 +95,7 @@ export interface PurchaseInvoiceRecord {
   attachment: PurchaseAttachment | null;
   ocrPayload?: PurchaseInvoiceOcrPayload | null;
   matchStatus?: "pending" | "matched" | "partial_match" | "mismatch";
+  workflow?: AccountsDocumentWorkflow;
   activity?: Array<{ date: string; time?: string; action: string; by: string; remarks?: string }>;
   createdBy: string;
   updatedBy: string;

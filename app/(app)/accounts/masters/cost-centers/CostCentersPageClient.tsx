@@ -46,8 +46,8 @@ export default function CostCentersPageClient() {
             </Button>
           </div>
         </div>
-        <table className="w-full text-table">
-          <thead className="bg-muted/20 border-b border-border/60 sticky top-0">
+        <table className="accounts-table w-full text-table">
+          <thead className="border-b border-border/60">
             <tr>
               <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Code</th>
               <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Name</th>

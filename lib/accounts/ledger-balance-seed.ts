@@ -84,13 +84,13 @@ const SKIP_OPENING_SUBGROUPS = new Set([
 
 function subGroupName(records: ChartOfAccount[], ledger: ChartOfAccount): string {
   const path = getAncestorPath(records, ledger.id);
-  return path.find((n) => n.nodeLevel === "sub_group")?.accountName ?? "";
+  return path.find((n) => n.nodeLevel === "account_group")?.accountName ?? "";
 }
 
 function findLedger(name: string): ChartOfAccount | undefined {
   return loadChartOfAccounts().find(
     (r) =>
-      (r.nodeLevel === "ledger" || r.nodeLevel === "sub_ledger") &&
+      r.nodeLevel === "ledger" &&
       r.accountName.toLowerCase() === name.toLowerCase(),
   );
 }

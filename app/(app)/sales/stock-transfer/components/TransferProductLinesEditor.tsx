@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { AlertTriangle, Plus, Trash2, ChevronsUpDown, Search } from "lucide-react";
+import { AlertTriangle, Plus, Trash2, ChevronsUpDown, Search, Pencil, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import type { ProductCatalogItem } from "@/app/(app)/sales/orders/orders-data";
 import {
   computeLineTaxBreakdown,
@@ -13,6 +15,7 @@ import {
   type TaxSupplyType,
 } from "@/app/(app)/sales/orders/orders-data";
 import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
+import { ProductItemDetailsSection } from "@/components/procurement/ProductItemDetailsSection";
 import {
   createEmptyLineItem,
   getAvailableBatchRowsForTransfer,
@@ -57,10 +60,7 @@ export default function TransferProductLinesEditor({
     return source.state === target.state ? "intra" : "inter";
   }, [sourceWarehouseId, targetWarehouseId]);
 
-  const addLine = () => onChange([...lines, createEmptyLineItem() as TransferLineItem]);
-
   const removeLine = (id: string) => {
-    if (lines.length <= 1) return;
     onChange(lines.filter((l) => l.id !== id));
   };
 
@@ -70,6 +70,15 @@ export default function TransferProductLinesEditor({
         if (line.id !== id) return line;
         const product = products.find((p) => p.id === (patch.productId ?? line.productId));
         let next: TransferLineItem = { ...line, ...patch };
+
+        if (patch.caseQuantity !== undefined || patch.pieceQuantity !== undefined || patch.quantityType !== undefined) {
+          if (next.quantityType === "Case") {
+            next.pieceQuantity = 0;
+          }
+          next.quantity = next.quantityType === "Case"
+            ? ((next.caseQuantity || 0) * (product?.packSize || 1))
+            : ((next.caseQuantity || 0) * (product?.packSize || 1)) + (next.pieceQuantity || 0);
+        }
 
         if (product?.gstRate) {
           const breakdown = computeLineTaxBreakdown(next, product.gstRate, taxSupplyType);
@@ -89,199 +98,568 @@ export default function TransferProductLinesEditor({
     );
   };
 
-  return (
-    <div className="space-y-3">
-      <div className="overflow-x-auto border border-border rounded-xl">
-        <table className="w-full min-w-[1180px] text-left">
-          <thead>
-            <tr className="bg-muted/40 border-b border-border">
-              {[
-                { h: "Product", rowSpan: 2 },
-                { h: "SKU", rowSpan: 2 },
-                { h: "Batch No.", rowSpan: 2 },
-                { h: "Expiry", rowSpan: 2 },
-                { h: "Available", rowSpan: 2 },
-                { h: "Transfer Qty", rowSpan: 2 },
-                { h: "CP", rowSpan: 2 },
-              ].map(({ h, rowSpan }) => (
-                <th
-                  key={h}
-                  rowSpan={rowSpan}
-                  className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap align-middle"
-                >
-                  {h}
-                </th>
-              ))}
-              <th
-                colSpan={taxSupplyType === "intra" ? 4 : 2}
-                className="px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-foreground border-b border-border/60"
-              >
-                {taxSupplyType === "intra" ? "Tax — CGST + SGST" : "Tax — IGST"}
-              </th>
-              {[
-                { h: "Total", rowSpan: 2 },
-                { h: "", rowSpan: 2 },
-              ].map(({ h, rowSpan }) => (
-                <th
-                  key={h || "actions"}
-                  rowSpan={rowSpan}
-                  className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground align-middle"
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-            <tr className="bg-muted/40 border-b border-border">
-              {(taxSupplyType === "intra"
-                ? ["CGST %", "CGST Amt", "SGST %", "SGST Amt"]
-                : ["IGST %", "IGST Amt"]
-              ).map((h) => (
-                <th key={h} className={TAX_HEAD}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {lines.map((line) => {
-              const batches = sourceWarehouseName
-                ? getAvailableBatchRowsForTransfer(
-                    sourceWarehouseName,
-                    line.productName,
-                    line.productCode,
-                  )
-                : [];
-              const product = products.find((p) => p.id === line.productId);
-              const selectedBatch = batches.find((b) => b.batchNumber === line.batchNumber);
-              const isNearExpiry = selectedBatch?.status === "Near Expiry";
-              const isExpired = selectedBatch?.status === "Expired";
-              const taxBreakdown =
-                line.productId && product?.gstRate
-                  ? computeLineTaxBreakdown(line, product.gstRate, taxSupplyType)
-                  : null;
+  const [topSelectedProduct, setTopSelectedProduct] = useState<ProductCatalogItem | null>(null);
+  const [topSelectedBatch, setTopSelectedBatch] = useState<any | null>(null);
+  const [topInputQty, setTopInputQty] = useState<string>("1");
+  const [topQuantityType, setTopQuantityType] = useState<"Case" | "Piece">("Piece");
+  const [topCaseQuantity, setTopCaseQuantity] = useState<number>(0);
+  const [topPieceQuantity, setTopPieceQuantity] = useState<number>(0);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<TransferLineItem> | null>(null);
 
-              return (
-                <tr
-                  key={line.id}
-                  className={cn("border-b border-border/60", isExpired && "bg-red-50/60")}
-                >
-                  <td className="px-3 py-2">
-                    <ProductSelect
-                      value={line.productId}
-                      products={products}
-                      onSelect={(p) => {
-                        updateLine(line.id, {
-                          productId: p.id,
-                          productCode: p.code,
-                          productName: p.name,
-                          availableStock: p.stock,
-                          dealerPrice: p.sellingPrice,
-                          unitPrice: p.sellingPrice,
-                          finalRate: p.sellingPrice,
-                          gstRate: p.gstRate,
-                          batchNumber: undefined,
-                          expiryDate: undefined,
-                          mfgDate: undefined,
-                        });
-                      }}
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-xs font-mono font-semibold text-brand-700">
-                    {line.productCode || "—"}
-                  </td>
-                  <td className="px-3 py-2 min-w-[200px]">
-                    <BatchSelect
-                      productName={line.productName}
-                      productCode={line.productCode}
-                      batches={batches}
-                      value={line.batchNumber}
-                      disabled={!line.productId || !sourceWarehouseName}
-                      onSelect={(batch) => {
-                        updateLine(line.id, {
-                          batchNumber: batch.batchNumber,
-                          mfgDate: batch.mfgDate,
-                          expiryDate: batch.expiryDate,
-                          availableStock: batch.availableQty,
-                        });
-                      }}
-                    />
-                    {isNearExpiry && (
-                      <p className="text-[10px] text-amber-700 flex items-center gap-1 mt-1">
-                        <AlertTriangle className="w-3 h-3" /> Near expiry
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">{line.expiryDate || "—"}</td>
-                  <td className="px-3 py-2 text-xs font-bold text-center">
-                    {line.batchNumber ? line.availableStock ?? 0 : "—"}
-                  </td>
-                  <td className="px-3 py-2">
+  const updateDraft = (patch: Partial<TransferLineItem>) => {
+    setEditDraft((prev) => {
+      if (!prev) return prev;
+      let next = { ...prev, ...patch } as TransferLineItem;
+      const product = products.find((p) => p.id === next.productId);
+
+      if (patch.caseQuantity !== undefined || patch.pieceQuantity !== undefined || patch.quantityType !== undefined) {
+        if (next.quantityType === "Case") {
+          next.pieceQuantity = 0;
+        }
+        next.quantity = next.quantityType === "Case"
+          ? ((next.caseQuantity || 0) * (product?.packSize || 1))
+          : ((next.caseQuantity || 0) * (product?.packSize || 1)) + (next.pieceQuantity || 0);
+      }
+
+      if (product?.gstRate) {
+        const breakdown = computeLineTaxBreakdown(next, product.gstRate, taxSupplyType);
+        next = {
+          ...next,
+          gstRate: product.gstRate,
+          gstAmount: breakdown.gstAmount,
+          cgstAmount: breakdown.cgstAmount,
+          sgstAmount: breakdown.sgstAmount,
+          igstAmount: breakdown.igstAmount,
+        };
+      }
+
+      next = recalculateLineItem(next) as TransferLineItem;
+      return next;
+    });
+  };
+  const topBatches = useMemo(() => {
+    if (!sourceWarehouseName || !topSelectedProduct) return [];
+    return getAvailableBatchRowsForTransfer(
+      sourceWarehouseName,
+      topSelectedProduct.name,
+      topSelectedProduct.code
+    );
+  }, [sourceWarehouseName, topSelectedProduct]);
+
+  const handleAddProductFromTop = () => {
+    if (!sourceWarehouseId) {
+      setLocalError("Please select From Warehouse first.");
+      return;
+    }
+    if (!topSelectedProduct) {
+      setLocalError("Please select a product.");
+      return;
+    }
+    if (!topSelectedBatch) {
+      setLocalError("Please select a batch.");
+      return;
+    }
+    const qty = topQuantityType === "Case"
+      ? (topCaseQuantity * (topSelectedProduct.packSize || 1))
+      : (topCaseQuantity * (topSelectedProduct.packSize || 1)) + topPieceQuantity;
+
+    if (qty <= 0) {
+      setLocalError("Transfer Qty must be greater than zero.");
+      return;
+    }
+    if (qty > topSelectedBatch.availableQty) {
+      setLocalError("Transfer Qty cannot exceed available quantity.");
+      return;
+    }
+
+    // Check duplicate
+    const exists = lines.some(
+      (l) => l.productId === topSelectedProduct.id && l.batchNumber === topSelectedBatch.batchNumber
+    );
+    if (exists) {
+      setLocalError(`Batch "${topSelectedBatch.batchNumber}" of product "${topSelectedProduct.name}" is already added.`);
+      return;
+    }
+
+    let newLine = createEmptyLineItem() as TransferLineItem;
+    newLine.productId = topSelectedProduct.id;
+    newLine.productCode = topSelectedProduct.code;
+    newLine.productName = topSelectedProduct.name;
+    newLine.batchNumber = topSelectedBatch.batchNumber;
+    newLine.mfgDate = topSelectedBatch.mfgDate;
+    newLine.expiryDate = topSelectedBatch.expiryDate;
+    newLine.availableStock = topSelectedBatch.availableQty;
+    newLine.dealerPrice = topSelectedProduct.sellingPrice;
+    newLine.unitPrice = topSelectedProduct.sellingPrice;
+    newLine.finalRate = topSelectedProduct.sellingPrice;
+    newLine.gstRate = topSelectedProduct.gstRate;
+    newLine.quantityType = topQuantityType;
+    newLine.caseQuantity = topCaseQuantity;
+    newLine.pieceQuantity = topPieceQuantity;
+    newLine.quantity = qty;
+
+    if (topSelectedProduct.gstRate) {
+      const breakdown = computeLineTaxBreakdown(newLine, topSelectedProduct.gstRate, taxSupplyType);
+      newLine = {
+        ...newLine,
+        gstAmount: breakdown.gstAmount,
+        cgstAmount: breakdown.cgstAmount,
+        sgstAmount: breakdown.sgstAmount,
+        igstAmount: breakdown.igstAmount,
+      };
+    }
+
+    newLine = recalculateLineItem(newLine) as TransferLineItem;
+    onChange([...lines, newLine]);
+    setTopSelectedProduct(null);
+    setTopSelectedBatch(null);
+    setTopCaseQuantity(0);
+    setTopPieceQuantity(0);
+    setLocalError(null);
+  };
+
+  const totalQuantity = lines.reduce((sum, line) => sum + (line.quantity || 0), 0);
+  const totalAmount = lines.reduce((sum, line) => sum + (line.lineTotal || 0), 0);
+
+  return (
+    <div className="space-y-1.5">
+      <ProductItemDetailsSection
+        mode="stock-transfer"
+        title="Products"
+        description="Manage products, batches, quantities, and taxes for this stock transfer."
+        items={lines}
+        totalQuantity={totalQuantity}
+        totalAmount={totalAmount}
+        showTotalsInHeader={true}
+        quantity={topInputQty}
+        onQuantityChange={setTopInputQty}
+        onAddItem={handleAddProductFromTop}
+        customSelectorArea={
+          <ProductSelect
+            value={topSelectedProduct ? topSelectedProduct.id : null}
+            products={products}
+            onSelect={(p) => {
+              setTopSelectedProduct(p);
+              setLocalError(null);
+              const batches = sourceWarehouseName
+                ? getAvailableBatchRowsForTransfer(sourceWarehouseName, p.name, p.code)
+                : [];
+              if (batches.length > 0) {
+                setTopSelectedBatch(batches[0]);
+              } else {
+                setTopSelectedBatch(null);
+              }
+            }}
+          />
+        }
+        customBatchSelectorArea={
+          <BatchSelect
+            productName={topSelectedProduct ? topSelectedProduct.name : ""}
+            productCode={topSelectedProduct ? topSelectedProduct.code : ""}
+            batches={topBatches}
+            value={topSelectedBatch ? topSelectedBatch.batchNumber : undefined}
+            disabled={!topSelectedProduct || !sourceWarehouseName}
+            alreadyAddedBatchNumbers={lines
+              .filter((l) => l.productId === topSelectedProduct?.id)
+              .map((l) => l.batchNumber)
+              .filter((bn): bn is string => typeof bn === "string")}
+            onSelect={(b) => {
+              setTopSelectedBatch(b);
+              setLocalError(null);
+            }}
+          />
+        }
+        customQuantityArea={
+          <>
+            <div className="space-y-1">
+              <Label className="text-xs font-medium">Type</Label>
+              <Select
+                value={topQuantityType}
+                onValueChange={(value) => {
+                  const type = value as "Case" | "Piece";
+                  setTopQuantityType(type);
+                  if (type === "Case") {
+                    setTopPieceQuantity(0);
+                  }
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs rounded-lg border-border bg-white w-[90px]">
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent className="min-w-[120px]">
+                  <SelectItem value="Case">Case</SelectItem>
+                  <SelectItem value="Piece">Piece</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-medium">Cases</Label>
+              <Input
+                type="number"
+                min={0}
+                value={topCaseQuantity || ""}
+                onChange={(e) => setTopCaseQuantity(Number(e.target.value) || 0)}
+                className="h-8 text-xs w-20 bg-white"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-medium">Pieces</Label>
+              <Input
+                type="number"
+                min={0}
+                disabled={topQuantityType === "Case"}
+                value={topPieceQuantity || ""}
+                onChange={(e) => setTopPieceQuantity(Number(e.target.value) || 0)}
+                className="h-8 text-xs w-20 bg-white disabled:opacity-50"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-medium">Total Unit Qty</Label>
+              <Input
+                type="text"
+                disabled
+                value={
+                  topSelectedProduct
+                    ? (((topCaseQuantity || 0) * (topSelectedProduct.packSize || 1)) + (topPieceQuantity || 0)) || "—"
+                    : "—"
+                }
+                className="h-8 text-xs w-24 font-semibold bg-muted text-muted-foreground"
+              />
+            </div>
+          </>
+        }
+        customTableHead={
+          <tr className="bg-muted/40 border-b border-border">
+            {[
+              { h: "Product", className: "w-[240px]" },
+              { h: "SKU" },
+              { h: "Batch No." },
+              { h: "Expiry" },
+              { h: "Available", className: "w-16" },
+              { h: "Type", className: "w-[80px]" },
+              { h: "Cases", className: "w-20" },
+              { h: "Pieces", className: "w-20" },
+              { h: "Total Unit Qty", className: "w-20" },
+              { h: "CP" },
+            ].map(({ h, className }) => (
+              <th
+                key={h}
+                className={cn(
+                  "px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap align-middle",
+                  className
+                )}
+              >
+                {h}
+              </th>
+            ))}
+            {(taxSupplyType === "intra"
+              ? ["CGST", "SGST", "GST"]
+              : ["IGST", "GST"]
+            ).map((h) => (
+              <th key={h} className={TAX_HEAD}>
+                {h}
+              </th>
+            ))}
+            {[
+              { h: "Total" },
+              { h: "" },
+            ].map(({ h }) => (
+              <th
+                key={h || "actions"}
+                className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground align-middle"
+              >
+                {h}
+              </th>
+            ))}
+          </tr>
+        }
+        customTableBody={
+          lines.map((line) => {
+            const batches = sourceWarehouseName
+              ? getAvailableBatchRowsForTransfer(
+                sourceWarehouseName,
+                line.productName,
+                line.productCode,
+              )
+              : [];
+            const product = products.find((p) => p.id === line.productId);
+            const selectedBatch = batches.find((b) => b.batchNumber === line.batchNumber);
+            const isNearExpiry = selectedBatch?.status === "Near Expiry";
+            const isExpired = selectedBatch?.status === "Expired";
+            const taxBreakdown =
+              line.productId && product?.gstRate
+                ? computeLineTaxBreakdown(line, product.gstRate, taxSupplyType)
+                : null;
+
+            const isEditing = editingId === line.id;
+            const draftLine = isEditing && editDraft ? (editDraft as TransferLineItem) : line;
+
+            return (
+              <tr
+                key={line.id}
+                className={cn("border-b border-border/60", isExpired && "bg-red-50/60")}
+              >
+                <td className="px-3 py-2">
+                  <ProductSelect
+                    value={line.productId}
+                    products={products}
+                    onSelect={(p) => {
+                      updateLine(line.id, {
+                        productId: p.id,
+                        productCode: p.code,
+                        productName: p.name,
+                        availableStock: p.stock,
+                        dealerPrice: p.sellingPrice,
+                        unitPrice: p.sellingPrice,
+                        finalRate: p.sellingPrice,
+                        gstRate: p.gstRate,
+                        batchNumber: undefined,
+                        expiryDate: undefined,
+                        mfgDate: undefined,
+                      });
+                    }}
+                  />
+                </td>
+                <td className="px-3 py-2 text-xs font-mono font-semibold text-brand-700">
+                  {line.productCode || "—"}
+                </td>
+                <td className="px-3 py-2 min-w-[200px]">
+                  <BatchSelect
+                    productName={line.productName}
+                    productCode={line.productCode}
+                    batches={batches}
+                    value={line.batchNumber}
+                    disabled={!line.productId || !sourceWarehouseName}
+                    alreadyAddedBatchNumbers={lines
+                      .filter((l) => l.id !== line.id && l.productId === line.productId)
+                      .map((l) => l.batchNumber)
+                      .filter((bn): bn is string => typeof bn === "string")}
+                    onSelect={(batch) => {
+                      updateLine(line.id, {
+                        batchNumber: batch.batchNumber,
+                        mfgDate: batch.mfgDate,
+                        expiryDate: batch.expiryDate,
+                        availableStock: batch.availableQty,
+                      });
+                    }}
+                  />
+                  {isNearExpiry && (
+                    <p className="text-[10px] text-amber-700 flex items-center gap-1 mt-1">
+                      <AlertTriangle className="w-3 h-3" /> Near expiry
+                    </p>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-xs text-muted-foreground">{line.expiryDate || "—"}</td>
+                <td className="px-3 py-2 text-xs font-bold text-center">
+                  {line.batchNumber ? line.availableStock ?? 0 : "—"}
+                </td>
+                <td className='px-2 py-1.5 w-[80px]'>
+                  {isEditing ? (
+                    <Select
+                      disabled={!line.batchNumber || isExpired}
+                      value={draftLine.quantityType || "Piece"}
+                      onValueChange={(value) => updateDraft({ quantityType: value as "Case" | "Piece" })}
+                    >
+                      <SelectTrigger className="h-7 text-xs rounded border-border bg-white w-full px-2">
+                        <SelectValue placeholder="Type" />
+                      </SelectTrigger>
+                      <SelectContent className="min-w-[120px]">
+                        <SelectItem value="Case">Case</SelectItem>
+                        <SelectItem value="Piece">Piece</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span className="text-xs">{line.quantityType || "Piece"}</span>
+                  )}
+                </td>
+                <td className='px-2 py-1.5 w-20'>
+                  {isEditing ? (
                     <Input
                       type="number"
                       min={0}
-                      max={line.availableStock ?? 0}
                       disabled={!line.batchNumber || isExpired}
-                      value={line.quantity || ""}
-                      onChange={(e) =>
-                        updateLine(line.id, { quantity: parseInt(e.target.value, 10) || 0 })
-                      }
-                      className="h-8 w-24 text-xs text-right"
+                      value={draftLine.caseQuantity === 0 && !draftLine.quantity ? "" : draftLine.caseQuantity}
+                      onChange={(e) => updateDraft({ caseQuantity: e.target.value ? Number(e.target.value) : 0 })}
+                      className="h-7 text-xs w-full"
                     />
-                  </td>
-                  <td className="px-3 py-2 text-xs tabular-nums whitespace-nowrap">
-                    {line.productId ? formatRupee(line.unitPrice ?? 0) : "—"}
-                  </td>
-                  {line.productId && product && taxBreakdown ? (
-                    taxSupplyType === "intra" ? (
+                  ) : (
+                    <span className="text-xs">{line.caseQuantity || 0}</span>
+                  )}
+                </td>
+                <td className='px-2 py-1.5 w-20'>
+                  {isEditing ? (
+                    <Input
+                      type="number"
+                      min={0}
+                      disabled={(!line.batchNumber || isExpired) || draftLine.quantityType === "Case"}
+                      value={draftLine.pieceQuantity === 0 && !draftLine.quantity ? "" : draftLine.pieceQuantity}
+                      onChange={(e) => updateDraft({ pieceQuantity: e.target.value ? Number(e.target.value) : 0 })}
+                      className="h-7 text-xs w-full disabled:opacity-50"
+                    />
+                  ) : (
+                    <span className="text-xs">{line.pieceQuantity || 0}</span>
+                  )}
+                </td>
+                <td className='px-2 py-1.5 w-20'>
+                  {isEditing ? (
+                    <Input
+                      type="number"
+                      disabled
+                      value={draftLine.quantity || ""}
+                      className="h-7 text-xs w-full font-semibold bg-muted text-muted-foreground"
+                    />
+                  ) : (
+                    <span className="text-xs font-semibold tabular-nums text-foreground">
+                      {line.quantity || 0}
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-xs tabular-nums whitespace-nowrap">
+                  {line.productId ? formatRupee(line.unitPrice ?? 0) : "—"}
+                </td>
+                {line.productId && product && taxBreakdown ? (
+                  taxSupplyType === "intra" ? (
+                    <>
+                      <td className={cn(TAX_CELL, "min-w-[100px] whitespace-nowrap")}>
+                        <div className="flex flex-col">
+                          <span className="text-foreground">{formatRupee(line.cgstAmount ?? 0)}</span>
+                          <span className="text-[10px] text-muted-foreground">({taxBreakdown.cgstRate}%)</span>
+                        </div>
+                      </td>
+                      <td className={cn(TAX_CELL, "min-w-[100px] whitespace-nowrap")}>
+                        <div className="flex flex-col">
+                          <span className="text-foreground">{formatRupee(line.sgstAmount ?? 0)}</span>
+                          <span className="text-[10px] text-muted-foreground">({taxBreakdown.sgstRate}%)</span>
+                        </div>
+                      </td>
+                      <td className={cn(TAX_CELL_AMT, "min-w-[100px] whitespace-nowrap")}>
+                        <div className="flex flex-col">
+                          <span className="text-foreground">{formatRupee(line.gstAmount ?? 0)}</span>
+                          <span className="text-[10px] text-muted-foreground">({taxBreakdown.cgstRate + taxBreakdown.sgstRate}%)</span>
+                        </div>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className={cn(TAX_CELL, "min-w-[100px] whitespace-nowrap")}>
+                        <div className="flex flex-col">
+                          <span className="text-foreground">{formatRupee(line.igstAmount ?? 0)}</span>
+                          <span className="text-[10px] text-muted-foreground">({taxBreakdown.igstRate}%)</span>
+                        </div>
+                      </td>
+                      <td className={cn(TAX_CELL_AMT, "min-w-[100px] whitespace-nowrap")}>
+                        <div className="flex flex-col">
+                          <span className="text-foreground">{formatRupee(line.gstAmount ?? 0)}</span>
+                          <span className="text-[10px] text-muted-foreground">({taxBreakdown.igstRate}%)</span>
+                        </div>
+                      </td>
+                    </>
+                  )
+                ) : (
+                  taxSupplyType === "intra" ? (
+                    <>
+                      <td className={cn(TAX_CELL, "min-w-[100px]")}>—</td>
+                      <td className={cn(TAX_CELL, "min-w-[100px]")}>—</td>
+                      <td className={cn(TAX_CELL, "min-w-[100px]")}>—</td>
+                    </>
+                  ) : (
+                    <>
+                      <td className={cn(TAX_CELL, "min-w-[100px]")}>—</td>
+                      <td className={cn(TAX_CELL, "min-w-[100px]")}>—</td>
+                    </>
+                  )
+                )}
+                <td className="px-3 py-2 text-xs font-semibold tabular-nums whitespace-nowrap">
+                  {line.productId ? formatRupee(line.lineTotal ?? 0) : "—"}
+                </td>
+                <td className="px-3 py-2">
+                  <div className="flex items-center justify-end gap-0.5">
+                    {isEditing ? (
                       <>
-                        <td className={cn(TAX_CELL, "text-muted-foreground")}>
-                          {taxBreakdown.cgstRate}%
-                        </td>
-                        <td className={TAX_CELL_AMT}>{formatRupee(line.cgstAmount ?? 0)}</td>
-                        <td className={cn(TAX_CELL, "text-muted-foreground")}>
-                          {taxBreakdown.sgstRate}%
-                        </td>
-                        <td className={TAX_CELL_AMT}>{formatRupee(line.sgstAmount ?? 0)}</td>
+                        <button
+                          type='button'
+                          onClick={() => {
+                            if (editDraft) {
+                              updateLine(line.id, editDraft);
+                            }
+                            setEditingId(null);
+                            setEditDraft(null);
+                          }}
+                          className='p-1.5 hover:bg-emerald-50 rounded-md transition-colors'
+                          title='Save changes'
+                        >
+                          <Check className='w-3.5 h-3.5 text-emerald-600' />
+                        </button>
+                        <button
+                          type='button'
+                          onClick={() => {
+                            setEditingId(null);
+                            setEditDraft(null);
+                          }}
+                          className='p-1.5 hover:bg-red-50 rounded-md transition-colors'
+                          title='Cancel editing'
+                        >
+                          <X className='w-3.5 h-3.5 text-red-500' />
+                        </button>
                       </>
                     ) : (
                       <>
-                        <td className={cn(TAX_CELL, "text-muted-foreground")}>
-                          {taxBreakdown.igstRate}%
-                        </td>
-                        <td className={TAX_CELL_AMT}>{formatRupee(line.igstAmount ?? 0)}</td>
+                        <button
+                          type='button'
+                          onClick={() => {
+                            setEditingId(line.id);
+                            setEditDraft({ ...line });
+                          }}
+                          className='p-1.5 hover:bg-muted rounded-md transition-colors'
+                          title='Edit row'
+                        >
+                          <Pencil className='w-3.5 h-3.5 text-muted-foreground' />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeLine(line.id)}
+                          className="p-1.5 hover:bg-red-50 rounded-md transition-colors"
+                          title="Remove row"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                        </button>
                       </>
-                    )
-                  ) : (
-                    Array.from({ length: taxSupplyType === "intra" ? 4 : 2 }).map((_, i) => (
-                      <td key={i} className={TAX_CELL}>
-                        —
-                      </td>
-                    ))
-                  )}
-                  <td className="px-3 py-2 text-xs font-semibold tabular-nums whitespace-nowrap">
-                    {line.productId ? formatRupee(line.lineTotal ?? 0) : "—"}
-                  </td>
-                  <td className="px-3 py-2">
-                    <button
-                      type="button"
-                      onClick={() => removeLine(line.id)}
-                      className="p-1.5 hover:bg-red-50 rounded-md"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            );
+          })
+        }
+        customTableFooter={
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-muted/20 px-4 py-2.5">
+            <p className="text-[11px] text-muted-foreground">
+              <span className="font-medium text-foreground">{lines.length}</span> product(s) selected
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-[11px] text-muted-foreground">
+                Total unit qty:{" "}
+                <span className="font-medium text-foreground tabular-nums">{totalQuantity}</span>
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Total amount:{" "}
+                <span className="font-medium text-foreground tabular-nums font-mono">
+                  {formatRupee(totalAmount)}
+                </span>
+              </p>
+            </div>
+          </div>
+        }
+      />
 
-      {error && <p className="text-xs text-red-500">{error}</p>}
-
-      <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={addLine}>
-        <Plus className="w-3.5 h-3.5" /> Add Product
-      </Button>
+      {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+      {localError && (
+        <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" /> {localError}
+        </p>
+      )}
     </div>
   );
 }
@@ -357,6 +735,7 @@ function BatchSelect({
   batches,
   value,
   disabled,
+  alreadyAddedBatchNumbers = [],
   onSelect,
 }: {
   productName: string;
@@ -364,6 +743,7 @@ function BatchSelect({
   batches: ReturnType<typeof getAvailableBatchRowsForTransfer>;
   value?: string;
   disabled?: boolean;
+  alreadyAddedBatchNumbers?: string[];
   onSelect: (batch: (typeof batches)[number]) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -394,19 +774,20 @@ function BatchSelect({
         {batches.length === 0 ? null : (
           batches.map((batch) => {
             const isExpired = batch.status === "Expired";
+            const isAlreadyAdded = alreadyAddedBatchNumbers.includes(batch.batchNumber);
             return (
               <button
                 key={batch.batchNumber}
                 type="button"
-                disabled={isExpired}
+                disabled={isExpired || isAlreadyAdded}
                 onClick={() => {
-                  if (isExpired) return;
+                  if (isExpired || isAlreadyAdded) return;
                   onSelect(batch);
                   setOpen(false);
                 }}
                 className={cn(
                   "w-full px-3 py-2.5 text-xs text-left rounded-lg transition-colors",
-                  isExpired
+                  (isExpired || isAlreadyAdded)
                     ? "opacity-50 cursor-not-allowed bg-red-50/50"
                     : "hover:bg-muted/60",
                   value === batch.batchNumber && !isExpired && "bg-brand-50",
@@ -428,7 +809,9 @@ function BatchSelect({
                   <div className="text-right flex-shrink-0">
                     <p className="font-bold tabular-nums">{batch.availableQty}</p>
                     <p className="text-[10px] text-muted-foreground">avail.</p>
-                    {batch.status === "Near Expiry" && (
+                    {isAlreadyAdded ? (
+                      <p className="text-[10px] text-brand-600 font-semibold bg-brand-50 px-1 py-0.5 rounded mt-0.5">Added</p>
+                    ) : batch.status === "Near Expiry" && (
                       <p className="text-[10px] text-amber-700 flex items-center gap-0.5 justify-end mt-0.5">
                         <AlertTriangle className="w-3 h-3" /> Near Expiry
                       </p>

@@ -211,40 +211,10 @@ export function resolveMappingLedger(
   const records = loadChartOfAccounts();
   const subGroup = records.find(
     (r) =>
-      r.nodeLevel === "sub_group" &&
+      r.nodeLevel === "account_group" &&
       r.accountName.toLowerCase() === mapping.subGroupName.toLowerCase(),
   );
   if (!subGroup) return null;
-
-  const parentLedger = candidates[0];
-  if (options.asSubLedger && parentLedger) {
-    const subId = nextId(records);
-    const subLedger: ChartOfAccount = {
-      id: subId,
-      accountCode: `SLED-${String(subId).padStart(4, "0")}`,
-      accountName: partyName.trim(),
-      alias: "",
-      accountType: parentLedger.accountType,
-      nodeLevel: "sub_ledger",
-      parentAccountId: parentLedger.id,
-      parentAccount: parentLedger.accountName,
-      description: `Auto-created for ${mappingKey}`,
-      status: "active",
-      usedIn: [mapping.module],
-      isSystem: false,
-      openingBalance: 0,
-      balanceType: parentLedger.balanceType,
-      gstApplicable: false,
-      tdsApplicable: false,
-      costCenterApplicable: false,
-      bankAccountFlag: false,
-      createdBy: ACCOUNTS_CURRENT_USER,
-      updatedBy: ACCOUNTS_CURRENT_USER,
-    };
-    const updated = [...records, subLedger];
-    saveChartOfAccounts(updated);
-    return subLedger;
-  }
 
   const id = nextId(records);
   const ledger: ChartOfAccount = {

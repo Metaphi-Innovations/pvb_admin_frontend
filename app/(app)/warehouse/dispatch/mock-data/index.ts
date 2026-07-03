@@ -130,7 +130,7 @@ export const SEED_DISPATCHES: DispatchRecord[] = [
     driverName: "Arun Yadav",
     transporterName: "Blue Dart Logistics",
     dispatchDate: "2026-06-02",
-    deliveryStatus: "In Transit",
+    deliveryStatus: "Delivered",
     warehouse: "North Zone Hub",
     packingNumbers: ["PKG-2026-005"],
     products: [
@@ -147,7 +147,7 @@ export const SEED_DISPATCHES: DispatchRecord[] = [
     customer_name: "Reliance Agri",
     total_items: 1,
     total_quantity: 400,
-    dispatch_status: "In Transit",
+    dispatch_status: "Delivered",
   },
   {
     id: "dp-st-1",
@@ -184,7 +184,7 @@ export const SEED_DISPATCHES: DispatchRecord[] = [
 ];
 
 const KEY_DISPATCHES = "ds_dispatch_records";
-const DISPATCH_DATA_VERSION = 4;
+const DISPATCH_DATA_VERSION = 5;
 const DISPATCH_VERSION_KEY = "ds_dispatch_records_version";
 
 export function getDispatchRecords(): DispatchRecord[] {

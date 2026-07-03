@@ -14,7 +14,6 @@ import {
 import { SearchableSelect } from "@/app/(app)/accounts/credit-notes/components/SearchableSelect";
 import { MasterReadOnlyField, MasterReadOnlyAddress } from "./MasterReadOnlyField";
 import { PartyBranchAddressSelector } from "./PartyBranchAddressSelector";
-import { MasterFetchedBadge } from "./MasterFetchedBadge";
 
 export interface VendorMasterPanelProps {
   vendors: Vendor[];
@@ -64,16 +63,13 @@ export function VendorMasterPanel({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] text-muted-foreground">
-          {title} data is loaded from{" "}
-          <Link href="/masters/vendors" className="text-brand-700 hover:underline">
-            Supplier Master
-          </Link>
-          . Edit master records there — not on this form.
-        </p>
-        <MasterFetchedBadge />
-      </div>
+      <p className="text-[11px] text-muted-foreground">
+        {title} data is loaded from{" "}
+        <Link href="/masters/vendors" className="text-brand-700 hover:underline">
+          Supplier Master
+        </Link>
+        . Edit master records there — not on this form.
+      </p>
 
       {allowSelect ? (
         <div className="max-w-md">

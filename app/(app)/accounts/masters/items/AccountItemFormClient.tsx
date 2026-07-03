@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { AccountsFormLayout } from "../../expenses/components/AccountsFormLayout";
 import {
@@ -141,7 +142,7 @@ export default function AccountItemFormClient({ itemId }: { itemId?: number }) {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Opening Rate</Label>
-              <Input type="number" className="h-8 text-xs" value={form.openingRate ?? 0} onChange={(e) => set("openingRate", Number(e.target.value))} />
+              <AccountsMoneyInput className="h-8 text-xs" value={form.openingRate ?? 0} onChange={(v) => set("openingRate", v)} />
             </div>
             <div className="space-y-1 sm:col-span-2">
               <Label className="text-xs">Valuation Method</Label>

@@ -1,206 +1,402 @@
 "use client";
 
-import React, { useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { CoaAccountingTransactionsTable } from "@/components/accounts/CoaAccountingTransactionsTable";
+import { CoaListingToolbar } from "./components/CoaListingToolbar";
 import { useCoaNavigation } from "@/components/accounts/CoaNavigationContext";
+import { buildLedgerAccountingSummary } from "@/lib/accounts/coa-accounting-view";
+import { isPostingLedger } from "@/lib/accounts/coa-hierarchy";
 import { canCoa } from "@/lib/accounts/permissions";
+import { defaultLedgerDateRangeState } from "@/lib/accounts/ledger-transaction-date-filter";
+import { type DateRangePresetId } from "@/lib/accounts/report-date-presets";
+import { isTdsCoaNode } from "@/lib/accounts/tds-coa-utils";
+import { useFY } from "@/lib/fy-store";
+import { useClientMounted } from "@/lib/use-client-mounted";
 import { nextId } from "../../data";
 import type { ChartOfAccount } from "../../data";
 import {
   DEFAULT_LEDGER_FORM,
   canAddLedgerUnder,
-  canAddSubLedgerUnder,
   defaultBalanceTypeForParent,
   formToLedger,
-  formToSubLedger,
   generateLedgerCode,
-  generateSubLedgerCode,
-  ledgerToForm,
+  getAncestorPath,
+  purgeManualCoaLedgersOnce,
   saveChartOfAccounts,
   validateLedgerForm,
-  validateSubLedgerForm,
   type LedgerFormValues,
 } from "./chart-of-accounts-data";
-import { CoaNodeDetail } from "./components/CoaNodeDetail";
+import { CHART_OF_ACCOUNTS_BREADCRUMB } from "./chart-of-accounts-utils";
+import { buildCoaListingRows, computeCoaListingSummary } from "./coa-listing-data";
+import { exportCoaListingToExcel, exportCoaListingToPdf } from "./coa-export";
+import { registerCoaAddLedgerHandler } from "./coa-add-ledger-bridge";
+import { CoaListingTable } from "./components/CoaListingTable";
+import { CoaListingSummaryBar } from "./components/CoaListingSummaryBar";
+import { CoaPathBreadcrumb } from "./components/CoaPathBreadcrumb";
 import { LedgerSheet } from "./components/LedgerSheet";
 
-type SheetMode = "add" | "edit" | "view" | null;
-type SheetKind = "ledger" | "sub_ledger";
+const HIGHLIGHT_MS = 4000;
 
 export default function ChartOfAccountsPageClient() {
+  const mounted = useClientMounted();
+  const { selectedFY } = useFY();
   const {
     records,
     setRecords,
     selectedNode,
     selectNode,
-    expandAll,
-    collapseAll,
+    search,
+    setSearch,
+    refreshRecords,
+    highlightedLedgerId,
+    setHighlightedLedgerId,
+    ensureExpanded,
   } = useCoaNavigation();
 
-  const [sheetMode, setSheetMode] = useState<SheetMode>(null);
-  const [sheetKind, setSheetKind] = useState<SheetKind>("ledger");
-  const [active, setActive] = useState<ChartOfAccount | null>(null);
+  const [showRoot, setShowRoot] = useState(false);
+  const [preset, setPreset] = useState<DateRangePresetId>("custom");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [datesReady, setDatesReady] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [form, setForm] = useState<LedgerFormValues>(DEFAULT_LEDGER_FORM);
   const [formError, setFormError] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<ChartOfAccount | null>(null);
   const [previewCode, setPreviewCode] = useState("");
 
   const canCreate = canCoa("create");
-  const canAddOnSelection =
-    canCreate &&
-    selectedNode != null &&
-    canAddLedgerUnder(selectedNode, records);
-  const canEdit = canCoa("edit");
-  const canDelete = canCoa("delete");
 
-  const openAddLedger = (parentGroupId?: number) => {
-    const parentId =
-      parentGroupId ??
-      (selectedNode && canAddLedgerUnder(selectedNode, records) ? selectedNode.id : null);
-    setSheetKind("ledger");
-    setForm({
-      ...DEFAULT_LEDGER_FORM,
-      parentGroupId: parentId,
-      balanceType: defaultBalanceTypeForParent(records, parentId),
-    });
-    setPreviewCode(generateLedgerCode(records));
-    setActive(null);
-    setFormError(null);
-    setSheetMode("add");
-  };
+  /** Parent whose immediate children are shown in the main table */
+  const tableParentId = showRoot ? null : (selectedNode?.id ?? null);
 
-  const openAddSubLedger = (parentLedgerId: number) => {
-    setSheetKind("sub_ledger");
-    setForm({
-      ...DEFAULT_LEDGER_FORM,
-      parentGroupId: parentLedgerId,
-      balanceType: defaultBalanceTypeForParent(records, parentLedgerId),
-    });
-    setPreviewCode(generateSubLedgerCode(records));
-    setActive(null);
-    setFormError(null);
-    setSheetMode("add");
-  };
+  useEffect(() => {
+    if (purgeManualCoaLedgersOnce()) {
+      refreshRecords();
+    }
+  }, [refreshRecords]);
 
-  const openEditLedger = (row: ChartOfAccount) => {
-    setSheetKind(row.nodeLevel === "sub_ledger" ? "sub_ledger" : "ledger");
-    setActive(row);
-    setForm(ledgerToForm(row));
-    setPreviewCode(row.accountCode);
-    setFormError(null);
-    setSheetMode("edit");
-  };
+  useEffect(() => {
+    const { from, to, preset: initialPreset } = defaultLedgerDateRangeState(selectedFY.id);
+    setPreset(initialPreset);
+    setDateFrom(from);
+    setDateTo(to);
+    setDatesReady(true);
+  }, [selectedFY.id]);
+
+  useEffect(() => {
+    if (selectedNode) setShowRoot(false);
+  }, [selectedNode]);
+
+  useEffect(() => {
+    if (!highlightedLedgerId) return;
+    const timer = window.setTimeout(() => setHighlightedLedgerId(null), HIGHLIGHT_MS);
+    return () => window.clearTimeout(timer);
+  }, [highlightedLedgerId, setHighlightedLedgerId]);
+
+  const isSearchMode = Boolean(search.trim());
+
+  const isLedgerTransactionView = Boolean(
+    !isSearchMode &&
+      !showRoot &&
+      selectedNode &&
+      selectedNode.nodeLevel === "ledger" &&
+      isPostingLedger(selectedNode, records) &&
+      !isTdsCoaNode(selectedNode, records),
+  );
+
+  const ledgerAccounting = useMemo(() => {
+    if (!isLedgerTransactionView || !selectedNode || !datesReady) return null;
+    return buildLedgerAccountingSummary(selectedNode, records, dateFrom, dateTo);
+  }, [isLedgerTransactionView, selectedNode, records, dateFrom, dateTo, datesReady]);
+
+  const rows = useMemo(
+    () =>
+      datesReady
+        ? buildCoaListingRows(records, tableParentId, dateFrom, dateTo, { search })
+        : [],
+    [records, tableParentId, dateFrom, dateTo, search, datesReady],
+  );
+
+  const summary = useMemo(() => {
+    if (!datesReady) return null;
+
+    if (ledgerAccounting) {
+      const transactionCount = ledgerAccounting.transactions.filter((row) => !row.isOpeningRow).length;
+      return {
+        totalAccounts: transactionCount,
+        openingAmount: ledgerAccounting.openingBalance,
+        openingSide: ledgerAccounting.openingBalanceType,
+        periodDebit: ledgerAccounting.totalDebit,
+        periodCredit: ledgerAccounting.totalCredit,
+        closingAmount: ledgerAccounting.currentBalance,
+        closingSide: ledgerAccounting.balanceType,
+      };
+    }
+
+    return computeCoaListingSummary(
+      records,
+      rows,
+      selectedNode,
+      showRoot,
+      dateFrom,
+      dateTo,
+      Boolean(search.trim()),
+    );
+  }, [
+    records,
+    rows,
+    selectedNode,
+    showRoot,
+    dateFrom,
+    dateTo,
+    search,
+    datesReady,
+    ledgerAccounting,
+  ]);
+
+  const exportMeta = useMemo(() => ({ dateFrom, dateTo }), [dateFrom, dateTo]);
+
+  const openAddLedger = useCallback(
+    (parentGroupId: number) => {
+      const parent = records.find((r) => r.id === parentGroupId);
+      if (!parent || !canAddLedgerUnder(parent, records)) return;
+      setForm({
+        ...DEFAULT_LEDGER_FORM,
+        parentGroupId,
+        balanceType: defaultBalanceTypeForParent(records, parentGroupId),
+      });
+      setPreviewCode(generateLedgerCode(records));
+      setFormError(null);
+      setSheetOpen(true);
+    },
+    [records],
+  );
+
+  const openGlobalAddLedger = useCallback(
+    (preferredParentId?: number | null) => {
+      const parentGroupId = preferredParentId ?? null;
+      setForm({
+        ...DEFAULT_LEDGER_FORM,
+        ...(parentGroupId != null
+          ? {
+              parentGroupId,
+              balanceType: defaultBalanceTypeForParent(records, parentGroupId),
+            }
+          : {}),
+      });
+      setPreviewCode(generateLedgerCode(records));
+      setFormError(null);
+      setSheetOpen(true);
+    },
+    [records],
+  );
+
+  useEffect(() => {
+    registerCoaAddLedgerHandler(openAddLedger);
+    return () => registerCoaAddLedgerHandler(null);
+  }, [openAddLedger]);
 
   const closeSheet = () => {
-    setSheetMode(null);
-    setActive(null);
+    setSheetOpen(false);
     setFormError(null);
   };
 
   const handleSave = () => {
-    const err =
-      sheetKind === "sub_ledger"
-        ? validateSubLedgerForm(form, records, active?.id)
-        : validateLedgerForm(form, records, active?.id);
+    const err = validateLedgerForm(form, records);
     if (err) {
       setFormError(err);
       return;
     }
+
     const list = [...records];
-    let saved: ChartOfAccount | null = null;
-    if (sheetMode === "add") {
-      const code =
-        sheetKind === "sub_ledger" ? generateSubLedgerCode(list) : generateLedgerCode(list);
-      const row =
-        sheetKind === "sub_ledger"
-          ? formToSubLedger(form, nextId(list), code, list)
-          : formToLedger(form, nextId(list), code, list);
-      list.push(row);
-      saved = row;
-    } else if (sheetMode === "edit" && active) {
-      const idx = list.findIndex((r) => r.id === active.id);
-      if (idx >= 0) {
-        list[idx] =
-          sheetKind === "sub_ledger"
-            ? formToSubLedger(form, active.id, active.accountCode, list, active)
-            : formToLedger(form, active.id, active.accountCode, list, active);
-        saved = list[idx];
-      }
-    }
+    const code = generateLedgerCode(list);
+    const row = formToLedger(form, nextId(list), code, list);
+    list.push(row);
     saveChartOfAccounts(list);
     setRecords(list);
-    if (saved) selectNode(saved);
+
+    if (row.parentAccountId) {
+      const parent = list.find((r) => r.id === row.parentAccountId);
+      if (parent) {
+        const ancestorIds = getAncestorPath(list, parent.id).map((a) => a.id);
+        ensureExpanded([...ancestorIds, parent.id]);
+        selectNode(parent);
+      }
+    }
+
+    setHighlightedLedgerId(row.id);
     closeSheet();
   };
 
-  const confirmDelete = () => {
-    if (!deleteTarget) return;
-    const list = records.filter((r) => r.id !== deleteTarget.id);
-    saveChartOfAccounts(list);
-    setRecords(list);
-    if (deleteTarget.parentAccountId) {
-      const parent = list.find((r) => r.id === deleteTarget.parentAccountId);
-      if (parent) selectNode(parent);
-    }
-    setDeleteTarget(null);
+  const handleDrillInto = useCallback(
+    (node: ChartOfAccount) => {
+      const ancestorIds = getAncestorPath(records, node.id).map((a) => a.id);
+      ensureExpanded(ancestorIds);
+      selectNode(node);
+    },
+    [selectNode, records, ensureExpanded],
+  );
+
+  const handleBreadcrumbRoot = () => {
+    setShowRoot(true);
+    setSearch("");
   };
 
+  const handleExcelExport = async () => {
+    if (!mounted || isLedgerTransactionView || rows.length === 0) return;
+    setExporting(true);
+    try {
+      await exportCoaListingToExcel(rows, exportMeta);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handlePdfExport = () => {
+    if (!mounted || isLedgerTransactionView || rows.length === 0) return;
+    exportCoaListingToPdf(rows, exportMeta);
+  };
+
+  const handleNewLedger = useCallback(() => {
+    const parentId =
+      selectedNode && !showRoot && canAddLedgerUnder(selectedNode, records)
+        ? selectedNode.id
+        : null;
+    openGlobalAddLedger(parentId);
+  }, [selectedNode, showRoot, records, openGlobalAddLedger]);
+
   return (
-    <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
-      <CoaNodeDetail
-        node={selectedNode}
-        records={records}
-        canCreate={canCreate}
-        canEdit={canEdit}
-        canDelete={canDelete}
-        onSelect={selectNode}
-        onAddLedger={openAddLedger}
-        onAddSubLedger={openAddSubLedger}
-        onEditLedger={openEditLedger}
-        onDeleteLedger={setDeleteTarget}
-      />
+    <>
+      <AccountsPageShell
+        layout="split"
+        hideDescription
+        breadcrumbs={CHART_OF_ACCOUNTS_BREADCRUMB}
+        title="Chart of Accounts"
+        description="View account hierarchy and create ledgers under permitted groups."
+        className="h-full"
+      >
+        <div className="flex flex-col flex-1 min-h-0 border border-border rounded-xl bg-white shadow-sm overflow-hidden">
+          <CoaListingToolbar
+            search={search}
+            onSearchChange={setSearch}
+            preset={preset}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onPresetChange={setPreset}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+            onExcel={handleExcelExport}
+            onPdf={handlePdfExport}
+            exportDisabled={exporting || isLedgerTransactionView || rows.length === 0}
+            canCreate={canCreate}
+            onNewLedger={handleNewLedger}
+          />
+
+          <CoaPathBreadcrumb
+            records={records}
+            selectedNode={selectedNode}
+            showRoot={showRoot}
+            onSelectRoot={handleBreadcrumbRoot}
+            onSelectNode={(node) => {
+              setShowRoot(false);
+              selectNode(node);
+            }}
+          />
+
+          {summary && (
+            <CoaListingSummaryBar
+              summary={summary}
+              totalLabel={isLedgerTransactionView ? "Transactions" : undefined}
+            />
+          )}
+
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            {isLedgerTransactionView && selectedNode && ledgerAccounting ? (
+              <CoaAccountingTransactionsTable
+                rows={ledgerAccounting.transactions}
+                variant="ledger-detail"
+                footer={{
+                  totalDebit: ledgerAccounting.totalDebit,
+                  totalCredit: ledgerAccounting.totalCredit,
+                  closingBalance: ledgerAccounting.currentBalance,
+                  closingBalanceType: ledgerAccounting.balanceType,
+                }}
+                emptyLabel="No posted transactions for this ledger in the selected period."
+              />
+            ) : (
+              <CoaListingTable
+                rows={rows}
+                records={records}
+                canCreate={canCreate}
+                highlightedLedgerId={highlightedLedgerId}
+                isSearchMode={isSearchMode}
+                onDrillInto={handleDrillInto}
+                onAddLedger={openAddLedger}
+                emptyMessage={
+                  isSearchMode
+                    ? "No accounts match your search."
+                    : "No accounts at this level."
+                }
+              />
+            )}
+          </div>
+
+          <div className="flex-shrink-0 px-4 py-2 border-t border-border bg-muted/20">
+            <p className="text-[11px] text-muted-foreground">
+              {isLedgerTransactionView && selectedNode ? (
+                <>
+                  Showing{" "}
+                  <span className="font-medium text-foreground">
+                    {ledgerAccounting?.transactions.filter((row) => !row.isOpeningRow).length ?? 0}
+                  </span>{" "}
+                  transactions for{" "}
+                  <span className="font-medium text-foreground">{selectedNode.accountName}</span>
+                </>
+              ) : (
+                <>
+                  Showing <span className="font-medium text-foreground">{rows.length}</span>{" "}
+                  {isSearchMode ? (
+                    <>matching accounts for &ldquo;{search.trim()}&rdquo;</>
+                  ) : (
+                    <>
+                      accounts
+                      {selectedNode && !showRoot && (
+                        <>
+                          {" "}
+                          under{" "}
+                          <span className="font-medium text-foreground">
+                            {selectedNode.accountName}
+                          </span>
+                        </>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+      </AccountsPageShell>
 
       <LedgerSheet
-        open={!!sheetMode}
-        mode={sheetMode}
-        kind={sheetKind}
+        open={sheetOpen}
+        mode="add"
         form={form}
         formError={formError}
         previewCode={previewCode}
         records={records}
-        active={active}
+        active={null}
         onClose={closeSheet}
         onSave={handleSave}
-        onFormChange={setForm}
-        canEdit={sheetMode === "add" ? canCreate : canEdit}
+        onFormChange={(next) => {
+          setForm(next);
+          if (next.parentGroupId) setFormError(null);
+        }}
+        canEdit={canCreate}
+        compactAdd
       />
-
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-base">Delete ledger?</DialogTitle>
-            <DialogDescription className="text-xs">
-              {deleteTarget?.accountName} ({deleteTarget?.accountCode}) will be removed.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" onClick={confirmDelete}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+    </>
   );
 }

@@ -198,7 +198,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
         {/* Line Items */}
         <Section title="Items Received">
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="accounts-table w-full text-xs">
               <thead>
                 <tr className="border-b border-border/60 bg-muted/30">
                   <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">#</th>
@@ -268,7 +268,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
         {/* Supplier Ledger Impact */}
         <Section title="Supplier Ledger Entry">
           <div className="rounded-lg bg-muted/30 border border-border/40 overflow-hidden">
-            <table className="w-full text-xs">
+            <table className="accounts-table w-full text-xs">
               <thead>
                 <tr className="border-b border-border/30 bg-muted/50">
                   <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Date</th>

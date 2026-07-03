@@ -1,11 +1,11 @@
 /**
- * Finance module hierarchy — base architecture for the Accounts module.
+ * Finance module hierarchy — simplified Chart of Accounts.
  *
- * Primary Head (L1) → Account Group (L2) → Sub-Group (L3) → Ledger (L4) → Sub-Ledger (L5)
+ * Primary Head (L1) → Standard Group (L2, nested) → Ledger (L3+, user-created)
  *
- * Posting rule: voucher entries target leaf Ledgers or Sub-Ledgers only.
- * Levels 1–3 are system-defined and locked.
- * Users may create Ledgers under valid leaf sub-groups and Sub-Ledgers under Ledgers.
+ * Posting rule: voucher entries target posting ledgers only (ledgers with no child ledgers).
+ * Grouping ledgers (ledgers with children) cannot receive postings.
+ * Primary heads and standard groups are system-defined and locked.
  */
 
 import type { ChartOfAccount, CoaNodeLevel } from "@/app/(app)/accounts/data";
@@ -16,9 +16,7 @@ import { getAncestorPath } from "@/app/(app)/accounts/masters/chart-of-accounts/
 export const COA_HIERARCHY_LEVELS: CoaNodeLevel[] = [
   "primary_head",
   "account_group",
-  "sub_group",
   "ledger",
-  "sub_ledger",
 ];
 
 export const PRIMARY_HEAD_NAMES = [
@@ -32,18 +30,14 @@ export type PrimaryHeadName = (typeof PRIMARY_HEAD_NAMES)[number];
 
 export const NODE_LEVEL_LABELS: Record<CoaNodeLevel, string> = {
   primary_head: "Primary Head",
-  account_group: "Account Group",
-  sub_group: "Sub-Group",
+  account_group: "Standard Group",
   ledger: "Ledger",
-  sub_ledger: "Sub-Ledger",
 };
 
 export const NODE_LEVEL_DESCRIPTIONS: Record<CoaNodeLevel, string> = {
   primary_head: "Top-level system heads: Assets, Liabilities, Income, Expenses",
-  account_group: "Groups under a Primary Head (e.g. Current Assets, Indirect Expenses)",
-  sub_group: "Detailed classification under an Account Group (e.g. Bank Accounts, Trade Payables)",
-  ledger: "User-created posting group under a valid sub-group (e.g. HDFC Bank)",
-  sub_ledger: "User-created leaf account under a Ledger (e.g. Current Account)",
+  account_group: "System-defined groups (e.g. Current Assets, Sundry Debtors, Bank Accounts)",
+  ledger: "User or ERP-created account — posting or grouping inferred from children",
 };
 
 export function nextHierarchyLevel(level: CoaNodeLevel): CoaNodeLevel | null {
@@ -57,45 +51,53 @@ export function isLedgerNode(node: Pick<ChartOfAccount, "nodeLevel">): boolean {
   return node.nodeLevel === "ledger";
 }
 
-export function isSubLedgerNode(node: Pick<ChartOfAccount, "nodeLevel">): boolean {
-  return node.nodeLevel === "sub_ledger";
-}
-
-export function isUserAccountNode(node: Pick<ChartOfAccount, "nodeLevel">): boolean {
-  return isLedgerNode(node) || isSubLedgerNode(node);
+export function isUserLedgerNode(node: ChartOfAccount): boolean {
+  return isLedgerNode(node) && !node.isSystem;
 }
 
 export function isStructuralNode(node: Pick<ChartOfAccount, "nodeLevel">): boolean {
-  return !isUserAccountNode(node);
+  return !isLedgerNode(node);
 }
 
-function ledgerHasSubLedgers(ledgerId: number, records: ChartOfAccount[]): boolean {
+export function ledgerHasChildLedgers(ledgerId: number, records: ChartOfAccount[]): boolean {
   return records.some(
-    (r) => r.nodeLevel === "sub_ledger" && r.parentAccountId === ledgerId,
+    (r) => r.nodeLevel === "ledger" && r.parentAccountId === ledgerId,
   );
 }
 
-/** Only active leaf posting accounts accept voucher postings */
+/** Ledger with child ledgers — grouping only, no direct postings */
+export function isGroupingLedger(node: ChartOfAccount, records?: ChartOfAccount[]): boolean {
+  if (!isLedgerNode(node)) return false;
+  const list = records ?? loadChartOfAccounts();
+  return ledgerHasChildLedgers(node.id, list);
+}
+
+/** Leaf ledger — accepts voucher postings when active */
+export function isPostingLedger(node: ChartOfAccount, records?: ChartOfAccount[]): boolean {
+  if (!isLedgerNode(node)) return false;
+  const list = records ?? loadChartOfAccounts();
+  return !ledgerHasChildLedgers(node.id, list);
+}
+
+/** Only active posting ledgers accept voucher postings */
 export function isPostableNode(node: ChartOfAccount, records?: ChartOfAccount[]): boolean {
   const list = records ?? loadChartOfAccounts();
   if (node.status !== "active") return false;
-  if (isSubLedgerNode(node)) return true;
-  if (isLedgerNode(node)) return !ledgerHasSubLedgers(node.id, list);
-  return false;
+  return isPostingLedger(node, list);
 }
 
-/** Primary heads, account groups, and sub-groups are system-locked */
+/** Primary heads and standard groups are system-locked */
 export function isSystemLockedNode(node: ChartOfAccount): boolean {
   return node.isSystem && isStructuralNode(node);
 }
 
 export function canUserCreateAtLevel(level: CoaNodeLevel): boolean {
-  return level === "ledger" || level === "sub_ledger";
+  return level === "ledger";
 }
 
 export function canUserEditNode(node: ChartOfAccount): boolean {
   if (isSystemLockedNode(node)) return false;
-  return isUserAccountNode(node) && !node.isSystem;
+  return isLedgerNode(node) && !node.isSystem;
 }
 
 export function canUserDeleteNode(node: ChartOfAccount): boolean {
@@ -105,9 +107,9 @@ export function canUserDeleteNode(node: ChartOfAccount): boolean {
 export interface HierarchyPath {
   primaryHead: ChartOfAccount | null;
   accountGroup: ChartOfAccount | null;
-  subGroup: ChartOfAccount | null;
+  /** Deepest system standard group in the path (leaf account_group) */
+  standardGroup: ChartOfAccount | null;
   ledger: ChartOfAccount | null;
-  subLedger: ChartOfAccount | null;
   path: ChartOfAccount[];
 }
 
@@ -116,12 +118,12 @@ export function resolveHierarchyPath(
   nodeId: number,
 ): HierarchyPath {
   const path = getAncestorPath(records, nodeId);
+  const accountGroups = path.filter((n) => n.nodeLevel === "account_group");
   return {
     primaryHead: path.find((n) => n.nodeLevel === "primary_head") ?? null,
-    accountGroup: path.find((n) => n.nodeLevel === "account_group") ?? null,
-    subGroup: path.find((n) => n.nodeLevel === "sub_group") ?? null,
+    accountGroup: accountGroups[0] ?? null,
+    standardGroup: accountGroups[accountGroups.length - 1] ?? null,
     ledger: path.find((n) => n.nodeLevel === "ledger") ?? null,
-    subLedger: path.find((n) => n.nodeLevel === "sub_ledger") ?? null,
     path,
   };
 }
@@ -137,14 +139,14 @@ export function getActivePostingLedgers(records?: ChartOfAccount[]): ChartOfAcco
 }
 
 /**
- * Validates that an account ID is a postable COA ledger or sub-ledger.
+ * Validates that an account ID is a postable ledger.
  */
 export function validatePostingLedgerId(
   ledgerId: number | null | undefined,
   records?: ChartOfAccount[],
 ): string | null {
   if (ledgerId == null) {
-    return "Each voucher line must select a Ledger or Sub-Ledger. Posting to structural nodes is not allowed.";
+    return "Each voucher line must select a Ledger. Posting to groups or grouping ledgers is not allowed.";
   }
   const list = records ?? loadChartOfAccounts();
   const node = list.find((r) => r.id === ledgerId);
@@ -152,20 +154,17 @@ export function validatePostingLedgerId(
     return "Invalid account selected.";
   }
   if (node.nodeLevel === "primary_head") {
-    return `Cannot post to Primary Head "${node.accountName}". Select a Ledger or Sub-Ledger.`;
+    return `Cannot post to Primary Head "${node.accountName}". Select a Ledger.`;
   }
   if (node.nodeLevel === "account_group") {
-    return `Cannot post to Account Group "${node.accountName}". Select a Ledger or Sub-Ledger.`;
+    return `Cannot post to Standard Group "${node.accountName}". Select a Ledger.`;
   }
-  if (node.nodeLevel === "sub_group") {
-    return `Cannot post to Sub-Group "${node.accountName}". Select a Ledger under this sub-group.`;
-  }
-  if (!isUserAccountNode(node)) {
-    return "Voucher posting is allowed only on Ledgers and Sub-Ledgers.";
+  if (!isLedgerNode(node)) {
+    return "Voucher posting is allowed only on Ledgers.";
   }
   if (!isPostableNode(node, list)) {
-    if (isLedgerNode(node) && ledgerHasSubLedgers(node.id, list)) {
-      return `Ledger "${node.accountName}" has sub-ledgers. Post to a Sub-Ledger instead.`;
+    if (isGroupingLedger(node, list)) {
+      return `Ledger "${node.accountName}" is a grouping ledger with child ledgers. Post to a child ledger instead.`;
     }
     return `Account "${node.accountName}" is inactive and cannot receive postings.`;
   }
@@ -178,24 +177,32 @@ export function findLedgerById(
 ): ChartOfAccount | null {
   const list = records ?? loadChartOfAccounts();
   const node = list.find((r) => r.id === ledgerId);
-  return node && isUserAccountNode(node) ? node : null;
+  return node && isLedgerNode(node) ? node : null;
 }
 
-/** Ledgers whose ancestor path includes a sub-group with the given name */
-export function getLedgersUnderSubGroupName(
-  subGroupName: string,
+/** Ledgers whose ancestor path includes a standard group with the given name */
+export function getLedgersUnderGroupName(
+  groupName: string,
   records?: ChartOfAccount[],
 ): ChartOfAccount[] {
   const list = records ?? loadChartOfAccounts();
-  const target = subGroupName.trim().toLowerCase();
+  const target = groupName.trim().toLowerCase();
   return getPostableCoaAccounts(list).filter((account) => {
     const { path } = resolveHierarchyPath(list, account.id);
     return path.some(
       (n) =>
-        n.nodeLevel === "sub_group" &&
+        n.nodeLevel === "account_group" &&
         n.accountName.toLowerCase() === target,
     );
   });
+}
+
+/** @deprecated Use getLedgersUnderGroupName */
+export function getLedgersUnderSubGroupName(
+  subGroupName: string,
+  records?: ChartOfAccount[],
+): ChartOfAccount[] {
+  return getLedgersUnderGroupName(subGroupName, records);
 }
 
 export function ledgerHasAncestorNamed(
@@ -210,15 +217,20 @@ export function ledgerHasAncestorNamed(
   );
 }
 
+export function ledgerMatchesGroupFilter(
+  ledger: ChartOfAccount,
+  groupId: number,
+  records?: ChartOfAccount[],
+): boolean {
+  const list = records ?? loadChartOfAccounts();
+  return resolveHierarchyPath(list, ledger.id).path.some((n) => n.id === groupId);
+}
+
+/** @deprecated Use ledgerMatchesGroupFilter */
 export function ledgerMatchesSubGroupFilter(
   ledger: ChartOfAccount,
   subGroupId: number,
   records?: ChartOfAccount[],
 ): boolean {
-  const list = records ?? loadChartOfAccounts();
-  return resolveHierarchyPath(list, ledger.id).path.some((n) => n.id === subGroupId);
-}
-
-export function canAddSubLedgerUnder(ledger: ChartOfAccount): boolean {
-  return isLedgerNode(ledger) && !ledger.isSystem;
+  return ledgerMatchesGroupFilter(ledger, subGroupId, records);
 }

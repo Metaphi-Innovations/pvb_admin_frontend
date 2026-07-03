@@ -51,26 +51,26 @@ export default function PaymentRunsPage() {
       layout="split"
     >
       <div className="flex-1 overflow-auto min-h-0">
-        <table className="w-full text-table">
-          <thead className="bg-muted/20 border-b border-border/60 sticky top-0">
+        <table className="accounts-table w-full text-table">
+          <thead className="border-b border-border/60">
             <tr>
-              <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">Run No.</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">Date</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">Branch</th>
-              <th className="px-4 py-2.5 text-center text-[10px] font-semibold uppercase text-muted-foreground">Payees</th>
-              <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase text-muted-foreground">Total</th>
-              <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">Status</th>
+              <th className="text-left text-[10px] font-semibold uppercase text-muted-foreground">Run No.</th>
+              <th className="text-left text-[10px] font-semibold uppercase text-muted-foreground">Date</th>
+              <th className="text-left text-[10px] font-semibold uppercase text-muted-foreground">Branch</th>
+              <th className="text-center text-[10px] font-semibold uppercase text-muted-foreground">Payees</th>
+              <th className="text-right text-[10px] font-semibold uppercase text-muted-foreground">Total</th>
+              <th className="text-left text-[10px] font-semibold uppercase text-muted-foreground">Status</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className="border-b border-border/40 hover:bg-muted/20">
-                <td className="px-4 py-2.5 text-xs font-mono font-semibold">{r.runNo}</td>
-                <td className="px-4 py-2.5 text-xs">{r.date}</td>
-                <td className="px-4 py-2.5 text-xs">{r.branch}</td>
-                <td className="px-4 py-2.5 text-xs text-center">{r.payeeCount}</td>
-                <td className="px-4 py-2.5 text-xs text-right tabular-nums">{formatMoney(r.totalAmount)}</td>
-                <td className="px-4 py-2.5"><StatusBadge status={r.status} /></td>
+                <td className="text-xs font-mono font-semibold">{r.runNo}</td>
+                <td className="text-xs">{r.date}</td>
+                <td className="text-xs">{r.branch}</td>
+                <td className="text-xs text-center">{r.payeeCount}</td>
+                <td className="text-xs text-right tabular-nums">{formatMoney(r.totalAmount)}</td>
+                <td><StatusBadge status={r.status} /></td>
               </tr>
             ))}
           </tbody>

@@ -264,9 +264,7 @@ function systemNode(
   const desc =
     nodeLevel === "primary_head"
       ? "System primary head"
-      : nodeLevel === "account_group"
-        ? "System account group"
-        : "System sub-group";
+      : "System standard group";
   return buildCoaNode({
     id,
     accountCode: code,
@@ -292,7 +290,7 @@ function buildFlatSubGroups(
   accountType: AccountType,
 ): void {
   for (const b of branches) {
-    nodes.push(systemNode(allocId(), b.code, b.name, accountType, "sub_group", parentId, parentName));
+    nodes.push(systemNode(allocId(), b.code, b.name, accountType, "account_group", parentId, parentName));
   }
 }
 
@@ -306,7 +304,7 @@ function buildNestedBranches(
   for (const branch of branches) {
     const branchId = allocId();
     nodes.push(
-      systemNode(branchId, branch.code, branch.name, accountType, "sub_group", parentId, parentName),
+      systemNode(branchId, branch.code, branch.name, accountType, "account_group", parentId, parentName),
     );
     if (branch.children?.length) {
       buildFlatSubGroups(nodes, branch.children, branchId, branch.name, accountType);
@@ -361,6 +359,6 @@ function buildSystemCoaNodes(): ChartOfAccount[] {
 export const SYSTEM_COA_NODES: ChartOfAccount[] = buildSystemCoaNodes();
 
 /** Bump when CA system hierarchy changes — triggers storage reset on mismatch */
-export const COA_SYSTEM_REVISION = 1;
+export const COA_SYSTEM_REVISION = 3;
 
 export const EXPECTED_SYSTEM_NODE_COUNT = SYSTEM_COA_NODES.length;

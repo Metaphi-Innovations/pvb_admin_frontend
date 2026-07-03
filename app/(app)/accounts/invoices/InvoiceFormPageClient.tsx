@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -25,6 +26,7 @@ import type { PendingDispatchInvoiceRow } from "@/lib/accounts/dispatch-invoice-
 import type { DispatchNearExpirySchemeEntry } from "@/app/(app)/warehouse/dispatch/types";
 import { InvoiceSchemeSettlementPanel } from "./components/InvoiceSchemeSettlementPanel";
 import { InvoiceLinesEditor } from "./components/InvoiceLinesEditor";
+import { InvoiceAdditionalExpensesEditor } from "./components/InvoiceAdditionalExpensesEditor";
 import { SalesInvoiceCustomerSection } from "./components/SalesInvoiceCustomerSection";
 import { SalesInvoiceDispatchSelect } from "./components/SalesInvoiceDispatchSelect";
 import {
@@ -49,6 +51,13 @@ import {
   customerMasterToTransactionFields,
   type CustomerTransactionFields,
 } from "@/lib/accounts/transaction-master-fetch";
+import {
+  calcAdditionalExpensesTotals,
+  createEmptyAdditionalExpense,
+  deriveLegacyChargeFields,
+  resolveInvoiceAdditionalExpenses,
+  type InvoiceAdditionalExpense,
+} from "./invoice-additional-expenses";
 
 function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
@@ -106,8 +115,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [termsAndConditions, setTermsAndConditions] = useState("");
   const [internalRemarks, setInternalRemarks] = useState("");
   const [salesperson, setSalesperson] = useState("");
-  const [shippingCharges, setShippingCharges] = useState(0);
-  const [otherCharges, setOtherCharges] = useState(0);
+  const [additionalExpenses, setAdditionalExpenses] = useState<InvoiceAdditionalExpense[]>([
+    createEmptyAdditionalExpense(),
+  ]);
   const [roundOff, setRoundOff] = useState(0);
   const [salesOrderId, setSalesOrderId] = useState<number | null>(null);
   const [sourceDispatchId, setSourceDispatchId] = useState("");
@@ -364,8 +374,14 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setCustomerNotes(rec.customerNotes ?? "");
     setTermsAndConditions(rec.termsAndConditions ?? "");
     setInternalRemarks(rec.internalRemarks ?? rec.remarks ?? "");
-    setShippingCharges(rec.shippingCharges ?? 0);
-    setOtherCharges(rec.otherCharges ?? 0);
+    const expenses = resolveInvoiceAdditionalExpenses(
+      rec.additionalExpenses,
+      rec.shippingCharges,
+      rec.otherCharges,
+    );
+    setAdditionalExpenses(
+      expenses.length ? expenses : [createEmptyAdditionalExpense()],
+    );
     setRoundOff(rec.roundOff ?? 0);
     setInvoiceDate(rec.invoiceDate);
     setDueDate(rec.dueDate);
@@ -375,14 +391,37 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setSchemeSettlementEntries(rec.nearExpirySchemeSettlements ?? []);
   }, [isEdit, invoiceId, router, customers]);
 
+  const lineTotals = useMemo(() => calculateInvoiceTotals(lines), [lines]);
+
+  const expenseTotals = useMemo(
+    () => calcAdditionalExpensesTotals(additionalExpenses),
+    [additionalExpenses],
+  );
+
   const totals = useMemo(() => {
-    const base = calculateInvoiceTotals(lines);
-    const chargeDelta = shippingCharges + otherCharges + roundOff;
+    const taxAmount =
+      Math.round((lineTotals.taxAmount + expenseTotals.gstAmount) * 100) / 100;
+    const subtotal =
+      Math.round((lineTotals.subtotal + expenseTotals.taxableAmount) * 100) / 100;
+    const grandTotal = Math.round(
+      (lineTotals.subtotal -
+        lineTotals.discountTotal +
+        lineTotals.taxAmount +
+        expenseTotals.taxableAmount +
+        expenseTotals.gstAmount +
+        roundOff) *
+        100,
+    ) / 100;
     return {
-      ...base,
-      grandTotal: Math.round((base.grandTotal + chargeDelta) * 100) / 100,
+      subtotal,
+      discountTotal: lineTotals.discountTotal,
+      taxAmount,
+      productSubtotal: lineTotals.subtotal,
+      expenseTaxable: expenseTotals.taxableAmount,
+      expenseGst: expenseTotals.gstAmount,
+      grandTotal,
     };
-  }, [lines, shippingCharges, otherCharges, roundOff]);
+  }, [lineTotals, expenseTotals, roundOff]);
 
   const accountingPreview = useMemo(
     () => ({
@@ -476,8 +515,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     customerNotes: customerNotes.trim(),
     termsAndConditions: termsAndConditions.trim(),
     internalRemarks: internalRemarks.trim(),
-    shippingCharges,
-    otherCharges,
+    ...deriveLegacyChargeFields(additionalExpenses),
+    additionalExpenses: additionalExpenses.filter(
+      (e) => e.expenseHead.trim() || e.amount > 0,
+    ),
     roundOff,
     adjustment: 0,
     tdsTcs: 0,
@@ -621,7 +662,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           <InvoiceSchemeSettlementPanel entries={schemeSettlementEntries} />
         )}
 
-        <Section title="Item Details">
+        <Section title="Product Details">
           <InvoiceLinesEditor
             lines={lines}
             products={products}
@@ -629,6 +670,14 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             interstate={interstateGst}
             hideMasterHint
             manualEntry={isManualInvoice}
+          />
+        </Section>
+
+        <Section title="Additional Expenses">
+          <InvoiceAdditionalExpensesEditor
+            expenses={additionalExpenses}
+            onChange={setAdditionalExpenses}
+            defaultGstPct={18}
           />
         </Section>
 
@@ -664,34 +713,22 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             </div>
           </Section>
 
-          <div className="rounded-lg border border-border/60 bg-muted/10 p-4 space-y-3 lg:sticky lg:top-3">
-            <h2 className="text-sm font-semibold text-foreground">Invoice Total</h2>
+          <div className="rounded-lg border border-border bg-white p-4 space-y-3 lg:sticky lg:top-3 lg:z-10 shadow-sm">
+            <h2 className="text-sm font-semibold text-foreground">Invoice Summary</h2>
             <div className="space-y-2 text-sm">
               <div className="flex items-center justify-between gap-4 py-1">
-                <span className="text-muted-foreground">Sub Total</span>
-                <span className="font-medium tabular-nums">{formatINR(totals.subtotal)}</span>
+                <span className="text-muted-foreground">Product Sub Total</span>
+                <span className="font-medium tabular-nums">{formatINR(totals.productSubtotal)}</span>
               </div>
+              {totals.expenseTaxable > 0 && (
+                <div className="flex items-center justify-between gap-4 py-1">
+                  <span className="text-muted-foreground">Additional Expenses</span>
+                  <span className="font-medium tabular-nums">{formatINR(totals.expenseTaxable)}</span>
+                </div>
+              )}
               <div className="flex items-center justify-between gap-4 py-1">
                 <span className="text-muted-foreground">Discount</span>
                 <span className="font-medium tabular-nums text-amber-800">{formatINR(totals.discountTotal)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-4 py-1">
-                <Label className="text-muted-foreground font-normal">Shipping Charges</Label>
-                <Input
-                  type="number"
-                  className={CHARGE_INPUT_CLASS}
-                  value={shippingCharges || ""}
-                  onChange={(e) => setShippingCharges(parseFloat(e.target.value) || 0)}
-                />
-              </div>
-              <div className="flex items-center justify-between gap-4 py-1">
-                <Label className="text-muted-foreground font-normal">Other Charges</Label>
-                <Input
-                  type="number"
-                  className={CHARGE_INPUT_CLASS}
-                  value={otherCharges || ""}
-                  onChange={(e) => setOtherCharges(parseFloat(e.target.value) || 0)}
-                />
               </div>
               <div className="flex items-center justify-between gap-4 py-1 border-t border-border/60 pt-2">
                 <span className="text-muted-foreground">GST Total</span>
@@ -699,11 +736,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               </div>
               <div className="flex items-center justify-between gap-4 py-1">
                 <Label className="text-muted-foreground font-normal">Round Off</Label>
-                <Input
-                  type="number"
+                <AccountsMoneyInput
                   className={CHARGE_INPUT_CLASS}
                   value={roundOff || ""}
-                  onChange={(e) => setRoundOff(parseFloat(e.target.value) || 0)}
+                  onChange={(v) => setRoundOff(v)}
                 />
               </div>
               <div className="flex items-center justify-between gap-4 py-2 border-t border-border/60">

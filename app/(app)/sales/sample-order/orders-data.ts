@@ -106,6 +106,7 @@ export interface ProductCatalogItem {
   sellingPrice: number;
   stock: number;
   status: "active" | "inactive" | "archived";
+  packSize?: number;
 }
 
 export interface SalesOrderLineItem {
@@ -114,6 +115,9 @@ export interface SalesOrderLineItem {
   productCode: string;
   productName: string;
   availableStock: number;
+  quantityType?: "Case" | "Piece";
+  caseQuantity?: number;
+  pieceQuantity?: number;
   quantity: number;
   unitPrice: number;
   /** Discount percentage */
@@ -712,6 +716,9 @@ export function createEmptyLineItem(): SalesOrderLineItem {
     productCode: "",
     productName: "",
     availableStock: 0,
+    quantityType: "Piece",
+    caseQuantity: 0,
+    pieceQuantity: 0,
     quantity: 0,
     unitPrice: 0,
     discount: 0,
@@ -983,7 +990,7 @@ export function orderToFormValues(order: SalesOrder): SalesOrderFormValues {
     salesManId: hydrated.salesManId,
     remarks: hydrated.remarks ?? "",
     status: hydrated.status,
-    lineItems: hydrated.lineItems.length > 0 ? hydrated.lineItems : [createEmptyLineItem()],
+    lineItems: hydrated.lineItems.length > 0 ? hydrated.lineItems : [],
     warehouseId: hydrated.warehouseId ?? null,
     warehouseName: hydrated.warehouseName ?? "",
   };
