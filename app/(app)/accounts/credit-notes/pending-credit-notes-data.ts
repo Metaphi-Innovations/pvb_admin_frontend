@@ -1,6 +1,6 @@
 /**
  * Pending credit notes — sales returns and scheme settlements awaiting CN generation.
- * Reads sales return + invoice data (read-only); does not modify non-Accounts modules.
+ * Reads sales return + scheme data (read-only); does not modify non-Accounts modules.
  */
 
 import {
@@ -9,36 +9,28 @@ import {
   type SalesReturnRecord,
 } from "@/app/(app)/sales/orders/sales-return-data";
 import {
-  listPendingSchemeSettlementOptions,
-  type PendingSchemeSettlementOption,
-} from "@/lib/accounts/scheme-settlement-data";
-import {
   buildReferenceFromSalesReturn,
   computeCreditNoteGstSplit,
   loadCreditNotes,
   recalcAllCreditLines,
 } from "./credit-notes-data";
+import {
+  CREDIT_NOTE_SOURCE_KIND_LABELS,
+  type CreditNoteSourceKind,
+} from "./credit-note-source-types";
+import {
+  listAllSchemePendingSettlements,
+  type UnifiedSchemePendingRow,
+} from "./scheme-pending-settlements";
+import {
+  invalidateModuleDataCache,
+  MODULE_CACHE_KEYS,
+  readThroughModuleCache,
+} from "@/lib/accounts/module-data-cache";
 
-const CREDIT_NOTES_STORAGE_KEY = "ds_accounts_credit_notes_v2";
+export type PendingCreditNoteSourceType = CreditNoteSourceKind;
 
-type CreditNoteLink = {
-  sourceReturnId?: string;
-  sourceReturnNo?: string;
-  schemeSettlementKey?: string;
-  status: string;
-};
-
-function loadCreditNoteLinks(): CreditNoteLink[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(CREDIT_NOTES_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as CreditNoteLink[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-export type PendingCreditNoteSourceType = "sales_return" | "scheme";
+export const PENDING_CREDIT_SOURCE_LABELS = CREDIT_NOTE_SOURCE_KIND_LABELS;
 
 export interface PendingCreditNoteRow {
   /** Unique row key — return id or scheme settlement key */
@@ -62,22 +54,55 @@ export interface PendingCreditNoteRow {
   schemeName?: string;
 }
 
+function loadCreditNoteLinks(): Array<{
+  sourceReturnId?: string;
+  sourceReturnNo?: string;
+  schemeSettlementKey?: string;
+  status: string;
+}> {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem("ds_accounts_credit_notes_v2");
+    return raw ? (JSON.parse(raw) as Array<{ sourceReturnId?: string; sourceReturnNo?: string; schemeSettlementKey?: string; status: string }>) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function hasCreditNoteForReturn(ret: SalesReturnRecord): boolean {
   if (ret.creditNoteId) return true;
   const notes = loadCreditNoteLinks();
   return notes.some(
     (cn) =>
       cn.status !== "cancelled" &&
-      (cn.sourceReturnId === ret.id ||
-        cn.sourceReturnNo === ret.returnNumber),
+      (cn.sourceReturnId === ret.id || cn.sourceReturnNo === ret.returnNumber),
   );
 }
 
 export function hasCreditNoteForScheme(key: string): boolean {
   const notes = loadCreditNoteLinks();
-  return notes.some(
-    (cn) => cn.status !== "cancelled" && cn.schemeSettlementKey === key,
-  );
+  return notes.some((cn) => cn.status !== "cancelled" && cn.schemeSettlementKey === key);
+}
+
+function splitGstFromTotal(total: number): {
+  eligibleCreditAmount: number;
+  gstAmount: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  totalAmount: number;
+} {
+  const gstRate = 0.18;
+  const taxable = Math.round((total / (1 + gstRate)) * 100) / 100;
+  const gst = Math.round((total - taxable) * 100) / 100;
+  return {
+    eligibleCreditAmount: taxable,
+    gstAmount: gst,
+    cgstAmount: Math.round((gst / 2) * 100) / 100,
+    sgstAmount: Math.round((gst / 2) * 100) / 100,
+    igstAmount: 0,
+    totalAmount: total,
+  };
 }
 
 function computeSalesReturnPendingAmounts(ret: SalesReturnRecord): {
@@ -112,19 +137,12 @@ function computeSalesReturnPendingAmounts(ret: SalesReturnRecord): {
   }
 
   const total = getReturnTotalAmount(ret);
-  const gstRate = 0.18;
-  const taxable = Math.round((total / (1 + gstRate)) * 100) / 100;
-  const gst = Math.round((total - taxable) * 100) / 100;
+  const split = splitGstFromTotal(total);
   const invoiceNos = ret.sourceInvoiceNo ? [ret.sourceInvoiceNo] : [];
   const invoiceIds = ret.sourceInvoiceId ? [ret.sourceInvoiceId] : [];
 
   return {
-    eligibleCreditAmount: taxable,
-    gstAmount: gst,
-    cgstAmount: Math.round((gst / 2) * 100) / 100,
-    sgstAmount: Math.round((gst / 2) * 100) / 100,
-    igstAmount: 0,
-    totalAmount: total,
+    ...split,
     linkedInvoiceNos: invoiceNos,
     linkedInvoiceIds: invoiceIds,
   };
@@ -157,33 +175,29 @@ function salesReturnToPendingRow(ret: SalesReturnRecord): PendingCreditNoteRow {
   };
 }
 
-function schemeToPendingRow(opt: PendingSchemeSettlementOption): PendingCreditNoteRow {
-  const total = opt.estimatedBenefitAmount;
-  const gstRate = 0.18;
-  const taxable = Math.round((total / (1 + gstRate)) * 100) / 100;
-  const gst = Math.round((total - taxable) * 100) / 100;
-
+function schemeToPendingRow(row: UnifiedSchemePendingRow): PendingCreditNoteRow {
+  const split = splitGstFromTotal(row.eligibleAmount);
   return {
-    id: opt.key,
-    sourceType: "scheme",
-    customerName: opt.customerName,
-    customerId: opt.customerId,
-    referenceNo: opt.schemeCode,
-    linkedInvoiceNos: [opt.invoiceNo],
-    linkedInvoiceIds: [opt.invoiceId],
-    eligibleCreditAmount: taxable,
-    gstAmount: gst,
-    cgstAmount: Math.round((gst / 2) * 100) / 100,
-    sgstAmount: Math.round((gst / 2) * 100) / 100,
-    igstAmount: 0,
-    totalAmount: total,
+    id: row.key,
+    sourceType: row.sourceKind,
+    customerName: row.customerName,
+    customerId: row.customerId,
+    referenceNo: row.referenceNo,
+    linkedInvoiceNos: row.linkedInvoiceNos,
+    linkedInvoiceIds: row.linkedInvoiceIds,
+    eligibleCreditAmount: split.eligibleCreditAmount,
+    gstAmount: split.gstAmount,
+    cgstAmount: split.cgstAmount,
+    sgstAmount: split.sgstAmount,
+    igstAmount: split.igstAmount,
+    totalAmount: split.totalAmount,
     status: "Pending",
-    schemeSettlementKey: opt.key,
-    schemeName: opt.schemeName,
+    schemeSettlementKey: row.schemeSettlementKey ?? row.key,
+    schemeName: row.schemeName,
   };
 }
 
-export function listPendingCreditNotes(): PendingCreditNoteRow[] {
+function buildPendingCreditNotesList(): PendingCreditNoteRow[] {
   const rows: PendingCreditNoteRow[] = [];
 
   for (const ret of getSalesReturnRecords()) {
@@ -193,12 +207,20 @@ export function listPendingCreditNotes(): PendingCreditNoteRow[] {
     rows.push(salesReturnToPendingRow(ret));
   }
 
-  for (const opt of listPendingSchemeSettlementOptions()) {
+  for (const opt of listAllSchemePendingSettlements()) {
     if (hasCreditNoteForScheme(opt.key)) continue;
     rows.push(schemeToPendingRow(opt));
   }
 
   return rows.sort((a, b) => b.referenceNo.localeCompare(a.referenceNo));
+}
+
+export function invalidatePendingCreditNotesListCache(): void {
+  invalidateModuleDataCache(MODULE_CACHE_KEYS.pendingCreditNotes);
+}
+
+export function listPendingCreditNotes(): PendingCreditNoteRow[] {
+  return readThroughModuleCache(MODULE_CACHE_KEYS.pendingCreditNotes, buildPendingCreditNotesList);
 }
 
 export function getPendingCreditNoteRow(
@@ -225,6 +247,7 @@ export function filterPendingCreditNotes(
       (x) =>
         x.referenceNo.toLowerCase().includes(q) ||
         x.customerName.toLowerCase().includes(q) ||
+        PENDING_CREDIT_SOURCE_LABELS[x.sourceType].toLowerCase().includes(q) ||
         x.linkedInvoiceNos.some((inv) => inv.toLowerCase().includes(q)) ||
         x.schemeName?.toLowerCase().includes(q),
     );
@@ -232,7 +255,11 @@ export function filterPendingCreditNotes(
   return r;
 }
 
-export const PENDING_CREDIT_SOURCE_LABELS: Record<PendingCreditNoteSourceType, string> = {
-  sales_return: "Sales Return",
-  scheme: "Scheme",
-};
+export const PENDING_SOURCE_FILTER_OPTIONS: { value: PendingCreditNoteSourceType; label: string }[] = [
+  { value: "sales_return", label: "Sales Return" },
+  { value: "cash_discount", label: "Cash Discount" },
+  { value: "near_expiry", label: "Near Expiry Scheme" },
+  { value: "festive_scheme", label: "Festive Scheme" },
+  { value: "payment_discount", label: "Payment Discount" },
+  { value: "turnover_discount", label: "Turnover Discount" },
+];

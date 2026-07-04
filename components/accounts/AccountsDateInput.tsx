@@ -48,11 +48,11 @@ export function AccountsDateInput({
   return (
     <div
       className={cn(
-        "accounts-date-filter-input relative flex items-center rounded-md border border-[#E5E7EB] bg-white text-left",
+        "accounts-date-filter-input relative flex items-center rounded-md border border-[#E5E7EB] bg-white text-left overflow-hidden",
         "hover:bg-muted/20 transition-colors",
         "focus-within:ring-2 focus-within:ring-brand-300 focus-within:border-brand-400",
         ACCOUNTS_FILTER_CONTROL_CLASS,
-        disabled && "opacity-50 cursor-not-allowed",
+        disabled && "opacity-50 cursor-not-allowed pointer-events-none",
         className,
       )}
     >
@@ -90,7 +90,8 @@ export function AccountsDateInput({
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         aria-label={ariaLabel}
-        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+        className="absolute inset-0 z-[2] opacity-0 w-full h-full cursor-pointer"
+        tabIndex={-1}
       />
     </div>
   );

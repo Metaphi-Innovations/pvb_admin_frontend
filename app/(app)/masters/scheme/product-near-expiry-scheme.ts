@@ -24,6 +24,11 @@ import {
 } from "./scheme-data";
 import { STANDARD_SCHEME_SEED } from "./standard-schemes";
 import {
+  invalidateModuleDataCache,
+  MODULE_CACHE_KEYS,
+  readThroughModuleCache,
+} from "@/lib/accounts/module-data-cache";
+import {
   formatSchemeRupee,
   getProductDiscountSchemeLines,
   loadConsolidatedSchemeRecords as loadProductDiscountConsolidated,
@@ -835,10 +840,17 @@ export function deduplicateSchemesByCode(records: SchemeRecord[]): SchemeRecord[
     .sort((a, b) => a.schemeCode.localeCompare(b.schemeCode));
 }
 
-export function loadConsolidatedSchemeRecords(): SchemeRecord[] {
+function loadConsolidatedSchemeRecordsUncached(): SchemeRecord[] {
   const records = loadProductDiscountConsolidated();
   const withStandard = mergeSchemeSeedRecords(records, STANDARD_SCHEME_SEED);
   return deduplicateSchemesByCode(consolidateNearExpiryRecords(withStandard));
+}
+
+export function loadConsolidatedSchemeRecords(): SchemeRecord[] {
+  return readThroughModuleCache(
+    MODULE_CACHE_KEYS.schemeRecordsNearExpiry,
+    loadConsolidatedSchemeRecordsUncached,
+  );
 }
 
 function isBlockingNearExpiryRecord(record: SchemeRecord): boolean {
