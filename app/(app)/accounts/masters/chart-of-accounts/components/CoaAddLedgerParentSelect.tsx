@@ -113,7 +113,7 @@ export function CoaAddLedgerParentSelect({
             >
               {selectedDisplay ?? placeholder}
             </span>
-            <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <ChevronsUpDown className="w-4 h-4 text-muted-foreground shrink-0" />
           </button>
         </PopoverTrigger>
         <PopoverContent
@@ -128,7 +128,7 @@ export function CoaAddLedgerParentSelect({
         >
           <div className="sticky top-0 z-20 flex-shrink-0 p-2 border-b border-border bg-white shadow-sm">
             <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               <input
                 placeholder="Search ledger group…"
                 value={search}
@@ -208,7 +208,7 @@ function ParentRow({
       <span className="flex-1 min-w-0 text-xs text-foreground truncate">
         {opt.node.accountName}
       </span>
-      {selected && <Check className="w-3.5 h-3.5 text-brand-600 shrink-0" />}
+      {selected && <Check className="w-4 h-4 text-brand-600 shrink-0" />}
     </button>
   );
 }

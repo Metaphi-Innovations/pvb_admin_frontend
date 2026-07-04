@@ -100,16 +100,18 @@ export function SectionTabs({
   compact?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-0.5 border-b border-border/60 overflow-x-auto">
+    <div className="flex items-center gap-0 border-b border-border/60 overflow-x-auto">
       {tabs.map((t) => (
         <button
           key={t.id}
           type="button"
           onClick={() => onChange(t.id)}
           className={cn(
-            "font-medium whitespace-nowrap border-b-2 -mb-px",
-            compact ? "px-2 py-1 text-[10px]" : "px-3 py-2 text-xs",
-            active === t.id ? "border-brand-600 text-brand-700" : "border-transparent text-muted-foreground hover:text-foreground",
+            "font-medium whitespace-nowrap border-b-2 -mb-px text-[13px] leading-none",
+            compact ? "px-2.5 py-2" : "px-3 py-2",
+            active === t.id
+              ? "border-brand-600 text-brand-700"
+              : "border-transparent text-slate-600 hover:text-slate-800",
           )}
         >
           {t.label}

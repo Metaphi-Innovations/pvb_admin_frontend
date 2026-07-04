@@ -36,6 +36,22 @@ export const REJECTED_STATUS_OPTIONS = [
   { label: "Returned To Supplier", value: "Returned To Supplier" },
 ];
 
+// Sales Return Stock Statuses
+export const SALES_RETURN_STOCK_STATUS_OPTIONS = [
+  { label: "QC Pending", value: "QC Pending" },
+  { label: "Available", value: "Available" },
+  { label: "Near Expiry", value: "Near Expiry" },
+  { label: "Expired", value: "Expired" },
+];
+
+// Sample Return Stock Statuses
+export const SAMPLE_RETURN_STOCK_STATUS_OPTIONS = [
+  { label: "QC Pending", value: "QC Pending" },
+  { label: "Available", value: "Available" },
+  { label: "Near Expiry", value: "Near Expiry" },
+  { label: "Expired", value: "Expired" },
+];
+
 // GRN Pending Stock Statuses
 export const GRN_PENDING_STATUS_OPTIONS = [
   { label: "Pending QC", value: "Pending QC" },
@@ -55,6 +71,8 @@ export const STATUS_BADGE_CONFIG: Record<string, { bg: string; label: string }> 
   "Under Review": { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Under Review" },
   "Disposed": { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Disposed" },
   "Returned To Supplier": { bg: "bg-indigo-50 text-indigo-700 border-indigo-200", label: "Returned To Supplier" },
+
+  "QC Pending": { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "QC Pending" },
 
   // GRN Pending Stock badges
   "Pending QC": { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Pending QC" },

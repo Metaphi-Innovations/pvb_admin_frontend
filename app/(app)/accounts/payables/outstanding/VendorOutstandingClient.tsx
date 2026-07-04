@@ -17,8 +17,6 @@ import {
 } from "@/lib/accounts/payables-export";
 import { formatMoney, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
 import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
-import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
-import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
 import { Label } from "@/components/ui/label";
 import {
@@ -30,9 +28,9 @@ import {
 } from "@/components/ui/select";
 import {
   ReportFilterRow,
-  ReportFinancialYearFilter,
-  ReportFromToDateFilter,
+  ReportDateRangeFilter,
   ReportVendorFilter,
+  useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 import {
   AccountsRichTable,
@@ -63,9 +61,7 @@ function formatReportDate(value: string): string {
 export default function VendorOutstandingClient() {
   const router = useRouter();
   const [refreshKey, setRefreshKey] = useState(0);
-  const [dateFrom, setDateFrom] = useState("2026-04-01");
-  const [dateTo, setDateTo] = useState("2026-06-30");
-  const [financialYearId, setFinancialYearId] = useState("all");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [vendorId, setVendorId] = useState("all");
   const [paymentStatus, setPaymentStatus] = useState<PayableStatus | "all">("all");
   const [search, setSearch] = useState("");
@@ -78,28 +74,11 @@ export default function VendorOutstandingClient() {
     setRefreshKey((k) => k + 1);
   }, []);
 
-  useEffect(() => {
-    const activeFyId = getActiveFinancialYearId();
-    const years = loadFinancialYears();
-    const activeFy = years.find((fy) => fy.id === activeFyId) ?? years.find((fy) => fy.status === "active");
-    if (activeFy) {
-      setFinancialYearId(String(activeFy.id));
-      setDateFrom(activeFy.startDate);
-      setDateTo(activeFy.endDate > "2026-06-30" ? "2026-06-30" : activeFy.endDate);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (financialYearId === "all") return;
-    const fy = loadFinancialYears().find((y) => String(y.id) === financialYearId);
-    if (!fy) return;
-    setDateFrom(fy.startDate);
-    setDateTo(fy.endDate);
-  }, [financialYearId]);
+  
 
   useEffect(() => {
     setPage(1);
-  }, [dateFrom, dateTo, financialYearId, vendorId, paymentStatus, search, pageSize, refreshKey]);
+  }, [dateFrom, dateTo, vendorId, paymentStatus, search, pageSize, refreshKey]);
 
   const asOnDate = dateTo || defaultAsOnDate();
 
@@ -111,7 +90,7 @@ export default function VendorOutstandingClient() {
       status: paymentStatus === "all" ? undefined : paymentStatus,
       dateFrom,
       dateTo,
-      financialYearId: financialYearId === "all" ? undefined : Number(financialYearId),
+      financialYearId: undefined,
       search,
     });
     if (paymentStatus === "all") {
@@ -120,7 +99,7 @@ export default function VendorOutstandingClient() {
       data = data.filter((r) => r.status === "paid");
     }
     return data;
-  }, [asOnDate, dateFrom, dateTo, financialYearId, vendorId, paymentStatus, search, refreshKey]);
+  }, [asOnDate, dateFrom, dateTo, vendorId, paymentStatus, search, refreshKey]);
 
   const pagedRows = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -128,10 +107,6 @@ export default function VendorOutstandingClient() {
   }, [rows, page, pageSize]);
 
   const exportMeta = useMemo(() => {
-    const fy =
-      financialYearId === "all"
-        ? "All years"
-        : (loadFinancialYears().find((y) => String(y.id) === financialYearId)?.name ?? "All years");
     const vendor =
       vendorId === "all"
         ? "All suppliers"
@@ -140,14 +115,14 @@ export default function VendorOutstandingClient() {
       PAYMENT_STATUS_OPTIONS.find((o) => o.value === paymentStatus)?.label ?? "All statuses";
     return {
       reportName: "Supplier Outstanding",
-      financialYear: fy,
       dateFrom,
       dateTo,
+      financialYear: "",
       supplier: vendor,
       paymentStatus: statusLabel,
       search,
     };
-  }, [financialYearId, vendorId, paymentStatus, search, dateFrom, dateTo, filterOptions.vendors]);
+  }, [vendorId, paymentStatus, search, dateFrom, dateTo, filterOptions.vendors]);
 
   const handleExportExcel = useCallback(async () => {
     setExporting(true);
@@ -256,10 +231,11 @@ export default function VendorOutstandingClient() {
       description="Unpaid and partially paid supplier purchase invoices with due dates and ageing."
       filters={
         <ReportFilterRow>
-          <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
-          <ReportFromToDateFilter
+          <ReportDateRangeFilter
+            preset={preset}
             dateFrom={dateFrom}
             dateTo={dateTo}
+            onPresetChange={setPreset}
             onDateFromChange={setDateFrom}
             onDateToChange={setDateTo}
           />
@@ -272,7 +248,7 @@ export default function VendorOutstandingClient() {
               value={paymentStatus}
               onValueChange={(v) => setPaymentStatus(v as PayableStatus | "all")}
             >
-              <SelectTrigger className="h-7 text-xs mt-0 w-[140px]">
+              <SelectTrigger className="h-9 text-[13px] font-medium mt-0 w-[140px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

@@ -17,8 +17,34 @@ import {
 } from "@/lib/accounts/ledger-transaction-date-filter";
 
 import { fromSignedBalance, openingSignedBalance, toSignedBalance } from "@/lib/accounts/running-balance";
+import { buildBundledCoaDemoLedgers } from "./coa-demo-bundle";
+import { getBundledDemoTransactions } from "./coa-demo-transactions";
 
+function coaListingMovementMapForRange(
+  from: string,
+  to: string,
+): Map<number, { totalDebit: number; totalCredit: number }> {
+  const map = ledgerMovementMapForRange(from, to);
 
+  for (const ledger of buildBundledCoaDemoLedgers()) {
+    const rows = getBundledDemoTransactions(ledger.id);
+    let totalDebit = 0;
+    let totalCredit = 0;
+    for (const row of rows) {
+      if (row.date < from || row.date > to) continue;
+      totalDebit += row.debit;
+      totalCredit += row.credit;
+    }
+    if (totalDebit === 0 && totalCredit === 0) continue;
+    const cur = map.get(ledger.id) ?? { totalDebit: 0, totalCredit: 0 };
+    map.set(ledger.id, {
+      totalDebit: cur.totalDebit + totalDebit,
+      totalCredit: cur.totalCredit + totalCredit,
+    });
+  }
+
+  return map;
+}
 
 export interface CoaListingRow {
   node: ChartOfAccount;
@@ -251,7 +277,7 @@ export function computeCoaListingSummary(
   dateTo: string,
   hasSearch: boolean,
 ): CoaListingSummary {
-  const movementMap = ledgerMovementMapForRange(dateFrom, dateTo);
+  const movementMap = coaListingMovementMapForRange(dateFrom, dateTo);
   const balances =
     hasSearch || showRoot || !selectedNode
       ? sumRowBalances(rows)
@@ -292,7 +318,7 @@ export function buildCoaListingRows(
   options: { search?: string } = {},
 ): CoaListingRow[] {
   const search = options.search?.trim() ?? "";
-  const movementMap = ledgerMovementMapForRange(dateFrom, dateTo);
+  const movementMap = coaListingMovementMapForRange(dateFrom, dateTo);
 
   if (search) {
     return getSearchMatchingNodes(records, search).map((node) => {

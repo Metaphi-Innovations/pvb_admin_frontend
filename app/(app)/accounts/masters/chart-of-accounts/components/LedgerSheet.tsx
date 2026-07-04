@@ -120,7 +120,7 @@ export function LedgerSheet({
           {mode === "add" && (
             <div className="space-y-1">
               <Label className="text-[11px]">Ledger Code</Label>
-              <Input className="h-8 text-xs bg-muted/30 font-mono" disabled readOnly value={previewCode} />
+              <Input className="h-9 text-[13px] font-medium bg-muted/30 font-mono" disabled readOnly value={previewCode} />
               <p className="text-[10px] text-muted-foreground">Auto-generated on save</p>
             </div>
           )}
@@ -130,7 +130,7 @@ export function LedgerSheet({
               Ledger Name <span className="text-red-500">*</span>
             </Label>
             <Input
-              className="h-8 text-xs"
+              className="h-9 text-[13px] font-medium"
               disabled={readOnly}
               value={form.ledgerName}
               onChange={(e) => setForm({ ledgerName: e.target.value })}
@@ -176,7 +176,7 @@ export function LedgerSheet({
             <div className="space-y-1">
               <Label className="text-[11px]">Opening Balance</Label>
               <AccountsMoneyInput
-                className="h-8 text-xs"
+                className="h-9 text-[13px] font-medium"
                 disabled={readOnly}
                 value={form.openingBalance}
                 onChange={(v) => setForm({ openingBalance: String(v) })}
@@ -189,7 +189,7 @@ export function LedgerSheet({
                 disabled={readOnly}
                 onValueChange={(v) => setForm({ balanceType: v as "Debit" | "Credit" })}
               >
-                <SelectTrigger className="h-8 text-xs">
+                <SelectTrigger className="h-9 text-[13px] font-medium">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -209,7 +209,7 @@ export function LedgerSheet({
           <div className="space-y-1">
             <Label className="text-[11px]">Alias / Short Name</Label>
             <Input
-              className="h-8 text-xs"
+              className="h-9 text-[13px] font-medium"
               disabled={readOnly}
               value={form.alias}
               onChange={(e) => setForm({ alias: e.target.value })}
@@ -219,7 +219,7 @@ export function LedgerSheet({
 
           <div className="space-y-1">
             <Label className="text-[11px]">Ledger Type</Label>
-            <Input className="h-8 text-xs bg-muted/30" disabled readOnly value={ledgerType} />
+            <Input className="h-9 text-[13px] font-medium bg-muted/30" disabled readOnly value={ledgerType} />
           </div>
 
           {showGst && (
@@ -248,7 +248,7 @@ export function LedgerSheet({
           <div className="space-y-1">
             <Label className="text-[11px]">Description</Label>
             <Input
-              className="h-8 text-xs"
+              className="h-9 text-[13px] font-medium"
               disabled={readOnly}
               value={form.description}
               onChange={(e) => setForm({ description: e.target.value })}
@@ -286,13 +286,13 @@ export function LedgerSheet({
         </SheetBody>
 
         <SheetFooter className="px-5 py-3 border-t border-border/60 bg-muted/20 gap-2 sm:gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onClose}>
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={onClose}>
             {readOnly ? "Close" : "Cancel"}
           </Button>
           {!readOnly && (
             <Button
               size="sm"
-              className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+              className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
               onClick={onSave}
             >
               Save

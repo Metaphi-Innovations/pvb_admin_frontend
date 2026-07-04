@@ -25,7 +25,7 @@ import {
 import { useFY } from "@/lib/fy-store";
 
 const filterControlClass =
-  "h-8 text-xs rounded-lg border border-border bg-background focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400";
+  "h-9 text-[13px] font-medium rounded-lg border border-border bg-background focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400";
 
 const exportTriggerClass = cn(
   filterControlClass,
@@ -115,7 +115,7 @@ export function LedgerTransactionDateFilter({
     <div className="flex flex-wrap items-center gap-2">
       {onSearchChange !== undefined && (
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
             type="search"
             value={search ?? ""}
@@ -135,7 +135,7 @@ export function LedgerTransactionDateFilter({
           )}
         >
           <span className="truncate text-foreground">{presetLabel}</span>
-          <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+          <ChevronsUpDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
         </PopoverTrigger>
         <PopoverContent align="start" className="w-44 p-1">
           {DATE_RANGE_PRESET_OPTIONS.map((option) => {
@@ -154,7 +154,7 @@ export function LedgerTransactionDateFilter({
                 )}
               >
                 {selected ? (
-                  <Check className="w-3.5 h-3.5 text-brand-600 flex-shrink-0" />
+                  <Check className="w-4 h-4 text-brand-600 flex-shrink-0" />
                 ) : (
                   <span className="w-3.5 flex-shrink-0" />
                 )}
@@ -179,7 +179,7 @@ export function LedgerTransactionDateFilter({
         <Button
           type="button"
           size="sm"
-          className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white px-3"
+          className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white px-3"
           onClick={onApply}
         >
           Apply
@@ -189,7 +189,7 @@ export function LedgerTransactionDateFilter({
       {showExport && (
         <DropdownMenu>
           <DropdownMenuTrigger disabled={exporting} className={exportTriggerClass}>
-            <Download className="w-3.5 h-3.5" />
+            <Download className="w-4 h-4" />
             Export
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40">
@@ -199,13 +199,13 @@ export function LedgerTransactionDateFilter({
                 disabled={exporting}
                 onClick={onExportExcel}
               >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <FileSpreadsheet className="w-4 h-4" />
                 Excel
               </DropdownMenuItem>
             )}
             {onExportPdf && (
               <DropdownMenuItem className="text-xs gap-2 cursor-pointer" onClick={onExportPdf}>
-                <FileDown className="w-3.5 h-3.5" />
+                <FileDown className="w-4 h-4" />
                 PDF
               </DropdownMenuItem>
             )}

@@ -45,12 +45,12 @@ export function CreditNoteCancelDialog({
           />
         </div>
         <DialogFooter>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onClose}>
+          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={onClose}>
             Close
           </Button>
           <Button
             size="sm"
-            className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white"
+            className="h-9 text-[13px] font-medium bg-red-600 hover:bg-red-700 text-white"
             onClick={() => {
               onConfirm(reason.trim());
               setReason("");

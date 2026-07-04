@@ -89,7 +89,7 @@ export function CoaNodeDetail({
               <h2 className="text-sm font-semibold text-foreground truncate">{node.accountName}</h2>
               <p className="text-[11px] text-muted-foreground mt-0.5">TDS liability account</p>
             </div>
-            <Button asChild size="sm" className="h-7 text-xs px-2 bg-brand-600 text-white gap-1">
+            <Button asChild size="sm" className="h-9 text-[13px] font-medium px-2 bg-brand-600 text-white gap-1">
               <Link href={reportHref}>View TDS Summary</Link>
             </Button>
           </div>
@@ -115,13 +115,13 @@ export function CoaNodeDetail({
               <p className="text-[11px] text-muted-foreground mt-0.5">Posting ledger</p>
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              <Button asChild size="sm" className="h-7 text-xs px-2 bg-brand-600 text-white gap-1">
+              <Button asChild size="sm" className="h-9 text-[13px] font-medium px-2 bg-brand-600 text-white gap-1">
                 <Link href={`/accounts/reports/ledger?ledger=${node.id}`}>
                   <BookOpen className="w-3 h-3" /> View General Ledger
                 </Link>
               </Button>
               {masterLink && (
-                <Button asChild size="sm" variant="outline" className="h-7 text-xs px-2 gap-1">
+                <Button asChild size="sm" variant="outline" className="h-9 text-[13px] font-medium px-2 gap-1">
                   <Link href={masterLink.masterHref}>Open Source Master</Link>
                 </Button>
               )}
@@ -129,7 +129,7 @@ export function CoaNodeDetail({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 text-xs px-2 gap-1"
+                  className="h-9 text-[13px] font-medium px-2 gap-1"
                   onClick={() => onEditLedger(node)}
                 >
                   <Pencil className="w-3 h-3" /> Edit
@@ -164,7 +164,7 @@ export function CoaNodeDetail({
                     asChild
                     size="sm"
                     variant="outline"
-                    className="h-7 text-xs px-2"
+                    className="h-9 text-[13px] font-medium px-2"
                   >
                     <Link href={alt.href}>{alt.label}</Link>
                   </Button>
@@ -172,7 +172,7 @@ export function CoaNodeDetail({
               {allowAddHere && (
                 <Button
                   size="sm"
-                  className="h-7 text-xs px-2 bg-brand-600 text-white gap-1"
+                  className="h-9 text-[13px] font-medium px-2 bg-brand-600 text-white gap-1"
                   onClick={() => onAddLedger(node.id)}
                 >
                   <Plus className="w-3 h-3" /> Add Ledger
@@ -182,7 +182,7 @@ export function CoaNodeDetail({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 text-xs px-2 gap-1"
+                  className="h-9 text-[13px] font-medium px-2 gap-1"
                   onClick={() => onEditLedger(node)}
                 >
                   <Pencil className="w-3 h-3" /> Edit

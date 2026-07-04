@@ -415,10 +415,10 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 text-xs gap-1 text-brand-700 hover:text-brand-800"
+              className="h-9 text-[13px] font-medium gap-1 text-brand-700 hover:text-brand-800"
               onClick={() => handlePartyDrill(row.groupKey)}
             >
-              <Eye className="w-3.5 h-3.5" />
+              <Eye className="w-4 h-4" />
               {actionLabel}
             </Button>
           ),
@@ -481,10 +481,10 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 text-xs gap-1 text-brand-700 hover:text-brand-800"
+              className="h-9 text-[13px] font-medium gap-1 text-brand-700 hover:text-brand-800"
               onClick={() => drillToInvoiceView({ monthKey: row.groupKey })}
             >
-              <Eye className="w-3.5 h-3.5" />
+              <Eye className="w-4 h-4" />
               {actionLabel}
             </Button>
           ),
@@ -548,10 +548,10 @@ export function RegisterReportClient({ mode }: RegisterReportClientProps) {
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 text-xs gap-1 text-brand-700 hover:text-brand-800"
+            className="h-9 text-[13px] font-medium gap-1 text-brand-700 hover:text-brand-800"
             onClick={() => handleCommodityDrill(row.groupKey)}
           >
-            <Eye className="w-3.5 h-3.5" />
+            <Eye className="w-4 h-4" />
             {actionLabel}
           </Button>
         ),

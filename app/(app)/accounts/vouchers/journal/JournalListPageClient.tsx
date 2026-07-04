@@ -124,7 +124,7 @@ export default function JournalListPageClient() {
   const filterBar = (
     <div className="flex flex-wrap gap-2">
       <div className="relative flex-1 min-w-[200px] max-w-sm">
-        <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
           className="h-7 pl-8 text-xs bg-white"
           placeholder="Search voucher no., narration, created by…"
@@ -168,14 +168,14 @@ export default function JournalListPageClient() {
       description="Manual double-entry journal. Total debit must equal total credit before posting."
       actions={
         <>
-          <AccountsExportMenu onExcel={exportCsv} onPdf={exportCsv} />
+          <AccountsExportMenu onExcel={exportCsv} />
           <Button
             size="sm"
-            className="h-7 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1"
+            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
             asChild
           >
             <Link href="/accounts/vouchers/journal/new">
-              <Plus className="w-3.5 h-3.5" /> Add Journal
+              <Plus className="w-4 h-4" /> Add Journal
             </Link>
           </Button>
         </>

@@ -4,6 +4,7 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -119,7 +120,11 @@ const FYContext = createContext<FYContextType | null>(null);
 
 // ── Provider — single render tree (no mount gate that remounts children) ───────
 export function FYProvider({ children }: { children: React.ReactNode }) {
-  const [selectedFY, setSelectedFYState] = useState<FinancialYear>(readStoredFY);
+  const [selectedFY, setSelectedFYState] = useState<FinancialYear>(DEFAULT_FY);
+
+  useEffect(() => {
+    setSelectedFYState(readStoredFY());
+  }, []);
 
   const setSelectedFY = useCallback((fy: FinancialYear) => {
     setSelectedFYState(fy);

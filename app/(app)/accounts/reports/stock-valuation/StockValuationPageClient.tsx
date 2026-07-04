@@ -32,6 +32,8 @@ import {
   ReportFinancialYearFilter,
   ReportSearchFilter,
   ReportWarehouseFilter,
+  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
+  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
 import { SortTh } from "@/app/(app)/accounts/components/AccountsUI";
 import { EmptySearch } from "@/components/ui/EmptyState";
@@ -60,9 +62,6 @@ import {
   exportStockValuationToPdf,
   type StockValuationExportMeta,
 } from "./stock-valuation-export";
-
-const filterLabelClass = "text-[10px] font-medium uppercase text-muted-foreground leading-none";
-const filterControlClass = "h-7 text-xs mt-0";
 
 const STOCK_STATUS_OPTIONS: { value: StockValuationStatusFilter; label: string }[] = [
   { value: "all", label: "All" },
@@ -303,15 +302,16 @@ export default function StockValuationPageClient() {
       breadcrumbs={accountsBreadcrumb("Reports", "Stock Valuation")}
       title="Stock Valuation"
       description="Read-only financial view of inventory stock value as on date. Valuation uses cost price (CP)."
-      actions={
-        <AccountsExportMenu
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          disabled={exporting || filteredRows.length === 0}
-        />
-      }
       filters={
-        <ReportFilterRow>
+        <ReportFilterRow
+          end={
+            <AccountsExportMenu
+              onExcel={handleExportExcel}
+              onPdf={handleExportPdf}
+              disabled={exporting || filteredRows.length === 0}
+            />
+          }
+        >
           <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
           <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
           <ReportWarehouseFilter value={warehouse} onChange={setWarehouse} />

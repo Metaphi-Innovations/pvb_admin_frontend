@@ -31,7 +31,7 @@ import {
 } from "../expense-data";
 import { formatINR } from "../expense-utils";
 
-const fieldClass = "h-8 text-xs";
+const fieldClass = "h-9 text-[13px] font-medium";
 const labelClass = "text-xs font-medium text-foreground";
 const PAYMENT_MODES: PaymentMode[] = ["Cash", "UPI", "Bank Transfer", "Cheque", "Card", "Other"];
 
@@ -316,7 +316,7 @@ export function ExpenseForm({
               onKeyDown={(e) => e.stopPropagation()}
             />
             <label className="flex items-center justify-center gap-2 h-8 px-3 rounded-md border border-border bg-white text-xs cursor-pointer hover:bg-muted/30 col-span-2 md:col-span-2">
-              <Upload className="w-3.5 h-3.5" />
+              <Upload className="w-4 h-4" />
               Upload file
               <input
                 type="file"
@@ -343,14 +343,14 @@ export function ExpenseForm({
                 <span className="text-muted-foreground truncate flex-1">{att.fileName} · {att.fileSize}</span>
                 <div className="flex gap-1 ml-auto">
                   <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => viewAttachment(att)}>
-                    <Eye className="w-3.5 h-3.5" />
+                    <Eye className="w-4 h-4" />
                   </Button>
                   <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => downloadAttachment(att)}>
-                    <Download className="w-3.5 h-3.5" />
+                    <Download className="w-4 h-4" />
                   </Button>
                   {!readOnly && (
                     <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-600" onClick={() => removeAttachment(att.id)}>
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" />
                     </Button>
                   )}
                 </div>

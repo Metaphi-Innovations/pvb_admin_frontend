@@ -62,8 +62,8 @@ export function GeneralLedgerTransactionsTable({
 }) {
   if (rows.length === 0) {
     return (
-      <div className="px-4 py-14 text-center">
-        <p className="text-sm text-muted-foreground">{emptyLabel}</p>
+      <div className="px-4 py-6 text-center">
+        <p className="text-xs text-muted-foreground">{emptyLabel}</p>
       </div>
     );
   }

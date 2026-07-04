@@ -8,7 +8,7 @@ import { DonePackingListing } from "./DonePackingListing";
 import { useSearchParams } from "next/navigation";
 
 type PackingStatusTab = "ready-for-packing" | "packing-done";
-type PackingSourceTab = "sales" | "sample" | "stock_transfer";
+type PackingSourceTab = "sales" | "sample" | "stock_transfer" | "purchase_return";
 
 export function PackingListing({ sourceFilter }: { sourceFilter: PackingSourceTab }) {
   const searchParams = useSearchParams();
@@ -20,9 +20,14 @@ export function PackingListing({ sourceFilter }: { sourceFilter: PackingSourceTa
   const [rawPackings, setRawPackings] = useState<PackingRecord[]>([]);
 
   useEffect(() => {
-    setRawOrders(getSalesOrders("All"));
-    setRawPackings(getPackingRecordsList("All"));
-  }, []);
+    const refresh = () => {
+      setRawOrders(getSalesOrders("All"));
+      setRawPackings(getPackingRecordsList("All"));
+    };
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [sourceFilter]);
 
   const ordersForWarehouse = useMemo(() => {
     if (selectedWarehouse === "All") return rawOrders;

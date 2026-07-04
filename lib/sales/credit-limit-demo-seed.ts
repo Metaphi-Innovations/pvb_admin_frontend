@@ -5,6 +5,8 @@
  * driven by posted demo invoices only (no open orders).
  */
 
+import { applyRelativeInvoiceDates, demoDateAt } from "@/lib/accounts/demo-date-utils";
+
 export const CREDIT_LIMIT_DEMO_AMOUNT = 350_000;
 
 export const CREDIT_LIMIT_DEMO_CUSTOMER_IDS = [1010, 1011, 1012] as const;
@@ -66,13 +68,13 @@ export const CREDIT_LIMIT_DEMO_CUSTOMERS_RAW = [
 		bankAccountNo: "50100987654321",
 		ifscCode: "HDFC0001010",
 		createdBy: "Admin",
-		createdDate: "2026-06-20",
+		createdDate: demoDateAt(15),
 		updatedBy: "Admin",
-		updatedDate: "2026-06-20",
-		lastStatusChange: "2026-06-20",
+		updatedDate: demoDateAt(15),
+		lastStatusChange: demoDateAt(15),
 		statusHistory: [
 			{
-				date: "2026-06-20",
+				date: demoDateAt(15),
 				from: "-",
 				to: "active",
 				by: "Admin",
@@ -135,13 +137,13 @@ export const CREDIT_LIMIT_DEMO_CUSTOMERS_RAW = [
 		bankAccountNo: "50100987654322",
 		ifscCode: "ICIC0001011",
 		createdBy: "Admin",
-		createdDate: "2026-06-20",
+		createdDate: demoDateAt(15),
 		updatedBy: "Admin",
-		updatedDate: "2026-06-20",
-		lastStatusChange: "2026-06-20",
+		updatedDate: demoDateAt(15),
+		lastStatusChange: demoDateAt(15),
 		statusHistory: [
 			{
-				date: "2026-06-20",
+				date: demoDateAt(15),
 				from: "-",
 				to: "active",
 				by: "Admin",
@@ -204,13 +206,13 @@ export const CREDIT_LIMIT_DEMO_CUSTOMERS_RAW = [
 		bankAccountNo: "50100987654323",
 		ifscCode: "SBIN0001012",
 		createdBy: "Admin",
-		createdDate: "2026-06-20",
+		createdDate: demoDateAt(15),
 		updatedBy: "Admin",
-		updatedDate: "2026-06-20",
-		lastStatusChange: "2026-06-20",
+		updatedDate: demoDateAt(15),
+		lastStatusChange: demoDateAt(15),
 		statusHistory: [
 			{
-				date: "2026-06-20",
+				date: demoDateAt(15),
 				from: "-",
 				to: "active",
 				by: "Admin",
@@ -249,7 +251,7 @@ function splitGstTotal(grandTotal: number): {
 }
 
 /** Posted sales invoice specs — outstanding = grandTotal (unpaid). */
-export const CREDIT_LIMIT_DEMO_INVOICE_SPECS = (
+const CREDIT_LIMIT_DEMO_INVOICE_SPECS_RAW = (
 	[
 		{ id: 110, customerId: 1010, invoiceNo: "INV-2026-CL01", grandTotal: 175_000 },
 		{ id: 111, customerId: 1011, invoiceNo: "INV-2026-CL02", grandTotal: 320_000 },
@@ -270,3 +272,11 @@ export const CREDIT_LIMIT_DEMO_INVOICE_SPECS = (
 		amountCredited: 0,
 	};
 });
+
+export const CREDIT_LIMIT_DEMO_INVOICE_SPECS = applyRelativeInvoiceDates(
+	CREDIT_LIMIT_DEMO_INVOICE_SPECS_RAW,
+	20,
+	"INV",
+	new Date(),
+	3,
+);

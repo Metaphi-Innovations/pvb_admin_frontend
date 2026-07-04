@@ -31,10 +31,18 @@ import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync
 import { customerMasterToTransactionFields } from "@/lib/accounts/transaction-master-fetch";
 import type { InvoiceNearExpirySchemeSettlement } from "@/app/(app)/accounts/invoices/invoices-data";
 import {
+  getPendingInvoiceSeedDispatch,
+  listPendingInvoiceSeedRows,
+} from "@/lib/accounts/pending-invoice-seed";
+import {
   getNearExpiryPendingDemoDispatch,
   isNearExpiryPendingDemoDispatch,
-  NEAR_EXPIRY_PENDING_DEMO_DISPATCH_ID,
 } from "@/lib/accounts/pending-invoice-near-expiry-demo";
+import {
+  getDispatchInvoiceType,
+  getDispatchPartyName,
+  type InvoiceDocumentType,
+} from "@/lib/accounts/invoice-type";
 
 const INVOICE_READY_STATUSES = new Set<DispatchRecord["deliveryStatus"]>([
   "Delivered",
@@ -47,11 +55,14 @@ export interface PendingDispatchInvoiceRow {
   dispatchNo: string;
   soNumber: string;
   salesOrderId: number | null;
+  invoiceType: InvoiceDocumentType;
   customerName: string;
   dispatchDate: string;
   taxableValue: number;
   gstAmount: number;
   invoiceValue: number;
+  /** When true, GST is IGST-only; otherwise CGST + SGST. */
+  interstate?: boolean;
   status: string;
   warehouse: string;
   totalQty: number;
@@ -176,10 +187,23 @@ export function buildInvoiceLineFromDispatchProduct(
   const unitPrice = resolveUnitRate(dp, master.id, customerId, order);
   const unit = pricing?.uom ?? master.packagingUnit ?? master.baseUnit ?? "PCS";
 
+  const soLine = order?.lineItems?.find(
+    (l) =>
+      l.productName.toLowerCase() === dp.product.toLowerCase() ||
+      (l.productCode && l.productCode.toLowerCase() === dp.sku.toLowerCase()),
+  );
+
+  const hasScheme = soLine?.schemeApplied === "Yes";
+  const effectiveRate = soLine?.finalRate || unitPrice;
+  const discountPct = hasScheme
+    ? soLine.schemeDiscountPercent || soLine.discount || 0
+    : soLine?.discount || 0;
+
   const line = recalculateLineItem({
     id: `dispatch-${dispatch.id}-${lineIndex}`,
     productId: master.id,
     productName: master.productName,
+    productCode: master.sku ?? master.productCode ?? dp.sku,
     description: [
       dispatch.dispatchNumber,
       dp.batchNo ? `Batch ${dp.batchNo}` : "",
@@ -190,10 +214,18 @@ export function buildInvoiceLineFromDispatchProduct(
     hsn: master.hsnCode ?? "",
     qty: dp.dispatchQty,
     unit,
-    unitPrice,
-    discountPct: 0,
+    unitPrice: effectiveRate,
+    discountPct,
     taxPct,
     amount: 0,
+    dealerPrice: soLine?.dealerPrice ?? unitPrice,
+    finalRate: effectiveRate,
+    schemeApplied: hasScheme ? "Yes" : soLine?.schemeApplied ?? "No",
+    schemeCode: soLine?.appliedSchemeCode ?? soLine?.schemeCode,
+    schemeName: soLine?.appliedSchemeName ?? soLine?.schemeName,
+    schemeDiscountPercent: soLine?.schemeDiscountPercent,
+    schemeDiscountAmount: soLine?.schemeDiscountAmount,
+    schemeDiscountType: soLine?.schemeDiscountType,
   });
 
   return { line };
@@ -285,13 +317,15 @@ export function findPendingDispatchForCustomer(
 function mapDispatchToPendingRow(d: DispatchRecord): PendingDispatchInvoiceRow {
   const order = findOrderBySoNumber(d.salesOrderNumber);
   const customer = findCustomerByName(d.customer);
+  const invoiceType = getDispatchInvoiceType(d);
   const totals = computeDispatchInvoiceTotals(d, customer?.id ?? order?.customerId);
   return enrichPendingDispatchRow(d, {
     dispatchId: d.id,
     dispatchNo: d.dispatchNumber,
     soNumber: d.salesOrderNumber,
-    salesOrderId: order?.id ?? null,
-    customerName: d.customer,
+    salesOrderId: invoiceType === "sales" ? order?.id ?? null : null,
+    invoiceType,
+    customerName: getDispatchPartyName(d),
     dispatchDate: d.dispatchDate,
     taxableValue: totals.taxableValue,
     gstAmount: totals.gstAmount,
@@ -301,23 +335,41 @@ function mapDispatchToPendingRow(d: DispatchRecord): PendingDispatchInvoiceRow {
 }
 
 export function listPendingDispatchInvoices(): PendingDispatchInvoiceRow[] {
+  const seedRows = listPendingInvoiceSeedRows().map((row) => ({
+    dispatchId: row.dispatchId,
+    dispatchNo: row.dispatchNo,
+    soNumber: row.soNumber,
+    salesOrderId: row.salesOrderId,
+    invoiceType: row.invoiceType,
+    customerName: row.customerName,
+    dispatchDate: row.dispatchDate,
+    taxableValue: row.taxableValue,
+    gstAmount: row.gstAmount,
+    invoiceValue: row.invoiceValue,
+    interstate: row.interstate,
+    status: row.status,
+    warehouse: row.invoiceType === "stock_transfer" ? row.customerName : "Central Warehouse",
+    totalQty: 0,
+    qtyUnit: "Units",
+    schemeLabel: row.schemeLabel,
+    settlementLabel: row.settlementLabel,
+  }));
+
+  const seedIds = new Set(seedRows.map((r) => r.dispatchId));
+
   const warehouseRows = getDispatchRecords()
     .filter((d) => INVOICE_READY_STATUSES.has(d.deliveryStatus))
     .filter((d) => !isDispatchInvoiced(d.dispatchNumber))
     .filter((d) => d.products.some((p) => p.dispatchQty > 0))
+    .filter((d) => !seedIds.has(d.id))
     .map(mapDispatchToPendingRow);
 
-  const demoDispatch = getNearExpiryPendingDemoDispatch();
-  const demoRow = demoDispatch ? mapDispatchToPendingRow(demoDispatch) : null;
-
-  const rows = demoRow
-    ? [demoRow, ...warehouseRows.filter((row) => row.dispatchId !== NEAR_EXPIRY_PENDING_DEMO_DISPATCH_ID)]
-    : warehouseRows;
-
-  return rows.sort((a, b) => b.dispatchDate.localeCompare(a.dispatchDate));
+  return [...seedRows, ...warehouseRows].sort((a, b) => b.dispatchDate.localeCompare(a.dispatchDate));
 }
 
 export function getDispatchById(dispatchId: string): DispatchRecord | undefined {
+  const seed = getPendingInvoiceSeedDispatch(dispatchId);
+  if (seed) return seed;
   if (isNearExpiryPendingDemoDispatch(dispatchId)) {
     return getNearExpiryPendingDemoDispatch();
   }
@@ -325,6 +377,8 @@ export function getDispatchById(dispatchId: string): DispatchRecord | undefined 
 }
 
 export function getDispatchByNumber(dispatchNo: string): DispatchRecord | undefined {
+  const seed = getPendingInvoiceSeedDispatch(null, dispatchNo);
+  if (seed) return seed;
   if (isNearExpiryPendingDemoDispatch(null, dispatchNo)) {
     return getNearExpiryPendingDemoDispatch();
   }
@@ -338,6 +392,7 @@ function dueDateFromTerms(baseDate: string, creditDays: number): string {
 }
 
 export interface DispatchSalesInvoicePrefill {
+  invoiceType: InvoiceDocumentType;
   salesOrderId: number | null;
   salesOrderNo: string;
   sourceDispatchId: string;
@@ -382,41 +437,53 @@ export function buildSalesInvoicePrefillFromDispatch(
 
   if (!dispatch) return null;
 
-  const order =
-    (orderId ? getOrderById(orderId) : undefined) ??
-    findOrderBySoNumber(dispatch.salesOrderNumber);
+  const invoiceType = getDispatchInvoiceType(dispatch);
+  const isStockTransfer = invoiceType === "stock_transfer";
+  const destinationWarehouse = getDispatchPartyName(dispatch);
+  const sourceWarehouse =
+    dispatch.source_warehouse_name?.trim() ||
+    dispatch.sourceWarehouse?.trim() ||
+    dispatch.warehouse;
 
-  const customer =
-    (order?.customerId ? loadCustomers().find((c) => c.id === order.customerId) : undefined) ??
-    findCustomerByName(dispatch.customer);
+  const order = isStockTransfer
+    ? undefined
+    : (orderId ? getOrderById(orderId) : undefined) ??
+      findOrderBySoNumber(dispatch.salesOrderNumber);
+
+  const customer = isStockTransfer
+    ? undefined
+    : (order?.customerId ? loadCustomers().find((c) => c.id === order.customerId) : undefined) ??
+      findCustomerByName(dispatch.customer);
 
   const custFields = customer
     ? customerMasterToTransactionFields(customer)
     : {
         customerId: null as number | null,
         customerCode: "",
-        customerName: dispatch.customer,
+        customerName: isStockTransfer ? destinationWarehouse : dispatch.customer,
         customerMobile: "",
         customerEmail: "",
         customerGst: "",
         customerGstCategory: undefined,
-        billingAddress: "",
-        shippingAddress: "",
+        billingAddress: isStockTransfer ? destinationWarehouse : "",
+        shippingAddress: isStockTransfer ? destinationWarehouse : "",
         pan: "",
         contactPerson: "",
-        paymentTerms: "Net 30",
-        creditDays: 30,
+        paymentTerms: isStockTransfer ? "Immediate" : "Net 30",
+        creditDays: isStockTransfer ? 0 : 30,
         placeOfSupply: "",
         state: "",
         gstTreatment: "registered",
-        receivableLedger: dispatch.customer,
+        receivableLedger: isStockTransfer ? destinationWarehouse : dispatch.customer,
         defaultBillToId: "",
         defaultShipToId: "",
       };
 
   const ledger = customer ? ensureCustomerLedgerFromMaster(customer) : null;
-  const creditDays = custFields.creditDays ?? 30;
+  const creditDays = custFields.creditDays ?? (isStockTransfer ? 0 : 30);
   const invoiceDate = dispatch.dispatchDate || new Date().toISOString().slice(0, 10);
+  const stockTransferDocNo =
+    dispatch.source_document_no?.trim() || dispatch.salesOrderNumber;
 
   const lineItems: InvoiceLineItem[] = [];
   const lineErrors: string[] = [];
@@ -435,14 +502,15 @@ export function buildSalesInvoicePrefillFromDispatch(
   });
 
   return {
+    invoiceType,
     salesOrderId: order?.id ?? null,
-    salesOrderNo: dispatch.salesOrderNumber,
+    salesOrderNo: isStockTransfer ? stockTransferDocNo : dispatch.salesOrderNumber,
     sourceDispatchId: dispatch.id,
     dispatchNo: dispatch.dispatchNumber,
     branch: "Head Office",
-    warehouse: dispatch.warehouse,
+    warehouse: sourceWarehouse,
     salesperson: order?.salesManName ?? "",
-    referenceNo: dispatch.salesOrderNumber,
+    referenceNo: isStockTransfer ? stockTransferDocNo : dispatch.salesOrderNumber,
     paymentTerms: custFields.paymentTerms ?? "Net 30",
     creditDays,
     dueDate: dueDateFromTerms(invoiceDate, creditDays),

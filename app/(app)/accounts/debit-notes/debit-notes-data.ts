@@ -18,6 +18,30 @@ import {
 } from "../purchase-invoices/purchase-invoices-data";
 import { getGrnRecords } from "@/app/(app)/warehouse/grn/mock-data";
 import { getQcRecords } from "@/app/(app)/warehouse/qc/mock-data";
+import { computeNoteTaxBreakup } from "@/lib/accounts/note-tax-breakup";
+import { inferInterstateFromPlaceOfSupply } from "@/lib/accounts/gst-accounting";
+import { invalidateAccountsDataCache } from "@/lib/accounts/accounts-data-service";
+import { buildDebitNotesSeed } from "./debit-notes-seed";
+import {
+  getPurchaseReturnById,
+  loadPurchaseReturns,
+  type PurchaseReturn,
+} from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
+
+export type DebitNoteCreationMode = "against_return" | "direct_adjustment";
+
+export type DebitNoteSource = "purchase_return" | "manual";
+
+export const DEBIT_NOTE_SOURCE_LABELS: Record<DebitNoteSource, string> = {
+  purchase_return: "Purchase Return",
+  manual: "Manual",
+};
+
+export const MANUAL_DEBIT_REASONS = [
+  "Manual Adjustment",
+  "Commercial Settlement",
+  "Other",
+] as const;
 
 export type DebitNoteAgainst = "purchase_invoice" | "purchase_order" | "standalone_adjustment";
 export type DebitReferenceType = DebitNoteAgainst;
@@ -42,7 +66,13 @@ export interface DebitNoteLine {
   id: string;
   sourceLineId: string;
   productName: string;
+  batchNo?: string;
+  hsn?: string;
   invoiceQty: number;
+  /** Qty from purchase return document. */
+  purchaseReturnQty?: number;
+  /** Upper bound for debit qty validation. */
+  eligibleReturnQty?: number;
   uom: string;
   unitPrice: number;
   discountPct: number;
@@ -115,9 +145,16 @@ export interface DebitNoteRecord {
   processedAt?: string;
   createdAt: string;
   updatedAt: string;
+  source: DebitNoteSource;
+  sourceReturnId?: string;
+  sourceReturnNo?: string;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
 }
 
-const STORAGE_KEY = "ds_accounts_debit_notes_v2";
+const STORAGE_KEY = "ds_accounts_debit_notes_v3";
+const SEED_VERSION_KEY = "ds_accounts_debit_notes_seed_v3";
 
 function warehouseRefsForPo(poNumber: string): { sourceGrnNo: string; sourceQcNo: string } {
   if (!poNumber) return { sourceGrnNo: "", sourceQcNo: "" };
@@ -169,7 +206,11 @@ export function createEmptyDebitLine(): DebitNoteLine {
     id: `dnl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     sourceLineId: "",
     productName: "",
+    batchNo: "",
+    hsn: "",
     invoiceQty: 0,
+    purchaseReturnQty: 0,
+    eligibleReturnQty: 0,
     uom: "",
     unitPrice: 0,
     discountPct: 0,
@@ -182,13 +223,113 @@ export function createEmptyDebitLine(): DebitNoteLine {
   };
 }
 
+export function getDebitLineMaxQty(line: DebitNoteLine): number {
+  if (line.eligibleReturnQty != null && line.eligibleReturnQty > 0) return line.eligibleReturnQty;
+  if (line.purchaseReturnQty != null && line.purchaseReturnQty > 0) return line.purchaseReturnQty;
+  return line.invoiceQty > 0 ? line.invoiceQty : Number.POSITIVE_INFINITY;
+}
+
+export function validateDebitNoteLines(lines: DebitNoteLine[]): void {
+  for (const line of lines) {
+    if (line.returnQty <= 0) continue;
+    const max = getDebitLineMaxQty(line);
+    if (Number.isFinite(max) && line.returnQty > max + 0.0001) {
+      throw new Error(
+        `Debit qty for "${line.productName || "line"}" cannot exceed eligible return qty (${max}).`,
+      );
+    }
+  }
+}
+
+export function listPurchaseReturnsForDebitNote(): PurchaseReturn[] {
+  return loadPurchaseReturns().filter(
+    (r) =>
+      r.status === "approved" ||
+      r.status === "returned" ||
+      r.status === "issued_for_packing" ||
+      r.status === "submitted",
+  );
+}
+
+export function buildReferenceFromPurchaseReturn(returnId: number): DebitReferencePreview | null {
+  const ret = getPurchaseReturnById(returnId);
+  if (!ret) return null;
+  const pi = findPurchaseInvoiceForPO(ret.poId);
+  const basePreview = pi ? buildReferenceFromPurchaseInvoice(pi.id) : null;
+  const vendor = getActiveVendors().find(
+    (v) => v.id === ret.supplierId || v.vendorName === ret.supplierName,
+  );
+  const wh = warehouseRefsForPo(ret.poNumber);
+
+  const lineItems = ret.items
+    .filter((item) => item.returnQty > 0 || item.balanceRejectedQty > 0)
+    .map((item) => {
+      const baseLine =
+        basePreview?.lineItems.find((l) => l.sourceLineId === item.id) ??
+        basePreview?.lineItems.find(
+          (l) => l.productName.trim().toLowerCase() === item.productName.trim().toLowerCase(),
+        );
+      const purchaseReturnQty = item.returnQty > 0 ? item.returnQty : item.balanceRejectedQty;
+      const taxPct = item.cgstPct + item.sgstPct + item.igstPct;
+      const lineTotal =
+        item.netAmount > 0
+          ? item.netAmount
+          : Math.round((item.taxableValue + item.taxAmount) * 100) / 100;
+      return normalizeDebitLine({
+        id: baseLine?.id ?? `dnl-pr-${item.id}`,
+        sourceLineId: baseLine?.sourceLineId ?? item.id,
+        productName: item.productName,
+        batchNo: item.batchNumber,
+        hsn: baseLine?.hsn ?? "",
+        invoiceQty: baseLine?.invoiceQty ?? item.grnReceivedQty,
+        purchaseReturnQty,
+        eligibleReturnQty: purchaseReturnQty,
+        uom: baseLine?.uom ?? "Unit",
+        unitPrice: item.unitPrice || baseLine?.unitPrice || 0,
+        discountPct: baseLine?.discountPct ?? 0,
+        taxPct: taxPct || baseLine?.taxPct || 0,
+        gstAmount: item.taxAmount || baseLine?.gstAmount || 0,
+        lineAmount: baseLine?.lineAmount ?? lineTotal,
+        returnQty: 0,
+        debitAmount: 0,
+        lineRemarks: item.lineRemark || ret.overallRemarks,
+      });
+    });
+
+  if (!lineItems.length) return null;
+
+  return {
+    referenceType: "purchase_invoice",
+    documentDate: ret.returnDate,
+    sourceInvoiceId: pi?.id ?? null,
+    sourceInvoiceNo: pi?.invoiceNo ?? "",
+    sourcePoId: ret.poId,
+    sourcePoNo: ret.poNumber,
+    sourceGrnNo: wh.sourceGrnNo,
+    sourceQcNo: wh.sourceQcNo,
+    vendorId: ret.supplierId ?? vendor?.id ?? null,
+    vendorName: ret.supplierName,
+    vendorPhone: vendor ? `${vendor.mobileCountryCode} ${vendor.mobile}`.trim() : "",
+    vendorEmail: vendor?.email ?? "",
+    vendorGstin: vendor?.gstNumber ?? "",
+    originalAmount: basePreview?.originalAmount ?? ret.summary?.grandTotal ?? 0,
+    taxAmount: basePreview?.taxAmount ?? 0,
+    alreadyAdjustedAmount: basePreview?.alreadyAdjustedAmount ?? 0,
+    lineItems,
+  };
+}
+
 function piLineToDebitLine(l: PurchaseInvoiceLine): DebitNoteLine {
   const lineTotal = Math.round((l.lineAmount + l.taxAmount) * 100) / 100;
   return {
     id: `dnl-${l.id}`,
     sourceLineId: l.id,
     productName: l.productName,
+    batchNo: l.batchNumber ?? "",
+    hsn: "",
     invoiceQty: l.invoiceQty,
+    purchaseReturnQty: 0,
+    eligibleReturnQty: l.invoiceQty,
     uom: l.unit,
     unitPrice: l.unitPrice,
     discountPct: 0,
@@ -201,7 +342,7 @@ function piLineToDebitLine(l: PurchaseInvoiceLine): DebitNoteLine {
   };
 }
 
-function calcDebitFromQty(line: Pick<DebitNoteLine, "returnQty" | "invoiceQty" | "unitPrice" | "discountPct" | "taxPct" | "lineAmount">): number {
+export function calcDebitFromQty(line: Pick<DebitNoteLine, "returnQty" | "invoiceQty" | "unitPrice" | "discountPct" | "taxPct" | "lineAmount">): number {
   const returnQty = Math.max(0, line.returnQty);
   if (returnQty <= 0) return 0;
   const invoiceQty = line.invoiceQty;
@@ -288,6 +429,12 @@ export function totalRejectedQtyFromLines(lines: DebitNoteLine[]): number {
   return lines.reduce((s, l) => s + (l.returnQty ?? 0), 0);
 }
 
+function inferDebitNoteSource(rec: DebitNoteRecord): DebitNoteSource {
+  if (rec.source) return rec.source;
+  if (rec.sourceReturnNo) return "purchase_return";
+  return "manual";
+}
+
 export function normalizeDebitNote(rec: DebitNoteRecord): DebitNoteRecord {
   const lineItems = rec.lineItems.map((l) => normalizeDebitLine(l));
   const totals =
@@ -304,88 +451,73 @@ export function normalizeDebitNote(rec: DebitNoteRecord): DebitNoteRecord {
     0,
     rec.originalAmount - rec.alreadyAdjustedAmount - currentDebitAmount,
   );
+  const interstate = inferInterstateFromPlaceOfSupply(
+    (rec as { placeOfSupply?: string }).placeOfSupply,
+  );
+  const taxBreakup =
+    rec.againstType === "standalone_adjustment"
+      ? {
+          taxableValue: rec.standaloneDebitAmount,
+          cgstAmount: 0,
+          sgstAmount: 0,
+          igstAmount: 0,
+        }
+      : computeNoteTaxBreakup(lineItems, interstate);
   return {
     ...rec,
+    source: inferDebitNoteSource(rec),
     sourceGrnNo: rec.sourceGrnNo ?? "",
     sourceQcNo: rec.sourceQcNo ?? "",
     lineItems,
     attachments: rec.attachments ?? [],
     taxableAmount: totals.taxableAmount,
     gstAmount: totals.gstAmount,
+    cgstAmount: taxBreakup.cgstAmount,
+    sgstAmount: taxBreakup.sgstAmount,
+    igstAmount: taxBreakup.igstAmount,
     currentDebitAmount: Math.round(currentDebitAmount * 100) / 100,
     balanceAfterAdjustment: Math.round(balanceAfterAdjustment * 100) / 100,
   };
 }
 
-const SEED: DebitNoteRecord[] = [
-  {
-    id: 1,
-    debitNoteNo: "DN-0001",
-    debitNoteDate: "2026-06-02",
-    againstType: "purchase_invoice",
-    sourceInvoiceId: 1,
-    sourceInvoiceNo: "PI-0001",
-    sourcePoId: null,
-    sourcePoNo: "",
-    sourceGrnNo: "",
-    sourceQcNo: "",
-    vendorId: null,
-    vendorName: "",
-    originalAmount: 0,
-    alreadyAdjustedAmount: 0,
-    taxableAmount: 0,
-    gstAmount: 0,
-    currentDebitAmount: 0,
-    balanceAfterAdjustment: 0,
-    standaloneDebitAmount: 0,
-    lineItems: [],
-    reason: "Purchase Return",
-    remarks: "Sample debit note for UI review",
-    attachments: [],
-    status: "draft",
-    activity: [{ at: "2026-06-02T09:00:00.000Z", action: "created", by: "Admin", detail: "Sample debit note" }],
-    createdBy: "Admin",
-    updatedBy: "Admin",
-    createdAt: "2026-06-02T09:00:00.000Z",
-    updatedAt: "2026-06-02T09:00:00.000Z",
-  },
-];
+const SEED: DebitNoteRecord[] = buildDebitNotesSeed();
 
 function hydrateSeed(): DebitNoteRecord[] {
-  const preview = buildReferenceFromPurchaseInvoice(1);
-  if (!preview) return SEED.map(normalizeDebitNote);
-  const totals = computeDebitTotals(preview.lineItems);
-  return [
-    normalizeDebitNote({
-      ...SEED[0],
-      sourcePoId: preview.sourcePoId,
-      sourcePoNo: preview.sourcePoNo,
-      sourceGrnNo: preview.sourceGrnNo,
-      sourceQcNo: preview.sourceQcNo,
-      vendorId: preview.vendorId,
-      vendorName: preview.vendorName,
-      originalAmount: preview.originalAmount,
-      alreadyAdjustedAmount: preview.alreadyAdjustedAmount,
-      lineItems: preview.lineItems,
-      taxableAmount: totals.taxableAmount,
-      gstAmount: totals.gstAmount,
-    }),
-  ];
+  return SEED.map(normalizeDebitNote);
 }
 
 export function loadDebitNotes(): DebitNoteRecord[] {
   if (typeof window === "undefined") return hydrateSeed().map(normalizeDebitNote);
   try {
+    const seedCurrent = localStorage.getItem(SEED_VERSION_KEY) === SEED_VERSION_KEY;
     let raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      const legacy = localStorage.getItem("ds_accounts_debit_notes_v1");
-      if (legacy) {
-        localStorage.setItem(STORAGE_KEY, legacy);
-        raw = legacy;
+      const legacyV2 = localStorage.getItem("ds_accounts_debit_notes_v2");
+      const legacyV1 = localStorage.getItem("ds_accounts_debit_notes_v1");
+      if (legacyV2) {
+        localStorage.setItem(STORAGE_KEY, legacyV2);
+        raw = legacyV2;
+      } else if (legacyV1) {
+        localStorage.setItem(STORAGE_KEY, legacyV1);
+        raw = legacyV1;
       }
     }
+    if (!raw && !seedCurrent) {
+      const seeded = hydrateSeed();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
+      localStorage.setItem(SEED_VERSION_KEY, SEED_VERSION_KEY);
+      return seeded;
+    }
     const list: DebitNoteRecord[] = raw ? JSON.parse(raw) : hydrateSeed();
-    const normalized = list.map(normalizeDebitNote);
+    const normalized = list.map((r) =>
+      normalizeDebitNote({
+        ...r,
+        source: r.source ?? inferDebitNoteSource(r as DebitNoteRecord),
+        cgstAmount: r.cgstAmount ?? 0,
+        sgstAmount: r.sgstAmount ?? 0,
+        igstAmount: r.igstAmount ?? 0,
+      }),
+    );
     localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
     return normalized;
   } catch {
@@ -396,6 +528,7 @@ export function loadDebitNotes(): DebitNoteRecord[] {
 export function saveDebitNotes(records: DebitNoteRecord[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(records.map(normalizeDebitNote)));
+  invalidateAccountsDataCache("debitNotes");
 }
 
 export function getDebitNoteById(id: number): DebitNoteRecord | undefined {
@@ -644,6 +777,9 @@ export type DebitNoteFormInput = {
   remarks: string;
   attachments: DebitNoteAttachment[];
   status: NoteWorkflowStatus;
+  source?: DebitNoteSource;
+  sourceReturnId?: string;
+  sourceReturnNo?: string;
 };
 
 function metaFromInput(input: DebitNoteFormInput) {
@@ -683,6 +819,12 @@ function metaFromInput(input: DebitNoteFormInput) {
   };
 }
 
+function resolveDebitNoteSource(input: DebitNoteFormInput): DebitNoteSource {
+  if (input.source) return input.source;
+  if (input.sourceReturnNo) return "purchase_return";
+  return "manual";
+}
+
 export function createDebitNote(input: DebitNoteFormInput): DebitNoteRecord {
   validateBasic(input);
   const all = loadDebitNotes();
@@ -693,6 +835,9 @@ export function createDebitNote(input: DebitNoteFormInput): DebitNoteRecord {
     debitNoteNo: nextDebitNoteNo(all),
     debitNoteDate: input.debitNoteDate,
     againstType: input.againstType,
+    source: resolveDebitNoteSource(input),
+    sourceReturnId: input.sourceReturnId,
+    sourceReturnNo: input.sourceReturnNo,
     sourceInvoiceId: input.sourceInvoiceId,
     sourceInvoiceNo: meta.sourceInvoiceNo,
     sourcePoId: input.sourcePoId,
@@ -705,6 +850,9 @@ export function createDebitNote(input: DebitNoteFormInput): DebitNoteRecord {
     alreadyAdjustedAmount: meta.alreadyAdjustedAmount,
     taxableAmount: 0,
     gstAmount: 0,
+    cgstAmount: 0,
+    sgstAmount: 0,
+    igstAmount: 0,
     currentDebitAmount: 0,
     balanceAfterAdjustment: 0,
     standaloneDebitAmount: input.standaloneDebitAmount,
@@ -737,6 +885,9 @@ export function updateDebitNote(id: number, input: DebitNoteFormInput): DebitNot
     ...cur,
     debitNoteDate: input.debitNoteDate,
     againstType: input.againstType,
+    source: resolveDebitNoteSource(input),
+    sourceReturnId: input.sourceReturnId ?? cur.sourceReturnId,
+    sourceReturnNo: input.sourceReturnNo ?? cur.sourceReturnNo,
     vendorId: input.vendorId,
     vendorName: input.vendorName.trim(),
     sourceInvoiceId: input.sourceInvoiceId,
@@ -894,10 +1045,12 @@ export function filterDebitNotes(records: DebitNoteRecord[], filters: DebitNoteF
         x.debitNoteNo.toLowerCase().includes(q) ||
         x.vendorName.toLowerCase().includes(q) ||
         x.sourceInvoiceNo.toLowerCase().includes(q) ||
-        x.sourcePoNo.toLowerCase().includes(q),
+        x.sourcePoNo.toLowerCase().includes(q) ||
+        x.sourceReturnNo?.toLowerCase().includes(q) ||
+        DEBIT_NOTE_SOURCE_LABELS[x.source].toLowerCase().includes(q),
     );
   }
-  return r;
+  return r.sort((a, b) => b.debitNoteDate.localeCompare(a.debitNoteDate));
 }
 
 export function computeDebitNoteTabCounts(records: DebitNoteRecord[]): Record<string, number> {

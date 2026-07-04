@@ -5,7 +5,7 @@
 
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
-import type { VoucherTypeCode } from "@/app/(app)/accounts/masters/masters-data";
+import { loadFinancialYears, type VoucherTypeCode } from "@/app/(app)/accounts/masters/masters-data";
 import {
   loadVouchers,
   type AccountingVoucher,
@@ -58,6 +58,7 @@ export interface BankBookAccountOption {
   accountNumber: string;
   maskedAccountNumber: string;
   label: string;
+  defaultForReceipts: boolean;
 }
 
 export interface BankBookRawTransaction {
@@ -143,6 +144,7 @@ export function getBankBookAccountOptions(): BankBookAccountOption[] {
       accountNumber: m.accountNumber,
       maskedAccountNumber: maskBankAccountLast4(m.accountNumber),
       label: `${m.accountNickname} (${maskBankAccountLast4(m.accountNumber)})`,
+      defaultForReceipts: m.defaultForReceipts,
     }));
 }
 
@@ -206,7 +208,10 @@ function matchesFinancialYear(v: AccountingVoucher, financialYearId: string): bo
   if (financialYearId === "all") return true;
   const fyId = Number(financialYearId);
   if (!Number.isFinite(fyId)) return true;
-  return v.financialYearId === fyId;
+  if (v.financialYearId === fyId) return true;
+  const fy = loadFinancialYears().find((f) => f.id === fyId);
+  if (fy && v.date >= fy.startDate && v.date <= fy.endDate) return true;
+  return false;
 }
 
 function buildRawTransactions(ledgerId: number): BankBookRawTransaction[] {

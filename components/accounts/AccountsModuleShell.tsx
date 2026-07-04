@@ -14,6 +14,7 @@ import {
 import { ACCOUNTS_SCROLL_PANEL_CLASS } from "@/lib/accounts/accounts-layout-constants";
 import { seedAccountsDemoData } from "@/lib/accounts/accounts-demo-seed";
 import { ensureGstAccountingLedgers } from "@/lib/accounts/gst-accounting";
+import { ACCOUNTS_SIDEBAR_GROUP_CLASS, ACCOUNTS_SIDEBAR_ITEM_CLASS } from "@/lib/accounts/accounts-typography";
 import { CoaSidebarNav } from "./CoaSidebarNav";
 
 interface AccountsModuleShellProps {
@@ -44,10 +45,11 @@ function NavGroup({
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         className={cn(
-          "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-semibold transition-all duration-150",
+          "w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all duration-150",
+          ACCOUNTS_SIDEBAR_GROUP_CLASS,
           hasActiveChild
             ? "text-brand-800 bg-brand-50/60"
-            : "text-foreground/80 hover:bg-brand-50/50 hover:text-brand-800",
+            : "text-[#6B7280] hover:bg-brand-50/50 hover:text-brand-800",
         )}
       >
         <span
@@ -80,11 +82,12 @@ function NavGroup({
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "group flex items-center gap-2.5 pl-2.5 pr-2.5 py-2 rounded-r-lg text-[13px] leading-snug",
+                  "group flex items-center gap-2 pl-2 pr-2 py-1.5 rounded-r-lg leading-snug",
+                  ACCOUNTS_SIDEBAR_ITEM_CLASS,
                   "border-l-2 -ml-[1px] transition-all duration-150",
                   active
-                    ? "border-brand-600 bg-brand-50 text-brand-800 font-semibold"
-                    : "border-transparent text-foreground/75 hover:bg-brand-50/70 hover:text-brand-800 hover:border-brand-300",
+                    ? "border-brand-600 bg-[#FFF3E6] text-brand-800 font-medium"
+                    : "border-transparent text-[#6B7280] hover:bg-brand-50/70 hover:text-brand-800 hover:border-brand-300",
                 )}
               >
                 <ItemIcon
@@ -127,8 +130,8 @@ export function AccountsModuleShell({ children }: AccountsModuleShellProps) {
     <div className="accounts-module-shell flex h-full min-h-0 w-full overflow-hidden">
       <aside className="accounts-module-sidebar w-[min(380px,32vw)] min-w-[340px] flex-shrink-0 flex flex-col h-full min-h-0 overflow-hidden bg-white border-r border-border/80">
         <div className="flex-shrink-0 px-3 py-3 border-b border-border/60">
-          <p className="text-xs font-semibold text-brand-800">Accounting</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">
+          <p className={cn(ACCOUNTS_SIDEBAR_GROUP_CLASS, "text-brand-800")}>Accounting</p>
+          <p className="text-[13px] text-slate-500 mt-0.5">
             Chart of Accounts · Transactions · Receivables · Payables · Banking · Reports
           </p>
         </div>

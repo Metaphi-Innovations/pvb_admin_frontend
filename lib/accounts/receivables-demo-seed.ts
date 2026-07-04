@@ -16,6 +16,11 @@ import {
   seedCollectionFollowUpHistory,
   seedReceiptAllocations,
 } from "@/lib/accounts/receivables-data";
+import {
+  applyRelativeInvoiceDates,
+  demoDateAt,
+  demoDocNo,
+} from "@/lib/accounts/demo-date-utils";
 
 type SupplementalInvoiceSpec = {
   id: number;
@@ -31,7 +36,7 @@ type SupplementalInvoiceSpec = {
 };
 
 /** 13 supplemental invoices — brings receivables demo to 25 invoices across 5 core customers */
-const SUPPLEMENTAL_INVOICE_SPECS: SupplementalInvoiceSpec[] = [
+const SUPPLEMENTAL_INVOICE_SPECS_RAW: SupplementalInvoiceSpec[] = [
   {
     id: 13,
     invoiceNo: "INV-2026-013",
@@ -176,6 +181,10 @@ const SUPPLEMENTAL_INVOICE_SPECS: SupplementalInvoiceSpec[] = [
     amountReceived: 15000,
   },
 ];
+
+function getSupplementalInvoiceSpecs(): SupplementalInvoiceSpec[] {
+  return applyRelativeInvoiceDates(SUPPLEMENTAL_INVOICE_SPECS_RAW, 2, "INV", new Date(), 3);
+}
 
 function buildSupplementalInvoice(spec: SupplementalInvoiceSpec, customerName: string): InvoiceRecord {
   const amountCredited = spec.amountCredited ?? 0;
@@ -525,14 +534,82 @@ export const DEMO_RECEIPT_ALLOCATION_SPECS: Array<{
   { voucherNumber: "RV-2026-006", lines: [] },
 ];
 
+function buildDemoReceiptAllocationSpecs(ref = new Date()) {
+  const invNo = (id: number) => demoDocNo("INV", id, ref, 3);
+  const rvNo = (seq: number) => demoDocNo("RV", seq, ref, 3);
+  return [
+    { voucherNumber: rvNo(1), lines: [{ invoiceNo: invNo(1), amount: 80000 }] },
+    { voucherNumber: rvNo(2), lines: [{ invoiceNo: invNo(2), amount: 45000 }] },
+    { voucherNumber: rvNo(3), lines: [{ invoiceNo: invNo(6), amount: 118000 }] },
+    {
+      voucherNumber: rvNo(4),
+      lines: [
+        { invoiceNo: invNo(4), amount: 80000 },
+        { invoiceNo: invNo(5), amount: 10000 },
+      ],
+    },
+    { voucherNumber: rvNo(5), lines: [{ invoiceNo: invNo(8), amount: 25000 }] },
+    { voucherNumber: rvNo(6), lines: [] as Array<{ invoiceNo: string; amount: number }> },
+  ];
+}
+
+const COLLECTION_DATE_OFFSETS: Record<
+  number,
+  { followUp: number; next: number; promise?: number }
+> = {
+  1: { followUp: 10, next: 18 },
+  2: { followUp: 12, next: 26, promise: 25 },
+  3: { followUp: 5, next: 22 },
+  4: { followUp: 15, next: 20 },
+  5: { followUp: 8, next: 1, promise: 0 },
+  6: { followUp: 1, next: 24 },
+  7: { followUp: 14, next: 21 },
+  8: { followUp: 16, next: 29, promise: 28 },
+  9: { followUp: 18, next: -1 },
+  10: { followUp: 11, next: 27 },
+};
+
+function buildDemoCollectionFollowUps(ref = new Date()): CollectionFollowUp[] {
+  const invoices = loadInvoices();
+  const rv5 = demoDocNo("RV", 5, ref, 3);
+  return DEMO_COLLECTION_FOLLOWUPS.map((row) => {
+    const inv = invoices.find((i) => i.id === row.invoiceId);
+    const o = COLLECTION_DATE_OFFSETS[row.id] ?? { followUp: 7, next: 14 };
+    return {
+      ...row,
+      invoiceNo: inv?.invoiceNo ?? demoDocNo("INV", row.invoiceId ?? 0, ref, 3),
+      dueDate: inv?.dueDate ?? demoDateAt(o.followUp + 8, ref),
+      followUpDate: demoDateAt(o.followUp, ref),
+      promiseToPayDate:
+        row.promiseToPayDate === ""
+          ? ""
+          : o.promise != null
+            ? demoDateAt(o.promise, ref)
+            : demoDateAt(o.followUp + 3, ref),
+      nextFollowUpDate: o.next < 0 ? "" : demoDateAt(o.next, ref),
+      remarks: row.remarks.replace("RV-2026-005", rv5),
+    };
+  });
+}
+
+function buildDemoCollectionHistory(ref = new Date()): CollectionFollowUpHistoryEntry[] {
+  const offsets = [10, 12, 8, 14];
+  return DEMO_COLLECTION_HISTORY.map((row, i) => ({
+    ...row,
+    date: demoDateAt(offsets[i] ?? 7, ref),
+    remarks: row.remarks.replace("RV-2026-005", demoDocNo("RV", 5, ref, 3)),
+  }));
+}
+
 export function seedReceivablesDemoData(
   resolveVoucherId: (voucherNumber: string) => number | undefined,
   resolveInvoiceId: (invoiceNo: string) => number | undefined,
 ): void {
-  seedCollectionFollowUps(DEMO_COLLECTION_FOLLOWUPS);
-  seedCollectionFollowUpHistory(DEMO_COLLECTION_HISTORY);
+  const ref = new Date();
+  seedCollectionFollowUps(buildDemoCollectionFollowUps(ref));
+  seedCollectionFollowUpHistory(buildDemoCollectionHistory(ref));
 
-  const entries = DEMO_RECEIPT_ALLOCATION_SPECS.map((spec) => {
+  const entries = buildDemoReceiptAllocationSpecs(ref).map((spec) => {
     const voucherId = resolveVoucherId(spec.voucherNumber);
     if (!voucherId) return null;
     return {
@@ -560,7 +637,7 @@ export function seedReceivablesSupplementalData(): void {
   const existing = loadInvoices();
   const existingNos = new Set(existing.map((i) => i.invoiceNo));
 
-  const toAdd = SUPPLEMENTAL_INVOICE_SPECS.filter((s) => !existingNos.has(s.invoiceNo)).map(
+  const toAdd = getSupplementalInvoiceSpecs().filter((s) => !existingNos.has(s.invoiceNo)).map(
     (spec) => {
       const customer = customers.find((c) => c.id === spec.customerId);
       return buildSupplementalInvoice(spec, customer?.customerName ?? "Customer");
@@ -571,19 +648,20 @@ export function seedReceivablesSupplementalData(): void {
     saveInvoices([...existing, ...toAdd]);
   }
 
-  seedCollectionFollowUps(DEMO_COLLECTION_FOLLOWUPS);
-  seedCollectionFollowUpHistory(DEMO_COLLECTION_HISTORY);
+  seedCollectionFollowUps(buildDemoCollectionFollowUps(new Date()));
+  seedCollectionFollowUpHistory(buildDemoCollectionHistory(new Date()));
 }
 
-const RECEIVABLES_SEED_KEY = "ds_receivables_demo_seed_v2";
+const RECEIVABLES_SEED_KEY = "ds_receivables_demo_seed_v3";
+export const RECEIVABLES_SEED_VERSION = "relative-dates-v3";
 
 /** Idempotent client-side seed for supplemental receivables demo data. */
 export function ensureReceivablesDemoData(): void {
   if (typeof window === "undefined") return;
-  if (localStorage.getItem(RECEIVABLES_SEED_KEY) === "v2") return;
+  if (localStorage.getItem(RECEIVABLES_SEED_KEY) === RECEIVABLES_SEED_VERSION) return;
   try {
     seedReceivablesSupplementalData();
-    localStorage.setItem(RECEIVABLES_SEED_KEY, "v2");
+    localStorage.setItem(RECEIVABLES_SEED_KEY, RECEIVABLES_SEED_VERSION);
   } catch (err) {
     console.error("[receivables] supplemental seed failed:", err);
   }

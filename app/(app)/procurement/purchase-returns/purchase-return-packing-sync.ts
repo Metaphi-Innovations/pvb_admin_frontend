@@ -1,4 +1,5 @@
 import type { SalesOrderRecord } from "@/app/(app)/warehouse/packing/types";
+import { getPackingRecords } from "@/app/(app)/warehouse/packing/mock-data";
 import type { PurchaseReturn } from "./purchase-return-data";
 import { loadPurchaseReturns } from "./purchase-return-data";
 import { getPOById } from "../purchase-orders/po-data";
@@ -38,11 +39,16 @@ export function mapPurchaseReturnToPackingOrder(record: PurchaseReturn): SalesOr
     status: "Ready For Packing",
     warehouse,
     products: activeItems.map((it) => ({
+      lineId: it.id,
       product: it.productName,
       sku: it.productCode,
       orderedQty: it.returnQty,
       packedQty: 0,
       pendingQty: it.returnQty,
+      batchNumber: it.batchNumber,
+      grnNo: it.grnNo,
+      mfgDate: it.mfgDate,
+      expDate: it.expDate,
     })),
     sourceDocumentType: "Purchase Return",
     sourceDocumentNo: record.returnNumber,
@@ -50,13 +56,34 @@ export function mapPurchaseReturnToPackingOrder(record: PurchaseReturn): SalesOr
     targetWarehouse: record.supplierName,
     createdDate: record.returnDate,
     packingListNo: `PL-${record.returnNumber}`,
+    poNumber: record.poNumber,
+    supplierCode: record.supplierCode,
+    initiatedBy: record.initiatedBy,
+    returnRemarks: record.overallRemarks,
   };
+}
+
+export function removePurchaseReturnFromPackingQueue(returnId: number): void {
+  const ids = loadPackingQueueIds().filter((id) => id !== returnId);
+  savePackingQueueIds(ids);
+}
+
+export function getPurchaseReturnByReturnNumber(returnNumber: string): PurchaseReturn | undefined {
+  return loadPurchaseReturns().find((r) => r.returnNumber === returnNumber);
 }
 
 export function getPurchaseReturnsForPacking(): SalesOrderRecord[] {
   const ids = new Set(loadPackingQueueIds());
+  const packedIds = new Set(
+    getPackingRecords()
+      .filter((p) => p.id.startsWith("pret-pkg-") && p.status === "Packed")
+      .map((p) => Number(p.id.replace("pret-pkg-", ""))),
+  );
   return loadPurchaseReturns()
-    .filter((r) => r.status === "issued_for_packing" || ids.has(r.id))
+    .filter(
+      (r) =>
+        (r.status === "issued_for_packing" || ids.has(r.id)) && !packedIds.has(r.id),
+    )
     .map(mapPurchaseReturnToPackingOrder);
 }
 

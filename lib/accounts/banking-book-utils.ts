@@ -126,7 +126,11 @@ export function buildBookEntries(
 
       v.lines.forEach((line, lineOrder) => {
         if (!line.ledgerId || !allowedIds.has(line.ledgerId)) return;
-        const ledger = ledgerMap.get(line.ledgerId);
+        let ledger = ledgerMap.get(line.ledgerId);
+        if (!ledger) {
+          ledger = loadChartOfAccounts().find((l) => l.id === line.ledgerId);
+          if (ledger) ledgerMap.set(ledger.id, ledger);
+        }
         if (!ledger) return;
 
         const branch = ledgerBranch(ledger);
@@ -164,8 +168,10 @@ export function buildBookEntries(
   const sorted = sortChronological(raw);
 
   const runningByLedger = new Map<number, number>();
-  for (const l of ledgers) {
-    if (allowedIds.has(l.id)) runningByLedger.set(l.id, openingSignedBalance(l));
+  for (const id of allowedIds) {
+    const ledger =
+      ledgerMap.get(id) ?? loadChartOfAccounts().find((l) => l.id === id);
+    if (ledger) runningByLedger.set(id, openingSignedBalance(ledger));
   }
 
   return sorted.map((row) => {

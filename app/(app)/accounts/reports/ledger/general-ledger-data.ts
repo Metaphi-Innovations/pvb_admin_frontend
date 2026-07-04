@@ -12,10 +12,16 @@ import {
 } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { collectLedgerRawCoaTransactions } from "@/lib/accounts/coa-accounting-view";
 import {
+  parentGroupLabel,
+  resolveLedgerType,
+  type LedgerTypeLabel,
+} from "@/lib/accounts/ledger-detail-utils";
+import { loadLedgerMeta } from "@/lib/accounts/ledger-metadata";
+import {
   computeClosingFromPeriodOpening,
   computePeriodOpeningBalance,
+  ledgerMovementMapForRange,
 } from "@/lib/accounts/ledger-transaction-date-filter";
-import { resolveLedgerType } from "@/lib/accounts/ledger-detail-utils";
 import { roundMoney, type BalanceSide } from "@/lib/accounts/money-format";
 import { isLedgerMovementVoucherStatus } from "@/lib/accounts/running-balance";
 import {
@@ -28,9 +34,29 @@ export type GeneralLedgerLedgerType =
   | "Customer"
   | "Supplier"
   | "Bank"
+  | "Cash"
+  | "Sales"
+  | "Purchase"
+  | "GST"
   | "Expense"
   | "Income"
+  | "Inventory"
   | "General";
+
+export const GENERAL_LEDGER_TYPE_OPTIONS: { value: string; label: GeneralLedgerLedgerType | "All Types" }[] = [
+  { value: "all", label: "All Types" },
+  { value: "Customer", label: "Customer" },
+  { value: "Supplier", label: "Supplier" },
+  { value: "Bank", label: "Bank" },
+  { value: "Cash", label: "Cash" },
+  { value: "Sales", label: "Sales" },
+  { value: "Purchase", label: "Purchase" },
+  { value: "GST", label: "GST" },
+  { value: "Expense", label: "Expense" },
+  { value: "Income", label: "Income" },
+  { value: "Inventory", label: "Inventory" },
+  { value: "General", label: "General" },
+];
 
 export interface GeneralLedgerLedgerOption {
   id: string;
@@ -73,6 +99,9 @@ export interface GeneralLedgerSummary {
   ledgerName: string;
   ledgerCode: string;
   ledgerType: GeneralLedgerLedgerType;
+  parentGroup: string;
+  gstin: string;
+  pan: string;
   openingBalance: number;
   openingBalanceType: BalanceSide;
   totalDebit: number;
@@ -81,6 +110,31 @@ export interface GeneralLedgerSummary {
   closingBalanceType: BalanceSide;
   currentBalance: number;
   currentBalanceType: BalanceSide;
+}
+
+export interface GeneralLedgerListingRow {
+  ledgerId: string;
+  ledgerCode: string;
+  ledgerName: string;
+  ledgerType: GeneralLedgerLedgerType;
+  parentGroup: string;
+  gstin: string;
+  pan: string;
+  openingBalance: number;
+  openingBalanceType: BalanceSide;
+  totalDebit: number;
+  totalCredit: number;
+  closingBalance: number;
+  closingBalanceType: BalanceSide;
+  lastTransactionDate: string | null;
+}
+
+export interface GeneralLedgerListingFilters {
+  dateFrom: string;
+  dateTo: string;
+  ledgerType: string;
+  parentGroup: string;
+  search: string;
 }
 
 export interface GeneralLedgerStatement {
@@ -132,13 +186,46 @@ function voucherMap(): Map<number, AccountingVoucher> {
   );
 }
 
-function mapLedgerType(label: ReturnType<typeof resolveLedgerType>): GeneralLedgerLedgerType {
+function mapLedgerType(label: LedgerTypeLabel): GeneralLedgerLedgerType {
   if (label === "Customer") return "Customer";
   if (label === "Vendor") return "Supplier";
-  if (label === "Bank" || label === "Cash") return "Bank";
-  if (label === "Expense" || label === "Purchase") return "Expense";
-  if (label === "Income" || label === "Sales") return "Income";
+  if (label === "Bank") return "Bank";
+  if (label === "Cash") return "Cash";
+  if (label === "Sales") return "Sales";
+  if (label === "Purchase") return "Purchase";
+  if (label === "GST") return "GST";
+  if (label === "Inventory") return "Inventory";
+  if (label === "Expense") return "Expense";
+  if (label === "Income") return "Income";
   return "General";
+}
+
+function resolveLedgerTaxFields(ledger: ChartOfAccount): { gstin: string; pan: string } {
+  const meta = loadLedgerMeta(ledger.id);
+  return {
+    gstin: meta.gstin?.trim() || GL_EMPTY,
+    pan: meta.pan?.trim() || GL_EMPTY,
+  };
+}
+
+function resolveLastTransactionDate(
+  raw: ReturnType<typeof collectLedgerRawCoaTransactions>,
+): string | null {
+  if (raw.length === 0) return null;
+  return raw.reduce((latest, row) => (row.date > latest ? row.date : latest), raw[0].date);
+}
+
+function matchesListingSearch(row: GeneralLedgerListingRow, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [
+    row.ledgerCode,
+    row.ledgerName,
+    row.ledgerType,
+    row.parentGroup,
+    row.gstin,
+    row.pan,
+  ].some((v) => v.toLowerCase().includes(q));
 }
 
 function resolveContraLedger(
@@ -282,6 +369,67 @@ export function getGeneralLedgerVoucherTypeOptions(): { value: string; label: st
   ];
 }
 
+export function getGeneralLedgerParentGroupOptions(): { value: string; label: string }[] {
+  const records = loadChartOfAccounts();
+  const groups = new Set<string>();
+  for (const ledger of getPostableCoaAccounts(records)) {
+    const group = parentGroupLabel(records, ledger);
+    if (group && group !== GL_EMPTY) groups.add(group);
+  }
+  return [
+    { value: "all", label: "All groups" },
+    ...Array.from(groups)
+      .sort((a, b) => a.localeCompare(b))
+      .map((g) => ({ value: g, label: g })),
+  ];
+}
+
+export function buildGeneralLedgerListing(
+  filters: GeneralLedgerListingFilters,
+): GeneralLedgerListingRow[] {
+  const records = loadChartOfAccounts();
+  const movementMap = ledgerMovementMapForRange(filters.dateFrom, filters.dateTo);
+
+  const rows = getPostableCoaAccounts(records).map((ledger) => {
+    const ledgerType = mapLedgerType(resolveLedgerType(ledger, records));
+    const group = parentGroupLabel(records, ledger);
+    const tax = resolveLedgerTaxFields(ledger);
+    const raw = collectLedgerRawCoaTransactions(ledger);
+    const periodOpening = computePeriodOpeningBalance(ledger, raw, filters.dateFrom);
+    const movement = movementMap.get(ledger.id) ?? { totalDebit: 0, totalCredit: 0 };
+    const closing = computeClosingFromPeriodOpening(
+      periodOpening,
+      movement.totalDebit,
+      movement.totalCredit,
+    );
+
+    return {
+      ledgerId: String(ledger.id),
+      ledgerCode: ledger.accountCode,
+      ledgerName: ledger.accountName,
+      ledgerType,
+      parentGroup: group,
+      gstin: tax.gstin,
+      pan: tax.pan,
+      openingBalance: periodOpening.amount,
+      openingBalanceType: periodOpening.balanceType,
+      totalDebit: movement.totalDebit,
+      totalCredit: movement.totalCredit,
+      closingBalance: closing.amount,
+      closingBalanceType: closing.balanceType,
+      lastTransactionDate: resolveLastTransactionDate(raw),
+    };
+  });
+
+  return rows
+    .filter((row) => {
+      if (filters.ledgerType !== "all" && row.ledgerType !== filters.ledgerType) return false;
+      if (filters.parentGroup !== "all" && row.parentGroup !== filters.parentGroup) return false;
+      return matchesListingSearch(row, filters.search);
+    })
+    .sort((a, b) => a.ledgerName.localeCompare(b.ledgerName));
+}
+
 export function buildGeneralLedgerStatement(
   ledgerId: string,
   filters: GeneralLedgerFilters,
@@ -291,6 +439,8 @@ export function buildGeneralLedgerStatement(
 
   const records = loadChartOfAccounts();
   const ledgerOption = getGeneralLedgerLedgerById(ledgerId);
+  const tax = resolveLedgerTaxFields(ledger);
+  const parentGroup = parentGroupLabel(records, ledger);
   const vouchers = voucherMap();
   const raw = collectLedgerRawCoaTransactions(ledger);
 
@@ -352,11 +502,11 @@ export function buildGeneralLedgerStatement(
     kind: "opening",
     date: formatGeneralLedgerDate(filters.dateFrom),
     voucherNo: GL_EMPTY,
-    voucherType: GL_EMPTY,
+    voucherType: "Opening",
     ...summaryFields,
     particularsNarration: "Opening Balance",
-    debit: 0,
-    credit: 0,
+    debit: periodOpening.balanceType === "Debit" ? periodOpening.amount : 0,
+    credit: periodOpening.balanceType === "Credit" ? periodOpening.amount : 0,
     runningBalance: periodOpening.amount,
     runningBalanceType: periodOpening.balanceType,
     particular: "Opening Balance",
@@ -384,6 +534,9 @@ export function buildGeneralLedgerStatement(
       ledgerName: ledger.accountName,
       ledgerCode: ledger.accountCode,
       ledgerType: ledgerOption?.ledgerType ?? mapLedgerType(resolveLedgerType(ledger, records)),
+      parentGroup,
+      gstin: tax.gstin,
+      pan: tax.pan,
       openingBalance: periodOpening.amount,
       openingBalanceType: periodOpening.balanceType,
       totalDebit,

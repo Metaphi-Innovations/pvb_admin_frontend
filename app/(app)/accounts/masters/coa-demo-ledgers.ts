@@ -8,7 +8,8 @@ export interface CoaDemoLedgerSeed {
 
 /**
  * Demo ledger entries — minimum 5 per leaf COA standard group.
- * Bank Accounts, Sundry Debtors, and Sundry Creditors are seeded via bank/customer/vendor masters.
+ * Bundled at build time via coa-demo-bundle.ts (not localStorage).
+ * Bank Accounts, Sundry Debtors, and Sundry Creditors are also in coa-demo-bundle.ts.
  */
 export const COA_DEMO_LEDGER_SEEDS: CoaDemoLedgerSeed[] = [
   // Accounting Charges

@@ -1,6 +1,15 @@
-export type WarehouseOrderDocType = "sales_order" | "sample_order" | "stock_transfer";
+export type WarehouseOrderDocType =
+  | "sales_order"
+  | "sample_order"
+  | "stock_transfer"
+  | "purchase_return";
 
-export type OrderTypeFilterTab = "all" | "sales" | "sample" | "stock_transfer";
+export type OrderTypeFilterTab =
+  | "all"
+  | "sales"
+  | "sample"
+  | "stock_transfer"
+  | "purchase_return";
 
 export function resolveWarehouseOrderType(record: {
   sourceDocumentType?: string;
@@ -13,6 +22,13 @@ export function resolveWarehouseOrderType(record: {
 
   if (docType === "Stock Transfer" || docType === "stock_transfer") {
     return "stock_transfer";
+  }
+  if (
+    docType === "Purchase Return" ||
+    docType === "purchase_return" ||
+    docNo.startsWith("PRET-")
+  ) {
+    return "purchase_return";
   }
   if (
     docType === "Sample Order" ||
@@ -33,6 +49,7 @@ export function matchesOrderTypeFilter(
   if (tab === "sales") return type === "sales_order";
   if (tab === "sample") return type === "sample_order";
   if (tab === "stock_transfer") return type === "stock_transfer";
+  if (tab === "purchase_return") return type === "purchase_return";
   return true;
 }
 
@@ -51,6 +68,10 @@ export const ORDER_TYPE_BADGE_CONFIG: Record<
   stock_transfer: {
     bg: "bg-amber-50 text-amber-700 border-amber-200",
     label: "Transfer",
+  },
+  purchase_return: {
+    bg: "bg-rose-50 text-rose-700 border-rose-200",
+    label: "P. Return",
   },
 };
 

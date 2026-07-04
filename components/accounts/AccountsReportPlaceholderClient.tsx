@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { FileText } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
@@ -20,7 +19,6 @@ import {
   ReportSearchFilter,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
-import { EmptyState } from "@/components/ui/EmptyState";
 
 export interface ReportPlaceholderColumn {
   key: string;
@@ -66,16 +64,17 @@ export function AccountsReportPlaceholderClient({
     URL.revokeObjectURL(url);
   }, [columns, title]);
 
-  const hasFilters = Boolean(search.trim());
-
   return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Reports", title)}
       title={title}
       description={description}
-      actions={<AccountsExportMenu onExcel={exportCsv} onPdf={exportCsv} disabled={totalRecords === 0} />}
       filters={
-        <ReportFilterRow>
+        <ReportFilterRow
+          end={
+            <AccountsExportMenu onExcel={exportCsv} onPdf={exportCsv} disabled={totalRecords === 0} />
+          }
+        >
           <ReportSearchFilter
             value={search}
             onChange={setSearch}
@@ -108,21 +107,8 @@ export function AccountsReportPlaceholderClient({
     >
       <AccountsTableListing>
         {totalRecords === 0 ? (
-          <div className="flex flex-1 items-center justify-center min-h-[280px]">
-            <EmptyState
-              icon={FileText}
-              title={emptyTitle}
-              description={emptyMessage}
-              size="sm"
-              secondaryAction={
-                hasFilters
-                  ? {
-                      label: "Clear search",
-                      onClick: () => setSearch(""),
-                    }
-                  : undefined
-              }
-            />
+          <div className="flex flex-1 items-center justify-center min-h-[200px]">
+            <p className="text-xs text-muted-foreground">No records found.</p>
           </div>
         ) : (
           <AccountsTableScroll>
