@@ -1,9 +1,8 @@
 import {
-  creditNoteSourceToKind,
+  CREDIT_NOTE_SOURCE_LABELS,
   normalizeCreditNote,
   type CreditNoteRecord,
 } from "./credit-notes-data";
-import { CREDIT_NOTE_SOURCE_KIND_LABELS } from "./credit-note-source-types";
 import { formatLinkedInvoiceNos } from "./components/LinkedInvoicesMultiSelect";
 
 /** Listing export — filtered records with source and tax columns. */
@@ -11,14 +10,15 @@ export async function exportCreditNotesToExcel(records: CreditNoteRecord[]): Pro
   const XLSX = await import("xlsx");
   const rows = records.map((r) => {
     const rec = normalizeCreditNote(r);
-    const kind = creditNoteSourceToKind(rec.source, rec);
     const refDoc =
-      kind === "sales_return"
+      rec.source === "sales_return"
         ? rec.sourceReturnNo ?? ""
-        : rec.schemeName ?? rec.schemeCode ?? rec.reason;
+        : rec.source === "payment_discount_scheme"
+          ? rec.schemeName ?? rec.schemeCode ?? ""
+          : rec.reason;
     return {
       "Credit Note No.": rec.creditNoteNo,
-      Source: CREDIT_NOTE_SOURCE_KIND_LABELS[kind],
+      Source: CREDIT_NOTE_SOURCE_LABELS[rec.source],
       "Reference Document": refDoc,
       "Against Invoice": formatLinkedInvoiceNos(rec.linkedInvoices) || rec.sourceInvoiceNo || "",
       "Linked Invoices": formatLinkedInvoiceNos(rec.linkedInvoices) || rec.sourceInvoiceNo || "",

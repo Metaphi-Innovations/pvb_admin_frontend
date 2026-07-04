@@ -20,6 +20,7 @@ export default function NewCreditNotePage({
       <CreditNoteFormPageClient
         returnId={searchParams?.returnId}
         schemeKey={searchParams?.schemeKey}
+        invoiceId={searchParams?.invoiceId}
         mode={mode}
       />
     </Suspense>

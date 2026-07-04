@@ -43,13 +43,11 @@ import {
   CREDIT_NOTE_SOURCE_LABELS,
   cancelCreditNote,
   computeCreditNoteTabCounts,
-  creditNoteSourceToKind,
   filterCreditNotes,
   getCreditNoteRowActions,
   loadCreditNotes,
   type CreditNoteRecord,
 } from "../../credit-notes/credit-notes-data";
-import { CREDIT_NOTE_SOURCE_KIND_LABELS } from "../../credit-notes/credit-note-source-types";
 import { listPendingCreditNotes } from "../../credit-notes/pending-credit-notes-data";
 import { exportCreditNotesToExcel } from "../../credit-notes/credit-notes-export";
 import { formatLinkedInvoiceNos } from "../../credit-notes/components/LinkedInvoicesMultiSelect";
@@ -59,7 +57,11 @@ const LIST_PATH = CREDIT_NOTES_LIST_PATH;
 
 const MODULE_TABS = [
   { id: "pending", label: "Pending Credit Notes" },
-  { id: "all", label: "All Credit Notes" },
+  { id: "records", label: "All Credit Notes" },
+];
+
+const STATUS_TABS = [
+  { id: "all", label: "All" },
   { id: "draft", label: "Draft" },
   { id: "posted", label: "Posted" },
   { id: "cancelled", label: "Cancelled" },
@@ -69,6 +71,7 @@ export default function CreditNotesListClient() {
   const router = useRouter();
   const mounted = useClientMounted();
   const [moduleTab, setModuleTab] = useState("pending");
+  const [statusTab, setStatusTab] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [records, setRecords] = useState<CreditNoteRecord[]>([]);
@@ -83,12 +86,7 @@ export default function CreditNotesListClient() {
   const refresh = useCallback(() => {
     if (!mounted) return;
     setRecords(loadCreditNotes());
-    const loadPendingCount = () => setPendingCount(listPendingCreditNotes().length);
-    if (typeof requestIdleCallback === "function") {
-      requestIdleCallback(loadPendingCount, { timeout: 800 });
-    } else {
-      loadPendingCount();
-    }
+    setPendingCount(listPendingCreditNotes().length);
   }, [mounted]);
 
   useEffect(() => {
@@ -96,8 +94,6 @@ export default function CreditNotesListClient() {
   }, [refresh]);
 
   const counts = useMemo(() => computeCreditNoteTabCounts(records), [records]);
-
-  const statusTab = moduleTab === "all" ? "all" : moduleTab;
 
   const visible = useMemo(
     () =>
@@ -114,7 +110,7 @@ export default function CreditNotesListClient() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, dateFrom, dateTo, pageSize, moduleTab]);
+  }, [search, dateFrom, dateTo, pageSize, statusTab, moduleTab]);
 
   const pagedRows = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -130,26 +126,24 @@ export default function CreditNotesListClient() {
     }
   };
 
-  const tabCounts = {
-    pending: pendingCount,
-    all: counts.all,
-    draft: counts.draft,
-    posted: counts.posted,
-    cancelled: counts.cancelled,
-  };
-
   return (
     <>
       <AccountsPageShell
         breadcrumbs={accountsBreadcrumb("Transactions", "Credit Notes")}
         title="Credit Notes"
-        description="Centralized customer credit notes from sales returns and scheme settlements."
+        description="Customer credit notes — pending sales returns & scheme settlements, plus manual adjustments."
         hideDescription
         actions={
           <Button
             size="sm"
             className="h-8 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
-            onClick={() => router.push(`${LIST_PATH}/new?mode=fresh`)}
+            onClick={() => {
+              const target = `${LIST_PATH}/new?mode=fresh`;
+              // #region agent log
+              fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'db7cdd'},body:JSON.stringify({sessionId:'db7cdd',hypothesisId:'A-B',location:'CreditNotesListClient.tsx:create-btn',message:'Create Credit Note clicked',data:{target},timestamp:Date.now()})}).catch(()=>{});
+              // #endregion
+              router.push(target);
+            }}
           >
             <Plus className="w-3.5 h-3.5" /> Create Credit Note
           </Button>
@@ -166,7 +160,7 @@ export default function CreditNotesListClient() {
                 setModuleTab(tab);
                 if (tab === "pending") refresh();
               }}
-              counts={tabCounts}
+              counts={{ pending: pendingCount, records: records.length }}
               compact
             />
           </div>
@@ -174,87 +168,87 @@ export default function CreditNotesListClient() {
           {moduleTab === "pending" ? (
             <PendingCreditNotesPanel />
           ) : (
-            <div className="accounts-listing-card flex flex-col flex-1 min-h-0">
-              <AccountsListingFilterCard
-                actions={
-                  <AccountsExportMenu
-                    onExcel={handleExportExcel}
-                    onPdf={handleExportExcel}
-                    disabled={exporting || visible.length === 0}
+            <div className="flex flex-col flex-1 min-h-0 gap-2 overflow-hidden">
+              <div className="flex-shrink-0">
+                <SectionTabs tabs={STATUS_TABS} active={statusTab} onChange={setStatusTab} counts={counts} compact />
+              </div>
+              <div className="accounts-listing-card flex flex-col flex-1 min-h-0">
+                <AccountsListingFilterCard
+                  actions={
+                    <AccountsExportMenu
+                      onExcel={handleExportExcel}
+                      onPdf={handleExportExcel}
+                      disabled={exporting || visible.length === 0}
+                    />
+                  }
+                >
+                  <AccountsListingDateFilter
+                    dateFrom={dateFrom}
+                    dateTo={dateTo}
+                    onDateFromChange={setDateFrom}
+                    onDateToChange={setDateTo}
                   />
-                }
-              >
-                <AccountsListingDateFilter
-                  dateFrom={dateFrom}
-                  dateTo={dateTo}
-                  onDateFromChange={setDateFrom}
-                  onDateToChange={setDateTo}
-                />
-                <ReportSearchFilter
-                  value={search}
-                  onChange={setSearch}
-                  placeholder="Search CN no., source, invoice, return, customer, scheme…"
-                  className="min-w-[200px] flex-1 max-w-md"
-                />
-              </AccountsListingFilterCard>
-              <AccountsListingTableCard>
-                <AccountsTableScroll className="[&_.accounts-table-td-inner]:min-w-0 [&_.accounts-table-td-inner]:overflow-hidden">
-                  <AccountsTable minWidth={1180}>
-                    <colgroup>
-                      <col className="w-[9rem]" />
-                      <col className="w-[5.5rem]" />
-                      <col className="w-[8rem]" />
-                      <col className="w-[9rem]" />
-                      <col className="w-[6rem]" />
-                      <col className="w-[5.5rem]" />
-                      <col className="w-[5rem]" />
-                      <col className="w-[5rem]" />
-                      <col className="w-[5rem]" />
-                      <col className="w-[5.5rem]" />
-                      <col className="w-[5.5rem]" />
-                      <col className="w-[4.5rem]" />
-                    </colgroup>
-                    <AccountsTableHead>
-                      <AccountsTableHeadRow>
-                        <AccountsTableHeadCell uppercase>CN No.</AccountsTableHeadCell>
-                        <AccountsTableHeadCell uppercase>Source</AccountsTableHeadCell>
-                        <AccountsTableHeadCell uppercase>Invoice</AccountsTableHeadCell>
-                        <AccountsTableHeadCell uppercase className="accounts-col-party">Customer</AccountsTableHeadCell>
-                        <AccountsTableHeadCell uppercase>Date</AccountsTableHeadCell>
-                        <AccountsTableHeadCell align="right" uppercase>Taxable</AccountsTableHeadCell>
-                        <AccountsTableHeadCell align="right" uppercase>CGST</AccountsTableHeadCell>
-                        <AccountsTableHeadCell align="right" uppercase>SGST</AccountsTableHeadCell>
-                        <AccountsTableHeadCell align="right" uppercase>IGST</AccountsTableHeadCell>
-                        <AccountsTableHeadCell align="right" uppercase>Total</AccountsTableHeadCell>
-                        <AccountsTableHeadCell uppercase>Status</AccountsTableHeadCell>
-                        <AccountsTableHeadCell align="right" uppercase className={accountsActionColClass("multi")}>
-                          Actions
-                        </AccountsTableHeadCell>
-                      </AccountsTableHeadRow>
-                    </AccountsTableHead>
-                    <AccountsTableBody>
-                      {!mounted ? (
-                        <AccountsTableEmpty colSpan={12} message="Loading credit notes…" />
-                      ) : visible.length === 0 ? (
-                        <AccountsTableEmpty
-                          colSpan={12}
-                          message="No credit notes found."
-                          onClear={
-                            search || dateFrom || dateTo
-                              ? () => {
-                                  setSearch("");
-                                  setDateFrom("");
-                                  setDateTo("");
-                                }
-                              : undefined
-                          }
-                        />
-                      ) : (
-                        pagedRows.map((r) => {
-                          const sourceLabel =
-                            CREDIT_NOTE_SOURCE_KIND_LABELS[creditNoteSourceToKind(r.source, r)] ??
-                            CREDIT_NOTE_SOURCE_LABELS[r.source];
-                          return (
+                  <ReportSearchFilter
+                    value={search}
+                    onChange={setSearch}
+                    placeholder="Search CN no., source, invoice, return, customer, scheme…"
+                    className="min-w-[200px] flex-1 max-w-md"
+                  />
+                </AccountsListingFilterCard>
+                <AccountsListingTableCard>
+                  <AccountsTableScroll className="[&_.accounts-table-td-inner]:min-w-0 [&_.accounts-table-td-inner]:overflow-hidden">
+                    <AccountsTable minWidth={1180}>
+                      <colgroup>
+                        <col className="w-[9rem]" />
+                        <col className="w-[5.5rem]" />
+                        <col className="w-[8rem]" />
+                        <col className="w-[9rem]" />
+                        <col className="w-[6rem]" />
+                        <col className="w-[5.5rem]" />
+                        <col className="w-[5rem]" />
+                        <col className="w-[5rem]" />
+                        <col className="w-[5rem]" />
+                        <col className="w-[5.5rem]" />
+                        <col className="w-[5.5rem]" />
+                        <col className="w-[4.5rem]" />
+                      </colgroup>
+                      <AccountsTableHead>
+                        <AccountsTableHeadRow>
+                          <AccountsTableHeadCell uppercase>CN No.</AccountsTableHeadCell>
+                          <AccountsTableHeadCell uppercase>Source</AccountsTableHeadCell>
+                          <AccountsTableHeadCell uppercase>Invoice</AccountsTableHeadCell>
+                          <AccountsTableHeadCell uppercase className="accounts-col-party">Customer</AccountsTableHeadCell>
+                          <AccountsTableHeadCell uppercase>Date</AccountsTableHeadCell>
+                          <AccountsTableHeadCell align="right" uppercase>Taxable</AccountsTableHeadCell>
+                          <AccountsTableHeadCell align="right" uppercase>CGST</AccountsTableHeadCell>
+                          <AccountsTableHeadCell align="right" uppercase>SGST</AccountsTableHeadCell>
+                          <AccountsTableHeadCell align="right" uppercase>IGST</AccountsTableHeadCell>
+                          <AccountsTableHeadCell align="right" uppercase>Total</AccountsTableHeadCell>
+                          <AccountsTableHeadCell uppercase>Status</AccountsTableHeadCell>
+                          <AccountsTableHeadCell align="right" uppercase className={accountsActionColClass("multi")}>
+                            Actions
+                          </AccountsTableHeadCell>
+                        </AccountsTableHeadRow>
+                      </AccountsTableHead>
+                      <AccountsTableBody>
+                        {!mounted ? (
+                          <AccountsTableEmpty colSpan={12} message="Loading credit notes…" />
+                        ) : visible.length === 0 ? (
+                          <AccountsTableEmpty
+                            colSpan={12}
+                            message="No credit notes found."
+                            onClear={
+                              search || dateFrom || dateTo
+                                ? () => {
+                                    setSearch("");
+                                    setDateFrom("");
+                                    setDateTo("");
+                                  }
+                                : undefined
+                            }
+                          />
+                        ) : (
+                          pagedRows.map((r) => (
                             <AccountsTableRow key={r.id}>
                               <AccountsTableCell mono className="font-semibold text-brand-700">
                                 <button
@@ -266,7 +260,9 @@ export default function CreditNotesListClient() {
                                   {r.creditNoteNo}
                                 </button>
                               </AccountsTableCell>
-                              <AccountsTableCell className="truncate text-xs">{sourceLabel}</AccountsTableCell>
+                              <AccountsTableCell className="truncate text-xs">
+                                {CREDIT_NOTE_SOURCE_LABELS[r.source]}
+                              </AccountsTableCell>
                               <AccountsTableCell mono className="truncate text-xs" title={formatLinkedInvoiceNos(r.linkedInvoices) || r.sourceInvoiceNo || undefined}>
                                 {formatLinkedInvoiceNos(r.linkedInvoices) || r.sourceInvoiceNo || "—"}
                               </AccountsTableCell>
@@ -313,23 +309,23 @@ export default function CreditNotesListClient() {
                                 </AccountsTableActionCell>
                               </AccountsTableCell>
                             </AccountsTableRow>
-                          );
-                        })
-                      )}
-                    </AccountsTableBody>
-                  </AccountsTable>
-                </AccountsTableScroll>
-                {mounted && visible.length > 0 ? (
-                  <AccountsTablePagination
-                    page={page}
-                    pageSize={pageSize}
-                    totalRecords={visible.length}
-                    onPageChange={setPage}
-                    onPageSizeChange={setPageSize}
-                    recordLabel="credit notes"
-                  />
-                ) : null}
-              </AccountsListingTableCard>
+                          ))
+                        )}
+                      </AccountsTableBody>
+                    </AccountsTable>
+                  </AccountsTableScroll>
+                  {mounted && visible.length > 0 ? (
+                    <AccountsTablePagination
+                      page={page}
+                      pageSize={pageSize}
+                      totalRecords={visible.length}
+                      onPageChange={setPage}
+                      onPageSizeChange={setPageSize}
+                      recordLabel="credit notes"
+                    />
+                  ) : null}
+                </AccountsListingTableCard>
+              </div>
             </div>
           )}
         </div>

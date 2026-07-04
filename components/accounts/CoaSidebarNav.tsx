@@ -1,23 +1,15 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, FolderTree, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { CoaExplorerTree } from "@/app/(app)/accounts/masters/chart-of-accounts/components/CoaExplorerTree";
 import { requestCoaAddLedger } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-add-ledger-bridge";
 import { useCanCoa } from "@/lib/accounts/use-can-coa";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 import { useCoaNavigation } from "./CoaNavigationContext";
-
-const CoaExplorerTree = dynamic(
-  () =>
-    import("@/app/(app)/accounts/masters/chart-of-accounts/components/CoaExplorerTree").then(
-      (m) => ({ default: m.CoaExplorerTree }),
-    ),
-  { ssr: false, loading: () => <div className="px-3 py-4 text-xs text-muted-foreground">Loading tree…</div> },
-);
 
 /** COA hierarchy panel — collapsible header, search, expandable tree. */
 export function CoaSidebarNav() {

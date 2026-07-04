@@ -32,10 +32,7 @@ import {
 import { ensureTdsAccountingLedgers } from "@/lib/accounts/tds-accounting";
 import { backfillErpPartyLedgers } from "@/lib/accounts/erp-accounting-mapping";
 import { subscribeCoaChanged } from "@/lib/accounts/coa-events";
-import {
-  hasAccountsCoaBackfillRun,
-  markAccountsCoaBackfillRun,
-} from "@/lib/accounts/accounts-init-guard";
+import { syncGstCoaFromMaster } from "@/lib/accounts/gst-coa-sync";
 
 const FULL_COA_SEED: ChartOfAccount[] = mergeBundledCoaDemoLedgers([...SYSTEM_COA_NODES]);
 
@@ -95,25 +92,13 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
   useEffect(() => {
     if (mountedRef.current) return;
     mountedRef.current = true;
-
-    const runInit = () => {
-      if (!hasAccountsCoaBackfillRun()) {
-        backfillErpPartyLedgers();
-        backfillCoaMasterLinks();
-        ensureTdsAccountingLedgers();
-        markAccountsCoaBackfillRun();
-      }
-
-      const loaded = readCoaRecords();
-      setRecords(loaded);
-      setExpandedIds(defaultExpandedIds(loaded));
-    };
-
-    if (typeof requestIdleCallback === "function") {
-      const idleId = requestIdleCallback(runInit, { timeout: 1500 });
-      return () => cancelIdleCallback(idleId);
-    }
-    runInit();
+    backfillErpPartyLedgers();
+    backfillCoaMasterLinks();
+    ensureTdsAccountingLedgers();
+    syncGstCoaFromMaster();
+    const loaded = readCoaRecords();
+    setRecords(loaded);
+    setExpandedIds(defaultExpandedIds(loaded));
   }, []);
 
   const refreshRecords = useCallback(() => {

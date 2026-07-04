@@ -11,7 +11,7 @@ import { MANUAL_CREDIT_REASONS, type CreditNoteLinkedInvoice } from "../credit-n
 import { formatINR } from "../note-utils";
 
 export interface FreshCreditNoteFormProps {
-  customerSelector?: React.ReactNode | null;
+  customerSelector: React.ReactNode;
   reason: string;
   onReasonChange: (value: string) => void;
   referenceNo: string;
@@ -32,8 +32,6 @@ export interface FreshCreditNoteFormProps {
   attachmentName: string;
   onAttachmentChange: (fileName: string) => void;
   disabled?: boolean;
-  /** When true, hides GST/total/narration/attachment (provided by AccountingSummary). */
-  hideSummaryFields?: boolean;
 }
 
 export function FreshCreditNoteForm({
@@ -58,21 +56,18 @@ export function FreshCreditNoteForm({
   attachmentName,
   onAttachmentChange,
   disabled,
-  hideSummaryFields,
 }: FreshCreditNoteFormProps) {
   const { gstAmount, total } = computeFreshCreditTotals(taxableAmount, gstApplicable, gstPct);
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {customerSelector != null && (
-          <div className="md:col-span-2 space-y-1">
-            <Label className="text-xs font-medium">
-              Customer <span className="text-red-500">*</span>
-            </Label>
-            {customerSelector}
-          </div>
-        )}
+        <div className="md:col-span-2 space-y-1">
+          <Label className="text-xs font-medium">
+            Customer <span className="text-red-500">*</span>
+          </Label>
+          {customerSelector}
+        </div>
 
         <SearchableSelect
           label="Reason / Adjustment Type"
@@ -154,49 +149,45 @@ export function FreshCreditNoteForm({
           )}
         </div>
 
-        {!hideSummaryFields && (
-          <>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">GST Amount</Label>
-              <Input className="h-9 text-sm bg-muted/30 tabular-nums" disabled value={formatINR(gstAmount)} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">Total Amount</Label>
-              <Input
-                className="h-9 text-sm bg-muted/30 tabular-nums font-semibold text-brand-700"
-                disabled
-                value={formatINR(total)}
-              />
-            </div>
+        <div className="space-y-1">
+          <Label className="text-xs font-medium">GST Amount</Label>
+          <Input className="h-9 text-sm bg-muted/30 tabular-nums" disabled value={formatINR(gstAmount)} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs font-medium">Total Amount</Label>
+          <Input
+            className="h-9 text-sm bg-muted/30 tabular-nums font-semibold text-brand-700"
+            disabled
+            value={formatINR(total)}
+          />
+        </div>
 
-            <div className="md:col-span-2 space-y-1">
-              <Label className="text-xs font-medium">Narration</Label>
-              <Textarea
-                className="min-h-[72px] text-xs resize-none"
-                value={narration}
-                onChange={(e) => onNarrationChange(e.target.value)}
-                placeholder="Details of customer adjustment…"
-                disabled={disabled}
-              />
-            </div>
+        <div className="md:col-span-2 space-y-1">
+          <Label className="text-xs font-medium">Narration</Label>
+          <Textarea
+            className="min-h-[72px] text-xs resize-none"
+            value={narration}
+            onChange={(e) => onNarrationChange(e.target.value)}
+            placeholder="Details of customer adjustment…"
+            disabled={disabled}
+          />
+        </div>
 
-            <div className="md:col-span-2 space-y-1">
-              <Label className="text-xs font-medium">Attachment (Optional)</Label>
-              <Input
-                type="file"
-                className="h-9 text-xs"
-                disabled={disabled}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  onAttachmentChange(file?.name ?? "");
-                }}
-              />
-              {attachmentName && (
-                <p className="text-[11px] text-muted-foreground">Selected: {attachmentName}</p>
-              )}
-            </div>
-          </>
-        )}
+        <div className="md:col-span-2 space-y-1">
+          <Label className="text-xs font-medium">Attachment (Optional)</Label>
+          <Input
+            type="file"
+            className="h-9 text-xs"
+            disabled={disabled}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              onAttachmentChange(file?.name ?? "");
+            }}
+          />
+          {attachmentName && (
+            <p className="text-[11px] text-muted-foreground">Selected: {attachmentName}</p>
+          )}
+        </div>
       </div>
     </div>
   );

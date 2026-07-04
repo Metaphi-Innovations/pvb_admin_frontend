@@ -372,33 +372,19 @@ export function loadChartOfAccountsCore(): ChartOfAccount[] {
   return merged;
 }
 
-let coaLoadCache: ChartOfAccount[] | null = null;
-
-/** Clears in-memory COA cache — called automatically on save. */
-export function invalidateCoaLoadCache(): void {
-  coaLoadCache = null;
-}
-
 export const loadChartOfAccounts = (): ChartOfAccount[] => {
-  if (typeof window !== "undefined" && coaLoadCache) {
-    return coaLoadCache;
-  }
-
   const core = loadChartOfAccountsCore();
   if (typeof window === "undefined") return core;
 
   // Lazy require avoids circular init with gst-coa-sync (which imports this module).
   const { applyGstCoaSyncOnLoad } = require("@/lib/accounts/gst-coa-sync") as typeof import("@/lib/accounts/gst-coa-sync");
-  const synced = applyGstCoaSyncOnLoad(core);
-  coaLoadCache = synced;
-  return synced;
+  return applyGstCoaSyncOnLoad(core);
 };
 
 export const saveChartOfAccounts = (list: ChartOfAccount[]) => {
   const cleaned = ensureCoaSystemStructure(list);
   save(COA_KEY, cleaned);
   writeCoaMeta();
-  invalidateCoaLoadCache();
   dispatchCoaChanged();
 };
 export const getSystemCoaNodes = () => SYSTEM_COA_NODES;
