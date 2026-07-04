@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -9,7 +9,8 @@ import {
   RecordSectionCard,
 } from "@/components/record-detail";
 import { FileText, Pencil, User } from "lucide-react";
-import { CustomerTypeListService } from "@/services/customer-type-list.service";
+import { useCustomerType } from "@/hooks/masters";
+import { getMasterDetailErrorMessage } from "@/lib/masters/master-query-errors";
 import type { CustomerTypeRecord } from "../customer-type-data";
 
 function toCustomerTypeRecord(detail: {
@@ -48,30 +49,20 @@ function toCustomerTypeRecord(detail: {
 export default function CustomerTypeDetailPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
-  const [customerType, setCustomerType] = useState<CustomerTypeRecord | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
 
-  useEffect(() => {
-    if (!id) return;
-
-    setLoading(true);
-    setLoadError(null);
-
-    CustomerTypeListService.view(id)
-      .then((detail) => setCustomerType(toCustomerTypeRecord(detail)))
-      .catch((error: unknown) => {
-        const err = error as { status?: number; message?: string } | undefined;
-        const message =
-          err?.status === 404
-            ? "Customer type not found."
-            : err?.message || "Failed to load customer type.";
-        setLoadError(message);
-        setCustomerType(null);
-      })
-      .finally(() => setLoading(false));
-  }, [id]);
+  const detailQuery = useCustomerType(id);
+  const customerType = detailQuery.data
+    ? toCustomerTypeRecord(detailQuery.data)
+    : null;
+  const loading = detailQuery.isFetching && !detailQuery.data;
+  const loadError = detailQuery.isError
+    ? getMasterDetailErrorMessage(
+        detailQuery.error,
+        "Customer type not found.",
+        "Failed to load customer type.",
+      )
+    : null;
 
   if (loading) {
     return (

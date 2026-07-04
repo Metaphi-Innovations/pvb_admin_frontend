@@ -18,7 +18,14 @@ import {
   generateGSTCode,
   normalizeGst,
 } from "./gst-data";
-import { GstListService } from "@/services/gst-list.service";
+import {
+  useGstList,
+  useGst,
+  useCreateGst,
+  useUpdateGst,
+  useToggleGstStatus,
+  useExportGst,
+} from "@/hooks/masters";
 import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
@@ -29,6 +36,11 @@ import {
   resolveListStatus,
 } from "@/lib/masters/list-api-filters";
 import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import {
+  getErrorMessage,
+  getMasterListErrorMessage,
+} from "@/lib/masters/master-query-errors";
+import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 
 interface ToastState {
   msg: string;
@@ -76,18 +88,13 @@ function toGstRow(item: {
 }
 
 export default function GSTPage() {
-  const [records, setRecords] = useState<GSTMaster[]>([]);
-  const [totalRecords, setTotalRecords] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [listError, setListError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>({});
   const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
   const [sort, setSort] = useState<SortState>({ key: "gstPercentage", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [viewLoading, setViewLoading] = useState(false);
+  const [viewId, setViewId] = useState<string | null>(null);
 
   const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
   const [active, setActive] = useState<GSTMaster | null>(null);
@@ -97,7 +104,6 @@ export default function GSTPage() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
   const apiFilters = useMemo(
     () => mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.gst),
@@ -108,47 +114,40 @@ export default function GSTPage() {
     [debouncedFilters],
   );
 
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    setListError(null);
-
-    GstListService.list({
+  const listParams = useMemo<MasterListKeyParams>(
+    () => ({
       page,
       pageSize,
       search: debouncedSearch,
-      ordering: "",
       status: listStatus,
       apiFilters,
-      signal: controller.signal,
-    })
-      .then((result) => {
-        setRecords(result.items.map(toGstRow));
-        setTotalRecords(result.total);
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
-        const err = error as { status?: number; message?: string } | undefined;
-        const message =
-          err?.status === 401
-            ? "Unauthorized. Please login again."
-            : err?.status === 403
-              ? "Forbidden. You do not have access."
-              : err?.status === 404
-                ? "GST list endpoint not found."
-                : err?.status === 500
-                  ? "Server error while loading GST records."
-                  : err?.message || "Unable to load GST records.";
-        setListError(message);
-        setRecords([]);
-        setTotalRecords(0);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
+      ordering: "",
+    }),
+    [page, pageSize, debouncedSearch, listStatus, apiFilters],
+  );
 
-    return () => controller.abort();
-  }, [page, pageSize, debouncedSearch, apiFilters, listStatus, reloadKey]);
+  const listQuery = useGstList(listParams);
+  const detailQuery = useGst(viewId);
+  const createMutation = useCreateGst();
+  const updateMutation = useUpdateGst();
+  const toggleStatusMutation = useToggleGstStatus();
+  const exportMutation = useExportGst();
+
+  const records = useMemo(
+    () => (listQuery.data?.items ?? []).map(toGstRow),
+    [listQuery.data],
+  );
+  const totalRecords = listQuery.data?.total ?? 0;
+  const loading = listQuery.isFetching;
+  const listError = listQuery.isError
+    ? getMasterListErrorMessage(listQuery.error, {
+        resource: "GST records",
+        notFoundMessage: "GST list endpoint not found.",
+        serverMessage: "Server error while loading GST records.",
+      })
+    : null;
+  const viewLoading = Boolean(viewId) && detailQuery.isFetching;
+  const saving = createMutation.isPending || updateMutation.isPending;
 
   useEffect(() => {
     if (!toast) return;
@@ -156,23 +155,45 @@ export default function GSTPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const toggleStatus = useCallback(async (record: GSTMaster) => {
-    if (!record.gstUuid) {
-      setToast({ msg: "GST id missing. Unable to update status.", type: "error" });
+  useEffect(() => {
+    if (!viewId) return;
+    if (detailQuery.isError) {
+      setToast({
+        msg: getErrorMessage(detailQuery.error, "Failed to load GST details."),
+        type: "error",
+      });
+      setViewId(null);
       return;
     }
-    try {
-      await GstListService.updateStatus(record.gstUuid);
-      setToast({
-        msg: `GST status updated to ${record.status === "active" ? "Inactive" : "Active"}`,
-        type: "success",
-      });
-      setReloadKey((prev) => prev + 1);
-    } catch (error: unknown) {
-      const err = error as { message?: string } | undefined;
-      setToast({ msg: err?.message || "Failed to update GST status.", type: "error" });
+    if (detailQuery.data) {
+      setActive(toGstRow(detailQuery.data));
+      setSheetMode("view");
     }
-  }, []);
+  }, [viewId, detailQuery.data, detailQuery.isError, detailQuery.error]);
+
+  const toggleStatus = useCallback(
+    (record: GSTMaster) => {
+      if (!record.gstUuid) {
+        setToast({ msg: "GST id missing. Unable to update status.", type: "error" });
+        return;
+      }
+      toggleStatusMutation.mutate(record.gstUuid, {
+        onSuccess: () => {
+          setToast({
+            msg: `GST status updated to ${record.status === "active" ? "Inactive" : "Active"}`,
+            type: "success",
+          });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to update GST status."),
+            type: "error",
+          });
+        },
+      });
+    },
+    [toggleStatusMutation],
+  );
 
   const openAdd = () => {
     setForm({ gstPercentage: 0, remarks: "" });
@@ -193,23 +214,12 @@ export default function GSTPage() {
     setSheetMode("edit");
   };
 
-  const openView = useCallback(async (row: GSTMaster) => {
+  const openView = useCallback((row: GSTMaster) => {
     if (!row.gstUuid) {
       setToast({ msg: "GST id missing. Unable to load details.", type: "error" });
       return;
     }
-
-    try {
-      setViewLoading(true);
-      const detail = await GstListService.view(row.gstUuid);
-      setActive(toGstRow(detail));
-      setSheetMode("view");
-    } catch (error: unknown) {
-      const err = error as { message?: string } | undefined;
-      setToast({ msg: err?.message || "Failed to load GST details.", type: "error" });
-    } finally {
-      setViewLoading(false);
-    }
+    setViewId(row.gstUuid);
   }, []);
 
   const columns: ColumnConfig<GSTMaster>[] = [
@@ -307,6 +317,7 @@ export default function GSTPage() {
   const closeSheet = () => {
     setSheetMode(null);
     setActive(null);
+    setViewId(null);
     setErrors({});
     setFormError(null);
   };
@@ -333,27 +344,27 @@ export default function GSTPage() {
     return Object.keys(e).length === 0;
   };
 
-  const persist = async () => {
+  const persist = () => {
     if (!validate()) return;
 
     if (sheetMode === "add") {
-      try {
-        setSaving(true);
-        setFormError(null);
-        await GstListService.create({
+      setFormError(null);
+      createMutation.mutate(
+        {
           gstPercentage: form.gstPercentage,
           remark: form.remarks,
-        });
-        setToast({ msg: "GST added successfully", type: "success" });
-        setPage(1);
-        setReloadKey((prev) => prev + 1);
-        closeSheet();
-      } catch (error: unknown) {
-        const err = error as { message?: string } | undefined;
-        setFormError(err?.message || "Failed to create GST record.");
-      } finally {
-        setSaving(false);
-      }
+        },
+        {
+          onSuccess: () => {
+            setToast({ msg: "GST added successfully", type: "success" });
+            setPage(1);
+            closeSheet();
+          },
+          onError: (error) => {
+            setFormError(getErrorMessage(error, "Failed to create GST record."));
+          },
+        },
+      );
       return;
     }
 
@@ -362,36 +373,46 @@ export default function GSTPage() {
       return;
     }
 
-    try {
-      setSaving(true);
-      setFormError(null);
-      await GstListService.update(active.gstUuid, {
-        gstPercentage: form.gstPercentage,
-        remark: form.remarks,
-      });
-      setToast({ msg: "GST updated successfully", type: "success" });
-      setReloadKey((prev) => prev + 1);
-      closeSheet();
-    } catch (error: unknown) {
-      const err = error as { message?: string } | undefined;
-      setFormError(err?.message || "Failed to update GST record.");
-    } finally {
-      setSaving(false);
-    }
+    setFormError(null);
+    updateMutation.mutate(
+      {
+        id: active.gstUuid,
+        payload: {
+          gstPercentage: form.gstPercentage,
+          remark: form.remarks,
+        },
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "GST updated successfully", type: "success" });
+          closeSheet();
+        },
+        onError: (error) => {
+          setFormError(getErrorMessage(error, "Failed to update GST record."));
+        },
+      },
+    );
   };
 
-  const handleExport = async () => {
-    try {
-      await GstListService.export({
+  const handleExport = () => {
+    exportMutation.mutate(
+      {
         search: debouncedSearch,
         status: listStatus,
         apiFilters,
-      });
-      setToast({ msg: "GST configs exported successfully", type: "success" });
-    } catch (error: unknown) {
-      const err = error as { message?: string } | undefined;
-      setToast({ msg: err?.message || "Failed to export GST configs", type: "error" });
-    }
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "GST configs exported successfully", type: "success" });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to export GST configs"),
+            type: "error",
+          });
+        },
+      },
+    );
   };
 
   const sheetTitle =

@@ -10,7 +10,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, Save, AlertCircle } from "lucide-react";
-import { GstListService } from "@/services/gst-list.service";
+import { useGst, useUpdateGst } from "@/hooks/masters";
+import {
+  getErrorMessage,
+  getMasterDetailErrorMessage,
+} from "@/lib/masters/master-query-errors";
 
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null;
@@ -28,34 +32,27 @@ export default function EditGSTPage() {
   const [gstPercentage, setGstPercentage] = useState<number | null>(null);
   const [form, setForm] = useState({ gstPercentage: 0, remarks: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const detailQuery = useGst(id);
+  const updateMutation = useUpdateGst();
+  const loading = detailQuery.isFetching && !detailQuery.data;
+  const loadError = detailQuery.isError
+    ? getMasterDetailErrorMessage(
+        detailQuery.error,
+        "GST record not found.",
+        "Failed to load GST record.",
+      )
+    : null;
+  const saving = updateMutation.isPending;
 
   useEffect(() => {
-    if (!id) return;
-
-    setLoading(true);
-    setLoadError(null);
-
-    GstListService.view(id)
-      .then((detail) => {
-        setGstPercentage(detail.gstPercentage);
-        setForm({
-          gstPercentage: detail.gstPercentage,
-          remarks: detail.remark || "",
-        });
-      })
-      .catch((error: unknown) => {
-        const err = error as { status?: number; message?: string } | undefined;
-        setLoadError(
-          err?.status === 404
-            ? "GST record not found."
-            : err?.message || "Failed to load GST record.",
-        );
-      })
-      .finally(() => setLoading(false));
-  }, [id]);
+    if (!detailQuery.data) return;
+    setGstPercentage(detailQuery.data.gstPercentage);
+    setForm({
+      gstPercentage: detailQuery.data.gstPercentage,
+      remarks: detailQuery.data.remark || "",
+    });
+  }, [detailQuery.data]);
 
   const set = (key: "gstPercentage" | "remarks", value: number | string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -79,22 +76,28 @@ export default function EditGSTPage() {
     return Object.keys(e).length === 0;
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!validate() || !id) return;
 
-    try {
-      setSaving(true);
-      await GstListService.update(id, {
-        gstPercentage: form.gstPercentage,
-        remark: form.remarks,
-      });
-      router.push("/masters/gst");
-    } catch (error: unknown) {
-      const err = error as { message?: string } | undefined;
-      setErrors({ _form: err?.message || "Failed to update GST record." });
-    } finally {
-      setSaving(false);
-    }
+    updateMutation.mutate(
+      {
+        id,
+        payload: {
+          gstPercentage: form.gstPercentage,
+          remark: form.remarks,
+        },
+      },
+      {
+        onSuccess: () => {
+          router.push("/masters/gst");
+        },
+        onError: (error) => {
+          setErrors({
+            _form: getErrorMessage(error, "Failed to update GST record."),
+          });
+        },
+      },
+    );
   };
 
   if (loading) {

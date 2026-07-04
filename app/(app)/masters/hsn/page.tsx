@@ -28,14 +28,26 @@ import {
 	formatHsnDisplayCode,
 	validateHsnApiForm,
 } from "./hsn-data";
-import { HsnListService } from "@/services/hsn-list.service";
-import { GstListService, type GstDropdownItem } from "@/services/gst-list.service";
+import {
+	useHsnList,
+	useHsn,
+	useCreateHsn,
+	useUpdateHsn,
+	useToggleHsnStatus,
+	useExportHsn,
+	useGstDropdown,
+} from "@/hooks/masters";
 import {
 	MASTER_FILTER_FIELD_MAPS,
 	mergeListRequestFilters,
 	resolveListStatus,
 } from "@/lib/masters/list-api-filters";
 import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import {
+	getErrorMessage,
+	getMasterListErrorMessage,
+} from "@/lib/masters/master-query-errors";
+import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 import { MasterListingSheets } from "@/components/masters/MasterListingSheets";
 import { MasterFormGrid, MasterField, compactInput } from "@/components/masters/MasterModule";
 import { MasterDrawerSection } from "@/components/masters/MasterRecordDrawer";
@@ -124,10 +136,6 @@ function toHsnRow(item: {
 }
 
 export default function HSNPage() {
-	const [records, setRecords] = useState<HSNMaster[]>([]);
-	const [totalRecords, setTotalRecords] = useState(0);
-	const [loading, setLoading] = useState(true);
-	const [listError, setListError] = useState<string | null>(null);
 	const [filters, setFilters] = useState<FilterState>({});
 	const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
 	const [sort, setSort] = useState<SortState>({ key: "hsnCode", direction: "asc" });
@@ -135,19 +143,13 @@ export default function HSNPage() {
 	const [pageSize, setPageSize] = useState(10);
 	const [toast, setToast] = useState<ToastState | null>(null);
 	const [statusTab, setStatusTab] = useState<StatusTab>("all");
-	const [reloadKey, setReloadKey] = useState(0);
-	const [viewLoading, setViewLoading] = useState(false);
-
-	const [gstOptions, setGstOptions] = useState<GstDropdownItem[]>([]);
-	const [gstLoading, setGstLoading] = useState(true);
-	const [gstError, setGstError] = useState<string | null>(null);
+	const [viewId, setViewId] = useState<string | null>(null);
 
 	const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
 	const [active, setActive] = useState<HSNMaster | null>(null);
 	const [form, setForm] = useState<HSNForm>(DEFAULT_HSN_FORM);
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [formError, setFormError] = useState<string | null>(null);
-	const [saving, setSaving] = useState(false);
 	const [statusTarget, setStatusTarget] = useState<HSNMaster | null>(null);
 
 	const apiFilters = useMemo(
@@ -162,79 +164,73 @@ export default function HSNPage() {
 		[debouncedFilters, statusTab],
 	);
 
-	useEffect(() => {
-		setStatusTab(readStoredStatusTab());
-	}, []);
-
-	useEffect(() => {
-		const controller = new AbortController();
-		setGstLoading(true);
-		setGstError(null);
-
-		GstListService.dropdown()
-			.then((items) => {
-				if (!controller.signal.aborted) setGstOptions(items);
-			})
-			.catch((error: unknown) => {
-				if (controller.signal.aborted) return;
-				const err = error as { message?: string } | undefined;
-				setGstError(err?.message || "Failed to load GST rates.");
-				setGstOptions([]);
-			})
-			.finally(() => {
-				if (!controller.signal.aborted) setGstLoading(false);
-			});
-
-		return () => controller.abort();
-	}, []);
-
-	useEffect(() => {
-		const controller = new AbortController();
-		setLoading(true);
-		setListError(null);
-
-		HsnListService.list({
+	const listParams = useMemo<MasterListKeyParams>(
+		() => ({
 			page,
 			pageSize,
 			search: debouncedSearch,
-			ordering: "",
 			status: listStatus,
 			apiFilters,
-			signal: controller.signal,
-		})
-			.then((result) => {
-				setRecords(result.items.map(toHsnRow));
-				setTotalRecords(result.total);
-			})
-			.catch((error: unknown) => {
-				if (controller.signal.aborted) return;
-				const err = error as { status?: number; message?: string } | undefined;
-				const message =
-					err?.status === 401
-						? "Unauthorized. Please login again."
-						: err?.status === 403
-							? "Forbidden. You do not have access."
-							: err?.status === 404
-								? "HSN list endpoint not found."
-								: err?.status === 500
-									? "Server error while loading HSN records."
-									: err?.message || "Unable to load HSN records.";
-				setListError(message);
-				setRecords([]);
-				setTotalRecords(0);
-			})
-			.finally(() => {
-				if (!controller.signal.aborted) setLoading(false);
-			});
+			ordering: "",
+		}),
+		[page, pageSize, debouncedSearch, listStatus, apiFilters],
+	);
 
-		return () => controller.abort();
-	}, [page, pageSize, debouncedSearch, apiFilters, listStatus, reloadKey]);
+	const listQuery = useHsnList(listParams);
+	const detailQuery = useHsn(viewId);
+	const gstDropdownQuery = useGstDropdown();
+	const createMutation = useCreateHsn();
+	const updateMutation = useUpdateHsn();
+	const toggleStatusMutation = useToggleHsnStatus();
+	const exportMutation = useExportHsn();
+
+	const records = useMemo(
+		() => (listQuery.data?.items ?? []).map(toHsnRow),
+		[listQuery.data],
+	);
+	const totalRecords = listQuery.data?.total ?? 0;
+	const loading = listQuery.isFetching;
+	const listError = listQuery.isError
+		? getMasterListErrorMessage(listQuery.error, {
+				resource: "HSN records",
+				notFoundMessage: "HSN list endpoint not found.",
+				serverMessage: "Server error while loading HSN records.",
+			})
+		: null;
+	const viewLoading = Boolean(viewId) && detailQuery.isFetching;
+	const saving = createMutation.isPending || updateMutation.isPending;
+
+	const gstOptions = gstDropdownQuery.data ?? [];
+	const gstLoading = gstDropdownQuery.isFetching;
+	const gstError = gstDropdownQuery.isError
+		? getErrorMessage(gstDropdownQuery.error, "Failed to load GST rates.")
+		: null;
+
+	useEffect(() => {
+		setStatusTab(readStoredStatusTab());
+	}, []);
 
 	useEffect(() => {
 		if (!toast) return;
 		const t = setTimeout(() => setToast(null), 3000);
 		return () => clearTimeout(t);
 	}, [toast]);
+
+	useEffect(() => {
+		if (!viewId) return;
+		if (detailQuery.isError) {
+			setToast({
+				msg: getErrorMessage(detailQuery.error, "Failed to load HSN details."),
+				type: "error",
+			});
+			setViewId(null);
+			return;
+		}
+		if (detailQuery.data) {
+			setActive(toHsnRow(detailQuery.data));
+			setSheetMode("view");
+		}
+	}, [viewId, detailQuery.data, detailQuery.isError, detailQuery.error]);
 
 	const gstSelectOptions = useMemo(
 		() =>
@@ -273,23 +269,12 @@ export default function HSNPage() {
 		setSheetMode("edit");
 	};
 
-	const openView = useCallback(async (row: HSNMaster) => {
+	const openView = useCallback((row: HSNMaster) => {
 		if (!row.hsnUuid) {
 			setToast({ msg: "HSN id missing. Unable to load details.", type: "error" });
 			return;
 		}
-
-		try {
-			setViewLoading(true);
-			const detail = await HsnListService.view(row.hsnUuid);
-			setActive(toHsnRow(detail));
-			setSheetMode("view");
-		} catch (error: unknown) {
-			const err = error as { message?: string } | undefined;
-			setToast({ msg: err?.message || "Failed to load HSN details.", type: "error" });
-		} finally {
-			setViewLoading(false);
-		}
+		setViewId(row.hsnUuid);
 	}, []);
 
 	function hsnToFormFromRecord(record: HSNMaster): HSNForm {
@@ -306,6 +291,7 @@ export default function HSNPage() {
 	const closeSheet = () => {
 		setSheetMode(null);
 		setActive(null);
+		setViewId(null);
 		setErrors({});
 		setFormError(null);
 	};
@@ -314,26 +300,32 @@ export default function HSNPage() {
 		setStatusTarget(record);
 	};
 
-	const confirmStatusChange = async () => {
-		if (!statusTarget?.hsnUuid) {
+	const confirmStatusChange = () => {
+		const id = statusTarget?.hsnUuid;
+		if (!statusTarget || !id) {
 			setToast({ msg: "HSN id missing. Unable to update status.", type: "error" });
 			setStatusTarget(null);
 			return;
 		}
 
-		try {
-			await HsnListService.updateStatus(statusTarget.hsnUuid);
-			setToast({
-				msg: `HSN status updated to ${statusTarget.status === "active" ? "Inactive" : "Active"}`,
-				type: "success",
-			});
-			setReloadKey((prev) => prev + 1);
-		} catch (error: unknown) {
-			const err = error as { message?: string } | undefined;
-			setToast({ msg: err?.message || "Failed to update HSN status.", type: "error" });
-		} finally {
-			setStatusTarget(null);
-		}
+		const nextStatusLabel = statusTarget.status === "active" ? "Inactive" : "Active";
+		toggleStatusMutation.mutate(id, {
+			onSuccess: () => {
+				setToast({
+					msg: `HSN status updated to ${nextStatusLabel}`,
+					type: "success",
+				});
+			},
+			onError: (error) => {
+				setToast({
+					msg: getErrorMessage(error, "Failed to update HSN status."),
+					type: "error",
+				});
+			},
+			onSettled: () => {
+				setStatusTarget(null);
+			},
+		});
 	};
 
 	const columns: ColumnConfig<HSNMaster>[] = [
@@ -455,29 +447,29 @@ export default function HSNPage() {
 		setPage(1);
 	}, [sort.key, sort.direction]);
 
-	const persist = async () => {
+	const persist = () => {
 		const fieldErrors = validateHsnApiForm(form);
 		setErrors(fieldErrors);
 		if (Object.keys(fieldErrors).length > 0) return;
 
 		if (sheetMode === "add") {
-			try {
-				setSaving(true);
-				setFormError(null);
-				await HsnListService.create({
+			setFormError(null);
+			createMutation.mutate(
+				{
 					hsnDescription: form.hsnDescription,
 					gstId: form.gstId,
-				});
-				setToast({ msg: "HSN added successfully", type: "success" });
-				setPage(1);
-				setReloadKey((prev) => prev + 1);
-				closeSheet();
-			} catch (error: unknown) {
-				const err = error as { message?: string } | undefined;
-				setFormError(err?.message || "Failed to create HSN record.");
-			} finally {
-				setSaving(false);
-			}
+				},
+				{
+					onSuccess: () => {
+						setToast({ msg: "HSN added successfully", type: "success" });
+						setPage(1);
+						closeSheet();
+					},
+					onError: (error) => {
+						setFormError(getErrorMessage(error, "Failed to create HSN record."));
+					},
+				},
+			);
 			return;
 		}
 
@@ -486,36 +478,46 @@ export default function HSNPage() {
 			return;
 		}
 
-		try {
-			setSaving(true);
-			setFormError(null);
-			await HsnListService.update(active.hsnUuid, {
-				hsnDescription: form.hsnDescription,
-				gstId: form.gstId,
-			});
-			setToast({ msg: "HSN updated successfully", type: "success" });
-			setReloadKey((prev) => prev + 1);
-			closeSheet();
-		} catch (error: unknown) {
-			const err = error as { message?: string } | undefined;
-			setFormError(err?.message || "Failed to update HSN record.");
-		} finally {
-			setSaving(false);
-		}
+		setFormError(null);
+		updateMutation.mutate(
+			{
+				id: active.hsnUuid,
+				payload: {
+					hsnDescription: form.hsnDescription,
+					gstId: form.gstId,
+				},
+			},
+			{
+				onSuccess: () => {
+					setToast({ msg: "HSN updated successfully", type: "success" });
+					closeSheet();
+				},
+				onError: (error) => {
+					setFormError(getErrorMessage(error, "Failed to update HSN record."));
+				},
+			},
+		);
 	};
 
-	const handleExport = async () => {
-		try {
-			await HsnListService.export({
+	const handleExport = () => {
+		exportMutation.mutate(
+			{
 				search: debouncedSearch,
 				status: listStatus,
 				apiFilters,
-			});
-			setToast({ msg: "HSN records exported successfully", type: "success" });
-		} catch (error: unknown) {
-			const err = error as { message?: string } | undefined;
-			setToast({ msg: err?.message || "Failed to export HSN records", type: "error" });
-		}
+			},
+			{
+				onSuccess: () => {
+					setToast({ msg: "HSN records exported successfully", type: "success" });
+				},
+				onError: (error) => {
+					setToast({
+						msg: getErrorMessage(error, "Failed to export HSN records"),
+						type: "error",
+					});
+				},
+			},
+		);
 	};
 
 	const sheetTitle =

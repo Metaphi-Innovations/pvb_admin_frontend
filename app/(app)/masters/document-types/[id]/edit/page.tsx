@@ -7,10 +7,13 @@ import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { DocumentTypeListService } from "@/services/document-type-list.service";
+import { useDocumentType, useUpdateDocumentType } from "@/hooks/masters";
+import {
+  getErrorMessage,
+  getMasterDetailErrorMessage,
+} from "@/lib/masters/master-query-errors";
 import {
   DocumentTypeForm,
-  DEFAULT_DOCUMENT_TYPE_FORM,
   type DocumentTypeFormValues,
   validateDocumentTypeForm,
 } from "../../components/DocumentTypeForm";
@@ -20,36 +23,28 @@ export default function EditDocumentTypePage() {
   const { id } = useParams<{ id: string }>();
   const [form, setForm] = useState<DocumentTypeFormValues | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
+  const detailQuery = useDocumentType(id);
+  const updateMutation = useUpdateDocumentType();
+  const loading = detailQuery.isFetching && !detailQuery.data;
+  const loadError = detailQuery.isError
+    ? getMasterDetailErrorMessage(
+        detailQuery.error,
+        "Document type not found.",
+        "Failed to load document type.",
+      )
+    : null;
+  const saving = updateMutation.isPending;
+
   useEffect(() => {
-    if (!id) return;
-
-    setLoading(true);
-    setLoadError(null);
-
-    DocumentTypeListService.view(id)
-      .then((detail) => {
-        setForm({
-          documentTypeCode: "",
-          title: detail.title,
-          description: detail.description || "",
-        });
-      })
-      .catch((error: unknown) => {
-        const err = error as { status?: number; message?: string } | undefined;
-        const message =
-          err?.status === 404
-            ? "Document type not found."
-            : err?.message || "Failed to load document type.";
-        setLoadError(message);
-        setForm(null);
-      })
-      .finally(() => setLoading(false));
-  }, [id]);
+    if (!detailQuery.data) return;
+    setForm({
+      documentTypeCode: "",
+      title: detailQuery.data.title,
+      description: detailQuery.data.description || "",
+    });
+  }, [detailQuery.data]);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -58,7 +53,7 @@ export default function EditDocumentTypePage() {
       return next;
     });
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!form || !id) return;
     const validation = validateDocumentTypeForm(form);
     setErrors(validation);
@@ -68,21 +63,28 @@ export default function EditDocumentTypePage() {
       return;
     }
 
-    try {
-      setSaving(true);
-      await DocumentTypeListService.update(id, {
-        title: form.title,
-        description: form.description,
-      });
-      setToast({ msg: "Document Type updated successfully", type: "success" });
-      setTimeout(() => router.push("/masters/document-types"), 900);
-    } catch (error: unknown) {
-      const err = error as { message?: string } | undefined;
-      setToast({ msg: err?.message || "Failed to update document type.", type: "error" });
-      setTimeout(() => setToast(null), 3200);
-    } finally {
-      setSaving(false);
-    }
+    updateMutation.mutate(
+      {
+        id,
+        payload: {
+          title: form.title,
+          description: form.description,
+        },
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Document Type updated successfully", type: "success" });
+          setTimeout(() => router.push("/masters/document-types"), 900);
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to update document type."),
+            type: "error",
+          });
+          setTimeout(() => setToast(null), 3200);
+        },
+      },
+    );
   };
 
   if (loading) {
