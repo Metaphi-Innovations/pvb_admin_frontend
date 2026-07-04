@@ -1,39 +1,33 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, CheckCircle2, Save, XCircle } from "lucide-react";
+import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  loadCustomerTypes,
-  saveCustomerTypes,
-  nextCustomerTypeId,
-  generateCustomerTypeCode,
-  validateCustomerTypeInitialCode,
-  validateCustomerTypeCodeUnique,
-  type CustomerTypeRecord,
-} from "../customer-type-data";
 import { normalizeInitialCode } from "@/lib/masters/code-generation";
+import { CustomerTypeListService } from "@/services/customer-type-list.service";
 import {
   CustomerTypeForm,
   DEFAULT_CUSTOMER_TYPE_FORM,
   type CustomerTypeFormValues,
   validateCustomerTypeForm,
 } from "../components/CustomerTypeForm";
+import type { CustomerTypeDocument } from "../customer-type-data";
+
+function extractDocumentTypeIds(documents: CustomerTypeDocument[]): string[] {
+  return documents
+    .map((doc) => doc.documentTypeId)
+    .filter((id): id is string => Boolean(id));
+}
 
 export default function AddCustomerTypePage() {
   const router = useRouter();
   const [form, setForm] = useState<CustomerTypeFormValues>(DEFAULT_CUSTOMER_TYPE_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -42,16 +36,12 @@ export default function AddCustomerTypePage() {
       return next;
     });
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const validation = validateCustomerTypeForm(form);
-    const list = loadCustomerTypes();
-    const initialErr = validateCustomerTypeInitialCode(form.initialCode, list);
-    if (initialErr) validation.initialCode = initialErr;
-    const customerTypeCode =
-      form.customerTypeCode.trim() ||
-      generateCustomerTypeCode(form.initialCode, list);
-    const codeErr = validateCustomerTypeCodeUnique(customerTypeCode, list);
-    if (codeErr) validation.customerTypeCode = codeErr;
+    const documentTypeIds = extractDocumentTypeIds(form.documentTypes || []);
+    if ((form.documentTypes || []).length > 0 && documentTypeIds.length === 0) {
+      validation.documentTypes = "Select document types from the list";
+    }
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
       setToast({ msg: "Please fix the errors before saving.", type: "error" });
@@ -59,33 +49,24 @@ export default function AddCustomerTypePage() {
       return;
     }
 
-    const today = new Date().toISOString().slice(0, 10);
-    const newRecord: CustomerTypeRecord = {
-      id: nextCustomerTypeId(list),
-      customerTypeCode,
-      initialCode: normalizeInitialCode(form.initialCode),
-      customerType: form.customerType.trim(),
-      description: form.description.trim(),
-      documentTypes: form.documentTypes || [],
-      status: "active",
-      createdBy: "Admin",
-      createdDate: today,
-      updatedBy: "Admin",
-      updatedDate: today,
-    };
-
-    saveCustomerTypes([...list, newRecord]);
-    setToast({ msg: "Customer Type added successfully.", type: "success" });
-    setTimeout(() => router.push("/masters/customer-types"), 900);
+    try {
+      setSaving(true);
+      await CustomerTypeListService.create({
+        customerInitialCode: normalizeInitialCode(form.initialCode),
+        customerTypeName: form.customerType,
+        description: form.description,
+        documentTypeIds,
+      });
+      setToast({ msg: "Customer Type added successfully.", type: "success" });
+      setTimeout(() => router.push("/masters/customer-types"), 900);
+    } catch (error: unknown) {
+      const err = error as { message?: string } | undefined;
+      setToast({ msg: err?.message || "Failed to create customer type.", type: "error" });
+      setTimeout(() => setToast(null), 3200);
+    } finally {
+      setSaving(false);
+    }
   };
-
-  if (!mounted) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
-    );
-  }
 
   return (
     <FormContainer
@@ -94,14 +75,20 @@ export default function AddCustomerTypePage() {
       onBack={() => router.back()}
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
+          <Button
+            variant="outline"
+            className="h-9 text-xs font-semibold rounded-lg"
+            onClick={() => router.back()}
+            disabled={saving}
+          >
             Discard
           </Button>
           <Button
             className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
+            disabled={saving}
           >
-            <Save className="w-4 h-4" /> Save Customer Type
+            <Save className="w-4 h-4" /> {saving ? "Saving..." : "Save Customer Type"}
           </Button>
         </div>
       }

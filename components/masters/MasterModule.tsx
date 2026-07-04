@@ -95,6 +95,16 @@ export interface MasterModuleConfig<T extends BaseMasterRecord, F> {
     created: string;
     updated: string;
   };
+  remoteListConfig?: {
+    fetchPage: (params: {
+      page: number;
+      pageSize: number;
+      search: string;
+      status: "all" | "active" | "inactive";
+      signal?: AbortSignal;
+    }) => Promise<{ items: T[]; total: number }>;
+    searchDebounceMs?: number;
+  };
 }
 
 function AuditCell({
@@ -138,6 +148,7 @@ export function MasterModule<T extends BaseMasterRecord, F>({
       created: "Created By",
       updated: "Updated By",
     },
+    remoteListConfig,
   } = config;
 
   const { data: loadedRecords, ready } = useDeferredLoad(
@@ -154,16 +165,72 @@ export function MasterModule<T extends BaseMasterRecord, F>({
   const [form, setForm] = useState<F>(defaultForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [deleteTarget, setDeleteTarget] = useState<T | null>(null);
+  const [remoteLoading, setRemoteLoading] = useState(false);
+  const [remoteError, setRemoteError] = useState<string | null>(null);
+  const [serverTotal, setServerTotal] = useState(0);
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
 
   useEffect(() => {
+    const debounceMs = remoteListConfig?.searchDebounceMs ?? 350;
+    const timer = window.setTimeout(() => setDebouncedSearch(search), debounceMs);
+    return () => window.clearTimeout(timer);
+  }, [search, remoteListConfig?.searchDebounceMs]);
+
+  useEffect(() => {
+    if (remoteListConfig) return;
     if (ready) setRecords(loadedRecords);
-  }, [ready, loadedRecords]);
+  }, [ready, loadedRecords, remoteListConfig]);
+
+  useEffect(() => {
+    if (!remoteListConfig) return;
+    const controller = new AbortController();
+    setRemoteLoading(true);
+    setRemoteError(null);
+    remoteListConfig
+      .fetchPage({
+        page,
+        pageSize,
+        search: debouncedSearch.trim(),
+        status: statusFilter as "all" | "active" | "inactive",
+        signal: controller.signal,
+      })
+      .then((result) => {
+        setRecords(result.items);
+        setServerTotal(result.total);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        const err = error as { status?: number; message?: string } | undefined;
+        const status = err?.status;
+        const fallbackByStatus =
+          status === 401
+            ? "Unauthorized. Please login again."
+            : status === 403
+              ? "Forbidden. You do not have access."
+              : status === 404
+                ? "Category list endpoint not found."
+                : status === 500
+                  ? "Server error while loading categories."
+                  : "Unable to load categories.";
+        setRemoteError(err?.message || fallbackByStatus);
+        setRecords([]);
+        setServerTotal(0);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setRemoteLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, [remoteListConfig, page, pageSize, debouncedSearch, statusFilter]);
 
   const refresh = useCallback(() => {
+    if (remoteListConfig) return;
     setRecords(loadMasterRecords<T>(storageKey, seed));
-  }, [storageKey, seed]);
+  }, [storageKey, seed, remoteListConfig]);
 
   const filtered = useMemo(() => {
+    if (remoteListConfig) return records;
     let r = [...records];
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -175,12 +242,13 @@ export function MasterModule<T extends BaseMasterRecord, F>({
       r = r.filter((row) => row.status === statusFilter);
     }
     return r;
-  }, [records, search, statusFilter, searchKeys]);
+  }, [records, search, statusFilter, searchKeys, remoteListConfig]);
 
   const paginated = useMemo(() => {
+    if (remoteListConfig) return records;
     const start = (page - 1) * pageSize;
     return filtered.slice(start, start + pageSize);
-  }, [filtered, page, pageSize]);
+  }, [filtered, page, pageSize, records, remoteListConfig]);
 
   const openAdd = () => {
     const codes = records.map((r) => String((r as Record<string, unknown>).code ?? ""));
@@ -220,7 +288,14 @@ export function MasterModule<T extends BaseMasterRecord, F>({
     }
     const list = loadMasterRecords<T>(storageKey, seed);
     if (mode === "add") {
-      const id = list.length ? Math.max(...list.map((r) => r.id)) + 1 : 1;
+      const id = list.length
+        ? Math.max(
+            ...list.map((r) => {
+              const parsed = Number(r.id);
+              return Number.isFinite(parsed) ? parsed : 0;
+            }),
+          ) + 1
+        : 1;
       saveMasterRecords(storageKey, [...list, recordFromForm(form, id)]);
     } else if (active) {
       saveMasterRecords(
@@ -234,6 +309,7 @@ export function MasterModule<T extends BaseMasterRecord, F>({
 
   const toggleStatus = useCallback(
     (row: T) => {
+      if (remoteListConfig) return;
       const list = loadMasterRecords<T>(storageKey, seed);
       const next: MasterStatus = row.status === "active" ? "inactive" : "active";
       saveMasterRecords(
@@ -246,7 +322,7 @@ export function MasterModule<T extends BaseMasterRecord, F>({
       );
       refresh();
     },
-    [storageKey, seed, refresh],
+    [storageKey, seed, refresh, remoteListConfig],
   );
 
   const confirmDelete = () => {
@@ -269,6 +345,7 @@ export function MasterModule<T extends BaseMasterRecord, F>({
           <ActiveInactiveToggle
             active={row.status === "active"}
             onChange={() => toggleStatus(row)}
+            disabled={!!remoteListConfig}
           />
         ),
       },
@@ -339,7 +416,7 @@ export function MasterModule<T extends BaseMasterRecord, F>({
           }
         />
 
-        {!ready ? (
+        {(!remoteListConfig && !ready) || (remoteListConfig && remoteLoading) ? (
           <div className="space-y-3">
             <div className="flex gap-2">
               <div className="h-8 flex-1 max-w-sm rounded-lg skeleton" />
@@ -365,41 +442,44 @@ export function MasterModule<T extends BaseMasterRecord, F>({
             </div>
           </div>
         ) : (
-          <DataTable
-            columns={tableColumns}
-            data={paginated}
-            totalCount={filtered.length}
-            page={page}
-            pageSize={pageSize}
-            onPageChange={setPage}
-            onPageSizeChange={(s) => {
-              setPageSize(s);
-              setPage(1);
-            }}
-            searchValue={search}
-            onSearchChange={(v) => {
-              setSearch(v);
-              setPage(1);
-            }}
-            searchPlaceholder={`Search ${title.toLowerCase()}…`}
-            rowKey={(r) => String(r.id)}
-            onRowClick={openView}
-            emptyModule={title}
-            hideColumnSelection={hideColumnSelection}
-            filterSlot={
-              <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-                <SelectTrigger className="h-8 w-[120px] text-xs">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="text-xs">All Status</SelectItem>
-                  <SelectItem value="active" className="text-xs">Active</SelectItem>
-                  <SelectItem value="inactive" className="text-xs">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
-            }
-            actions={tableActions}
-          />
+          <div className="space-y-2">
+            {remoteError ? <p className="text-xs text-red-600">{remoteError}</p> : null}
+            <DataTable
+              columns={tableColumns}
+              data={paginated}
+              totalCount={remoteListConfig ? serverTotal : filtered.length}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
+              searchValue={search}
+              onSearchChange={(v) => {
+                setSearch(v);
+                setPage(1);
+              }}
+              searchPlaceholder={`Search ${title.toLowerCase()}…`}
+              rowKey={(r) => String(r.id)}
+              onRowClick={openView}
+              emptyModule={title}
+              hideColumnSelection={hideColumnSelection}
+              filterSlot={
+                <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+                  <SelectTrigger className="h-8 w-[120px] text-xs">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" className="text-xs">All Status</SelectItem>
+                    <SelectItem value="active" className="text-xs">Active</SelectItem>
+                    <SelectItem value="inactive" className="text-xs">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              }
+              actions={tableActions}
+            />
+          </div>
         )}
 
         <MasterRecordDrawer
