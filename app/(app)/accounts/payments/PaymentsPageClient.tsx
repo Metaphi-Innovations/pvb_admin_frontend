@@ -96,14 +96,14 @@ export default function PaymentsPageClient() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 text-[13px] font-medium gap-1.5"
+                className="h-9 text-sm font-medium gap-1.5"
                 disabled={exporting || visible.length === 0}
                 onClick={handleExport}
               >
                 <FileSpreadsheet className="w-4 h-4" />
                 {exporting ? "Exporting…" : "Export Excel"}
               </Button>
-              <Button size="sm" className="h-9 text-[13px] font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" asChild>
+              <Button size="sm" className="h-9 text-sm font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" asChild>
                 <Link href={`${PAYMENTS_LIST_PATH}/new`}>
                   <Plus className="w-4 h-4" />
                   Record Payment
@@ -117,7 +117,7 @@ export default function PaymentsPageClient() {
 
         <AccountsFilterBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Payment no., payee, source ref…">
           <Select value={sourceType} onValueChange={setSourceType}>
-            <SelectTrigger className="h-8 w-[150px] text-xs bg-white">
+            <SelectTrigger className="h-8 w-[150px] text-sm bg-white">
               <SelectValue placeholder="Source type" />
             </SelectTrigger>
             <SelectContent>
@@ -130,7 +130,7 @@ export default function PaymentsPageClient() {
             </SelectContent>
           </Select>
           <Select value={paymentMode} onValueChange={setPaymentMode}>
-            <SelectTrigger className="h-8 w-[130px] text-xs bg-white">
+            <SelectTrigger className="h-8 w-[130px] text-sm bg-white">
               <SelectValue placeholder="Mode" />
             </SelectTrigger>
             <SelectContent>
@@ -143,7 +143,7 @@ export default function PaymentsPageClient() {
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-8 w-[130px] text-xs bg-white">
+            <SelectTrigger className="h-8 w-[130px] text-sm bg-white">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -185,7 +185,7 @@ export default function PaymentsPageClient() {
                   ].map((h) => (
                     <th
                       key={h || "a"}
-                      className="px-2.5 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap"
+                      className="px-2.5 py-2 text-left text-xs font-semibold uppercase text-muted-foreground whitespace-nowrap"
                     >
                       {h}
                     </th>

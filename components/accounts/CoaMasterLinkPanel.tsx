@@ -17,7 +17,7 @@ interface CoaMasterLinkPanelProps {
 
 export function CoaMasterLinkBadge({ link }: { link: CoaMasterLink }) {
   return (
-    <Badge variant="secondary" className="text-[10px] font-medium gap-1">
+    <Badge variant="secondary" className="text-xs font-medium gap-1">
       <Link2 className="w-3 h-3" />
       Master-linked · {link.categoryLabel}
     </Badge>
@@ -36,7 +36,7 @@ export function CoaMasterLinkActions({
       <Button
         variant="outline"
         size="sm"
-        className="h-9 text-[13px] font-medium gap-1"
+        className="h-9 text-sm font-medium gap-1"
         onClick={() => router.push(ledgerDetailHref(ledgerId))}
       >
         <BookOpen className="w-4 h-4" /> View Ledger
@@ -44,14 +44,14 @@ export function CoaMasterLinkActions({
       <Button
         variant="outline"
         size="sm"
-        className="h-9 text-[13px] font-medium gap-1"
+        className="h-9 text-sm font-medium gap-1"
         onClick={() => (onViewTransactions ? onViewTransactions() : router.push(`${coaHrefForLedger(ledgerId)}`))}
       >
         <ListOrdered className="w-4 h-4" /> View Transactions
       </Button>
       <Button
         size="sm"
-        className="h-9 text-[13px] font-medium gap-1 bg-brand-600 hover:bg-brand-700 text-white"
+        className="h-9 text-sm font-medium gap-1 bg-brand-600 hover:bg-brand-700 text-white"
         onClick={() => router.push(link.masterHref)}
       >
         <ExternalLink className="w-4 h-4" /> Open Source Master
@@ -71,7 +71,7 @@ export function CoaMasterLinkPanel({ ledgerId, link, compact }: CoaMasterLinkPan
     >
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-800/80 mb-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-800/80 mb-1">
             Source Master Link
           </p>
           <p className="text-sm font-medium text-foreground">{link.sourceName}</p>
@@ -82,7 +82,7 @@ export function CoaMasterLinkPanel({ ledgerId, link, compact }: CoaMasterLinkPan
         </div>
         <CoaMasterLinkBadge link={link} />
       </div>
-      <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+      <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
         Profile and operational details are maintained in the source master only. COA shows accounting
         balances and transactions for this ledger.
       </p>

@@ -319,7 +319,7 @@ export function InvoiceLinesEditor({
           </span>
         )}
         {manualEntry && (
-          <Button type="button" variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1.5" onClick={addRow}>
+          <Button type="button" variant="outline" size="sm" className="h-9 text-sm font-medium gap-1.5" onClick={addRow}>
             <Plus className="w-4 h-4" /> Add New Row
           </Button>
         )}

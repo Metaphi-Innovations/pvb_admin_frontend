@@ -145,7 +145,7 @@ function AllocationWorkspace({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <div className="flex-shrink-0 px-2 py-1.5 border-b border-border/60 bg-white flex items-center gap-2">
-        <Button variant="ghost" size="sm" className="h-9 text-[13px] font-medium gap-1" onClick={onBack}>
+        <Button variant="ghost" size="sm" className="h-9 text-sm font-medium gap-1" onClick={onBack}>
           <ArrowLeft className="w-4 h-4" /> All Suppliers
         </Button>
       </div>
@@ -160,7 +160,7 @@ function AllocationWorkspace({
             ["Unallocated Balance", formatMoney(context.unallocatedBalance)],
           ].map(([label, value]) => (
             <div key={label}>
-              <p className="text-[10px] uppercase text-muted-foreground font-semibold">{label}</p>
+              <p className="text-xs uppercase text-muted-foreground font-semibold">{label}</p>
               <p className="font-semibold mt-0.5 tabular-nums">{value}</p>
             </div>
           ))}
@@ -221,7 +221,7 @@ function AllocationWorkspace({
                       </td>
                       <td className="px-3 py-2.5">
                         <AccountsMoneyInput
-                          className="h-9 text-[13px] font-medium w-32"
+                          className="h-9 text-sm font-medium w-32"
                           disabled={!selected[bill.billId]}
                           value={amounts[bill.billId] ?? ""}
                           onChange={(v) => {
@@ -257,13 +257,13 @@ function AllocationWorkspace({
         </div>
         <div className="flex items-center gap-2">
           <Link href={`/accounts/payables/outstanding/${vendorId}`}>
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium">
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium">
               View Outstanding
             </Button>
           </Link>
           <Button
             size="sm"
-            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
+            className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white"
             onClick={handleSave}
             disabled={saving || totalSelected <= 0 || context.unallocatedBalance <= 0}
           >
@@ -370,7 +370,7 @@ export default function PaymentAllocationClient() {
     {
       key: "vendorCode",
       label: "Supplier Code",
-      render: (r) => <span className="font-mono text-[11px] text-muted-foreground">{r.vendorCode}</span>,
+      render: (r) => <span className="font-mono text-xs text-muted-foreground">{r.vendorCode}</span>,
     },
     {
       key: "totalOutstanding",
@@ -408,7 +408,7 @@ export default function PaymentAllocationClient() {
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 px-2 text-[11px] text-brand-700"
+          className="h-7 px-2 text-sm text-brand-700"
           onClick={(e) => {
             e.stopPropagation();
             setActiveVendorId(r.vendorId);
@@ -454,14 +454,14 @@ export default function PaymentAllocationClient() {
           <ReportFinancialYearFilter value={financialYearId} onChange={setFinancialYearId} />
           <ReportVendorFilter value={vendorId} onChange={setVendorId} vendors={filterOptions.vendors} />
           <div className="space-y-1 min-w-[160px]">
-            <Label className="text-[10px] font-medium uppercase text-muted-foreground leading-none">
+            <Label className="text-xs font-medium uppercase text-muted-foreground leading-none">
               Payment Status
             </Label>
             <Select
               value={allocationStatus}
               onValueChange={(v) => setAllocationStatus(v as PaymentAllocationStatus | "all")}
             >
-              <SelectTrigger className="h-9 text-[13px] font-medium mt-0 w-[160px]">
+              <SelectTrigger className="h-9 text-sm font-medium mt-0 w-[160px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

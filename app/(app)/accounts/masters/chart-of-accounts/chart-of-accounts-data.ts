@@ -2,12 +2,14 @@ import {
   canUserCreateAtLevel,
   canUserDeleteNode,
   canUserEditNode,
-  isGroupingLedger,
-  isPostingLedger,
   isStructuralNode as hierarchyIsStructural,
   ledgerHasChildLedgers,
 } from "@/lib/accounts/coa-hierarchy";
 import { isMasterLinkedLedger } from "@/lib/accounts/coa-master-link";
+import { isGstCoaLedger } from "@/lib/accounts/gst-coa-sync";
+import { isTdsCoaLedger } from "@/lib/accounts/tds-coa-sync";
+import { resolveCoaAddLedgerPolicy } from "@/lib/accounts/coa-add-ledger-policy";
+import { getCoaDisplayPath, getCoaTreeChildren } from "@/lib/accounts/coa-tree-children";
 import {
   type AccountType,
   type ChartOfAccount,
@@ -210,18 +212,22 @@ export function isManualLedgerCreationParent(
   return pathNames.some((n) => COA_MANUAL_LEDGER_PARENT_NAMES.has(n));
 }
 
-export function canAddLedgerUnder(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
-  if (node.nodeLevel === "primary_head") return false;
-  if (node.nodeLevel === "account_group") {
-    return !hasChildAccountGroups(records, node.id);
-  }
-  if (node.nodeLevel === "ledger") {
-    if (isGroupingLedger(node, records)) return true;
-    if (isPostingLedger(node, records) && !ledgerHasVoucherPostings(node.id)) return true;
-    return false;
-  }
-  return false;
+/** Level 3 — leaf account group (e.g. Bank Accounts, Direct Expenses) where ledgers attach */
+export function isAccountingGroupNode(
+  node: ChartOfAccount,
+  records: ChartOfAccount[],
+): boolean {
+  if (node.nodeLevel !== "account_group") return false;
+  return !hasChildAccountGroups(records, node.id);
 }
+
+/** Ledgers may only be created directly under Level 3 Accounting Groups — never under ledgers */
+export function canAddLedgerUnder(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
+  return isAccountingGroupNode(node, records);
+}
+
+export const LEDGER_UNDER_LEDGER_ERROR =
+  "A ledger cannot contain another ledger. Please create the ledger under an Accounting Group.";
 
 export function countChildGroups(records: ChartOfAccount[], nodeId: number): number {
   return getChildGroups(records, nodeId).length;
@@ -390,10 +396,16 @@ export function validateLedgerForm(
   editingId?: number,
 ): string | null {
   if (!form.ledgerName.trim()) return "Ledger name is required.";
-  if (!form.parentGroupId) return "Please select a Parent Ledger.";
+  if (!form.parentGroupId) return "Please select a Parent Group.";
   const parent = records.find((r) => r.id === form.parentGroupId);
-  if (!parent || !canAddLedgerUnder(parent, records)) {
-    return "Ledgers must be created under a valid Standard Group or grouping ledger. Posting ledgers with transactions cannot hold child ledgers.";
+  if (!parent) return "Please select a valid Parent Group.";
+  if (parent.nodeLevel === "ledger") return LEDGER_UNDER_LEDGER_ERROR;
+  if (!canAddLedgerUnder(parent, records)) {
+    return "Ledgers must be created under an Accounting Group (e.g. Bank Accounts, Direct Expenses).";
+  }
+  const addPolicy = resolveCoaAddLedgerPolicy(parent, records);
+  if (addPolicy.blocked) {
+    return addPolicy.reason ?? "Manual ledger creation is not allowed under this group.";
   }
   const dup = records.find(
     (r) =>
@@ -403,14 +415,6 @@ export function validateLedgerForm(
       r.accountName.toLowerCase() === form.ledgerName.trim().toLowerCase(),
   );
   if (dup) return "A ledger with this name already exists under this parent.";
-  if (
-    editingId &&
-    parent.nodeLevel === "ledger" &&
-    isPostingLedger(parent, records) &&
-    ledgerHasVoucherPostings(parent.id)
-  ) {
-    return "Cannot add child ledgers under a posting ledger that already has transactions.";
-  }
   return null;
 }
 
@@ -421,6 +425,7 @@ export function ledgerHasVoucherPostings(ledgerId: number): boolean {
 }
 
 export function canDeleteLedger(record: ChartOfAccount): boolean {
+  if (isGstCoaLedger(record) || isTdsCoaLedger(record)) return false;
   if (!canUserDeleteNode(record)) return false;
   if (ledgerHasChildLedgers(record.id, loadChartOfAccounts())) return false;
   if (ledgerHasVoucherPostings(record.id)) return false;
@@ -428,6 +433,7 @@ export function canDeleteLedger(record: ChartOfAccount): boolean {
 }
 
 export function canEditLedger(record: ChartOfAccount): boolean {
+  if (isGstCoaLedger(record) || isTdsCoaLedger(record)) return false;
   if (isMasterLinkedLedger(record)) return false;
   return canUserEditNode(record);
 }
@@ -442,7 +448,11 @@ export function canCreateCoaNodeAtLevel(level: CoaNodeLevel): boolean {
 
 export function getAllExpandableIds(records: ChartOfAccount[]): number[] {
   return records
-    .filter((r) => r.nodeLevel !== "ledger" || ledgerHasChildLedgers(r.id, records))
+    .filter(
+      (r) =>
+        !r.bankGroupFlag &&
+        (r.nodeLevel !== "ledger" || ledgerHasChildLedgers(r.id, records)),
+    )
     .map((r) => r.id);
 }
 
@@ -549,9 +559,9 @@ export function getSearchVisibleIds(
 
   const matching = getSearchMatchingNodes(records, query);
   for (const node of matching) {
-    getAncestorPath(records, node.id).forEach((a) => visible.add(a.id));
+    getCoaDisplayPath(records, node.id).forEach((a) => visible.add(a.id));
     const collectDesc = (id: number) => {
-      getDirectChildren(records, id).forEach((c) => {
+      getCoaTreeChildren(records, id).forEach((c) => {
         visible.add(c.id);
         if (c.nodeLevel !== "ledger" || ledgerHasChildLedgers(c.id, records)) {
           collectDesc(c.id);

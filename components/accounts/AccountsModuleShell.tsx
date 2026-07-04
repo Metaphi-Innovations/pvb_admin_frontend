@@ -13,7 +13,7 @@ import {
 } from "@/lib/accounts/accounts-nav";
 import { ACCOUNTS_SCROLL_PANEL_CLASS } from "@/lib/accounts/accounts-layout-constants";
 import { seedAccountsDemoData } from "@/lib/accounts/accounts-demo-seed";
-import { ensureGstAccountingLedgers } from "@/lib/accounts/gst-accounting";
+import { syncGstCoaFromMaster } from "@/lib/accounts/gst-coa-sync";
 import { ACCOUNTS_SIDEBAR_GROUP_CLASS, ACCOUNTS_SIDEBAR_ITEM_CLASS } from "@/lib/accounts/accounts-typography";
 import { CoaSidebarNav } from "./CoaSidebarNav";
 
@@ -72,7 +72,7 @@ function NavGroup({
       </button>
 
       {open && (
-        <div className="mt-1 ml-1 space-y-0.5 border-l border-border/50 pl-2">
+        <div className="mt-1 ml-2 space-y-0.5">
           {group.items.map((item) => {
             const active = isAccountsNavActive(pathname, item.href);
             const ItemIcon = item.icon;
@@ -82,12 +82,12 @@ function NavGroup({
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "group flex items-center gap-2 pl-2 pr-2 py-1.5 rounded-r-lg leading-snug",
+                  "group flex items-center gap-2 pl-2 pr-2 py-1.5 rounded-lg leading-snug",
                   ACCOUNTS_SIDEBAR_ITEM_CLASS,
-                  "border-l-2 -ml-[1px] transition-all duration-150",
+                  "transition-all duration-150",
                   active
-                    ? "border-brand-600 bg-[#FFF3E6] text-brand-800 font-medium"
-                    : "border-transparent text-[#6B7280] hover:bg-brand-50/70 hover:text-brand-800 hover:border-brand-300",
+                    ? "bg-[#FFF3E6] text-brand-800 font-medium"
+                    : "text-[#6B7280] hover:bg-brand-50/70 hover:text-brand-800",
                 )}
               >
                 <ItemIcon
@@ -112,18 +112,18 @@ export function AccountsModuleShell({ children }: AccountsModuleShellProps) {
   const activeGroupId = useMemo(() => resolveAccountsNavGroupId(pathname), [pathname]);
 
   useEffect(() => {
-    const run = () => {
-      seedAccountsDemoData();
-      ensureGstAccountingLedgers();
+    seedAccountsDemoData();
+    syncGstCoaFromMaster();
+  }, []);
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "ds_gst_masters") {
+        syncGstCoaFromMaster();
+      }
     };
-
-    if (typeof window.requestIdleCallback === "function") {
-      const id = window.requestIdleCallback(run, { timeout: 2500 });
-      return () => window.cancelIdleCallback(id);
-    }
-
-    const t = window.setTimeout(run, 250);
-    return () => window.clearTimeout(t);
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   return (
@@ -131,7 +131,7 @@ export function AccountsModuleShell({ children }: AccountsModuleShellProps) {
       <aside className="accounts-module-sidebar w-[min(380px,32vw)] min-w-[340px] flex-shrink-0 flex flex-col h-full min-h-0 overflow-hidden bg-white border-r border-border/80">
         <div className="flex-shrink-0 px-3 py-3 border-b border-border/60">
           <p className={cn(ACCOUNTS_SIDEBAR_GROUP_CLASS, "text-brand-800")}>Accounting</p>
-          <p className="text-[13px] text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 mt-0.5">
             Chart of Accounts · Transactions · Receivables · Payables · Banking · Reports
           </p>
         </div>
@@ -149,7 +149,7 @@ export function AccountsModuleShell({ children }: AccountsModuleShellProps) {
       </aside>
 
       <main className="accounts-module-main flex-1 min-w-0 min-h-0 h-full overflow-hidden flex flex-col bg-slate-50/40">
-        <div className={cn(ACCOUNTS_SCROLL_PANEL_CLASS, "px-4 py-3")}>{children}</div>
+        <div className={cn(ACCOUNTS_SCROLL_PANEL_CLASS, "px-3 py-2")}>{children}</div>
       </main>
     </div>
   );

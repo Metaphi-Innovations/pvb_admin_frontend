@@ -106,8 +106,8 @@ export function TransactionPage({
       <div className="max-w-[1400px] mx-auto space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold">{title}</h1>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
+            <h1 className="text-xl font-semibold">{title}</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
               ERP posting supported only for approved records.
             </p>
           </div>
@@ -150,14 +150,14 @@ export function TransactionPage({
                 <tr>
                   <SortTh label={`${title} No.`} colKey="number" sortKey={sortKey} sortDir={sortDir} onSort={(k) => { setSortKey(k); setSortDir(sortDir === "asc" ? "desc" : "asc"); }} />
                   <SortTh label="Date" colKey="date" sortKey={sortKey} sortDir={sortDir} onSort={(k) => { setSortKey(k); setSortDir(sortDir === "asc" ? "desc" : "asc"); }} />
-                  <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">{partyLabel}</th>
-                  <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">Reference No.</th>
-                  <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">Amount</th>
-                  <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">Tax</th>
-                  <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">Total</th>
-                  <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">Status</th>
-                  <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">Created By</th>
-                  <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">Updated By</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">{partyLabel}</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">Reference No.</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">Amount</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">Tax</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">Total</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">Status</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">Created By</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">Updated By</th>
                   <th className="px-3 py-2.5 w-36" />
                 </tr>
               </thead>
@@ -176,10 +176,10 @@ export function TransactionPage({
                     <td className="px-3 py-2 text-xs text-muted-foreground">{r.updatedBy}</td>
                     <td className="px-3 py-2 text-right">
                       {r.status === "draft" && (
-                        <Button size="sm" className="h-7 text-[11px]" onClick={() => updateStatus(r, "approved")}>Approve</Button>
+                        <Button size="sm" className="h-7 text-sm" onClick={() => updateStatus(r, "approved")}>Approve</Button>
                       )}
                       {r.status === "approved" && (
-                        <Button size="sm" className="h-7 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => updateStatus(r, "posted")}>Post</Button>
+                        <Button size="sm" className="h-7 text-sm bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => updateStatus(r, "posted")}>Post</Button>
                       )}
                     </td>
                   </tr>

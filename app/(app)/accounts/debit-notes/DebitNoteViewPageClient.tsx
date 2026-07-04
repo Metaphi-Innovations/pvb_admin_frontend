@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Calendar, Download, Eye, Pencil, PlayCircle } from "lucide-react";
+import { Calendar, Download, Eye, Pencil } from "lucide-react";
 import { RecordDetailPage } from "@/components/record-detail";
 import { AccountsVoucherStatusBadge } from "@/components/accounts/AccountsVoucherStatusBadge";
 import { AccountsDocumentWorkflowSection } from "@/components/accounts/AccountsDocumentWorkflowSection";
@@ -15,7 +15,6 @@ import {
   canEditDebitNote,
   DEBIT_NOTE_SOURCE_LABELS,
   getDebitNoteById,
-  processDebitNote,
   totalRejectedQtyFromLines,
   type DebitNoteRecord,
 } from "./debit-notes-data";
@@ -27,7 +26,7 @@ import { debitNoteImpactResolved } from "@/lib/accounts/resolved-impact-previews
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[10px] uppercase text-muted-foreground">{label}</p>
+      <p className="text-xs uppercase text-muted-foreground">{label}</p>
       <p className="text-xs font-medium mt-0.5">{value || "—"}</p>
     </div>
   );
@@ -71,20 +70,11 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
       onEdit={canEdit ? () => router.push(`${DEBIT_NOTES_LIST_PATH}/${record.id}/edit`) : undefined}
       headerActions={
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1" onClick={() => downloadDebitNotePdf(record)}>
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1" onClick={() => downloadDebitNotePdf(record)}>
             <Download className="w-4 h-4" /> Download PDF
           </Button>
-          {displayStatus === "posted" && record.status === "approved" && (
-            <Button
-              size="sm"
-              className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
-              onClick={() => {
-                processDebitNote(record.id);
-                refresh();
-              }}
-            >
-              <PlayCircle className="w-4 h-4" /> Mark Processed
-            </Button>
+          {displayStatus === "posted" && (
+            <span className="text-xs text-muted-foreground">Posted to accounts</span>
           )}
         </div>
       }
@@ -133,6 +123,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
             taxable: record.taxableAmount,
             taxAmount: record.gstAmount,
             grandTotal: record.currentDebitAmount,
+            adjustmentLedgerName: record.adjustmentLedgerName,
           })}
         />
         <AccountsVoucherStatusBadge workflow={record.workflow} legacyStatus={record.status} />
@@ -153,6 +144,11 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
           />
           <DetailRow label="Supplier" value={record.vendorName} />
           <DetailRow label="Purchase Return Reference" value={record.sourceReturnNo ?? ""} />
+          <DetailRow label="PO No." value={record.sourcePoNo} />
+          <DetailRow label="GRN No." value={record.sourceGrnNo} />
+          <DetailRow label="Dispatch No." value={record.sourceDispatchNo ?? ""} />
+          <DetailRow label="Reference No." value={record.referenceNo ?? ""} />
+          <DetailRow label="Adjustment Ledger" value={record.adjustmentLedgerName ?? ""} />
           <DetailRow label="Purchase Invoice Reference" value={record.sourceInvoiceNo} />
           <DetailRow label="Debit Note Date" value={record.debitNoteDate} />
           <DetailRow label="Taxable Value" value={formatINR(record.taxableAmount)} />
@@ -169,7 +165,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
               <thead className="border-b">
                 <tr>
                   {["Product", "Inv Qty", "Return Qty", "UOM", "Rate", "GST %", "Debit Amount"].map((h) => (
-                    <th key={h} className="py-1.5 text-left text-[10px] uppercase text-muted-foreground font-semibold">
+                    <th key={h} className="py-1.5 text-left text-xs uppercase text-muted-foreground font-semibold">
                       {h}
                     </th>
                   ))}
@@ -218,7 +214,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
 
         {record.remarks && (
           <div className="bg-white rounded-lg border p-4 text-xs">
-            <p className="text-[10px] uppercase text-muted-foreground mb-1">Remarks</p>
+            <p className="text-xs uppercase text-muted-foreground mb-1">Remarks</p>
             <p>{record.remarks}</p>
           </div>
         )}
@@ -230,7 +226,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
               <div key={i} className="text-xs border-l-2 border-brand-200 pl-3 py-0.5">
                 <p className="font-medium capitalize">{a.action.replaceAll("_", " ")}</p>
                 <p className="text-muted-foreground">{a.detail}</p>
-                <p className="text-[10px] text-muted-foreground">{a.by} · {new Date(a.at).toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">{a.by} · {new Date(a.at).toLocaleString()}</p>
               </div>
             ))}
           </div>

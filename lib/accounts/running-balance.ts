@@ -43,6 +43,34 @@ export function fromSignedBalance(signed: number): BalanceAmount {
   return { amount: Math.abs(signed), balanceType: "Credit" };
 }
 
+/** Which side the voucher line was posted on (Debit column vs Credit column). */
+export function entrySideFromAmounts(debit: number, credit: number): BalanceSide | null {
+  const d = Number(debit) || 0;
+  const c = Number(credit) || 0;
+  if (d > 0 && c <= 0) return "Debit";
+  if (c > 0 && d <= 0) return "Credit";
+  if (d > 0 && c > 0) return d >= c ? "Debit" : "Credit";
+  return null;
+}
+
+export interface DrCrColumnSideInput {
+  debit: number;
+  credit: number;
+  runningBalanceType: BalanceSide;
+  /** Opening / closing rows reflect balance direction, not entry side. */
+  isBalanceRow?: boolean;
+}
+
+/**
+ * Dr/Cr indicator for ledger tables with a separate side column:
+ * - Opening / closing / zero-movement rows → running balance side
+ * - Posted lines → accounting entry side (credit column → Cr, debit column → Dr)
+ */
+export function resolveDrCrColumnSide(input: DrCrColumnSideInput): BalanceSide {
+  if (input.isBalanceRow) return input.runningBalanceType;
+  return entrySideFromAmounts(input.debit, input.credit) ?? input.runningBalanceType;
+}
+
 /** Apply a voucher line: running balance += Debit − Credit (standard double-entry). */
 export function applyMovement(signedBalance: number, debit: number, credit: number): number {
   return signedBalance + debit - credit;

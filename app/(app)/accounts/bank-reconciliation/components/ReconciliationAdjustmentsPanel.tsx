@@ -89,18 +89,18 @@ export function ReconciliationAdjustmentsPanel({
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-xs font-semibold text-foreground">Adjustments</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             Map GST/TDS, discounts, advances, or other differences before reconciliation.
           </p>
         </div>
-        <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={addRow}>
+        <Button type="button" variant="outline" size="sm" className="h-7 text-sm" onClick={addRow}>
           <Plus className="w-3 h-3 mr-1" />
           Add
         </Button>
       </div>
 
       {(breakdown.documentShortfall > 0.01 || breakdown.bankUnaccounted > 0.01) && (
-        <div className="text-[10px] space-y-1 text-muted-foreground">
+        <div className="text-xs space-y-1 text-muted-foreground">
           {breakdown.documentShortfall > 0.01 && (
             <p>
               Document shortfall:{" "}
@@ -121,7 +121,7 @@ export function ReconciliationAdjustmentsPanel({
       )}
 
       {adjustments.length === 0 ? (
-        <p className="text-[10px] text-muted-foreground text-center py-2">
+        <p className="text-xs text-muted-foreground text-center py-2">
           Add an adjustment row to map the remaining difference.
         </p>
       ) : (
@@ -129,7 +129,7 @@ export function ReconciliationAdjustmentsPanel({
           {adjustments.map((row) => (
             <div key={row.id} className="rounded-md border border-border/60 bg-white p-2.5 space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <Label className="text-[10px] uppercase text-muted-foreground">Adjustment Type</Label>
+                <Label className="text-xs uppercase text-muted-foreground">Adjustment Type</Label>
                 <button
                   type="button"
                   className="text-muted-foreground hover:text-red-600"
@@ -143,7 +143,7 @@ export function ReconciliationAdjustmentsPanel({
                 value={row.adjustmentTypeId}
                 onValueChange={(v) => updateRow(row.id, { adjustmentTypeId: v })}
               >
-                <SelectTrigger className="h-9 text-[13px] font-medium">
+                <SelectTrigger className="h-9 text-sm font-medium">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -168,9 +168,9 @@ export function ReconciliationAdjustmentsPanel({
               />
 
               <div className="space-y-1">
-                <Label className="text-[10px]">Amount</Label>
+                <Label className="text-xs">Amount</Label>
                 <AccountsMoneyInput
-                  className="h-9 text-[13px] font-medium tabular-nums"
+                  className="h-9 text-sm font-medium tabular-nums"
                   value={row.amount || ""}
                   onChange={(v) => updateRow(row.id, { amount: v })}
                 />

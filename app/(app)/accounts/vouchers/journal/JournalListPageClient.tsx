@@ -126,7 +126,7 @@ export default function JournalListPageClient() {
       <div className="relative flex-1 min-w-[200px] max-w-sm">
         <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
-          className="h-7 pl-8 text-xs bg-white"
+          className="h-7 pl-8 text-sm bg-white"
           placeholder="Search voucher no., narration, created by…"
           value={search}
           onChange={(e) => {
@@ -142,7 +142,7 @@ export default function JournalListPageClient() {
           setPage(1);
         }}
       >
-        <SelectTrigger className="h-7 w-[120px] text-xs bg-white">
+        <SelectTrigger className="h-7 w-[120px] text-sm bg-white">
           <SelectValue placeholder="Status" />
         </SelectTrigger>
         <SelectContent>
@@ -171,7 +171,7 @@ export default function JournalListPageClient() {
           <AccountsExportMenu onExcel={exportCsv} />
           <Button
             size="sm"
-            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
+            className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
             asChild
           >
             <Link href="/accounts/vouchers/journal/new">

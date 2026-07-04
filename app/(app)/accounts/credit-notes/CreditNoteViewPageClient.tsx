@@ -8,6 +8,7 @@ import { RecordDetailPage } from "@/components/record-detail";
 import { AccountsVoucherStatusBadge } from "@/components/accounts/AccountsVoucherStatusBadge";
 import { AccountsDocumentWorkflowSection } from "@/components/accounts/AccountsDocumentWorkflowSection";
 import { CreditNoteCancelDialog } from "./components/CreditNoteCancelDialog";
+import { formatLinkedInvoiceNos } from "./components/LinkedInvoicesMultiSelect";
 import {
   canEditCreditNote,
   cancelCreditNote,
@@ -26,7 +27,7 @@ import {
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="text-xs font-medium mt-0.5">{value ?? "—"}</p>
     </div>
   );
@@ -131,7 +132,14 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
             }
           />
           <DetailRow label="Customer" value={record.customerName} />
-          <DetailRow label="Invoice Reference" value={record.sourceInvoiceNo} />
+          <DetailRow
+            label="Linked Invoice(s)"
+            value={
+              formatLinkedInvoiceNos(record.linkedInvoices) ||
+              record.sourceInvoiceNo ||
+              "—"
+            }
+          />
           {record.source === "payment_discount_scheme" && record.schemeName && (
             <DetailRow label="Scheme Name" value={record.schemeName} />
           )}
@@ -155,7 +163,7 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
             <thead className="border-b">
               <tr>
                 {["Product", "Description", "Inv Qty", "Return Qty", "Credit Amount"].map((h) => (
-                  <th key={h} className="py-1.5 text-left text-[10px] uppercase text-muted-foreground font-semibold">
+                  <th key={h} className="py-1.5 text-left text-xs uppercase text-muted-foreground font-semibold">
                     {h}
                   </th>
                 ))}
@@ -177,7 +185,7 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
 
         {record.remarks && (
           <div className="bg-white rounded-lg border p-4 text-xs">
-            <p className="text-[10px] uppercase text-muted-foreground mb-1">Remarks</p>
+            <p className="text-xs uppercase text-muted-foreground mb-1">Remarks</p>
             <p>{record.remarks}</p>
           </div>
         )}
@@ -189,7 +197,7 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
               <div key={i} className="text-xs border-l-2 border-brand-200 pl-3 py-0.5">
                 <p className="font-medium capitalize">{a.action.replaceAll("_", " ")}</p>
                 <p className="text-muted-foreground">{a.detail}</p>
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {a.by} · {new Date(a.at).toLocaleString()}
                 </p>
               </div>

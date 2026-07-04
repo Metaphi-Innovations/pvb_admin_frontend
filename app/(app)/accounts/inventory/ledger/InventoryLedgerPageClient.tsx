@@ -25,9 +25,9 @@ export default function InventoryLedgerPageClient() {
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Inventory", "Inventory Ledger")}
       title="Inventory Ledger"
-      description="View stock-related ledgers under Chart of Accounts. Create items from Inventory → Items."
+      description="View stock-related ledgers under Chart of Accounts. Create items from Inventory â†’ Items."
       actions={
-        <Button asChild variant="outline" size="sm" className="h-9 text-[13px] font-medium">
+        <Button asChild variant="outline" size="sm" className="h-9 text-sm font-medium">
           <Link href="/accounts/masters/chart-of-accounts">View in Chart of Accounts</Link>
         </Button>
       }
@@ -40,7 +40,7 @@ export default function InventoryLedgerPageClient() {
               {["Ledger Code", "Ledger Name", "Type", "Opening Balance", "Current Balance", "Status"].map((h) => (
                 <th
                   key={h}
-                  className={`px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground ${
+                  className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground ${
                     h.includes("Balance") ? "text-right" : "text-left"
                   }`}
                 >

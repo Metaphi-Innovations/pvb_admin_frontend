@@ -1,5 +1,28 @@
+import { Suspense } from "react";
 import CreditNoteFormPageClient from "../../../credit-notes/CreditNoteFormPageClient";
 
-export default function NewCreditNotePage() {
-  return <CreditNoteFormPageClient />;
+type FormMode = "fresh" | "return" | "scheme";
+
+export default function NewCreditNotePage({
+  searchParams,
+}: {
+  searchParams?: { returnId?: string; schemeKey?: string; mode?: string; invoiceId?: string };
+}) {
+  const modeParam = searchParams?.mode;
+  let mode: FormMode | undefined;
+  if (modeParam === "fresh") mode = "fresh";
+  else if (modeParam === "scheme") mode = "scheme";
+  else if (searchParams?.returnId) mode = "return";
+  else if (searchParams?.schemeKey) mode = "scheme";
+
+  return (
+    <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Loading credit note form…</div>}>
+      <CreditNoteFormPageClient
+        returnId={searchParams?.returnId}
+        schemeKey={searchParams?.schemeKey}
+        invoiceId={searchParams?.invoiceId}
+        mode={mode}
+      />
+    </Suspense>
+  );
 }

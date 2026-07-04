@@ -7,11 +7,12 @@ import type { ChartOfAccount } from "../../../data";
 import {
   canAddLedgerUnder,
   countLedgersUnder,
-  getDirectChildren,
   getSearchVisibleIds,
   nodeMatchesSearch,
 } from "../chart-of-accounts-data";
+import { getCoaTreeChildren } from "@/lib/accounts/coa-tree-children";
 import { CoaAddLedgerHoverAction } from "./CoaAddLedgerHoverAction";
+import { isAddLedgerBlocked } from "@/lib/accounts/coa-add-ledger-policy";
 import { CoaLevelBadge } from "./CoaLevelBadge";
 import {
   COA_TREE_ICON_SIZE_CLASS,
@@ -99,7 +100,7 @@ function TreeNode({
   onAddLedger,
 }: TreeNodeProps) {
   const isSidebar = variant === "sidebar";
-  const children = getDirectChildren(records, node.id);
+  const children = getCoaTreeChildren(records, node.id);
   const hasChildren = children.length > 0;
   const isExpanded = expandedIds.has(node.id);
   const isSelected = selectedId === node.id;
@@ -110,7 +111,11 @@ function TreeNode({
   const ledgerCount = !isLedger ? countLedgersUnder(records, node.id) : 0;
   const isPrimaryHead = node.nodeLevel === "primary_head";
   const showExpandChevron = coaNodeShowsExpandChevron(node, records, hasChildren);
-  const allowAdd = canCreate && onAddLedger != null && canAddLedgerUnder(node, records);
+  const allowAdd =
+    canCreate &&
+    onAddLedger != null &&
+    canAddLedgerUnder(node, records) &&
+    !isAddLedgerBlocked(node, records);
   const isHighlighted = highlightedLedgerId === node.id;
   const isSearchMatch =
     Boolean(searchQuery.trim()) && nodeMatchesSearch(records, node, searchQuery);
@@ -221,7 +226,7 @@ function TreeNode({
                 <Lock className="inline w-3 h-3 ml-1 text-amber-600 opacity-80" aria-label="System locked" />
               )}
               {!isLedger && ledgerCount > 0 && !isSidebar && (
-                <span className="ml-1.5 text-[10px] font-normal text-muted-foreground tabular-nums whitespace-nowrap">
+                <span className="ml-1.5 text-xs font-normal text-muted-foreground tabular-nums whitespace-nowrap">
                   ({ledgerCount})
                 </span>
               )}

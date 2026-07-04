@@ -61,7 +61,7 @@ function StatusBadge({ status }: { status: TransactionStatus }) {
     reconciled: { label: "Reconciled", className: "bg-green-100 text-green-700" },
   };
   const c = config[status];
-  return <Badge className={cn("text-[10px] px-2 py-0.5", c.className)}>{c.label}</Badge>;
+  return <Badge className={cn("text-xs px-2 py-0.5", c.className)}>{c.label}</Badge>;
 }
 
 interface CategorizationPanelProps {
@@ -212,14 +212,14 @@ function CategorizationPanel({ transaction, open, onClose, onSave }: Categorizat
               }}
               disabled={transaction.status === "reconciled"}
             >
-              <SelectTrigger className="h-9 text-xs">
+              <SelectTrigger className="h-9 text-sm">
                 <SelectValue placeholder="Select category" />
               </SelectTrigger>
               <SelectContent>
                 {TRANSACTION_CATEGORIES.map((cat) => (
                   <SelectItem key={cat.value} value={cat.value} className="text-xs">
                     {cat.label}
-                    <span className="ml-2 text-[10px] text-muted-foreground">({cat.type})</span>
+                    <span className="ml-2 text-xs text-muted-foreground">({cat.type})</span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -234,7 +234,7 @@ function CategorizationPanel({ transaction, open, onClose, onSave }: Categorizat
               </Label>
               <div className="relative">
                 <Input
-                  className="h-9 text-xs pr-8"
+                  className="h-9 text-sm pr-8"
                   placeholder="Search ledger..."
                   value={ledgerSearch}
                   onChange={(e) => setLedgerSearch(e.target.value)}
@@ -245,7 +245,7 @@ function CategorizationPanel({ transaction, open, onClose, onSave }: Categorizat
               {selectedLedger && (
                 <div className="mt-2 rounded-md bg-brand-50 border border-brand-200 px-3 py-2">
                   <p className="text-xs font-medium">{selectedLedger.name}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     {selectedLedger.code} · {selectedLedger.type}
                   </p>
                 </div>
@@ -272,7 +272,7 @@ function CategorizationPanel({ transaction, open, onClose, onSave }: Categorizat
                         disabled={transaction.status === "reconciled"}
                       >
                         <p className="text-xs font-medium">{ledger.name}</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           {ledger.code} · {ledger.type}
                         </p>
                       </button>
@@ -332,7 +332,7 @@ function CategorizationPanel({ transaction, open, onClose, onSave }: Categorizat
               <>
                 <Button
                   size="sm"
-                  className="flex-1 h-9 text-xs"
+                  className="flex-1 h-9 text-sm"
                   onClick={handleSave}
                   disabled={!category || !ledgerId || saving}
                 >
@@ -342,7 +342,7 @@ function CategorizationPanel({ transaction, open, onClose, onSave }: Categorizat
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-9 text-xs"
+                  className="h-9 text-sm"
                   onClick={onClose}
                 >
                   Cancel
@@ -353,7 +353,7 @@ function CategorizationPanel({ transaction, open, onClose, onSave }: Categorizat
               <>
                 <Button
                   size="sm"
-                  className="flex-1 h-9 text-xs bg-green-600 hover:bg-green-700"
+                  className="flex-1 h-9 text-sm bg-green-600 hover:bg-green-700"
                   onClick={handleReconcile}
                   disabled={saving}
                 >
@@ -363,7 +363,7 @@ function CategorizationPanel({ transaction, open, onClose, onSave }: Categorizat
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-9 text-xs"
+                  className="h-9 text-sm"
                   onClick={handleUncategorize}
                   disabled={saving}
                 >
@@ -376,7 +376,7 @@ function CategorizationPanel({ transaction, open, onClose, onSave }: Categorizat
               <Button
                 size="sm"
                 variant="outline"
-                className="flex-1 h-9 text-xs"
+                className="flex-1 h-9 text-sm"
                 onClick={onClose}
               >
                 Close
@@ -519,7 +519,7 @@ export function BankTransactionsClient() {
                 <AccountsTableCell>{txn.transactionDate}</AccountsTableCell>
                 <AccountsTableCell wrap>
                   <span className="font-medium line-clamp-1">{txn.narration}</span>
-                  <span className="text-[10px] text-muted-foreground">{txn.bankAccountName}</span>
+                  <span className="text-xs text-muted-foreground">{txn.bankAccountName}</span>
                 </AccountsTableCell>
                 <AccountsTableCell>{txn.referenceNo || "—"}</AccountsTableCell>
                 <AccountsTableCell align="right" className="text-red-600 font-medium tabular-nums">

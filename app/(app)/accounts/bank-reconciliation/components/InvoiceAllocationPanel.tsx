@@ -54,7 +54,7 @@ export function InvoiceAllocationPanel({
         <p className="text-xs font-semibold text-foreground">{title}</p>
         <button
           type="button"
-          className="text-[10px] text-brand-600 hover:underline"
+          className="text-xs text-brand-600 hover:underline"
           onClick={onClearAll}
         >
           Clear Applied Amount
@@ -88,7 +88,7 @@ export function InvoiceAllocationPanel({
                   onClick={() => onSelectInvoice?.(key)}
                 >
                   <p className="text-xs font-semibold text-foreground">{inv.label}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     Invoice Date {formatDisplayDate(inv.invoiceDate)}
                   </p>
                 </button>
@@ -101,7 +101,7 @@ export function InvoiceAllocationPanel({
                   />
                   <button
                     type="button"
-                    className="text-[10px] text-brand-600 hover:underline whitespace-nowrap"
+                    className="text-xs text-brand-600 hover:underline whitespace-nowrap"
                     onClick={() =>
                       onPayInFull(key, Math.min(inv.balance, transactionAmount))
                     }
@@ -111,7 +111,7 @@ export function InvoiceAllocationPanel({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] rounded-md bg-muted/20 p-2">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs rounded-md bg-muted/20 p-2">
                 <span className="text-muted-foreground">Taxable value</span>
                 <span className="text-right tabular-nums">{formatMoney(inv.taxableAmount)}</span>
                 <span className="text-muted-foreground">GST / Tax</span>
@@ -125,7 +125,7 @@ export function InvoiceAllocationPanel({
               </div>
 
               {applied > 0 && (
-                <div className="text-[10px] text-muted-foreground border-t border-border/40 pt-2 space-y-0.5">
+                <div className="text-xs text-muted-foreground border-t border-border/40 pt-2 space-y-0.5">
                   <p>
                     Applied breakup: Taxable {formatMoney(breakup.taxableApplied)} · GST{" "}
                     {formatMoney(breakup.taxApplied)}
@@ -140,7 +140,7 @@ export function InvoiceAllocationPanel({
               )}
 
               {applied > inv.balance + 0.01 && (
-                <p className="text-[10px] text-red-600">
+                <p className="text-xs text-red-600">
                   Exceeds outstanding ({formatMoney(inv.balance)})
                 </p>
               )}
@@ -151,7 +151,7 @@ export function InvoiceAllocationPanel({
 
       <div className="rounded-lg border border-border/60 bg-slate-50/80 p-3 space-y-1.5 text-xs">
         <div className="flex justify-between gap-2">
-          <span className="text-muted-foreground uppercase text-[10px] font-semibold">
+          <span className="text-muted-foreground uppercase text-xs font-semibold">
             Cash applied (INR)
           </span>
           <span className="font-semibold tabular-nums">{formatMoney(totalAllocated)}</span>

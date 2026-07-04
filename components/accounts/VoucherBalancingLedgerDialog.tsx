@@ -62,12 +62,12 @@ export function VoucherBalancingLedgerDialog({
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={onClose}>
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={onClose}>
             Cancel
           </Button>
           <Button
             size="sm"
-            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
+            className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white"
             disabled={!ledger}
             onClick={() => ledger && onConfirm(ledger)}
           >

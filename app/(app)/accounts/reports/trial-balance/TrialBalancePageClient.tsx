@@ -310,7 +310,7 @@ export default function TrialBalancePageClient() {
             <Button
               variant="outline"
               size="sm"
-              className="h-8 text-[11px] px-2"
+              className="h-8 text-sm px-2"
               onClick={resetFilters}
             >
               Reset
@@ -353,7 +353,7 @@ export default function TrialBalancePageClient() {
             footer={
               <>
                 {mounted && !summary.isBalanced && filteredSummaryRows.length > 0 && (
-                  <div className="flex-shrink-0 flex items-center gap-1 px-2 py-0.5 bg-red-50/70 border-t border-red-100 text-[10px] text-red-700 leading-tight">
+                  <div className="flex-shrink-0 flex items-center gap-1 px-2 py-0.5 bg-red-50/70 border-t border-red-100 text-xs text-red-700 leading-tight">
                     <AlertTriangle className="w-3 h-3 flex-shrink-0" />
                     Trial Balance is not balanced.
                   </div>
@@ -423,7 +423,7 @@ export default function TrialBalancePageClient() {
                 </AccountsTableBody>
                 <AccountsTableFoot>
                   <AccountsTableRow>
-                    <AccountsTableCell className="font-semibold text-foreground text-[11px]">
+                    <AccountsTableCell className="font-semibold text-foreground text-xs">
                       Grand Total
                     </AccountsTableCell>
                     <AccountsTableCell
@@ -466,7 +466,7 @@ export default function TrialBalancePageClient() {
             footer={
               <>
                 {mounted && !summary.isBalanced && filteredDetailedGroups.length > 0 && (
-                  <div className="flex-shrink-0 flex items-center gap-1 px-2 py-0.5 bg-red-50/70 border-t border-red-100 text-[10px] text-red-700 leading-tight">
+                  <div className="flex-shrink-0 flex items-center gap-1 px-2 py-0.5 bg-red-50/70 border-t border-red-100 text-xs text-red-700 leading-tight">
                     <AlertTriangle className="w-3 h-3 flex-shrink-0" />
                     Trial Balance is not balanced.
                   </div>
@@ -551,7 +551,7 @@ export default function TrialBalancePageClient() {
                           <button
                             type="button"
                             onClick={() => toggleGroup(row.groupKey)}
-                            className="flex items-center gap-1.5 text-[11px] font-semibold text-foreground hover:text-brand-700 w-full text-left"
+                            className="flex items-center gap-1.5 text-xs font-semibold text-foreground hover:text-brand-700 w-full text-left"
                           >
                             <ChevronRight
                               className={cn(
@@ -560,7 +560,7 @@ export default function TrialBalancePageClient() {
                               )}
                             />
                             {row.groupName}
-                            <span className="text-[10px] font-normal text-muted-foreground ml-1">
+                            <span className="text-xs font-normal text-muted-foreground ml-1">
                               ({row.ledgerCount})
                             </span>
                           </button>
@@ -571,7 +571,7 @@ export default function TrialBalancePageClient() {
                         <AccountsTableCell className="pl-8">
                           <Link
                             href={buildGeneralLedgerHref(row.ledger.ledgerId)}
-                            className="text-[11px] font-semibold text-brand-700 hover:underline"
+                            className="text-xs font-semibold text-brand-700 hover:underline"
                           >
                             {row.ledger.ledgerName}
                           </Link>
@@ -589,7 +589,7 @@ export default function TrialBalancePageClient() {
                           {formatMoneyOrDash(row.ledger.closingAmount)}
                         </AccountsTableCell>
                         <AccountsTableCell align="center">
-                          <span className="text-[11px] font-medium text-muted-foreground">
+                          <span className="text-xs font-medium text-muted-foreground">
                             {balanceSideLabel(row.ledger.closingBalanceType)}
                           </span>
                         </AccountsTableCell>
@@ -599,7 +599,7 @@ export default function TrialBalancePageClient() {
                 </AccountsTableBody>
                 <AccountsTableFoot>
                   <AccountsTableRow>
-                    <AccountsTableCell className="font-semibold text-foreground text-[11px]">
+                    <AccountsTableCell className="font-semibold text-foreground text-xs">
                       Grand Total
                     </AccountsTableCell>
                     <AccountsTableCell />

@@ -15,7 +15,7 @@ import { formatINR } from "@/app/(app)/accounts/credit-notes/note-utils";
 function DetailField({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div>
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className={`mt-0.5 text-xs font-medium truncate ${mono ? "font-mono text-brand-700" : ""}`}>
         {value || "—"}
       </p>
@@ -83,7 +83,7 @@ export function SchemeSettlementSelector({
 
       {selected && (
         <div className="rounded-lg border border-brand-200/80 bg-brand-50/20 p-3 space-y-3">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Scheme Settlement Details
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2">
@@ -112,23 +112,23 @@ export function SchemeSettlementSelector({
               value={formatSchemeRupee(selected.estimatedBenefitAmount)}
             />
             {isCreditNote ? (
-              <p className="text-[11px] text-muted-foreground sm:col-span-2 lg:col-span-4">
+              <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-4">
                 Enter <span className="font-medium text-foreground">Return Qty</span> in the item table below — credit
                 amount is calculated from quantity, rate, and discount (max benefit{" "}
                 {formatSchemeRupee(selected.estimatedBenefitAmount)}).
               </p>
             ) : (
               <div>
-                <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Settlement Amount
                 </Label>
                 <AccountsMoneyInput
-                  className="mt-0.5 h-9 text-[13px] font-medium tabular-nums"
+                  className="mt-0.5 h-9 text-sm font-medium tabular-nums"
                   value={settlementAmount || ""}
                   onChange={onSettlementAmountChange}
                   disabled={disabled}
                 />
-                <p className="text-[10px] text-muted-foreground mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Max {formatSchemeRupee(maxAmount)}
                 </p>
               </div>

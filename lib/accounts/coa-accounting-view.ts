@@ -13,12 +13,14 @@ import {
   ledgerMovementTotalsForRange,
 } from "@/lib/accounts/ledger-transaction-date-filter";
 import {
+  applyMovement,
   computeRunningBalances,
   fromSignedBalance,
   isLedgerMovementVoucherStatus,
   openingSignedBalance,
   sortChronological,
 } from "@/lib/accounts/running-balance";
+import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 
 export interface CoaLedgerBalanceRow {
   id: number;
@@ -103,10 +105,6 @@ export function sumLedgerBalances(ledgers: ChartOfAccount[]): number {
   return ledgers.reduce((s, l) => s + computeLedgerCurrentBalance(l).amount, 0);
 }
 
-function signedMovement(debit: number, credit: number): number {
-  return debit - credit;
-}
-
 export function collectLedgerRawCoaTransactions(
   ledger: ChartOfAccount,
 ): Omit<CoaTransactionRow, "runningBalance" | "runningBalanceType" | "isOpeningRow">[] {
@@ -162,7 +160,16 @@ export function buildGroupTransactions(
   _balanceType: "Debit" | "Credit" = "Debit",
   limit = 20,
 ): CoaTransactionRow[] {
-  const raw: Omit<CoaTransactionRow, "runningBalance" | "runningBalanceType" | "isOpeningRow">[] = [];
+  type RawGroupRow = Omit<
+    CoaTransactionRow,
+    "runningBalance" | "runningBalanceType" | "isOpeningRow"
+  > & { ledgerId: number };
+
+  const raw: RawGroupRow[] = [];
+  const coaRecords = loadChartOfAccounts();
+  const ledgerMap = new Map(
+    coaRecords.filter((r) => ledgerIds.has(r.id)).map((l) => [l.id, l]),
+  );
 
   loadVouchers()
     .filter((v) => isLedgerMovementVoucherStatus(v.status))
@@ -185,18 +192,32 @@ export function buildGroupTransactions(
           lineOrder,
           viewHref: source.href,
           viewLabel: source.label,
+          ledgerId: line.ledgerId,
         });
       });
     });
 
-  return sortChronological(raw)
-    .reverse()
-    .slice(0, limit)
-    .map((row) => ({
-      ...row,
-      runningBalance: Math.abs(signedMovement(row.debit, row.credit)),
-      runningBalanceType: (row.debit >= row.credit ? "Debit" : "Credit") as "Debit" | "Credit",
-    }));
+  const sorted = sortChronological(raw);
+  const runningByLedger = new Map<number, number>();
+  for (const id of ledgerIds) {
+    const ledger = ledgerMap.get(id);
+    if (ledger) runningByLedger.set(id, openingSignedBalance(ledger));
+  }
+
+  const withBalances = sorted.map((row) => {
+    const prior = runningByLedger.get(row.ledgerId) ?? 0;
+    const signed = applyMovement(prior, row.debit, row.credit);
+    runningByLedger.set(row.ledgerId, signed);
+    const bal = fromSignedBalance(signed);
+    const { ledgerId: _ledgerId, ...entry } = row;
+    return {
+      ...entry,
+      runningBalance: bal.amount,
+      runningBalanceType: bal.balanceType,
+    };
+  });
+
+  return withBalances.reverse().slice(0, limit);
 }
 
 function sumMonthDebitCredit(ledgerIds: Set<number>): { debit: number; credit: number } {

@@ -237,7 +237,7 @@ export default function PendingTaxInvoicesClient() {
                     <Button
                       asChild
                       size="sm"
-                      className="h-7 text-[11px] bg-brand-600 hover:bg-brand-700 text-white gap-1"
+                      className="h-7 text-sm bg-brand-600 hover:bg-brand-700 text-white gap-1"
                     >
                       <Link href={buildGenerateInvoiceHref(r)}>
                         <FileText className="w-3 h-3" />

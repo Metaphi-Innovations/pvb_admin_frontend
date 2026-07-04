@@ -234,12 +234,9 @@ export const COA_DEMO_LEDGER_SEEDS: CoaDemoLedgerSeed[] = [
   { subGroup: "GST Late Fees / Penalty", name: "GST Show Cause Notice Settlement", accountType: "Expense" },
   { subGroup: "GST Late Fees / Penalty", name: "GSTR-3B Late Filing Charges", accountType: "Expense" },
 
-  // GST Payable
+  // GST Payable — control / penalty only; component output ledgers live under Duties & Taxes Payable
   { subGroup: "GST Payable", name: "GST Interest & Penalty Payable", accountType: "Liability" },
   { subGroup: "GST Payable", name: "GST Payable Control Account", accountType: "Liability" },
-  { subGroup: "GST Payable", name: "Output CGST Payable", accountType: "Liability" },
-  { subGroup: "GST Payable", name: "Output IGST Payable", accountType: "Liability" },
-  { subGroup: "GST Payable", name: "Output SGST Payable", accountType: "Liability" },
 
   // Housekeeping
   { subGroup: "Housekeeping", name: "Cleaning Supplies Expense", accountType: "Expense" },
@@ -368,9 +365,6 @@ export const COA_DEMO_LEDGER_SEEDS: CoaDemoLedgerSeed[] = [
   { subGroup: "Office Expenses", name: "Pantry & Cafeteria Expense", accountType: "Expense" },
 
   // Other Current Assets
-  { subGroup: "Other Current Assets", name: "GST Input Credit (CGST)", accountType: "Asset" },
-  { subGroup: "Other Current Assets", name: "GST Input Credit (IGST)", accountType: "Asset" },
-  { subGroup: "Other Current Assets", name: "GST Input Credit (SGST)", accountType: "Asset" },
   { subGroup: "Other Current Assets", name: "Input Tax Credit Receivable", accountType: "Asset" },
   { subGroup: "Other Current Assets", name: "TDS Receivable", accountType: "Asset" },
 

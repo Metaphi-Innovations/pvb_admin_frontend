@@ -16,7 +16,7 @@ export function SalesSidebarNav() {
         <span className="w-7 h-7 rounded-md flex items-center justify-center bg-brand-100 text-brand-700">
           <ShoppingBag className="w-4 h-4" />
         </span>
-        <span className="text-[13px] font-semibold text-brand-800">Sales</span>
+        <span className="text-sm font-semibold text-brand-800">Sales</span>
       </div>
       <nav className="space-y-0.5 border-l border-border/50 ml-3 pl-2">
         {SALES_SIDEBAR_ITEMS.map((item) => {
@@ -27,7 +27,7 @@ export function SalesSidebarNav() {
               key={item.href}
               href={item.href}
               className={cn(
-                "group flex items-center gap-2.5 pl-2.5 pr-2.5 py-2 rounded-r-lg text-[13px] leading-snug",
+                "group flex items-center gap-2.5 pl-2.5 pr-2.5 py-2 rounded-r-lg text-sm leading-snug",
                 "border-l-2 -ml-[1px] transition-all duration-150",
                 active
                   ? "border-brand-600 bg-brand-50 text-brand-800 font-semibold"

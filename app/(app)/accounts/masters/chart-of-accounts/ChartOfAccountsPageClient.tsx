@@ -5,12 +5,16 @@ import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { CoaListingToolbar } from "./components/CoaListingToolbar";
 import { useCoaNavigation } from "@/components/accounts/CoaNavigationContext";
-import { isGroupingLedger, isPostingLedger } from "@/lib/accounts/coa-hierarchy";
+import { isGroupingLedger } from "@/lib/accounts/coa-hierarchy";
 import { buildCoaLedgerDetailSummary } from "./coa-demo-accounting";
 import { useCanCoa } from "@/lib/accounts/use-can-coa";
 import { defaultLedgerDateRangeState } from "@/lib/accounts/ledger-transaction-date-filter";
 import { type DateRangePresetId } from "@/lib/accounts/report-date-presets";
 import { isTdsCoaNode } from "@/lib/accounts/tds-coa-utils";
+import { resolveCoaAddLedgerPolicy } from "@/lib/accounts/coa-add-ledger-policy";
+import {
+  getCoaDisplayPath,
+} from "@/lib/accounts/coa-tree-children";
 import { useFY } from "@/lib/fy-store";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { ACCOUNTS_HOME_HREF } from "@/lib/accounts/accounts-nav";
@@ -23,13 +27,21 @@ import {
   formToLedger,
   generateLedgerCode,
   getAncestorPath,
+  isAccountingGroupNode,
   saveChartOfAccounts,
   validateLedgerForm,
   type LedgerFormValues,
 } from "./chart-of-accounts-data";
 import { CHART_OF_ACCOUNTS_LIST_PATH } from "./chart-of-accounts-utils";
-import { buildCoaListingRows, computeCoaListingSummary } from "./coa-listing-data";
 import {
+  buildCoaLedgerListingRows,
+  buildCoaListingRows,
+  computeCoaLedgerListingSummary,
+  computeCoaListingSummary,
+} from "./coa-listing-data";
+import {
+  exportCoaLedgerListingToExcel,
+  exportCoaLedgerListingToPdf,
   exportCoaLedgerStatementToExcel,
   exportCoaLedgerStatementToPdf,
   exportCoaListingToExcel,
@@ -38,7 +50,7 @@ import {
 import { filterLedgerStatementRows } from "./coa-ledger-utils";
 import { registerCoaAddLedgerHandler } from "./coa-add-ledger-bridge";
 import { CoaListingTable } from "./components/CoaListingTable";
-import { CoaListingSummaryBar } from "./components/CoaListingSummaryBar";
+import { CoaListingSummaryBar, CoaLedgerListingSummaryBar } from "./components/CoaListingSummaryBar";
 import { CoaLedgerDetailTable } from "./components/CoaLedgerDetailTable";
 import { CoaLedgerDetailHeader } from "./components/CoaLedgerDetailHeader";
 import { CoaPathBreadcrumb } from "./components/CoaPathBreadcrumb";
@@ -46,11 +58,12 @@ import { LedgerSheet } from "./components/LedgerSheet";
 
 const HIGHLIGHT_MS = 4000;
 
-/** Leaf posting ledger — show statement, not sibling listing. */
-function isLeafPostingLedger(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
+/** Ledger detail view for posting ledgers (TDS and bank name containers excluded). */
+function isCoaLedgerDetailView(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
   if (node.nodeLevel !== "ledger") return false;
+  if (node.bankGroupFlag) return false;
   if (isTdsCoaNode(node, records)) return false;
-  return isPostingLedger(node, records);
+  return true;
 }
 
 export default function ChartOfAccountsPageClient() {
@@ -79,11 +92,16 @@ export default function ChartOfAccountsPageClient() {
   const [form, setForm] = useState<LedgerFormValues>(DEFAULT_LEDGER_FORM);
   const [formError, setFormError] = useState<string | null>(null);
   const [previewCode, setPreviewCode] = useState("");
+  const [parentGroupLocked, setParentGroupLocked] = useState(false);
 
   const canCreate = useCanCoa("create");
 
   const isLedgerStatementView = Boolean(
-    !showRoot && selectedNode && isLeafPostingLedger(selectedNode, records),
+    !showRoot && selectedNode && isCoaLedgerDetailView(selectedNode, records),
+  );
+
+  const isAccountingGroupLedgerListing = Boolean(
+    !showRoot && selectedNode && isAccountingGroupNode(selectedNode, records),
   );
 
   const isGroupingLedgerView = Boolean(
@@ -93,8 +111,11 @@ export default function ChartOfAccountsPageClient() {
       isGroupingLedger(selectedNode, records),
   );
 
-  /** Parent whose immediate children are shown in the group listing table */
-  const tableParentId = showRoot || isLedgerStatementView ? null : (selectedNode?.id ?? null);
+  /** Parent whose immediate children are shown in the hierarchy listing table */
+  const tableParentId =
+    showRoot || isLedgerStatementView || isAccountingGroupLedgerListing
+      ? null
+      : (selectedNode?.id ?? null);
 
   useEffect(() => {
     const { from, to, preset: initialPreset } = defaultLedgerDateRangeState(selectedFY.id);
@@ -128,15 +149,36 @@ export default function ChartOfAccountsPageClient() {
     return filterLedgerStatementRows(ledgerAccounting.transactions, contentSearch);
   }, [ledgerAccounting, contentSearch]);
 
+  const ledgerListingRows = useMemo(() => {
+    if (!selectedNode || !isAccountingGroupLedgerListing) return [];
+    return buildCoaLedgerListingRows(records, selectedNode.id, {
+      search: contentSearch,
+    });
+  }, [records, selectedNode, contentSearch, isAccountingGroupLedgerListing]);
+
   const listingRows = useMemo(() => {
-    if (!datesReady || isLedgerStatementView) return [];
+    if (!datesReady || isLedgerStatementView || isAccountingGroupLedgerListing) return [];
     return buildCoaListingRows(records, tableParentId, dateFrom, dateTo, {
       search: contentSearch,
     });
-  }, [records, tableParentId, dateFrom, dateTo, contentSearch, datesReady, isLedgerStatementView]);
+  }, [
+    records,
+    tableParentId,
+    dateFrom,
+    dateTo,
+    contentSearch,
+    datesReady,
+    isLedgerStatementView,
+    isAccountingGroupLedgerListing,
+  ]);
+
+  const ledgerListingSummary = useMemo(() => {
+    if (!isAccountingGroupLedgerListing) return null;
+    return computeCoaLedgerListingSummary(ledgerListingRows);
+  }, [ledgerListingRows, isAccountingGroupLedgerListing]);
 
   const summary = useMemo(() => {
-    if (!datesReady) return null;
+    if (!datesReady || isAccountingGroupLedgerListing) return null;
 
     if (ledgerAccounting) {
       const transactionCount = filteredTransactions.filter((row) => !row.isOpeningRow).length;
@@ -171,6 +213,7 @@ export default function ChartOfAccountsPageClient() {
     datesReady,
     ledgerAccounting,
     filteredTransactions,
+    isAccountingGroupLedgerListing,
   ]);
 
   const pageBreadcrumbs = useMemo(() => {
@@ -179,7 +222,7 @@ export default function ChartOfAccountsPageClient() {
       { label: "Chart of Accounts", href: CHART_OF_ACCOUNTS_LIST_PATH },
     ];
     if (showRoot || !selectedNode) return base;
-    const path = getAncestorPath(records, selectedNode.id);
+    const path = getCoaDisplayPath(records, selectedNode.id);
     return [
       ...base,
       ...path.map((node, index) => ({
@@ -215,6 +258,7 @@ export default function ChartOfAccountsPageClient() {
       });
       setPreviewCode(generateLedgerCode(records));
       setFormError(null);
+      setParentGroupLocked(true);
       setSheetOpen(true);
     },
     [records],
@@ -234,6 +278,7 @@ export default function ChartOfAccountsPageClient() {
       });
       setPreviewCode(generateLedgerCode(records));
       setFormError(null);
+      setParentGroupLocked(false);
       setSheetOpen(true);
     },
     [records],
@@ -305,6 +350,10 @@ export default function ChartOfAccountsPageClient() {
           closingAmount: ledgerAccounting.currentBalance,
           closingSide: ledgerAccounting.balanceType,
         });
+      } else if (isAccountingGroupLedgerListing && ledgerListingRows.length > 0) {
+        await exportCoaLedgerListingToExcel(ledgerListingRows, {
+          groupName: selectedNode?.accountName ?? "",
+        });
       } else if (listingRows.length > 0) {
         await exportCoaListingToExcel(listingRows, exportMeta);
       }
@@ -326,24 +375,50 @@ export default function ChartOfAccountsPageClient() {
         closingAmount: ledgerAccounting.currentBalance,
         closingSide: ledgerAccounting.balanceType,
       });
+    } else if (isAccountingGroupLedgerListing && ledgerListingRows.length > 0) {
+      exportCoaLedgerListingToPdf(ledgerListingRows, {
+        groupName: selectedNode?.accountName ?? "",
+      });
     } else if (listingRows.length > 0) {
       exportCoaListingToPdf(listingRows, exportMeta);
     }
   };
 
   const handleNewLedger = useCallback(() => {
+    if (
+      selectedNode &&
+      !showRoot &&
+      resolveCoaAddLedgerPolicy(selectedNode, records).blocked
+    ) {
+      return;
+    }
     const parentId =
-      selectedNode && !showRoot && canAddLedgerUnder(selectedNode, records)
+      selectedNode &&
+      !showRoot &&
+      selectedNode.nodeLevel === "account_group" &&
+      canAddLedgerUnder(selectedNode, records) &&
+      !resolveCoaAddLedgerPolicy(selectedNode, records).blocked
         ? selectedNode.id
         : null;
     openGlobalAddLedger(parentId);
   }, [selectedNode, showRoot, records, openGlobalAddLedger]);
 
+  const canShowNewLedger =
+    canCreate &&
+    !isLedgerStatementView &&
+    selectedNode?.nodeLevel !== "ledger" &&
+    (isAccountingGroupLedgerListing ||
+      showRoot ||
+      !selectedNode ||
+      !resolveCoaAddLedgerPolicy(selectedNode, records).blocked);
+
   const exportDisabled =
     exporting ||
     (isLedgerStatementView
       ? filteredTransactions.length === 0
-      : listingRows.length === 0);
+      : isAccountingGroupLedgerListing
+        ? ledgerListingRows.length === 0
+        : listingRows.length === 0);
 
   return (
     <>
@@ -362,8 +437,11 @@ export default function ChartOfAccountsPageClient() {
             searchPlaceholder={
               isLedgerStatementView
                 ? "Search voucher no., type, narration…"
-                : "Search accounts in this view…"
+                : isAccountingGroupLedgerListing
+                  ? "Search ledger name, code, source…"
+                  : "Search accounts in this view…"
             }
+            hideDateRange={isAccountingGroupLedgerListing}
             preset={preset}
             dateFrom={dateFrom}
             dateTo={dateTo}
@@ -373,8 +451,9 @@ export default function ChartOfAccountsPageClient() {
             onExcel={handleExcelExport}
             onPdf={handlePdfExport}
             exportDisabled={exportDisabled}
+            showNewLedger={canShowNewLedger}
             canCreate={canCreate}
-            onNewLedger={handleNewLedger}
+            onNewLedger={canShowNewLedger ? handleNewLedger : undefined}
           />
 
           <AccountsListingTableCard className="flex-1 min-h-0">
@@ -400,7 +479,11 @@ export default function ChartOfAccountsPageClient() {
             />
           )}
 
-          {summary && !isLedgerStatementView && (
+          {ledgerListingSummary && (
+            <CoaLedgerListingSummaryBar summary={ledgerListingSummary} />
+          )}
+
+          {summary && !isLedgerStatementView && !isAccountingGroupLedgerListing && (
             <CoaListingSummaryBar summary={summary} />
           )}
 
@@ -421,6 +504,19 @@ export default function ChartOfAccountsPageClient() {
                   <p className="text-sm text-muted-foreground">Loading ledger transactions…</p>
                 </div>
               )
+            ) : isAccountingGroupLedgerListing ? (
+              <CoaListingTable
+                variant="ledger"
+                ledgerRows={ledgerListingRows}
+                highlightedLedgerId={highlightedLedgerId}
+                isSearchMode={Boolean(contentSearch.trim())}
+                onDrillInto={handleDrillInto}
+                emptyMessage={
+                  contentSearch.trim()
+                    ? "No ledgers match your search."
+                    : "No ledgers under this accounting group."
+                }
+              />
             ) : (
               <CoaListingTable
                 rows={listingRows}
@@ -442,7 +538,7 @@ export default function ChartOfAccountsPageClient() {
           </div>
 
           <div className="flex-shrink-0 px-4 py-2 border-t border-border bg-muted/20">
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {isLedgerStatementView && selectedNode ? (
                 <>
                   Showing{" "}
@@ -457,6 +553,21 @@ export default function ChartOfAccountsPageClient() {
                       matching &ldquo;{contentSearch.trim()}&rdquo;
                     </>
                   ) : null}
+                </>
+              ) : isAccountingGroupLedgerListing ? (
+                <>
+                  Showing{" "}
+                  <span className="font-medium text-foreground">{ledgerListingRows.length}</span>{" "}
+                  {contentSearch.trim() ? (
+                    <>ledgers matching &ldquo;{contentSearch.trim()}&rdquo;</>
+                  ) : (
+                    <>
+                      ledgers under{" "}
+                      <span className="font-medium text-foreground">
+                        {selectedNode?.accountName}
+                      </span>
+                    </>
+                  )}
                 </>
               ) : (
                 <>
@@ -501,6 +612,7 @@ export default function ChartOfAccountsPageClient() {
         }}
         canEdit={canCreate}
         compactAdd
+        parentGroupLocked={parentGroupLocked}
       />
     </>
   );

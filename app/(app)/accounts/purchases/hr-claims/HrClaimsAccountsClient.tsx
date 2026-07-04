@@ -141,7 +141,7 @@ export default function HrClaimsAccountsClient() {
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Claims", "Employee Claims")}
       title="Expense / Claims from HR"
-      description="Pending → Claims Payable → Payment Voucher → Paid Claims."
+      description="Pending â†’ Claims Payable â†’ Payment Voucher â†’ Paid Claims."
       filters={
         <ReportFilterRow>
           <ReportDateRangeFilter
@@ -166,7 +166,7 @@ export default function HrClaimsAccountsClient() {
               <thead className="border-b">
                 <tr>
                   {["Claim No", "Employee", "Department", "Type", "Approved", "Status"].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground uppercase text-[10px]">{h}</th>
+                    <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground uppercase text-xs">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -206,7 +206,7 @@ export default function HrClaimsAccountsClient() {
           <div className="w-full lg:w-[340px] flex-shrink-0 p-4 space-y-4 overflow-auto bg-muted/5">
             <div className="rounded-lg border border-border/60 bg-white p-3 space-y-2 text-xs">
               <p className="font-semibold text-foreground">{selected.expenseNumber}</p>
-              <div className="grid grid-cols-2 gap-2 text-[11px]">
+              <div className="grid grid-cols-2 gap-2 text-xs">
                 <span className="text-muted-foreground">Employee</span><span>{selected.employeeName}</span>
                 <span className="text-muted-foreground">Department</span><span>{selected.department}</span>
                 <span className="text-muted-foreground">Claim Type</span><span>{selected.categoryName}</span>
@@ -216,13 +216,13 @@ export default function HrClaimsAccountsClient() {
                 <span className="text-muted-foreground">Paid Amount</span><span>{formatMoney(getPaidAmount(selected))}</span>
                 <span className="text-muted-foreground">Payment Mode</span><span>{selected.payment?.paymentMode ?? selected.paymentMode ?? "—"}</span>
               </div>
-              <Link href={`/accounts/transactions/expenses/${selected.id}`} className="text-brand-600 hover:underline text-[11px]">
-                Open claim →
+              <Link href={`/accounts/transactions/expenses/${selected.id}`} className="text-brand-600 hover:underline text-xs">
+                Open claim â†’
               </Link>
               {tab === "payable" && selected.paidStatus !== "paid" && (
                 <Button
                   size="sm"
-                  className="w-full h-9 text-[13px] font-medium mt-2 bg-brand-600 hover:bg-brand-700 text-white"
+                  className="w-full h-9 text-sm font-medium mt-2 bg-brand-600 hover:bg-brand-700 text-white"
                   onClick={() => {
                     setPayError(null);
                     setPaymentRef("");
@@ -274,13 +274,13 @@ export default function HrClaimsAccountsClient() {
               Posts payment voucher: Dr Employee Payable · Cr Bank for {formatMoney(approvedAmt)}.
             </p>
             <div className="space-y-1">
-              <Label className="text-[11px]">Payment Date</Label>
-              <Input className="h-9 text-[13px] font-medium" type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+              <Label className="text-xs">Payment Date</Label>
+              <Input className="h-9 text-sm font-medium" type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
             </div>
             <div className="space-y-1">
-              <Label className="text-[11px]">Payment Mode</Label>
+              <Label className="text-xs">Payment Mode</Label>
               <Select value={paymentMode} onValueChange={(v) => setPaymentMode(v as PaymentMode)}>
-                <SelectTrigger className="h-9 text-[13px] font-medium"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-9 text-sm font-medium"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {PAYMENT_MODES.map((m) => (
                     <SelectItem key={m} value={m} className="text-xs">{m}</SelectItem>
@@ -289,9 +289,9 @@ export default function HrClaimsAccountsClient() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-[11px]">Bank Ledger (Paid From)</Label>
+              <Label className="text-xs">Bank Ledger (Paid From)</Label>
               <Select value={bankLedgerId} onValueChange={setBankLedgerId}>
-                <SelectTrigger className="h-9 text-[13px] font-medium"><SelectValue placeholder="Select bank ledger" /></SelectTrigger>
+                <SelectTrigger className="h-9 text-sm font-medium"><SelectValue placeholder="Select bank ledger" /></SelectTrigger>
                 <SelectContent>
                   {bankLedgers.map((l) => (
                     <SelectItem key={l.id} value={String(l.id)} className="text-xs">{l.accountName}</SelectItem>
@@ -300,15 +300,15 @@ export default function HrClaimsAccountsClient() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-[11px]">Reference No.</Label>
-              <Input className="h-9 text-[13px] font-medium" value={paymentRef} onChange={(e) => setPaymentRef(e.target.value)} placeholder="UTR / Cheque no." />
+              <Label className="text-xs">Reference No.</Label>
+              <Input className="h-9 text-sm font-medium" value={paymentRef} onChange={(e) => setPaymentRef(e.target.value)} placeholder="UTR / Cheque no." />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => setPayOpen(false)}>Cancel</Button>
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => setPayOpen(false)}>Cancel</Button>
             <Button
               size="sm"
-              className="h-9 text-[13px] font-medium bg-brand-600 text-white"
+              className="h-9 text-sm font-medium bg-brand-600 text-white"
               disabled={!bankLedgerId}
               onClick={handlePay}
             >

@@ -25,7 +25,7 @@ import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-pr
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[10px] uppercase text-muted-foreground">{label}</p>
+      <p className="text-xs uppercase text-muted-foreground">{label}</p>
       <p className="text-xs font-medium mt-0.5">{value || "—"}</p>
     </div>
   );
@@ -64,7 +64,7 @@ export default function PurchaseViewPageClient({ purchaseId }: { purchaseId: num
       statusLabel={PURCHASE_PAYMENT_STATUS_LABELS[payStatus]}
       statusVariant={purchaseStatusVariant(payStatus)}
       typeBadge={
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase bg-brand-50 text-brand-700 border border-brand-200">
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold uppercase bg-brand-50 text-brand-700 border border-brand-200">
           {PURCHASE_SOURCE_LABELS[record.source]}
         </span>
       }
@@ -133,10 +133,10 @@ export default function PurchaseViewPageClient({ purchaseId }: { purchaseId: num
             {match && (
               <div className="pt-2 border-t space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[10px] uppercase text-muted-foreground font-semibold">3-Way Match Status</span>
+                  <span className="text-xs uppercase text-muted-foreground font-semibold">3-Way Match Status</span>
                   <ThreeWayMatchStatusBadge status={match.status} />
                   {!match.matchReady && (
-                    <span className="text-[11px] text-amber-700">
+                    <span className="text-xs text-amber-700">
                       Pending — PO approval, invoice, GRN, or QC not complete.
                     </span>
                   )}
@@ -165,7 +165,7 @@ export default function PurchaseViewPageClient({ purchaseId }: { purchaseId: num
               <thead className="border-b">
                 <tr>
                   {["Product", "Qty", "UOM", "Rate", "GST %", "Line Amt"].map((h) => (
-                    <th key={h} className="py-1.5 text-left text-[10px] uppercase text-muted-foreground font-semibold">
+                    <th key={h} className="py-1.5 text-left text-xs uppercase text-muted-foreground font-semibold">
                       {h}
                     </th>
                   ))}
@@ -209,7 +209,7 @@ export default function PurchaseViewPageClient({ purchaseId }: { purchaseId: num
 
         {record.remarks && (
           <div className="bg-white rounded-lg border p-4 text-xs">
-            <p className="text-[10px] uppercase text-muted-foreground mb-1">Remarks</p>
+            <p className="text-xs uppercase text-muted-foreground mb-1">Remarks</p>
             <p>{record.remarks}</p>
           </div>
         )}

@@ -144,14 +144,16 @@ export function ReportDateRangeFilter({
   };
 
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-0.5 shrink-0">
       <span className={cn(filterLabelClass, "inline-flex items-center gap-1")}>
         <Calendar className="w-3 h-3 flex-shrink-0" aria-hidden />
         Date Range
       </span>
       <div className="flex flex-wrap items-center gap-1.5">
         <Select value={preset} onValueChange={(v) => handlePresetChange(v as DateRangePresetId)}>
-          <SelectTrigger className={cn(filterSelectClass, ACCOUNTS_PRESET_SELECT_WIDTH_CLASS)}>
+          <SelectTrigger
+            className={cn(filterSelectClass, ACCOUNTS_PRESET_SELECT_WIDTH_CLASS, "shrink-0")}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -170,8 +172,8 @@ export function ReportDateRangeFilter({
               aria-label="From date"
               className={ACCOUNTS_DATE_FILTER_WIDTH_CLASS}
             />
-            <span className="text-[11px] text-[#9CA3AF] select-none px-0.5" aria-hidden>
-              –
+            <span className="text-xs text-[#9CA3AF] select-none px-0.5" aria-hidden>
+              —
             </span>
             <AccountsDateInput
               value={dateTo}
@@ -223,7 +225,7 @@ export function ReportAsOnDateFilter({
       <AccountsDateInput
         value={value}
         onChange={onChange}
-        className="mt-0 w-[118px]"
+        className={cn("mt-0", ACCOUNTS_DATE_FILTER_WIDTH_CLASS)}
         aria-label="As on date"
       />
     </div>
