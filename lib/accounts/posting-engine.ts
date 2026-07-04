@@ -23,7 +23,9 @@ import {
 } from "@/lib/accounts/ledger-mappings";
 import { loadAccountingSettings } from "@/lib/accounts/accounting-settings-data";
 import { ensureInventoryAccountingLedgers, getCostPriceBySku, resolveSku } from "@/lib/accounts/inventory-accounting-data";
-import { ensureGstAccountingLedgers } from "@/lib/accounts/gst-accounting";
+import { ensureGstAccountingLedgers, expandGstPostingLines, type GstRateBreakdown } from "@/lib/accounts/gst-accounting";
+import { ensureTdsAccountingLedgers, resolveTdsPayableLedger } from "@/lib/accounts/tds-accounting";
+import { roundMoney } from "@/lib/accounts/money-format";
 
 export type ErpSourceModule =
   | "procurement"
@@ -39,6 +41,8 @@ export interface PostingLineInput {
   debit: number;
   credit: number;
   remarks?: string;
+  /** Total GST rate (e.g. 18) for rate-specific GST ledger resolution */
+  gstRatePct?: number;
 }
 
 export interface ErpPostingRequest {
@@ -66,7 +70,7 @@ function resolveLineToLedgerId(line: PostingLineInput): number | null {
     const ledger = resolveMappingLedger(
       line.mappingKey,
       line.partyName ?? "General",
-      { createIfMissing: true },
+      { createIfMissing: true, gstRatePct: line.gstRatePct },
     );
     return ledger?.id ?? null;
   }
@@ -244,10 +248,17 @@ export function postPurchaseInvoice(input: {
   cgst: number;
   sgst: number;
   igst: number;
+  gstBreakdowns?: GstRateBreakdown[];
+  gstRatePct?: number;
+  tdsAmount?: number;
+  tdsMasterId?: number | null;
 }): PostingResult {
   ensureGstAccountingLedgers();
+  ensureTdsAccountingLedgers();
   ensureInventoryAccountingLedgers();
+  const tds = roundMoney(input.tdsAmount ?? 0);
   const total = input.taxableAmount + input.cgst + input.sgst + input.igst;
+  const payableTotal = roundMoney(total - tds);
   const lines: PostingLineInput[] = [
     {
       mappingKey: "purchase_inventory",
@@ -260,18 +271,54 @@ export function postPurchaseInvoice(input: {
       mappingKey: "purchase_payable",
       partyName: input.vendorName,
       debit: 0,
-      credit: total,
+      credit: payableTotal,
       remarks: `Payable — ${input.vendorName}`,
     },
   ];
-  if (input.cgst > 0) {
-    lines.push({ mappingKey: "purchase_cgst", debit: input.cgst, credit: 0, remarks: "Input CGST (ITC)" });
+
+  if (input.gstBreakdowns?.length) {
+    lines.push(...expandGstPostingLines(input.gstBreakdowns, "purchase"));
+  } else {
+    const rate = input.gstRatePct;
+    if (input.cgst > 0) {
+      lines.push({
+        mappingKey: "purchase_cgst",
+        debit: input.cgst,
+        credit: 0,
+        gstRatePct: rate,
+        remarks: "Input CGST (ITC)",
+      });
+    }
+    if (input.sgst > 0) {
+      lines.push({
+        mappingKey: "purchase_sgst",
+        debit: input.sgst,
+        credit: 0,
+        gstRatePct: rate,
+        remarks: "Input SGST (ITC)",
+      });
+    }
+    if (input.igst > 0) {
+      lines.push({
+        mappingKey: "purchase_igst",
+        debit: input.igst,
+        credit: 0,
+        gstRatePct: rate,
+        remarks: "Input IGST (ITC)",
+      });
+    }
   }
-  if (input.sgst > 0) {
-    lines.push({ mappingKey: "purchase_sgst", debit: input.sgst, credit: 0, remarks: "Input SGST (ITC)" });
-  }
-  if (input.igst > 0) {
-    lines.push({ mappingKey: "purchase_igst", debit: input.igst, credit: 0, remarks: "Input IGST (ITC)" });
+
+  if (tds > 0 && input.tdsMasterId != null) {
+    const tdsLedger = resolveTdsPayableLedger(input.tdsMasterId);
+    if (tdsLedger) {
+      lines.push({
+        ledgerId: tdsLedger.id,
+        debit: 0,
+        credit: tds,
+        remarks: `TDS Payable — ${input.invoiceNo}`,
+      });
+    }
   }
 
   return postFromErpSource({
@@ -295,6 +342,8 @@ export function postSalesInvoice(input: {
   cgst: number;
   sgst: number;
   igst: number;
+  gstBreakdowns?: GstRateBreakdown[];
+  gstRatePct?: number;
 }): PostingResult {
   ensureGstAccountingLedgers();
   const total = input.taxableAmount + input.cgst + input.sgst + input.igst;
@@ -313,14 +362,20 @@ export function postSalesInvoice(input: {
       remarks: `Revenue — ${input.invoiceNo}`,
     },
   ];
-  if (input.cgst > 0) {
-    lines.push({ mappingKey: "sales_cgst", debit: 0, credit: input.cgst });
-  }
-  if (input.sgst > 0) {
-    lines.push({ mappingKey: "sales_sgst", debit: 0, credit: input.sgst });
-  }
-  if (input.igst > 0) {
-    lines.push({ mappingKey: "sales_igst", debit: 0, credit: input.igst });
+
+  if (input.gstBreakdowns?.length) {
+    lines.push(...expandGstPostingLines(input.gstBreakdowns, "sales"));
+  } else {
+    const rate = input.gstRatePct;
+    if (input.cgst > 0) {
+      lines.push({ mappingKey: "sales_cgst", debit: 0, credit: input.cgst, gstRatePct: rate });
+    }
+    if (input.sgst > 0) {
+      lines.push({ mappingKey: "sales_sgst", debit: 0, credit: input.sgst, gstRatePct: rate });
+    }
+    if (input.igst > 0) {
+      lines.push({ mappingKey: "sales_igst", debit: 0, credit: input.igst, gstRatePct: rate });
+    }
   }
 
   return postFromErpSource({
@@ -386,6 +441,8 @@ export function postCreditNote(input: {
   cgst: number;
   sgst: number;
   igst: number;
+  gstBreakdowns?: GstRateBreakdown[];
+  gstRatePct?: number;
 }): PostingResult {
   ensureGstAccountingLedgers();
   const total = input.taxableAmount + input.cgst + input.sgst + input.igst;
@@ -404,9 +461,21 @@ export function postCreditNote(input: {
       remarks: `Reduce outstanding — ${input.customerName}`,
     },
   ];
-  if (input.cgst > 0) lines.push({ mappingKey: "sales_cgst", debit: input.cgst, credit: 0 });
-  if (input.sgst > 0) lines.push({ mappingKey: "sales_sgst", debit: input.sgst, credit: 0 });
-  if (input.igst > 0) lines.push({ mappingKey: "sales_igst", debit: input.igst, credit: 0 });
+
+  if (input.gstBreakdowns?.length) {
+    lines.push(...expandGstPostingLines(input.gstBreakdowns, "credit_note"));
+  } else {
+    const rate = input.gstRatePct;
+    if (input.cgst > 0) {
+      lines.push({ mappingKey: "sales_cgst", debit: input.cgst, credit: 0, gstRatePct: rate });
+    }
+    if (input.sgst > 0) {
+      lines.push({ mappingKey: "sales_sgst", debit: input.sgst, credit: 0, gstRatePct: rate });
+    }
+    if (input.igst > 0) {
+      lines.push({ mappingKey: "sales_igst", debit: input.igst, credit: 0, gstRatePct: rate });
+    }
+  }
 
   return postFromErpSource({
     sourceModule: "sales",
@@ -419,7 +488,7 @@ export function postCreditNote(input: {
   });
 }
 
-/** Procurement: Debit Note approved → reduce vendor payable */
+/** Procurement: Debit Note posted → reduce vendor payable */
 export function postDebitNote(input: {
   debitNoteId: number;
   debitNoteNo: string;
@@ -429,27 +498,69 @@ export function postDebitNote(input: {
   cgst: number;
   sgst: number;
   igst: number;
+  gstBreakdowns?: GstRateBreakdown[];
+  gstRatePct?: number;
+  tdsAmount?: number;
+  tdsMasterId?: number | null;
+  adjustmentLedgerId?: number | null;
+  creditMappingKey?: LedgerMappingKey;
 }): PostingResult {
   ensureGstAccountingLedgers();
+  ensureTdsAccountingLedgers();
+  const tds = roundMoney(input.tdsAmount ?? 0);
   const total = input.taxableAmount + input.cgst + input.sgst + input.igst;
+  const payableDebit = roundMoney(total - tds);
+  const creditLine: PostingLineInput = input.adjustmentLedgerId
+    ? {
+        ledgerId: input.adjustmentLedgerId,
+        debit: 0,
+        credit: input.taxableAmount,
+        remarks: `Supplier adjustment — ${input.debitNoteNo}`,
+      }
+    : {
+        mappingKey: input.creditMappingKey ?? "purchase_inventory",
+        debit: 0,
+        credit: input.taxableAmount,
+        remarks: `Purchase return — ${input.debitNoteNo}`,
+      };
+
   const lines: PostingLineInput[] = [
     {
       mappingKey: "purchase_payable",
       partyName: input.vendorName,
-      debit: total,
+      debit: payableDebit,
       credit: 0,
-      remarks: `Reduce payable — ${input.vendorName}`,
+      remarks: `Supplier Dr — ${input.vendorName}`,
     },
-    {
-      mappingKey: "purchase_inventory",
-      debit: 0,
-      credit: input.taxableAmount,
-      remarks: `Purchase return — ${input.debitNoteNo}`,
-    },
+    creditLine,
   ];
-  if (input.cgst > 0) lines.push({ mappingKey: "purchase_cgst", debit: 0, credit: input.cgst });
-  if (input.sgst > 0) lines.push({ mappingKey: "purchase_sgst", debit: 0, credit: input.sgst });
-  if (input.igst > 0) lines.push({ mappingKey: "purchase_igst", debit: 0, credit: input.igst });
+
+  if (input.gstBreakdowns?.length) {
+    lines.push(...expandGstPostingLines(input.gstBreakdowns, "debit_note"));
+  } else {
+    const rate = input.gstRatePct;
+    if (input.cgst > 0) {
+      lines.push({ mappingKey: "purchase_cgst", debit: 0, credit: input.cgst, gstRatePct: rate });
+    }
+    if (input.sgst > 0) {
+      lines.push({ mappingKey: "purchase_sgst", debit: 0, credit: input.sgst, gstRatePct: rate });
+    }
+    if (input.igst > 0) {
+      lines.push({ mappingKey: "purchase_igst", debit: 0, credit: input.igst, gstRatePct: rate });
+    }
+  }
+
+  if (tds > 0 && input.tdsMasterId != null) {
+    const tdsLedger = resolveTdsPayableLedger(input.tdsMasterId);
+    if (tdsLedger) {
+      lines.push({
+        ledgerId: tdsLedger.id,
+        debit: tds,
+        credit: 0,
+        remarks: `TDS Payable reversal — ${input.debitNoteNo}`,
+      });
+    }
+  }
 
   return postFromErpSource({
     sourceModule: "procurement",

@@ -297,19 +297,19 @@ function SupplierLedgerPageContent() {
                   closingRow={closingRow}
                 />
                 <div className="flex-shrink-0 border-t border-border bg-muted/10 px-4 py-2 flex flex-wrap items-center justify-end gap-x-6 gap-y-1">
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Total Debit:{" "}
                     <span className="font-semibold text-foreground tabular-nums">
                       {formatMoney(statement.summary.totalDebit)}
                     </span>
                   </p>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Total Credit:{" "}
                     <span className="font-semibold text-foreground tabular-nums">
                       {formatMoney(statement.summary.totalCredit)}
                     </span>
                   </p>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Closing Balance:{" "}
                     <span className="font-semibold text-foreground tabular-nums">
                       {formatBalanceAmount(

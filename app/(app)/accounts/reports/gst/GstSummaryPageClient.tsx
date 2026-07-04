@@ -270,7 +270,7 @@ export default function GstSummaryPageClient() {
             <Button
               variant="outline"
               size="sm"
-              className="h-8 text-[11px] px-2"
+              className="h-8 text-sm px-2"
               onClick={resetFilters}
             >
               Reset

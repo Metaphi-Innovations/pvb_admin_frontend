@@ -69,7 +69,7 @@ export function SearchableSelect({
               placeholder="Search…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              className="h-9 text-[13px] font-medium"
+              className="h-9 text-sm font-medium"
               autoFocus
             />
           </div>
@@ -93,7 +93,7 @@ export function SearchableSelect({
                 >
                   <div className="flex-1 min-w-0">
                     <span className="block truncate font-medium">{opt.label}</span>
-                    {opt.sub && <span className="text-[10px] text-muted-foreground block truncate">{opt.sub}</span>}
+                    {opt.sub && <span className="text-xs text-muted-foreground block truncate">{opt.sub}</span>}
                   </div>
                   {selected?.value === opt.value && <Check className="w-3 h-3 text-brand-600 shrink-0" />}
                 </button>

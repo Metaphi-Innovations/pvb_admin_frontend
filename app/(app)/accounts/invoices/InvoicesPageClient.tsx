@@ -118,14 +118,14 @@ export default function InvoicesPageClient() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 text-[13px] font-medium gap-1.5"
+                className="h-9 text-sm font-medium gap-1.5"
                 disabled={exporting || visible.length === 0}
                 onClick={handleExport}
               >
                 <FileSpreadsheet className="w-4 h-4" />
                 {exporting ? "Exporting…" : "Export Excel"}
               </Button>
-              <Button size="sm" className="h-9 text-[13px] font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" asChild>
+              <Button size="sm" className="h-9 text-sm font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" asChild>
                 <Link href={`${INVOICES_LIST_PATH}/new`}>
                   <Plus className="w-4 h-4" />
                   Create Invoice
@@ -149,10 +149,10 @@ export default function InvoicesPageClient() {
               <SelectValue placeholder="Invoice status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all" className="text-[13px]">All Invoice Status</SelectItem>
-              <SelectItem value="draft" className="text-[13px]">Draft</SelectItem>
-              <SelectItem value="sent" className="text-[13px]">Sent</SelectItem>
-              <SelectItem value="cancelled" className="text-[13px]">Cancelled</SelectItem>
+              <SelectItem value="all" className="text-xs">All Invoice Status</SelectItem>
+              <SelectItem value="draft" className="text-xs">Draft</SelectItem>
+              <SelectItem value="sent" className="text-xs">Sent</SelectItem>
+              <SelectItem value="cancelled" className="text-xs">Cancelled</SelectItem>
             </SelectContent>
           </Select>
           <Select value={paymentStatus} onValueChange={setPaymentStatus}>
@@ -160,10 +160,10 @@ export default function InvoicesPageClient() {
               <SelectValue placeholder="Payment status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all" className="text-[13px]">All Payment Status</SelectItem>
-              <SelectItem value="unpaid" className="text-[13px]">Unpaid</SelectItem>
-              <SelectItem value="partially_paid" className="text-[13px]">Partially Paid</SelectItem>
-              <SelectItem value="paid" className="text-[13px]">Paid</SelectItem>
+              <SelectItem value="all" className="text-xs">All Payment Status</SelectItem>
+              <SelectItem value="unpaid" className="text-xs">Unpaid</SelectItem>
+              <SelectItem value="partially_paid" className="text-xs">Partially Paid</SelectItem>
+              <SelectItem value="paid" className="text-xs">Paid</SelectItem>
             </SelectContent>
           </Select>
           <Select value={createdBy} onValueChange={setCreatedBy}>
@@ -171,9 +171,9 @@ export default function InvoicesPageClient() {
               <SelectValue placeholder="Created by" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all" className="text-[13px]">All Users</SelectItem>
+              <SelectItem value="all" className="text-xs">All Users</SelectItem>
               {creators.map((c) => (
-                <SelectItem key={c} value={c} className="text-[13px]">
+                <SelectItem key={c} value={c} className="text-xs">
                   {c}
                 </SelectItem>
               ))}
@@ -204,7 +204,7 @@ export default function InvoicesPageClient() {
                   ].map((h) => (
                     <th
                       key={h || "a"}
-                      className="px-2.5 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap"
+                      className="px-2.5 py-2 text-left text-xs font-semibold uppercase text-muted-foreground whitespace-nowrap"
                     >
                       {h}
                     </th>

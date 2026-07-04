@@ -130,21 +130,21 @@ export default function ReconciliationPageClient({ embedded = false }: Reconcili
       <Button
         variant="outline"
         size="sm"
-        className="h-9 text-[13px] font-medium gap-1.5"
+        className="h-9 text-sm font-medium gap-1.5"
         disabled={exporting || visible.length === 0}
         onClick={handleExportList}
       >
         <FileSpreadsheet className="w-4 h-4" />
         Export List
       </Button>
-      <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1.5" disabled={exporting} onClick={handleExportAll}>
+      <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1.5" disabled={exporting} onClick={handleExportAll}>
         <FileSpreadsheet className="w-4 h-4" />
         Export All Entries
       </Button>
       <Button
         variant="outline"
         size="sm"
-        className="h-9 text-[13px] font-medium gap-1.5"
+        className="h-9 text-sm font-medium gap-1.5"
         onClick={() => {
           const { statementId } = seedDummyBankReconciliation(true);
           refresh();
@@ -156,7 +156,7 @@ export default function ReconciliationPageClient({ embedded = false }: Reconcili
       </Button>
       <Button
         size="sm"
-        className="h-9 text-[13px] font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+        className="h-9 text-sm font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
         onClick={() => {
           setReuploadPreset(null);
           setUploadOpen(true);
@@ -231,7 +231,7 @@ export default function ReconciliationPageClient({ embedded = false }: Reconcili
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <Landmark className="w-10 h-10 text-muted-foreground/40 mb-3" />
       <p className="text-sm text-muted-foreground">No bank statements yet. Upload a monthly statement to begin.</p>
-      <Button size="sm" className="mt-4 h-9 text-[13px] font-medium bg-brand-600 text-white" onClick={() => setUploadOpen(true)}>
+      <Button size="sm" className="mt-4 h-9 text-sm font-medium bg-brand-600 text-white" onClick={() => setUploadOpen(true)}>
         <Plus className="w-4 h-4 mr-1" />
         Upload Statement
       </Button>
@@ -261,7 +261,7 @@ export default function ReconciliationPageClient({ embedded = false }: Reconcili
                     ].map((h) => (
                       <th
                         key={h || "a"}
-                        className="px-2.5 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap"
+                        className="px-2.5 py-2 text-left text-xs font-semibold uppercase text-muted-foreground whitespace-nowrap"
                       >
                         {h}
                       </th>
@@ -279,7 +279,7 @@ export default function ReconciliationPageClient({ embedded = false }: Reconcili
                       <td className="px-2.5 py-2 text-xs tabular-nums text-amber-700">{s.unmatched}</td>
                       <td className="px-2.5 py-2 text-xs tabular-nums text-emerald-700">{s.reconciled}</td>
                       <td className="px-2.5 py-2 text-xs">
-                        <span className="inline-flex px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 text-[10px] font-medium">
+                        <span className="inline-flex px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 text-xs font-medium">
                           {s.uploadStatus}
                         </span>
                       </td>
@@ -358,10 +358,10 @@ export default function ReconciliationPageClient({ embedded = false }: Reconcili
             <strong>{deleteTarget?.statementName}</strong>. This cannot be undone.
           </p>
           <DialogFooter>
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => setDeleteTarget(null)}>
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => setDeleteTarget(null)}>
               Cancel
             </Button>
-            <Button size="sm" className="h-9 text-[13px] font-medium bg-red-600 hover:bg-red-700 text-white" onClick={confirmDelete}>
+            <Button size="sm" className="h-9 text-sm font-medium bg-red-600 hover:bg-red-700 text-white" onClick={confirmDelete}>
               Delete
             </Button>
           </DialogFooter>

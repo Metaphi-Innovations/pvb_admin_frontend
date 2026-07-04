@@ -73,7 +73,7 @@ function BalanceSheetRow({ line }: { line: BalanceSheetLineItem }) {
 
   return (
     <AccountsTableRow>
-      <AccountsTableCell className="text-[11px] text-foreground pl-4">
+      <AccountsTableCell className="text-xs text-foreground pl-4">
         {line.particular}
       </AccountsTableCell>
       <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
@@ -221,7 +221,7 @@ export default function BalanceSheetPageClient() {
             <Button
               variant="outline"
               size="sm"
-              className="h-8 text-[11px] px-2"
+              className="h-8 text-sm px-2"
               onClick={resetFilters}
             >
               Reset

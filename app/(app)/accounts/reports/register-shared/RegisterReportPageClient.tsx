@@ -376,7 +376,7 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
             </AccountsTableBody>
             <AccountsTableFoot>
               <AccountsTableRow>
-                <AccountsTableCell colSpan={5} className="font-semibold text-[11px] text-foreground">
+                <AccountsTableCell colSpan={5} className="font-semibold text-xs text-foreground">
                   Totals
                 </AccountsTableCell>
                 <AccountsTableCell align="right" money className={cn("font-semibold", MONEY_AMOUNT_CLASS)}>

@@ -3,6 +3,7 @@ import {
   normalizeCreditNote,
   type CreditNoteRecord,
 } from "./credit-notes-data";
+import { formatLinkedInvoiceNos } from "./components/LinkedInvoicesMultiSelect";
 
 /** Listing export — filtered records with source and tax columns. */
 export async function exportCreditNotesToExcel(records: CreditNoteRecord[]): Promise<void> {
@@ -19,7 +20,8 @@ export async function exportCreditNotesToExcel(records: CreditNoteRecord[]): Pro
       "Credit Note No.": rec.creditNoteNo,
       Source: CREDIT_NOTE_SOURCE_LABELS[rec.source],
       "Reference Document": refDoc,
-      "Against Invoice": rec.sourceInvoiceNo || "",
+      "Against Invoice": formatLinkedInvoiceNos(rec.linkedInvoices) || rec.sourceInvoiceNo || "",
+      "Linked Invoices": formatLinkedInvoiceNos(rec.linkedInvoices) || rec.sourceInvoiceNo || "",
       "Sales Return No.": rec.sourceReturnNo || "",
       "Scheme Name": rec.schemeName || "",
       Customer: rec.customerName,

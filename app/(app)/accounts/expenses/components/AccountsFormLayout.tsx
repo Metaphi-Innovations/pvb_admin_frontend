@@ -37,8 +37,8 @@ export function AccountsFormLayout({
                 <ArrowLeft className="w-4 h-4 text-muted-foreground" />
               </button>
               <div className="min-w-0">
-                <h1 className="text-sm font-semibold text-foreground">{title}</h1>
-                <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                <h1 className="text-xl font-semibold text-foreground">{title}</h1>
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">
                   {breadcrumb.map((b, i) => (
                     <span key={b.href}>
                       {i > 0 && <span className="mx-1">/</span>}

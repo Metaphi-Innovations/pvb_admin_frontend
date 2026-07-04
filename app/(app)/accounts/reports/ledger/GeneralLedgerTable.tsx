@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import { MoneyCell } from "@/components/accounts/MoneyAmount";
 import { balanceSideLabel, formatMoney } from "@/lib/accounts/money-format";
+import { resolveDrCrColumnSide } from "@/lib/accounts/running-balance";
 import {
   AccountsTable,
   AccountsTableBody,
@@ -69,6 +70,13 @@ export function GeneralLedgerTable({
 
 function GeneralLedgerTableRow({ row }: { row: GeneralLedgerDisplayRow }) {
   const isOpening = row.kind === "opening";
+  const isBalanceRow = row.kind === "opening" || row.kind === "closing";
+  const drCrSide = resolveDrCrColumnSide({
+    debit: row.debit,
+    credit: row.credit,
+    runningBalanceType: row.runningBalanceType,
+    isBalanceRow,
+  });
 
   return (
     <AccountsTableRow className={cn(isOpening && "bg-muted/20 font-medium")}>
@@ -83,7 +91,7 @@ function GeneralLedgerTableRow({ row }: { row: GeneralLedgerDisplayRow }) {
           <span className="font-mono text-xs font-semibold text-brand-700">{row.voucherNo}</span>
         )}
       </AccountsTableCell>
-      <AccountsTableCell className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">
+      <AccountsTableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
         {emptyCell(row.referenceNo)}
       </AccountsTableCell>
       <AccountsTableCell
@@ -98,7 +106,7 @@ function GeneralLedgerTableRow({ row }: { row: GeneralLedgerDisplayRow }) {
         {formatMoney(row.runningBalance)}
       </AccountsTableCell>
       <AccountsTableCell align="center" className="whitespace-nowrap text-xs font-semibold">
-        {balanceSideLabel(row.runningBalanceType)}
+        {balanceSideLabel(drCrSide)}
       </AccountsTableCell>
     </AccountsTableRow>
   );

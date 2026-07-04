@@ -260,14 +260,14 @@ export default function LedgersPageClient() {
           <span>
             {visible.length === 0
               ? "0 ledgers"
-              : `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, visible.length)} of ${visible.length}`}
+              : `Showing ${(page - 1) * PAGE_SIZE + 1}—${Math.min(page * PAGE_SIZE, visible.length)} of ${visible.length}`}
           </span>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
               Previous
             </Button>
-            <span className="text-[11px] tabular-nums">Page {page} of {totalPages}</span>
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+            <span className="text-xs tabular-nums">Page {page} of {totalPages}</span>
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
               Next
             </Button>
           </div>
@@ -282,11 +282,11 @@ export default function LedgersPageClient() {
         description="Ledger accounts created under Chart of Accounts groups and sub-groups."
         actions={
           <>
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1" onClick={exportCsv}>
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1" onClick={exportCsv}>
               <Download className="w-4 h-4" /> Export
             </Button>
             {canCreate && (
-              <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1" onClick={openAdd}>
+              <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1" onClick={openAdd}>
                 <Plus className="w-4 h-4" /> Add Ledger
               </Button>
             )}
@@ -322,7 +322,7 @@ export default function LedgersPageClient() {
                       Adjust search or date range, or add a ledger under a valid group.
                     </p>
                     {canCreate && (
-                      <Button size="sm" className="h-9 text-[13px] font-medium mt-3 bg-brand-600 text-white" onClick={openAdd}>
+                      <Button size="sm" className="h-9 text-sm font-medium mt-3 bg-brand-600 text-white" onClick={openAdd}>
                         <Plus className="w-4 h-4 mr-1" /> Add Ledger
                       </Button>
                     )}
@@ -344,7 +344,7 @@ export default function LedgersPageClient() {
                       <AccountsTableCell wrap className="min-w-[180px]">
                         <p className="text-xs font-semibold text-foreground leading-snug">{r.accountName}</p>
                         {r.alias ? (
-                          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{r.alias}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 truncate">{r.alias}</p>
                         ) : null}
                       </AccountsTableCell>
                       <AccountsTableCell className="whitespace-nowrap">{ledgerType}</AccountsTableCell>

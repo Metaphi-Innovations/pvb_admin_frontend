@@ -31,7 +31,7 @@ import {
 } from "../expense-data";
 import { formatINR } from "../expense-utils";
 
-const fieldClass = "h-9 text-[13px] font-medium";
+const fieldClass = "h-9 text-sm font-medium";
 const labelClass = "text-xs font-medium text-foreground";
 const PAYMENT_MODES: PaymentMode[] = ["Cash", "UPI", "Bank Transfer", "Cheque", "Card", "Other"];
 
@@ -305,7 +305,7 @@ export function ExpenseForm({
       <div className="bg-white rounded-lg border border-border/60 p-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold">Attachments</h2>
-          <span className="text-[11px] text-muted-foreground">{form.attachments.length} file(s)</span>
+          <span className="text-xs text-muted-foreground">{form.attachments.length} file(s)</span>
         </div>
         {!readOnly && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3 p-3 bg-muted/15 rounded-lg border border-dashed border-border/60">

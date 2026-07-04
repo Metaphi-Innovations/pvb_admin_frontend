@@ -107,14 +107,14 @@ export default function DebitNotesPageClient() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 text-[13px] font-medium gap-1.5"
+                className="h-9 text-sm font-medium gap-1.5"
                 disabled={exporting || visible.length === 0}
                 onClick={handleExport}
               >
                 <FileSpreadsheet className="w-4 h-4" />
                 {exporting ? "Exporting…" : "Export Excel"}
               </Button>
-              <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5" asChild>
+              <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5" asChild>
                 <Link href={`${DEBIT_NOTES_LIST_PATH}/new`}>
                   <Plus className="w-4 h-4" />
                   Create Debit Note
@@ -128,7 +128,7 @@ export default function DebitNotesPageClient() {
 
         <AccountsFilterBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Debit note no., supplier, reference…">
           <Select value={vendor} onValueChange={setVendor}>
-            <SelectTrigger className="h-8 w-[140px] text-xs bg-white"><SelectValue placeholder="Supplier" /></SelectTrigger>
+            <SelectTrigger className="h-8 w-[140px] text-sm bg-white"><SelectValue placeholder="Supplier" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all" className="text-xs">All suppliers</SelectItem>
               {vendorNames.map((v) => (
@@ -137,7 +137,7 @@ export default function DebitNotesPageClient() {
             </SelectContent>
           </Select>
           <Select value={referenceType} onValueChange={setReferenceType}>
-            <SelectTrigger className="h-8 w-[150px] text-xs bg-white"><SelectValue placeholder="Ref. type" /></SelectTrigger>
+            <SelectTrigger className="h-8 w-[150px] text-sm bg-white"><SelectValue placeholder="Ref. type" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all" className="text-xs">All ref. types</SelectItem>
               <SelectItem value="purchase_invoice" className="text-xs">Purchase Invoice</SelectItem>
@@ -153,7 +153,7 @@ export default function DebitNotesPageClient() {
             onDateToChange={setDateTo}
           />
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-8 w-[120px] text-xs bg-white"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectTrigger className="h-8 w-[120px] text-sm bg-white"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all" className="text-xs">All statuses</SelectItem>
               <SelectItem value="draft" className="text-xs">Draft</SelectItem>
@@ -186,7 +186,7 @@ export default function DebitNotesPageClient() {
                     "Updated By",
                     "",
                   ].map((h) => (
-                    <th key={h || "a"} className="px-2.5 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap">
+                    <th key={h || "a"} className="px-2.5 py-2 text-left text-xs font-semibold uppercase text-muted-foreground whitespace-nowrap">
                       {h}
                     </th>
                   ))}

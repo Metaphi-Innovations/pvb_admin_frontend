@@ -87,7 +87,7 @@ export function PaymentInstallmentModal({
         </DialogHeader>
         <div className="px-5 py-4 space-y-3">
           {matchCtx && (
-            <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 space-y-1.5 text-[11px]">
+            <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 space-y-1.5 text-xs">
               <p><span className="text-muted-foreground">PO No.:</span> <span className="font-mono font-medium">{matchCtx.poNumber}</span></p>
               <p><span className="text-muted-foreground">Supplier Invoice No.:</span> <span className="font-mono font-medium">{matchCtx.vendorInvoiceNo}</span></p>
               <p><span className="text-muted-foreground">Purchase No.:</span> <span className="font-mono font-medium">{matchCtx.purchaseNo}</span></p>
@@ -98,7 +98,7 @@ export function PaymentInstallmentModal({
             </div>
           )}
           {mismatchWarning && (
-            <div className="flex gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">
+            <div className="flex gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
               <p>{mismatchWarning}</p>
             </div>
@@ -106,12 +106,12 @@ export function PaymentInstallmentModal({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Payment Date</Label>
-              <Input type="date" className="h-9 text-[13px] font-medium" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+              <Input type="date" className="h-9 text-sm font-medium" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Payment Mode</Label>
               <Select value={paymentMode} onValueChange={(v) => setPaymentMode(v as PaymentMode)}>
-                <SelectTrigger className="h-9 text-[13px] font-medium">
+                <SelectTrigger className="h-9 text-sm font-medium">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -127,17 +127,17 @@ export function PaymentInstallmentModal({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Reference Number</Label>
-              <Input className="h-9 text-[13px] font-medium" value={paymentReferenceNo} onChange={(e) => setPaymentReferenceNo(e.target.value)} />
+              <Input className="h-9 text-sm font-medium" value={paymentReferenceNo} onChange={(e) => setPaymentReferenceNo(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Transaction Number</Label>
-              <Input className="h-9 text-[13px] font-medium" value={transactionNo} onChange={(e) => setTransactionNo(e.target.value)} />
+              <Input className="h-9 text-sm font-medium" value={transactionNo} onChange={(e) => setTransactionNo(e.target.value)} />
             </div>
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Amount (max {formatINR(maxPay)})</Label>
             <AccountsMoneyInput
-              className="h-9 text-[13px] font-medium"
+              className="h-9 text-sm font-medium"
               value={amount}
               onChange={(v) => {
                 setAmount(String(v));
@@ -152,12 +152,12 @@ export function PaymentInstallmentModal({
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
         <DialogFooter className="px-5 py-3 border-t bg-muted/20">
-          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={onClose}>
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={onClose}>
             Cancel
           </Button>
           <Button
             size="sm"
-            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
+            className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white"
             disabled={!valid}
             onClick={() => {
               if (amt > maxPay) {

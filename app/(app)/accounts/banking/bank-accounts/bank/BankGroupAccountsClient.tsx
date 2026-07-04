@@ -59,7 +59,7 @@ export default function BankGroupAccountsClient({ bankGroupId }: { bankGroupId: 
       actions={
         <Button
           size="sm"
-          className="h-9 text-[13px] font-medium bg-brand-600 text-white gap-1"
+          className="h-9 text-sm font-medium bg-brand-600 text-white gap-1"
           onClick={() =>
             router.push(`/accounts/banking/bank-accounts/new?bankGroupId=${bankGroupId}`)
           }
@@ -74,7 +74,7 @@ export default function BankGroupAccountsClient({ bankGroupId }: { bankGroupId: 
           <thead className="border-b">
             <tr>
               {["Account", "Account No.", "IFSC", "Branch", "Balance", "Recon", "Status"].map((h) => (
-                <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">{h}</th>
+                <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-muted-foreground">{h}</th>
               ))}
             </tr>
           </thead>

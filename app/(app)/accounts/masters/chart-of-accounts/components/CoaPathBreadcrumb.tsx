@@ -5,6 +5,7 @@ import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChartOfAccount } from "../../../data";
 import { getAncestorPath } from "../chart-of-accounts-data";
+import { getCoaDisplayPath } from "@/lib/accounts/coa-tree-children";
 
 interface CoaPathBreadcrumbProps {
   records: ChartOfAccount[];
@@ -23,14 +24,14 @@ export function CoaPathBreadcrumb({
   onSelectNode,
   actions,
 }: CoaPathBreadcrumbProps) {
-  const path = selectedNode && !showRoot ? getAncestorPath(records, selectedNode.id) : [];
+  const path = selectedNode && !showRoot ? getCoaDisplayPath(records, selectedNode.id) : [];
 
   return (
     <nav
       aria-label="COA path"
       className="flex-shrink-0 flex items-center justify-between gap-3 px-3 py-2 border-b border-border/60 bg-muted/10"
     >
-      <ol className="flex items-center flex-wrap gap-1 text-[11px] text-muted-foreground min-w-0">
+      <ol className="flex items-center flex-wrap gap-1 text-xs text-muted-foreground min-w-0">
         <li>
           <button
             type="button"

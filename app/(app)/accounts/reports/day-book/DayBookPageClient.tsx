@@ -149,7 +149,7 @@ export default function DayBookPageClient() {
       actions={
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1.5" disabled={exporting}>
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1.5" disabled={exporting}>
               <Download className="w-4 h-4" />
               Export
             </Button>
@@ -186,13 +186,13 @@ export default function DayBookPageClient() {
           />
           <DayBookVoucherTypeFilter value={voucherType} onChange={setVoucherType} />
           <div className="space-y-1 min-w-[180px] flex-1">
-            <Label className="text-[10px] font-medium uppercase text-muted-foreground">Search</Label>
+            <Label className="text-xs font-medium uppercase text-muted-foreground">Search</Label>
             <div className="relative">
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Voucher no., type, party, narration…"
-                className="h-9 text-[13px] font-medium pr-8"
+                className="h-9 text-sm font-medium pr-8"
               />
               {search && (
                 <button
@@ -210,7 +210,7 @@ export default function DayBookPageClient() {
             <Button
               variant="outline"
               size="sm"
-              className="h-9 text-[13px] font-medium"
+              className="h-9 text-sm font-medium"
               onClick={clearFilters}
             >
               Clear Filters
@@ -271,7 +271,7 @@ export default function DayBookPageClient() {
             {sorted.length > 0 && (
               <AccountsTableFoot>
                 <AccountsTableRow>
-                  <AccountsTableCell colSpan={5} className="font-semibold text-foreground text-[11px]">
+                  <AccountsTableCell colSpan={5} className="font-semibold text-foreground text-xs">
                     Total
                   </AccountsTableCell>
                   <AccountsTableCell
@@ -298,7 +298,7 @@ export default function DayBookPageClient() {
           <>
             <div
               className={cn(
-                "flex-shrink-0 flex items-center gap-1.5 px-4 py-2 border-t text-[11px]",
+                "flex-shrink-0 flex items-center gap-1.5 px-4 py-2 border-t text-xs",
                 summary.isBalanced
                   ? "bg-emerald-50/80 border-emerald-100 text-emerald-700"
                   : "bg-amber-50/80 border-amber-100 text-amber-800",

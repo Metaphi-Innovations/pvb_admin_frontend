@@ -5,6 +5,7 @@ import {
   type TDSMaster,
 } from "@/app/(app)/masters/tds/tds-data";
 import { parseTdsSectionCode } from "@/lib/accounts/tds-coa-utils";
+import { resolveTdsPayableLedger } from "@/lib/accounts/tds-accounting";
 
 export type TdsPartyType =
   | "Supplier"
@@ -68,12 +69,7 @@ function resolvePartyLedgerId(
 }
 
 function resolveTdsLedgerId(sectionCode: string): number | null {
-  const code = sectionCode.toUpperCase();
-  const ledger = loadChartOfAccounts().find(
-    (r) =>
-      r.nodeLevel === "ledger" &&
-      r.accountName.toUpperCase().includes(`SEC ${code}`),
-  );
+  const ledger = resolveTdsPayableLedger(sectionCode);
   return ledger?.id ?? null;
 }
 

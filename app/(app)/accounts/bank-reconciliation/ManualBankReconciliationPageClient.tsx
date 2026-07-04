@@ -90,9 +90,9 @@ function SummaryCard({
 
   return (
     <div className={cn("bg-white rounded-xl border border-border p-3 shadow-sm border-l-4", accentClass)}>
-      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">{label}</p>
-      <p className={cn("text-lg font-bold mt-1", MONEY_AMOUNT_CLASS)}>{value}</p>
-      {subLabel && <p className="text-[10px] text-muted-foreground mt-0.5">{subLabel}</p>}
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</p>
+      <p className={cn("text-base font-bold mt-1", MONEY_AMOUNT_CLASS)}>{value}</p>
+      {subLabel && <p className="text-xs text-muted-foreground mt-0.5">{subLabel}</p>}
     </div>
   );
 }
@@ -192,7 +192,7 @@ function ReconcileDialog({
 
           {row.suggestedStatementMatch && row.rowSource !== "statement" && (
             <div className="bg-brand-50 rounded-lg p-3 space-y-1.5 border border-brand-200">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-brand-600">Suggested Match</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-brand-600">Suggested Match</p>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Statement Date</span>
                 <span>{formatAccountsDate(row.suggestedStatementMatch.statementDate)}</span>
@@ -220,7 +220,7 @@ function ReconcileDialog({
             </Label>
             <Input
               type="date"
-              className="h-9 text-[13px] font-medium"
+              className="h-9 text-sm font-medium"
               value={bankDate}
               max={new Date().toISOString().slice(0, 10)}
               min={row.entryDate}
@@ -237,7 +237,7 @@ function ReconcileDialog({
               value={reason || undefined}
               onValueChange={(v) => setReason(v as DifferenceReason)}
             >
-              <SelectTrigger className="h-9 text-[13px] font-medium">
+              <SelectTrigger className="h-9 text-sm font-medium">
                 <SelectValue placeholder="Select reason" />
               </SelectTrigger>
               <SelectContent>
@@ -256,7 +256,7 @@ function ReconcileDialog({
               <Input
                 type="number"
                 step="0.01"
-                className="h-9 text-[13px] font-medium text-right"
+                className="h-9 text-sm font-medium text-right"
                 value={diffAmount}
                 onChange={(e) => setDiffAmount(e.target.value)}
                 placeholder="0.00"
@@ -267,7 +267,7 @@ function ReconcileDialog({
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Remarks</Label>
             <Input
-              className="h-9 text-[13px] font-medium"
+              className="h-9 text-sm font-medium"
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
               placeholder="Optional notes…"
@@ -282,12 +282,12 @@ function ReconcileDialog({
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={onClose}>
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={onClose}>
             Cancel
           </Button>
           <Button
             size="sm"
-            className="h-9 text-[13px] font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+            className="h-9 text-sm font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
             onClick={handleSubmit}
           >
             <Check className="w-4 h-4" />
@@ -585,14 +585,14 @@ export default function ManualBankReconciliationPageClient() {
   const headerActions = (
     <div className="flex items-center gap-2">
       <AccountsExportMenu onExcel={handleExport} disabled={!coaLedgerId || exporting} />
-      <Button size="sm" variant="outline" className="h-9 text-[13px] font-medium gap-1.5" onClick={handleLoadDemoEntries}>
+      <Button size="sm" variant="outline" className="h-9 text-sm font-medium gap-1.5" onClick={handleLoadDemoEntries}>
         <FlaskConical className="w-4 h-4" />
         Load Demo Entries
       </Button>
       <Button
         size="sm"
         variant="outline"
-        className="h-9 text-[13px] font-medium gap-1.5"
+        className="h-9 text-sm font-medium gap-1.5"
         disabled={!bankMasterId}
         onClick={() => setUploadOpen(true)}
       >
@@ -601,7 +601,7 @@ export default function ManualBankReconciliationPageClient() {
       </Button>
       <Button
         size="sm"
-        className="h-9 text-[13px] font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+        className="h-9 text-sm font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
         disabled={!coaLedgerId || saving || !dirty}
         onClick={() => void handleSave()}
       >
@@ -677,11 +677,11 @@ export default function ManualBankReconciliationPageClient() {
                 onDateToChange={setDateTo}
               />
               <div className="space-y-1 min-w-[180px]">
-                <Label className="text-[10px] font-medium uppercase text-muted-foreground leading-none">
+                <Label className="text-xs font-medium uppercase text-muted-foreground leading-none">
                   Bank Account <span className="text-red-500">*</span>
                 </Label>
                 <Select value={bankAccountId} onValueChange={setBankAccountId}>
-                  <SelectTrigger className="h-9 text-[13px] font-medium bg-white mt-0.5">
+                  <SelectTrigger className="h-9 text-sm font-medium bg-white mt-0.5">
                     <SelectValue placeholder="Select bank account" />
                   </SelectTrigger>
                   <SelectContent>
@@ -694,9 +694,9 @@ export default function ManualBankReconciliationPageClient() {
                 </Select>
               </div>
               <div className="space-y-1 min-w-[120px]">
-                <Label className="text-[10px] font-medium uppercase text-muted-foreground leading-none">Status</Label>
+                <Label className="text-xs font-medium uppercase text-muted-foreground leading-none">Status</Label>
                 <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
-                  <SelectTrigger className="h-9 text-[13px] font-medium bg-white mt-0.5">
+                  <SelectTrigger className="h-9 text-sm font-medium bg-white mt-0.5">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -731,18 +731,18 @@ export default function ManualBankReconciliationPageClient() {
           ) : visibleRows.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center rounded-xl border border-border/60 bg-muted/10 px-6">
               <p className="text-sm font-medium text-foreground">No entries to reconcile</p>
-              <p className="text-[11px] text-muted-foreground mt-1 max-w-md">
+              <p className="text-xs text-muted-foreground mt-1 max-w-md">
                 Upload a bank statement or load demo entries to populate the reconciliation table.
               </p>
               <div className="flex items-center gap-2 mt-4">
-                <Button size="sm" variant="outline" className="h-9 text-[13px] font-medium gap-1.5" onClick={handleLoadDemoEntries}>
+                <Button size="sm" variant="outline" className="h-9 text-sm font-medium gap-1.5" onClick={handleLoadDemoEntries}>
                   <FlaskConical className="w-4 h-4" />
                   Load Demo Entries
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-9 text-[13px] font-medium gap-1.5"
+                  className="h-9 text-sm font-medium gap-1.5"
                   disabled={!bankMasterId}
                   onClick={() => setUploadOpen(true)}
                 >
@@ -797,7 +797,7 @@ export default function ManualBankReconciliationPageClient() {
                           </td>
                           <td className={cn(TD_PAD, "text-xs whitespace-nowrap")}>
                             {isStatementRow ? (
-                              <span className="text-[10px] font-semibold uppercase tracking-wide text-navy-600">
+                              <span className="text-xs font-semibold uppercase tracking-wide text-navy-600">
                                 Bank Stmt
                               </span>
                             ) : (
@@ -813,7 +813,7 @@ export default function ManualBankReconciliationPageClient() {
                           <td className={cn(TD_PAD, "text-xs whitespace-nowrap")}>
                             <Input
                               type="date"
-                              className="h-7 w-full max-w-[130px] text-xs"
+                              className="h-7 w-full max-w-[130px] text-sm"
                               value={draftDate}
                               max={new Date().toISOString().slice(0, 10)}
                               min={row.entryDate}
@@ -824,7 +824,7 @@ export default function ManualBankReconciliationPageClient() {
                             {row.matchedStatementRef ? (
                               <span className="font-mono text-muted-foreground">{row.matchedStatementRef}</span>
                             ) : row.suggestedStatementMatch ? (
-                              <span className="text-brand-600 text-[10px] font-medium flex items-center gap-0.5">
+                              <span className="text-brand-600 text-xs font-medium flex items-center gap-0.5">
                                 <Link2 className="w-3 h-3" />
                                 {row.suggestedStatementMatch.matchType === "exact" ? "Exact" : "Suggested"}
                               </span>
@@ -847,7 +847,7 @@ export default function ManualBankReconciliationPageClient() {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="h-6 px-2 text-[10px] text-brand-600 hover:text-brand-700 hover:bg-brand-50"
+                                className="h-6 px-2 text-xs text-brand-600 hover:text-brand-700 hover:bg-brand-50"
                                 onClick={() => setReconcileRow(row)}
                               >
                                 Reconcile

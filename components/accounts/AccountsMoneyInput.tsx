@@ -14,7 +14,7 @@ export interface AccountsMoneyInputProps
   extends Omit<IndianRupeeInputProps, "value" | "onChange"> {
   value: number | string;
   onChange: (value: number) => void;
-  /** Compact h-9 text-[13px] font-medium styling for accounts forms (default: true) */
+  /** Compact h-9 text-sm font-medium styling for accounts forms (default: true) */
   compact?: boolean;
 }
 
@@ -30,7 +30,7 @@ export function AccountsMoneyInput({
     <IndianRupeeInput
       value={toAmount(value)}
       onChange={onChange}
-      className={cn(compact && "h-9 text-[13px] font-medium", className)}
+      className={cn(compact && "h-9 text-sm font-medium", className)}
       {...props}
     />
   );

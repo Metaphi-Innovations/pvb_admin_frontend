@@ -200,7 +200,7 @@ function PandLRow({ line }: { line: PandLLineItem }) {
 
     <AccountsTableRow>
 
-      <AccountsTableCell className="text-[11px] text-foreground pl-4">
+      <AccountsTableCell className="text-xs text-foreground pl-4">
 
         {line.particular}
 
@@ -501,7 +501,7 @@ export default function ProfitLossPageClient() {
 
               size="sm"
 
-              className="h-8 text-[11px] px-2"
+              className="h-8 text-sm px-2"
 
               onClick={resetFilters}
 

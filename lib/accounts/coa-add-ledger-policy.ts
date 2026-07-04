@@ -44,10 +44,10 @@ export function resolveCoaAddLedgerPolicy(
 ): CoaAddLedgerPolicy {
   const names = [...pathNames(records, node.id), node.accountName];
 
-  if (names.includes("TDS Payable")) {
+  if (names.includes("TDS Receivable") || names.includes("TDS Payable")) {
     return {
       blocked: true,
-      reason: "TDS section ledgers are provisioned from TDS Master configuration.",
+      reason: "TDS section ledgers are auto-created from TDS Master. Manual creation is not allowed.",
       alternatives: [
         { label: "TDS Settings", href: "/masters/tds", variant: "primary" },
         { label: "TDS Summary", href: "/accounts/reports/tds-party-wise" },
@@ -60,7 +60,18 @@ export function resolveCoaAddLedgerPolicy(
       blocked: true,
       reason: "GST tax ledgers are auto-created from GST Master configuration.",
       alternatives: [
-        { label: "GST Settings", href: "/settings/gst-tax-configuration", variant: "primary" },
+        { label: "GST Master", href: "/masters/gst", variant: "primary" },
+        { label: "GST Summary", href: "/accounts/reports/gst" },
+      ],
+    };
+  }
+
+  if (names.includes("GST Input Credit")) {
+    return {
+      blocked: true,
+      reason: "GST input credit ledgers are auto-created from GST Master configuration.",
+      alternatives: [
+        { label: "GST Master", href: "/masters/gst", variant: "primary" },
         { label: "GST Summary", href: "/accounts/reports/gst" },
       ],
     };

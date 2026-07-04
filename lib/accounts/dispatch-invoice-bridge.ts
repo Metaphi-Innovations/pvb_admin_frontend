@@ -187,10 +187,23 @@ export function buildInvoiceLineFromDispatchProduct(
   const unitPrice = resolveUnitRate(dp, master.id, customerId, order);
   const unit = pricing?.uom ?? master.packagingUnit ?? master.baseUnit ?? "PCS";
 
+  const soLine = order?.lineItems?.find(
+    (l) =>
+      l.productName.toLowerCase() === dp.product.toLowerCase() ||
+      (l.productCode && l.productCode.toLowerCase() === dp.sku.toLowerCase()),
+  );
+
+  const hasScheme = soLine?.schemeApplied === "Yes";
+  const effectiveRate = soLine?.finalRate || unitPrice;
+  const discountPct = hasScheme
+    ? soLine.schemeDiscountPercent || soLine.discount || 0
+    : soLine?.discount || 0;
+
   const line = recalculateLineItem({
     id: `dispatch-${dispatch.id}-${lineIndex}`,
     productId: master.id,
     productName: master.productName,
+    productCode: master.sku ?? master.productCode ?? dp.sku,
     description: [
       dispatch.dispatchNumber,
       dp.batchNo ? `Batch ${dp.batchNo}` : "",
@@ -201,10 +214,18 @@ export function buildInvoiceLineFromDispatchProduct(
     hsn: master.hsnCode ?? "",
     qty: dp.dispatchQty,
     unit,
-    unitPrice,
-    discountPct: 0,
+    unitPrice: effectiveRate,
+    discountPct,
     taxPct,
     amount: 0,
+    dealerPrice: soLine?.dealerPrice ?? unitPrice,
+    finalRate: effectiveRate,
+    schemeApplied: hasScheme ? "Yes" : soLine?.schemeApplied ?? "No",
+    schemeCode: soLine?.appliedSchemeCode ?? soLine?.schemeCode,
+    schemeName: soLine?.appliedSchemeName ?? soLine?.schemeName,
+    schemeDiscountPercent: soLine?.schemeDiscountPercent,
+    schemeDiscountAmount: soLine?.schemeDiscountAmount,
+    schemeDiscountType: soLine?.schemeDiscountType,
   });
 
   return { line };

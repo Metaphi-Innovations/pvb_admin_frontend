@@ -49,7 +49,6 @@ export function CoaSidebarNav() {
     <div
       className={cn(
         "mb-2 rounded-lg border border-border/60 bg-white shadow-sm overflow-hidden",
-        "border-l-[3px] border-l-brand-500",
         isCoaRoute && "ring-1 ring-brand-200/60",
       )}
     >
@@ -69,7 +68,7 @@ export function CoaSidebarNav() {
           <span className="w-7 h-7 rounded-md bg-brand-100 border border-brand-200/80 flex items-center justify-center flex-shrink-0">
             <FolderTree className="w-4 h-4 text-brand-600" />
           </span>
-          <span className="flex-1 text-[13px] font-medium text-brand-800 truncate">Chart of Accounts</span>
+          <span className="flex-1 text-sm font-medium text-brand-800 truncate">Chart of Accounts</span>
         </button>
         <button
           type="button"
@@ -98,7 +97,7 @@ export function CoaSidebarNav() {
           <div className="relative px-2.5 py-2 border-b border-border/40 bg-white">
             <Search className="w-4 h-4 absolute left-5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
-              className="h-[34px] pl-8 text-[13px] bg-white border-[#E5E7EB] rounded-md"
+              className="h-[34px] pl-8 text-sm bg-white border-[#E5E7EB] rounded-md"
               placeholder="Search accounts..."
               value={treeSearchTerm}
               onChange={(e) => setTreeSearchTerm(e.target.value)}

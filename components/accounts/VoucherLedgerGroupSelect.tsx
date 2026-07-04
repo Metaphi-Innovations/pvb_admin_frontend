@@ -115,13 +115,13 @@ export function VoucherLedgerGroupSelect({
           ) : (
             sections.map((section) => (
               <div key={section.headName} className="py-1">
-                <p className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-navy-700">
+                <p className="px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-navy-700">
                   {section.headName}
                 </p>
                 {section.groups.map((group) => (
                   <div key={`${section.headName}-${group.groupName}`}>
-                    <p className="px-3 py-1 text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
-                      <span className="text-muted-foreground/50">├─</span>
+                    <p className="px-3 py-1 text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                      <span className="text-muted-foreground/50">â”œâ”€</span>
                       {group.groupName}
                     </p>
                     {group.items.map((opt) => (
@@ -164,7 +164,7 @@ function ParentRow({
         selected && "bg-brand-50/80",
       )}
     >
-      <span className="text-muted-foreground/50 text-[11px] shrink-0">├─</span>
+      <span className="text-muted-foreground/50 text-xs shrink-0">â”œâ”€</span>
       <span className="flex-1 min-w-0 text-xs text-foreground truncate">
         {opt.node.accountName}
       </span>

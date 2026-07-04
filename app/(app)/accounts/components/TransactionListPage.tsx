@@ -417,7 +417,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                         <InvoiceTypeBadge type={r.invoiceType ?? "sales"} />
                       </AccountsTableCell>
                     )}
-                    <AccountsTableCell className="text-[13px] font-medium text-slate-800">
+                    <AccountsTableCell className="text-xs font-medium text-slate-800">
                       {r.viewHref ? (
                         <Link href={r.viewHref} className="text-slate-800 hover:text-brand-700 hover:underline">
                           {r.number}
@@ -461,7 +461,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                         {r.schemeSettlementLabel ? (
                           <span
                             className={cn(
-                              "inline-flex h-5 items-center rounded-md border px-1.5 text-[11px] font-semibold whitespace-nowrap",
+                              "inline-flex h-5 items-center rounded-md border px-1.5 text-xs font-semibold whitespace-nowrap",
                               r.schemeSettlementLabel === "Settled"
                                 ? "border-emerald-200 bg-emerald-50 text-emerald-800"
                                 : "border-amber-200 bg-amber-50 text-amber-800",
@@ -493,7 +493,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 text-[11px] text-brand-700"
+                            className="h-7 text-sm text-brand-700"
                             onClick={() => {
                               config.onPost!(r.id);
                               bump();
@@ -556,7 +556,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                   ...(viewRow.branch ? [{ label: "Branch", value: viewRow.branch }] : []),
                 ]).map((f) => (
                   <div key={f.label} className="space-y-1">
-                    <p className="text-[11px] text-muted-foreground">{f.label}</p>
+                    <p className="text-xs text-muted-foreground">{f.label}</p>
                     <p
                       className={cn(
                         "text-sm font-medium",
@@ -578,13 +578,13 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
             )}
           </SheetBody>
           <SheetFooter>
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => setViewRow(null)}>
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => setViewRow(null)}>
               Close
             </Button>
             {viewRow?.viewHref && (
               <Button
                 size="sm"
-                className="h-9 text-[13px] font-medium bg-brand-600 text-white"
+                className="h-9 text-sm font-medium bg-brand-600 text-white"
                 onClick={() => {
                   router.push(viewRow.viewHref!);
                   setViewRow(null);
@@ -597,7 +597,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 text-[13px] font-medium gap-1.5"
+                className="h-9 text-sm font-medium gap-1.5"
                 onClick={() => router.push(config.editHref!(viewRow.id))}
               >
                 <Pencil className="w-4 h-4" /> Edit
@@ -606,7 +606,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
             {viewRow && rowCanPost(viewRow) && (
               <Button
                 size="sm"
-                className="h-9 text-[13px] font-medium bg-brand-600 text-white"
+                className="h-9 text-sm font-medium bg-brand-600 text-white"
                 onClick={() => {
                   config.onPost!(viewRow.id);
                   setViewRow(null);
@@ -620,7 +620,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 text-[13px] font-medium text-destructive"
+                className="h-9 text-sm font-medium text-destructive"
                 onClick={() => {
                   if (window.confirm(`Delete ${viewRow.number}?`)) {
                     config.onDelete!(viewRow.id);

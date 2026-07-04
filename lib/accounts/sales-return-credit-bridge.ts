@@ -1,5 +1,5 @@
 /**
- * Link sales return approval to credit note creation.
+ * Link sales return approval to credit note creation (manual generation in Accounts).
  */
 
 import {
@@ -8,7 +8,6 @@ import {
   saveSalesReturnRecords,
   type SalesReturnRecord,
 } from "@/app/(app)/sales/orders/sales-return-data";
-import { createCreditNoteFromSalesReturn } from "./credit-note-integration";
 
 export function linkCreditNoteToSalesReturn(
   returnId: string,
@@ -31,6 +30,7 @@ export function linkCreditNoteToSalesReturn(
   saveSalesReturnRecords(records);
 }
 
+/** Approve sales return only — credit note is generated manually from Accounts pending panel. */
 export function processSalesReturnApproval(returnId: string): {
   returnRecord: SalesReturnRecord;
   creditNoteCreated: boolean;
@@ -42,19 +42,8 @@ export function processSalesReturnApproval(returnId: string): {
   const approved = approveSalesReturn(returnId);
   if (!approved) return null;
 
-  const cn = createCreditNoteFromSalesReturn(approved);
-  if (cn) {
-    linkCreditNoteToSalesReturn(
-      returnId,
-      cn.id,
-      cn.creditNoteNo,
-      cn.sourceInvoiceId,
-      cn.sourceInvoiceNo,
-    );
-  }
-
   const updated = getSalesReturnRecords().find((r) => r.id === returnId) ?? approved;
-  return { returnRecord: updated, creditNoteCreated: Boolean(cn) };
+  return { returnRecord: updated, creditNoteCreated: false };
 }
 
 export function processSalesReturnOnSave(record: SalesReturnRecord): {
@@ -75,10 +64,10 @@ export function processSalesReturnOnSave(record: SalesReturnRecord): {
   saveSalesReturnRecords(records);
 
   const result = processSalesReturnApproval(record.id);
-  if (result?.creditNoteCreated && result.returnRecord.creditNoteNo) {
+  if (result?.returnRecord) {
     return {
-      creditNoteNo: result.returnRecord.creditNoteNo,
-      message: `Sales return approved. Credit Note ${result.returnRecord.creditNoteNo} generated.`,
+      message:
+        "Sales return approved. Generate a Credit Note from Accounts → Credit Notes → Pending.",
     };
   }
   return { message: "Sales return saved." };
