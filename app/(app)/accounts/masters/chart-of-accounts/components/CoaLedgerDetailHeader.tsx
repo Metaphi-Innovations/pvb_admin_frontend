@@ -30,28 +30,28 @@ export function CoaLedgerDetailHeader({
     <div className="flex-shrink-0 px-3 py-2 border-b border-border/60 bg-muted/10">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-1 text-xs">
         <div>
-          <span className="text-[10px] font-medium uppercase text-muted-foreground">Ledger Name</span>
+          <span className="text-xs font-medium uppercase text-muted-foreground">Ledger Name</span>
           <p className="font-semibold text-foreground mt-0.5">{ledger.accountName}</p>
         </div>
         <div>
-          <span className="text-[10px] font-medium uppercase text-muted-foreground">Ledger Code</span>
+          <span className="text-xs font-medium uppercase text-muted-foreground">Ledger Code</span>
           <p className="font-mono font-semibold text-brand-700 mt-0.5">{ledger.accountCode}</p>
         </div>
         <div>
-          <span className="text-[10px] font-medium uppercase text-muted-foreground">Parent Group</span>
+          <span className="text-xs font-medium uppercase text-muted-foreground">Parent Group</span>
           <p className="text-foreground mt-0.5 truncate" title={parentGroup}>
             {parentGroup}
           </p>
         </div>
         <div className="flex gap-4 sm:col-span-2 lg:col-span-1 lg:justify-end">
           <div>
-            <span className="text-[10px] font-medium uppercase text-muted-foreground">Opening Balance</span>
+            <span className="text-xs font-medium uppercase text-muted-foreground">Opening Balance</span>
             <p className="font-semibold tabular-nums text-foreground mt-0.5">
               {formatBalanceAmount(openingAmount, openingSide)}
             </p>
           </div>
           <div>
-            <span className="text-[10px] font-medium uppercase text-muted-foreground">Closing Balance</span>
+            <span className="text-xs font-medium uppercase text-muted-foreground">Closing Balance</span>
             <p className="font-semibold tabular-nums text-foreground mt-0.5">
               {formatBalanceAmount(closingAmount, closingSide)}
             </p>

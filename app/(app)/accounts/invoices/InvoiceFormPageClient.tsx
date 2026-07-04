@@ -780,7 +780,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         </Section>
 
         <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3 lg:sticky lg:top-3 lg:z-10 shadow-sm">
-          <h2 className="text-[15px] font-semibold text-slate-900">Invoice Summary</h2>
+          <h2 className="text-base font-semibold text-slate-900">Invoice Summary</h2>
             <div className="space-y-2 text-sm">
               <div className="flex items-center justify-between gap-4 py-1">
                 <span className="text-muted-foreground">Product Sub Total</span>
@@ -810,7 +810,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               </div>
               <div className="flex items-center justify-between gap-4 py-2 border-t border-border/60">
                 <span className="font-semibold text-base">Total (₹)</span>
-                <span className="font-bold text-lg tabular-nums text-brand-700">{formatINR(totals.grandTotal)}</span>
+                <span className="font-bold text-base tabular-nums text-brand-700">{formatINR(totals.grandTotal)}</span>
               </div>
             </div>
           </div>

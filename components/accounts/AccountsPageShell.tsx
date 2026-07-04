@@ -54,7 +54,7 @@ export function AccountsPageShell({
     <div
       className={cn(
         "flex flex-col w-full",
-        isSplit ? "h-full min-h-0 overflow-hidden gap-3" : "gap-3",
+        isSplit ? "h-full min-h-0 overflow-hidden gap-2" : "gap-2",
         isConstrainedHeight && !isSplit && "h-full min-h-0 overflow-hidden",
         className,
       )}

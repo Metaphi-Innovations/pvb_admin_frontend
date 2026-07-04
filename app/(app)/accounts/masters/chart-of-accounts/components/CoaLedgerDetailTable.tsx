@@ -4,6 +4,7 @@ import React from "react";
 import { cn } from "@/lib/utils";
 import { MoneyAmount, MoneyCell } from "@/components/accounts/MoneyAmount";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { DrCrSideBadge } from "@/components/accounts/DrCrSideBadge";
 import { isoToDisplayDate } from "@/lib/accounts/date-display";
 import type { CoaLedgerDetailRow } from "../coa-demo-accounting";
 import {
@@ -95,16 +96,12 @@ export function CoaLedgerDetailTable({
                 </AccountsTableCell>
                 <AccountsTableCell align="center" className="whitespace-nowrap">
                   {r.runningBalance > 0 ? (
-                    <span
-                      className={cn(
-                        "text-[10px] font-semibold px-1.5 py-0.5 rounded",
-                        r.runningBalanceType === "Debit"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : "bg-navy-50 text-navy-700",
-                      )}
-                    >
-                      {r.runningBalanceType === "Debit" ? "Dr" : "Cr"}
-                    </span>
+                    <DrCrSideBadge
+                      debit={r.debit}
+                      credit={r.credit}
+                      runningBalanceType={r.runningBalanceType}
+                      isBalanceRow={Boolean(r.isOpeningRow)}
+                    />
                   ) : (
                     "—"
                   )}

@@ -23,14 +23,16 @@ import {
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 import { GENERAL_LEDGER_HREF, buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import { backfillCoaMasterLinks } from "@/lib/accounts/coa-master-link";
+import { resolveCoaTreeSelectionNode } from "@/lib/accounts/coa-tree-children";
 import { isPostableNode } from "@/lib/accounts/coa-hierarchy";
 import {
   buildTdsPartyWiseReportHref,
   isTdsCoaNode,
 } from "@/lib/accounts/tds-coa-utils";
-import { ensureTdsSectionLedgers } from "@/lib/accounts/tds-section-ledgers";
+import { ensureTdsAccountingLedgers } from "@/lib/accounts/tds-accounting";
 import { backfillErpPartyLedgers } from "@/lib/accounts/erp-accounting-mapping";
 import { subscribeCoaChanged } from "@/lib/accounts/coa-events";
+import { syncGstCoaFromMaster } from "@/lib/accounts/gst-coa-sync";
 
 const FULL_COA_SEED: ChartOfAccount[] = mergeBundledCoaDemoLedgers([...SYSTEM_COA_NODES]);
 
@@ -92,7 +94,8 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
     mountedRef.current = true;
     backfillErpPartyLedgers();
     backfillCoaMasterLinks();
-    ensureTdsSectionLedgers();
+    ensureTdsAccountingLedgers();
+    syncGstCoaFromMaster();
     const loaded = readCoaRecords();
     setRecords(loaded);
     setExpandedIds(defaultExpandedIds(loaded));
@@ -112,19 +115,20 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
 
   const selectNode = useCallback(
     (node: ChartOfAccount) => {
-      if (isTdsCoaNode(node, records) && !pathname.startsWith(CHART_OF_ACCOUNTS_HREF)) {
-        router.push(buildTdsPartyWiseReportHref(node, records));
+      const resolved = resolveCoaTreeSelectionNode(records, node);
+      if (isTdsCoaNode(resolved, records) && !pathname.startsWith(CHART_OF_ACCOUNTS_HREF)) {
+        router.push(buildTdsPartyWiseReportHref(resolved, records));
         return;
       }
-      setSelectedId(node.id);
-      if (node.nodeLevel !== "ledger" || hasChildLedgers(records, node.id)) {
-        setExpandedIds((prev) => new Set([...prev, node.id]));
+      setSelectedId(resolved.id);
+      if (resolved.nodeLevel !== "ledger" || hasChildLedgers(records, resolved.id)) {
+        setExpandedIds((prev) => new Set([...prev, resolved.id]));
       }
-      const href = `${CHART_OF_ACCOUNTS_HREF}?node=${node.id}`;
+      const href = `${CHART_OF_ACCOUNTS_HREF}?node=${resolved.id}`;
       if (pathname.startsWith(CHART_OF_ACCOUNTS_HREF)) {
         router.replace(href, { scroll: false });
-      } else if (node.nodeLevel === "ledger" && isPostableNode(node, records)) {
-        router.push(buildGeneralLedgerHref(node.id));
+      } else if (resolved.nodeLevel === "ledger" && isPostableNode(resolved, records)) {
+        router.push(buildGeneralLedgerHref(resolved.id));
       } else {
         router.push(href);
       }
@@ -138,7 +142,20 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
         const nodeParam = readClientSearchParam("node");
         if (nodeParam) {
           const id = Number(nodeParam);
-          if (!Number.isNaN(id)) setSelectedId(id);
+          if (!Number.isNaN(id)) {
+            const node = records.find((r) => r.id === id);
+            if (node) {
+              const resolved = resolveCoaTreeSelectionNode(records, node);
+              setSelectedId(resolved.id);
+              if (resolved.id !== id) {
+                router.replace(`${CHART_OF_ACCOUNTS_HREF}?node=${resolved.id}`, {
+                  scroll: false,
+                });
+              }
+            } else {
+              setSelectedId(id);
+            }
+          }
           return;
         }
         if (records.length > 0) {

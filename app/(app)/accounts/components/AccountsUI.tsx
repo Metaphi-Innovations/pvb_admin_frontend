@@ -107,8 +107,8 @@ export function SectionTabs({
           type="button"
           onClick={() => onChange(t.id)}
           className={cn(
-            "font-medium whitespace-nowrap border-b-2 -mb-px text-[13px] leading-none",
-            compact ? "px-2.5 py-2" : "px-3 py-2",
+            "font-medium whitespace-nowrap border-b-2 -mb-px leading-none",
+            compact ? "px-2 py-1.5 text-xs" : "px-3 py-2 text-sm",
             active === t.id
               ? "border-brand-600 text-brand-700"
               : "border-transparent text-slate-600 hover:text-slate-800",

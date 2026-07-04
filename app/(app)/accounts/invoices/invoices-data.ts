@@ -923,3 +923,68 @@ export function reconcileInvoiceCredits(
 	});
 	saveInvoices(all);
 }
+
+/** Apply a lump-sum credit amount across one or more invoices (manual / direct adjustment CNs). */
+export function applyCreditAmountToInvoices(
+	invoiceIds: number[],
+	amount: number,
+): void {
+	if (!invoiceIds.length || amount <= 0) return;
+
+	const all = loadInvoices();
+	const uniqueIds = [...new Set(invoiceIds)];
+	const targets = uniqueIds
+		.map((id) => all.find((inv) => inv.id === id))
+		.filter((inv): inv is InvoiceRecord => inv != null && inv.invoiceStatus !== "cancelled");
+
+	if (!targets.length) return;
+
+	let remaining = Math.round(amount * 100) / 100;
+	const perInvoice =
+		targets.length === 1
+			? remaining
+			: Math.round((amount / targets.length) * 100) / 100;
+
+	for (let i = 0; i < targets.length; i++) {
+		const inv = targets[i];
+		const idx = all.findIndex((r) => r.id === inv.id);
+		if (idx < 0) continue;
+
+		const balanceAllowed = Math.max(
+			0,
+			inv.balanceCreditAllowed ??
+				inv.grandTotal - (inv.amountCredited ?? 0) - (inv.amountReceived ?? 0),
+		);
+		const alloc =
+			i === targets.length - 1
+				? Math.min(remaining, balanceAllowed)
+				: Math.min(perInvoice, balanceAllowed, remaining);
+		if (alloc <= 0) continue;
+
+		const lines = inv.lineItems.length
+			? inv.lineItems.map((l, lineIdx) =>
+					lineIdx === 0
+						? { ...l, creditedAmount: (l.creditedAmount ?? 0) + alloc }
+						: l,
+				)
+			: inv.lineItems;
+
+		all[idx] = normalizeInvoice({
+			...inv,
+			lineItems: lines,
+			updatedAt: new Date().toISOString(),
+			activity: [
+				...inv.activity,
+				{
+					at: new Date().toISOString(),
+					action: "credit_applied",
+					by: ACCOUNTS_CURRENT_USER,
+					detail: `Credit note posted — ${alloc.toFixed(2)} applied to receivable`,
+				},
+			],
+		});
+		remaining = Math.round((remaining - alloc) * 100) / 100;
+	}
+
+	saveInvoices(all);
+}

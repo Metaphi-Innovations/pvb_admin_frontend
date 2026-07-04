@@ -22,7 +22,7 @@ export const INVOICE_FORM_READONLY_CLASS = cn(
 export const INVOICE_FORM_HELPER_CLASS = "text-xs text-slate-500";
 export const INVOICE_FORM_CARD_CLASS =
   "bg-white rounded-lg border border-slate-200 p-4 h-full";
-export const INVOICE_FORM_CARD_TITLE_CLASS = "text-[15px] font-semibold text-slate-900";
+export const INVOICE_FORM_CARD_TITLE_CLASS = "text-base font-semibold text-slate-900";
 export const INVOICE_FORM_GRID_CLASS = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3";
 export const INVOICE_FORM_TABLE_TH_CLASS =
   "px-2.5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 whitespace-nowrap";
@@ -75,7 +75,7 @@ export function InvoiceFormLayout({
               </p>
               <h1 className="text-xl font-semibold text-slate-900 leading-tight truncate">{title}</h1>
               {subtitle ? (
-                <p className="text-[13px] text-slate-500 mt-0.5 truncate">{subtitle}</p>
+                <p className="text-xs text-slate-500 mt-0.5 truncate">{subtitle}</p>
               ) : null}
             </div>
           </div>

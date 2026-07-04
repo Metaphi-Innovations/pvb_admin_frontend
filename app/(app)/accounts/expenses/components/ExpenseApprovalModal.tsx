@@ -96,15 +96,15 @@ export function ExpenseApprovalModal({
         <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div>
-              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Expense No.</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Expense No.</p>
               <p className="font-mono font-semibold text-foreground mt-0.5">{expense?.expenseNumber}</p>
             </div>
             <div>
-              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Employee</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Employee</p>
               <p className="font-medium text-foreground mt-0.5">{expense?.employeeName}</p>
             </div>
             <div className="col-span-2">
-              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Category</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Category</p>
               <p className="font-medium text-foreground mt-0.5">{expense?.categoryName}</p>
             </div>
           </div>
@@ -114,14 +114,14 @@ export function ExpenseApprovalModal({
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Approved Amount (editable)</Label>
             <AccountsMoneyInput
-              className="h-9 text-[13px] font-medium font-semibold"
+              className="h-9 text-sm font-medium font-semibold"
               value={approvedInput}
               onChange={(v) => {
                 setApprovedInput(String(v));
                 setError(null);
               }}
             />
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Claimed: {formatINR(claimed)}
               {parsedApproved < claimed && parsedApproved > 0 && (
                 <span className="text-amber-700 ml-2">
@@ -149,7 +149,7 @@ export function ExpenseApprovalModal({
           <div className="flex flex-wrap gap-2 w-full">
             <Button
               size="sm"
-              className="h-9 text-[13px] font-medium flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="h-9 text-sm font-medium flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
               onClick={handleFull}
             >
               Approve Full Amount
@@ -157,7 +157,7 @@ export function ExpenseApprovalModal({
             <Button
               size="sm"
               variant="outline"
-              className="h-9 text-[13px] font-medium flex-1 border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+              className="h-9 text-sm font-medium flex-1 border-emerald-300 text-emerald-800 hover:bg-emerald-50"
               onClick={handlePartial}
               disabled={parsedApproved <= 0 || parsedApproved > claimed}
             >
@@ -168,12 +168,12 @@ export function ExpenseApprovalModal({
             <Button
               size="sm"
               variant="outline"
-              className="h-9 text-[13px] font-medium flex-1 text-red-600 border-red-200 hover:bg-red-50"
+              className="h-9 text-sm font-medium flex-1 text-red-600 border-red-200 hover:bg-red-50"
               onClick={handleReject}
             >
               Reject
             </Button>
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium flex-1" onClick={onClose}>
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium flex-1" onClick={onClose}>
               Cancel
             </Button>
           </div>

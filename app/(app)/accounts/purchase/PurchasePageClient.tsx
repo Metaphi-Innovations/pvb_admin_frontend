@@ -69,7 +69,7 @@ export default function PurchasePageClient() {
           description="Supplier invoices from PO uploads and manual entries for accounts payable."
           breadcrumbs={PURCHASE_BREADCRUMB}
           actions={
-            <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5" asChild>
+            <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5" asChild>
               <Link href={`${PURCHASE_LIST_PATH}/new`}>
                 <Plus className="w-4 h-4" />
                 Manual Purchase Entry
@@ -78,7 +78,7 @@ export default function PurchasePageClient() {
           }
         />
 
-        <p className="text-[11px] text-muted-foreground px-1">
+        <p className="text-xs text-muted-foreground px-1">
           Most purchases are created when you upload a supplier invoice on a Purchase Order in Procurement.
         </p>
 
@@ -88,7 +88,7 @@ export default function PurchasePageClient() {
           searchPlaceholder="Purchase no., supplier invoice no., supplier, PO…"
         >
           <Select value={source} onValueChange={setSource}>
-            <SelectTrigger className="h-8 w-[130px] text-xs bg-white">
+            <SelectTrigger className="h-8 w-[130px] text-sm bg-white">
               <SelectValue placeholder="Source" />
             </SelectTrigger>
             <SelectContent>
@@ -98,7 +98,7 @@ export default function PurchasePageClient() {
             </SelectContent>
           </Select>
           <Select value={vendor} onValueChange={setVendor}>
-            <SelectTrigger className="h-8 w-[140px] text-xs bg-white">
+            <SelectTrigger className="h-8 w-[140px] text-sm bg-white">
               <SelectValue placeholder="Supplier" />
             </SelectTrigger>
             <SelectContent>
@@ -137,7 +137,7 @@ export default function PurchasePageClient() {
                   ].map((h) => (
                     <th
                       key={h || "a"}
-                      className="px-2.5 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap"
+                      className="px-2.5 py-2 text-left text-xs font-semibold uppercase text-muted-foreground whitespace-nowrap"
                     >
                       {h}
                     </th>

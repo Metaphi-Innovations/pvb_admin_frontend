@@ -49,7 +49,7 @@ import {
   exportJournalRegisterToPdf,
 } from "./journal-register-export";
 
-// ─── Voucher Detail Modal ────────────────────────────────────────────────────
+// â”€â”€â”€ Voucher Detail Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function JournalVoucherDetailModal({
   row,
@@ -74,29 +74,29 @@ function JournalVoucherDetailModal({
           {/* Header info */}
           <div className="grid grid-cols-2 gap-2 bg-muted/30 rounded-lg px-3 py-2.5 text-xs">
             <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-0.5">Date</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-0.5">Date</p>
               <p className="font-medium">{formatJournalRegisterDate(row.date)}</p>
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-0.5">Reference No.</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-0.5">Reference No.</p>
               <p className="font-mono font-medium">{row.referenceNo === "—" ? "—" : row.referenceNo}</p>
             </div>
           </div>
 
           {/* Ledger entries */}
           <div className="border border-border rounded-lg overflow-hidden">
-            <div className="grid grid-cols-[1fr_auto] gap-0 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/40 border-b border-border px-3 py-1.5">
+            <div className="grid grid-cols-[1fr_auto] gap-0 text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-muted/40 border-b border-border px-3 py-1.5">
               <span>Ledger</span>
               <span className="text-right">Amount (₹)</span>
             </div>
             {/* Debit row */}
             <div className="grid grid-cols-[1fr_auto] gap-2 px-3 py-2.5 border-b border-border/60">
               <div>
-                <p className="text-[10px] text-muted-foreground mb-0.5">Dr (Debit)</p>
+                <p className="text-xs text-muted-foreground mb-0.5">Dr (Debit)</p>
                 <p className="text-xs font-medium text-foreground">{row.debitLedger}</p>
               </div>
               <div className="text-right">
-                <p className="text-[10px] text-muted-foreground mb-0.5">&nbsp;</p>
+                <p className="text-xs text-muted-foreground mb-0.5">&nbsp;</p>
                 <p className="text-xs font-semibold font-mono text-foreground">
                   {formatMoney(row.debitAmount)}
                 </p>
@@ -105,11 +105,11 @@ function JournalVoucherDetailModal({
             {/* Credit row */}
             <div className="grid grid-cols-[1fr_auto] gap-2 px-3 py-2.5">
               <div>
-                <p className="text-[10px] text-muted-foreground mb-0.5">Cr (Credit)</p>
+                <p className="text-xs text-muted-foreground mb-0.5">Cr (Credit)</p>
                 <p className="text-xs font-medium text-foreground">{row.creditLedger}</p>
               </div>
               <div className="text-right">
-                <p className="text-[10px] text-muted-foreground mb-0.5">&nbsp;</p>
+                <p className="text-xs text-muted-foreground mb-0.5">&nbsp;</p>
                 <p className="text-xs font-semibold font-mono text-foreground">
                   {formatMoney(row.creditAmount)}
                 </p>
@@ -120,7 +120,7 @@ function JournalVoucherDetailModal({
           {/* Narration */}
           {row.narration && row.narration !== "—" && (
             <div className="bg-muted/20 rounded-lg px-3 py-2.5">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-1">Narration</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-1">Narration</p>
               <p className="text-xs text-foreground leading-relaxed">{row.narration}</p>
             </div>
           )}
@@ -155,7 +155,7 @@ function JournalVoucherDetailModal({
   );
 }
 
-// ─── Main Page ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Main Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function JournalRegisterPageClient() {
   const mounted = useClientMounted();
@@ -415,7 +415,7 @@ export default function JournalRegisterPageClient() {
               {sorted.length > 0 && (
                 <AccountsTableFoot>
                   <AccountsTableRow>
-                    <AccountsTableCell colSpan={6} className="font-semibold text-[11px] text-foreground">
+                    <AccountsTableCell colSpan={6} className="font-semibold text-xs text-foreground">
                       Total ({summary.count} entries)
                     </AccountsTableCell>
                     <AccountsTableCell
@@ -441,7 +441,7 @@ export default function JournalRegisterPageClient() {
 
           {sorted.length > 0 && (
             <div className="flex flex-col gap-2 border-t border-border bg-muted/20 px-4 py-2 flex-shrink-0">
-              <div className="flex items-center gap-2 text-[11px]">
+              <div className="flex items-center gap-2 text-xs">
                 {summary.isBalanced ? (
                   <>
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />

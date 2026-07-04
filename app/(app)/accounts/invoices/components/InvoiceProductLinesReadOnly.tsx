@@ -67,7 +67,7 @@ export function InvoiceProductLinesReadOnly({
 
   return (
     <div className="space-y-2">
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         Line items from dispatch — read-only. Product discount scheme is applied as per sales order.
       </p>
       <div className="overflow-x-auto border border-border rounded-xl bg-white shadow-sm">
@@ -120,7 +120,7 @@ export function InvoiceProductLinesReadOnly({
                       </p>
                       <p className="text-xs font-medium text-foreground mt-0.5">{line.productName}</p>
                       {line.description && (
-                        <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[220px]">
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[220px]">
                           {line.description}
                         </p>
                       )}
@@ -145,7 +145,7 @@ export function InvoiceProductLinesReadOnly({
                     </td>
                     <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "min-w-[140px]")}>
                       {line.schemeApplied === "Yes" || line.schemeCode ? (
-                        <span className="inline-flex items-center text-[11px] px-2 py-0.5 rounded-md bg-brand-50 border border-brand-200 text-brand-700 font-medium">
+                        <span className="inline-flex items-center text-xs px-2 py-0.5 rounded-md bg-brand-50 border border-brand-200 text-brand-700 font-medium">
                           {formatSchemeDiscount(line)}
                         </span>
                       ) : (

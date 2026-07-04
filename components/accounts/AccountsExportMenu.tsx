@@ -45,13 +45,18 @@ export function AccountsExportMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
         {handleExcel && (
-          <DropdownMenuItem className="text-[13px] gap-2" onClick={handleExcel}>
+          <DropdownMenuItem className="text-xs gap-2" onClick={handleExcel}>
             <FileSpreadsheet className="w-4 h-4" /> Export Excel
           </DropdownMenuItem>
         )}
         {handlePdf && (
-          <DropdownMenuItem className="text-[13px] gap-2" onClick={handlePdf}>
+          <DropdownMenuItem className="text-xs gap-2" onClick={handlePdf}>
             <FileDown className="w-4 h-4" /> Export PDF
+          </DropdownMenuItem>
+        )}
+        {onCsv && (
+          <DropdownMenuItem className="text-xs gap-2" onClick={onCsv}>
+            <Download className="w-4 h-4" /> Export CSV
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

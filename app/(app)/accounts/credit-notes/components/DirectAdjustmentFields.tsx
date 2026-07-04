@@ -83,7 +83,7 @@ export function DirectAdjustmentFields({
           Amount <span className="text-red-500">*</span>
         </Label>
         <AccountsMoneyInput
-          className="h-9 text-[13px] font-medium"
+          className="h-9 text-sm font-medium"
           value={amount}
           onChange={(v) => onAmountChange(String(v))}
           disabled={disabled}
@@ -108,7 +108,7 @@ export function DirectAdjustmentFields({
               type="number"
               min={0}
               max={100}
-              className="h-9 text-[13px]"
+              className="h-9 text-sm"
               value={gstPct}
               onChange={(e) => onGstPctChange(e.target.value)}
               disabled={disabled}
@@ -120,7 +120,7 @@ export function DirectAdjustmentFields({
       <div className="md:col-span-2 space-y-1">
         <Label className="text-xs font-medium">Remarks</Label>
         <Textarea
-          className="min-h-[72px] text-[13px] resize-none"
+          className="min-h-[72px] text-xs resize-none"
           value={remarks}
           onChange={(e) => onRemarksChange(e.target.value)}
           placeholder="Additional remarks…"

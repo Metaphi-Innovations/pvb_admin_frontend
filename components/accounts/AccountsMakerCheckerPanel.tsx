@@ -100,13 +100,13 @@ export function AccountsMakerCheckerPanel({
           <p className="text-xs font-semibold text-foreground">Approval Workflow</p>
           <AccountsVoucherStatusBadge workflow={workflow} legacyStatus={legacyStatus} />
         </div>
-        <p className="text-[11px] text-muted-foreground mt-0.5">
+        <p className="text-xs text-muted-foreground mt-0.5">
           Maker: {workflow.makerName} — {workflow.makerRole}
         </p>
       </div>
 
       <div className="px-4 py-4 space-y-0">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
+        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">
           Approval Chain
         </p>
         {workflow.steps.map((step, i) => {
@@ -141,7 +141,7 @@ export function AccountsMakerCheckerPanel({
                   </p>
                   <span
                     className={cn(
-                      "text-[10px] font-semibold flex-shrink-0",
+                      "text-xs font-semibold flex-shrink-0",
                       step.state === "pending" ? "text-brand-700" : "text-muted-foreground",
                     )}
                   >
@@ -149,10 +149,10 @@ export function AccountsMakerCheckerPanel({
                   </span>
                 </div>
                 {step.level > 0 && (
-                  <p className="text-[11px] text-muted-foreground">{step.label}</p>
+                  <p className="text-xs text-muted-foreground">{step.label}</p>
                 )}
                 {step.remarks && (
-                  <p className="text-[11px] text-muted-foreground mt-0.5 italic">{step.remarks}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 italic">{step.remarks}</p>
                 )}
               </div>
             </div>
@@ -186,7 +186,7 @@ export function AccountsMakerCheckerPanel({
             <Button
               variant="outline"
               size="sm"
-              className="h-9 text-[13px] font-medium"
+              className="h-9 text-sm font-medium"
               disabled={saving}
               onClick={onSaveDraft}
             >
@@ -196,7 +196,7 @@ export function AccountsMakerCheckerPanel({
           {canSubmit && status === "draft" && onSubmitForApproval && (
             <Button
               size="sm"
-              className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
+              className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
               disabled={saving}
               onClick={() => onSubmitForApproval(remarks)}
             >
@@ -207,7 +207,7 @@ export function AccountsMakerCheckerPanel({
             <Button
               variant="outline"
               size="sm"
-              className="h-9 text-[13px] font-medium gap-1.5"
+              className="h-9 text-sm font-medium gap-1.5"
               disabled={saving}
               onClick={() => onResubmit(remarks)}
             >
@@ -215,7 +215,7 @@ export function AccountsMakerCheckerPanel({
             </Button>
           )}
           {isViewOnly && (
-            <p className="text-[11px] text-amber-700 font-medium w-full">
+            <p className="text-xs text-amber-700 font-medium w-full">
               Pending approval — editing is disabled until the checker acts.
             </p>
           )}
@@ -223,7 +223,7 @@ export function AccountsMakerCheckerPanel({
             <>
               <Button
                 size="sm"
-                className="h-9 text-[13px] font-medium bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                className="h-9 text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
                 disabled={saving}
                 onClick={() => onApprove?.(remarks)}
               >
@@ -232,7 +232,7 @@ export function AccountsMakerCheckerPanel({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 text-[13px] font-medium text-red-600 gap-1.5"
+                className="h-9 text-sm font-medium text-red-600 gap-1.5"
                 disabled={saving}
                 onClick={() => {
                   setConfirmRemarks(remarks);
@@ -244,7 +244,7 @@ export function AccountsMakerCheckerPanel({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 text-[13px] font-medium text-navy-700 gap-1.5"
+                className="h-9 text-sm font-medium text-navy-700 gap-1.5"
                 disabled={saving}
                 onClick={() => {
                   setConfirmRemarks(remarks);
@@ -258,7 +258,7 @@ export function AccountsMakerCheckerPanel({
           {status === "rejected" && onDuplicate && (
             <Button
               size="sm"
-              className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
+              className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white"
               onClick={onDuplicate}
             >
               Duplicate &amp; Create New
@@ -269,12 +269,12 @@ export function AccountsMakerCheckerPanel({
 
       {workflow.history.length > 0 && (
         <div className="px-4 py-3 border-t border-border">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
             Approval History
           </p>
           <div className="space-y-2 max-h-40 overflow-y-auto">
             {[...workflow.history].reverse().map((h, i) => (
-              <div key={`${h.at}-${i}`} className="text-[11px]">
+              <div key={`${h.at}-${i}`} className="text-xs">
                 <p className="font-medium text-foreground capitalize">
                   {h.action.replaceAll("_", " ")} — {h.by}
                 </p>
@@ -320,13 +320,13 @@ export function AccountsMakerCheckerPanel({
             placeholder="Enter remarks…"
           />
           <div className="flex items-center justify-end gap-2 pt-2">
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => setConfirm(null)}>
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => setConfirm(null)}>
               Cancel
             </Button>
             <Button
               size="sm"
               className={cn(
-                "h-9 text-[13px] font-medium text-white",
+                "h-9 text-sm font-medium text-white",
                 confirm === "reject" ? "bg-red-600 hover:bg-red-700" : "bg-navy-600 hover:bg-navy-700",
               )}
               disabled={!confirmRemarks.trim()}

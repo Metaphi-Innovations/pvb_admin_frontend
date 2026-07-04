@@ -69,7 +69,7 @@ export function CreateLedgerModal({
         <DialogHeader>
           <DialogTitle className="text-sm">Create Ledger</DialogTitle>
         </DialogHeader>
-        <p className="text-[11px] text-muted-foreground -mt-2">
+        <p className="text-xs text-muted-foreground -mt-2">
           Quick-create expense or GST ledgers only. Customer, vendor and bank ledgers are created in their respective masters.
         </p>
         {error && <p className="text-xs text-red-600">{error}</p>}
@@ -77,7 +77,7 @@ export function CreateLedgerModal({
           <div className="space-y-1">
             <Label className="text-xs">Ledger Name</Label>
             <Input
-              className="h-9 text-[13px] font-medium"
+              className="h-9 text-sm font-medium"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Bank Charges"
@@ -86,7 +86,7 @@ export function CreateLedgerModal({
           <div className="space-y-1">
             <Label className="text-xs">Account Type</Label>
             <Select value={accountType} onValueChange={(v) => setAccountType(v as AccountType)}>
-              <SelectTrigger className="h-9 text-[13px] font-medium">
+              <SelectTrigger className="h-9 text-sm font-medium">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -109,12 +109,12 @@ export function CreateLedgerModal({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
             size="sm"
-            className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
+            className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white"
             onClick={handleSave}
             disabled={!name.trim()}
           >

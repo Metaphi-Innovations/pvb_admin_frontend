@@ -4,33 +4,28 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
 import { SearchableSelect } from "../credit-notes/components/SearchableSelect";
-import { NoteTypeSelector } from "../credit-notes/components/NoteTypeSelector";
-import { DirectAdjustmentFields } from "../credit-notes/components/DirectAdjustmentFields";
 import { DebitNoteProductTable } from "./components/DebitNoteProductTable";
+import { FreshDebitNoteForm, computeFreshDebitTotals } from "./components/FreshDebitNoteForm";
 import {
   applyReturnQtyToDebitLines,
   buildReferenceFromPurchaseReturn,
-  canUseStandaloneDebit,
   computeDebitTotals,
   createDebitNote,
-  getDebitLineMaxQty,
+  DEBIT_REASONS,
   getDebitNoteById,
+  getDebitLineMaxQty,
+  getPendingDebitNoteRow,
   getVendorsForDebitNote,
-  listCreditablePurchaseInvoices,
-  listPurchaseReturnsForDebitNote,
-  MANUAL_DEBIT_REASONS,
   newDebitAttachmentId,
   normalizeDebitLine,
+  postDebitNoteRecord,
   previewToDebitForm,
   updateDebitNote,
-  approveDebitNote,
   validateDebitNoteLines,
   type DebitNoteAttachment,
-  type DebitNoteCreationMode,
   type DebitNoteLine,
   type DebitReferencePreview,
   type NoteWorkflowStatus,
@@ -43,21 +38,26 @@ import {
   vendorMasterToTransactionFields,
   type VendorTransactionFields,
 } from "@/lib/accounts/transaction-master-fetch";
-import { Download, Eye, Trash2, Upload } from "lucide-react";
+import { Download, Eye, Save, Trash2, Upload } from "lucide-react";
 
-const NOTE_TYPE_OPTIONS: { value: DebitNoteCreationMode; label: string }[] = [
-  { value: "against_return", label: "Against Purchase Return (Quantity Based)" },
-  { value: "direct_adjustment", label: "Direct Amount Adjustment" },
-];
+type FormMode = "fresh" | "return";
 
-export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?: number }) {
+export default function DebitNoteFormPageClient({
+  debitNoteId,
+  returnId,
+  mode,
+}: {
+  debitNoteId?: number;
+  returnId?: number;
+  mode?: FormMode;
+}) {
   const router = useRouter();
   const isEdit = debitNoteId != null;
-  const vendors = useMemo(() => getVendorsForDebitNote(), []);
-  const purchaseReturns = useMemo(() => listPurchaseReturnsForDebitNote(), []);
-  const invoices = useMemo(() => listCreditablePurchaseInvoices(), []);
+  const isFresh = !isEdit && mode === "fresh";
+  const isReturn = !isEdit && (mode === "return" || returnId != null);
 
-  const [noteType, setNoteType] = useState<DebitNoteCreationMode>("against_return");
+  const vendors = useMemo(() => getVendorsForDebitNote(), []);
+
   const [debitNoteNo, setDebitNoteNo] = useState("");
   const [debitNoteDate, setDebitNoteDate] = useState(new Date().toISOString().slice(0, 10));
   const [vendorId, setVendorId] = useState("");
@@ -66,12 +66,13 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
   const [shipToId, setShipToId] = useState("");
   const [billingAddress, setBillingAddress] = useState("");
   const [shippingAddress, setShippingAddress] = useState("");
-  const [referenceReturnId, setReferenceReturnId] = useState("");
-  const [sourceReturnId, setSourceReturnId] = useState("");
-  const [sourceReturnNo, setSourceReturnNo] = useState("");
   const [referencePreview, setReferencePreview] = useState<DebitReferencePreview | null>(null);
   const [sourceInvoiceId, setSourceInvoiceId] = useState<number | null>(null);
   const [sourcePoId, setSourcePoId] = useState<number | null>(null);
+  const [sourceReturnId, setSourceReturnId] = useState("");
+  const [sourceReturnNo, setSourceReturnNo] = useState("");
+  const [sourcePackingNo, setSourcePackingNo] = useState("");
+  const [sourceDispatchNo, setSourceDispatchNo] = useState("");
   const [originalAmount, setOriginalAmount] = useState("");
   const [alreadyAdjusted, setAlreadyAdjusted] = useState("0");
   const [lines, setLines] = useState<DebitNoteLine[]>([]);
@@ -80,34 +81,16 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
   const [attachments, setAttachments] = useState<DebitNoteAttachment[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const [directAmount, setDirectAmount] = useState("");
-  const [directGstApplicable, setDirectGstApplicable] = useState(false);
-  const [directGstPct, setDirectGstPct] = useState("18");
-  const [directRefInvoiceId, setDirectRefInvoiceId] = useState("");
+  const [referenceNo, setReferenceNo] = useState("");
+  const [adjustmentLedgerId, setAdjustmentLedgerId] = useState<number | null>(null);
+  const [adjustmentLedgerName, setAdjustmentLedgerName] = useState("");
+  const [taxableAmount, setTaxableAmount] = useState("");
+  const [gstApplicable, setGstApplicable] = useState(false);
+  const [gstPct, setGstPct] = useState("18");
+  const [narration, setNarration] = useState("");
 
-  const isAgainstMode = noteType === "against_return";
-  const vendorLocked = isAgainstMode && Boolean(referencePreview);
+  const vendorLocked = isReturn && Boolean(referencePreview);
   const alreadyAdjustedNum = parseFloat(alreadyAdjusted) || 0;
-
-  const returnOptions = useMemo(
-    () =>
-      purchaseReturns.map((ret) => ({
-        value: String(ret.id),
-        label: ret.returnNumber,
-        sub: `${ret.supplierName} · ${ret.poNumber} · ${ret.returnDate}`,
-      })),
-    [purchaseReturns],
-  );
-
-  const invoiceOptions = useMemo(
-    () =>
-      invoices.map((inv) => ({
-        value: String(inv.id),
-        label: inv.vendorInvoiceNo ? `${inv.vendorInvoiceNo} (${inv.invoiceNo})` : inv.invoiceNo,
-        sub: `${inv.vendorName} · ${formatINR(inv.grandTotal)}`,
-      })),
-    [invoices],
-  );
 
   const onVendorChange = (id: string, fields: VendorTransactionFields | null) => {
     setVendorId(id);
@@ -122,23 +105,15 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
     setShippingAddress(fields.shippingAddress);
   };
 
-  const clearReference = () => {
-    setReferenceReturnId("");
-    setReferencePreview(null);
-    setSourceInvoiceId(null);
-    setSourcePoId(null);
-    setSourceReturnId("");
-    setSourceReturnNo("");
-    setOriginalAmount("");
-    setAlreadyAdjusted("0");
-    setLines([]);
-  };
-
-  const applyPreview = (preview: DebitReferencePreview) => {
+  const applyPreview = (preview: DebitReferencePreview, retId: number, retNo: string) => {
     setReferencePreview(preview);
     const pre = previewToDebitForm(preview);
     setSourceInvoiceId(pre.sourceInvoiceId ?? null);
     setSourcePoId(pre.sourcePoId ?? null);
+    setSourceReturnId(String(retId));
+    setSourceReturnNo(retNo);
+    setSourcePackingNo(preview.sourcePackingNo ?? "");
+    setSourceDispatchNo(preview.sourceDispatchNo ?? "");
     if (pre.vendorId) {
       const v = vendors.find((x) => x.id === pre.vendorId);
       if (v) onVendorChange(String(pre.vendorId), vendorMasterToTransactionFields(v));
@@ -146,36 +121,28 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
     }
     setOriginalAmount(String(pre.originalAmount ?? ""));
     setAlreadyAdjusted(String(pre.alreadyAdjustedAmount ?? 0));
+    setReason("Purchase Return");
+    setRemarks(preview.dispatchStatus ? `Dispatch: ${preview.dispatchStatus}` : "");
     if (pre.lineItems?.length) {
-      setLines(pre.lineItems.map((l) => normalizeDebitLine(l)));
+      const withQty = pre.lineItems.map((l) => {
+        const normalized = normalizeDebitLine(l);
+        const qty = normalized.eligibleReturnQty ?? normalized.purchaseReturnQty ?? 0;
+        return applyReturnQtyToDebitLines([normalized], normalized.id, qty, alreadyAdjustedNum)[0];
+      });
+      setLines(withQty);
     }
   };
 
-  const onPurchaseReturnSelect = (id: string) => {
-    setReferenceReturnId(id);
-    if (!id) {
-      clearReference();
-      return;
+  useEffect(() => {
+    if (!isReturn || returnId == null || isEdit) return;
+    const pending = getPendingDebitNoteRow(returnId);
+    const preview = buildReferenceFromPurchaseReturn(returnId);
+    if (preview && pending) {
+      applyPreview(preview, returnId, pending.returnNumber);
+    } else if (preview) {
+      applyPreview(preview, returnId, `PRET-${returnId}`);
     }
-    const ret = purchaseReturns.find((r) => String(r.id) === id);
-    const preview = buildReferenceFromPurchaseReturn(Number(id));
-    if (preview && ret) {
-      setSourceReturnId(String(ret.id));
-      setSourceReturnNo(ret.returnNumber);
-      applyPreview(preview);
-    }
-  };
-
-  const onNoteTypeChange = (mode: DebitNoteCreationMode) => {
-    if (mode === "direct_adjustment" && !canUseStandaloneDebit()) return;
-    setNoteType(mode);
-    clearReference();
-    setDirectAmount("");
-    setReason("");
-    setDirectRefInvoiceId("");
-    setDirectGstApplicable(false);
-    setError(null);
-  };
+  }, [isReturn, returnId, isEdit, vendors]);
 
   useEffect(() => {
     if (!isEdit || debitNoteId == null) return;
@@ -184,8 +151,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
       router.replace(DEBIT_NOTES_LIST_PATH);
       return;
     }
-    const isDirect = rec.againstType === "standalone_adjustment";
-    setNoteType(isDirect ? "direct_adjustment" : "against_return");
+    const fresh = rec.againstType === "standalone_adjustment";
     setDebitNoteNo(rec.debitNoteNo);
     setDebitNoteDate(rec.debitNoteDate);
     setVendorId(rec.vendorId ? String(rec.vendorId) : "");
@@ -197,15 +163,21 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
     setSourcePoId(rec.sourcePoId);
     setSourceReturnId(rec.sourceReturnId ?? "");
     setSourceReturnNo(rec.sourceReturnNo ?? "");
-    if (rec.sourceReturnId) setReferenceReturnId(rec.sourceReturnId);
+    setSourcePackingNo(rec.sourcePackingNo ?? "");
+    setSourceDispatchNo(rec.sourceDispatchNo ?? "");
     setOriginalAmount(String(rec.originalAmount));
     setAlreadyAdjusted(String(rec.alreadyAdjustedAmount));
     setReason(rec.reason);
     setRemarks(rec.remarks);
     setAttachments(rec.attachments ?? []);
-    if (isDirect) {
-      setDirectAmount(String(rec.standaloneDebitAmount || rec.currentDebitAmount));
-      setDirectRefInvoiceId(rec.sourceInvoiceId ? String(rec.sourceInvoiceId) : "");
+    if (fresh) {
+      setReferenceNo(rec.referenceNo ?? "");
+      setAdjustmentLedgerId(rec.adjustmentLedgerId ?? null);
+      setAdjustmentLedgerName(rec.adjustmentLedgerName ?? "");
+      setTaxableAmount(String(rec.taxableAmount || rec.standaloneDebitAmount));
+      setGstApplicable((rec.gstAmount ?? 0) > 0);
+      setGstPct(String(rec.freshGstPct ?? 18));
+      setNarration(rec.remarks);
     } else {
       setLines(rec.lineItems.map((l) => normalizeDebitLine(l)));
       if (rec.sourceReturnId) {
@@ -215,13 +187,9 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
     }
   }, [isEdit, debitNoteId, router, vendors]);
 
-  const directBase = parseFloat(directAmount) || 0;
-  const directGst = directGstApplicable ? (directBase * (parseFloat(directGstPct) || 0)) / 100 : 0;
-  const directTotal = Math.round((directBase + directGst) * 100) / 100;
-
+  const freshTotals = computeFreshDebitTotals(taxableAmount, gstApplicable, gstPct);
   const lineTotals = useMemo(() => computeDebitTotals(lines), [lines]);
-  const totalDebit = isAgainstMode ? lineTotals.total : directTotal;
-  const original = parseFloat(originalAmount) || totalDebit;
+  const totalDebit = isFresh ? freshTotals.total : lineTotals.total;
 
   const onDebitQtyChange = (lineId: string, qty: number) => {
     const line = lines.find((l) => l.id === lineId);
@@ -237,29 +205,63 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
     return "";
   };
 
-  const buildInput = (status: NoteWorkflowStatus) => ({
-    debitNoteDate,
-    againstType: isAgainstMode ? ("purchase_invoice" as const) : ("standalone_adjustment" as const),
-    vendorId: vendorId ? Number(vendorId) : null,
-    vendorName: resolveVendorName(),
-    sourceInvoiceId: isAgainstMode ? sourceInvoiceId : directRefInvoiceId ? Number(directRefInvoiceId) : null,
-    sourceInvoiceNo: referencePreview?.sourceInvoiceNo ?? "",
-    sourcePoId: sourcePoId ?? referencePreview?.sourcePoId ?? null,
-    sourcePoNo: referencePreview?.sourcePoNo ?? "",
-    sourceGrnNo: referencePreview?.sourceGrnNo ?? "",
-    sourceQcNo: referencePreview?.sourceQcNo ?? "",
-    originalAmount: isAgainstMode ? original : directTotal,
-    alreadyAdjustedAmount: isAgainstMode ? alreadyAdjustedNum : 0,
-    standaloneDebitAmount: isAgainstMode ? 0 : directTotal,
-    lineItems: isAgainstMode ? lines.filter((l) => l.productName && l.returnQty > 0) : [],
-    reason,
-    remarks,
-    attachments,
-    status,
-    source: isAgainstMode && sourceReturnNo ? ("purchase_return" as const) : ("manual" as const),
-    sourceReturnId: sourceReturnId || undefined,
-    sourceReturnNo: sourceReturnNo || undefined,
-  });
+  const buildInput = (status: NoteWorkflowStatus) => {
+    if (isFresh) {
+      return {
+        debitNoteDate,
+        againstType: "standalone_adjustment" as const,
+        vendorId: vendorId ? Number(vendorId) : null,
+        vendorName: resolveVendorName(),
+        sourceInvoiceId: null,
+        sourceInvoiceNo: "",
+        sourcePoId: null,
+        sourcePoNo: "",
+        sourceGrnNo: "",
+        sourceQcNo: "",
+        originalAmount: freshTotals.total,
+        alreadyAdjustedAmount: 0,
+        standaloneDebitAmount: freshTotals.total,
+        taxableAmount: freshTotals.taxable,
+        gstAmount: freshTotals.gstAmount,
+        freshGstPct: gstApplicable ? freshTotals.rate : 0,
+        lineItems: [] as DebitNoteLine[],
+        reason,
+        remarks: narration || remarks,
+        referenceNo,
+        adjustmentLedgerId,
+        adjustmentLedgerName,
+        attachments,
+        status,
+        source: "manual" as const,
+      };
+    }
+
+    return {
+      debitNoteDate,
+      againstType: "purchase_invoice" as const,
+      vendorId: vendorId ? Number(vendorId) : null,
+      vendorName: resolveVendorName(),
+      sourceInvoiceId,
+      sourceInvoiceNo: referencePreview?.sourceInvoiceNo ?? "",
+      sourcePoId: sourcePoId ?? referencePreview?.sourcePoId ?? null,
+      sourcePoNo: referencePreview?.sourcePoNo ?? "",
+      sourceGrnNo: referencePreview?.sourceGrnNo ?? "",
+      sourceQcNo: referencePreview?.sourceQcNo ?? "",
+      sourcePackingNo,
+      sourceDispatchNo,
+      originalAmount: parseFloat(originalAmount) || totalDebit,
+      alreadyAdjustedAmount: alreadyAdjustedNum,
+      standaloneDebitAmount: 0,
+      lineItems: lines.filter((l) => l.productName && l.returnQty > 0),
+      reason,
+      remarks,
+      attachments,
+      status,
+      source: "purchase_return" as const,
+      sourceReturnId: sourceReturnId || undefined,
+      sourceReturnNo: sourceReturnNo || undefined,
+    };
+  };
 
   const handleFile = (file: File, documentName: string) => {
     const reader = new FileReader();
@@ -278,60 +280,94 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
     reader.readAsDataURL(file);
   };
 
-  const postNote = () => {
+  const validateForm = (): boolean => {
+    if (!resolveVendorName().trim()) {
+      setError("Select a supplier before saving.");
+      return false;
+    }
+    if (!reason.trim()) {
+      setError("Select a reason / adjustment type.");
+      return false;
+    }
+    if (isFresh) {
+      if (!adjustmentLedgerId) {
+        setError("Select an adjustment ledger.");
+        return false;
+      }
+      if (freshTotals.total <= 0) {
+        setError("Enter a valid debit amount.");
+        return false;
+      }
+    } else {
+      if (!referencePreview) {
+        setError("Purchase return reference is missing.");
+        return false;
+      }
+      validateDebitNoteLines(lines);
+      if (totalDebit <= 0) {
+        setError("Enter debit qty on at least one line.");
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const saveDraft = () => {
     setError(null);
     try {
-      if (!resolveVendorName().trim()) {
-        setError("Select a supplier before posting.");
-        return;
-      }
-      if (!reason.trim()) {
-        setError("Select a reason before posting.");
-        return;
-      }
-      if (isAgainstMode) {
-        if (!referencePreview) {
-          setError("Select a purchase return.");
-          return;
-        }
-        validateDebitNoteLines(lines);
-        if (totalDebit <= 0) {
-          setError("Enter debit qty on at least one line.");
-          return;
-        }
-      } else if (directTotal <= 0) {
-        setError("Enter a valid debit amount.");
-        return;
-      }
+      if (!validateForm()) return;
       if (isEdit && debitNoteId != null) {
         updateDebitNote(debitNoteId, buildInput("draft"));
-        approveDebitNote(debitNoteId);
         router.push(`${DEBIT_NOTES_LIST_PATH}/${debitNoteId}`);
       } else {
         const rec = createDebitNote(buildInput("draft"));
-        approveDebitNote(rec.id);
         router.push(`${DEBIT_NOTES_LIST_PATH}/${rec.id}`);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save debit note.");
+    }
+  };
+
+  const postNote = () => {
+    setError(null);
+    try {
+      if (!validateForm()) return;
+      let id = debitNoteId;
+      if (isEdit && debitNoteId != null) {
+        updateDebitNote(debitNoteId, buildInput("draft"));
+      } else {
+        const rec = createDebitNote(buildInput("draft"));
+        id = rec.id;
+      }
+      if (id != null) {
+        postDebitNoteRecord(id);
+        router.push(`${DEBIT_NOTES_LIST_PATH}/${id}`);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not post debit note.");
     }
   };
 
-  const noteOptions = canUseStandaloneDebit()
-    ? NOTE_TYPE_OPTIONS
-    : NOTE_TYPE_OPTIONS.filter((o) => o.value === "against_return");
+  const title = isEdit
+    ? "Edit Debit Note"
+    : isFresh
+      ? "Create Debit Note"
+      : "Create Debit Note from Purchase Return";
 
   return (
     <AccountsFormLayout
-      title={isEdit ? "Edit Debit Note" : "Create Debit Note"}
+      title={title}
       breadcrumb={[...DEBIT_NOTES_BREADCRUMB]}
       code={debitNoteNo || undefined}
       footer={
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => router.push(DEBIT_NOTES_LIST_PATH)}>
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => router.push(DEBIT_NOTES_LIST_PATH)}>
             Cancel
           </Button>
-          <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white" onClick={postNote}>
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1.5" onClick={saveDraft}>
+            <Save className="w-3.5 h-3.5" /> Save Draft
+          </Button>
+          <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white" onClick={postNote}>
             Post Debit Note
           </Button>
         </div>
@@ -339,39 +375,78 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
     >
       <div className="space-y-4 pb-8 w-full">
         <div className="bg-white border border-border/60 rounded-lg shadow-sm">
-          <div className="px-6 py-5 border-b border-border/60 space-y-4">
-            <NoteTypeSelector value={noteType} options={noteOptions} onChange={onNoteTypeChange} />
-
+          <div className="px-6 py-5 border-b border-border/60">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs font-medium">Debit Note No.</Label>
-                <Input className="h-9 text-[13px] font-mono bg-muted/30" disabled value={isEdit ? debitNoteNo : "Auto-generated"} />
+                <Input className="h-9 text-sm font-mono bg-muted/30" disabled value={isEdit ? debitNoteNo : "Auto-generated"} />
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs font-medium">Debit Note Date</Label>
-                <Input type="date" className="h-9 text-[13px]" value={debitNoteDate} onChange={(e) => setDebitNoteDate(e.target.value)} />
-              </div>
+              {!isFresh && (
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Debit Note Date</Label>
+                  <Input type="date" className="h-9 text-sm" value={debitNoteDate} onChange={(e) => setDebitNoteDate(e.target.value)} />
+                </div>
+              )}
             </div>
           </div>
 
-          {isAgainstMode ? (
+          {isFresh ? (
+            <div className="px-6 py-5">
+              <FreshDebitNoteForm
+                vendorSelector={
+                  <SearchableSelect
+                    label=""
+                    options={vendors.map((v) => ({
+                      value: String(v.id),
+                      label: v.vendorName,
+                      sub: v.vendorCode,
+                    }))}
+                    value={vendorId}
+                    onChange={(id) => {
+                      const v = vendors.find((x) => x.id === Number(id));
+                      onVendorChange(id, v ? vendorMasterToTransactionFields(v) : null);
+                    }}
+                    placeholder="Select supplier…"
+                    required
+                  />
+                }
+                debitNoteDate={debitNoteDate}
+                onDebitNoteDateChange={setDebitNoteDate}
+                reason={reason}
+                onReasonChange={setReason}
+                referenceNo={referenceNo}
+                onReferenceNoChange={setReferenceNo}
+                adjustmentLedgerId={adjustmentLedgerId}
+                adjustmentLedgerName={adjustmentLedgerName}
+                onAdjustmentLedgerChange={(l) => {
+                  setAdjustmentLedgerId(l.id);
+                  setAdjustmentLedgerName(l.accountName);
+                }}
+                taxableAmount={taxableAmount}
+                onTaxableAmountChange={setTaxableAmount}
+                gstPct={gstPct}
+                onGstPctChange={setGstPct}
+                gstApplicable={gstApplicable}
+                onGstApplicableChange={setGstApplicable}
+                narration={narration}
+                onNarrationChange={setNarration}
+              />
+            </div>
+          ) : (
             <>
-              <div className="px-6 py-5 border-b border-border/60 space-y-3">
-                <SearchableSelect
-                  label="Purchase Return"
-                  value={referenceReturnId}
-                  onChange={onPurchaseReturnSelect}
-                  options={returnOptions}
-                  placeholder="Select purchase return…"
-                  required
-                />
-                {referencePreview && (
-                  <p className="text-[11px] text-muted-foreground">
-                    PO {referencePreview.sourcePoNo} · Invoice {referencePreview.sourceInvoiceNo || "—"} ·{" "}
-                    {formatINR(referencePreview.originalAmount)}
-                  </p>
-                )}
-              </div>
+              {referencePreview && (
+                <div className="px-6 py-4 border-b border-border/60 bg-muted/10">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Purchase Return Reference</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                    <div><span className="text-muted-foreground">Return No.</span><p className="font-mono font-medium">{sourceReturnNo}</p></div>
+                    <div><span className="text-muted-foreground">PO No.</span><p className="font-mono font-medium">{referencePreview.sourcePoNo}</p></div>
+                    <div><span className="text-muted-foreground">GRN No.</span><p className="font-mono font-medium">{referencePreview.sourceGrnNo || "—"}</p></div>
+                    <div><span className="text-muted-foreground">Dispatch</span><p className="font-mono font-medium">{sourceDispatchNo || sourcePackingNo || "—"}</p></div>
+                    <div><span className="text-muted-foreground">Invoice</span><p className="font-mono font-medium">{referencePreview.sourceInvoiceNo || "—"}</p></div>
+                    <div><span className="text-muted-foreground">Dispatch Status</span><p className="font-medium">{referencePreview.dispatchStatus || "—"}</p></div>
+                  </div>
+                </div>
+              )}
 
               <div className="px-6 py-5 border-b border-border/60">
                 <VendorMasterPanel
@@ -400,7 +475,7 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
                   label="Reason"
                   value={reason}
                   onChange={setReason}
-                  options={MANUAL_DEBIT_REASONS.map((r) => ({ value: r, label: r }))}
+                  options={DEBIT_REASONS.map((r) => ({ value: r, label: r }))}
                   placeholder="Select reason…"
                   required
                 />
@@ -409,64 +484,20 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
                 {lines.length > 0 ? (
                   <DebitNoteProductTable lines={lines} onQtyChange={onDebitQtyChange} />
                 ) : (
-                  <p className="text-[13px] text-muted-foreground py-6 text-center border border-dashed border-border rounded-xl">
-                    Select a purchase return to load product lines.
+                  <p className="text-xs text-muted-foreground py-6 text-center border border-dashed border-border rounded-xl">
+                    Loading purchase return lines…
                   </p>
                 )}
               </div>
             </>
-          ) : (
-            <div className="px-6 py-5 space-y-4">
-              <DirectAdjustmentFields
-                partyLabel="Supplier"
-                partySelector={
-                  <SearchableSelect
-                    label=""
-                    options={vendors.map((v) => ({
-                      value: String(v.id),
-                      label: v.vendorName,
-                      sub: v.vendorCode,
-                    }))}
-                    value={vendorId}
-                    onChange={(id) => {
-                      const v = vendors.find((x) => x.id === Number(id));
-                      onVendorChange(id, v ? vendorMasterToTransactionFields(v) : null);
-                    }}
-                    placeholder="Select supplier…"
-                    required
-                  />
-                }
-                reason={reason}
-                onReasonChange={setReason}
-                reasonOptions={MANUAL_DEBIT_REASONS.map((r) => ({ value: r, label: r }))}
-                referenceInvoiceLabel="Reference Purchase Invoice (Optional)"
-                referenceInvoiceValue={directRefInvoiceId}
-                onReferenceInvoiceChange={setDirectRefInvoiceId}
-                referenceInvoiceOptions={[{ value: "", label: "None" }, ...invoiceOptions]}
-                amount={directAmount}
-                onAmountChange={setDirectAmount}
-                gstApplicable={directGstApplicable}
-                onGstApplicableChange={setDirectGstApplicable}
-                gstPct={directGstPct}
-                onGstPctChange={setDirectGstPct}
-                remarks={remarks}
-                onRemarksChange={setRemarks}
-              />
-              <div className="flex justify-end">
-                <div className="w-full sm:w-72 border border-border/60 rounded-lg p-3 bg-muted/5 text-[13px] flex justify-between font-semibold">
-                  <span>Total Debit</span>
-                  <span className="tabular-nums text-brand-700">{formatINR(directTotal)}</span>
-                </div>
-              </div>
-            </div>
           )}
 
           <div className="px-6 py-4 border-t border-border/60 space-y-3">
-            <p className="text-xs font-semibold uppercase text-muted-foreground">Attachments</p>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Attachments (Optional)</p>
             <div className="flex flex-wrap gap-2 items-end">
               <div className="space-y-1 flex-1 min-w-[140px]">
                 <Label className="text-xs">Document Name</Label>
-                <Input id="dn-doc-name" className="h-9 text-[13px]" placeholder="e.g. Return proof" />
+                <Input id="dn-doc-name" className="h-9 text-sm" placeholder="e.g. Supplier memo" />
               </div>
               <label className="inline-flex items-center gap-1.5 h-8 px-3 text-xs border rounded-lg cursor-pointer hover:bg-muted/40">
                 <Upload className="w-4 h-4" /> Upload
@@ -512,33 +543,28 @@ export default function DebitNoteFormPageClient({ debitNoteId }: { debitNoteId?:
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="rounded-lg border border-border/60 bg-white p-4 space-y-2 text-[13px]">
+          <div className="rounded-lg border border-border/60 bg-white p-4 space-y-2 text-xs">
             <h2 className="text-xs font-semibold uppercase text-muted-foreground">Summary</h2>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Taxable Amount</span>
-              <span className="tabular-nums">{formatINR(isAgainstMode ? lineTotals.taxableAmount : directBase)}</span>
+              <span className="tabular-nums">{formatINR(isFresh ? freshTotals.taxable : lineTotals.taxableAmount)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">GST Amount</span>
-              <span className="tabular-nums">{formatINR(isAgainstMode ? lineTotals.gstAmount : directGst)}</span>
+              <span className="tabular-nums">{formatINR(isFresh ? freshTotals.gstAmount : lineTotals.gstAmount)}</span>
             </div>
             <div className="flex justify-between font-semibold text-brand-700 pt-2 border-t">
               <span>Total Debit</span>
               <span className="tabular-nums">{formatINR(totalDebit)}</span>
             </div>
-            {isAgainstMode && original > 0 && (
-              <div className="flex justify-between text-muted-foreground pt-1">
-                <span>Balance After</span>
-                <span className="tabular-nums">{formatINR(Math.max(0, original - alreadyAdjustedNum - totalDebit))}</span>
-              </div>
-            )}
           </div>
           <LedgerImpactPreview
             lines={debitNoteImpactResolved({
               vendorName: resolveVendorName() || "Supplier",
-              taxable: isAgainstMode ? lineTotals.taxableAmount : directBase,
-              taxAmount: isAgainstMode ? lineTotals.gstAmount : directGst,
+              taxable: isFresh ? freshTotals.taxable : lineTotals.taxableAmount,
+              taxAmount: isFresh ? freshTotals.gstAmount : lineTotals.gstAmount,
               grandTotal: totalDebit,
+              adjustmentLedgerName: isFresh ? adjustmentLedgerName : undefined,
             })}
           />
         </div>

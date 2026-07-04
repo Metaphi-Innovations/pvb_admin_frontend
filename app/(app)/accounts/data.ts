@@ -5,6 +5,7 @@ import {
   SYSTEM_COA_NODES,
 } from "./masters/coa-seed-nodes";
 import { mergeBundledCoaDemoLedgers } from "./masters/chart-of-accounts/coa-demo-bundle";
+import { stripMisplacedGstLedgers } from "./masters/chart-of-accounts/coa-gst-duplicate-cleanup";
 import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
 
 export type RecordStatus = "draft" | "approved" | "rejected" | "posted";
@@ -280,7 +281,9 @@ function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccount[] {
     remaining = next;
   }
 
-  return mergeBundledCoaDemoLedgers([...mergedSystem, ...userLedgers]);
+  return stripMisplacedGstLedgers(
+    mergeBundledCoaDemoLedgers([...mergedSystem, ...userLedgers]),
+  );
 }
 
 function readCoaMeta(): { revision: number } | null {
@@ -346,22 +349,36 @@ function save<T>(key: string, list: T[]) {
   localStorage.setItem(key, JSON.stringify(list));
 }
 
-export const loadChartOfAccounts = (): ChartOfAccount[] => {
+/** Load COA from storage without GST Master sync (used internally to avoid sync loops). */
+export function loadChartOfAccountsCore(): ChartOfAccount[] {
   if (typeof window !== "undefined") {
     purgeLegacyCoaStorage();
   }
 
   const raw = getOrSeed(COA_KEY, COA_SEED);
-  const needsReset = coaStorageNeedsReset(raw);
-  const source = needsReset ? [] : raw;
+  const stripped = stripMisplacedGstLedgers(raw);
+  const needsReset = coaStorageNeedsReset(stripped);
+  const source = needsReset ? [] : stripped;
   const merged = ensureCoaSystemStructure(source.length ? source : COA_SEED);
 
-  if (typeof window !== "undefined" && (needsReset || merged.length !== raw.length)) {
+  if (
+    typeof window !== "undefined" &&
+    (needsReset || merged.length !== raw.length || stripped.length !== raw.length)
+  ) {
     save(COA_KEY, merged);
     writeCoaMeta();
   }
 
   return merged;
+}
+
+export const loadChartOfAccounts = (): ChartOfAccount[] => {
+  const core = loadChartOfAccountsCore();
+  if (typeof window === "undefined") return core;
+
+  // Lazy require avoids circular init with gst-coa-sync (which imports this module).
+  const { applyGstCoaSyncOnLoad } = require("@/lib/accounts/gst-coa-sync") as typeof import("@/lib/accounts/gst-coa-sync");
+  return applyGstCoaSyncOnLoad(core);
 };
 
 export const saveChartOfAccounts = (list: ChartOfAccount[]) => {

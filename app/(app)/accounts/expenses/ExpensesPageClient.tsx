@@ -94,7 +94,7 @@ export default function ExpensesPageClient() {
       <div className="max-w-[1600px] mx-auto space-y-3">
         <PageHeader
           title="Expenses"
-          description="Finance payment tracking for HR-approved claims and expenses. Approvals are managed in HR → TA/DA Claims."
+          description="Finance payment tracking for HR-approved claims and expenses. Approvals are managed in HR â†’ TA/DA Claims."
           icon={Wallet}
           breadcrumbs={EXPENSE_BREADCRUMB}
         />
@@ -107,7 +107,7 @@ export default function ExpensesPageClient() {
           searchPlaceholder="Search claim no., employee…"
         >
           <Select value={sourceFilter} onValueChange={setSourceFilter}>
-            <SelectTrigger className="h-8 w-[160px] text-xs bg-white">
+            <SelectTrigger className="h-8 w-[160px] text-sm bg-white">
               <SelectValue placeholder="Source" />
             </SelectTrigger>
             <SelectContent>
@@ -124,7 +124,7 @@ export default function ExpensesPageClient() {
           <Button
             variant="outline"
             size="sm"
-            className="h-9 text-[13px] font-medium gap-1.5"
+            className="h-9 text-sm font-medium gap-1.5"
             disabled={exporting || visible.length === 0}
             onClick={handleExport}
           >
@@ -158,7 +158,7 @@ export default function ExpensesPageClient() {
                     "Paid By",
                     "",
                   ].map((h) => (
-                    <th key={h || "a"} className="px-2.5 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground whitespace-nowrap">
+                    <th key={h || "a"} className="px-2.5 py-2 text-left text-xs font-semibold uppercase text-muted-foreground whitespace-nowrap">
                       {h}
                     </th>
                   ))}

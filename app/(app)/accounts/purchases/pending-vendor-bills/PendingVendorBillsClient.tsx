@@ -80,12 +80,12 @@ export default function PendingVendorBillsClient() {
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Purchases", "Pending Supplier Bills")}
       title="Pending Supplier Bills"
-      description="GRN-completed receipts → create purchase invoice → posts to supplier ledger."
+      description="GRN-completed receipts â†’ create purchase invoice â†’ posts to supplier ledger."
       hideDescription
       layout="split"
       className="h-full min-h-0"
       actions={
-        <Button asChild size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1">
+        <Button asChild size="sm" className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1">
           <Link href="/accounts/transactions/purchase/new">
             <Plus className="w-4 h-4" /> Create Purchase Invoice
           </Link>
@@ -157,7 +157,7 @@ export default function PendingVendorBillsClient() {
                   <AccountsTableCell align="center">{r.itemCount}</AccountsTableCell>
                   <AccountsTableCell className="capitalize">{r.status.replace("_", " ")}</AccountsTableCell>
                   <AccountsTableCell align="right">
-                    <Button asChild size="sm" variant="outline" className="h-7 text-[11px]">
+                    <Button asChild size="sm" variant="outline" className="h-7 text-sm">
                       <Link href={`/accounts/transactions/purchase/new?grn=${encodeURIComponent(r.grnNo)}`}>
                         Create Bill
                       </Link>

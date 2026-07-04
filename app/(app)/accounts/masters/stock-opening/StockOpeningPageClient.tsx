@@ -73,15 +73,15 @@ export default function StockOpeningPageClient() {
           </p>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
             <div className="space-y-1">
-              <Label className="text-[10px]">Financial Year</Label>
-              <Input className="h-9 text-[13px] font-medium" value={fy} onChange={(e) => setFy(e.target.value)} />
+              <Label className="text-xs">Financial Year</Label>
+              <Input className="h-9 text-sm font-medium" value={fy} onChange={(e) => setFy(e.target.value)} />
             </div>
             <div className="space-y-1">
-              <Label className="text-[10px]">Date</Label>
-              <Input type="date" className="h-9 text-[13px] font-medium" value={date} onChange={(e) => setDate(e.target.value)} />
+              <Label className="text-xs">Date</Label>
+              <Input type="date" className="h-9 text-sm font-medium" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
             <div className="space-y-1">
-              <Label className="text-[10px]">Warehouse</Label>
+              <Label className="text-xs">Warehouse</Label>
               <select className="h-8 w-full text-xs border rounded-lg px-2 bg-white" value={warehouse} onChange={(e) => setWarehouse(e.target.value)}>
                 {WAREHOUSE_OPTIONS.map((w) => (
                   <option key={w} value={w}>{w}</option>
@@ -89,7 +89,7 @@ export default function StockOpeningPageClient() {
               </select>
             </div>
             <div className="space-y-1">
-              <Label className="text-[10px]">Item</Label>
+              <Label className="text-xs">Item</Label>
               <select className="h-8 w-full text-xs border rounded-lg px-2 bg-white" value={itemSku} onChange={(e) => setItemSku(e.target.value)}>
                 {items.map((i) => (
                   <option key={i.sku} value={i.sku}>{i.itemName}</option>
@@ -97,27 +97,27 @@ export default function StockOpeningPageClient() {
               </select>
             </div>
             <div className="space-y-1">
-              <Label className="text-[10px]">Qty</Label>
-              <Input type="number" className="h-9 text-[13px] font-medium" value={qty} onChange={(e) => setQty(Number(e.target.value))} />
+              <Label className="text-xs">Qty</Label>
+              <Input type="number" className="h-9 text-sm font-medium" value={qty} onChange={(e) => setQty(Number(e.target.value))} />
             </div>
             <div className="space-y-1">
-              <Label className="text-[10px]">Rate</Label>
-              <AccountsMoneyInput className="h-9 text-[13px] font-medium" value={rate} onChange={(v) => setRate(v)} />
+              <Label className="text-xs">Rate</Label>
+              <AccountsMoneyInput className="h-9 text-sm font-medium" value={rate} onChange={(v) => setRate(v)} />
             </div>
             <div className="space-y-1">
-              <Label className="text-[10px]">Batch No</Label>
-              <Input className="h-9 text-[13px] font-medium" value={batchNo} onChange={(e) => setBatchNo(e.target.value)} />
+              <Label className="text-xs">Batch No</Label>
+              <Input className="h-9 text-sm font-medium" value={batchNo} onChange={(e) => setBatchNo(e.target.value)} />
             </div>
             <div className="space-y-1">
-              <Label className="text-[10px]">Expiry</Label>
-              <Input type="date" className="h-9 text-[13px] font-medium" value={expiry} onChange={(e) => setExpiry(e.target.value)} />
+              <Label className="text-xs">Expiry</Label>
+              <Input type="date" className="h-9 text-sm font-medium" value={expiry} onChange={(e) => setExpiry(e.target.value)} />
             </div>
             <div className="space-y-1 md:col-span-2">
-              <Label className="text-[10px]">Remarks</Label>
-              <Input className="h-9 text-[13px] font-medium" value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+              <Label className="text-xs">Remarks</Label>
+              <Input className="h-9 text-sm font-medium" value={remarks} onChange={(e) => setRemarks(e.target.value)} />
             </div>
             <div className="flex items-end">
-              <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 text-white" onClick={addRow}>
+              <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 text-white" onClick={addRow}>
                 Add Row
               </Button>
             </div>
@@ -128,7 +128,7 @@ export default function StockOpeningPageClient() {
             <thead className="border-b">
               <tr>
                 {["Item", "Warehouse", "Qty", "Rate", "Value", "Batch", "Expiry", "FY"].map((h) => (
-                  <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground uppercase text-[10px]">{h}</th>
+                  <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground uppercase text-xs">{h}</th>
                 ))}
               </tr>
             </thead>

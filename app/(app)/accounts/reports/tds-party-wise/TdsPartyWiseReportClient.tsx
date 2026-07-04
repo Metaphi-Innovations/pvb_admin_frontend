@@ -259,7 +259,7 @@ export default function TdsPartyWiseReportClient() {
             <Button
               variant="outline"
               size="sm"
-              className="h-8 text-[11px] px-2"
+              className="h-8 text-sm px-2"
               onClick={resetFilters}
             >
               <X className="w-3 h-3 mr-1" /> Reset

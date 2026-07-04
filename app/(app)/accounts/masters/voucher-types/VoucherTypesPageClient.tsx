@@ -43,11 +43,11 @@ export default function VoucherTypesPageClient() {
           <table className="accounts-table w-full">
             <thead className="border-b border-border/60">
               <tr>
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Voucher Type</th>
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Prefix</th>
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Numbering</th>
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Start No.</th>
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Voucher Type</th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prefix</th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Numbering</th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Start No.</th>
+                <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
                 <th className="w-20" />
               </tr>
             </thead>
@@ -65,7 +65,7 @@ export default function VoucherTypesPageClient() {
                   <td className="px-4 py-3 text-xs tabular-nums">{vt.startingNumber}</td>
                   <td className="px-4 py-3"><StatusBadge status={vt.status} /></td>
                   <td className="px-4 py-3">
-                    <Button variant="ghost" size="sm" className="h-7 text-[11px]" onClick={() => setEdit({ ...vt })}>
+                    <Button variant="ghost" size="sm" className="h-7 text-sm" onClick={() => setEdit({ ...vt })}>
                       Configure
                     </Button>
                   </td>
@@ -87,20 +87,20 @@ export default function VoucherTypesPageClient() {
                 Voucher type name cannot be changed. System types cannot be deleted.
               </p>
               <div className="space-y-1">
-                <Label className="text-[11px]">Prefix</Label>
+                <Label className="text-xs">Prefix</Label>
                 <Input
-                  className="h-9 text-[13px] font-medium font-mono"
+                  className="h-9 text-sm font-medium font-mono"
                   value={edit.prefix}
                   onChange={(e) => setEdit({ ...edit, prefix: e.target.value.toUpperCase() })}
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-[11px]">Numbering</Label>
+                <Label className="text-xs">Numbering</Label>
                 <Select
                   value={edit.numberingType}
                   onValueChange={(v) => setEdit({ ...edit, numberingType: v as "auto" | "manual" })}
                 >
-                  <SelectTrigger className="h-9 text-[13px] font-medium">
+                  <SelectTrigger className="h-9 text-sm font-medium">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -110,9 +110,9 @@ export default function VoucherTypesPageClient() {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-[11px]">Starting Number</Label>
+                <Label className="text-xs">Starting Number</Label>
                 <Input
-                  className="h-9 text-[13px] font-medium"
+                  className="h-9 text-sm font-medium"
                   type="number"
                   min={1}
                   value={edit.startingNumber}
@@ -121,8 +121,8 @@ export default function VoucherTypesPageClient() {
               </div>
               <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5">
                 <div>
-                  <Label className="text-[11px]">Status</Label>
-                  <p className="text-[10px] text-muted-foreground">
+                  <Label className="text-xs">Status</Label>
+                  <p className="text-xs text-muted-foreground">
                     {edit.status === "active" ? "Active" : "Inactive"}
                   </p>
                 </div>
@@ -134,7 +134,7 @@ export default function VoucherTypesPageClient() {
             </SheetBody>
           )}
           <SheetFooter>
-            <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 text-white" onClick={save}>Save</Button>
+            <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 text-white" onClick={save}>Save</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

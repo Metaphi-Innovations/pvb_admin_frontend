@@ -27,7 +27,7 @@ export function LedgerImpactPreview({
       <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {title}
       </h2>
-      <p className="text-[11px] text-muted-foreground leading-relaxed">
+      <p className="text-xs text-muted-foreground leading-relaxed">
         Preview of accounting entries when this document is posted. No actual posting until you
         confirm.
       </p>
@@ -46,7 +46,7 @@ export function LedgerImpactPreview({
                 <td className="px-3 py-2">
                   <span className="font-medium text-foreground">{line.ledger}</span>
                   {line.note ? (
-                    <span className="block text-[10px] text-muted-foreground mt-0.5">{line.note}</span>
+                    <span className="block text-xs text-muted-foreground mt-0.5">{line.note}</span>
                   ) : null}
                 </td>
                 <td className="px-3 py-2 text-right font-mono tabular-nums text-emerald-800">

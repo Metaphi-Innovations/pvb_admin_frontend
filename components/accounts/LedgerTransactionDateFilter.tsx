@@ -25,7 +25,7 @@ import {
 import { useFY } from "@/lib/fy-store";
 
 const filterControlClass =
-  "h-9 text-[13px] font-medium rounded-lg border border-border bg-background focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400";
+  "h-9 text-sm font-medium rounded-lg border border-border bg-background focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400";
 
 const exportTriggerClass = cn(
   filterControlClass,
@@ -179,7 +179,7 @@ export function LedgerTransactionDateFilter({
         <Button
           type="button"
           size="sm"
-          className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white px-3"
+          className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white px-3"
           onClick={onApply}
         >
           Apply

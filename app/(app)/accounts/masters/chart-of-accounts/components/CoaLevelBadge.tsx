@@ -16,7 +16,7 @@ export function CoaLevelBadge({
     <span
       className={cn(
         "inline-flex items-center rounded border font-semibold leading-none flex-shrink-0",
-        size === "sm" ? "text-[8px] px-1 py-px" : "text-[10px] px-2 py-0.5",
+        size === "sm" ? "text-xs px-1 py-px" : "text-xs px-2 py-0.5",
         VISUAL_BADGE_CLASS[level],
         className,
       )}

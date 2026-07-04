@@ -345,13 +345,13 @@ export default function AuditTrailPageClient() {
                       />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground truncate">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground truncate">
                         {card.label}
                       </p>
-                      <p className="text-lg font-bold text-foreground leading-tight">
+                      <p className="text-base font-bold text-foreground leading-tight">
                         {categoryCounts[card.id]}
                       </p>
-                      <p className="text-[10px] text-muted-foreground truncate">{card.hint}</p>
+                      <p className="text-xs text-muted-foreground truncate">{card.hint}</p>
                     </div>
                   </button>
                 );

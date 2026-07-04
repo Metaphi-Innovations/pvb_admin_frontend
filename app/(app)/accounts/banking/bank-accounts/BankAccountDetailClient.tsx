@@ -7,7 +7,7 @@ import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { SectionTabs, StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
 import { MoneyAmount, MoneyCell } from "@/components/accounts/MoneyAmount";
-import { formatMoney } from "@/lib/accounts/money-format";
+import { formatMoney, balanceSideLabel } from "@/lib/accounts/money-format";
 import { getBankAccountById } from "@/lib/accounts/bank-accounts-data";
 import { formatBankAccountMaster } from "@/lib/accounts/bank-account-display";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
@@ -96,19 +96,19 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
       <div className="flex flex-col flex-1 min-h-0">
         <div className="flex-shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 border-b border-border/60 bg-muted/10">
           <div className="rounded-lg border border-border/40 bg-white px-3 py-2">
-            <p className="text-[10px] uppercase text-muted-foreground">Current Balance</p>
+            <p className="text-xs uppercase text-muted-foreground">Current Balance</p>
             <MoneyAmount amount={balance.amount} side={balance.balanceType} className="text-sm font-semibold mt-1" />
           </div>
           <div className="rounded-lg border border-border/40 bg-white px-3 py-2">
-            <p className="text-[10px] uppercase text-muted-foreground">Opening Balance</p>
+            <p className="text-xs uppercase text-muted-foreground">Opening Balance</p>
             <p className="text-sm font-semibold mt-1 tabular-nums">{formatMoney(account.openingBalance)}</p>
           </div>
           <div className="rounded-lg border border-border/40 bg-white px-3 py-2">
-            <p className="text-[10px] uppercase text-muted-foreground">Reconciliation</p>
+            <p className="text-xs uppercase text-muted-foreground">Reconciliation</p>
             <p className="text-sm font-semibold mt-1 capitalize">{account.reconciliationStatus}</p>
           </div>
           <div className="rounded-lg border border-border/40 bg-white px-3 py-2">
-            <p className="text-[10px] uppercase text-muted-foreground">Status</p>
+            <p className="text-xs uppercase text-muted-foreground">Status</p>
             <div className="mt-1"><StatusBadge status={account.status} /></div>
           </div>
         </div>
@@ -131,7 +131,7 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
                 ["Default Payments", account.defaultForPayments ? "Yes" : "No"],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-lg border border-border/40 bg-slate-50/40 px-3 py-2.5">
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
                   <p className="text-sm mt-1">{value}</p>
                 </div>
               ))}
@@ -142,7 +142,7 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
               <thead className="border-b">
                 <tr>
                   {["Date", "Voucher Type", "Voucher No", "Particulars", "Debit", "Credit"].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground uppercase text-[10px]">{h}</th>
+                    <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground uppercase text-xs">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -170,7 +170,7 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
                   href="/accounts/banking/reconciliation"
                   className="inline-flex h-8 items-center px-3 text-xs border border-border rounded-lg hover:bg-muted/40 text-brand-700"
                 >
-                  Open Bank Reconciliation →
+                  Open Bank Reconciliation â†’
                 </Link>
               ) : (
                 <p className="text-xs text-muted-foreground">Reconciliation is disabled for this account.</p>
@@ -182,7 +182,7 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
               <thead className="border-b">
                 <tr>
                   {["Date", "Voucher Type", "Voucher No", "Particulars", "Debit", "Credit", "Running Balance"].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground uppercase text-[10px]">{h}</th>
+                    <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground uppercase text-xs">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -196,7 +196,7 @@ export default function BankAccountDetailClient({ accountId }: { accountId: numb
                     <MoneyCell amount={row.debit} dashIfZero className="px-3 py-2" />
                     <MoneyCell amount={row.credit} dashIfZero className="px-3 py-2" />
                     <td className="px-3 py-2 text-right font-medium">
-                      {formatMoney(row.runningBalance)} {row.balanceType === "Debit" ? "Dr" : "Cr"}
+                      {formatMoney(row.runningBalance)} {balanceSideLabel(row.balanceType)}
                     </td>
                   </tr>
                 ))}

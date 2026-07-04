@@ -36,7 +36,7 @@ export function TransactionProductSelect({
         <PopoverTrigger asChild disabled={disabled}>
           <button
             type="button"
-            className="w-full h-7 px-2 text-xs text-left border border-border rounded-md bg-background flex items-center justify-between disabled:opacity-50"
+            className="w-full h-7 px-2 text-sm text-left border border-border rounded-md bg-background flex items-center justify-between disabled:opacity-50"
           >
             <span className={cn("truncate", !selected && "text-muted-foreground")}>
               {selected ? `${selected.sku} — ${selected.name}` : placeholder}
@@ -52,7 +52,7 @@ export function TransactionProductSelect({
                 placeholder="Search SKU, name, HSN…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="h-9 text-[13px] font-medium pl-7"
+                className="h-9 text-sm font-medium pl-7"
               />
             </div>
           </div>
@@ -81,7 +81,7 @@ export function TransactionProductSelect({
                     <span className="flex-1 truncate font-medium">{p.name}</span>
                     {value === p.id && <Check className="w-3 h-3 text-brand-600" />}
                   </span>
-                  <span className="text-[10px] text-muted-foreground pl-0.5">
+                  <span className="text-xs text-muted-foreground pl-0.5">
                     HSN {p.hsn || "—"} · GST {p.taxPct}% · {p.unit}
                   </span>
                 </button>

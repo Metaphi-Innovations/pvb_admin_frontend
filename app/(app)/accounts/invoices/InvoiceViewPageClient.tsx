@@ -38,7 +38,7 @@ function DetailRow({
 }) {
   return (
     <div className={className}>
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="text-xs font-medium mt-0.5">{value ?? "—"}</p>
     </div>
   );
@@ -120,7 +120,7 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
         <Button
           variant="outline"
           size="sm"
-          className="h-9 text-[13px] font-medium gap-1"
+          className="h-9 text-sm font-medium gap-1"
           onClick={() => downloadInvoicePdf(record)}
         >
           <Download className="w-4 h-4" /> Print / PDF
@@ -157,7 +157,7 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
                     <th
                       key={h}
                       className={cn(
-                        "px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-foreground whitespace-nowrap",
+                        "px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-foreground whitespace-nowrap",
                         h !== "Product Name" && h !== "Batch No." && "text-right",
                         (h === "Product Code" || h === "Product Name" || h === "HSN" || h === "Batch No.") &&
                           "text-left",

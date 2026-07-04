@@ -141,10 +141,10 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
       code={purchaseNo || undefined}
       footer={
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => router.push(PURCHASE_LIST_PATH)}>
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => router.push(PURCHASE_LIST_PATH)}>
             Cancel
           </Button>
-          <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white" onClick={submit}>
+          <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white" onClick={submit}>
             Save Purchase
           </Button>
         </div>
@@ -152,7 +152,7 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
     >
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pb-8 items-start">
         <div className="lg:col-span-2 max-w-[720px] space-y-4">
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Use for exceptional cases only. Normal flow: upload supplier invoice on a PO in Procurement.
         </p>
 
@@ -160,11 +160,11 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Purchase No.</Label>
-              <Input className="h-9 text-[13px] font-medium bg-muted/30" disabled value={isEdit ? purchaseNo : "Auto-generated"} />
+              <Input className="h-9 text-sm font-medium bg-muted/30" disabled value={isEdit ? purchaseNo : "Auto-generated"} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Source</Label>
-              <Input className="h-9 text-[13px] font-medium bg-muted/30" disabled value="Manual Entry" />
+              <Input className="h-9 text-sm font-medium bg-muted/30" disabled value="Manual Entry" />
             </div>
           </div>
           <SearchableSelect
@@ -178,43 +178,43 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Supplier Invoice No. *</Label>
-              <Input className="h-9 text-[13px] font-medium" value={vendorInvoiceNo} onChange={(e) => setVendorInvoiceNo(e.target.value)} />
+              <Input className="h-9 text-sm font-medium" value={vendorInvoiceNo} onChange={(e) => setVendorInvoiceNo(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Supplier Invoice Date *</Label>
-              <Input type="date" className="h-9 text-[13px] font-medium" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+              <Input type="date" className="h-9 text-sm font-medium" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Invoice Amount *</Label>
-              <AccountsMoneyInput className="h-9 text-[13px] font-medium" value={invoiceAmount} onChange={(v) => onAmountChange("invoice", String(v))} />
+              <AccountsMoneyInput className="h-9 text-sm font-medium" value={invoiceAmount} onChange={(v) => onAmountChange("invoice", String(v))} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Tax Amount *</Label>
-              <AccountsMoneyInput className="h-9 text-[13px] font-medium" value={taxAmount} onChange={(v) => onAmountChange("tax", String(v))} />
+              <AccountsMoneyInput className="h-9 text-sm font-medium" value={taxAmount} onChange={(v) => onAmountChange("tax", String(v))} />
             </div>
             <div className="space-y-1 col-span-2">
               <Label className="text-xs">Total Amount *</Label>
-              <AccountsMoneyInput className="h-9 text-[13px] font-medium" value={totalAmount} onChange={(v) => onAmountChange("total", String(v))} />
+              <AccountsMoneyInput className="h-9 text-sm font-medium" value={totalAmount} onChange={(v) => onAmountChange("total", String(v))} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">PO Reference</Label>
-              <Input className="h-9 text-[13px] font-medium font-mono" value={poRef} onChange={(e) => setPoRef(e.target.value)} />
+              <Input className="h-9 text-sm font-medium font-mono" value={poRef} onChange={(e) => setPoRef(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">GRN Reference</Label>
-              <Input className="h-9 text-[13px] font-medium font-mono" value={grnRef} onChange={(e) => setGrnRef(e.target.value)} />
+              <Input className="h-9 text-sm font-medium font-mono" value={grnRef} onChange={(e) => setGrnRef(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Due Date</Label>
-              <Input type="date" className="h-9 text-[13px] font-medium" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <Input type="date" className="h-9 text-sm font-medium" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Branch</Label>
-              <Input className="h-9 text-[13px] font-medium" value={branch} onChange={(e) => setBranch(e.target.value)} />
+              <Input className="h-9 text-sm font-medium" value={branch} onChange={(e) => setBranch(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Warehouse</Label>
-              <Input className="h-9 text-[13px] font-medium" value={warehouse} onChange={(e) => setWarehouse(e.target.value)} />
+              <Input className="h-9 text-sm font-medium" value={warehouse} onChange={(e) => setWarehouse(e.target.value)} />
             </div>
           </div>
         </Section>
@@ -239,7 +239,7 @@ export default function PurchaseFormPageClient({ purchaseId }: { purchaseId?: nu
         </Section>
 
         <Section title="Remarks">
-          <Textarea className="min-h-[72px] text-xs resize-none" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Required…" />
+          <Textarea className="min-h-[72px] text-sm resize-none" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Required…" />
         </Section>
 
         {error && <p className="text-xs text-red-600">{error}</p>}

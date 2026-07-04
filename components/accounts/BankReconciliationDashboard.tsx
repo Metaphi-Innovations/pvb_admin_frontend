@@ -44,7 +44,7 @@ function KpiCard({ title, value, subtitle, icon, trend, trendValue, className }:
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
-          <p className="text-2xl font-bold mt-2 text-foreground">{value}</p>
+          <p className="text-base font-bold mt-2 text-foreground">{value}</p>
           {subtitle && <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>}
           {trend && trendValue && (
             <div className="flex items-center gap-1 mt-2">
@@ -76,19 +76,19 @@ function BankAccountCard({ account, bookBalance, uncategorizedCount }: BankAccou
       <div className="flex items-start justify-between mb-3">
         <div>
           <h3 className="text-sm font-semibold text-foreground">{formatBankAccountMaster(account)}</h3>
-          <p className="text-[10px] text-muted-foreground mt-0.5">{account.bankName}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{account.bankName}</p>
         </div>
-        <Badge className="text-[10px] px-2 py-0.5 bg-green-100 text-green-700">
+        <Badge className="text-xs px-2 py-0.5 bg-green-100 text-green-700">
           {account.accountType}
         </Badge>
       </div>
       <div className="grid grid-cols-2 gap-3 mt-4 pt-3 border-t border-border/30">
         <div>
-          <p className="text-[10px] text-muted-foreground uppercase">Book Balance</p>
+          <p className="text-xs text-muted-foreground uppercase">Book Balance</p>
           <p className="text-sm font-semibold mt-1">{formatMoney(bookBalance)}</p>
         </div>
         <div>
-          <p className="text-[10px] text-muted-foreground uppercase">Uncategorized</p>
+          <p className="text-xs text-muted-foreground uppercase">Uncategorized</p>
           <div className="flex items-center gap-1.5 mt-1">
             <span className="text-sm font-semibold">{uncategorizedCount}</span>
             {uncategorizedCount > 0 && <AlertCircle className="w-4 h-4 text-orange-500" />}
@@ -96,7 +96,7 @@ function BankAccountCard({ account, bookBalance, uncategorizedCount }: BankAccou
         </div>
       </div>
       <Link href={`/accounts/banking/transactions?bankAccountId=${account.id}`}>
-        <Button size="sm" variant="outline" className="w-full mt-3 h-9 text-[13px] font-medium">
+        <Button size="sm" variant="outline" className="w-full mt-3 h-9 text-sm font-medium">
           View Transactions
           <ArrowRight className="w-3 h-3 ml-1.5" />
         </Button>
@@ -132,7 +132,7 @@ function RecentTransactionRow({
         <StatusIcon className={cn("w-4 h-4 flex-shrink-0", config.color)} />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-medium text-foreground truncate">{narration}</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">{date}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{date}</p>
         </div>
       </div>
       <div className="flex-shrink-0 ml-3">
@@ -177,13 +177,13 @@ export function BankReconciliationDashboard() {
         </div>
         <div className="flex gap-2">
           <Link href="/accounts/banking/statement-import">
-            <Button size="sm" className="h-9 text-xs gap-1.5">
+            <Button size="sm" className="h-9 text-sm gap-1.5">
               <Upload className="w-4 h-4" />
               Import Statement
             </Button>
           </Link>
           <Link href="/accounts/banking/transactions">
-            <Button size="sm" variant="outline" className="h-9 text-xs">
+            <Button size="sm" variant="outline" className="h-9 text-sm">
               All Transactions
             </Button>
           </Link>
@@ -228,7 +228,7 @@ export function BankReconciliationDashboard() {
             <Database className="w-4 h-4 text-blue-600" />
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Bank Balance</p>
           </div>
-          <p className="text-2xl font-bold text-foreground">{formatMoney(totalBookBalance)}</p>
+          <p className="text-base font-bold text-foreground">{formatMoney(totalBookBalance)}</p>
           <p className="text-xs text-muted-foreground mt-1">As per statements</p>
         </div>
         <div className="rounded-xl border border-border/50 bg-gradient-to-br from-green-50 to-white p-5 shadow-sm">
@@ -236,7 +236,7 @@ export function BankReconciliationDashboard() {
             <DollarSign className="w-4 h-4 text-green-600" />
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Book Balance</p>
           </div>
-          <p className="text-2xl font-bold text-foreground">{formatMoney(totalBookBalance)}</p>
+          <p className="text-base font-bold text-foreground">{formatMoney(totalBookBalance)}</p>
           <p className="text-xs text-muted-foreground mt-1">As per books</p>
         </div>
         <div className="rounded-xl border border-border/50 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm">
@@ -244,7 +244,7 @@ export function BankReconciliationDashboard() {
             <AlertCircle className="w-4 h-4 text-slate-600" />
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Difference</p>
           </div>
-          <p className="text-2xl font-bold text-foreground">{formatMoney(0)}</p>
+          <p className="text-base font-bold text-foreground">{formatMoney(0)}</p>
           <p className="text-xs text-green-600 mt-1">Balanced</p>
         </div>
       </div>
@@ -254,7 +254,7 @@ export function BankReconciliationDashboard() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-foreground">Bank Accounts</h2>
           <Link href="/accounts/banking/bank-accounts">
-            <Button size="sm" variant="ghost" className="h-9 text-[13px] font-medium">
+            <Button size="sm" variant="ghost" className="h-9 text-sm font-medium">
               View All
               <ArrowRight className="w-3 h-3 ml-1" />
             </Button>
@@ -277,7 +277,7 @@ export function BankReconciliationDashboard() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-foreground">Recent Transactions</h2>
           <Link href="/accounts/banking/transactions">
-            <Button size="sm" variant="ghost" className="h-9 text-[13px] font-medium">
+            <Button size="sm" variant="ghost" className="h-9 text-sm font-medium">
               View All
               <ArrowRight className="w-3 h-3 ml-1" />
             </Button>

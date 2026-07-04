@@ -32,7 +32,7 @@ import {
 function SectionHeading({ label }: { label: string }) {
   return (
     <div className="pb-2 border-b border-border mb-2.5">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
+      <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
     </div>
   );
 }
@@ -41,7 +41,7 @@ function InfoRow({ label, value }: { label: string; value?: React.ReactNode }) {
   if (value == null || value === "" || value === "—") return null;
   return (
     <div className="flex items-start justify-between gap-3 py-1.5 border-b border-border/40 last:border-0">
-      <span className="text-[11px] text-muted-foreground shrink-0">{label}</span>
+      <span className="text-xs text-muted-foreground shrink-0">{label}</span>
       <span className="text-xs text-foreground text-right font-medium">{value}</span>
     </div>
   );
@@ -217,7 +217,7 @@ export function TransactionDetailsDrawer({
                     <Paperclip className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium truncate">{att.name}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">{att.fileName}</p>
+                      <p className="text-xs text-muted-foreground truncate">{att.fileName}</p>
                     </div>
                     {att.dataUrl && (
                       <a
@@ -236,11 +236,11 @@ export function TransactionDetailsDrawer({
         </SheetBody>
 
         <SheetFooter className="flex-row gap-2 justify-end">
-          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1.5" onClick={handlePrint}>
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1.5" onClick={handlePrint}>
             <Printer className="w-4 h-4" />
             Print
           </Button>
-          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1.5" asChild>
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1.5" asChild>
             <Link href={detail.sourceHref} onClick={onClose}>
               <ExternalLink className="w-4 h-4" />
               Open Original Voucher

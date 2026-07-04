@@ -200,28 +200,28 @@ export default function TransactionPageClient({
                         setSortDir(sortDir === "asc" ? "desc" : "asc");
                       }}
                     />
-                    <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">
+                    <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
                       {partyLabel}
                     </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">
+                    <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
                       Reference No.
                     </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">
+                    <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
                       Amount
                     </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">
+                    <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
                       Tax
                     </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">
+                    <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
                       Total
                     </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">
+                    <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
                       Status
                     </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">
+                    <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
                       Created By
                     </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-medium text-muted-foreground">
+                    <th className="px-3 py-2.5 text-left text-xs font-medium text-muted-foreground">
                       Updated By
                     </th>
                     <th className="px-3 py-2.5 w-36" />
@@ -246,7 +246,7 @@ export default function TransactionPageClient({
                         {r.status === "draft" && (
                           <Button
                             size="sm"
-                            className="h-7 text-[11px]"
+                            className="h-7 text-sm"
                             onClick={() => updateStatus(r, "approved")}
                           >
                             Approve
@@ -255,7 +255,7 @@ export default function TransactionPageClient({
                         {r.status === "approved" && (
                           <Button
                             size="sm"
-                            className="h-7 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white"
+                            className="h-7 text-sm bg-emerald-600 hover:bg-emerald-700 text-white"
                             onClick={() => updateStatus(r, "posted")}
                           >
                             Post
