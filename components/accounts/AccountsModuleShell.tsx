@@ -12,7 +12,6 @@ import {
   type AccountsNavGroup,
 } from "@/lib/accounts/accounts-nav";
 import { ACCOUNTS_SCROLL_PANEL_CLASS } from "@/lib/accounts/accounts-layout-constants";
-import { seedAccountsDemoData } from "@/lib/accounts/accounts-demo-seed";
 import { syncGstCoaFromMaster } from "@/lib/accounts/gst-coa-sync";
 import { ACCOUNTS_SIDEBAR_GROUP_CLASS, ACCOUNTS_SIDEBAR_ITEM_CLASS } from "@/lib/accounts/accounts-typography";
 import { CoaSidebarNav } from "./CoaSidebarNav";
@@ -112,8 +111,17 @@ export function AccountsModuleShell({ children }: AccountsModuleShellProps) {
   const activeGroupId = useMemo(() => resolveAccountsNavGroupId(pathname), [pathname]);
 
   useEffect(() => {
-    seedAccountsDemoData();
-    syncGstCoaFromMaster();
+    const runSeed = () => {
+      void import("@/lib/accounts/accounts-demo-seed").then(({ seedAccountsDemoData }) => {
+        seedAccountsDemoData();
+      });
+    };
+
+    if (typeof requestIdleCallback === "function") {
+      const idleId = requestIdleCallback(runSeed, { timeout: 2500 });
+      return () => cancelIdleCallback(idleId);
+    }
+    runSeed();
   }, []);
 
   useEffect(() => {
@@ -128,7 +136,7 @@ export function AccountsModuleShell({ children }: AccountsModuleShellProps) {
 
   return (
     <div className="accounts-module-shell flex h-full min-h-0 w-full overflow-hidden">
-      <aside className="accounts-module-sidebar w-[min(380px,32vw)] min-w-[340px] flex-shrink-0 flex flex-col h-full min-h-0 overflow-hidden bg-white border-r border-border/80">
+      <aside className="accounts-module-sidebar relative z-10 w-[min(380px,32vw)] min-w-[340px] flex-shrink-0 flex flex-col h-full min-h-0 overflow-hidden bg-white border-r border-border/80">
         <div className="flex-shrink-0 px-3 py-3 border-b border-border/60">
           <p className={cn(ACCOUNTS_SIDEBAR_GROUP_CLASS, "text-brand-800")}>Accounting</p>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -148,7 +156,7 @@ export function AccountsModuleShell({ children }: AccountsModuleShellProps) {
         </nav>
       </aside>
 
-      <main className="accounts-module-main flex-1 min-w-0 min-h-0 h-full overflow-hidden flex flex-col bg-slate-50/40">
+      <main className="accounts-module-main relative z-0 flex-1 min-w-0 min-h-0 h-full overflow-hidden flex flex-col bg-slate-50/40">
         <div className={cn(ACCOUNTS_SCROLL_PANEL_CLASS, "px-3 py-2")}>{children}</div>
       </main>
     </div>

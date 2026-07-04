@@ -23,6 +23,12 @@ import { customerMasterToTransactionFields } from "@/lib/accounts/transaction-ma
 import { validateProductForSalesInvoice } from "@/lib/accounts/erp-accounting-mapping";
 import { backfillInvoiceCustomerLedgerLinks } from "@/lib/accounts/invoice-ledger-match";
 import {
+	invalidateCreditNotePendingCaches,
+	invalidateModuleDataCache,
+	MODULE_CACHE_KEYS,
+	readThroughModuleCache,
+} from "@/lib/accounts/module-data-cache";
+import {
   NEAR_EXPIRY_SETTLEMENT_REQUIRED_LABEL,
 } from "@/app/(app)/warehouse/dispatch/near-expiry-dispatch";
 import { mergeNearExpiryDemoSalesInvoice } from "@/lib/accounts/near-expiry-scheme-invoice-demo";
@@ -488,7 +494,7 @@ function pushActivity(
 
 const SEED: InvoiceRecord[] = buildSalesInvoiceSeed();
 
-export function loadInvoices(): InvoiceRecord[] {
+function loadInvoicesUncached(): InvoiceRecord[] {
 	if (typeof window === "undefined") return SEED.map(normalizeInvoice);
 	try {
 		const version = localStorage.getItem(SEED_VERSION_KEY);
@@ -510,12 +516,29 @@ export function loadInvoices(): InvoiceRecord[] {
 	}
 }
 
+export function loadInvoices(): InvoiceRecord[] {
+	return readThroughModuleCache(MODULE_CACHE_KEYS.invoices, loadInvoicesUncached);
+}
+
+export function invalidateInvoicesCache(): void {
+	invalidateModuleDataCache(MODULE_CACHE_KEYS.invoices);
+	invalidateCreditNotePendingCaches();
+	try {
+		const { invalidateAccountsDataCache } =
+			require("@/lib/accounts/accounts-data-service") as typeof import("@/lib/accounts/accounts-data-service");
+		invalidateAccountsDataCache("invoices");
+	} catch {
+		/* best-effort sync with service cache */
+	}
+}
+
 export function saveInvoices(records: InvoiceRecord[]): void {
 	if (typeof window === "undefined") return;
 	localStorage.setItem(
 		STORAGE_KEY,
 		JSON.stringify(records.map(normalizeInvoice)),
 	);
+	invalidateInvoicesCache();
 }
 
 export function getInvoiceById(id: number): InvoiceRecord | undefined {

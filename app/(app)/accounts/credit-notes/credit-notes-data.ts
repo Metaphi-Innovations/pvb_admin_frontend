@@ -23,6 +23,12 @@ import { computeNoteTaxBreakup } from "@/lib/accounts/note-tax-breakup";
 import { inferInterstateFromPlaceOfSupply } from "@/lib/accounts/gst-accounting";
 import { reconcileInvoiceCredits, applyCreditAmountToInvoices } from "../invoices/invoices-data";
 import { invalidateAccountsDataCache } from "@/lib/accounts/accounts-data-service";
+import {
+  invalidateCreditNotePendingCaches,
+  invalidateModuleDataCache,
+  MODULE_CACHE_KEYS,
+  readThroughModuleCache,
+} from "@/lib/accounts/module-data-cache";
 import { appendAuditTrailEntry } from "@/lib/accounts/audit-trail-data";
 import { linkCreditNoteToSalesReturn } from "@/lib/accounts/sales-return-credit-bridge";
 import { buildCreditNotesSeed } from "./credit-notes-seed";
@@ -33,13 +39,60 @@ import {
   type SalesReturnRecord,
 } from "@/app/(app)/sales/orders/sales-return-data";
 
-export type CreditNoteSource = "sales_return" | "payment_discount_scheme" | "manual";
+import {
+  CREDIT_NOTE_SOURCE_KIND_LABELS,
+  resolveCreditNoteSourceKind,
+  type CreditNoteSourceKind,
+} from "./credit-note-source-types";
+
+export type CreditNoteSource =
+  | "sales_return"
+  | "payment_discount_scheme"
+  | "cash_discount_scheme"
+  | "festive_scheme"
+  | "turnover_scheme"
+  | "near_expiry_scheme"
+  | "manual";
 
 export const CREDIT_NOTE_SOURCE_LABELS: Record<CreditNoteSource, string> = {
-  sales_return: "Sales Return",
-  payment_discount_scheme: "Scheme",
-  manual: "Manual",
+  sales_return: CREDIT_NOTE_SOURCE_KIND_LABELS.sales_return,
+  payment_discount_scheme: CREDIT_NOTE_SOURCE_KIND_LABELS.payment_discount,
+  cash_discount_scheme: CREDIT_NOTE_SOURCE_KIND_LABELS.cash_discount,
+  festive_scheme: CREDIT_NOTE_SOURCE_KIND_LABELS.festive_scheme,
+  turnover_scheme: CREDIT_NOTE_SOURCE_KIND_LABELS.turnover_discount,
+  near_expiry_scheme: CREDIT_NOTE_SOURCE_KIND_LABELS.near_expiry,
+  manual: CREDIT_NOTE_SOURCE_KIND_LABELS.manual,
 };
+
+export function creditNoteSourceToKind(source: CreditNoteSource, rec?: Partial<CreditNoteRecord>): CreditNoteSourceKind {
+  if (source === "sales_return") return "sales_return";
+  if (source === "manual") return "manual";
+  if (source === "cash_discount_scheme") return "cash_discount";
+  if (source === "festive_scheme") return "festive_scheme";
+  if (source === "turnover_scheme") return "turnover_discount";
+  if (source === "near_expiry_scheme") return "near_expiry";
+  if (source === "payment_discount_scheme") return "payment_discount";
+  return resolveCreditNoteSourceKind(rec ?? {});
+}
+
+export function sourceKindToCreditNoteSource(kind: CreditNoteSourceKind): CreditNoteSource {
+  switch (kind) {
+    case "sales_return":
+      return "sales_return";
+    case "cash_discount":
+      return "cash_discount_scheme";
+    case "near_expiry":
+      return "near_expiry_scheme";
+    case "festive_scheme":
+      return "festive_scheme";
+    case "payment_discount":
+      return "payment_discount_scheme";
+    case "turnover_discount":
+      return "turnover_scheme";
+    default:
+      return "manual";
+  }
+}
 
 export const MANUAL_CREDIT_REASONS = [
   "Commercial Discount",
@@ -241,17 +294,33 @@ export function recalcCreditLine(
   alreadyAdjustedAmount: number,
 ): CreditNoteLine {
   const amounts = calcCreditLineAmounts(line);
-  const creditAmount =
-    line.returnQty > 0 && line.unitPrice > 0
-      ? computeLineCreditAmount(
-          { ...line, creditAmount: amounts.amount },
-          allLines,
-          alreadyAdjustedAmount,
-        )
-      : 0;
+  if (line.returnQty > 0 && line.unitPrice > 0) {
+    const creditAmount = computeLineCreditAmount(
+      { ...line, creditAmount: amounts.amount },
+      allLines,
+      alreadyAdjustedAmount,
+    );
+    return {
+      ...line,
+      creditAmount,
+      gstAmount: amounts.taxAmt,
+      lineAmount: amounts.amount,
+    };
+  }
+  if (line.creditAmount > 0) {
+    const rate = 1 + (line.taxPct || 0) / 100;
+    const taxable = Math.round((line.creditAmount / rate) * 100) / 100;
+    const taxAmt = Math.round((line.creditAmount - taxable) * 100) / 100;
+    return {
+      ...line,
+      creditAmount: line.creditAmount,
+      gstAmount: taxAmt,
+      lineAmount: line.creditAmount,
+    };
+  }
   return {
     ...line,
-    creditAmount,
+    creditAmount: 0,
     gstAmount: amounts.taxAmt,
     lineAmount: amounts.amount,
   };
@@ -329,14 +398,8 @@ export function computeCreditNoteGstSplit(lines: CreditNoteLine[]): { taxable: n
 
 function inferCreditNoteSource(rec: CreditNoteRecord): CreditNoteSource {
   if (rec.source) return rec.source;
-  if (rec.sourceReturnNo) return "sales_return";
-  if (rec.schemeSettlementKey || (rec.schemeCode && rec.schemeName)) {
-    return "payment_discount_scheme";
-  }
-  if (rec.schemeCode && rec.reason?.toLowerCase().includes("payment discount")) {
-    return "payment_discount_scheme";
-  }
-  return "manual";
+  const kind = resolveCreditNoteSourceKind(rec);
+  return sourceKindToCreditNoteSource(kind);
 }
 
 function resolveLinkedInvoices(rec: CreditNoteRecord): CreditNoteLinkedInvoice[] {
@@ -379,7 +442,7 @@ export function normalizeCreditNote(rec: CreditNoteRecord): CreditNoteRecord {
   };
 }
 
-export function loadCreditNotes(): CreditNoteRecord[] {
+function loadCreditNotesUncached(): CreditNoteRecord[] {
   if (typeof window === "undefined") return SEED.map(normalizeCreditNote);
   try {
     const seedCurrent = localStorage.getItem(SEED_VERSION_KEY) === SEED_VERSION_KEY;
@@ -415,10 +478,26 @@ export function loadCreditNotes(): CreditNoteRecord[] {
   }
 }
 
+export function loadCreditNotes(): CreditNoteRecord[] {
+  return readThroughModuleCache(MODULE_CACHE_KEYS.creditNotes, loadCreditNotesUncached);
+}
+
+export function invalidateCreditNotesCache(): void {
+  invalidateModuleDataCache(MODULE_CACHE_KEYS.creditNotes);
+  invalidateCreditNotePendingCaches();
+  try {
+    const { invalidateAccountsDataCache } =
+      require("@/lib/accounts/accounts-data-service") as typeof import("@/lib/accounts/accounts-data-service");
+    invalidateAccountsDataCache("creditNotes");
+  } catch {
+    /* best-effort sync with service cache */
+  }
+}
+
 export function saveCreditNotes(records: CreditNoteRecord[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(records.map(normalizeCreditNote)));
-  invalidateAccountsDataCache("creditNotes");
+  invalidateCreditNotesCache();
 }
 
 export function getCreditNoteById(id: number): CreditNoteRecord | undefined {
@@ -741,6 +820,7 @@ export type CreditNoteFormInput = {
   reason: string;
   remarks: string;
   status: NoteWorkflowStatus;
+  sourceKind?: CreditNoteSourceKind;
   schemeSettlementKey?: string;
   schemeCode?: string;
   schemeSettlementAmount?: number;
@@ -763,8 +843,18 @@ function inferAgainstType(input: CreditNoteFormInput): CreditNoteAgainst {
 
 function resolveCreditNoteSource(input: CreditNoteFormInput): CreditNoteSource {
   if (input.source) return input.source;
+  if (input.sourceKind) return sourceKindToCreditNoteSource(input.sourceKind);
   if (input.sourceReturnNo) return "sales_return";
-  if (input.schemeSettlementKey || input.schemeName) return "payment_discount_scheme";
+  if (input.schemeSettlementKey || input.schemeName) {
+    return sourceKindToCreditNoteSource(
+      resolveCreditNoteSourceKind({
+        schemeSettlementKey: input.schemeSettlementKey,
+        schemeCode: input.schemeCode,
+        schemeName: input.schemeName,
+        reason: input.reason,
+      }),
+    );
+  }
   return "manual";
 }
 
