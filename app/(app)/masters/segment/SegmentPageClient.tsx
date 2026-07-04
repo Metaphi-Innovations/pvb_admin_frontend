@@ -30,16 +30,26 @@ import {
   type SegmentForm,
   type SegmentRecord,
 } from "./segment-data";
+import { sortStateToOrdering } from "@/services/segment-list.service";
 import {
-  SegmentListService,
-  sortStateToOrdering,
-} from "@/services/segment-list.service";
+  useSegments,
+  useSegment,
+  useCreateSegment,
+  useUpdateSegment,
+  useToggleSegmentStatus,
+  useExportSegments,
+} from "@/hooks/masters";
 import {
   MASTER_FILTER_FIELD_MAPS,
   mergeListRequestFilters,
   resolveListStatus,
 } from "@/lib/masters/list-api-filters";
 import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import {
+  getErrorMessage,
+  getMasterListErrorMessage,
+} from "@/lib/masters/master-query-errors";
+import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 import { MasterListing } from "@/components/listing/MasterListing";
 import {
   ColumnConfig,
@@ -119,10 +129,6 @@ function toSegmentRow(item: {
 }
 
 export default function SegmentMasterPage() {
-  const [records, setRecords] = useState<SegmentRecord[]>([]);
-  const [totalRecords, setTotalRecords] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [listError, setListError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>({});
   const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
   const [sort, setSort] = useState<SortState>({ key: "segmentName", direction: "asc" });
@@ -130,15 +136,13 @@ export default function SegmentMasterPage() {
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
-  const [reloadKey, setReloadKey] = useState(0);
-  const [viewLoading, setViewLoading] = useState(false);
+  const [viewId, setViewId] = useState<string | null>(null);
 
   const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
   const [active, setActive] = useState<SegmentRecord | null>(null);
   const [form, setForm] = useState<SegmentForm>(DEFAULT_SEGMENT_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [statusTarget, setStatusTarget] = useState<SegmentRecord | null>(null);
 
   const ordering = useMemo(
@@ -157,54 +161,45 @@ export default function SegmentMasterPage() {
     [debouncedFilters, statusTab],
   );
 
-  useEffect(() => {
-    setStatusTab(readStoredStatusTab());
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    setListError(null);
-
-    SegmentListService.list({
+  const listParams = useMemo<MasterListKeyParams>(
+    () => ({
       page,
       pageSize,
       search: debouncedSearch,
-      ordering,
       status: listStatus,
       apiFilters,
-      signal: controller.signal,
-    })
-      .then((result) => {
-        setRecords(result.items.map(toSegmentRow));
-        setTotalRecords(result.total);
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
-        const err = error as { status?: number; message?: string } | undefined;
-        const message =
-          err?.status === 401
-            ? "Unauthorized. Please login again."
-            : err?.status === 403
-              ? "Forbidden. You do not have access."
-              : err?.status === 404
-                ? "Segment list endpoint not found."
-                : err?.status === 500
-                  ? "Server error while loading segments."
-                  : SegmentListService.extractErrorMessage(
-                      error,
-                      "Unable to load segments.",
-                    );
-        setListError(message);
-        setRecords([]);
-        setTotalRecords(0);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
+      ordering,
+    }),
+    [page, pageSize, debouncedSearch, listStatus, apiFilters, ordering],
+  );
 
-    return () => controller.abort();
-  }, [page, pageSize, debouncedSearch, ordering, apiFilters, listStatus, reloadKey]);
+  const listQuery = useSegments(listParams);
+  const detailQuery = useSegment(viewId);
+  const createMutation = useCreateSegment();
+  const updateMutation = useUpdateSegment();
+  const toggleStatusMutation = useToggleSegmentStatus();
+  const exportMutation = useExportSegments();
+
+  const records = useMemo(
+    () => (listQuery.data?.items ?? []).map(toSegmentRow),
+    [listQuery.data],
+  );
+  const totalRecords = listQuery.data?.total ?? 0;
+  const loading = listQuery.isFetching;
+  const listError = listQuery.isError
+    ? getMasterListErrorMessage(listQuery.error, {
+        resource: "segments",
+        notFoundMessage: "Segment list endpoint not found.",
+        serverMessage: "Server error while loading segments.",
+      })
+    : null;
+  const viewLoading = Boolean(viewId) && detailQuery.isFetching;
+  const saving = createMutation.isPending || updateMutation.isPending;
+  const isFiltering = isDebouncing;
+
+  useEffect(() => {
+    setStatusTab(readStoredStatusTab());
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -216,7 +211,21 @@ export default function SegmentMasterPage() {
     setPage(1);
   }, [debouncedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
 
-  const isFiltering = isDebouncing;
+  useEffect(() => {
+    if (!viewId) return;
+    if (detailQuery.isError) {
+      setToast({
+        msg: getErrorMessage(detailQuery.error, "Failed to load segment details."),
+        type: "error",
+      });
+      setViewId(null);
+      return;
+    }
+    if (detailQuery.data) {
+      setActive(toSegmentRow(detailQuery.data));
+      setSheetMode("view");
+    }
+  }, [viewId, detailQuery.data, detailQuery.isError, detailQuery.error]);
 
   const handleStatusTabChange = (tab: string) => {
     const next = tab as StatusTab;
@@ -229,8 +238,9 @@ export default function SegmentMasterPage() {
     setStatusTarget(record);
   };
 
-  const confirmStatusChange = async () => {
-    if (!statusTarget?.segmentUuid) {
+  const confirmStatusChange = () => {
+    const id = statusTarget?.segmentUuid;
+    if (!statusTarget || !id) {
       setToast({ msg: "Segment id missing. Unable to update status.", type: "error" });
       setStatusTarget(null);
       return;
@@ -238,24 +248,26 @@ export default function SegmentMasterPage() {
 
     const nextActive = statusTarget.status !== "active";
 
-    try {
-      await SegmentListService.updateStatus(statusTarget.segmentUuid, nextActive);
-      setToast({
-        msg: `Segment status updated to ${nextActive ? "Active" : "Inactive"}`,
-        type: "success",
-      });
-      setReloadKey((prev) => prev + 1);
-    } catch (error: unknown) {
-      setToast({
-        msg: SegmentListService.extractErrorMessage(
-          error,
-          "Failed to update segment status.",
-        ),
-        type: "error",
-      });
-    } finally {
-      setStatusTarget(null);
-    }
+    toggleStatusMutation.mutate(
+      { id, isActive: nextActive },
+      {
+        onSuccess: () => {
+          setToast({
+            msg: `Segment status updated to ${nextActive ? "Active" : "Inactive"}`,
+            type: "success",
+          });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to update segment status."),
+            type: "error",
+          });
+        },
+        onSettled: () => {
+          setStatusTarget(null);
+        },
+      },
+    );
   };
 
   const openAdd = () => {
@@ -274,33 +286,18 @@ export default function SegmentMasterPage() {
     setSheetMode("edit");
   };
 
-  const openView = useCallback(async (row: SegmentRecord) => {
+  const openView = useCallback((row: SegmentRecord) => {
     if (!row.segmentUuid) {
       setToast({ msg: "Segment id missing. Unable to load details.", type: "error" });
       return;
     }
-
-    try {
-      setViewLoading(true);
-      const detail = await SegmentListService.view(row.segmentUuid);
-      setActive(toSegmentRow(detail));
-      setSheetMode("view");
-    } catch (error: unknown) {
-      setToast({
-        msg: SegmentListService.extractErrorMessage(
-          error,
-          "Failed to load segment details.",
-        ),
-        type: "error",
-      });
-    } finally {
-      setViewLoading(false);
-    }
+    setViewId(row.segmentUuid);
   }, []);
 
   const closeSheet = () => {
     setSheetMode(null);
     setActive(null);
+    setViewId(null);
     setErrors({});
     setFormError(null);
   };
@@ -402,30 +399,29 @@ export default function SegmentMasterPage() {
     });
   }, [records, sort, ordering]);
 
-  const persist = async () => {
+  const persist = () => {
     const fieldErrors = validateSegmentApiForm(form);
     setErrors(fieldErrors);
     if (Object.keys(fieldErrors).length > 0) return;
 
     if (sheetMode === "add") {
-      try {
-        setSaving(true);
-        setFormError(null);
-        await SegmentListService.create({
+      setFormError(null);
+      createMutation.mutate(
+        {
           segment_name: form.segmentName,
           description: form.description || null,
-        });
-        setToast({ msg: "Segment added successfully", type: "success" });
-        setPage(1);
-        setReloadKey((prev) => prev + 1);
-        closeSheet();
-      } catch (error: unknown) {
-        setFormError(
-          SegmentListService.extractErrorMessage(error, "Failed to create segment."),
-        );
-      } finally {
-        setSaving(false);
-      }
+        },
+        {
+          onSuccess: () => {
+            setToast({ msg: "Segment added successfully", type: "success" });
+            setPage(1);
+            closeSheet();
+          },
+          onError: (error) => {
+            setFormError(getErrorMessage(error, "Failed to create segment."));
+          },
+        },
+      );
       return;
     }
 
@@ -434,40 +430,47 @@ export default function SegmentMasterPage() {
       return;
     }
 
-    try {
-      setSaving(true);
-      setFormError(null);
-      await SegmentListService.update(active.segmentUuid, {
-        segment_name: form.segmentName,
-        description: form.description || null,
-      });
-      setToast({ msg: "Segment updated successfully", type: "success" });
-      setReloadKey((prev) => prev + 1);
-      closeSheet();
-    } catch (error: unknown) {
-      setFormError(
-        SegmentListService.extractErrorMessage(error, "Failed to update segment."),
-      );
-    } finally {
-      setSaving(false);
-    }
+    setFormError(null);
+    updateMutation.mutate(
+      {
+        id: active.segmentUuid,
+        payload: {
+          segment_name: form.segmentName,
+          description: form.description || null,
+        },
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Segment updated successfully", type: "success" });
+          closeSheet();
+        },
+        onError: (error) => {
+          setFormError(getErrorMessage(error, "Failed to update segment."));
+        },
+      },
+    );
   };
 
-  const handleExport = async () => {
-    try {
-      await SegmentListService.export({
+  const handleExport = () => {
+    exportMutation.mutate(
+      {
         search: debouncedSearch,
         status: listStatus,
         ordering,
         apiFilters,
-      });
-      setToast({ msg: "Segments exported successfully", type: "success" });
-    } catch (error: unknown) {
-      setToast({
-        msg: SegmentListService.extractErrorMessage(error, "Failed to export segments"),
-        type: "error",
-      });
-    }
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Segments exported successfully", type: "success" });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to export segments"),
+            type: "error",
+          });
+        },
+      },
+    );
   };
 
   const sheetTitle =
