@@ -6,15 +6,15 @@ import type { PurchaseOrder } from "./po-data";
 
 export type POInvoiceListingStatus = "not_uploaded" | "uploaded";
 
-export function getPOVendorInvoice(poId: number): PurchaseInvoiceRecord | null {
-  const list = listPurchaseInvoicesByPO(poId);
+export function getPOVendorInvoice(poId: string | number): PurchaseInvoiceRecord | null {
+  const list = listPurchaseInvoicesByPO(poId as number);
   if (!list.length) return null;
   return [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
 }
 
 export function canUploadPOInvoice(po: PurchaseOrder): boolean {
-  if (["cancelled", "short_closed"].includes(po.status)) return false;
-  return ["approved", "invoice_uploaded"].includes(po.status);
+  if (["cancelled", "short_closed", "closed"].includes(po.status)) return false;
+  return ["approved", "invoice_uploaded", "partially_received", "received"].includes(po.status);
 }
 
 export function getPOInvoiceListingStatus(po: PurchaseOrder): POInvoiceListingStatus {

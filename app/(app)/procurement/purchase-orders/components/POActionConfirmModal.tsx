@@ -45,24 +45,27 @@ export function POActionConfirmModal({
   po,
   action,
   onConfirm,
+  submitting = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   po: PurchaseOrder | null;
   action: POActionConfirmType;
   onConfirm: () => void;
+  submitting?: boolean;
 }) {
   if (!po) return null;
 
   const cfg = CONFIG[action];
 
-  const handleConfirm = () => {
-    onConfirm();
-    onOpenChange(false);
-  };
-
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (submitting) return;
+        onOpenChange(next);
+      }}
+    >
       <DialogContent className="max-w-sm z-[400]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
@@ -102,6 +105,7 @@ export function POActionConfirmModal({
             size="sm"
             className="h-8 text-xs"
             onClick={() => onOpenChange(false)}
+            disabled={submitting}
           >
             No, keep PO
           </Button>
@@ -113,9 +117,10 @@ export function POActionConfirmModal({
                 ? "bg-red-600 hover:bg-red-700"
                 : "bg-brand-600 hover:bg-brand-700",
             )}
-            onClick={handleConfirm}
+            onClick={onConfirm}
+            disabled={submitting}
           >
-            {cfg.confirmLabel}
+            {submitting ? "Saving…" : cfg.confirmLabel}
           </Button>
         </div>
       </DialogContent>
