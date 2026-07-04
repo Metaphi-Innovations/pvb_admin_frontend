@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { cn } from "@/lib/utils";
@@ -8,37 +8,112 @@ import {
   Edit2,
   Eye,
   FileText,
-  CheckCircle2,
-  XCircle,
   X,
 } from "lucide-react";
 import {
   DocumentTypeMaster,
-  loadDocumentTypes,
-  saveDocumentTypes,
-  todayStr,
 } from "./document-type-data";
-import { MiniKPICard } from "@/components/ui/KPICard";
+import { DocumentTypeListService } from "@/services/document-type-list.service";
+import {
+  MASTER_FILTER_FIELD_MAPS,
+  mergeListRequestFilters,
+  resolveListStatus,
+} from "@/lib/masters/list-api-filters";
+import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
 import { MasterListing } from "@/components/listing/MasterListing";
-import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { MasterRecordDrawer, masterAuditFromRecord } from "@/components/masters/MasterRecordDrawer";
 import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
 
+function toDocumentTypeRow(item: {
+  id: string;
+  title: string;
+  description: string;
+  status: "Active" | "Inactive";
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+}): DocumentTypeMaster {
+  return {
+    id: item.id,
+    documentTypeCode: "",
+    title: item.title,
+    description: item.description,
+    status: item.status,
+    createdBy: item.createdBy || "—",
+    createdDate: item.createdAt ? item.createdAt.slice(0, 10) : "",
+    updatedBy: item.updatedBy || "—",
+    updatedDate: item.updatedAt ? item.updatedAt.slice(0, 10) : "",
+  };
+}
+
 export default function DocumentTypesPage() {
   const router = useRouter();
   const [records, setRecords] = useState<DocumentTypeMaster[]>([]);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>({});
+  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
   const [sort, setSort] = useState<SortState>({ key: "title", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  
+
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [viewTarget, setViewTarget] = useState<DocumentTypeMaster | null>(null);
+  const [viewLoading, setViewLoading] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const apiFilters = useMemo(
+    () => mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.documentType),
+    [debouncedFilters],
+  );
+  const listStatus = useMemo(
+    () => resolveListStatus(debouncedFilters),
+    [debouncedFilters],
+  );
 
   useEffect(() => {
-    setRecords(loadDocumentTypes());
-  }, []);
+    const controller = new AbortController();
+    setLoading(true);
+    setListError(null);
+
+    DocumentTypeListService.list({
+      page,
+      pageSize,
+      search: debouncedSearch,
+      status: listStatus,
+      apiFilters,
+      signal: controller.signal,
+    })
+      .then((result) => {
+        setRecords(result.items.map(toDocumentTypeRow));
+        setTotalRecords(result.total);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        const err = error as { status?: number; message?: string } | undefined;
+        const message =
+          err?.status === 401
+            ? "Unauthorized. Please login again."
+            : err?.status === 403
+              ? "Forbidden. You do not have access."
+              : err?.status === 404
+                ? "Document type list endpoint not found."
+                : err?.status === 500
+                  ? "Server error while loading document types."
+                  : err?.message || "Unable to load document types.";
+        setListError(message);
+        setRecords([]);
+        setTotalRecords(0);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [page, pageSize, debouncedSearch, apiFilters, listStatus, reloadKey]);
 
   useEffect(() => {
     if (!toast) return;
@@ -46,22 +121,41 @@ export default function DocumentTypesPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const toggleStatus = (record: DocumentTypeMaster) => {
-    const nextStatus: "Active" | "Inactive" = record.status === "Active" ? "Inactive" : "Active";
-    const updated = records.map((r) =>
-      r.id === record.id
-        ? {
-            ...r,
-            status: nextStatus,
-            updatedBy: "Admin",
-            updatedDate: todayStr(),
-          }
-        : r
-    );
-    saveDocumentTypes(updated);
-    setRecords(updated);
-    setToast({ msg: `Document Type status updated to ${nextStatus}`, type: "success" });
-  };
+  const toggleStatus = useCallback(async (record: DocumentTypeMaster) => {
+    if (!record.id) {
+      setToast({ msg: "Document type id missing. Unable to update status.", type: "error" });
+      return;
+    }
+    try {
+      await DocumentTypeListService.updateStatus(record.id);
+      setToast({
+        msg: `Document type status updated to ${record.status === "Active" ? "Inactive" : "Active"}`,
+        type: "success",
+      });
+      setReloadKey((prev) => prev + 1);
+    } catch (error: unknown) {
+      const err = error as { message?: string } | undefined;
+      setToast({ msg: err?.message || "Failed to update document type status.", type: "error" });
+    }
+  }, []);
+
+  const openView = useCallback(async (row: DocumentTypeMaster) => {
+    if (!row.id) {
+      setToast({ msg: "Document type id missing. Unable to load details.", type: "error" });
+      return;
+    }
+
+    try {
+      setViewLoading(true);
+      const detail = await DocumentTypeListService.view(row.id);
+      setViewTarget(toDocumentTypeRow(detail));
+    } catch (error: unknown) {
+      const err = error as { message?: string } | undefined;
+      setToast({ msg: err?.message || "Failed to load document type details.", type: "error" });
+    } finally {
+      setViewLoading(false);
+    }
+  }, []);
 
   const columns: ColumnConfig<DocumentTypeMaster>[] = [
     {
@@ -93,12 +187,15 @@ export default function DocumentTypesPage() {
       filterable: true,
       filterType: "dropdown",
       filterOptions: [
-        { label: "Active", value: "Active" },
-        { label: "Inactive", value: "Inactive" },
+        { label: "Active", value: "active" },
+        { label: "Inactive", value: "inactive" },
       ],
       width: "160px",
       render: (val, row) => (
-        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => toggleStatus(row)} />
+        <ListingStatusToggle
+          active={isActiveStatus(row.status)}
+          onChange={() => toggleStatus(row)}
+        />
       ),
     },
     {
@@ -106,7 +203,7 @@ export default function DocumentTypesPage() {
       header: "Created",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "audit",
       width: "120px",
       render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />,
     },
@@ -115,7 +212,7 @@ export default function DocumentTypesPage() {
       header: "Updated",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "audit",
       width: "120px",
       render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />,
     },
@@ -126,7 +223,8 @@ export default function DocumentTypesPage() {
       label: "View",
       action: "view",
       icon: Eye,
-      onClick: (row) => setViewTarget(row),
+      onClick: (row) => openView(row),
+      disabled: () => viewLoading,
     },
     {
       label: "Edit",
@@ -136,88 +234,39 @@ export default function DocumentTypesPage() {
     },
   ];
 
-  const filtered = useMemo(() => {
-    let result = [...records];
+  const displayRecords = useMemo(() => {
+    if (!sort.key || sort.direction === "none") return records;
+    return [...records].sort((a, b) => {
+      const aVal = String(a[sort.key as keyof DocumentTypeMaster] || "").toLowerCase();
+      const bVal = String(b[sort.key as keyof DocumentTypeMaster] || "").toLowerCase();
+      const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      return sort.direction === "asc" ? cmp : -cmp;
+    });
+  }, [records, sort]);
 
-    // Search
-    if (filters.search) {
-      const q = String(filters.search).trim().toLowerCase();
-      result = result.filter(r =>
-        r.title.toLowerCase().includes(q) ||
-        (r.description || "").toLowerCase().includes(q)
-      );
-    }
-
-    // Apply column filters
-    result = applyFilters(result, filters);
-
-    // Sorting
-    if (sort.key && sort.direction !== "none") {
-      result.sort((a, b) => {
-        let aVal = a[sort.key as keyof DocumentTypeMaster];
-        let bVal = b[sort.key as keyof DocumentTypeMaster];
-        if (aVal === undefined) aVal = "";
-        if (bVal === undefined) bVal = "";
-        if (typeof aVal === "string") {
-          aVal = aVal.toLowerCase();
-          bVal = (bVal as string).toLowerCase();
-        }
-        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-        return sort.direction === "asc" ? cmp : -cmp;
-      });
-    }
-
-    return result;
-  }, [records, filters, sort]);
-
-  const paginated = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, page, pageSize]);
-
-  const handleExport = () => {
-    const rows = filtered.map((row) => ({
-      Title: row.title,
-      Description: row.description || "",
-      Status: row.status,
-      "Created By": row.createdBy || "",
-      "Updated By": row.updatedBy || "",
-    }));
-
-    const headers = Object.keys(rows[0] || {});
-    const csv = [
-      headers.join(","),
-      ...rows.map((row) =>
-        headers
-          .map((header) => {
-            const value = String(row[header as keyof typeof row] ?? "");
-            return `"${value.replace(/"/g, '""')}"`;
-          })
-          .join(","),
-      ),
-    ].join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `document-types-${todayStr()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const isFiltering = isDebouncing;
 
   useEffect(() => {
     setPage(1);
-  }, [filters, sort, pageSize]);
+  }, [debouncedSearch, apiFilters, pageSize, sort.key, sort.direction]);
 
-  const total = records.length;
-  const active = records.filter(r => r.status === "Active").length;
-  const inactive = records.filter(r => r.status === "Inactive").length;
+  const handleExport = async () => {
+    try {
+      await DocumentTypeListService.export({
+        search: debouncedSearch,
+        status: listStatus,
+        apiFilters,
+      });
+      setToast({ msg: "Document types exported successfully", type: "success" });
+    } catch (error: unknown) {
+      const err = error as { message?: string } | undefined;
+      setToast({ msg: err?.message || "Failed to export document types", type: "error" });
+    }
+  };
 
   return (
     <AppLayout>
       <div className="space-y-5">
-        {/* Header */}
         <div>
           <h1 className="text-xl font-bold text-foreground">Document Type Master</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
@@ -225,18 +274,13 @@ export default function DocumentTypesPage() {
           </p>
         </div>
 
-        {/* KPI Cards */}
-        {/* <div className="grid grid-cols-3 gap-3">
-          <MiniKPICard label="Total Document Types" value={total} icon={FileText} accent={true} />
-          <MiniKPICard label="Active" value={active} icon={CheckCircle2} accent={false} />
-          <MiniKPICard label="Inactive" value={inactive} icon={XCircle} accent={false} />
-        </div> */}
+        {listError ? <p className="text-xs text-red-600">{listError}</p> : null}
 
-        {/* Table Listing */}
         <MasterListing<DocumentTypeMaster>
           columns={columns}
-          data={paginated}
-          totalRecords={filtered.length}
+          data={displayRecords}
+          loading={loading || isFiltering}
+          totalRecords={totalRecords}
           page={page}
           pageSize={pageSize}
           onPageChange={setPage}
@@ -278,7 +322,6 @@ export default function DocumentTypesPage() {
         />
       )}
 
-      {/* Toast */}
       {toast && (
         <div
           className={cn(

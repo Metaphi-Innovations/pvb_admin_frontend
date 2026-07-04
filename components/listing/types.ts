@@ -1,6 +1,6 @@
 import React from "react";
 
-export type FilterType = "text" | "dropdown" | "date";
+export type FilterType = "text" | "dropdown" | "date" | "audit";
 
 export interface ColumnConfig<T = any> {
   key: string;
@@ -20,7 +20,14 @@ export interface DateRange {
   toDate: string;
 }
 
-export type FilterValue = string | string[] | DateRange;
+/** Created/Updated column filter: user and/or date range (combinable). */
+export interface AuditFilterValue {
+  user?: string;
+  fromDate?: string;
+  toDate?: string;
+}
+
+export type FilterValue = string | string[] | DateRange | AuditFilterValue;
 
 export interface FilterState {
   [key: string]: FilterValue;

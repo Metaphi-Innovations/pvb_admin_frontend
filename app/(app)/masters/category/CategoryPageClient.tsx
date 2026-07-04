@@ -11,7 +11,6 @@ import {
   compactInput,
 } from "@/components/masters/MasterModule";
 import {
-  CATEGORY_SEED,
   CATEGORY_STORAGE_KEY,
   categoryToForm,
   DEFAULT_CATEGORY_FORM,
@@ -20,6 +19,7 @@ import {
   type CategoryRecord,
   validateCategoryForm,
 } from "./category-data";
+import { CategoryListService } from "@/services/category-list.service";
 
 const columns: Column<CategoryRecord>[] = [
   { key: "categoryName", header: "Category Name", sortable: true },
@@ -39,7 +39,7 @@ export default function CategoryPageClient() {
         description: "Product categories for catalog organization",
         icon: Tag,
         storageKey: CATEGORY_STORAGE_KEY,
-        seed: CATEGORY_SEED,
+        seed: [],
         codePrefix: "",
         columns,
         searchKeys: ["categoryName", "description"],
@@ -47,6 +47,25 @@ export default function CategoryPageClient() {
         getFormFromRecord: categoryToForm,
         recordFromForm: formToCategory,
         validate: (f) => validateCategoryForm(f),
+        remoteListConfig: {
+          fetchPage: async ({ page, pageSize, search, status, signal }) => {
+            const result = await CategoryListService.list({ page, pageSize, search, status, signal });
+            return {
+              items: result.items.map((item) => ({
+                id: item.id,
+                categoryName: item.name,
+                description: item.remark,
+                status: item.status,
+                createdBy: item.createdBy || "—",
+                updatedBy: item.updatedBy || "—",
+                createdAt: item.createdAt,
+                updatedAt: item.updatedAt,
+              })),
+              total: result.total,
+            };
+          },
+          searchDebounceMs: 350,
+        },
         auditColumnVariant: "product",
         auditColumnHeaders: {
           created: "Created",

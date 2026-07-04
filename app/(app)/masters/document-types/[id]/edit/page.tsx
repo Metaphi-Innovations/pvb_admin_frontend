@@ -7,15 +7,10 @@ import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  loadDocumentTypes,
-  saveDocumentTypes,
-  generateNextDocumentTypeCode,
-  todayStr,
-  type DocumentTypeMaster,
-} from "../../document-type-data";
+import { DocumentTypeListService } from "@/services/document-type-list.service";
 import {
   DocumentTypeForm,
+  DEFAULT_DOCUMENT_TYPE_FORM,
   type DocumentTypeFormValues,
   validateDocumentTypeForm,
 } from "../../components/DocumentTypeForm";
@@ -25,17 +20,35 @@ export default function EditDocumentTypePage() {
   const { id } = useParams<{ id: string }>();
   const [form, setForm] = useState<DocumentTypeFormValues | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
   useEffect(() => {
-    const list = loadDocumentTypes();
-    const found = list.find((d) => d.id === id);
-    if (!found) return;
-    setForm({
-      documentTypeCode: found.documentTypeCode || generateNextDocumentTypeCode(list),
-      title: found.title,
-      description: found.description || "",
-    });
+    if (!id) return;
+
+    setLoading(true);
+    setLoadError(null);
+
+    DocumentTypeListService.view(id)
+      .then((detail) => {
+        setForm({
+          documentTypeCode: "",
+          title: detail.title,
+          description: detail.description || "",
+        });
+      })
+      .catch((error: unknown) => {
+        const err = error as { status?: number; message?: string } | undefined;
+        const message =
+          err?.status === 404
+            ? "Document type not found."
+            : err?.message || "Failed to load document type.";
+        setLoadError(message);
+        setForm(null);
+      })
+      .finally(() => setLoading(false));
   }, [id]);
 
   const clearErr = (key: string) =>
@@ -45,8 +58,8 @@ export default function EditDocumentTypePage() {
       return next;
     });
 
-  const handleSave = () => {
-    if (!form) return;
+  const handleSave = async () => {
+    if (!form || !id) return;
     const validation = validateDocumentTypeForm(form);
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
@@ -55,29 +68,35 @@ export default function EditDocumentTypePage() {
       return;
     }
 
-    const list = loadDocumentTypes();
-    const updated = list.map((d) =>
-      d.id === id
-        ? {
-            ...d,
-            documentTypeCode: form.documentTypeCode,
-            title: form.title.trim(),
-            description: form.description.trim(),
-            updatedBy: "Admin",
-            updatedDate: todayStr(),
-          }
-        : d
-    );
-
-    saveDocumentTypes(updated);
-    setToast({ msg: "Document Type updated successfully", type: "success" });
-    setTimeout(() => router.push("/masters/document-types"), 900);
+    try {
+      setSaving(true);
+      await DocumentTypeListService.update(id, {
+        title: form.title,
+        description: form.description,
+      });
+      setToast({ msg: "Document Type updated successfully", type: "success" });
+      setTimeout(() => router.push("/masters/document-types"), 900);
+    } catch (error: unknown) {
+      const err = error as { message?: string } | undefined;
+      setToast({ msg: err?.message || "Failed to update document type.", type: "error" });
+      setTimeout(() => setToast(null), 3200);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  if (!form) {
+  if (loading) {
     return (
       <div className="py-16 text-center">
-        <p className="text-sm text-muted-foreground">Document Type not found.</p>
+        <p className="text-sm text-muted-foreground">Loading document type...</p>
+      </div>
+    );
+  }
+
+  if (!form || loadError) {
+    return (
+      <div className="py-16 text-center">
+        <p className="text-sm text-muted-foreground">{loadError || "Document Type not found."}</p>
         <Link href="/masters/document-types" className="text-xs text-brand-600 hover:underline mt-2 inline-block">
           Back to listing
         </Link>
@@ -92,14 +111,20 @@ export default function EditDocumentTypePage() {
       onBack={() => router.back()}
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
+          <Button
+            variant="outline"
+            className="h-9 text-xs font-semibold rounded-lg"
+            onClick={() => router.back()}
+            disabled={saving}
+          >
             Discard
           </Button>
           <Button
             className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
+            disabled={saving}
           >
-            <Save className="w-4 h-4" /> Update Document Type
+            <Save className="w-4 h-4" /> {saving ? "Updating..." : "Update Document Type"}
           </Button>
         </div>
       }

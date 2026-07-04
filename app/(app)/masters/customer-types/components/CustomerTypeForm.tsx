@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { type CustomerTypeDocument } from "../customer-type-data";
-import { loadDocumentTypes } from "../../document-types/document-type-data";
+import { DocumentTypeListService, type DocumentTypeDropdownItem } from "@/services/document-type-list.service";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import {
 	normalizeInitialCode,
@@ -33,30 +33,27 @@ function DocumentNameField({
 	onChange,
 	readOnly,
 	error,
+	options,
 }: {
 	value: string;
 	documentTypeId?: string;
 	onChange: (next: { documentName: string; documentTypeId?: string }) => void;
 	readOnly?: boolean;
 	error?: string;
+	options: DocumentTypeDropdownItem[];
 }) {
-	const activeDocTypes = useMemo(
-		() => loadDocumentTypes().filter((d) => d.status === "Active"),
-		[],
-	);
 	const [open, setOpen] = useState(false);
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const filtered = useMemo(() => {
 		const q = value.trim().toLowerCase();
-		if (!q) return activeDocTypes;
-		return activeDocTypes.filter(
+		if (!q) return options;
+		return options.filter(
 			(d) =>
 				d.title.toLowerCase().includes(q) ||
-				d.description.toLowerCase().includes(q) ||
 				d.id.toLowerCase().includes(q),
 		);
-	}, [activeDocTypes, value]);
-	const selected = activeDocTypes.find((d) => d.id === documentTypeId);
+	}, [options, value]);
+	const selected = options.find((d) => d.id === documentTypeId);
 
 	useEffect(() => {
 		if (!open || readOnly) return;
@@ -152,11 +149,6 @@ function DocumentNameField({
 												<Check className='w-3 h-3 text-brand-600 shrink-0' />
 											)}
 										</div>
-										{docType.description && (
-											<p className='text-[10px] text-muted-foreground truncate mt-0.5'>
-												{docType.description}
-											</p>
-										)}
 									</div>
 								</button>
 							))
@@ -224,6 +216,7 @@ export function CustomerTypeForm({
 	errors,
 	onClearError,
 	readOnly,
+	readOnlyInitialCode,
 	triggerToast,
 	recordId,
 	originalInitialCode,
@@ -233,12 +226,38 @@ export function CustomerTypeForm({
 	errors: Record<string, string>;
 	onClearError: (key: string) => void;
 	readOnly?: boolean;
+	readOnlyInitialCode?: boolean;
 	triggerToast?: (message: string, type: "success" | "error") => void;
 	/** Set in edit mode to preserve code when initial code is unchanged. */
 	recordId?: number;
 	originalInitialCode?: string;
 }) {
 	const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
+	const [docTypesList, setDocTypesList] = useState<DocumentTypeDropdownItem[]>([]);
+	const [docTypesLoading, setDocTypesLoading] = useState(true);
+	const [docTypesError, setDocTypesError] = useState<string | null>(null);
+
+	useEffect(() => {
+		const controller = new AbortController();
+		setDocTypesLoading(true);
+		setDocTypesError(null);
+
+		DocumentTypeListService.dropdown()
+			.then((items) => {
+				if (!controller.signal.aborted) setDocTypesList(items);
+			})
+			.catch((error: unknown) => {
+				if (controller.signal.aborted) return;
+				const err = error as { message?: string } | undefined;
+				setDocTypesError(err?.message || "Failed to load document types.");
+				setDocTypesList([]);
+			})
+			.finally(() => {
+				if (!controller.signal.aborted) setDocTypesLoading(false);
+			});
+
+		return () => controller.abort();
+	}, []);
 
 	useEffect(() => {
 		const normalized = normalizeInitialCode(form.initialCode);
@@ -259,11 +278,7 @@ export function CustomerTypeForm({
 		if (nextCode !== form.customerTypeCode) {
 			onChange((prev) => ({ ...prev, customerTypeCode: nextCode }));
 		}
-	}, [form.initialCode, form.customerTypeCode, recordId, originalInitialCode]);
-
-	const docTypesList = useMemo(() => {
-		return loadDocumentTypes().filter((d) => d.status === "Active");
-	}, []);
+	}, [form.initialCode, form.customerTypeCode, recordId, originalInitialCode, onChange]);
 
 	const autocompleteOptions = useMemo(() => {
 		return docTypesList.map((d) => ({
@@ -406,7 +421,7 @@ export function CustomerTypeForm({
 								}
 								placeholder='e.g. GRC'
 								className={cn(inputCls("initialCode"), "font-mono uppercase")}
-								disabled={readOnly}
+								disabled={readOnly || readOnlyInitialCode}
 								maxLength={5}
 							/>
 							{errors.initialCode && (
@@ -444,11 +459,13 @@ export function CustomerTypeForm({
 					{/* Add Controls */}
 					{!readOnly && (
 						<div className='flex items-end gap-3 p-3 border rounded-lg bg-muted/20 border-border'>
-							{/* Document Type Dropdown */}
 							<div className='flex-1 space-y-1'>
 								<Label className='text-[11px] font-medium text-muted-foreground'>
 									Document Details
 								</Label>
+								{docTypesError ? (
+									<p className='text-[11px] text-red-500'>{docTypesError}</p>
+								) : null}
 								<AutocompleteSelect
 									options={autocompleteOptions}
 									value={selectedDocIds}
@@ -456,9 +473,10 @@ export function CustomerTypeForm({
 										setSelectedDocIds(Array.isArray(val) ? val : [])
 									}
 									multiple
-									placeholder='Select Document Type'
+									placeholder={docTypesLoading ? "Loading document types..." : "Select Document Type"}
 									searchPlaceholder='Search document type...'
 									className='h-8 text-xs bg-white border-border'
+									disabled={docTypesLoading || !!docTypesError}
 								/>
 							</div>
 
@@ -467,6 +485,7 @@ export function CustomerTypeForm({
 								onClick={handleAddDocument}
 								size='sm'
 								className='flex-shrink-0 h-8 px-4 text-xs text-white bg-brand-600 hover:bg-brand-700'
+								disabled={docTypesLoading || !!docTypesError}
 							>
 								Add
 							</Button>
@@ -546,6 +565,7 @@ export function CustomerTypeForm({
 														value={doc.documentName}
 														documentTypeId={doc.documentTypeId}
 														readOnly={readOnly}
+														options={docTypesList}
 														onChange={(patch) =>
 															handleUpdateDocument(doc.id, patch)
 														}
