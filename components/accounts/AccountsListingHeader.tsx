@@ -8,9 +8,8 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 
-/** White filter card — sits between page title and table card (z-20 keeps it above sticky table headers) */
-export const ACCOUNTS_LISTING_FILTER_CARD_CLASS =
-  "accounts-listing-filter-card relative z-20";
+/** White filter card — sits between page title and table card */
+export const ACCOUNTS_LISTING_FILTER_CARD_CLASS = "accounts-listing-filter-card";
 
 /** Table container — tabs + scrollable table + footer */
 export const ACCOUNTS_LISTING_TABLE_CARD_CLASS =

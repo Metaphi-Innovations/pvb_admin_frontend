@@ -22,11 +22,6 @@ import {
 	CREDIT_LIMIT_DEMO_CUSTOMERS_RAW,
 	CREDIT_LIMIT_DEMO_CUSTOMER_IDS,
 } from "@/lib/sales/credit-limit-demo-seed";
-import {
-	invalidateModuleDataCache,
-	MODULE_CACHE_KEYS,
-	readThroughModuleCache,
-} from "@/lib/accounts/module-data-cache";
 
 export type CustomerStatus = "active" | "inactive" | "draft" | "blocked";
 
@@ -2090,7 +2085,7 @@ function mergeMissingSeedCustomers(loaded: Customer[]): Customer[] {
 	return missing.length > 0 ? [...loaded, ...missing] : loaded;
 }
 
-function loadCustomersUncached(): Customer[] {
+export function loadCustomers(): Customer[] {
 	if (typeof window === "undefined") return SEED_CUSTOMERS;
 	try {
 		const raw = localStorage.getItem(STORAGE_KEY);
@@ -2130,18 +2125,9 @@ function loadCustomersUncached(): Customer[] {
 	}
 }
 
-export function loadCustomers(): Customer[] {
-	return readThroughModuleCache(MODULE_CACHE_KEYS.customers, loadCustomersUncached);
-}
-
-export function invalidateCustomersCache(): void {
-	invalidateModuleDataCache(MODULE_CACHE_KEYS.customers);
-}
-
 export function saveCustomers(list: Customer[]): void {
 	if (typeof window === "undefined") return;
 	localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-	invalidateCustomersCache();
 }
 
 export function nextCustomerId(list: Customer[]): number {

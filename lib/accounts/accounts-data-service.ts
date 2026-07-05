@@ -47,11 +47,6 @@ import {
   type InventoryAdjustmentRecord,
 } from "@/lib/accounts/accounts-mock-data";
 import { loadAuditTrailRecords, type AuditTrailRecord } from "@/lib/accounts/audit-trail-data";
-import {
-  invalidateCreditNotePendingCaches,
-  invalidateModuleDataCache,
-  MODULE_CACHE_KEYS,
-} from "@/lib/accounts/module-data-cache";
 
 export type AccountsDataScope =
   | "invoices"
@@ -81,20 +76,9 @@ export function invalidateAccountsDataCache(scope: AccountsDataScope = "all"): v
   if (scope === "all") {
     cacheEpoch += 1;
     cache.clear();
-    invalidateModuleDataCache(Object.values(MODULE_CACHE_KEYS));
     return;
   }
   cache.delete(scope);
-  if (scope === "invoices") {
-    invalidateModuleDataCache(MODULE_CACHE_KEYS.invoices);
-    invalidateModuleDataCache([
-      MODULE_CACHE_KEYS.schemePendingAll,
-      MODULE_CACHE_KEYS.pendingCreditNotes,
-    ]);
-  }
-  if (scope === "creditNotes") {
-    invalidateCreditNotePendingCaches();
-  }
   // Related derived scopes
   if (scope === "invoices" || scope === "vouchers") {
     cache.delete("receivables");
