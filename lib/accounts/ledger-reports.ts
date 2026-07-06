@@ -10,7 +10,10 @@ import {
   type LedgerBalance,
 } from "@/app/(app)/accounts/masters/ledgers/ledgers-utils";
 import { resolveHierarchyPath } from "@/lib/accounts/coa-hierarchy";
-import { getLedgerMovementTotals } from "@/app/(app)/accounts/vouchers/voucher-data";
+import {
+  getLedgerMovementTotals,
+  getVoucherCacheGeneration,
+} from "@/app/(app)/accounts/vouchers/voucher-data";
 
 export interface LedgerMovement {
   debit: number;
@@ -28,6 +31,18 @@ export interface TrialBalanceRow {
   debit: number;
   credit: number;
   closing: LedgerBalance;
+}
+
+let cachedTrialBalanceRows: TrialBalanceRow[] | null = null;
+let trialBalanceCacheKey = "";
+
+function trialBalanceCacheEpoch(records: ChartOfAccount[]): string {
+  return `${records.length}:${getVoucherCacheGeneration()}`;
+}
+
+function invalidateTrialBalanceCache(): void {
+  cachedTrialBalanceRows = null;
+  trialBalanceCacheKey = "";
 }
 
 export interface LedgerReportRow {
@@ -56,7 +71,12 @@ export function getVoucherMovementForLedger(ledgerId: number): LedgerMovement {
 export function computeTrialBalanceRows(
   records: ChartOfAccount[] = loadChartOfAccounts(),
 ): TrialBalanceRow[] {
-  return getCoaLedgers()
+  const epoch = trialBalanceCacheEpoch(records);
+  if (cachedTrialBalanceRows && trialBalanceCacheKey === epoch) {
+    return cachedTrialBalanceRows;
+  }
+
+  const rows = getCoaLedgers()
     .map((ledger) => {
       const movement = getLedgerMovementTotals(ledger.id);
       const hierarchy = resolveHierarchyPath(records, ledger.id);
@@ -74,6 +94,15 @@ export function computeTrialBalanceRows(
       };
     })
     .sort((a, b) => a.ledger.localeCompare(b.ledger));
+
+  cachedTrialBalanceRows = rows;
+  trialBalanceCacheKey = epoch;
+  return rows;
+}
+
+/** Clear memoized trial balance after voucher/COA mutations. */
+export function invalidateLedgerReportCaches(): void {
+  invalidateTrialBalanceCache();
 }
 
 export function computeLedgerReportRows(

@@ -101,6 +101,13 @@ let coaCache: ChartOfAccount[] | null = null;
 
 function clearCoaCache(): void {
   coaCache = null;
+  try {
+    const { invalidateCoaPathCache } =
+      require("@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data") as typeof import("@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data");
+    invalidateCoaPathCache();
+  } catch {
+    // optional during module init
+  }
 }
 
 const LEGACY_COA_KEYS = [
@@ -394,6 +401,12 @@ export const saveChartOfAccounts = (list: ChartOfAccount[]) => {
   save(COA_KEY, cleaned);
   writeCoaMeta();
   clearCoaCache();
+  try {
+    const { invalidateLedgerReportCaches } = require("@/lib/accounts/ledger-reports") as typeof import("@/lib/accounts/ledger-reports");
+    invalidateLedgerReportCaches();
+  } catch {
+    // optional — avoid circular init issues during module load
+  }
   dispatchCoaChanged();
 };
 export const getSystemCoaNodes = () => SYSTEM_COA_NODES;

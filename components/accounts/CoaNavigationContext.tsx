@@ -82,7 +82,14 @@ interface CoaNavigationContextValue {
 
 const CoaNavigationContext = createContext<CoaNavigationContextValue | null>(null);
 
-export function CoaNavigationProvider({ children }: { children: React.ReactNode }) {
+export function CoaNavigationProvider({
+  children,
+  initMode = "full",
+}: {
+  children: React.ReactNode;
+  /** tree-only: sidebar COA tree without ERP/TDS backfill (fast). full: deferred backfill. */
+  initMode?: "full" | "tree-only";
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const { activeAccountsSection } = useAccountsAccordion();
@@ -106,18 +113,30 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
     if (!needsCoaData || initRef.current) return;
     initRef.current = true;
 
-    const init = () => {
-      backfillErpPartyLedgers();
-      backfillCoaMasterLinks();
-      ensureTdsAccountingLedgers();
+    const showTree = () => {
       const loaded = readCoaRecords();
       setRecords(loaded);
       setExpandedIds(defaultExpandedIds(loaded));
       setCoaReady(true);
     };
 
-    window.setTimeout(init, 0);
-  }, [needsCoaData]);
+    window.setTimeout(showTree, 0);
+
+    if (initMode !== "full") return;
+
+    const runBackfill = () => {
+      backfillErpPartyLedgers();
+      backfillCoaMasterLinks();
+      ensureTdsAccountingLedgers();
+      setRecords(readCoaRecords());
+    };
+
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(runBackfill, { timeout: 3000 });
+    } else {
+      window.setTimeout(runBackfill, 250);
+    }
+  }, [needsCoaData, initMode]);
 
   const refreshRecords = useCallback(() => {
     if (!initRef.current) return;

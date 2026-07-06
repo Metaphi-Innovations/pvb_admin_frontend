@@ -21,7 +21,7 @@ import {
 import { isBundledCoaDemoLedger } from "./coa-demo-bundle";
 import { SYSTEM_COA_NODES } from "../coa-seed-nodes";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
-import { loadVouchers } from "../../vouchers/voucher-data";
+import { ledgerHasVoucherPostings as voucherLedgerHasPostings } from "../../vouchers/voucher-data";
 
 export type { ChartOfAccount, AccountType, CoaNodeLevel, ErpUsageModule };
 export { loadChartOfAccounts, saveChartOfAccounts };
@@ -123,15 +123,29 @@ export function getAncestorPath(
   records: ChartOfAccount[],
   nodeId: number,
 ): ChartOfAccount[] {
+  const byId = coaIdMap(records);
   const path: ChartOfAccount[] = [];
-  let current = records.find((r) => r.id === nodeId);
+  let current = byId.get(nodeId);
   while (current) {
     path.unshift(current);
-    current = current.parentAccountId
-      ? records.find((r) => r.id === current!.parentAccountId)
-      : undefined;
+    current =
+      current.parentAccountId != null ? byId.get(current.parentAccountId) : undefined;
   }
   return path;
+}
+
+let coaPathMapCache: { key: string; map: Map<number, ChartOfAccount> } | null = null;
+
+function coaIdMap(records: ChartOfAccount[]): Map<number, ChartOfAccount> {
+  const key = `${records.length}:${records[0]?.id ?? 0}:${records[records.length - 1]?.id ?? 0}`;
+  if (coaPathMapCache?.key === key) return coaPathMapCache.map;
+  const map = new Map(records.map((r) => [r.id, r]));
+  coaPathMapCache = { key, map };
+  return map;
+}
+
+export function invalidateCoaPathCache(): void {
+  coaPathMapCache = null;
 }
 
 export function getDirectChildren(
@@ -419,9 +433,7 @@ export function validateLedgerForm(
 }
 
 export function ledgerHasVoucherPostings(ledgerId: number): boolean {
-  return loadVouchers().some((v) =>
-    v.lines.some((line) => line.ledgerId === ledgerId),
-  );
+  return voucherLedgerHasPostings(ledgerId);
 }
 
 export function canDeleteLedger(record: ChartOfAccount): boolean {
