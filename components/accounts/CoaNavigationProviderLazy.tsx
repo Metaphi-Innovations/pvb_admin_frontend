@@ -2,12 +2,13 @@
 
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
+import { CoaNavigationProvider } from "./CoaNavigationContext";
 import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 import { GENERAL_LEDGER_HREF } from "@/lib/accounts/general-ledger-data";
 import { useAccountsAccordion } from "./AccountsAccordionContext";
 
-const CoaNavigationProvider = dynamic(
-  () => import("./CoaNavigationContext").then((m) => ({ default: m.CoaNavigationProvider })),
+const CoaAddLedgerHost = dynamic(
+  () => import("./CoaAddLedgerHost").then((m) => ({ default: m.CoaAddLedgerHost })),
   { ssr: false },
 );
 
@@ -35,6 +36,7 @@ export function CoaNavigationProviderLazy({ children }: { children: React.ReactN
   return (
     <CoaNavigationProvider initMode={needsFullCoa ? "full" : "tree-only"}>
       {children}
+      <CoaAddLedgerHost />
     </CoaNavigationProvider>
   );
 }

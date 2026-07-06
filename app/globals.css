@@ -531,8 +531,6 @@
     overflow: hidden;
     background: #fff;
     border-right: 1px solid hsl(var(--border) / 0.8);
-    contain: layout paint;
-    isolation: isolate;
   }
 
   .accounts-module-main {
@@ -544,8 +542,6 @@
     height: 100%;
     overflow: hidden;
     background: #F9FAFB;
-    contain: layout paint;
-    isolation: isolate;
   }
 }
 
