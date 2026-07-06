@@ -136,6 +136,7 @@ interface POLineItemsSectionProps {
   previewLines: POLineItem[];
   linkedPr: PurchaseRequest | null;
   taxSupplyType?: TaxSupplyType;
+  supplierState?: string;
 }
 
 export function POLineItemsSection({
@@ -146,6 +147,7 @@ export function POLineItemsSection({
   previewLines,
   linkedPr,
   taxSupplyType = "intra",
+  supplierState,
 }: POLineItemsSectionProps) {
   const [quickProductIds, setQuickProductIds] = useState<string[]>([]);
   const [quickQty, setQuickQty] = useState("1");
@@ -227,10 +229,11 @@ export function POLineItemsSection({
 
     const pricingPromises = quickProductIds.map(async (productId) => {
       try {
-        if (form.state) {
+        const targetState = supplierState || form.state;
+        if (targetState) {
           const res = await axiosInstance.post("/master/product/pricing", {
             product_id: productId,
-            state_name: form.state,
+            state_name: targetState,
           });
           if (res.data?.success && res.data?.data) {
             return {
@@ -603,10 +606,11 @@ export function POLineItemsSection({
                               findGstMasterIdByTotalPct(gst) ?? getDefaultGstMasterId();
                             let price = 0;
                             try {
-                              if (form.state) {
+                              const targetState = supplierState || form.state;
+                              if (targetState) {
                                 const res = await axiosInstance.post("/master/product/pricing", {
                                   product_id: productId,
-                                  state_name: form.state,
+                                  state_name: targetState,
                                 });
                                 if (res.data?.success && res.data?.data) {
                                   price = res.data.data.cost_price;

@@ -28,7 +28,7 @@ import { resolvePurchaseCostPrice } from "@/lib/pricing/resolve-pricing";
 import { AdditionalChargesEditor, ProcurementTotalSummary } from "@/components/procurement/AdditionalChargesEditor";
 import BillToShipToSection from "@/app/(app)/sales/orders/components/BillToShipToSection";
 import { getActiveSuppliers } from "../../masters/suppliers/supplier-data";
-import { useSupplierDropdown } from "@/hooks/masters/use-suppliers";
+import { useSupplierDropdown, useSupplierDetail } from "@/hooks/masters/use-suppliers";
 import { useWarehouseDropdown } from "@/hooks/masters/use-warehouses";
 import { axiosInstance } from "@/api/axios";
 import { getPRById, loadPurchaseRequests } from "../../purchase-requests/pr-data";
@@ -79,7 +79,11 @@ export type POFormValues = Omit<
 	| "approvedDate"
 	| "activity"
 	| "status"
->;
+	| "attachments"
+> & {
+	attachments: File[];
+	existingAttachments?: POAttachment[];
+};
 
 export function emptyPOLine(): POLineItem {
 	return {
@@ -215,6 +219,7 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 		lines,
 		terms: [],
 		attachments: [],
+		existingAttachments: [],
 		additionalCharges: [],
 		otherCharges: 0,
 	};
@@ -233,6 +238,7 @@ export function poToFormValues(po: PurchaseOrder): POFormValues {
 		approvedBy: _ab,
 		approvedDate: _ad,
 		activity: _activity,
+		attachments,
 		...rest
 	} = po;
 	return {
@@ -243,6 +249,8 @@ export function poToFormValues(po: PurchaseOrder): POFormValues {
 		supplierMobileCountry: po.supplierMobileCountry ?? "+91",
 		supplierEmail: po.supplierEmail ?? "",
 		supplierGstin: po.supplierGstin ?? "",
+		attachments: [],
+		existingAttachments: attachments || [],
 	};
 }
 
@@ -293,6 +301,10 @@ export function PurchaseOrderForm({
 
 	const { data: dbSuppliers } = useSupplierDropdown();
 	const suppliers = dbSuppliers || [];
+	const isDbSupplier = Boolean(form.supplierId && typeof form.supplierId === "string" && !/^\d+$/.test(form.supplierId));
+	const { data: dbSupplierDetail } = useSupplierDetail(
+		isDbSupplier ? String(form.supplierId) : null
+	);
 	const prList = loadPurchaseRequests().filter((p) =>
 		["approved", "partially_converted"].includes(p.status),
 	);
@@ -305,6 +317,7 @@ export function PurchaseOrderForm({
 				id: "preview",
 				poNumber: "",
 				...form,
+				attachments: form.existingAttachments || [],
 				summary: {
 					grossAmount: 0,
 					totalDiscount: 0,
@@ -497,8 +510,25 @@ export function PurchaseOrderForm({
 
 	const selectedSupplier = useMemo(() => {
 		if (!form.supplierId) return null;
-		return getActiveSuppliers().find((s) => String(s.id) === String(form.supplierId)) ?? null;
-	}, [form.supplierId]);
+		const local = getActiveSuppliers().find((s) => String(s.id) === String(form.supplierId));
+		if (local) return local;
+		const dbSup = (dbSuppliers || []).find((s) => String(s.supplier_id) === String(form.supplierId));
+		if (dbSup) {
+			return {
+				id: dbSup.supplier_id,
+				supplierName: dbSup.supplier_name,
+				state: dbSup.state || "",
+			};
+		}
+		if (dbSupplierDetail) {
+			return {
+				id: dbSupplierDetail.supplier_id,
+				supplierName: dbSupplierDetail.supplier_name,
+				state: dbSupplierDetail.state || "",
+			};
+		}
+		return null;
+	}, [form.supplierId, dbSuppliers, dbSupplierDetail]);
 
 	const taxSupplyType = useMemo((): TaxSupplyType => {
 		const warehouseState = selectedWarehouse?.state ?? form.state ?? "";
@@ -568,13 +598,14 @@ export function PurchaseOrderForm({
 	}, [taxSupplyType]);
 
 	const getUpdatedLinesForState = async (state: string, currentLines: POLineItem[]) => {
-		if (currentLines.length === 0 || !state) return currentLines;
+		const targetState = selectedSupplier?.state || state;
+		if (currentLines.length === 0 || !targetState) return currentLines;
 		try {
 			const pricingPromises = currentLines.map(async (line) => {
 				try {
 					const res = await axiosInstance.post("/master/product/pricing", {
 						product_id: line.productId,
-						state_name: state,
+						state_name: targetState,
 					});
 					if (res.data?.success && res.data?.data) {
 						return {
@@ -801,13 +832,7 @@ export function PurchaseOrderForm({
 		patch({
 			attachments: [
 				...form.attachments,
-				{
-					uid: `att-${Date.now()}`,
-					name: file.name,
-					size: `${Math.max(1, Math.round(file.size / 1024))} KB`,
-					uploadedAt: new Date().toISOString().slice(0, 10),
-					uploadedBy: "Admin",
-				} as POAttachment,
+				file,
 			],
 		});
 		e.target.value = "";
@@ -1035,6 +1060,7 @@ export function PurchaseOrderForm({
 					previewLines={previewLines}
 					linkedPr={linkedPr}
 					taxSupplyType={taxSupplyType}
+					supplierState={selectedSupplier?.state}
 				/>
 
 				<div className="border-t border-border/60 pt-4">
@@ -1090,13 +1116,13 @@ export function PurchaseOrderForm({
 								{!readOnly && (
 									<input ref={fileRef} type="file" className="hidden" onChange={onFilePick} />
 								)}
-								{form.attachments.length === 0 ? (
+								{((form.existingAttachments ?? []).length === 0 && form.attachments.length === 0) ? (
 									<p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
 										No attachments
 									</p>
 								) : (
 									<ul className="space-y-2">
-										{form.attachments.map((a) => (
+										{(form.existingAttachments ?? []).map((a) => (
 											<li
 												key={a.uid}
 												className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-xs"
@@ -1107,7 +1133,31 @@ export function PurchaseOrderForm({
 														type="button"
 														onClick={() =>
 															patch({
-																attachments: form.attachments.filter((x) => x.uid !== a.uid),
+																existingAttachments: (form.existingAttachments ?? []).filter((x) => x.uid !== a.uid),
+															})
+														}
+														className="text-red-600"
+													>
+														<Trash2 className="h-3.5 w-3.5" />
+													</button>
+												)}
+											</li>
+										))}
+										{form.attachments.map((file, idx) => (
+											<li
+												key={`new-${idx}`}
+												className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-xs bg-slate-50/50"
+											>
+												<span className="min-w-0 flex-1 truncate text-foreground">
+													{file.name}
+													<span className="text-[10px] text-muted-foreground ml-1">(New)</span>
+												</span>
+												{!readOnly && (
+													<button
+														type="button"
+														onClick={() =>
+															patch({
+																attachments: form.attachments.filter((_, i) => i !== idx),
 															})
 														}
 														className="text-red-600"

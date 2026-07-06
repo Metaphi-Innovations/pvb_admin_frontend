@@ -91,6 +91,7 @@ export interface POAttachment {
   size: string;
   uploadedAt: string;
   uploadedBy: string;
+  url?: string;
 }
 
 export interface POTerm {

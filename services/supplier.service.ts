@@ -5,6 +5,7 @@ export interface SupplierDropdownItem {
   supplier_id: string;
   supplier_name: string;
   supplier_code: string;
+  state?: string | null;
   supplier_type?: {
     supplier_type_id: string;
     supplier_type_name: string;

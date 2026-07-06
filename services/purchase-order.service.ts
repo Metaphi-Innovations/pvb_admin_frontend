@@ -98,6 +98,7 @@ function mapAttachments(raw: unknown): POAttachment[] {
         size: "",
         uploadedAt: "",
         uploadedBy: "",
+        url: item,
       };
     }
     const row = (item ?? {}) as Record<string, unknown>;
@@ -376,10 +377,12 @@ function buildWriteBody(
   form: POFormValues,
   options: { poNumber?: string; status: POListStatus },
 ): Record<string, unknown> {
+  const { attachments: _newAtts, existingAttachments, ...restForm } = form;
   const draft = recalcPO({
     id: "temp",
     poNumber: options.poNumber ?? "",
-    ...form,
+    ...restForm,
+    attachments: existingAttachments || [],
     summary: {
       grossAmount: 0,
       totalDiscount: 0,
@@ -459,8 +462,8 @@ function buildWriteBody(
         total_amount: line.netAmount,
         remarks: line.remarks || null,
       })),
-    existingAttachments: (form.attachments ?? [])
-      .map((a) => a.name)
+    existingAttachments: (form.existingAttachments ?? [])
+      .map((a) => a.url)
       .filter(Boolean),
   };
 }
@@ -479,9 +482,9 @@ function appendFormData(body: Record<string, unknown>, files: File[] = []): Form
     }
     formData.append(key, String(value));
   }
-  for (const file of files) {
-    formData.append("attachments", file);
-  }
+  files.forEach((file, index) => {
+    formData.append(`attachments[${index}]`, file);
+  });
   return formData;
 }
 
