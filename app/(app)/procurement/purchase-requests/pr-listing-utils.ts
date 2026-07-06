@@ -19,7 +19,7 @@ export function getPRPoConversionStatus(pr: PurchaseRequest): PRPoConversionStat
 }
 
 export function getPRTotalItems(pr: PurchaseRequest): number {
-  return pr.lines.filter((l) => l.productId > 0 || l.productName).length;
+  return pr.lines.filter((l) => (Boolean(l.productId) && l.productId !== 0 && l.productId !== "0") || l.productName).length;
 }
 
 export function getPRTotalQuantity(pr: PurchaseRequest): number {

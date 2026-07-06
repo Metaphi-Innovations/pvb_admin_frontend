@@ -528,7 +528,7 @@ export function POLineItemsSection({
                 const isEditing = inlineEditUid === line.uid;
                 const draft = isEditing ? inlineEditDraft : null;
                 const draftInfo = draft?.productId
-                  ? enrichProductForProcurement(Number(draft.productId))
+                  ? enrichProductFromDropdown(draft.productId, dbProducts)
                   : null;
                 const calcLine = getPreviewLine(line.uid);
                 const displayHsn = draftInfo?.hsnCode ?? line.hsnCode;
@@ -598,7 +598,7 @@ export function POLineItemsSection({
                           value={draft.productId}
                           onChange={async (val) => {
                             const productId = String(val);
-                            const gst = parseFloat(findProductRefGst(productId).replace(/%/g, "")) || 0;
+                            const gst = parseFloat(findProductRefGst(productId, dbProducts).replace(/%/g, "")) || 0;
                             const gstMasterId =
                               findGstMasterIdByTotalPct(gst) ?? getDefaultGstMasterId();
                             let price = 0;

@@ -177,7 +177,7 @@ export function calcTotalQtyBase(
 }
 
 export interface EnrichedProductLine {
-  productId: number;
+  productId: number | string;
   productCode: string;
   productName: string;
   sku: string;
@@ -203,8 +203,9 @@ export function enrichProductFromDropdown(
   // 1. Try to find in dbProducts (API list)
   const dbProd = (dbProducts || []).find((p) => String(p.product_id) === String(productId));
   if (dbProd) {
+    const numId = Number(dbProd.product_id);
     return {
-      productId: Number(dbProd.product_id),
+      productId: isNaN(numId) ? dbProd.product_id : numId,
       productCode: dbProd.product_code || dbProd.sku || "",
       productName: dbProd.product_name,
       sku: dbProd.sku || "",
@@ -229,7 +230,7 @@ export function enrichProductFromDropdown(
   return null;
 }
 
-export function enrichProductForProcurement(productId: number): EnrichedProductLine | null {
+export function enrichProductForProcurement(productId: number | string): EnrichedProductLine | null {
   const p = findProductRef(productId);
   if (!p) return null;
   return productLineFromMaster(p);

@@ -132,7 +132,7 @@ function packagingUnitToRequestUom(packagingUnit: string): PackagingUom {
   return "Unit";
 }
 
-function lineFromProduct(productId: number, packingQty: number, remarks = ""): PRLineItem | null {
+function lineFromProduct(productId: number | string, packingQty: number, remarks = ""): PRLineItem | null {
   const info = enrichProductForProcurement(productId);
   if (!info) return null;
   const requestedQty = packingQty;
@@ -186,7 +186,7 @@ export function PurchaseRequestForm({
   const onAddItem = (productIds: string[], qty: number, remarks: string) => {
     let nextLines = [...form.lines];
     for (const idStr of Array.from(new Set(productIds))) {
-      const productId = Number(idStr);
+      const productId = isNaN(Number(idStr)) ? idStr : Number(idStr);
       const line = lineFromProduct(productId, qty, remarks);
       if (!line) continue;
       const idx = nextLines.findIndex((l) => l.productId === productId);
