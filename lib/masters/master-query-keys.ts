@@ -67,4 +67,13 @@ export const masterKeys = {
     details: () => [...masterKeys.customerTypes.all(), "detail"] as const,
     detail: (id: string) => [...masterKeys.customerTypes.details(), id] as const,
   },
+
+  products: {
+    all: () => [...masterKeys.all, "products"] as const,
+    lists: () => [...masterKeys.products.all(), "list"] as const,
+    list: (params: MasterListKeyParams) =>
+      [...masterKeys.products.lists(), params] as const,
+    details: () => [...masterKeys.products.all(), "detail"] as const,
+    detail: (id: string) => [...masterKeys.products.details(), id] as const,
+  },
 } as const;
