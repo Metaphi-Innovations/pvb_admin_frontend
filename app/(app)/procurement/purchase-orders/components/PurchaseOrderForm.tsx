@@ -495,11 +495,16 @@ export function PurchaseOrderForm({
 		};
 	}, [form.warehouseId, form.warehouseName, form.shipping, form.state, form.billing, selectedWarehouse]);
 
+	const selectedSupplier = useMemo(() => {
+		if (!form.supplierId) return null;
+		return getActiveSuppliers().find((s) => String(s.id) === String(form.supplierId)) ?? null;
+	}, [form.supplierId]);
+
 	const taxSupplyType = useMemo((): TaxSupplyType => {
 		const warehouseState = selectedWarehouse?.state ?? form.state ?? "";
-		const billToState = billToAddress?.state ?? "";
-		return resolveTaxSupplyType(warehouseState, billToState);
-	}, [selectedWarehouse, billToAddress, form.state]);
+		const supplierState = selectedSupplier?.state ?? "";
+		return resolveTaxSupplyType(warehouseState, supplierState);
+	}, [selectedWarehouse, selectedSupplier, form.state]);
 
 	useEffect(() => {
 		if (!form.supplierId) return;
@@ -562,7 +567,50 @@ export function PurchaseOrderForm({
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- re-split GST when supply type changes
 	}, [taxSupplyType]);
 
-	const onStateChange = (state: string) => {
+	const getUpdatedLinesForState = async (state: string, currentLines: POLineItem[]) => {
+		if (currentLines.length === 0 || !state) return currentLines;
+		try {
+			const pricingPromises = currentLines.map(async (line) => {
+				try {
+					const res = await axiosInstance.post("/master/product/pricing", {
+						product_id: line.productId,
+						state_name: state,
+					});
+					if (res.data?.success && res.data?.data) {
+						return {
+							productId: line.productId,
+							cost_price: res.data.data.cost_price,
+							success: true,
+						};
+					}
+				} catch (err) {
+					console.error(`Failed to fetch pricing for state ${state}:`, err);
+				}
+				return { productId: line.productId, success: false };
+			});
+
+			const resolvedPricings = await Promise.all(pricingPromises);
+			const pricingMap = new Map(resolvedPricings.map((p) => [p.productId, p]));
+
+			return currentLines.map((line) => {
+				const apiPricing = pricingMap.get(line.productId);
+				if (apiPricing && apiPricing.success) {
+					return {
+						...line,
+						unitPrice: apiPricing.cost_price,
+						cpSource: "pricing_master" as const,
+					};
+				}
+				return line;
+			});
+		} catch (err) {
+			console.error("Failed to update line items pricing:", err);
+			return currentLines;
+		}
+	};
+
+	const onStateChange = async (state: string) => {
+		const updatedLines = await getUpdatedLinesForState(state, form.lines);
 		patch({
 			state,
 			warehouseId: null,
@@ -586,10 +634,11 @@ export function PurchaseOrderForm({
 				contactNumber: "",
 				sameAsBilling: false,
 			},
+			lines: updatedLines,
 		});
 	};
 
-	const onWarehouseChange = (val: string) => {
+	const onWarehouseChange = async (val: string) => {
 		const wh = (dbWarehouses || []).find((w) => String(w.warehouse_id) === val) || (() => {
 			const staticWh = loadWarehouses().find((w) => String(w.id) === val);
 			if (!staticWh) return null;
@@ -619,12 +668,14 @@ export function PurchaseOrderForm({
 		})();
 		const addressStr = wh ? [wh.address, wh.address_1].filter(Boolean).join(", ") : "";
 		const primaryContact = wh?.contacts?.find((c) => c.is_primary) ?? wh?.contacts?.[0];
+		const nextState = wh?.state || form.state || "";
+		const updatedLines = await getUpdatedLinesForState(nextState, form.lines);
 
 		patch({
 			warehouseId: wh ? wh.warehouse_id : null,
 			warehouseName: wh?.warehouse_name || "",
 			deliveryAddress: addressStr,
-			state: wh?.state || form.state || "",
+			state: nextState,
 			billToAddressId: wh ? `bill-wh-${wh.warehouse_id}` : "",
 			shipToAddressId: wh ? `ship-wh-${wh.warehouse_id}` : "",
 			billing: wh
@@ -661,6 +712,7 @@ export function PurchaseOrderForm({
 						contactNumber: "",
 						sameAsBilling: false,
 					},
+			lines: updatedLines,
 		});
 	};
 

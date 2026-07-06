@@ -1,4 +1,4 @@
-import type { Product } from "@/app/(app)/masters/products/product-data";
+import { loadProducts, type Product } from "@/app/(app)/masters/products/product-data";
 import { findProductRef, getStandardMrp, resolvePurchaseCostPrice } from "@/lib/pricing/resolve-pricing";
 import { applyTaxSupplyToRates, round2, type TaxSupplyType } from "@/lib/procurement/utils";
 import {
@@ -190,6 +190,43 @@ export interface EnrichedProductLine {
   mrp: number;
   ratePerSku: number;
   description: string;
+}
+
+import type { ProductDropdownItem } from "@/services/product-dropdown.service";
+
+export function enrichProductFromDropdown(
+  productId: string | number,
+  dbProducts?: ProductDropdownItem[],
+): EnrichedProductLine | null {
+  if (!productId) return null;
+
+  // 1. Try to find in dbProducts (API list)
+  const dbProd = (dbProducts || []).find((p) => String(p.product_id) === String(productId));
+  if (dbProd) {
+    return {
+      productId: Number(dbProd.product_id),
+      productCode: dbProd.product_code || dbProd.sku || "",
+      productName: dbProd.product_name,
+      sku: dbProd.sku || "",
+      baseUnit: dbProd.unit || "Unit",
+      packagingUnit: dbProd.packing_unit || "Box",
+      conversionQty: Number(dbProd.unit_per_packing) || 1,
+      segment: dbProd.segment?.segment_name || "",
+      category: dbProd.category?.categoryName || "",
+      hsnCode: dbProd.hsn?.hsnDescription || "",
+      mrp: 0,
+      ratePerSku: 0,
+      description: dbProd.scientific_name || "",
+    };
+  }
+
+  // 2. Fall back to static mock data
+  const staticWh = loadProducts().find((w) => String(w.id) === String(productId));
+  if (staticWh) {
+    return productLineFromMaster(staticWh);
+  }
+
+  return null;
 }
 
 export function enrichProductForProcurement(productId: number): EnrichedProductLine | null {

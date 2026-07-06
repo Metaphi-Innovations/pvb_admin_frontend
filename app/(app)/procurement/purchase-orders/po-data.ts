@@ -286,7 +286,7 @@ function migratePO(po: PurchaseOrder): PurchaseOrder {
     status: normalizePOStatus(po.status),
     paymentType,
     creditDays: po.creditDays ?? 0,
-    state: po.state ?? po.shipping?.branch ? "" : "",
+    state: po.state ?? "",
     warehouseId: po.warehouseId ?? null,
     warehouseName: po.warehouseName ?? po.shipping?.shipToLocation ?? "",
     deliveryAddress: po.deliveryAddress ?? po.shipping?.address ?? "",

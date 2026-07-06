@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
 import { cn } from "@/lib/utils";
+import { axiosInstance } from "@/api/axios";
 import { formatCurrency, calcLineAmounts, applyTaxSupplyToRates, type TaxSupplyType } from "@/lib/procurement/utils";
 import {
   applyGstMasterToTaxRates,
@@ -19,13 +20,16 @@ import {
 import {
   calcPackingToBaseQty,
   enrichProductForProcurement,
+  enrichProductFromDropdown,
 } from "@/lib/procurement/procurement-line-utils";
 import { resolvePurchaseCostPrice } from "@/lib/pricing/resolve-pricing";
+import { useProductDropdown } from "@/hooks/masters/use-products";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import type { PurchaseRequest } from "../../purchase-requests/pr-data";
 import type { POLineItem } from "../po-data";
 import type { POFormValues } from "./PurchaseOrderForm";
 import { emptyPOLine } from "./PurchaseOrderForm";
+import type { ProductDropdownItem } from "@/services/product-dropdown.service";
 
 const inputCls = "h-8 rounded-lg text-xs";
 
@@ -81,15 +85,16 @@ function asLocalSupplierId(value: unknown): number | undefined {
 }
 
 function lineFromProduct(
-  productId: number,
+  productId: number | string,
   packingQty: number,
-  supplierId?: number,
+  supplierId?: number | string,
   taxSupplyType: TaxSupplyType = "intra",
+  dbProducts?: ProductDropdownItem[],
 ): POLineItem | null {
-  const info = enrichProductForProcurement(productId);
+  const info = enrichProductFromDropdown(productId, dbProducts);
   if (!info) return null;
-  const cp = resolvePurchaseCostPrice(productId, supplierId);
-  const gst = parseFloat(findProductRefGst(productId).replace(/%/g, "")) || 0;
+  const cp = resolvePurchaseCostPrice(productId, typeof supplierId === "number" ? supplierId : undefined);
+  const gst = parseFloat(findProductRefGst(productId, dbProducts).replace(/%/g, "")) || 0;
   const taxRates = applyTaxSupplyToRates(gst, taxSupplyType);
   const orderUom = packagingUnitToOrderUom(info.packagingUnit);
   const orderedQtyPack = packingQty;
@@ -116,8 +121,10 @@ function lineFromProduct(
   };
 }
 
-function findProductRefGst(productId: number): string {
-  const p = loadProducts().find((x) => x.id === productId);
+function findProductRefGst(productId: number | string, dbProducts?: ProductDropdownItem[]): string {
+  const dbProd = (dbProducts || []).find((x) => String(x.product_id) === String(productId));
+  if (dbProd?.gst_rate) return `${dbProd.gst_rate.gstPercentage}%`;
+  const p = loadProducts().find((x) => String(x.id) === String(productId));
   return p?.gstRate ?? "18%";
 }
 
@@ -150,23 +157,33 @@ export function POLineItemsSection({
   const [inlineEditDraft, setInlineEditDraft] = useState<InlineEditDraft | null>(null);
   const [inlineEditError, setInlineEditError] = useState<string | null>(null);
 
+  const { data: dbProducts } = useProductDropdown();
   const masterProducts = useMemo(
     () => loadProducts().filter((p) => p.status === "active"),
     [],
   );
   const gstOptions = useMemo(() => getActiveGstMasterOptions(), []);
-  const productOptions = masterProducts.map((p) => ({
-    value: String(p.id),
-    label: `${p.productName} (${p.sku || p.productId})`,
-  }));
+  const productOptions = useMemo(() => {
+    const list = (dbProducts || []).map((p) => ({
+      value: String(p.product_id),
+      label: `${p.product_name} (${p.sku || p.product_code})`,
+    }));
+    if (list.length === 0) {
+      return masterProducts.map((p) => ({
+        value: String(p.id),
+        label: `${p.productName} (${p.sku || p.productId})`,
+      }));
+    }
+    return list;
+  }, [dbProducts, masterProducts]);
 
   const filledLines = form.lines.filter((l) => Boolean(l.productId) && l.productId !== 0 && l.productId !== "0");
   const totalPackingQty = filledLines.reduce((sum, l) => sum + (l.orderedQtyPack || 0), 0);
   const totalSkuQty = filledLines.reduce((sum, l) => sum + (l.orderedQty || 0), 0);
   const totalAmount = previewLines.reduce((sum, l) => sum + (l.netAmount || 0), 0);
 
-  const previewProductId = Number(quickProductIds[0]);
-  const previewInfo = previewProductId ? enrichProductForProcurement(previewProductId) : null;
+  const previewProductId = quickProductIds[0];
+  const previewInfo = previewProductId ? enrichProductFromDropdown(previewProductId, dbProducts) : null;
   const previewSkuQty = previewInfo
     ? calcPackingToBaseQty(Number(quickQty) || 0, previewInfo.conversionQty)
     : 0;
@@ -200,18 +217,50 @@ export function POLineItemsSection({
     setInlineEditError(null);
   };
 
-  const quickAdd = () => {
+  const quickAdd = async () => {
     if (quickProductIds.length === 0) return;
     const packingQty = Number(quickQty) || 1;
     const discountType = quickDiscountType;
     const discountPct = discountType === "percentage" ? Number(quickDiscountPct) || 0 : 0;
     const discountFlatAmount = discountType === "flat" ? Number(quickDiscountFlat) || 0 : 0;
     let nextLines = [...form.lines];
+
+    const pricingPromises = quickProductIds.map(async (productId) => {
+      try {
+        if (form.state) {
+          const res = await axiosInstance.post("/master/product/pricing", {
+            product_id: productId,
+            state_name: form.state,
+          });
+          if (res.data?.success && res.data?.data) {
+            return {
+              productId,
+              cost_price: res.data.data.cost_price,
+              success: true
+            };
+          }
+        }
+      } catch (err) {
+        console.error(`Failed to fetch pricing for product ${productId}:`, err);
+      }
+      return { productId, success: false };
+    });
+
+    const resolvedPricings = await Promise.all(pricingPromises);
+    const pricingMap = new Map(resolvedPricings.map((p) => [p.productId, p]));
+
     for (const idStr of Array.from(new Set(quickProductIds))) {
-      const productId = Number(idStr);
-      const line = lineFromProduct(productId, packingQty, asLocalSupplierId(form.supplierId), taxSupplyType);
+      const productId = idStr;
+      const line = lineFromProduct(productId, packingQty, form.supplierId, taxSupplyType, dbProducts);
       if (!line) continue;
-      const idx = nextLines.findIndex((l) => l.productId === productId);
+
+      const apiPricing = pricingMap.get(productId);
+      if (apiPricing && apiPricing.success) {
+        line.unitPrice = apiPricing.cost_price;
+        line.cpSource = "pricing_master";
+      }
+
+      const idx = nextLines.findIndex((l) => String(l.productId) === String(productId));
       if (idx >= 0) {
         const existing = nextLines[idx];
         const nextPack = existing.orderedQtyPack + packingQty;
@@ -223,6 +272,7 @@ export function POLineItemsSection({
           discountPct,
           discountFlatAmount,
           remarks: quickRemarks || existing.remarks,
+          unitPrice: apiPricing && apiPricing.success ? apiPricing.cost_price : existing.unitPrice,
         };
       } else {
         nextLines.push({
@@ -263,12 +313,12 @@ export function POLineItemsSection({
       setInlineEditError("Quantity is required and must be greater than 0");
       return;
     }
-    const productId = Number(inlineEditDraft.productId);
+    const productId = inlineEditDraft.productId;
     if (!productId) {
       setInlineEditError("Product is required");
       return;
     }
-    const base = lineFromProduct(productId, packingQty, asLocalSupplierId(form.supplierId), taxSupplyType);
+    const base = lineFromProduct(productId, packingQty, form.supplierId, taxSupplyType, dbProducts);
     if (!base) return;
     const taxRates = applyGstMasterToTaxRates(Number(inlineEditDraft.gstMasterId), taxSupplyType);
     const existing = form.lines.find((l) => l.uid === inlineEditUid);
@@ -546,17 +596,32 @@ export function POLineItemsSection({
                         <AutocompleteSelect
                           options={productOptions}
                           value={draft.productId}
-                          onChange={(val) => {
-                            const productId = Number(val);
+                          onChange={async (val) => {
+                            const productId = String(val);
                             const gst = parseFloat(findProductRefGst(productId).replace(/%/g, "")) || 0;
                             const gstMasterId =
                               findGstMasterIdByTotalPct(gst) ?? getDefaultGstMasterId();
+                            let price = 0;
+                            try {
+                              if (form.state) {
+                                const res = await axiosInstance.post("/master/product/pricing", {
+                                  product_id: productId,
+                                  state_name: form.state,
+                                });
+                                if (res.data?.success && res.data?.data) {
+                                  price = res.data.data.cost_price;
+                                }
+                              }
+                            } catch (err) {
+                              console.error("Failed to fetch product pricing on change:", err);
+                            }
                             setInlineEditDraft((prev) =>
                               prev
                                 ? {
                                     ...prev,
                                     productId: String(val),
                                     gstMasterId: String(gstMasterId),
+                                    unitPrice: price ? String(price) : prev.unitPrice,
                                   }
                                 : prev,
                             );

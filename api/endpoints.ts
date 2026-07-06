@@ -69,6 +69,7 @@ export const API_ENDPOINTS = {
       VIEW: (id: string) => `/master/product/details/${id}`,
       EXPORT: "/master/product/export",
       PREVIEW_NUMBER: "/master/product/preview-number",
+      DROPDOWN: "/master/product/dropdown",
     },
     SUPPLIER: {
       DROPDOWN: "/master/supplier/dropdown",
