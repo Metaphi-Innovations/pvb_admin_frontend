@@ -39,12 +39,17 @@ const AccountsSidebarNavLink = memo(function AccountsSidebarNavLink({
   return (
     <PrefetchLink
       href={href}
+      aria-current={active ? "page" : undefined}
+      onClick={(e) => {
+        (e.currentTarget as HTMLAnchorElement).blur();
+      }}
       className={cn(
-        "group flex items-center gap-2 pl-2 pr-2 py-1.5 rounded-lg leading-snug",
+        "group flex items-center gap-2 pl-2 pr-2 py-1.5 rounded-lg leading-snug outline-none",
         ACCOUNTS_SIDEBAR_ITEM_CLASS,
         active
           ? "bg-[#FFF3E6] text-brand-800 font-medium"
           : "text-[#6B7280] hover:bg-brand-50/70 hover:text-brand-800",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/30",
       )}
     >
       <ItemIcon

@@ -34,13 +34,18 @@ export function ContextualSidebarNav({
             <Link
               key={item.href}
               href={item.href}
+              aria-current={active ? "page" : undefined}
+              onClick={(e) => {
+                (e.currentTarget as HTMLAnchorElement).blur();
+              }}
               className={cn(
-                "group flex items-center gap-2.5 pl-2.5 pr-2.5 py-2 rounded-r-lg leading-snug",
+                "group flex items-center gap-2.5 pl-2.5 pr-2.5 py-2 rounded-r-lg leading-snug outline-none",
                 ACCOUNTS_SIDEBAR_ITEM_CLASS,
                 "border-l-2 -ml-[1px] transition-all duration-150",
                 active
                   ? "border-brand-600 bg-brand-50 text-brand-800 font-semibold"
                   : "border-transparent text-slate-600 hover:bg-brand-50/70 hover:text-brand-800 hover:border-brand-300",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/30",
               )}
             >
               <ItemIcon

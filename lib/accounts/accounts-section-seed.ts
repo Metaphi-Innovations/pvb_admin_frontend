@@ -31,7 +31,11 @@ export function scheduleAccountsSectionSeed(groupId: AccountsNavGroupId): void {
   }
 
   const run = () => ensureAccountsSectionData(groupId);
-  window.setTimeout(run, 0);
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(run, { timeout: 4000 });
+  } else {
+    window.setTimeout(run, 50);
+  }
 }
 
 export function ensureAccountsSectionData(groupId: AccountsNavGroupId): void {

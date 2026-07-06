@@ -27,9 +27,14 @@ function routeNeedsCoaData(pathname: string): boolean {
 export function CoaNavigationProviderLazy({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { activeAccountsSection } = useAccountsAccordion();
-  const needsCoaData = routeNeedsCoaData(pathname) || activeAccountsSection === "coa";
+  const needsFullCoa = routeNeedsCoaData(pathname);
+  const needsTreeCoa = activeAccountsSection === "coa";
 
-  if (!needsCoaData) return <>{children}</>;
+  if (!needsFullCoa && !needsTreeCoa) return <>{children}</>;
 
-  return <CoaNavigationProvider>{children}</CoaNavigationProvider>;
+  return (
+    <CoaNavigationProvider initMode={needsFullCoa ? "full" : "tree-only"}>
+      {children}
+    </CoaNavigationProvider>
+  );
 }

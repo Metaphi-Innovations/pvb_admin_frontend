@@ -381,18 +381,36 @@ function runGstCoaSync(records: ChartOfAccount[]): ChartOfAccount[] {
   return deactivateLegacyGenericGstLedgers(next);
 }
 
+function gstSyncCacheKey(records: ChartOfAccount[]): string {
+  const masters = loadGSTMasters();
+  return JSON.stringify({
+    masters: masters.map((m) => ({
+      id: m.id,
+      pct: m.gstPercentage,
+      status: m.status,
+    })),
+    gstLedgers: fingerprintGstLedgers(records),
+  });
+}
+
 /** Apply GST Master → COA sync during load; persists when ledgers change. */
 export function applyGstCoaSyncOnLoad(records: ChartOfAccount[]): ChartOfAccount[] {
   if (typeof window === "undefined") return records;
+
+  const cacheKey = gstSyncCacheKey(records);
+  if (localStorage.getItem(GST_SYNC_META_KEY) === cacheKey) {
+    return records;
+  }
 
   const before = fingerprintGstLedgers(records);
   const synced = runGstCoaSync(records);
   const after = fingerprintGstLedgers(synced);
 
-  if (before === after) return synced;
+  if (before !== after) {
+    saveChartOfAccounts(synced);
+  }
 
-  saveChartOfAccounts(synced);
-  localStorage.setItem(GST_SYNC_META_KEY, new Date().toISOString());
+  localStorage.setItem(GST_SYNC_META_KEY, gstSyncCacheKey(synced));
   return synced;
 }
 

@@ -115,14 +115,14 @@ export default function TrialBalancePageClient() {
   }, [mounted]);
 
   const sourceSummaryRows = useMemo(() => {
-    if (!mounted) return [];
+    if (!mounted || activeTab !== "summary") return [];
     return buildTrialBalanceSummaryRows();
-  }, [mounted]);
+  }, [mounted, activeTab]);
 
   const sourceDetailedGroups = useMemo(() => {
-    if (!mounted) return [];
+    if (!mounted || activeTab !== "detailed") return [];
     return buildTrialBalanceDetailedGroups();
-  }, [mounted]);
+  }, [mounted, activeTab]);
 
   useEffect(() => {
     if (!mounted || sourceDetailedGroups.length === 0) return;

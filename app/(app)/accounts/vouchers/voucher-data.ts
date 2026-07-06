@@ -67,10 +67,18 @@ export type LedgerMovementTotals = { debit: number; credit: number };
 
 let voucherListCache: AccountingVoucher[] | null = null;
 let ledgerMovementIndex: Map<number, LedgerMovementTotals> | null = null;
+let ledgersWithPostings: Set<number> | null = null;
+let voucherCacheGeneration = 0;
 
 function clearVoucherCaches(): void {
   voucherListCache = null;
   ledgerMovementIndex = null;
+  ledgersWithPostings = null;
+  voucherCacheGeneration += 1;
+}
+
+export function getVoucherCacheGeneration(): number {
+  return voucherCacheGeneration;
 }
 
 function getOrSeed(): AccountingVoucher[] {
@@ -97,15 +105,23 @@ export function saveVouchers(list: AccountingVoucher[]) {
   if (typeof window === "undefined") return;
   localStorage.setItem(VOUCHER_KEY, JSON.stringify(list));
   clearVoucherCaches();
+  try {
+    const { invalidateLedgerReportCaches } = require("@/lib/accounts/ledger-reports") as typeof import("@/lib/accounts/ledger-reports");
+    invalidateLedgerReportCaches();
+  } catch {
+    // optional
+  }
 }
 
 function ensureLedgerMovementIndex(): Map<number, LedgerMovementTotals> {
   if (ledgerMovementIndex) return ledgerMovementIndex;
   ledgerMovementIndex = new Map();
+  ledgersWithPostings = new Set();
   for (const voucher of loadVouchers()) {
     if (voucher.status !== "posted" && voucher.status !== "approved") continue;
     for (const line of voucher.lines) {
       if (!line.ledgerId) continue;
+      ledgersWithPostings.add(line.ledgerId);
       const totals = ledgerMovementIndex.get(line.ledgerId) ?? { debit: 0, credit: 0 };
       totals.debit += Number(line.debit) || 0;
       totals.credit += Number(line.credit) || 0;
@@ -113,6 +129,12 @@ function ensureLedgerMovementIndex(): Map<number, LedgerMovementTotals> {
     }
   }
   return ledgerMovementIndex;
+}
+
+/** O(1) — whether any posted voucher line targets this ledger. */
+export function ledgerHasVoucherPostings(ledgerId: number): boolean {
+  ensureLedgerMovementIndex();
+  return ledgersWithPostings?.has(ledgerId) ?? false;
 }
 
 /** O(1) debit/credit totals per ledger — built once per voucher cache epoch. */
