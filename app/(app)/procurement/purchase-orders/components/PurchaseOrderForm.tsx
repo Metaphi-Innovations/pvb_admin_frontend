@@ -28,6 +28,8 @@ import { resolvePurchaseCostPrice } from "@/lib/pricing/resolve-pricing";
 import { AdditionalChargesEditor, ProcurementTotalSummary } from "@/components/procurement/AdditionalChargesEditor";
 import BillToShipToSection from "@/app/(app)/sales/orders/components/BillToShipToSection";
 import { getActiveSuppliers } from "../../masters/suppliers/supplier-data";
+import { useSupplierDropdown } from "@/hooks/masters/use-suppliers";
+import { axiosInstance } from "@/api/axios";
 import { getPRById, loadPurchaseRequests } from "../../purchase-requests/pr-data";
 import type { POLineItem, POAttachment, PurchaseOrder } from "../po-data";
 import { enrichPOLineItem, recalcPO } from "../po-data";
@@ -250,7 +252,8 @@ export function PurchaseOrderForm({
 }) {
 	const fileRef = useRef<HTMLInputElement>(null);
 
-	const suppliers = getActiveSuppliers();
+	const { data: dbSuppliers } = useSupplierDropdown();
+	const suppliers = dbSuppliers || [];
 	const prList = loadPurchaseRequests().filter((p) =>
 		["approved", "partially_converted"].includes(p.status),
 	);
@@ -467,40 +470,81 @@ export function PurchaseOrderForm({
 
 	const productTotal = preview.summary.productTotal ?? preview.summary.taxableValue;
 
-	const selectSupplier = (idStr: string) => {
+	const selectSupplier = async (idStr: string) => {
 		if (!idStr) {
 			patch({
 				supplierId: 0,
 				supplierName: "",
+				supplierType: "",
+				supplierContactPerson: "",
+				supplierMobile: "",
+				supplierEmail: "",
+				supplierGstin: "",
 				billToAddressId: "",
 				shipToAddressId: "",
 			});
 			return;
 		}
-		const s = suppliers.find((x) => x.id === Number(idStr));
-		if (!s) return;
-		const localWarehouseId =
-			typeof form.warehouseId === "number"
-				? form.warehouseId
-				: form.warehouseId && /^\d+$/.test(String(form.warehouseId))
-					? Number(form.warehouseId)
-					: null;
-		const defaults = getDefaultPOBillShipIds(
-			billToAddresses,
-			shipToAddresses,
-			localWarehouseId,
-		);
-		patch({
-			supplierId: s.id,
-			supplierName: s.supplierName,
-			supplierType: s.supplierType,
-			supplierContactPerson: s.contactPerson || "",
-			supplierMobile: s.mobile || s.phone || "",
-			supplierEmail: s.email || "",
-			supplierGstin: s.gstNumber || "",
-			billToAddressId: form.billToAddressId || defaults.billToAddressId,
-			shipToAddressId: form.shipToAddressId || defaults.shipToAddressId,
-		});
+
+		// Try to find if it is a local mock supplier first (for backwards compatibility/safety)
+		const localMock = getActiveSuppliers().find((x) => String(x.id) === idStr);
+		if (localMock) {
+			const localWarehouseId =
+				typeof form.warehouseId === "number"
+					? form.warehouseId
+					: form.warehouseId && /^\d+$/.test(String(form.warehouseId))
+						? Number(form.warehouseId)
+						: null;
+			const defaults = getDefaultPOBillShipIds(
+				billToAddresses,
+				shipToAddresses,
+				localWarehouseId,
+			);
+			patch({
+				supplierId: localMock.id,
+				supplierName: localMock.supplierName,
+				supplierType: localMock.supplierType,
+				supplierContactPerson: localMock.contactPerson || "",
+				supplierMobile: localMock.mobile || localMock.phone || "",
+				supplierEmail: localMock.email || "",
+				supplierGstin: localMock.gstNumber || "",
+				billToAddressId: form.billToAddressId || defaults.billToAddressId,
+				shipToAddressId: form.shipToAddressId || defaults.shipToAddressId,
+			});
+			return;
+		}
+
+		// Otherwise, fetch detailed supplier info from backend
+		try {
+			const response = await axiosInstance.get(`/master/supplier/details/${idStr}`);
+			const s = response.data?.data;
+			if (!s) return;
+
+			const localWarehouseId =
+				typeof form.warehouseId === "number"
+					? form.warehouseId
+					: form.warehouseId && /^\d+$/.test(String(form.warehouseId))
+						? Number(form.warehouseId)
+						: null;
+			const defaults = getDefaultPOBillShipIds(
+				billToAddresses,
+				shipToAddresses,
+				localWarehouseId,
+			);
+			patch({
+				supplierId: s.supplier_id,
+				supplierName: s.supplier_name,
+				supplierType: s.supplier_type?.supplier_type_name || "",
+				supplierContactPerson: s.contact_person || "",
+				supplierMobile: s.mobile_number || "",
+				supplierEmail: s.email || "",
+				supplierGstin: s.gstin_number || "",
+				billToAddressId: form.billToAddressId || defaults.billToAddressId,
+				shipToAddressId: form.shipToAddressId || defaults.shipToAddressId,
+			});
+		} catch (err) {
+			console.error("Failed to fetch supplier details:", err);
+		}
 	};
 
 	const onFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -525,10 +569,10 @@ export function PurchaseOrderForm({
 		value: String(p.id),
 		label: p.prNumber,
 	}));
-	const supplierOptions = suppliers.map((s) => ({
-		value: String(s.id),
-		label: `${s.supplierCode} | ${s.supplierName}`,
-		sublabel: `Supplier Type: ${s.supplierType || "—"}`,
+	const supplierOptions = (suppliers || []).map((s: any) => ({
+		value: String(s.supplier_id || s.id || ""),
+		label: `${s.supplier_code || s.supplierCode || ""} | ${s.supplier_name || s.supplierName || ""}`,
+		sublabel: `Supplier Type: ${s.supplier_type?.supplier_type_name || s.supplierType || "—"}`,
 	}));
 
 	const detailsGridCls = readOnly
