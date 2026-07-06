@@ -295,4 +295,9 @@ export const MASTER_FILTER_FIELD_MAPS = {
     status: statusColumnMapper,
     ...AUDIT_FILTER_FIELDS,
   },
+  product: {
+    status: statusColumnMapper,
+    ...AUDIT_FILTER_FIELDS,
+  },
 } as const satisfies Record<string, Record<string, FieldMapper>>;
+

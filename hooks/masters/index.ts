@@ -4,3 +4,4 @@ export * from "./use-hsn";
 export * from "./use-segments";
 export * from "./use-document-types";
 export * from "./use-customer-types";
+export * from "./use-products";
