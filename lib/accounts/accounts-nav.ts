@@ -420,22 +420,19 @@ const ROUTE_GROUP_PREFIXES: { prefix: string; groupId: AccountsNavGroupId }[] = 
   { prefix: "/accounts/dashboard", groupId: "coa" },
 ];
 
-
+function matchesAccountsRoutePrefix(pathname: string, prefix: string): boolean {
+  const base = prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
+  return pathname === base || pathname.startsWith(`${base}/`);
+}
 
 export function resolveAccountsNavGroupId(pathname: string): AccountsNavGroupId {
-
   for (const { prefix, groupId } of ROUTE_GROUP_PREFIXES) {
-
-    if (pathname === prefix || pathname.startsWith(`${prefix}/`)) {
-
+    if (matchesAccountsRoutePrefix(pathname, prefix)) {
       return groupId;
-
     }
-
   }
 
   return "coa";
-
 }
 
 

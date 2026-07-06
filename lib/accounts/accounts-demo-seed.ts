@@ -1136,52 +1136,113 @@ function ensureAutoPostingEnabled(): void {
 
 // ── Public API ─────────────────────────────────────────────────────────────────
 
+const CORE_SEED_KEY = "ds_accounts_core_seed";
+const CORE_SEED_VERSION = "relative-dates-v4";
+const COA_SECTION_KEY = "ds_accounts_coa_section_seed";
+const TX_SECTION_KEY = "ds_accounts_transactions_section_seed";
+const REPORTS_SECTION_KEY = "ds_accounts_reports_section_seed";
+
+/** Shared masters, FY, and COA demo ledgers — idempotent across sections. */
+export function ensureAccountsCoreDemoData(): void {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(CORE_SEED_KEY) === CORE_SEED_VERSION) return;
+  try {
+    ensureFinancialYearsCurrent();
+    ensureAutoPostingEnabled();
+    seedDemoMasters();
+    localStorage.setItem(CORE_SEED_KEY, CORE_SEED_VERSION);
+  } catch (err) {
+    console.error("[accounts] core demo seed failed:", err);
+  }
+}
+
+/** Chart of Accounts section — masters and FY only (COA tree loads in CoaNavigationProvider). */
+export function seedCoaSectionDemoData(): void {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(COA_SECTION_KEY) === ACCOUNTS_DEMO_SEED_VERSION) return;
+  try {
+    ensureAccountsCoreDemoData();
+    localStorage.setItem(COA_SECTION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
+  } catch (err) {
+    console.error("[accounts] COA section seed failed:", err);
+  }
+}
+
+function seedTransactionsDemoRecords(): InvoiceRecord[] {
+  ensureAccountsCoreDemoData();
+
+  const customers = loadCustomers();
+  const allDemoInvoiceSpecs: DemoSalesInvoiceSpec[] = [
+    ...getDemoSalesInvoices(),
+    ...CREDIT_LIMIT_DEMO_INVOICE_SPECS,
+  ];
+  const demoInvoiceIds = new Set<number>(allDemoInvoiceSpecs.map((spec) => spec.id));
+  const preservedInvoices = loadInvoices().filter((inv) => !demoInvoiceIds.has(inv.id));
+
+  const invoices = allDemoInvoiceSpecs.map((spec) => {
+    const customer = customers.find((c) => c.id === spec.customerId);
+    const link = customer ? findErpPartyLink("customer_master", customer.id) : undefined;
+    return buildSalesInvoice(
+      spec,
+      customer?.customerName ?? "Customer",
+      link?.ledgerId ?? null,
+    );
+  });
+
+  saveInvoices([...invoices, ...preservedInvoices]);
+  const creditNotes = buildCreditNotesSeed();
+  saveCreditNotes(creditNotes);
+  saveDebitNotes(buildDebitNotesSeed());
+  saveExpenses(getExpensesSeedData());
+
+  postAllTransactions(invoices);
+
+  for (const cn of creditNotes) {
+    maybePostCreditNote(cn);
+  }
+
+  return invoices;
+}
+
+/** Transactions section — sales/purchase docs, credit/debit notes, expenses, vouchers. */
+export function seedTransactionsSectionDemoData(): void {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(TX_SECTION_KEY) === ACCOUNTS_DEMO_SEED_VERSION) return;
+  try {
+    seedTransactionsDemoRecords();
+    localStorage.setItem(TX_SECTION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
+  } catch (err) {
+    console.error("[accounts] transactions section seed failed:", err);
+  }
+}
+
+/** Reports section — opening balances, inventory ledgers, demo accounting vouchers. */
+export function seedReportsSectionDemoData(): void {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(REPORTS_SECTION_KEY) === ACCOUNTS_DEMO_SEED_VERSION) return;
+  try {
+    ensureAccountsCoreDemoData();
+    assignDemoOpeningBalances();
+    seedInventoryLedgersFromBatchRegister();
+    seedDemoAccountingVouchers();
+    localStorage.setItem(REPORTS_SECTION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
+  } catch (err) {
+    console.error("[accounts] reports section seed failed:", err);
+  }
+}
+
 export function isAccountsDemoSeedCurrent(): boolean {
   if (typeof window === "undefined") return true;
   return localStorage.getItem(VERSION_KEY) === ACCOUNTS_DEMO_SEED_VERSION;
 }
 
-/** Idempotent demo bootstrap — 5 masters + 5 sales + 5 purchase invoices (all posted). */
+/** Full demo bootstrap — used by reset and cross-module callers (e.g. Sales Order form). */
 export function seedAccountsDemoData(force = false): void {
   if (typeof window === "undefined") return;
   if (!force && localStorage.getItem(VERSION_KEY) === ACCOUNTS_DEMO_SEED_VERSION) return;
 
   try {
-    ensureFinancialYearsCurrent();
-    ensureAutoPostingEnabled();
-    seedDemoMasters();
-
-    const customers = loadCustomers();
-    const allDemoInvoiceSpecs: DemoSalesInvoiceSpec[] = [
-      ...getDemoSalesInvoices(),
-      ...CREDIT_LIMIT_DEMO_INVOICE_SPECS,
-    ];
-    const demoInvoiceIds = new Set<number>(
-      allDemoInvoiceSpecs.map((spec) => spec.id),
-    );
-    const preservedInvoices = loadInvoices().filter((inv) => !demoInvoiceIds.has(inv.id));
-
-    const invoices = allDemoInvoiceSpecs.map((spec) => {
-      const customer = customers.find((c) => c.id === spec.customerId);
-      const link = customer ? findErpPartyLink("customer_master", customer.id) : undefined;
-      return buildSalesInvoice(
-        spec,
-        customer?.customerName ?? "Customer",
-        link?.ledgerId ?? null,
-      );
-    });
-
-    saveInvoices([...invoices, ...preservedInvoices]);
-    const creditNotes = buildCreditNotesSeed();
-    saveCreditNotes(creditNotes);
-    saveDebitNotes(buildDebitNotesSeed());
-    saveExpenses(getExpensesSeedData());
-
-    postAllTransactions(invoices);
-
-    for (const cn of creditNotes) {
-      maybePostCreditNote(cn);
-    }
+    const invoices = seedTransactionsDemoRecords();
 
     seedPayablesDemoData(
       (voucherNumber) => loadVouchers().find((v) => v.voucherNumber === voucherNumber)?.id,
@@ -1198,6 +1259,9 @@ export function seedAccountsDemoData(force = false): void {
     seedAccountsDemoBankReconciliation(true);
 
     localStorage.setItem(VERSION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
+    localStorage.setItem(COA_SECTION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
+    localStorage.setItem(TX_SECTION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
+    localStorage.setItem(REPORTS_SECTION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
   } catch (err) {
     console.error("[accounts] demo seed failed:", err);
   }
@@ -1206,5 +1270,10 @@ export function seedAccountsDemoData(force = false): void {
 export function resetAccountsDemoData(): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(VERSION_KEY);
+  localStorage.removeItem(CORE_SEED_KEY);
+  localStorage.removeItem(COA_SECTION_KEY);
+  localStorage.removeItem(TX_SECTION_KEY);
+  localStorage.removeItem(REPORTS_SECTION_KEY);
+  void import("./accounts-section-seed").then((m) => m.resetAccountsSectionBootstrapCache());
   seedAccountsDemoData(true);
 }
