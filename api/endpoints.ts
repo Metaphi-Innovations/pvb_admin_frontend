@@ -65,6 +65,9 @@ export const API_ENDPOINTS = {
       DROPDOWN: "/master/supplier/dropdown",
       DETAILS: (id: string) => `/master/supplier/details/${id}`,
     },
+    WAREHOUSE: {
+      DROPDOWN: "/master/warehouse/dropdown",
+    },
   },
   PROCUREMENT: {
     PURCHASE_ORDER: {
