@@ -1,31 +1,31 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { Eye, Truck } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PackingRecord } from "../types";
 import Link from "next/link";
-import {
-  CUSTOMER_OPTIONS,
-  PACKED_BY_OPTIONS,
-  DONE_STATUS_OPTIONS,
-  STATUS_BADGE_CONFIG,
-} from "../constants";
+import { STATUS_BADGE_CONFIG } from "../constants";
 import {
   resolveWarehouseOrderType,
-  matchesOrderTypeFilter,
   ORDER_TYPE_BADGE_CONFIG,
   formatWarehouseOrderAmount,
   type OrderTypeFilterTab,
 } from "@/app/(app)/warehouse/lib/order-document-type";
 import { getPackingListOrderNoHeader } from "../lib/packing-document-labels";
+import {
+  PackingDoneService,
+  buildPackingDoneApiFilters,
+  buildPackingDoneOrdering,
+  type PackingDoneFilterField,
+} from "@/services/packing-done.service";
 
 type PackingSourceTab = Exclude<OrderTypeFilterTab, "all">;
 
 interface DonePackingListingProps {
-  packingsForWarehouse: PackingRecord[];
+  packingsForWarehouse?: PackingRecord[]; // Left for backward compatibility, ignored in favor of real API
   sourceFilter: PackingSourceTab;
 }
 
@@ -49,81 +49,104 @@ function doneStatusLabel(row: PackingRecord): string {
   return row.status;
 }
 
-export function DonePackingListing({ packingsForWarehouse, sourceFilter }: DonePackingListingProps) {
+export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const selectedWarehouse = searchParams.get("warehouse") || "All";
+
+  // API parameters state
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  React.useEffect(() => {
+  // Dynamic filter options state
+  const [packingNoOptions, setPackingNoOptions] = useState<{ label: string; value: string }[]>([]);
+  const [salesOrderNoOptions, setSalesOrderNoOptions] = useState<{ label: string; value: string }[]>([]);
+  const [customerOptions, setCustomerOptions] = useState<{ label: string; value: string }[]>([]);
+  const [warehouseOptions, setWarehouseOptions] = useState<{ label: string; value: string }[]>([]);
+  const [packedByOptions, setPackedByOptions] = useState<{ label: string; value: string }[]>([]);
+  const [statusOptions, setStatusOptions] = useState<{ label: string; value: string }[]>([]);
+
+  // List data state
+  const [items, setItems] = useState<PackingRecord[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  // Reset page when source tab changes
+  useEffect(() => {
     setPage(1);
   }, [sourceFilter]);
 
-  const filteredPackings = useMemo(() => {
-    return packingsForWarehouse.filter((item) => {
-      const type = resolveWarehouseOrderType(item);
-      return matchesOrderTypeFilter(type, sourceFilter);
-    });
-  }, [packingsForWarehouse, sourceFilter]);
+  // Track which filter columns have already been loaded
+  const loadedFiltersRef = useRef<Set<string>>(new Set());
 
-  const processed = useMemo(() => {
-    let result = [...filteredPackings];
-    Object.keys(filters).forEach((key) => {
-      const val = filters[key];
-      if (!val) return;
+  // Lazy-load filter options only when the user opens a specific filter popover
+  const FILTER_FIELD_MAP: Record<string, { field: PackingDoneFilterField; setter: (opts: { label: string; value: string }[]) => void }> = useMemo(() => ({
+    packingDoneNo: { field: "packing_done_no", setter: setPackingNoOptions },
+    salesOrderNo: { field: "packing_list__packing_number", setter: setSalesOrderNoOptions },
+    customer: { field: "packing_list__customer_name", setter: setCustomerOptions },
+    warehouse: { field: "warehouse__warehouse_name", setter: setWarehouseOptions },
+    packedBy: { field: "packed_by_user__username", setter: setPackedByOptions },
+    status: { field: "status", setter: setStatusOptions },
+  }), []);
 
-      if (key === "search") {
-        const q = (val as string).toLowerCase();
-        result = result.filter(
-          (item) =>
-            item.packingNo.toLowerCase().includes(q) ||
-            item.salesOrderNo.toLowerCase().includes(q) ||
-            item.customer.toLowerCase().includes(q) ||
-            (item.sourceDocumentNo && item.sourceDocumentNo.toLowerCase().includes(q)) ||
-            (item.packingListNo && item.packingListNo.toLowerCase().includes(q)),
-        );
-      } else if (key === "packingNo" || key === "salesOrderNo" || key === "packingListNo") {
-        const q = (val as string).toLowerCase();
-        result = result.filter(
-          (item) =>
-            String(item.packingNo).toLowerCase().includes(q) ||
-            String(item.salesOrderNo).toLowerCase().includes(q) ||
-            (item.packingListNo && item.packingListNo.toLowerCase().includes(q)),
-        );
-      } else if (key === "customer" || key === "packedBy" || key === "status") {
-        const selected = val as string[];
-        result = result.filter((item) =>
-          selected.includes(String(item[key as keyof PackingRecord])),
-        );
-      } else if (key === "packingDate") {
-        const range = val as { fromDate: string; toDate: string };
-        if (range.fromDate) result = result.filter((item) => item.packingDate >= range.fromDate);
-        if (range.toDate) result = result.filter((item) => item.packingDate <= range.toDate);
-      }
-    });
-
-    if (sort.key && sort.direction !== "none") {
-      result.sort((a, b) => {
-        if (sort.key === "totalItems" || sort.key === "packedQuantity") {
-          return sort.direction === "asc"
-            ? (a[sort.key as keyof PackingRecord] as number) -
-                (b[sort.key as keyof PackingRecord] as number)
-            : (b[sort.key as keyof PackingRecord] as number) -
-                (a[sort.key as keyof PackingRecord] as number);
-        }
-        const valA = String(a[sort.key as keyof PackingRecord] || "");
-        const valB = String(b[sort.key as keyof PackingRecord] || "");
-        return sort.direction === "asc" ? valA.localeCompare(valB) : valB.localeCompare(valA);
-      });
+  const handleOpenFilter = useCallback(async (columnKey: string) => {
+    if (loadedFiltersRef.current.has(columnKey)) return;
+    const mapping = FILTER_FIELD_MAP[columnKey];
+    if (!mapping) return;
+    loadedFiltersRef.current.add(columnKey);
+    try {
+      const options = await PackingDoneService.getFilterDropdown(mapping.field);
+      mapping.setter(options);
+    } catch (err) {
+      console.error(`Error loading filter options for ${columnKey}:`, err);
+      loadedFiltersRef.current.delete(columnKey);
     }
-    return result;
-  }, [filteredPackings, filters, sort]);
+  }, [FILTER_FIELD_MAP]);
 
-  const paginated = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return processed.slice(start, start + pageSize);
-  }, [processed, page, pageSize]);
+  // Fetch list data from backend
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+
+    async function loadData() {
+      setLoading(true);
+      try {
+        const apiFilters = buildPackingDoneApiFilters(filters, selectedWarehouse);
+        // Force the source_type based on the active tab
+        apiFilters.source_type = sourceFilter === "sales" ? "normal_sales" : sourceFilter;
+
+        const ordering = buildPackingDoneOrdering(sort.key, sort.direction);
+
+        const result = await PackingDoneService.list({
+          page,
+          pageSize,
+          search: (filters.search as string) || "",
+          ordering,
+          apiFilters,
+          signal: controller.signal,
+        });
+
+        if (active) {
+          setItems(result.items);
+          setTotal(result.total);
+        }
+      } catch (err) {
+        console.error("Error loading packing done data:", err);
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [page, pageSize, sort, filters, sourceFilter, selectedWarehouse]);
 
   const isPurchaseReturn = sourceFilter === "purchase_return";
 
@@ -145,19 +168,32 @@ export function DonePackingListing({ packingsForWarehouse, sourceFilter }: DoneP
         render: (_: unknown, row: PackingRecord) => <OrderTypeBadge row={row} />,
       },
       {
-        key: "salesOrderNo",
-        header: getPackingListOrderNoHeader(sourceFilter),
+        key: "packingNo",
+        header: "Packing Done No",
         sortable: true,
         filterable: true,
-        filterType: "text",
+        filterType: "dropdown",
+        filterOptions: packingNoOptions,
         width: "140px",
         render: (_: unknown, row: PackingRecord) => (
           <Link
             href={`/warehouse/packing/view/${row.id}`}
             className="font-mono text-xs font-semibold text-brand-700 hover:underline"
           >
-            {row.salesOrderNo}
+            {row.packingNo}
           </Link>
+        ),
+      },
+      {
+        key: "salesOrderNo",
+        header: getPackingListOrderNoHeader(sourceFilter),
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: salesOrderNoOptions,
+        width: "140px",
+        render: (_: unknown, row: PackingRecord) => (
+          <span className="font-mono text-xs text-foreground font-semibold">{row.salesOrderNo}</span>
         ),
       },
     ];
@@ -183,7 +219,7 @@ export function DonePackingListing({ packingsForWarehouse, sourceFilter }: DoneP
         sortable: true,
         filterable: true,
         filterType: "dropdown",
-        filterOptions: CUSTOMER_OPTIONS,
+        filterOptions: customerOptions,
         width: "180px",
         render: (_: unknown, row: PackingRecord) => {
           const type = resolveWarehouseOrderType(row);
@@ -202,9 +238,12 @@ export function DonePackingListing({ packingsForWarehouse, sourceFilter }: DoneP
         },
       },
       {
-        key: "sourceWarehouse",
+        key: "warehouse",
         header: "Source Warehouse",
         sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: warehouseOptions,
         width: "160px",
         render: (_: unknown, row: PackingRecord) => (
           <span className="text-xs text-foreground">
@@ -262,7 +301,7 @@ export function DonePackingListing({ packingsForWarehouse, sourceFilter }: DoneP
         sortable: true,
         filterable: true,
         filterType: "dropdown",
-        filterOptions: PACKED_BY_OPTIONS,
+        filterOptions: packedByOptions,
         width: "120px",
       },
       {
@@ -280,7 +319,7 @@ export function DonePackingListing({ packingsForWarehouse, sourceFilter }: DoneP
         sortable: true,
         filterable: true,
         filterType: "dropdown",
-        filterOptions: DONE_STATUS_OPTIONS,
+        filterOptions: statusOptions,
         width: "110px",
         render: (_: unknown, row: PackingRecord) => {
           const label = doneStatusLabel(row);
@@ -299,7 +338,17 @@ export function DonePackingListing({ packingsForWarehouse, sourceFilter }: DoneP
       },
     );
     return cols;
-  }, [partyHeader, isPurchaseReturn, sourceFilter]);
+  }, [
+    partyHeader,
+    isPurchaseReturn,
+    sourceFilter,
+    packingNoOptions,
+    salesOrderNoOptions,
+    customerOptions,
+    warehouseOptions,
+    packedByOptions,
+    statusOptions,
+  ]);
 
   const actions: ActionItemConfig<PackingRecord>[] = [
     {
@@ -319,18 +368,20 @@ export function DonePackingListing({ packingsForWarehouse, sourceFilter }: DoneP
 
   return (
     <MasterListing<PackingRecord>
-        columns={columns}
-        data={paginated}
-        totalRecords={processed.length}
-        page={page}
-        pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={setPageSize}
-        onSortChange={setSort}
-        onFilterChange={setFilters}
-        actions={actions}
-        emptyMessage=""
-        searchPlaceholder="Search packing no, order no..."
-      />
+      columns={columns}
+      data={items}
+      loading={loading}
+      totalRecords={total}
+      page={page}
+      pageSize={pageSize}
+      onPageChange={setPage}
+      onPageSizeChange={setPageSize}
+      onSortChange={setSort}
+      onFilterChange={setFilters}
+      actions={actions}
+      emptyMessage="packing done records"
+      searchPlaceholder="Search packing done..."
+      onOpenFilter={handleOpenFilter}
+    />
   );
 }

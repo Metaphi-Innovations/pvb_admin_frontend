@@ -82,4 +82,24 @@ export const API_ENDPOINTS = {
       REJECT: "/procurement/purchase-order/reject",
     },
   },
+  WAREHOUSE: {
+    PACKING_LIST: {
+      BATCHES: "/warehouse/packing-list/batches",
+      FILTER_DROPDOWN: "/warehouse/packing-list/filter-dropdown",
+      LIST: "/warehouse/packing-list/list",
+      CREATE: "/warehouse/packing-list/create",
+      DETAILS: (id: string) => `/warehouse/packing-list/details/${id}`,
+      REVERT: (id: string) => `/warehouse/packing-list/revert/${id}`,
+    },
+    PACKING_DONE: {
+      PREVIEW_NUMBER: "/warehouse/packing-done/preview-number",
+      SUMMARY: "/warehouse/packing-done/summary",
+      FILTER_DROPDOWN: "/warehouse/packing-done/filter-dropdown",
+      LIST: "/warehouse/packing-done/list",
+      CREATE: "/warehouse/packing-done/create",
+      DETAILS: (id: string) => `/warehouse/packing-done/details/${id}`,
+      UPDATE: (id: string) => `/warehouse/packing-done/update/${id}`,
+      REVERT: (id: string) => `/warehouse/packing-done/revert/${id}`,
+    },
+  },
 };

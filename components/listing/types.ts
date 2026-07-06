@@ -70,4 +70,5 @@ export interface MasterListingProps<T = any> {
   // State from parent to keep track of current filters/sorting if controlled
   currentFilters?: FilterState;
   currentSort?: SortState;
+  onOpenFilter?: (columnKey: string) => void;
 }

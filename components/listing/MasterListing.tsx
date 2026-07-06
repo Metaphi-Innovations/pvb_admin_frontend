@@ -35,6 +35,7 @@ export function MasterListing<T = any>({
   hideSearch = false,
   currentFilters,
   currentSort,
+  onOpenFilter,
 }: MasterListingProps<T>) {
   // Sort State
   const [sortState, setSortState] = useState<SortState>({
@@ -218,6 +219,7 @@ export function MasterListing<T = any>({
                                 column={col}
                                 value={filters[col.key]}
                                 onChange={(val) => handleFilterItemChange(col.key, val)}
+                                onOpen={onOpenFilter ? () => onOpenFilter(col.key) : undefined}
                               />
                             )}
                           </span>
