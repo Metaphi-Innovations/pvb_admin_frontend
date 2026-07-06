@@ -7,7 +7,8 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { normalizeInitialCode } from "@/lib/masters/code-generation";
-import { CustomerTypeListService } from "@/services/customer-type-list.service";
+import { useCreateCustomerType } from "@/hooks/masters";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
 import {
   CustomerTypeForm,
   DEFAULT_CUSTOMER_TYPE_FORM,
@@ -26,8 +27,9 @@ export default function AddCustomerTypePage() {
   const router = useRouter();
   const [form, setForm] = useState<CustomerTypeFormValues>(DEFAULT_CUSTOMER_TYPE_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const createMutation = useCreateCustomerType();
+  const saving = createMutation.isPending;
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -49,23 +51,27 @@ export default function AddCustomerTypePage() {
       return;
     }
 
-    try {
-      setSaving(true);
-      await CustomerTypeListService.create({
+    createMutation.mutate(
+      {
         customerInitialCode: normalizeInitialCode(form.initialCode),
         customerTypeName: form.customerType,
         description: form.description,
         documentTypeIds,
-      });
-      setToast({ msg: "Customer Type added successfully.", type: "success" });
-      setTimeout(() => router.push("/masters/customer-types"), 900);
-    } catch (error: unknown) {
-      const err = error as { message?: string } | undefined;
-      setToast({ msg: err?.message || "Failed to create customer type.", type: "error" });
-      setTimeout(() => setToast(null), 3200);
-    } finally {
-      setSaving(false);
-    }
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Customer Type added successfully.", type: "success" });
+          setTimeout(() => router.push("/masters/customer-types"), 900);
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to create customer type."),
+            type: "error",
+          });
+          setTimeout(() => setToast(null), 3200);
+        },
+      },
+    );
   };
 
   return (

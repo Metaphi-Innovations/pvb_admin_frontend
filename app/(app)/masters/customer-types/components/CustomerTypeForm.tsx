@@ -16,7 +16,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { type CustomerTypeDocument } from "../customer-type-data";
-import { DocumentTypeListService, type DocumentTypeDropdownItem } from "@/services/document-type-list.service";
+import type { DocumentTypeDropdownItem } from "@/services/document-type-list.service";
+import { useDocumentTypeDropdown } from "@/hooks/masters";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import {
 	normalizeInitialCode,
@@ -233,31 +235,12 @@ export function CustomerTypeForm({
 	originalInitialCode?: string;
 }) {
 	const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
-	const [docTypesList, setDocTypesList] = useState<DocumentTypeDropdownItem[]>([]);
-	const [docTypesLoading, setDocTypesLoading] = useState(true);
-	const [docTypesError, setDocTypesError] = useState<string | null>(null);
-
-	useEffect(() => {
-		const controller = new AbortController();
-		setDocTypesLoading(true);
-		setDocTypesError(null);
-
-		DocumentTypeListService.dropdown()
-			.then((items) => {
-				if (!controller.signal.aborted) setDocTypesList(items);
-			})
-			.catch((error: unknown) => {
-				if (controller.signal.aborted) return;
-				const err = error as { message?: string } | undefined;
-				setDocTypesError(err?.message || "Failed to load document types.");
-				setDocTypesList([]);
-			})
-			.finally(() => {
-				if (!controller.signal.aborted) setDocTypesLoading(false);
-			});
-
-		return () => controller.abort();
-	}, []);
+	const docTypesQuery = useDocumentTypeDropdown();
+	const docTypesList: DocumentTypeDropdownItem[] = docTypesQuery.data ?? [];
+	const docTypesLoading = docTypesQuery.isFetching;
+	const docTypesError = docTypesQuery.isError
+		? getErrorMessage(docTypesQuery.error, "Failed to load document types.")
+		: null;
 
 	useEffect(() => {
 		const normalized = normalizeInitialCode(form.initialCode);

@@ -7,7 +7,11 @@ import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { CustomerTypeListService } from "@/services/customer-type-list.service";
+import { useCustomerType, useUpdateCustomerType } from "@/hooks/masters";
+import {
+  getErrorMessage,
+  getMasterDetailErrorMessage,
+} from "@/lib/masters/master-query-errors";
 import {
   CustomerTypeForm,
   type CustomerTypeFormValues,
@@ -27,43 +31,36 @@ export default function EditCustomerTypePage() {
   const [form, setForm] = useState<CustomerTypeFormValues | null>(null);
   const [originalInitialCode, setOriginalInitialCode] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
+  const detailQuery = useCustomerType(id);
+  const updateMutation = useUpdateCustomerType();
+  const loading = detailQuery.isFetching && !detailQuery.data;
+  const loadError = detailQuery.isError
+    ? getMasterDetailErrorMessage(
+        detailQuery.error,
+        "Customer type not found.",
+        "Failed to load customer type.",
+      )
+    : null;
+  const saving = updateMutation.isPending;
+
   useEffect(() => {
-    if (!id) return;
-
-    setLoading(true);
-    setLoadError(null);
-
-    CustomerTypeListService.view(id)
-      .then((detail) => {
-        setOriginalInitialCode(detail.initialCode);
-        setForm({
-          customerTypeCode: detail.initialCode,
-          initialCode: detail.initialCode,
-          customerType: detail.customerType,
-          description: detail.description || "",
-          documentTypes: detail.documents.map((doc, idx) => ({
-            id: `DOC-${idx + 1}`,
-            documentTypeId: doc.id,
-            documentName: doc.title,
-          })),
-        });
-      })
-      .catch((error: unknown) => {
-        const err = error as { status?: number; message?: string } | undefined;
-        const message =
-          err?.status === 404
-            ? "Customer type not found."
-            : err?.message || "Failed to load customer type.";
-        setLoadError(message);
-        setForm(null);
-      })
-      .finally(() => setLoading(false));
-  }, [id]);
+    if (!detailQuery.data) return;
+    const detail = detailQuery.data;
+    setOriginalInitialCode(detail.initialCode);
+    setForm({
+      customerTypeCode: detail.initialCode,
+      initialCode: detail.initialCode,
+      customerType: detail.customerType,
+      description: detail.description || "",
+      documentTypes: detail.documents.map((doc, idx) => ({
+        id: `DOC-${idx + 1}`,
+        documentTypeId: doc.id,
+        documentName: doc.title,
+      })),
+    });
+  }, [detailQuery.data]);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -86,22 +83,29 @@ export default function EditCustomerTypePage() {
       return;
     }
 
-    try {
-      setSaving(true);
-      await CustomerTypeListService.update(id, {
-        customerTypeName: form.customerType,
-        description: form.description,
-        documentTypeIds,
-      });
-      setToast({ msg: "Customer Type updated successfully.", type: "success" });
-      setTimeout(() => router.push(`/masters/customer-types/${id}`), 900);
-    } catch (error: unknown) {
-      const err = error as { message?: string } | undefined;
-      setToast({ msg: err?.message || "Failed to update customer type.", type: "error" });
-      setTimeout(() => setToast(null), 3200);
-    } finally {
-      setSaving(false);
-    }
+    updateMutation.mutate(
+      {
+        id,
+        payload: {
+          customerTypeName: form.customerType,
+          description: form.description,
+          documentTypeIds,
+        },
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Customer Type updated successfully.", type: "success" });
+          setTimeout(() => router.push(`/masters/customer-types/${id}`), 900);
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to update customer type."),
+            type: "error",
+          });
+          setTimeout(() => setToast(null), 3200);
+        },
+      },
+    );
   };
 
   if (loading) {

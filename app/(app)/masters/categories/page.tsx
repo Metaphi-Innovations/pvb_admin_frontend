@@ -40,9 +40,15 @@ import {
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { loadCategories, saveCategories, type Category, type CategoryStatus, todayStr } from "./category-data";
-import { CategoryListService } from "@/services/category-list.service";
-import { MiniKPICard } from "@/components/ui/KPICard";
+import { loadCategories, saveCategories, type Category, type CategoryStatus } from "./category-data";
+import {
+  useCategories,
+  useCategory,
+  useCreateCategory,
+  useUpdateCategory,
+  useToggleCategoryStatus,
+  useExportCategories,
+} from "@/hooks/masters";
 import { CategoryForm, DEFAULT_CATEGORY_FORM, type CategoryFormValues, validateCategoryForm } from "./components/CategoryForm";
 import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
 import {
@@ -51,6 +57,11 @@ import {
   resolveListStatus,
 } from "@/lib/masters/list-api-filters";
 import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import {
+  getErrorMessage,
+  getMasterListErrorMessage,
+} from "@/lib/masters/master-query-errors";
+import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
@@ -104,10 +115,6 @@ function toCategoryRow(item: {
 
 
 export default function CategoryMasterPage() {
-  const [records, setRecords] = useState<Category[]>([]);
-  const [totalRecords, setTotalRecords] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [listError, setListError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>({});
   const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
   const [sort, setSort] = useState<SortState>({ key: "categoryName", direction: "asc" });
@@ -121,9 +128,7 @@ export default function CategoryMasterPage() {
   const [form, setForm] = useState<CategoryFormValues>(DEFAULT_CATEGORY_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [viewLoading, setViewLoading] = useState(false);
+  const [viewId, setViewId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
 
   const apiFilters = useMemo(
@@ -135,46 +140,35 @@ export default function CategoryMasterPage() {
     [debouncedFilters],
   );
 
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    setListError(null);
-
-    CategoryListService.list({
+  const listParams = useMemo<MasterListKeyParams>(
+    () => ({
       page,
       pageSize,
       search: debouncedSearch,
       status: listStatus,
       apiFilters,
-      signal: controller.signal,
-    })
-      .then((result) => {
-        setRecords(result.items.map(toCategoryRow));
-        setTotalRecords(result.total);
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
-        const err = error as { status?: number; message?: string } | undefined;
-        const message =
-          err?.status === 401
-            ? "Unauthorized. Please login again."
-            : err?.status === 403
-              ? "Forbidden. You do not have access."
-              : err?.status === 404
-                ? "Category list endpoint not found."
-                : err?.status === 500
-                  ? "Server error while loading categories."
-                  : err?.message || "Unable to load categories.";
-        setListError(message);
-        setRecords([]);
-        setTotalRecords(0);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
+    }),
+    [page, pageSize, debouncedSearch, listStatus, apiFilters],
+  );
 
-    return () => controller.abort();
-  }, [page, pageSize, debouncedSearch, apiFilters, listStatus, reloadKey]);
+  const listQuery = useCategories(listParams);
+  const detailQuery = useCategory(viewId);
+  const createMutation = useCreateCategory();
+  const updateMutation = useUpdateCategory();
+  const toggleStatusMutation = useToggleCategoryStatus();
+  const exportMutation = useExportCategories();
+
+  const records = useMemo(
+    () => (listQuery.data?.items ?? []).map(toCategoryRow),
+    [listQuery.data],
+  );
+  const totalRecords = listQuery.data?.total ?? 0;
+  const loading = listQuery.isFetching;
+  const listError = listQuery.isError
+    ? getMasterListErrorMessage(listQuery.error, { resource: "categories" })
+    : null;
+  const viewLoading = Boolean(viewId) && detailQuery.isFetching;
+  const saving = createMutation.isPending || updateMutation.isPending;
 
   useEffect(() => {
     if (!toast) return;
@@ -182,23 +176,45 @@ export default function CategoryMasterPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const toggleStatus = useCallback(async (record: Category) => {
-    if (!record.categoryId) {
-      setToast({ msg: "Category id missing. Unable to update status.", type: "error" });
+  useEffect(() => {
+    if (!viewId) return;
+    if (detailQuery.isError) {
+      setToast({
+        msg: getErrorMessage(detailQuery.error, "Failed to load category details."),
+        type: "error",
+      });
+      setViewId(null);
       return;
     }
-    try {
-      await CategoryListService.updateStatus(record.categoryId);
-      setToast({
-        msg: `Category status updated to ${record.status === "active" ? "Inactive" : "Active"}`,
-        type: "success",
-      });
-      setReloadKey((prev) => prev + 1);
-    } catch (error: unknown) {
-      const err = error as { message?: string } | undefined;
-      setToast({ msg: err?.message || "Failed to update category status.", type: "error" });
+    if (detailQuery.data) {
+      setActive(toCategoryRow(detailQuery.data));
+      setSheetMode("view");
     }
-  }, []);
+  }, [viewId, detailQuery.data, detailQuery.isError, detailQuery.error]);
+
+  const toggleStatus = useCallback(
+    (record: Category) => {
+      if (!record.categoryId) {
+        setToast({ msg: "Category id missing. Unable to update status.", type: "error" });
+        return;
+      }
+      toggleStatusMutation.mutate(record.categoryId, {
+        onSuccess: () => {
+          setToast({
+            msg: `Category status updated to ${record.status === "active" ? "Inactive" : "Active"}`,
+            type: "success",
+          });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to update category status."),
+            type: "error",
+          });
+        },
+      });
+    },
+    [toggleStatusMutation],
+  );
 
   const columns: ColumnConfig<Category>[] = [
     {
@@ -320,33 +336,23 @@ export default function CategoryMasterPage() {
     setSheetMode("edit");
   };
 
-  const openView = async (row: Category) => {
+  const openView = (row: Category) => {
     if (!row.categoryId) {
       setToast({ msg: "Category id missing. Unable to load details.", type: "error" });
       return;
     }
-
-    try {
-      setViewLoading(true);
-      const detail = await CategoryListService.view(row.categoryId);
-      setActive(toCategoryRow(detail));
-      setSheetMode("view");
-    } catch (error: unknown) {
-      const err = error as { message?: string } | undefined;
-      setToast({ msg: err?.message || "Failed to load category details.", type: "error" });
-    } finally {
-      setViewLoading(false);
-    }
+    setViewId(row.categoryId);
   };
 
   const closeSheet = () => {
     setSheetMode(null);
     setActive(null);
+    setViewId(null);
     setErrors({});
     setFormError(null);
   };
 
-  const persist = async () => {
+  const persist = () => {
     const mode = sheetMode === "add" ? "add" : "edit";
     const errs = validateCategoryForm(form);
     if (Object.keys(errs).length > 0) {
@@ -355,23 +361,23 @@ export default function CategoryMasterPage() {
     }
 
     if (mode === "add") {
-      try {
-        setSaving(true);
-        setFormError(null);
-        await CategoryListService.create({
+      setFormError(null);
+      createMutation.mutate(
+        {
           categoryName: form.categoryName,
           description: form.description,
-        });
-        setToast({ msg: "Category created successfully.", type: "success" });
-        setPage(1);
-        setReloadKey((prev) => prev + 1);
-        closeSheet();
-      } catch (error: unknown) {
-        const err = error as { message?: string } | undefined;
-        setFormError(err?.message || "Failed to create category.");
-      } finally {
-        setSaving(false);
-      }
+        },
+        {
+          onSuccess: () => {
+            setToast({ msg: "Category created successfully.", type: "success" });
+            setPage(1);
+            closeSheet();
+          },
+          onError: (error) => {
+            setFormError(getErrorMessage(error, "Failed to create category."));
+          },
+        },
+      );
       return;
     }
 
@@ -380,46 +386,55 @@ export default function CategoryMasterPage() {
       return;
     }
 
-    try {
-      setSaving(true);
-      setFormError(null);
-      await CategoryListService.update(active.categoryId, {
-        categoryName: form.categoryName,
-        description: form.description,
-        is_active: form.status === "active",
-      });
-      setToast({ msg: "Category updated successfully.", type: "success" });
-      setReloadKey((prev) => prev + 1);
-      closeSheet();
-    } catch (error: unknown) {
-      const err = error as { message?: string } | undefined;
-      setFormError(err?.message || "Failed to update category.");
-    } finally {
-      setSaving(false);
-    }
+    setFormError(null);
+    updateMutation.mutate(
+      {
+        id: active.categoryId,
+        payload: {
+          categoryName: form.categoryName,
+          description: form.description,
+          is_active: form.status === "active",
+        },
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Category updated successfully.", type: "success" });
+          closeSheet();
+        },
+        onError: (error) => {
+          setFormError(getErrorMessage(error, "Failed to update category."));
+        },
+      },
+    );
   };
 
   const confirmDelete = () => {
     if (!deleteTarget) return;
     const list = loadCategories().filter((r) => r.id !== deleteTarget.id);
     saveCategories(list);
-    setRecords(list);
     setDeleteTarget(null);
     setToast({ msg: "Category deleted successfully", type: "success" });
   };
 
-  const handleExport = async () => {
-    try {
-      await CategoryListService.export({
+  const handleExport = () => {
+    exportMutation.mutate(
+      {
         search: debouncedSearch,
         status: listStatus,
         apiFilters,
-      });
-      setToast({ msg: "Categories exported successfully", type: "success" });
-    } catch (error: unknown) {
-      const err = error as { message?: string } | undefined;
-      setToast({ msg: err?.message || "Failed to export categories", type: "error" });
-    }
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Categories exported successfully", type: "success" });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to export categories"),
+            type: "error",
+          });
+        },
+      },
+    );
   };
 
   const sheetTitle =

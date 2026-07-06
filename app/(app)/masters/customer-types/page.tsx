@@ -22,13 +22,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { loadCustomerTypes, saveCustomerTypes, type CustomerTypeRecord } from "./customer-type-data";
-import { CustomerTypeListService } from "@/services/customer-type-list.service";
+import {
+  useCustomerTypes,
+  useToggleCustomerTypeStatus,
+  useExportCustomerTypes,
+} from "@/hooks/masters";
 import {
   MASTER_FILTER_FIELD_MAPS,
   mergeListRequestFilters,
   resolveListStatus,
 } from "@/lib/masters/list-api-filters";
 import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import {
+  getErrorMessage,
+  getMasterListErrorMessage,
+} from "@/lib/masters/master-query-errors";
+import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { ListingUserCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
@@ -92,10 +101,6 @@ function routeId(row: CustomerTypeRecord): string {
 
 export default function CustomerTypesPage() {
   const router = useRouter();
-  const [records, setRecords] = useState<CustomerTypeRecord[]>([]);
-  const [totalRecords, setTotalRecords] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [listError, setListError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>({});
   const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
   const [sort, setSort] = useState<SortState>({ key: "customerType", direction: "asc" });
@@ -103,7 +108,6 @@ export default function CustomerTypesPage() {
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CustomerTypeRecord | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
 
   const apiFilters = useMemo(
     () => mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.customerType),
@@ -114,47 +118,31 @@ export default function CustomerTypesPage() {
     [debouncedFilters],
   );
 
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    setListError(null);
-
-    CustomerTypeListService.list({
+  const listParams = useMemo<MasterListKeyParams>(
+    () => ({
       page,
       pageSize,
       search: debouncedSearch,
-      ordering: "",
       status: listStatus,
       apiFilters,
-      signal: controller.signal,
-    })
-      .then((result) => {
-        setRecords(result.items.map(toCustomerTypeRow));
-        setTotalRecords(result.total);
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
-        const err = error as { status?: number; message?: string } | undefined;
-        const message =
-          err?.status === 401
-            ? "Unauthorized. Please login again."
-            : err?.status === 403
-              ? "Forbidden. You do not have access."
-              : err?.status === 404
-                ? "Customer type list endpoint not found."
-                : err?.status === 500
-                  ? "Server error while loading customer types."
-                  : err?.message || "Unable to load customer types.";
-        setListError(message);
-        setRecords([]);
-        setTotalRecords(0);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
+      ordering: "",
+    }),
+    [page, pageSize, debouncedSearch, listStatus, apiFilters],
+  );
 
-    return () => controller.abort();
-  }, [page, pageSize, debouncedSearch, apiFilters, listStatus, reloadKey]);
+  const listQuery = useCustomerTypes(listParams);
+  const toggleStatusMutation = useToggleCustomerTypeStatus();
+  const exportMutation = useExportCustomerTypes();
+
+  const records = useMemo(
+    () => (listQuery.data?.items ?? []).map(toCustomerTypeRow),
+    [listQuery.data],
+  );
+  const totalRecords = listQuery.data?.total ?? 0;
+  const loading = listQuery.isFetching;
+  const listError = listQuery.isError
+    ? getMasterListErrorMessage(listQuery.error, { resource: "customer types" })
+    : null;
 
   useEffect(() => {
     if (!toast) return;
@@ -162,24 +150,30 @@ export default function CustomerTypesPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const toggleStatus = useCallback(async (record: CustomerTypeRecord) => {
-    const customerTypeId = routeId(record);
-    if (!customerTypeId) {
-      setToast({ msg: "Customer type id missing. Unable to update status.", type: "error" });
-      return;
-    }
-    try {
-      await CustomerTypeListService.updateStatus(customerTypeId);
-      setToast({
-        msg: `Customer type status updated to ${record.status === "active" ? "Inactive" : "Active"}`,
-        type: "success",
+  const toggleStatus = useCallback(
+    (record: CustomerTypeRecord) => {
+      const customerTypeId = routeId(record);
+      if (!customerTypeId) {
+        setToast({ msg: "Customer type id missing. Unable to update status.", type: "error" });
+        return;
+      }
+      toggleStatusMutation.mutate(customerTypeId, {
+        onSuccess: () => {
+          setToast({
+            msg: `Customer type status updated to ${record.status === "active" ? "Inactive" : "Active"}`,
+            type: "success",
+          });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to update customer type status."),
+            type: "error",
+          });
+        },
       });
-      setReloadKey((prev) => prev + 1);
-    } catch (error: unknown) {
-      const err = error as { message?: string } | undefined;
-      setToast({ msg: err?.message || "Failed to update customer type status.", type: "error" });
-    }
-  }, []);
+    },
+    [toggleStatusMutation],
+  );
 
   const columns: ColumnConfig<CustomerTypeRecord>[] = [
     {
@@ -299,23 +293,29 @@ export default function CustomerTypesPage() {
     if (!deleteTarget) return;
     const list = loadCustomerTypes().filter((r) => r.id !== deleteTarget.id);
     saveCustomerTypes(list);
-    setRecords((prev) => prev.filter((r) => r.id !== deleteTarget.id));
     setDeleteTarget(null);
     setToast({ msg: "Customer Type deleted successfully", type: "success" });
   };
 
-  const handleExport = async () => {
-    try {
-      await CustomerTypeListService.export({
+  const handleExport = () => {
+    exportMutation.mutate(
+      {
         search: debouncedSearch,
         status: listStatus,
         apiFilters,
-      });
-      setToast({ msg: "Customer Types exported successfully", type: "success" });
-    } catch (error: unknown) {
-      const err = error as { message?: string } | undefined;
-      setToast({ msg: err?.message || "Failed to export customer types", type: "error" });
-    }
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Customer Types exported successfully", type: "success" });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to export customer types"),
+            type: "error",
+          });
+        },
+      },
+    );
   };
 
   const handleAdd = () => {

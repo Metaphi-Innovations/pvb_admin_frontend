@@ -11,6 +11,7 @@ export function POFormFooter({
   onSubmit,
   showSubmit = true,
   saveLabel = "Save Purchase Order",
+  saving = false,
 }: {
   readOnly?: boolean;
   onCancel: () => void;
@@ -18,6 +19,7 @@ export function POFormFooter({
   onSubmit?: () => void;
   showSubmit?: boolean;
   saveLabel?: string;
+  saving?: boolean;
 }) {
   if (readOnly) {
     return (
@@ -28,16 +30,20 @@ export function POFormFooter({
   }
   return (
     <>
-      <Button variant="outline" className="h-9 rounded-lg text-xs font-semibold" onClick={onCancel}>
+      <Button variant="outline" className="h-9 rounded-lg text-xs font-semibold" onClick={onCancel} disabled={saving}>
         Discard
       </Button>
       {onSaveDraft && (
-        <Button className="h-9 gap-1.5 rounded-lg bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700" onClick={onSaveDraft}>
-          <Save className="h-3.5 w-3.5" /> {saveLabel}
+        <Button
+          className="h-9 gap-1.5 rounded-lg bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700"
+          onClick={onSaveDraft}
+          disabled={saving}
+        >
+          <Save className="h-3.5 w-3.5" /> {saving ? "Saving…" : saveLabel}
         </Button>
       )}
       {showSubmit && onSubmit && (
-        <Button variant="outline" className="h-9 gap-1.5 rounded-lg text-xs font-semibold" onClick={onSubmit}>
+        <Button variant="outline" className="h-9 gap-1.5 rounded-lg text-xs font-semibold" onClick={onSubmit} disabled={saving}>
           <Send className="h-3.5 w-3.5" /> Submit PO
         </Button>
       )}

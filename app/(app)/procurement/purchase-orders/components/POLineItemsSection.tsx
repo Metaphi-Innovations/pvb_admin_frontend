@@ -71,6 +71,15 @@ function packagingUnitToOrderUom(packagingUnit: string): POLineItem["orderUom"] 
   return "Unit";
 }
 
+function asLocalSupplierId(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+  if (typeof value === "string" && /^\d+$/.test(value)) {
+    const n = Number(value);
+    return n > 0 ? n : undefined;
+  }
+  return undefined;
+}
+
 function lineFromProduct(
   productId: number,
   packingQty: number,
@@ -151,7 +160,7 @@ export function POLineItemsSection({
     label: `${p.productName} (${p.sku || p.productId})`,
   }));
 
-  const filledLines = form.lines.filter((l) => l.productId > 0);
+  const filledLines = form.lines.filter((l) => Boolean(l.productId) && l.productId !== 0 && l.productId !== "0");
   const totalPackingQty = filledLines.reduce((sum, l) => sum + (l.orderedQtyPack || 0), 0);
   const totalSkuQty = filledLines.reduce((sum, l) => sum + (l.orderedQty || 0), 0);
   const totalAmount = previewLines.reduce((sum, l) => sum + (l.netAmount || 0), 0);
@@ -200,7 +209,7 @@ export function POLineItemsSection({
     let nextLines = [...form.lines];
     for (const idStr of Array.from(new Set(quickProductIds))) {
       const productId = Number(idStr);
-      const line = lineFromProduct(productId, packingQty, form.supplierId || undefined, taxSupplyType);
+      const line = lineFromProduct(productId, packingQty, asLocalSupplierId(form.supplierId), taxSupplyType);
       if (!line) continue;
       const idx = nextLines.findIndex((l) => l.productId === productId);
       if (idx >= 0) {
@@ -259,7 +268,7 @@ export function POLineItemsSection({
       setInlineEditError("Product is required");
       return;
     }
-    const base = lineFromProduct(productId, packingQty, form.supplierId || undefined, taxSupplyType);
+    const base = lineFromProduct(productId, packingQty, asLocalSupplierId(form.supplierId), taxSupplyType);
     if (!base) return;
     const taxRates = applyGstMasterToTaxRates(Number(inlineEditDraft.gstMasterId), taxSupplyType);
     const existing = form.lines.find((l) => l.uid === inlineEditUid);

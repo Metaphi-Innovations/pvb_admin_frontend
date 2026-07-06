@@ -6,7 +6,8 @@ import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { DocumentTypeListService } from "@/services/document-type-list.service";
+import { useCreateDocumentType } from "@/hooks/masters";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
 import {
   DocumentTypeForm,
   DEFAULT_DOCUMENT_TYPE_FORM,
@@ -18,8 +19,9 @@ export default function AddDocumentTypePage() {
   const router = useRouter();
   const [form, setForm] = useState<DocumentTypeFormValues>(DEFAULT_DOCUMENT_TYPE_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const createMutation = useCreateDocumentType();
+  const saving = createMutation.isPending;
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -28,7 +30,7 @@ export default function AddDocumentTypePage() {
       return next;
     });
 
-  const handleSave = async () => {
+  const handleSave = () => {
     const validation = validateDocumentTypeForm(form);
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
@@ -37,21 +39,25 @@ export default function AddDocumentTypePage() {
       return;
     }
 
-    try {
-      setSaving(true);
-      await DocumentTypeListService.create({
+    createMutation.mutate(
+      {
         title: form.title,
         description: form.description,
-      });
-      setToast({ msg: "Document Type added successfully", type: "success" });
-      setTimeout(() => router.push("/masters/document-types"), 900);
-    } catch (error: unknown) {
-      const err = error as { message?: string } | undefined;
-      setToast({ msg: err?.message || "Failed to create document type.", type: "error" });
-      setTimeout(() => setToast(null), 3200);
-    } finally {
-      setSaving(false);
-    }
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Document Type added successfully", type: "success" });
+          setTimeout(() => router.push("/masters/document-types"), 900);
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to create document type."),
+            type: "error",
+          });
+          setTimeout(() => setToast(null), 3200);
+        },
+      },
+    );
   };
 
   return (

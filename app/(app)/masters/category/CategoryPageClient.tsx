@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { Tag } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,6 +21,7 @@ import {
   validateCategoryForm,
 } from "./category-data";
 import { CategoryListService } from "@/services/category-list.service";
+import { masterKeys } from "@/lib/masters/master-query-keys";
 
 const columns: Column<CategoryRecord>[] = [
   { key: "categoryName", header: "Category Name", sortable: true },
@@ -32,6 +34,8 @@ const columns: Column<CategoryRecord>[] = [
 ];
 
 export default function CategoryPageClient() {
+  const queryClient = useQueryClient();
+
   return (
     <MasterModule<CategoryRecord, CategoryForm>
       config={{
@@ -49,7 +53,21 @@ export default function CategoryPageClient() {
         validate: (f) => validateCategoryForm(f),
         remoteListConfig: {
           fetchPage: async ({ page, pageSize, search, status, signal }) => {
-            const result = await CategoryListService.list({ page, pageSize, search, status, signal });
+            const params = {
+              page,
+              pageSize,
+              search,
+              status,
+              apiFilters: {},
+            };
+            const result = await queryClient.fetchQuery({
+              queryKey: masterKeys.categories.list(params),
+              queryFn: ({ signal: querySignal }) =>
+                CategoryListService.list({
+                  ...params,
+                  signal: signal ?? querySignal,
+                }),
+            });
             return {
               items: result.items.map((item) => ({
                 id: item.id,

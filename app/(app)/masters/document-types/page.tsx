@@ -13,13 +13,23 @@ import {
 import {
   DocumentTypeMaster,
 } from "./document-type-data";
-import { DocumentTypeListService } from "@/services/document-type-list.service";
+import {
+  useDocumentTypes,
+  useDocumentType,
+  useToggleDocumentTypeStatus,
+  useExportDocumentTypes,
+} from "@/hooks/masters";
 import {
   MASTER_FILTER_FIELD_MAPS,
   mergeListRequestFilters,
   resolveListStatus,
 } from "@/lib/masters/list-api-filters";
 import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import {
+  getErrorMessage,
+  getMasterListErrorMessage,
+} from "@/lib/masters/master-query-errors";
+import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { MasterRecordDrawer, masterAuditFromRecord } from "@/components/masters/MasterRecordDrawer";
@@ -50,10 +60,6 @@ function toDocumentTypeRow(item: {
 
 export default function DocumentTypesPage() {
   const router = useRouter();
-  const [records, setRecords] = useState<DocumentTypeMaster[]>([]);
-  const [totalRecords, setTotalRecords] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [listError, setListError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>({});
   const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
   const [sort, setSort] = useState<SortState>({ key: "title", direction: "asc" });
@@ -62,8 +68,7 @@ export default function DocumentTypesPage() {
 
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [viewTarget, setViewTarget] = useState<DocumentTypeMaster | null>(null);
-  const [viewLoading, setViewLoading] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
+  const [viewId, setViewId] = useState<string | null>(null);
 
   const apiFilters = useMemo(
     () => mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.documentType),
@@ -74,46 +79,32 @@ export default function DocumentTypesPage() {
     [debouncedFilters],
   );
 
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    setListError(null);
-
-    DocumentTypeListService.list({
+  const listParams = useMemo<MasterListKeyParams>(
+    () => ({
       page,
       pageSize,
       search: debouncedSearch,
       status: listStatus,
       apiFilters,
-      signal: controller.signal,
-    })
-      .then((result) => {
-        setRecords(result.items.map(toDocumentTypeRow));
-        setTotalRecords(result.total);
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
-        const err = error as { status?: number; message?: string } | undefined;
-        const message =
-          err?.status === 401
-            ? "Unauthorized. Please login again."
-            : err?.status === 403
-              ? "Forbidden. You do not have access."
-              : err?.status === 404
-                ? "Document type list endpoint not found."
-                : err?.status === 500
-                  ? "Server error while loading document types."
-                  : err?.message || "Unable to load document types.";
-        setListError(message);
-        setRecords([]);
-        setTotalRecords(0);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
+    }),
+    [page, pageSize, debouncedSearch, listStatus, apiFilters],
+  );
 
-    return () => controller.abort();
-  }, [page, pageSize, debouncedSearch, apiFilters, listStatus, reloadKey]);
+  const listQuery = useDocumentTypes(listParams);
+  const detailQuery = useDocumentType(viewId);
+  const toggleStatusMutation = useToggleDocumentTypeStatus();
+  const exportMutation = useExportDocumentTypes();
+
+  const records = useMemo(
+    () => (listQuery.data?.items ?? []).map(toDocumentTypeRow),
+    [listQuery.data],
+  );
+  const totalRecords = listQuery.data?.total ?? 0;
+  const loading = listQuery.isFetching;
+  const listError = listQuery.isError
+    ? getMasterListErrorMessage(listQuery.error, { resource: "document types" })
+    : null;
+  const viewLoading = Boolean(viewId) && detailQuery.isFetching;
 
   useEffect(() => {
     if (!toast) return;
@@ -121,40 +112,51 @@ export default function DocumentTypesPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const toggleStatus = useCallback(async (record: DocumentTypeMaster) => {
-    if (!record.id) {
-      setToast({ msg: "Document type id missing. Unable to update status.", type: "error" });
+  useEffect(() => {
+    if (!viewId) return;
+    if (detailQuery.isError) {
+      setToast({
+        msg: getErrorMessage(detailQuery.error, "Failed to load document type details."),
+        type: "error",
+      });
+      setViewId(null);
       return;
     }
-    try {
-      await DocumentTypeListService.updateStatus(record.id);
-      setToast({
-        msg: `Document type status updated to ${record.status === "Active" ? "Inactive" : "Active"}`,
-        type: "success",
-      });
-      setReloadKey((prev) => prev + 1);
-    } catch (error: unknown) {
-      const err = error as { message?: string } | undefined;
-      setToast({ msg: err?.message || "Failed to update document type status.", type: "error" });
+    if (detailQuery.data) {
+      setViewTarget(toDocumentTypeRow(detailQuery.data));
     }
-  }, []);
+  }, [viewId, detailQuery.data, detailQuery.isError, detailQuery.error]);
 
-  const openView = useCallback(async (row: DocumentTypeMaster) => {
+  const toggleStatus = useCallback(
+    (record: DocumentTypeMaster) => {
+      if (!record.id) {
+        setToast({ msg: "Document type id missing. Unable to update status.", type: "error" });
+        return;
+      }
+      toggleStatusMutation.mutate(record.id, {
+        onSuccess: () => {
+          setToast({
+            msg: `Document type status updated to ${record.status === "Active" ? "Inactive" : "Active"}`,
+            type: "success",
+          });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to update document type status."),
+            type: "error",
+          });
+        },
+      });
+    },
+    [toggleStatusMutation],
+  );
+
+  const openView = useCallback((row: DocumentTypeMaster) => {
     if (!row.id) {
       setToast({ msg: "Document type id missing. Unable to load details.", type: "error" });
       return;
     }
-
-    try {
-      setViewLoading(true);
-      const detail = await DocumentTypeListService.view(row.id);
-      setViewTarget(toDocumentTypeRow(detail));
-    } catch (error: unknown) {
-      const err = error as { message?: string } | undefined;
-      setToast({ msg: err?.message || "Failed to load document type details.", type: "error" });
-    } finally {
-      setViewLoading(false);
-    }
+    setViewId(row.id);
   }, []);
 
   const columns: ColumnConfig<DocumentTypeMaster>[] = [
@@ -250,18 +252,25 @@ export default function DocumentTypesPage() {
     setPage(1);
   }, [debouncedSearch, apiFilters, pageSize, sort.key, sort.direction]);
 
-  const handleExport = async () => {
-    try {
-      await DocumentTypeListService.export({
+  const handleExport = () => {
+    exportMutation.mutate(
+      {
         search: debouncedSearch,
         status: listStatus,
         apiFilters,
-      });
-      setToast({ msg: "Document types exported successfully", type: "success" });
-    } catch (error: unknown) {
-      const err = error as { message?: string } | undefined;
-      setToast({ msg: err?.message || "Failed to export document types", type: "error" });
-    }
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Document types exported successfully", type: "success" });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to export document types"),
+            type: "error",
+          });
+        },
+      },
+    );
   };
 
   return (
@@ -301,11 +310,20 @@ export default function DocumentTypesPage() {
       {viewTarget && (
         <MasterRecordDrawer
           open={!!viewTarget}
-          onOpenChange={(o) => !o && setViewTarget(null)}
-          onClose={() => setViewTarget(null)}
+          onOpenChange={(o) => {
+            if (!o) {
+              setViewTarget(null);
+              setViewId(null);
+            }
+          }}
+          onClose={() => {
+            setViewTarget(null);
+            setViewId(null);
+          }}
           onEdit={() => {
             router.push(`/masters/document-types/${viewTarget.id}/edit`);
             setViewTarget(null);
+            setViewId(null);
           }}
           title="Document Type"
           icon={FileText}

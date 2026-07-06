@@ -107,12 +107,16 @@ export function AddFollowUpModal({
   po,
   onSubmit,
   readOnly = false,
+  entries: entriesProp = [],
+  submitting = false,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   po: PurchaseOrder | null;
   onSubmit: (input: AddFollowUpInput) => void;
   readOnly?: boolean;
+  entries?: ReturnType<typeof loadFollowUpsForPO>;
+  submitting?: boolean;
 }) {
   const remarkRef = useRef<HTMLTextAreaElement>(null);
   const [followUpType, setFollowUpType] = useState<POFollowUpType | "">("");
@@ -121,11 +125,7 @@ export function AddFollowUpModal({
   const [nextFollowUpAt, setNextFollowUpAt] = useState("");
   const [remarks, setRemarks] = useState("");
   const [error, setError] = useState("");
-  const [entries, setEntries] = useState<ReturnType<typeof loadFollowUpsForPO>>([]);
-
-  const refreshEntries = useCallback(() => {
-    if (po) setEntries(loadFollowUpsForPO(po.id));
-  }, [po]);
+  const entries = entriesProp;
 
   const resetForm = useCallback(() => {
     setFollowUpType("");
@@ -138,9 +138,8 @@ export function AddFollowUpModal({
   useEffect(() => {
     if (open && po) {
       resetForm();
-      refreshEntries();
     }
-  }, [open, po?.id, resetForm, refreshEntries]);
+  }, [open, po?.id, resetForm]);
 
   if (!po) return null;
 
@@ -175,7 +174,6 @@ export function AddFollowUpModal({
       remarks: remarks.trim(),
     });
     resetForm();
-    refreshEntries();
   };
 
   const typeLabel =
@@ -301,6 +299,7 @@ export function AddFollowUpModal({
                 size="sm"
                 className="h-8 text-xs"
                 onClick={() => onOpenChange(false)}
+                disabled={submitting}
               >
                 Cancel
               </Button>
@@ -308,8 +307,9 @@ export function AddFollowUpModal({
                 size="sm"
                 className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
                 onClick={submit}
+                disabled={submitting}
               >
-                Save
+                {submitting ? "Saving…" : "Save"}
               </Button>
             </div>
           </div>
