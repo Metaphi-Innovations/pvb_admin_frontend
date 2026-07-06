@@ -8,7 +8,10 @@ import {
 
 export interface HSNMaster {
   id: number;
-  /** Government HSN code — numeric, up to 8 digits */
+  /** Backend UUID for API routes */
+  hsnUuid?: string;
+  gstId?: string;
+  /** Display reference — derived from sr_no when not stored in API */
   hsnCode: string;
   hsnDescription: string;
   gstRate: string;
@@ -22,22 +25,35 @@ export interface HSNMaster {
 }
 
 export interface HSNForm {
-  hsnCode: string;
   hsnDescription: string;
-  gstRate: string;
-  productCategory: string;
-  effectiveDate: string;
-  status: MasterStatus;
+  gstId: string;
+  /** @deprecated client-only legacy fields */
+  hsnCode?: string;
+  gstRate?: string;
+  productCategory?: string;
+  effectiveDate?: string;
+  status?: MasterStatus;
 }
 
 export const DEFAULT_HSN_FORM: HSNForm = {
-  hsnCode: "",
   hsnDescription: "",
-  gstRate: "",
-  productCategory: "",
-  effectiveDate: "",
-  status: "active",
+  gstId: "",
 };
+
+export function formatHsnDisplayCode(srNo: number): string {
+  return `HSN-${String(srNo).padStart(4, "0")}`;
+}
+
+export function validateHsnApiForm(form: HSNForm): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!form.hsnDescription.trim()) {
+    errors.hsnDescription = "HSN description is required.";
+  }
+  if (!form.gstId) {
+    errors.gstId = "GST rate is required.";
+  }
+  return errors;
+}
 
 const STORAGE_KEY = "ds_hsn_masters_v2";
 
@@ -162,12 +178,8 @@ export function todayStr(): string {
 
 export function hsnToForm(record: HSNMaster): HSNForm {
   return {
-    hsnCode: record.hsnCode,
     hsnDescription: record.hsnDescription,
-    gstRate: record.gstRate,
-    productCategory: record.productCategory ?? "",
-    effectiveDate: record.effectiveDate ?? "",
-    status: record.status,
+    gstId: record.gstId ?? "",
   };
 }
 

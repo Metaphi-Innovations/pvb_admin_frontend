@@ -15,6 +15,8 @@ export interface CustomerTypeDocument {
 
 export interface CustomerTypeRecord {
   id: number;
+  /** Backend UUID for API routes */
+  customerTypeId?: string;
   customerTypeCode: string;
   /** Prefix for customer codes, e.g. DIS, RET */
   initialCode: string;

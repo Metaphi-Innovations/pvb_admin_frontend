@@ -9,6 +9,8 @@ export type GstTaxType =
 
 export interface GSTMaster {
   id: number;
+  /** Backend UUID for API routes */
+  gstUuid?: string;
   gstId: string;
   gstCode?: string;
   gstName?: string;
@@ -48,6 +50,7 @@ function normalizeGst(g: Partial<GSTMaster>): GSTMaster {
   const split = splitGstRate(pct);
   return {
     id: Number(g.id),
+    gstUuid: g.gstUuid,
     gstId: g.gstId ?? `GST-${String(g.id).padStart(4, "0")}`,
     gstCode: g.gstCode || g.gstId || `GST-${String(g.id).padStart(4, "0")}`,
     gstName: g.gstName ?? (pct === 0 ? "Nil / Zero Rated" : `GST @ ${pct}%`),

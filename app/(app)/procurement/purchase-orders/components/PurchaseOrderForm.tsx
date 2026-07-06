@@ -6,7 +6,7 @@ import {
 	Upload,
 	Trash2,
 } from "lucide-react";
-import { COMPANY_BILLING, PAYMENT_TERMS_OPTIONS } from "@/lib/procurement/config";
+import { COMPANY_BILLING, PAYMENT_TYPE_OPTIONS } from "@/lib/procurement/config";
 import {
 	calcPackingToBaseQty,
 	enrichProductForProcurement,
@@ -94,11 +94,6 @@ export function emptyPOLine(): POLineItem {
 	};
 }
 
-function paymentTermDays(term: string): number {
-	const m = term.match(/(\d+)/);
-	return m ? Number(m[1]) : 0;
-}
-
 export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 	const pr = sourcePrId ? getPRById(sourcePrId) : null;
 	const supplier = getActiveSuppliers()[0];
@@ -134,7 +129,6 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 			};
 		}) ?? [];
 
-	const paymentTerms = "net-30";
 	const wh = pr?.warehouseId ? loadWarehouses().find((w) => w.id === pr.warehouseId) : null;
 	const billToAddresses = getPOBillToAddresses();
 	const shipToAddresses = getPOShipToAddresses();
@@ -155,8 +149,8 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 		supplierGstin: supplier?.gstNumber ?? "",
 		referenceNumber: "",
 		currency: "INR",
-		paymentTerms,
-		creditDays: paymentTermDays(paymentTerms),
+		paymentType: "Credit",
+		creditDays: 30,
 		deliveryTerms: "",
 		expectedDeliveryDate: "",
 		state: pr?.state ?? "",
@@ -239,10 +233,6 @@ function formatDisplayDate(iso: string): string {
 	return `${d}-${m}-${y}`;
 }
 
-function paymentTermLabel(value: string): string {
-	return PAYMENT_TERMS_OPTIONS.find((o) => o.value === value)?.label ?? (value || "—");
-}
-
 export function PurchaseOrderForm({
 	form,
 	onChange,
@@ -270,7 +260,7 @@ export function PurchaseOrderForm({
 	const preview = useMemo(
 		() =>
 			recalcPO({
-				id: 0,
+				id: "preview",
 				poNumber: "",
 				...form,
 				summary: {
@@ -316,7 +306,9 @@ export function PurchaseOrderForm({
 		const wh = pr.warehouseId ? loadWarehouses().find((w) => w.id === pr.warehouseId) : null;
 		const lines = pr.lines.map((l) => {
 			const info = enrichProductForProcurement(l.productId);
-			const cp = resolvePurchaseCostPrice(l.productId, form.supplierId || undefined);
+			const localSupplierId =
+				typeof form.supplierId === "number" ? form.supplierId : Number(form.supplierId) || undefined;
+			const cp = resolvePurchaseCostPrice(l.productId, localSupplierId);
 			const orderUom = l.requestUom ?? "Unit";
 			const orderedQtyPack = l.requestedQty;
 			const orderedQty = l.totalQtyBase ?? calcPackingToBaseQty(orderedQtyPack, info?.conversionQty ?? 1);
@@ -358,7 +350,12 @@ export function PurchaseOrderForm({
 
 	const previewLines = preview.lines;
 
-	const linkedPr = form.sourcePrId ? getPRById(form.sourcePrId) ?? null : null;
+	const linkedPr =
+		form.sourcePrId && typeof form.sourcePrId === "number"
+			? getPRById(form.sourcePrId) ?? null
+			: form.sourcePrId && /^\d+$/.test(String(form.sourcePrId))
+				? getPRById(Number(form.sourcePrId)) ?? null
+				: null;
 	const displayPoNo = poNumber || "Auto-generated";
 	const totalGst =
 		preview.summary.totalCgst +
@@ -395,10 +392,16 @@ export function PurchaseOrderForm({
 		const billValid = billToAddresses.some((a) => a.id === form.billToAddressId);
 		const shipValid = shipToAddresses.some((a) => a.id === form.shipToAddressId);
 		if (billValid && shipValid) return;
+		const localWarehouseId =
+			typeof form.warehouseId === "number"
+				? form.warehouseId
+				: form.warehouseId && /^\d+$/.test(String(form.warehouseId))
+					? Number(form.warehouseId)
+					: null;
 		const defaults = getDefaultPOBillShipIds(
 			billToAddresses,
 			shipToAddresses,
-			form.warehouseId,
+			localWarehouseId,
 		);
 		onChange({
 			...form,
@@ -476,10 +479,16 @@ export function PurchaseOrderForm({
 		}
 		const s = suppliers.find((x) => x.id === Number(idStr));
 		if (!s) return;
+		const localWarehouseId =
+			typeof form.warehouseId === "number"
+				? form.warehouseId
+				: form.warehouseId && /^\d+$/.test(String(form.warehouseId))
+					? Number(form.warehouseId)
+					: null;
 		const defaults = getDefaultPOBillShipIds(
 			billToAddresses,
 			shipToAddresses,
-			form.warehouseId,
+			localWarehouseId,
 		);
 		patch({
 			supplierId: s.id,
@@ -574,7 +583,7 @@ export function PurchaseOrderForm({
 								className={cn(inputCls, "bg-muted/30 font-mono text-muted-foreground")}
 							/>
 						</div>
-						<div className="space-y-1">
+						{/* <div className="space-y-1">
 							<Label className="text-xs font-medium">PR Reference</Label>
 							{readOnly ? (
 								<ReadOnlyField value={form.sourcePrNumber} />
@@ -589,7 +598,7 @@ export function PurchaseOrderForm({
 									className="h-8 rounded-lg text-xs"
 								/>
 							)}
-						</div>
+						</div> */}
 						<div className="space-y-1">
 							<Label className="text-xs font-medium">Supplier</Label>
 							{readOnly ? (
@@ -604,6 +613,10 @@ export function PurchaseOrderForm({
 									className="h-8 rounded-lg text-xs"
 								/>
 							)}
+						</div>
+						<div className="space-y-1">
+							<Label className="text-xs font-medium">Supplier Type</Label>
+							<ReadOnlyField value={form.supplierType} />
 						</div>
 						<div className="space-y-1">
 							<Label className="text-xs font-medium">PO Date</Label>
@@ -631,25 +644,46 @@ export function PurchaseOrderForm({
 								/>
 							)}
 						</div>
+						
 						<div className="space-y-1">
-							<Label className="text-xs font-medium">Supplier Type</Label>
-							<ReadOnlyField value={form.supplierType} />
-						</div>
-						<div className="space-y-1">
-							<Label className="text-xs font-medium">Payment Terms</Label>
+							<Label className="text-xs font-medium">
+								Payment Type <span className="text-red-500">*</span>
+							</Label>
 							{readOnly ? (
-								<ReadOnlyField value={paymentTermLabel(form.paymentTerms)} />
+								<ReadOnlyField value={form.paymentType} />
 							) : (
 								<AutocompleteSelect
-									options={PAYMENT_TERMS_OPTIONS}
-									value={form.paymentTerms}
+									options={PAYMENT_TYPE_OPTIONS}
+									value={form.paymentType}
 									onChange={(v) =>
 										patch({
-											paymentTerms: String(v),
-											creditDays: paymentTermDays(String(v)),
+											paymentType: String(v),
+											creditDays:
+												String(v) === "Credit" ? form.creditDays || 30 : 0,
 										})
 									}
 									className={inputCls}
+								/>
+							)}
+						</div>
+						<div className="space-y-1">
+							<Label className="text-xs font-medium">
+								Credit Days <span className="text-red-500">*</span>
+							</Label>
+							{readOnly ? (
+								<ReadOnlyField value={String(form.creditDays ?? "")} />
+							) : (
+								<Input
+									type="number"
+									min={0}
+									value={form.creditDays}
+									onChange={(e) =>
+										patch({
+											creditDays: Number(e.target.value),
+										})
+									}
+									className={inputCls}
+									placeholder="Enter Credit Days"
 								/>
 							)}
 						</div>
@@ -685,7 +719,7 @@ export function PurchaseOrderForm({
 					</div>
 				</div>
 
-				{form.supplierId > 0 && (
+				{Boolean(form.supplierId) && form.supplierId !== 0 && form.supplierId !== "0" && (
 					<div className="border-t border-border/60 pt-4">
 						<SectionHead label="Bill To / Ship To" required />
 						<BillToShipToSection

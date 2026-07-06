@@ -40,6 +40,10 @@ export interface POQtySummary {
 }
 
 export function getLineReceivedQty(po: PurchaseOrder, line: POLineItem): number {
+  // API-backed lines carry received_qty on the product row.
+  if (line.purchaseOrderProductId && line.receivedQty != null) {
+    return line.receivedQty;
+  }
   const grns = getGrnRecords().filter((g) => g.poNumber === po.poNumber);
   let fromGrn = 0;
   for (const g of grns) {
@@ -68,7 +72,9 @@ export function getPOQtySummary(po: PurchaseOrder): POQtySummary {
 }
 
 export function canShortClosePO(po: PurchaseOrder): boolean {
-  if (!["approved", "invoice_uploaded"].includes(po.status)) return false;
+  if (!["approved", "invoice_uploaded", "partially_received", "received"].includes(po.status)) {
+    return false;
+  }
   return getPOQtySummary(po).pendingQty > 0;
 }
 

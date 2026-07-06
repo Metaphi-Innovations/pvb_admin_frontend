@@ -1,19 +1,13 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  loadDocumentTypes,
-  saveDocumentTypes,
-  generateNextId,
-  generateNextDocumentTypeCode,
-  todayStr,
-  type DocumentTypeMaster,
-} from "../document-type-data";
+import { useCreateDocumentType } from "@/hooks/masters";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
 import {
   DocumentTypeForm,
   DEFAULT_DOCUMENT_TYPE_FORM,
@@ -26,11 +20,8 @@ export default function AddDocumentTypePage() {
   const [form, setForm] = useState<DocumentTypeFormValues>(DEFAULT_DOCUMENT_TYPE_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-
-  useEffect(() => {
-    const list = loadDocumentTypes();
-    setForm((prev) => ({ ...prev, documentTypeCode: generateNextDocumentTypeCode(list) }));
-  }, []);
+  const createMutation = useCreateDocumentType();
+  const saving = createMutation.isPending;
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -48,22 +39,25 @@ export default function AddDocumentTypePage() {
       return;
     }
 
-    const list = loadDocumentTypes();
-    const newRecord: DocumentTypeMaster = {
-      id: generateNextId(list),
-      documentTypeCode: form.documentTypeCode.trim() || generateNextDocumentTypeCode(list),
-      title: form.title.trim(),
-      description: form.description.trim(),
-      status: "Active",
-      createdBy: "Admin",
-      createdDate: todayStr(),
-      updatedBy: "Admin",
-      updatedDate: todayStr(),
-    };
-
-    saveDocumentTypes([...list, newRecord]);
-    setToast({ msg: "Document Type added successfully", type: "success" });
-    setTimeout(() => router.push("/masters/document-types"), 900);
+    createMutation.mutate(
+      {
+        title: form.title,
+        description: form.description,
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Document Type added successfully", type: "success" });
+          setTimeout(() => router.push("/masters/document-types"), 900);
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to create document type."),
+            type: "error",
+          });
+          setTimeout(() => setToast(null), 3200);
+        },
+      },
+    );
   };
 
   return (
@@ -73,14 +67,20 @@ export default function AddDocumentTypePage() {
       onBack={() => router.back()}
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
+          <Button
+            variant="outline"
+            className="h-9 text-xs font-semibold rounded-lg"
+            onClick={() => router.back()}
+            disabled={saving}
+          >
             Discard
           </Button>
           <Button
             className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
+            disabled={saving}
           >
-            <Save className="w-4 h-4" /> Save Document Type
+            <Save className="w-4 h-4" /> {saving ? "Saving..." : "Save Document Type"}
           </Button>
         </div>
       }
