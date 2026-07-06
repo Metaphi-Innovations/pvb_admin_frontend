@@ -40,7 +40,8 @@ import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatMoney, formatMoneyOrDash, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 import { buildBookEntries, computeBookSummary } from "@/lib/accounts/banking-book-utils";
-import { ensureBankingDemoOnPageLoad, seedBankingDemoData } from "@/lib/accounts/banking-demo-seed";
+import { seedBankingDemoData } from "@/lib/accounts/banking-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { loadBankAccounts } from "@/lib/accounts/bank-accounts-data";
 import {
   ensureMasterCoaLedgerLink,
@@ -318,12 +319,16 @@ export default function ManualBankReconciliationPageClient() {
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [reconcileRow, setReconcileRow] = useState<ManualReconGridRow | null>(null);
 
+  const sectionRefresh = useAccountsSectionRefresh();
+
   useEffect(() => {
-    ensureBankingDemoOnPageLoad();
-    ensureManualReconDemoSeed();
-    seedManualReconBookEntries();
-    setRefreshKey((k) => k + 1);
-  }, []);
+    const timer = window.setTimeout(() => {
+      ensureManualReconDemoSeed();
+      seedManualReconBookEntries();
+      setRefreshKey((k) => k + 1);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [sectionRefresh]);
 
   useEffect(() => {
     if (!toast) return;

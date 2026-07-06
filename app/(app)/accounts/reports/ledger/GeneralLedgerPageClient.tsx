@@ -29,7 +29,7 @@ import {
 } from "@/components/accounts/ReportFilters";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatBalanceAmount, formatMoney } from "@/lib/accounts/money-format";
-import { ensureGeneralLedgerDemoOnPageLoad } from "@/lib/accounts/general-ledger-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import {
@@ -69,10 +69,11 @@ function GeneralLedgerPageContent() {
     [mounted, dataTick],
   );
 
+  const sectionRefresh = useAccountsSectionRefresh();
+
   useEffect(() => {
-    ensureGeneralLedgerDemoOnPageLoad();
     setDataTick((t) => t + 1);
-  }, []);
+  }, [sectionRefresh]);
 
   useEffect(() => {
     if (!mounted) return;

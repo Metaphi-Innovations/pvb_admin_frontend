@@ -1,16 +1,9 @@
-"use client";
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
 
-import { Suspense } from "react";
-import ManualBankReconciliationPageClient from "@/app/(app)/accounts/bank-reconciliation/ManualBankReconciliationPageClient";
-
-function ReconciliationWrapper() {
-  return <ManualBankReconciliationPageClient />;
-}
+const ManualBankReconciliationPageClient = lazyAccountsPage(() =>
+  import("@/app/(app)/accounts/bank-reconciliation/ManualBankReconciliationPageClient"),
+);
 
 export default function BankReconciliationPage() {
-  return (
-    <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Loading…</div>}>
-      <ReconciliationWrapper />
-    </Suspense>
-  );
+  return <ManualBankReconciliationPageClient />;
 }

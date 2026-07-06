@@ -7,7 +7,7 @@ import { ArrowLeft, FileText, Receipt } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { getInvoiceOutstandingDetail } from "@/lib/accounts/receivables-data";
-import { ensureReceivablesDemoData } from "@/lib/accounts/receivables-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
 import { Button } from "@/components/ui/button";
@@ -34,13 +34,11 @@ export default function InvoiceOutstandingDetailClient() {
   const invoiceId = Number(params.invoiceId);
   const fromAgeing = searchParams.get("from") === "ageing";
 
-  useEffect(() => {
-    ensureReceivablesDemoData();
-  }, []);
+  const sectionRefresh = useAccountsSectionRefresh();
 
   const detail = useMemo(
     () => (Number.isFinite(invoiceId) ? getInvoiceOutstandingDetail(invoiceId) : null),
-    [invoiceId],
+    [invoiceId, sectionRefresh],
   );
 
   if (!detail) {

@@ -9,7 +9,7 @@ import {
   computeCustomerAgeingRows,
   type CustomerAgeingRow,
 } from "@/lib/accounts/receivables-data";
-import { ensureReceivablesDemoData } from "@/lib/accounts/receivables-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
 import { formatMoney, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
 import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
@@ -65,9 +65,7 @@ export default function CustomerAgeingClient() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  useEffect(() => {
-    ensureReceivablesDemoData();
-  }, []);
+  const sectionRefresh = useAccountsSectionRefresh();
 
   useEffect(() => {
     setPage(1);
@@ -96,7 +94,7 @@ export default function CustomerAgeingClient() {
       if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
       return String(av).localeCompare(String(bv)) * dir;
     });
-  }, [asOnDate, customerId, search, sortKey, sortDir]);
+  }, [asOnDate, customerId, search, sortKey, sortDir, sectionRefresh]);
 
   const pagedRows = useMemo(() => {
     const start = (page - 1) * pageSize;

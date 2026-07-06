@@ -1,6 +1,12 @@
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { ReconciliationHistoryClient } from "@/components/accounts/ReconciliationHistoryClient";
+
+const ReconciliationHistoryClient = lazyAccountsPage(() =>
+  import("@/components/accounts/ReconciliationHistoryClient").then((m) => ({
+    default: m.ReconciliationHistoryClient,
+  })),
+);
 
 export default function ReconciliationHistoryPage() {
   return (

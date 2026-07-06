@@ -1,5 +1,8 @@
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+
+const HrClaimsAccountsClient = lazyAccountsPage(() => import("../purchases/hr-claims/HrClaimsAccountsClient"));
+
 import { Suspense } from "react";
-import HrClaimsAccountsClient from "../purchases/hr-claims/HrClaimsAccountsClient";
 
 export default function ClaimsPage() {
   return (

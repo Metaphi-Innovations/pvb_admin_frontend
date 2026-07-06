@@ -1,6 +1,6 @@
-"use client";
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
 
-import JournalRegisterPageClient from "./JournalRegisterPageClient";
+const JournalRegisterPageClient = lazyAccountsPage(() => import("./JournalRegisterPageClient"));
 
 export default function JournalRegisterReportPage() {
   return <JournalRegisterPageClient />;

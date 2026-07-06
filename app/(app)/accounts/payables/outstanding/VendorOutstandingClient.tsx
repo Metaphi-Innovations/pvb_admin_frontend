@@ -10,7 +10,7 @@ import {
   type PayableStatus,
   type SupplierInvoiceOutstandingRow,
 } from "@/lib/accounts/payables-data";
-import { ensurePayablesDemoOnPageLoad } from "@/lib/accounts/payables-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import {
   exportSupplierOutstandingToExcel,
   exportSupplierOutstandingToPdf,
@@ -69,12 +69,12 @@ export default function VendorOutstandingClient() {
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
 
-  useEffect(() => {
-    ensurePayablesDemoOnPageLoad();
-    setRefreshKey((k) => k + 1);
-  }, []);
+  const sectionRefresh = useAccountsSectionRefresh();
 
-  
+  useEffect(() => {
+    setRefreshKey((k) => k + 1);
+  }, [sectionRefresh]);
+
 
   useEffect(() => {
     setPage(1);

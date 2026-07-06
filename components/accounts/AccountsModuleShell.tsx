@@ -4,14 +4,15 @@ import React, { memo } from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
-import { PrefetchLink } from "@/components/navigation/PrefetchLink";import { cn } from "@/lib/utils";
+import { PrefetchLink } from "@/components/navigation/PrefetchLink";
+import { cn } from "@/lib/utils";
 import {
   ACCOUNTS_NAV_GROUPS,
   CHART_OF_ACCOUNTS_HREF,
   isAccountsNavActive,
   type AccountsNavGroup,
 } from "@/lib/accounts/accounts-nav";
-import { ACCOUNTS_SCROLL_PANEL_CLASS } from "@/lib/accounts/accounts-layout-constants";
+import { ACCOUNTS_MAIN_PANEL_CLASS, ACCOUNTS_SCROLL_PANEL_CLASS } from "@/lib/accounts/accounts-layout-constants";
 import { ACCOUNTS_SIDEBAR_GROUP_CLASS, ACCOUNTS_SIDEBAR_ITEM_CLASS } from "@/lib/accounts/accounts-typography";
 import { useAccountsAccordion } from "./AccountsAccordionContext";
 
@@ -23,6 +24,39 @@ const CoaSidebarNavTree = dynamic(
 interface AccountsModuleShellProps {
   children: React.ReactNode;
 }
+
+const AccountsSidebarNavLink = memo(function AccountsSidebarNavLink({
+  href,
+  label,
+  icon: ItemIcon,
+  active,
+}: {
+  href: string;
+  label: string;
+  icon: AccountsNavGroup["items"][number]["icon"];
+  active: boolean;
+}) {
+  return (
+    <PrefetchLink
+      href={href}
+      className={cn(
+        "group flex items-center gap-2 pl-2 pr-2 py-1.5 rounded-lg leading-snug",
+        ACCOUNTS_SIDEBAR_ITEM_CLASS,
+        active
+          ? "bg-[#FFF3E6] text-brand-800 font-medium"
+          : "text-[#6B7280] hover:bg-brand-50/70 hover:text-brand-800",
+      )}
+    >
+      <ItemIcon
+        className={cn(
+          "w-4 h-4 flex-shrink-0",
+          active ? "text-brand-600" : "text-muted-foreground group-hover:text-brand-600",
+        )}
+      />
+      <span>{label}</span>
+    </PrefetchLink>
+  );
+});
 
 const AccountsSidebarSection = memo(function AccountsSidebarSection({
   group,
@@ -52,7 +86,7 @@ const AccountsSidebarSection = memo(function AccountsSidebarSection({
         onClick={() => onToggleSection(group.id)}
         aria-expanded={isOpen}
         className={cn(
-          "w-full flex items-center gap-2 px-2.5 py-2 transition-colors duration-150",
+          "w-full flex items-center gap-2 px-2.5 py-2",
           isOpen ? "bg-brand-50/50 border-b border-border/50" : "hover:bg-brand-50/40",
           hasActiveChild && !isOpen && "bg-brand-50/60",
         )}
@@ -60,9 +94,7 @@ const AccountsSidebarSection = memo(function AccountsSidebarSection({
         <span
           className={cn(
             "w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0",
-            hasActiveChild
-              ? "bg-brand-100 text-brand-700"
-              : "bg-muted/60 text-muted-foreground",
+            hasActiveChild ? "bg-brand-100 text-brand-700" : "bg-muted/60 text-muted-foreground",
           )}
         >
           <GroupIcon className="w-4 h-4" />
@@ -88,37 +120,25 @@ const AccountsSidebarSection = memo(function AccountsSidebarSection({
 
       {isOpen && !isCoaSection ? (
         <div className="px-2.5 pb-2 pt-1 space-y-0.5">
-          {group.items.map((item) => {
-            const active = isAccountsNavActive(pathname, item.href);
-            const ItemIcon = item.icon;
-
-            return (
-              <PrefetchLink
-                key={item.href}
-                href={item.href}                className={cn(
-                  "group flex items-center gap-2 pl-2 pr-2 py-1.5 rounded-lg leading-snug",
-                  ACCOUNTS_SIDEBAR_ITEM_CLASS,
-                  active
-                    ? "bg-[#FFF3E6] text-brand-800 font-medium"
-                    : "text-[#6B7280] hover:bg-brand-50/70 hover:text-brand-800",
-                )}
-              >
-                <ItemIcon
-                  className={cn(
-                    "w-4 h-4 flex-shrink-0",
-                    active ? "text-brand-600" : "text-muted-foreground group-hover:text-brand-600",
-                  )}
-                />
-                <span>{item.label}</span>
-              </PrefetchLink>            );
-          })}
+          {group.items.map((item) => (
+            <AccountsSidebarNavLink
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              icon={item.icon}
+              active={isAccountsNavActive(pathname, item.href)}
+            />
+          ))}
         </div>
       ) : null}
     </div>
   );
 });
 
-export const AccountsModuleShell = memo(function AccountsModuleShell({ children }: AccountsModuleShellProps) {  const pathname = usePathname();
+export const AccountsModuleShell = memo(function AccountsModuleShell({
+  children,
+}: AccountsModuleShellProps) {
+  const pathname = usePathname();
   const { activeAccountsSection, toggleAccountsSection } = useAccountsAccordion();
 
   return (
@@ -149,7 +169,7 @@ export const AccountsModuleShell = memo(function AccountsModuleShell({ children 
       </aside>
 
       <main className="accounts-module-main flex-1 min-w-0 min-h-0 h-full overflow-hidden flex flex-col bg-slate-50/40">
-        <div className={cn(ACCOUNTS_SCROLL_PANEL_CLASS, "px-3 py-2")}>{children}</div>
+        <div className={cn(ACCOUNTS_MAIN_PANEL_CLASS, "px-3 py-2")}>{children}</div>
       </main>
     </div>
   );

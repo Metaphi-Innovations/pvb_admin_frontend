@@ -1,5 +1,8 @@
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+
+const PurchaseInvoiceFormPageClient = lazyAccountsPage(() => import("../PurchaseInvoiceFormPageClient"));
+
 import { Suspense } from "react";
-import PurchaseInvoiceFormPageClient from "../PurchaseInvoiceFormPageClient";
 
 export default function NewPurchaseInvoicePage() {
   return (

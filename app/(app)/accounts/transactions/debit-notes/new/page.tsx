@@ -1,4 +1,6 @@
-import DebitNoteFormPageClient from "../../../debit-notes/DebitNoteFormPageClient";
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+
+const DebitNoteFormPageClient = lazyAccountsPage(() => import("../../../debit-notes/DebitNoteFormPageClient"));
 
 type PageProps = {
   searchParams?: { returnId?: string; mode?: string };

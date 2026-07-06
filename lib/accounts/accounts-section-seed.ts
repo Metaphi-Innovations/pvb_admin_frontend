@@ -4,30 +4,50 @@
  */
 
 import type { AccountsNavGroupId } from "./accounts-nav";
+import { isAccountsSectionStored } from "./accounts-section-storage";
 
 const bootstrappedSections = new Set<AccountsNavGroupId>();
+const inflightSections = new Set<AccountsNavGroupId>();
+
+export const ACCOUNTS_SECTION_SEEDED_EVENT = "ds-accounts-section-seeded";
 
 export function isAccountsSectionBootstrapped(groupId: AccountsNavGroupId): boolean {
   return bootstrappedSections.has(groupId);
 }
 
-/** Queue section seed once — no-op if already bootstrapped. */
+/** Queue section seed once — no-op if already bootstrapped, in flight, or stored in localStorage. */
 export function scheduleAccountsSectionSeed(groupId: AccountsNavGroupId): void {
   if (typeof window === "undefined") return;
-  if (bootstrappedSections.has(groupId)) return;
+  if (bootstrappedSections.has(groupId) || inflightSections.has(groupId)) return;
 
-  const run = () => ensureAccountsSectionData(groupId);
-  if (typeof window.requestIdleCallback === "function") {
-    window.requestIdleCallback(run, { timeout: 3000 });
+  if (isAccountsSectionStored(groupId)) {
+    bootstrappedSections.add(groupId);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent(ACCOUNTS_SECTION_SEEDED_EVENT, { detail: { groupId } }),
+      );
+    }
     return;
   }
-  window.setTimeout(run, 200);
+
+  const run = () => ensureAccountsSectionData(groupId);
+  window.setTimeout(run, 0);
 }
 
 export function ensureAccountsSectionData(groupId: AccountsNavGroupId): void {
   if (typeof window === "undefined") return;
-  if (bootstrappedSections.has(groupId)) return;
-  bootstrappedSections.add(groupId);
+  if (bootstrappedSections.has(groupId) || inflightSections.has(groupId)) return;
+  inflightSections.add(groupId);
+
+  const finish = () => {
+    bootstrappedSections.add(groupId);
+    inflightSections.delete(groupId);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent(ACCOUNTS_SECTION_SEEDED_EVENT, { detail: { groupId } }),
+      );
+    }
+  };
 
   switch (groupId) {
     case "coa":
@@ -37,43 +57,80 @@ export function ensureAccountsSectionData(groupId: AccountsNavGroupId): void {
           return import("./gst-coa-sync");
         })
         .then((m) => m.syncGstCoaFromMaster())
-        .catch((err) => console.error("[accounts] COA section bootstrap failed:", err));
+        .then(finish)
+        .catch((err) => {
+          inflightSections.delete(groupId);
+          console.error("[accounts] COA section bootstrap failed:", err);
+        });
       break;
     case "transactions":
       void import("./accounts-demo-seed")
         .then((m) => m.seedTransactionsSectionDemoData())
-        .catch((err) => console.error("[accounts] transactions section bootstrap failed:", err));
+        .then(finish)
+        .catch((err) => {
+          inflightSections.delete(groupId);
+          console.error("[accounts] transactions section bootstrap failed:", err);
+        });
       break;
     case "receivables":
       void import("./accounts-demo-seed")
         .then((m) => m.seedTransactionsSectionDemoData())
         .then(() => import("./receivables-demo-seed"))
         .then((m) => m.ensureReceivablesDemoData())
-        .catch((err) => console.error("[accounts] receivables section bootstrap failed:", err));
+        .then(finish)
+        .catch((err) => {
+          inflightSections.delete(groupId);
+          console.error("[accounts] receivables section bootstrap failed:", err);
+        });
       break;
     case "payables":
       void import("./accounts-demo-seed")
         .then((m) => m.ensureAccountsCoreDemoData())
         .then(() => import("./payables-demo-seed"))
         .then((m) => m.ensurePayablesDemoOnPageLoad())
-        .catch((err) => console.error("[accounts] payables section bootstrap failed:", err));
+        .then(finish)
+        .catch((err) => {
+          inflightSections.delete(groupId);
+          console.error("[accounts] payables section bootstrap failed:", err);
+        });
       break;
     case "banking":
       void import("./accounts-demo-seed")
         .then((m) => m.ensureAccountsCoreDemoData())
         .then(() => import("./banking-demo-seed"))
-        .then((m) => m.ensureBankingDemoOnPageLoad())
-        .catch((err) => console.error("[accounts] banking section bootstrap failed:", err));
+        .then((m) => {
+          m.ensureBankingDemoOnPageLoad();
+        })
+        .then(finish)
+        .catch((err) => {
+          inflightSections.delete(groupId);
+          console.error("[accounts] banking section bootstrap failed:", err);
+        });
       break;
     case "reports":
       void import("./accounts-demo-seed")
         .then((m) => {
-          m.seedTransactionsSectionDemoData();
-          m.seedReportsSectionDemoData();
+          if (!isAccountsSectionStored("transactions")) {
+            m.seedTransactionsSectionDemoData();
+          }
+          if (!isAccountsSectionStored("reports")) {
+            m.seedReportsSectionDemoData();
+          }
         })
-        .catch((err) => console.error("[accounts] reports section bootstrap failed:", err));
+        .then(() => import("@/app/(app)/accounts/reports/bank-book/bank-book-demo-seed"))
+        .then((m) => m.ensureBankBookDemoOnPageLoad())
+        .then(() => import("@/app/(app)/accounts/reports/cash-book/cash-book-demo-seed"))
+        .then((m) => m.ensureCashBookDemoOnPageLoad())
+        .then(() => import("./general-ledger-demo-seed"))
+        .then((m) => m.ensureGeneralLedgerDemoOnPageLoad())
+        .then(finish)
+        .catch((err) => {
+          inflightSections.delete(groupId);
+          console.error("[accounts] reports section bootstrap failed:", err);
+        });
       break;
     default:
+      finish();
       break;
   }
 }
@@ -81,4 +138,5 @@ export function ensureAccountsSectionData(groupId: AccountsNavGroupId): void {
 /** Clear in-memory bootstrap cache (e.g. after full demo reset). */
 export function resetAccountsSectionBootstrapCache(): void {
   bootstrappedSections.clear();
+  inflightSections.clear();
 }

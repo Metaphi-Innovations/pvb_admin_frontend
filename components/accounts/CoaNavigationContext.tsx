@@ -106,13 +106,17 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
     if (!needsCoaData || initRef.current) return;
     initRef.current = true;
 
-    backfillErpPartyLedgers();
-    backfillCoaMasterLinks();
-    ensureTdsAccountingLedgers();
-    const loaded = readCoaRecords();
-    setRecords(loaded);
-    setExpandedIds(defaultExpandedIds(loaded));
-    setCoaReady(true);
+    const init = () => {
+      backfillErpPartyLedgers();
+      backfillCoaMasterLinks();
+      ensureTdsAccountingLedgers();
+      const loaded = readCoaRecords();
+      setRecords(loaded);
+      setExpandedIds(defaultExpandedIds(loaded));
+      setCoaReady(true);
+    };
+
+    window.setTimeout(init, 0);
   }, [needsCoaData]);
 
   const refreshRecords = useCallback(() => {
@@ -122,9 +126,9 @@ export function CoaNavigationProvider({ children }: { children: React.ReactNode 
   }, []);
 
   useEffect(() => {
-    if (!coaReady) return;
+    if (!coaReady || !needsCoaData) return;
     return subscribeCoaChanged(refreshRecords);
-  }, [coaReady, refreshRecords]);
+  }, [coaReady, needsCoaData, refreshRecords]);
 
   const selectedNode = useMemo(
     () => (selectedId != null ? records.find((r) => r.id === selectedId) ?? null : null),

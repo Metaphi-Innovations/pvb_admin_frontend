@@ -1,5 +1,8 @@
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+
+const PurchaseInvoiceViewClient = lazyAccountsPage(() => import("./PurchaseInvoiceViewClient"));
+
 import { Suspense } from "react";
-import PurchaseInvoiceViewClient from "./PurchaseInvoiceViewClient";
 
 interface Props {
   params: Promise<{ id: string }>;

@@ -21,6 +21,7 @@ import {
   type FundTransferRecord,
 } from "@/lib/accounts/fund-transfer-data";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
+import { scheduleDeferredDemoSeed } from "./deferred-demo-seed";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
 
 import { getDemoBankLedgers } from "@/lib/accounts/bank-ledger-resolver";
@@ -663,28 +664,18 @@ export function seedBankingDemoData(force = false): void {
 }
 
 export function ensureBankingDemoOnPageLoad(): void {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(VERSION_KEY) === BANKING_DEMO_SEED_VERSION) return;
+
   ensureDemoBankAccounts();
-  if (typeof window !== "undefined") {
-    const storedVersion = localStorage.getItem(VERSION_KEY);
-    if (storedVersion !== BANKING_DEMO_SEED_VERSION) {
-      seedBankingDemoData(true);
-      return;
-    }
-  }
   if (loadBankAccountMasters().length === 0) {
     seedBankingDemoData(true);
     return;
   }
-  const voucherCount = loadVouchers().filter(
-    (v) =>
-      (v.status === "posted" || v.status === "approved") &&
-      (v.voucherNumber.startsWith("RV-") ||
-        v.voucherNumber.startsWith("PV-") ||
-        v.voucherNumber.startsWith("FT-") ||
-        v.voucherNumber.startsWith("CSH-")),
-  ).length;
-  if (voucherCount < 30) {
-    seedBankingDemoData(true);
-  }
-  seedFundTransferRecords();
+  seedBankingDemoData(true);
+}
+
+/** Non-blocking — use in page mount effects instead of ensureBankingDemoOnPageLoad(). */
+export function scheduleBankingDemoOnPageLoad(): void {
+  scheduleDeferredDemoSeed("banking-demo", ensureBankingDemoOnPageLoad);
 }

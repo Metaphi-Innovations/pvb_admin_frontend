@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, History, Pencil, UserCheck } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import {
@@ -140,6 +140,55 @@ function exportAuditTrailCsv(rows: AuditTrailRecord[]) {
   URL.revokeObjectURL(url);
 }
 
+const AuditTrailRow = memo(function AuditTrailRow({
+  row,
+  onView,
+}: {
+  row: AuditTrailRecord;
+  onView: (row: AuditTrailRecord) => void;
+}) {
+  return (
+    <AccountsTableRow>
+      <AccountsTableCell className="tabular-nums whitespace-nowrap text-xs">
+        {formatDateTime(row.dateTime)}
+      </AccountsTableCell>
+      <AccountsTableCell className="text-xs font-medium">{row.user}</AccountsTableCell>
+      <AccountsTableCell className="text-xs text-muted-foreground">{row.role}</AccountsTableCell>
+      <AccountsTableCell className="text-xs">{row.module}</AccountsTableCell>
+      <AccountsTableCell mono className="font-semibold text-brand-700 text-xs whitespace-nowrap">
+        {row.reference}
+      </AccountsTableCell>
+      <AccountsTableCell className="text-xs">{row.activityType}</AccountsTableCell>
+      <AccountsTableCell className="text-xs max-w-[160px] truncate" title={row.action}>
+        {row.action}
+      </AccountsTableCell>
+      <AccountsTableCell
+        className="text-xs max-w-[120px] truncate text-muted-foreground"
+        title={row.oldValue}
+      >
+        {row.oldValue}
+      </AccountsTableCell>
+      <AccountsTableCell className="text-xs max-w-[120px] truncate" title={row.newValue}>
+        {row.newValue}
+      </AccountsTableCell>
+      <AccountsTableCell>
+        <StatusBadge status={row.status} />
+      </AccountsTableCell>
+      <AccountsTableCell className="text-center w-10">
+        <button
+          type="button"
+          onClick={() => onView(row)}
+          className="inline-flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:text-brand-700 hover:bg-brand-50"
+          aria-label={`View audit details for ${row.reference}`}
+          title="View details"
+        >
+          <Eye className="w-4 h-4" />
+        </button>
+      </AccountsTableCell>
+    </AccountsTableRow>
+  );
+});
+
 export default function AuditTrailPageClient() {
   const mounted = useClientMounted();
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
@@ -202,6 +251,7 @@ export default function AuditTrailPageClient() {
   }, [search, dateFrom, dateTo, module, category, user, activityType, status, pageSize]);
 
   const handleExport = useCallback(() => exportAuditTrailCsv(filtered), [filtered]);
+  const handleView = useCallback((row: AuditTrailRecord) => setViewRecord(row), []);
 
   const tabCounts = useMemo(
     () => ({
@@ -392,17 +442,37 @@ export default function AuditTrailPageClient() {
         <AccountsTable minWidth={1400}>
           <AccountsTableHead>
             <AccountsTableHeadRow>
-              <AccountsTableHeadCell uppercase>Date & Time</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase>User Name</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase>Role</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase>Module</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase>Voucher / Reference No.</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase>Activity Type</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase>Action Performed</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase>Old Value</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase>New Value</AccountsTableHeadCell>
-              <AccountsTableHeadCell uppercase>Status</AccountsTableHeadCell>
-              <AccountsTableHeadCell className="w-10 text-center" uppercase>
+              <AccountsTableHeadCell uppercase sticky={false}>
+                Date & Time
+              </AccountsTableHeadCell>
+              <AccountsTableHeadCell uppercase sticky={false}>
+                User Name
+              </AccountsTableHeadCell>
+              <AccountsTableHeadCell uppercase sticky={false}>
+                Role
+              </AccountsTableHeadCell>
+              <AccountsTableHeadCell uppercase sticky={false}>
+                Module
+              </AccountsTableHeadCell>
+              <AccountsTableHeadCell uppercase sticky={false}>
+                Voucher / Reference No.
+              </AccountsTableHeadCell>
+              <AccountsTableHeadCell uppercase sticky={false}>
+                Activity Type
+              </AccountsTableHeadCell>
+              <AccountsTableHeadCell uppercase sticky={false}>
+                Action Performed
+              </AccountsTableHeadCell>
+              <AccountsTableHeadCell uppercase sticky={false}>
+                Old Value
+              </AccountsTableHeadCell>
+              <AccountsTableHeadCell uppercase sticky={false}>
+                New Value
+              </AccountsTableHeadCell>
+              <AccountsTableHeadCell uppercase sticky={false}>
+                Status
+              </AccountsTableHeadCell>
+              <AccountsTableHeadCell className="w-10 text-center" uppercase sticky={false}>
                 View
               </AccountsTableHeadCell>
             </AccountsTableHeadRow>
@@ -421,43 +491,7 @@ export default function AuditTrailPageClient() {
                 onClear={hasFilters ? clearFilters : undefined}
               />
             ) : (
-              paged.map((r) => (
-                <AccountsTableRow key={r.id}>
-                  <AccountsTableCell className="tabular-nums whitespace-nowrap text-xs">
-                    {formatDateTime(r.dateTime)}
-                  </AccountsTableCell>
-                  <AccountsTableCell className="text-xs font-medium">{r.user}</AccountsTableCell>
-                  <AccountsTableCell className="text-xs text-muted-foreground">{r.role}</AccountsTableCell>
-                  <AccountsTableCell className="text-xs">{r.module}</AccountsTableCell>
-                  <AccountsTableCell mono className="font-semibold text-brand-700 text-xs whitespace-nowrap">
-                    {r.reference}
-                  </AccountsTableCell>
-                  <AccountsTableCell className="text-xs">{r.activityType}</AccountsTableCell>
-                  <AccountsTableCell className="text-xs max-w-[160px] truncate" title={r.action}>
-                    {r.action}
-                  </AccountsTableCell>
-                  <AccountsTableCell className="text-xs max-w-[120px] truncate text-muted-foreground" title={r.oldValue}>
-                    {r.oldValue}
-                  </AccountsTableCell>
-                  <AccountsTableCell className="text-xs max-w-[120px] truncate" title={r.newValue}>
-                    {r.newValue}
-                  </AccountsTableCell>
-                  <AccountsTableCell>
-                    <StatusBadge status={r.status} />
-                  </AccountsTableCell>
-                  <AccountsTableCell className="text-center w-10">
-                    <button
-                      type="button"
-                      onClick={() => setViewRecord(r)}
-                      className="inline-flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:text-brand-700 hover:bg-brand-50 transition-colors"
-                      aria-label={`View audit details for ${r.reference}`}
-                      title="View details"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                  </AccountsTableCell>
-                </AccountsTableRow>
-              ))
+              paged.map((r) => <AuditTrailRow key={r.id} row={r} onView={handleView} />)
             )}
           </AccountsTableBody>
         </AccountsTable>

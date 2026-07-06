@@ -16,7 +16,7 @@ import {
   type CollectionFollowUp,
   type CollectionFollowUpStatus,
 } from "@/lib/accounts/receivables-data";
-import { ensureReceivablesDemoData } from "@/lib/accounts/receivables-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { Button } from "@/components/ui/button";
@@ -99,9 +99,11 @@ export default function CollectionTrackingClient() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
+  const sectionRefresh = useAccountsSectionRefresh();
+
   useEffect(() => {
-    ensureReceivablesDemoData();
-  }, []);
+    setRefreshKey((k) => k + 1);
+  }, [sectionRefresh]);
 
   useEffect(() => {
     setPage(1);
@@ -109,7 +111,7 @@ export default function CollectionTrackingClient() {
 
   const records = useMemo(() => loadCollectionFollowUps(), [refreshKey]);
   const customers = useMemo(() => loadCustomers(), []);
-  const invoices = useMemo(() => getPostedSalesInvoices(), []);
+  const invoices = useMemo(() => getPostedSalesInvoices(), [sectionRefresh]);
 
   const filteredRecords = useMemo(() => {
     return records.filter((r) => {

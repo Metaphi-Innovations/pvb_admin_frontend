@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, Paperclip, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { AccountsFormLayout } from "@/app/(app)/accounts/expenses/components/AccountsFormLayout";
 import { formatMoney } from "@/lib/accounts/money-format";
-import { ensureBankingDemoOnPageLoad } from "@/lib/accounts/banking-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { loadBankAccounts } from "@/lib/accounts/bank-accounts-data";
 import {
   createFundTransfer,
@@ -50,14 +50,11 @@ export default function FundTransferFormClient() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    ensureBankingDemoOnPageLoad();
-    loadBankAccounts();
-  }, []);
+  const sectionRefresh = useAccountsSectionRefresh();
 
   const accountOptions = useMemo(
     () => listTransferAccountOptions(form.transferMode),
-    [form.transferMode],
+    [form.transferMode, sectionRefresh],
   );
 
   const availableBalance = useMemo(() => {
