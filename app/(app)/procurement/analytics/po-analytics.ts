@@ -73,7 +73,7 @@ export function computePOAnalytics(records: PurchaseOrder[]): POAnalytics {
 
   const allFollowUps = loadAllFollowUps();
   const poIds = new Set(records.map((r) => r.id));
-  const relevantFollowUps = allFollowUps.filter((f) => poIds.has(f.poId));
+  const relevantFollowUps = allFollowUps.filter((f) => poIds.has(String(f.poId)));
 
   let followUpDue = 0;
   let overdueFollowUps = 0;
