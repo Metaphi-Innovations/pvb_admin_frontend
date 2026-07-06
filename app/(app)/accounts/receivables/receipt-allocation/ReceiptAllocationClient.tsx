@@ -12,7 +12,7 @@ import {
   loadReceiptAllocationRecords,
   type ReceiptAllocationStatus,
 } from "@/lib/accounts/receivables-data";
-import { ensureReceivablesDemoData } from "@/lib/accounts/receivables-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { Button } from "@/components/ui/button";
@@ -75,9 +75,11 @@ export default function ReceiptAllocationClient() {
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const sectionRefresh = useAccountsSectionRefresh();
+
   useEffect(() => {
-    ensureReceivablesDemoData();
-  }, []);
+    setRefreshKey((k) => k + 1);
+  }, [sectionRefresh]);
 
   useEffect(() => {
     const fromUrl = searchParams.get("customer");

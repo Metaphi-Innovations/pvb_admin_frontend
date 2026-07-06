@@ -1,7 +1,10 @@
 "use client";
 
+import { createLazyClientPage } from "@/lib/createLazyClientPage";
+
+const PurchaseInvoiceFormClient = createLazyClientPage(() => import("../../PurchaseInvoiceFormClient"));
+
 import { use } from "react";
-import PurchaseInvoiceFormClient from "../../PurchaseInvoiceFormClient";
 
 export default function EditPurchaseInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);

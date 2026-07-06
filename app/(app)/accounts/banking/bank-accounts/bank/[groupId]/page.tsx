@@ -1,4 +1,6 @@
-import BankGroupAccountsClient from "../BankGroupAccountsClient";
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+
+const BankGroupAccountsClient = lazyAccountsPage(() => import("../BankGroupAccountsClient"));
 
 export default async function BankGroupPage({
   params,

@@ -14,7 +14,7 @@ import {
   type PaymentAllocationStatus,
   type PaymentAllocationVendorRow,
 } from "@/lib/accounts/payables-data";
-import { ensurePayablesDemoOnPageLoad } from "@/lib/accounts/payables-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import {
   exportPaymentAllocationToExcel,
   exportPaymentAllocationToPdf,
@@ -292,10 +292,11 @@ export default function PaymentAllocationClient() {
     vendorParam ? Number(vendorParam) : null,
   );
 
+  const sectionRefresh = useAccountsSectionRefresh();
+
   useEffect(() => {
-    ensurePayablesDemoOnPageLoad();
     setRefreshKey((k) => k + 1);
-  }, []);
+  }, [sectionRefresh]);
 
   useEffect(() => {
     if (vendorParam) setActiveVendorId(Number(vendorParam));

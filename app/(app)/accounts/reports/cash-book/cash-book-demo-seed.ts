@@ -11,6 +11,7 @@ import {
   saveVouchers,
 } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { ensureBankingDemoOnPageLoad } from "@/lib/accounts/banking-demo-seed";
+import { scheduleDeferredDemoSeed } from "@/lib/accounts/deferred-demo-seed";
 import { getDemoBankLedgers } from "@/lib/accounts/bank-ledger-resolver";
 import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
 
@@ -186,11 +187,13 @@ function seedAdditionalContraAndJournal(): void {
 
 export function ensureCashBookDemoOnPageLoad(): void {
   if (typeof window === "undefined") return;
-
-  ensureBankingDemoOnPageLoad();
-
   if (localStorage.getItem(VERSION_KEY) === CASH_BOOK_DEMO_VERSION) return;
 
+  ensureBankingDemoOnPageLoad();
   seedAdditionalContraAndJournal();
   localStorage.setItem(VERSION_KEY, CASH_BOOK_DEMO_VERSION);
+}
+
+export function scheduleCashBookDemoOnPageLoad(): void {
+  scheduleDeferredDemoSeed("cash-book-demo", ensureCashBookDemoOnPageLoad);
 }

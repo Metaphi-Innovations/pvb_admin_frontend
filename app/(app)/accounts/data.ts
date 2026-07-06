@@ -97,6 +97,12 @@ const COA_META_KEY = "ds_accounts_coa_meta";
 const LEDGER_KEY = "ds_accounts_ledgers";
 const TXN_KEY = "ds_accounts_txns";
 
+let coaCache: ChartOfAccount[] | null = null;
+
+function clearCoaCache(): void {
+  coaCache = null;
+}
+
 const LEGACY_COA_KEYS = [
   "ds_accounts_coa",
   "ds_accounts_coa_v5",
@@ -373,18 +379,21 @@ export function loadChartOfAccountsCore(): ChartOfAccount[] {
 }
 
 export const loadChartOfAccounts = (): ChartOfAccount[] => {
+  if (coaCache) return coaCache;
+
   const core = loadChartOfAccountsCore();
   if (typeof window === "undefined") return core;
 
-  // Lazy require avoids circular init with gst-coa-sync (which imports this module).
   const { applyGstCoaSyncOnLoad } = require("@/lib/accounts/gst-coa-sync") as typeof import("@/lib/accounts/gst-coa-sync");
-  return applyGstCoaSyncOnLoad(core);
+  coaCache = applyGstCoaSyncOnLoad(core);
+  return coaCache;
 };
 
 export const saveChartOfAccounts = (list: ChartOfAccount[]) => {
   const cleaned = ensureCoaSystemStructure(list);
   save(COA_KEY, cleaned);
   writeCoaMeta();
+  clearCoaCache();
   dispatchCoaChanged();
 };
 export const getSystemCoaNodes = () => SYSTEM_COA_NODES;

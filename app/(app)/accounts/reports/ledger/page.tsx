@@ -1,5 +1,7 @@
-import GeneralLedgerPageClient from "./GeneralLedgerPageClient";
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
 
-export default function LedgerReportPage() {
+const GeneralLedgerPageClient = lazyAccountsPage(() => import("./GeneralLedgerPageClient"));
+
+export default function GeneralLedgerPage() {
   return <GeneralLedgerPageClient />;
 }

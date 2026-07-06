@@ -41,7 +41,7 @@ import {
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
 import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
-import { ensureBankingDemoOnPageLoad } from "@/lib/accounts/banking-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import {
   FUND_TRANSFER_MODE_LABELS,
   FUND_TRANSFER_MODES,
@@ -72,12 +72,12 @@ export default function FundTransferPageClient() {
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
 
-  useEffect(() => {
-    ensureBankingDemoOnPageLoad();
-    setRefreshKey((k) => k + 1);
-  }, []);
+  const sectionRefresh = useAccountsSectionRefresh();
 
-  
+  useEffect(() => {
+    setRefreshKey((k) => k + 1);
+  }, [sectionRefresh]);
+
 
   const records = useMemo(() => {
     void refreshKey;

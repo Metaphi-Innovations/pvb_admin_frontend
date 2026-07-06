@@ -36,7 +36,7 @@ import {
 } from "@/lib/accounts/bank-accounts-data";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { computeLedgerCurrentBalance } from "@/app/(app)/accounts/masters/ledgers/ledgers-utils";
-import { ensureBankingDemoOnPageLoad } from "@/lib/accounts/banking-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 
 type BankAccountRow = BankAccountMaster & {
   currentBalance: number;
@@ -84,11 +84,11 @@ export default function BankAccountsPageClient() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
+  const sectionRefresh = useAccountsSectionRefresh();
+
   useEffect(() => {
-    ensureBankingDemoOnPageLoad();
-    loadBankAccounts();
     setRefreshKey((k) => k + 1);
-  }, []);
+  }, [sectionRefresh]);
 
   const rows = useMemo((): BankAccountRow[] => {
     void refreshKey;

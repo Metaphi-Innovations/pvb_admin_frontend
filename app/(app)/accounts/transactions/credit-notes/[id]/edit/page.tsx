@@ -1,5 +1,8 @@
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+
+const CreditNoteFormPageClient = lazyAccountsPage(() => import("../../../../credit-notes/CreditNoteFormPageClient"));
+
 import { Suspense } from "react";
-import CreditNoteFormPageClient from "../../../../credit-notes/CreditNoteFormPageClient";
 
 type PageProps = { params: { id: string } };
 

@@ -33,7 +33,7 @@ import {
   sortCashBookTransactions,
   type CashBookSortKey,
 } from "./cash-book-data";
-import { ensureCashBookDemoOnPageLoad } from "./cash-book-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { exportCashBookToExcel, exportCashBookToPdf } from "./cash-book-export";
 import { CashBookTable } from "./CashBookTable";
 
@@ -50,10 +50,11 @@ function CashBookPageContent() {
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
 
+  const sectionRefresh = useAccountsSectionRefresh();
+
   useEffect(() => {
-    ensureCashBookDemoOnPageLoad();
     setRefreshKey((k) => k + 1);
-  }, []);
+  }, [sectionRefresh]);
 
   const ledgers = useMemo(() => {
     void refreshKey;

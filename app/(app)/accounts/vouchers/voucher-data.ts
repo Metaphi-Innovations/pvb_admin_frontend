@@ -63,6 +63,16 @@ const VOUCHER_KEY = "ds_accounts_vouchers_v1";
 
 const VOUCHER_SEED: AccountingVoucher[] = [];
 
+export type LedgerMovementTotals = { debit: number; credit: number };
+
+let voucherListCache: AccountingVoucher[] | null = null;
+let ledgerMovementIndex: Map<number, LedgerMovementTotals> | null = null;
+
+function clearVoucherCaches(): void {
+  voucherListCache = null;
+  ledgerMovementIndex = null;
+}
+
 function getOrSeed(): AccountingVoucher[] {
   if (typeof window === "undefined") return VOUCHER_SEED;
   try {
@@ -78,12 +88,40 @@ function getOrSeed(): AccountingVoucher[] {
 }
 
 export function loadVouchers(): AccountingVoucher[] {
-  return getOrSeed().map(normalizeVoucher);
+  if (voucherListCache) return voucherListCache;
+  voucherListCache = getOrSeed().map(normalizeVoucher);
+  return voucherListCache;
 }
 
 export function saveVouchers(list: AccountingVoucher[]) {
   if (typeof window === "undefined") return;
   localStorage.setItem(VOUCHER_KEY, JSON.stringify(list));
+  clearVoucherCaches();
+}
+
+function ensureLedgerMovementIndex(): Map<number, LedgerMovementTotals> {
+  if (ledgerMovementIndex) return ledgerMovementIndex;
+  ledgerMovementIndex = new Map();
+  for (const voucher of loadVouchers()) {
+    if (voucher.status !== "posted" && voucher.status !== "approved") continue;
+    for (const line of voucher.lines) {
+      if (!line.ledgerId) continue;
+      const totals = ledgerMovementIndex.get(line.ledgerId) ?? { debit: 0, credit: 0 };
+      totals.debit += Number(line.debit) || 0;
+      totals.credit += Number(line.credit) || 0;
+      ledgerMovementIndex.set(line.ledgerId, totals);
+    }
+  }
+  return ledgerMovementIndex;
+}
+
+/** O(1) debit/credit totals per ledger — built once per voucher cache epoch. */
+export function getLedgerMovementTotals(ledgerId: number): LedgerMovementTotals {
+  return ensureLedgerMovementIndex().get(ledgerId) ?? { debit: 0, credit: 0 };
+}
+
+export function getPostedVouchers(): AccountingVoucher[] {
+  return loadVouchers().filter((v) => v.status === "posted" || v.status === "approved");
 }
 
 export function getVouchersByType(type: VoucherTypeCode): AccountingVoucher[] {

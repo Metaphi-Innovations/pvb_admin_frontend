@@ -4,6 +4,7 @@
  */
 
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import { scheduleDeferredDemoSeed } from "@/lib/accounts/deferred-demo-seed";
 import {
   loadVendors,
   saveVendors,
@@ -979,4 +980,8 @@ export function ensurePayablesDemoOnPageLoad(): void {
   if (localStorage.getItem(PAYABLES_PAGE_SEED_KEY) === PAYABLES_PAGE_SEED_VERSION) return;
   seedPayablesDemoData();
   localStorage.setItem(PAYABLES_PAGE_SEED_KEY, PAYABLES_PAGE_SEED_VERSION);
+}
+
+export function schedulePayablesDemoOnPageLoad(): void {
+  scheduleDeferredDemoSeed("payables-demo", ensurePayablesDemoOnPageLoad);
 }

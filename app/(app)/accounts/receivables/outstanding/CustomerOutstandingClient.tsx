@@ -11,7 +11,7 @@ import {
   type InvoiceOutstandingRow,
   type ReceivableStatus,
 } from "@/lib/accounts/receivables-data";
-import { ensureReceivablesDemoData } from "@/lib/accounts/receivables-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
 import { formatMoneyNumber, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
 import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
@@ -87,9 +87,7 @@ export default function CustomerOutstandingClient() {
   const [pageSize, setPageSize] = useState(25);
   const asOnDate = defaultAsOnDate();
 
-  useEffect(() => {
-    ensureReceivablesDemoData();
-  }, []);
+  const sectionRefresh = useAccountsSectionRefresh();
 
   useEffect(() => {
     setPage(1);
@@ -114,7 +112,7 @@ export default function CustomerOutstandingClient() {
       return String(av).localeCompare(String(bv)) * dir;
     });
     return sorted;
-  }, [asOnDate, customerId, paymentStatus, dateFrom, dateTo, search, sortKey, sortDir]);
+  }, [asOnDate, customerId, paymentStatus, dateFrom, dateTo, search, sortKey, sortDir, sectionRefresh]);
 
   const pagedRows = useMemo(() => {
     const start = (page - 1) * pageSize;

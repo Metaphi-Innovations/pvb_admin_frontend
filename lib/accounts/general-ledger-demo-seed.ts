@@ -15,6 +15,7 @@ import {
   type ChartOfAccount,
 } from "@/app/(app)/accounts/data";
 import { ensureDayBookDemoOnPageLoad } from "@/lib/accounts/day-book-demo-seed";
+import { scheduleDeferredDemoSeed } from "@/lib/accounts/deferred-demo-seed";
 import { resolveLedgerIdByName } from "@/lib/accounts/general-ledger-data";
 
 export const GENERAL_LEDGER_DEMO_SEED_VERSION = "multi-ledger-v2";
@@ -250,10 +251,10 @@ function setAbcOpeningBalance(ledger: ChartOfAccount): void {
 export function seedGeneralLedgerDemoData(force = false): void {
   if (typeof window === "undefined") return;
 
-  ensureDayBookDemoOnPageLoad();
-
   const stored = localStorage.getItem(VERSION_KEY);
   if (!force && stored === GENERAL_LEDGER_DEMO_SEED_VERSION) return;
+
+  ensureDayBookDemoOnPageLoad();
 
   const abcId = resolveLedgerIdByName("ABC Agro Distributor");
   if (!abcId) return;
@@ -280,5 +281,12 @@ export function seedGeneralLedgerDemoData(force = false): void {
 }
 
 export function ensureGeneralLedgerDemoOnPageLoad(): void {
+  if (typeof window !== "undefined" && localStorage.getItem(VERSION_KEY) === GENERAL_LEDGER_DEMO_SEED_VERSION) {
+    return;
+  }
   seedGeneralLedgerDemoData();
+}
+
+export function scheduleGeneralLedgerDemoOnPageLoad(): void {
+  scheduleDeferredDemoSeed("general-ledger-demo", ensureGeneralLedgerDemoOnPageLoad);
 }

@@ -1,4 +1,6 @@
-import InvoiceEditPageClient from "../../../../invoices/InvoiceEditPageClient";
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+
+const InvoiceEditPageClient = lazyAccountsPage(() => import("../../../../invoices/InvoiceEditPageClient"));
 
 type PageProps = { params: { id: string } };
 

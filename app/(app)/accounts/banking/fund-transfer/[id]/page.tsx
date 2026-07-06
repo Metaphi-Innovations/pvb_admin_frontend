@@ -1,10 +1,11 @@
-import FundTransferDetailClient from "../FundTransferDetailClient";
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+
+const FundTransferDetailClient = lazyAccountsPage(() => import("../FundTransferDetailClient"));
 
 export default function FundTransferViewPage({
   params,
 }: {
   params: { id: string };
 }) {
-  const id = Number(params.id);
-  return <FundTransferDetailClient transferId={id} />;
+  return <FundTransferDetailClient transferId={Number(params.id)} />;
 }

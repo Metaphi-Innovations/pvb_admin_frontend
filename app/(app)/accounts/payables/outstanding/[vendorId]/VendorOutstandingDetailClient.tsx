@@ -11,7 +11,7 @@ import {
   getVendorPayablesMeta,
   getVendorPaymentHistory,
 } from "@/lib/accounts/payables-data";
-import { ensurePayablesDemoOnPageLoad } from "@/lib/accounts/payables-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { formatMoney, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
 import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
 import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
@@ -43,10 +43,11 @@ export default function VendorOutstandingDetailClient() {
   const [asOnDate] = useState(defaultAsOnDate());
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const sectionRefresh = useAccountsSectionRefresh();
+
   useEffect(() => {
-    ensurePayablesDemoOnPageLoad();
     setRefreshKey((k) => k + 1);
-  }, []);
+  }, [sectionRefresh]);
 
   const detail = useMemo(
     () => (Number.isFinite(vendorId) ? getVendorOutstandingDetail(vendorId, asOnDate) : null),

@@ -1,5 +1,8 @@
-﻿import { Suspense } from "react";
-import VouchersHubPageClient from "@/app/(app)/accounts/vouchers/VouchersHubPageClient";
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+
+const VouchersHubPageClient = lazyAccountsPage(() => import("@/app/(app)/accounts/vouchers/VouchersHubPageClient"));
+
+import { Suspense } from "react";
 
 export default function VouchersHubPage() {
   return (

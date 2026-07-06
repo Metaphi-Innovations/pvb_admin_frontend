@@ -14,7 +14,7 @@ import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
   getCustomerOutstandingDetail,
 } from "@/lib/accounts/receivables-data";
-import { ensureReceivablesDemoData } from "@/lib/accounts/receivables-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
 import { Button } from "@/components/ui/button";
@@ -40,13 +40,11 @@ export default function CustomerOutstandingDetailClient() {
   const params = useParams();
   const customerId = Number(params.customerId);
 
-  useEffect(() => {
-    ensureReceivablesDemoData();
-  }, []);
+  const sectionRefresh = useAccountsSectionRefresh();
 
   const detail = useMemo(
     () => (Number.isFinite(customerId) ? getCustomerOutstandingDetail(customerId) : null),
-    [customerId],
+    [customerId, sectionRefresh],
   );
 
   if (!detail) {

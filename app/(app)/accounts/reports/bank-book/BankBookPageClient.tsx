@@ -34,7 +34,7 @@ import {
   sortBankBookTransactions,
   type BankBookSortKey,
 } from "./bank-book-data";
-import { ensureBankBookDemoOnPageLoad } from "./bank-book-demo-seed";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { exportBankBookToExcel, exportBankBookToPdf } from "./bank-book-export";
 import { BankBookTable } from "./BankBookTable";
 
@@ -52,10 +52,11 @@ function BankBookPageContent() {
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
 
+  const sectionRefresh = useAccountsSectionRefresh();
+
   useEffect(() => {
-    ensureBankBookDemoOnPageLoad();
     setRefreshKey((k) => k + 1);
-  }, []);
+  }, [sectionRefresh]);
 
   const bankOptions = useMemo(() => {
     void refreshKey;

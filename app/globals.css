@@ -282,8 +282,11 @@
    * Sticky is applied per th — never on thead/tr (avoids header/first-row overlap in scroll containers).
    * Row sizing uses padding on th/td — never fixed height (fixed height + sticky th overlaps first tbody row). */
   .accounts-table-scroll {
-    @apply flex-1 overflow-auto min-h-0;
+    @apply flex-1 min-h-0;
+    overflow: auto;
     overscroll-behavior: contain;
+    contain: paint;
+    -webkit-overflow-scrolling: touch;
   }
 
   .accounts-table {
@@ -336,11 +339,22 @@
   }
 
   .accounts-table-row {
-    @apply border-b border-border bg-white transition-colors duration-150 ease-in-out;
+    @apply border-b border-border bg-white;
   }
 
-  .accounts-table-row:hover {
-    @apply bg-muted/25;
+  @media (hover: hover) and (pointer: fine) {
+    .accounts-table-row {
+      @apply transition-colors duration-150 ease-in-out;
+    }
+
+    .accounts-table-row:hover {
+      @apply bg-muted/25;
+    }
+
+    .accounts-table-body > .accounts-table-row:nth-child(even):hover,
+    .accounts-table > tbody > tr:nth-child(even):hover {
+      @apply bg-muted/30;
+    }
   }
 
   .accounts-table-body > .accounts-table-row:nth-child(even),
@@ -348,10 +362,6 @@
     @apply bg-[#FAFAFA];
   }
 
-  .accounts-table-body > .accounts-table-row:nth-child(even):hover,
-  .accounts-table > tbody > tr:nth-child(even):hover {
-    @apply bg-muted/30;
-  }
 
   .accounts-table-row.is-selected,
   .accounts-table > tbody > tr.is-selected {
@@ -462,11 +472,17 @@
   }
 
   .accounts-table > tbody > tr {
-    @apply border-b border-border bg-white transition-colors duration-150 ease-in-out;
+    @apply border-b border-border bg-white;
   }
 
-  .accounts-table > tbody > tr:hover {
-    @apply bg-muted/25;
+  @media (hover: hover) and (pointer: fine) {
+    .accounts-table > tbody > tr {
+      @apply transition-colors duration-150 ease-in-out;
+    }
+
+    .accounts-table > tbody > tr:hover {
+      @apply bg-muted/25;
+    }
   }
 
   .accounts-table > tbody > tr > td {
@@ -515,6 +531,8 @@
     overflow: hidden;
     background: #fff;
     border-right: 1px solid hsl(var(--border) / 0.8);
+    contain: layout paint;
+    isolation: isolate;
   }
 
   .accounts-module-main {
@@ -526,6 +544,8 @@
     height: 100%;
     overflow: hidden;
     background: #F9FAFB;
+    contain: layout paint;
+    isolation: isolate;
   }
 }
 

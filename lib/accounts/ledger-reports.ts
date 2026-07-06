@@ -10,7 +10,7 @@ import {
   type LedgerBalance,
 } from "@/app/(app)/accounts/masters/ledgers/ledgers-utils";
 import { resolveHierarchyPath } from "@/lib/accounts/coa-hierarchy";
-import { loadVouchers } from "@/app/(app)/accounts/vouchers/voucher-data";
+import { getLedgerMovementTotals } from "@/app/(app)/accounts/vouchers/voucher-data";
 
 export interface LedgerMovement {
   debit: number;
@@ -49,24 +49,8 @@ export interface PandLRow {
   amount: LedgerBalance;
 }
 
-function postedVouchers() {
-  return loadVouchers().filter(
-    (v) => v.status === "posted" || v.status === "approved",
-  );
-}
-
 export function getVoucherMovementForLedger(ledgerId: number): LedgerMovement {
-  let debit = 0;
-  let credit = 0;
-  postedVouchers().forEach((v) => {
-    v.lines.forEach((line) => {
-      if (line.ledgerId === ledgerId) {
-        debit += Number(line.debit) || 0;
-        credit += Number(line.credit) || 0;
-      }
-    });
-  });
-  return { debit, credit };
+  return getLedgerMovementTotals(ledgerId);
 }
 
 export function computeTrialBalanceRows(
@@ -74,7 +58,7 @@ export function computeTrialBalanceRows(
 ): TrialBalanceRow[] {
   return getCoaLedgers()
     .map((ledger) => {
-      const movement = getVoucherMovementForLedger(ledger.id);
+      const movement = getLedgerMovementTotals(ledger.id);
       const hierarchy = resolveHierarchyPath(records, ledger.id);
       return {
         ledgerId: ledger.id,
@@ -111,7 +95,7 @@ export function computeLedgerReportRows(
           amount: ledger.openingBalance,
           balanceType: ledger.balanceType,
         },
-        movement: getVoucherMovementForLedger(ledger.id),
+        movement: getLedgerMovementTotals(ledger.id),
         closing: computeLedgerCurrentBalance(ledger),
       };
     })
