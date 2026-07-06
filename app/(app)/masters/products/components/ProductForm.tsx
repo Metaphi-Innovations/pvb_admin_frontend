@@ -53,6 +53,8 @@ import {
 } from "../product-data";
 import { resolveProductAccountingDefaults } from "@/lib/accounts/erp-accounting-mapping";
 import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
+import { ListingStatusToggle } from "@/components/listing";
+import { useCategoriesDropdown, useSegmentsDropdown, useHsnDropdown, useSuppliersDropdown } from "@/hooks/masters";
 
 export interface ProductFormValues {
 	productCode: string;
@@ -302,27 +304,47 @@ export function ProductForm({
 		onClearError("category");
 	};
 
-	const handleSupplierChange = (supplier: string) => {
-		const code = resolveSupplierCode(supplier);
+	const handleSupplierChange = (supplierId: string) => {
+		const supplierItem = suppliersData?.find((s) => s.supplier_id === supplierId);
 		onChange({
 			...form,
-			supplier,
-			supplierCode: code || form.supplierCode,
+			supplier: supplierId,
+			supplierCode: supplierItem?.supplierCode || form.supplierCode,
 		});
 		onClearError("supplier");
 		onClearError("supplierCode");
 	};
 
-	const segmentOptions = useMemo(() => loadActiveSegmentOptions(), []);
-	const categoryOptions = useMemo(() => loadActiveCategoryOptions(), []);
+	const { data: categoriesData } = useCategoriesDropdown();
+	const { data: segmentsData } = useSegmentsDropdown();
+	const { data: hsnData } = useHsnDropdown();
+	const { data: suppliersData } = useSuppliersDropdown();
+
+	const segmentOptions = useMemo(() => {
+		if (!segmentsData) return [];
+		return segmentsData.map((s) => ({ value: s.segmentName, label: s.segmentName }));
+	}, [segmentsData]);
+
+	const categoryOptions = useMemo(() => {
+		if (!categoriesData) return [];
+		return categoriesData.map((c) => ({ value: c.categoryName, label: c.categoryName }));
+	}, [categoriesData]);
+
 	const formOptions = useMemo(() => loadActiveFormOptions(), []);
 	const cfuOptions = useMemo(() => loadActiveCfuOptions(), []);
-	const supplierOptions = useMemo(() => loadActiveSupplierOptions(), []);
 
-	const hsnMasters = typeof window !== "undefined" ? loadHSNMasters() : [];
-	const hsnOptions = hsnMasters
-		.filter((h) => h.status === "active")
-		.map((h) => ({ value: h.hsnCode, label: h.hsnCode }));
+	const supplierOptions = useMemo(() => {
+		if (!suppliersData) return [];
+		return suppliersData.map((s) => ({
+			value: s.supplier_id,
+			label: s.supplierName,
+		}));
+	}, [suppliersData]);
+
+	const hsnOptions = useMemo(() => {
+		if (!hsnData) return [];
+		return hsnData.map((h) => ({ value: h.id, label: h.hsnDescription }));
+	}, [hsnData]);
 
 	const unitOptions = useMemo(() => [...PRODUCT_UNIT_OPTIONS], []);
 
@@ -350,20 +372,20 @@ export function ProductForm({
 		form.baseUnit,
 	);
 
-	const handleHSNChange = (hsnCode: string) => {
-		if (!hsnCode) {
+	const handleHSNChange = (hsnUuid: string) => {
+		if (!hsnUuid) {
 			onChange({ ...form, hsnCode: "", hsnId: "", gstRate: "", gstId: "" });
 			onClearError("hsnCode");
 			onClearError("gstRate");
 			return;
 		}
-		const tax = resolveProductTaxFromHsn(hsnCode);
+		const hsnItem = hsnData?.find((h) => h.id === hsnUuid);
 		onChange({
 			...form,
-			hsnCode,
-			hsnId: tax ? String(tax.hsnId) : "",
-			gstRate: tax?.gstRate ?? "",
-			gstId: tax?.gstId ? String(tax.gstId) : "",
+			hsnCode: hsnUuid,           // store UUID — matches dropdown value & API hsn_id
+			hsnId: hsnUuid,
+			gstRate: hsnItem?.gstRate ?? "",
+			gstId: hsnItem?.gstId ?? "",
 		});
 		onClearError("hsnCode");
 		onClearError("gstRate");
@@ -424,7 +446,7 @@ export function ProductForm({
 		<div className='w-full space-y-4'>
 			{/* Basic & classification */}
 			<div>
-				<SectionHead label='Product Information' />
+				<SectionHead label='Product Inform2323232ation' />
 				<div className={formGrid}>
 					<div className='space-y-1 md:col-span-1'>
 						<Label className='text-xs font-medium'>
@@ -723,6 +745,23 @@ export function ProductForm({
 						</p>
 						<FieldError msg={errors.mrp} />
 					</div>
+				</div>
+			</div>
+
+			{/* Status */}
+			<div className='pt-3 border-t border-border/60'>
+				<SectionHead label='Status' />
+				<div className='flex items-center gap-3'>
+					<ListingStatusToggle
+						active={form.status === "active"}
+						onChange={(val) =>
+							!readOnly &&
+							set("status", val ? "active" : "inactive")
+						}
+					/>
+					<span className='text-xs text-muted-foreground'>
+						{form.status === "active" ? "Active" : "Inactive"}
+					</span>
 				</div>
 			</div>
 
