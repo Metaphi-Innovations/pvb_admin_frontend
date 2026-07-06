@@ -4,7 +4,15 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  CheckCircle2,
+  Edit2,
+  Eye,
+  Ruler,
+  X,
+  AlertTriangle,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,38 +22,26 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import {
-  CheckCircle2,
-  X,
-  Edit2,
-  Percent,
-  Eye,
-  AlertTriangle,
-} from "lucide-react";
-import {
-  type TdsApiRecord,
-  type TdsApiForm,
-  DEFAULT_TDS_API_FORM,
-  tdsApiToForm,
-  validateTdsApiForm,
-  formatTdsRateDisplay,
-  formatApplicableToLabel,
-  mergeApplicableToSelectOptions,
-} from "./tds-data";
-import { TdsRateInput } from "./TdsRateInput";
 import { MasterFormGrid, MasterField, compactInput } from "@/components/masters/MasterModule";
 import { MasterListingSheets } from "@/components/masters/MasterListingSheets";
 import { MasterDrawerSection } from "@/components/masters/MasterRecordDrawer";
-import { sortStateToOrdering } from "@/services/tds-list.service";
 import {
-  useTdsList,
-  useTds,
-  useCreateTds,
-  useUpdateTds,
-  useToggleTdsStatus,
-  useExportTds,
-  useTdsFilterDropdown,
-  useCategoryDropdown,
+  DEFAULT_UNIT_FORM,
+  unitToForm,
+  validateUnitApiForm,
+  type UnitForm,
+  type UnitRecord,
+} from "./uom-data";
+import { sortStateToOrdering } from "@/services/unit-list.service";
+import {
+  useUnits,
+  useUnit,
+  useCreateUnit,
+  useUpdateUnit,
+  useToggleUnitStatus,
+  useExportUnits,
+  useUnitFilterDropdown,
+  useParentUomDropdown,
 } from "@/hooks/masters";
 import {
   MASTER_FILTER_FIELD_MAPS,
@@ -74,7 +70,7 @@ import {
 import { ListingContainer } from "@/components/layout/ListingContainer";
 
 type StatusTab = "all" | "active" | "inactive";
-const TDS_TAB_KEY = "tds-list-status-tab";
+const UNIT_TAB_KEY = "unit-list-status-tab";
 
 const STATUS_TABS: { value: StatusTab; label: string }[] = [
   { value: "all", label: "All" },
@@ -84,7 +80,7 @@ const STATUS_TABS: { value: StatusTab; label: string }[] = [
 
 function readStoredStatusTab(): StatusTab {
   if (typeof window === "undefined") return "all";
-  const v = sessionStorage.getItem(TDS_TAB_KEY);
+  const v = sessionStorage.getItem(UNIT_TAB_KEY);
   return v === "active" || v === "inactive" ? v : "all";
 }
 
@@ -110,28 +106,30 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
   );
 }
 
-function toTdsRow(item: {
+function toUnitRow(item: {
   id: number;
-  tdsUuid: string;
-  sectionCode: string;
-  sectionName: string;
-  tdsRate: string;
-  applicableTo: string;
-  description: string;
+  unitUuid: string;
+  unitCode: string;
+  unitName: string;
+  shortName: string;
+  uomId: string | null;
+  parentUomName: string;
+  conversionFactor: string;
   status: "active" | "inactive";
   createdAt: string;
   updatedAt: string;
   createdBy: string;
   updatedBy: string;
-}): TdsApiRecord {
+}): UnitRecord {
   return {
     id: item.id,
-    tdsUuid: item.tdsUuid,
-    sectionCode: item.sectionCode,
-    sectionName: item.sectionName,
-    tdsRate: item.tdsRate,
-    applicableTo: item.applicableTo,
-    description: item.description,
+    unitUuid: item.unitUuid,
+    unitCode: item.unitCode,
+    unitName: item.unitName,
+    shortName: item.shortName,
+    uomId: item.uomId,
+    parentUomName: item.parentUomName,
+    conversionFactor: item.conversionFactor,
     status: item.status,
     createdBy: item.createdBy || "—",
     createdAt: item.createdAt,
@@ -140,20 +138,20 @@ function toTdsRow(item: {
   };
 }
 
-function buildApiPayload(form: TdsApiForm) {
-  const rate = Number(form.tdsRate.trim().replace(/%$/, ""));
+function buildApiPayload(form: UnitForm) {
+  const conversion = Number(form.conversionFactor.trim());
   return {
-    tds_rate: rate,
-    tds_section_name: form.sectionName.trim() || null,
-    applicable_to: form.applicableTo.trim() || null,
-    description: form.description.trim() || null,
+    unit_name: form.unitName.trim(),
+    short_name: form.shortName.trim(),
+    uom_id: form.uomId.trim() || null,
+    conversion_factor: conversion,
   };
 }
 
-export default function TdsPageClient() {
+export default function UomPageClient() {
   const [filters, setFilters] = useState<FilterState>({});
   const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
-  const [sort, setSort] = useState<SortState>({ key: "sectionCode", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "unitName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -161,13 +159,11 @@ export default function TdsPageClient() {
   const [viewId, setViewId] = useState<string | null>(null);
 
   const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
-  const [active, setActive] = useState<TdsApiRecord | null>(null);
-  const [form, setForm] = useState<TdsApiForm>(DEFAULT_TDS_API_FORM);
+  const [active, setActive] = useState<UnitRecord | null>(null);
+  const [form, setForm] = useState<UnitForm>(DEFAULT_UNIT_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
-  const [statusTarget, setStatusTarget] = useState<TdsApiRecord | null>(null);
-
-  const categoryQuery = useCategoryDropdown();
+  const [statusTarget, setStatusTarget] = useState<UnitRecord | null>(null);
 
   const ordering = useMemo(
     () => sortStateToOrdering(sort.key, sort.direction),
@@ -175,7 +171,7 @@ export default function TdsPageClient() {
   );
   const apiFilters = useMemo(
     () =>
-      mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.tds, {
+      mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.unit, {
         statusTab,
       }),
     [debouncedFilters, statusTab],
@@ -197,56 +193,35 @@ export default function TdsPageClient() {
     [page, pageSize, debouncedSearch, listStatus, apiFilters, ordering],
   );
 
-  const listQuery = useTdsList(listParams);
-  const detailQuery = useTds(viewId);
-  const createMutation = useCreateTds();
-  const updateMutation = useUpdateTds();
-  const toggleStatusMutation = useToggleTdsStatus();
-  const exportMutation = useExportTds();
+  const listQuery = useUnits(listParams);
+  const detailQuery = useUnit(viewId);
+  const createMutation = useCreateUnit();
+  const updateMutation = useUpdateUnit();
+  const toggleStatusMutation = useToggleUnitStatus();
+  const exportMutation = useExportUnits();
 
-  const sectionCodeOptionsQuery = useTdsFilterDropdown("tds_code");
-  const sectionNameOptionsQuery = useTdsFilterDropdown("tds_section_name");
-  const tdsRateOptionsQuery = useTdsFilterDropdown("tds_rate");
-  const applicableToOptionsQuery = useTdsFilterDropdown("applicable_to");
-  const descriptionOptionsQuery = useTdsFilterDropdown("description");
-  const statusOptionsQuery = useTdsFilterDropdown("is_active");
-  const createdByOptionsQuery = useTdsFilterDropdown("created_by_user__username");
-  const updatedByOptionsQuery = useTdsFilterDropdown("updated_by_user__username");
+  const excludeUomId = sheetMode === "edit" ? active?.unitUuid : undefined;
+  const parentUomQuery = useParentUomDropdown(excludeUomId);
 
-  const sectionCodeOptions = useMemo(
-    () => sectionCodeOptionsQuery.data ?? [],
-    [sectionCodeOptionsQuery.data],
-  );
-  const sectionNameOptions = useMemo(
-    () => sectionNameOptionsQuery.data ?? [],
-    [sectionNameOptionsQuery.data],
-  );
-  const tdsRateOptions = useMemo(
-    () => tdsRateOptionsQuery.data ?? [],
-    [tdsRateOptionsQuery.data],
-  );
-  const applicableOptions = useMemo(
-    () =>
-      mergeApplicableToSelectOptions(
-        categoryQuery.data ?? [],
-        form.applicableTo,
-        applicableToOptionsQuery.data,
-      ),
-    [categoryQuery.data, form.applicableTo, applicableToOptionsQuery.data],
-  );
+  const unitCodeOptionsQuery = useUnitFilterDropdown("unit_code");
+  const unitNameOptionsQuery = useUnitFilterDropdown("unit_name");
+  const shortNameOptionsQuery = useUnitFilterDropdown("short_name");
+  const parentUomOptionsQuery = useUnitFilterDropdown("uom__unit_name");
+  const conversionOptionsQuery = useUnitFilterDropdown("conversion_factor");
+  const statusOptionsQuery = useUnitFilterDropdown("is_active");
+  const createdByOptionsQuery = useUnitFilterDropdown("created_by_user__username");
+  const updatedByOptionsQuery = useUnitFilterDropdown("updated_by_user__username");
 
-  const applicableToFilterOptions = useMemo(
-    () =>
-      mergeApplicableToSelectOptions(
-        categoryQuery.data ?? [],
-        undefined,
-        applicableToOptionsQuery.data,
-      ),
-    [categoryQuery.data, applicableToOptionsQuery.data],
+  const unitCodeOptions = useMemo(() => unitCodeOptionsQuery.data ?? [], [unitCodeOptionsQuery.data]);
+  const unitNameOptions = useMemo(() => unitNameOptionsQuery.data ?? [], [unitNameOptionsQuery.data]);
+  const shortNameOptions = useMemo(() => shortNameOptionsQuery.data ?? [], [shortNameOptionsQuery.data]);
+  const parentUomFilterOptions = useMemo(
+    () => parentUomOptionsQuery.data ?? [],
+    [parentUomOptionsQuery.data],
   );
-  const descriptionOptions = useMemo(
-    () => descriptionOptionsQuery.data ?? [],
-    [descriptionOptionsQuery.data],
+  const conversionOptions = useMemo(
+    () => conversionOptionsQuery.data ?? [],
+    [conversionOptionsQuery.data],
   );
   const statusOptions = useMemo(() => {
     if (statusOptionsQuery.data?.length) return statusOptionsQuery.data;
@@ -264,17 +239,25 @@ export default function TdsPageClient() {
     [updatedByOptionsQuery.data],
   );
 
+  const parentUomSelectOptions = useMemo(() => {
+    const fromApi = parentUomQuery.data ?? [];
+    if (form.uomId && !fromApi.some((o) => o.value === form.uomId) && active?.parentUomName) {
+      return [{ label: active.parentUomName, value: form.uomId }, ...fromApi];
+    }
+    return fromApi;
+  }, [parentUomQuery.data, form.uomId, active?.parentUomName]);
+
   const records = useMemo(
-    () => (listQuery.data?.items ?? []).map(toTdsRow),
+    () => (listQuery.data?.items ?? []).map(toUnitRow),
     [listQuery.data],
   );
   const totalRecords = listQuery.data?.total ?? 0;
   const loading = listQuery.isFetching;
   const listError = listQuery.isError
     ? getMasterListErrorMessage(listQuery.error, {
-        resource: "TDS records",
-        notFoundMessage: "TDS list endpoint not found.",
-        serverMessage: "Server error while loading TDS records.",
+        resource: "units",
+        notFoundMessage: "Unit list endpoint not found.",
+        serverMessage: "Server error while loading units.",
       })
     : null;
   const viewLoading = Boolean(viewId) && detailQuery.isFetching;
@@ -296,22 +279,22 @@ export default function TdsPageClient() {
   }, [debouncedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
 
   useEffect(() => {
-    const maxPage = Math.max(1, Math.ceil(totalRecords / pageSize));
-    if (page > maxPage) setPage(maxPage);
-  }, [totalRecords, pageSize, page]);
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    if (page > totalPages) setPage(totalPages);
+  }, [page, pageSize, totalRecords]);
 
   useEffect(() => {
     if (!viewId) return;
     if (detailQuery.isError) {
       setToast({
-        msg: getErrorMessage(detailQuery.error, "Failed to load TDS details."),
+        msg: getErrorMessage(detailQuery.error, "Failed to load unit details."),
         type: "error",
       });
       setViewId(null);
       return;
     }
     if (detailQuery.data) {
-      setActive(toTdsRow(detailQuery.data));
+      setActive(toUnitRow(detailQuery.data));
       setSheetMode("view");
     }
   }, [viewId, detailQuery.data, detailQuery.isError, detailQuery.error]);
@@ -319,18 +302,18 @@ export default function TdsPageClient() {
   const handleStatusTabChange = (tab: string) => {
     const next = tab as StatusTab;
     setStatusTab(next);
-    sessionStorage.setItem(TDS_TAB_KEY, next);
+    sessionStorage.setItem(UNIT_TAB_KEY, next);
     setPage(1);
   };
 
-  const requestStatusToggle = (record: TdsApiRecord) => {
+  const requestStatusToggle = (record: UnitRecord) => {
     setStatusTarget(record);
   };
 
   const confirmStatusChange = () => {
-    const id = statusTarget?.tdsUuid;
+    const id = statusTarget?.unitUuid;
     if (!statusTarget || !id) {
-      setToast({ msg: "TDS id missing. Unable to update status.", type: "error" });
+      setToast({ msg: "Unit id missing. Unable to update status.", type: "error" });
       setStatusTarget(null);
       return;
     }
@@ -342,45 +325,43 @@ export default function TdsPageClient() {
       {
         onSuccess: () => {
           setToast({
-            msg: `TDS status updated to ${nextActive ? "Active" : "Inactive"}`,
+            msg: `Unit status updated to ${nextActive ? "Active" : "Inactive"}`,
             type: "success",
           });
         },
         onError: (error) => {
           setToast({
-            msg: getErrorMessage(error, "Failed to update TDS status."),
+            msg: getErrorMessage(error, "Failed to update unit status."),
             type: "error",
           });
         },
-        onSettled: () => {
-          setStatusTarget(null);
-        },
+        onSettled: () => setStatusTarget(null),
       },
     );
   };
 
   const openAdd = () => {
-    setForm({ ...DEFAULT_TDS_API_FORM });
+    setForm({ ...DEFAULT_UNIT_FORM });
     setErrors({});
     setFormError(null);
     setActive(null);
     setSheetMode("add");
   };
 
-  const openEdit = (row: TdsApiRecord) => {
-    setForm(tdsApiToForm(row));
+  const openEdit = (row: UnitRecord) => {
+    setForm(unitToForm(row));
     setErrors({});
     setFormError(null);
     setActive(row);
     setSheetMode("edit");
   };
 
-  const openView = useCallback((row: TdsApiRecord) => {
-    if (!row.tdsUuid) {
-      setToast({ msg: "TDS id missing. Unable to load details.", type: "error" });
+  const openView = useCallback((row: UnitRecord) => {
+    if (!row.unitUuid) {
+      setToast({ msg: "Unit id missing. Unable to load details.", type: "error" });
       return;
     }
-    setViewId(row.tdsUuid);
+    setViewId(row.unitUuid);
   }, []);
 
   const closeSheet = () => {
@@ -391,79 +372,66 @@ export default function TdsPageClient() {
     setFormError(null);
   };
 
-  const columns: ColumnConfig<TdsApiRecord>[] = useMemo(
+  const columns: ColumnConfig<UnitRecord>[] = useMemo(
     () => [
       {
-        key: "sectionCode",
-        header: "TDS Code",
+        key: "unitName",
+        header: "Unit Name",
         sortable: true,
         filterable: true,
         filterType: "dropdown",
-        filterOptions: sectionCodeOptions,
-        width: "110px",
+        filterOptions: unitNameOptions,
+        width: "180px",
         render: (_val, row) => (
           <button
             type="button"
             onClick={() => openView(row)}
-            className="font-mono text-xs font-semibold text-brand-700 hover:underline"
+            className="text-xs font-semibold text-brand-700 hover:underline text-left"
           >
-            {row.sectionCode}
+            {row.unitName}
           </button>
         ),
       },
       {
-        key: "sectionName",
-        header: "Section Name",
+        key: "unitCode",
+        header: "Unit Code",
         sortable: true,
         filterable: true,
         filterType: "dropdown",
-        filterOptions: sectionNameOptions,
-        width: "200px",
-        render: (_val, row) => (
-          <span className="text-xs font-medium text-foreground">{row.sectionName || "—"}</span>
-        ),
-      },
-      {
-        key: "tdsRate",
-        header: "TDS Rate",
-        sortable: true,
-        filterable: true,
-        filterType: "dropdown",
-        filterOptions: tdsRateOptions,
-        width: "100px",
-        render: (_val, row) => (
-          <span className="text-xs font-semibold text-foreground">
-            {formatTdsRateDisplay(row.tdsRate)}
-          </span>
-        ),
-      },
-      {
-        key: "applicableTo",
-        header: "Applicable To",
-        sortable: true,
-        filterable: true,
-        filterType: "dropdown",
-        filterOptions: applicableToFilterOptions,
-        width: "160px",
-        render: (_val, row) => (
-          <span className="text-xs text-muted-foreground">
-            {formatApplicableToLabel(row.applicableTo)}
-          </span>
-        ),
-      },
-      {
-        key: "description",
-        header: "Description",
-        sortable: true,
-        filterable: true,
-        filterType: "dropdown",
-        filterOptions: descriptionOptions,
-        width: "200px",
+        filterOptions: unitCodeOptions,
+        width: "110px",
         render: (val) => (
-          <span className="text-xs text-muted-foreground line-clamp-2">
-            {val ? String(val) : "—"}
-          </span>
+          <span className="font-mono text-xs text-muted-foreground">{String(val || "—")}</span>
         ),
+      },
+      {
+        key: "shortName",
+        header: "Short Name",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: shortNameOptions,
+        width: "110px",
+      },
+      {
+        key: "parentUomName",
+        header: "UOM",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: parentUomFilterOptions,
+        width: "160px",
+        render: (val) => <span className="text-xs">{val ? String(val) : "—"}</span>,
+      },
+      {
+        key: "conversionFactor",
+        header: "Conversion",
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: conversionOptions,
+        width: "110px",
+        render: (val) => <span className="text-xs font-mono">{val ? String(val) : "—"}</span>,
       },
       {
         key: "status",
@@ -506,11 +474,11 @@ export default function TdsPageClient() {
       },
     ],
     [
-      sectionCodeOptions,
-      sectionNameOptions,
-      tdsRateOptions,
-      applicableToFilterOptions,
-      descriptionOptions,
+      unitNameOptions,
+      unitCodeOptions,
+      shortNameOptions,
+      parentUomFilterOptions,
+      conversionOptions,
       statusOptions,
       createdByOptions,
       updatedByOptions,
@@ -518,7 +486,7 @@ export default function TdsPageClient() {
     ],
   );
 
-  const actions: ActionItemConfig<TdsApiRecord>[] = [
+  const actions: ActionItemConfig<UnitRecord>[] = [
     {
       label: "View",
       action: "view",
@@ -534,8 +502,18 @@ export default function TdsPageClient() {
     },
   ];
 
+  const displayRecords = useMemo(() => {
+    if (ordering || !sort.key || sort.direction === "none") return records;
+    return [...records].sort((a, b) => {
+      const aVal = String(a[sort.key as keyof UnitRecord] ?? "").toLowerCase();
+      const bVal = String(b[sort.key as keyof UnitRecord] ?? "").toLowerCase();
+      const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      return sort.direction === "asc" ? cmp : -cmp;
+    });
+  }, [records, sort, ordering]);
+
   const persist = () => {
-    const fieldErrors = validateTdsApiForm(form);
+    const fieldErrors = validateUnitApiForm(form);
     setErrors(fieldErrors);
     if (Object.keys(fieldErrors).length > 0) return;
 
@@ -545,32 +523,32 @@ export default function TdsPageClient() {
       setFormError(null);
       createMutation.mutate(payload, {
         onSuccess: () => {
-          setToast({ msg: "TDS section added successfully", type: "success" });
+          setToast({ msg: "Unit added successfully", type: "success" });
           setPage(1);
           closeSheet();
         },
         onError: (error) => {
-          setFormError(getErrorMessage(error, "Failed to create TDS record."));
+          setFormError(getErrorMessage(error, "Failed to create unit."));
         },
       });
       return;
     }
 
-    if (!active?.tdsUuid) {
-      setFormError("TDS id missing. Unable to update.");
+    if (!active?.unitUuid) {
+      setFormError("Unit id missing. Unable to update.");
       return;
     }
 
     setFormError(null);
     updateMutation.mutate(
-      { id: active.tdsUuid, payload },
+      { id: active.unitUuid, payload },
       {
         onSuccess: () => {
-          setToast({ msg: "TDS section updated successfully", type: "success" });
+          setToast({ msg: "Unit updated successfully", type: "success" });
           closeSheet();
         },
         onError: (error) => {
-          setFormError(getErrorMessage(error, "Failed to update TDS record."));
+          setFormError(getErrorMessage(error, "Failed to update unit."));
         },
       },
     );
@@ -585,12 +563,10 @@ export default function TdsPageClient() {
         apiFilters,
       },
       {
-        onSuccess: () => {
-          setToast({ msg: "TDS records exported successfully", type: "success" });
-        },
+        onSuccess: () => setToast({ msg: "Units exported successfully", type: "success" }),
         onError: (error) => {
           setToast({
-            msg: getErrorMessage(error, "Failed to export TDS records"),
+            msg: getErrorMessage(error, "Failed to export units"),
             type: "error",
           });
         },
@@ -599,55 +575,43 @@ export default function TdsPageClient() {
   };
 
   const sheetTitle =
-    sheetMode === "add"
-      ? "Add TDS Section"
-      : sheetMode === "edit"
-        ? "Edit TDS Section"
-        : "View TDS Section";
+    sheetMode === "add" ? "Add Unit" : sheetMode === "edit" ? "Edit Unit" : "View Unit";
 
   const viewDrawer = active
     ? {
-        title: active.sectionCode,
-        subtitle: active.sectionName || "Read-only TDS details",
+        title: active.unitName,
+        subtitle: active.unitCode || "Read-only unit details",
         status: active.status,
         basicInfo: [
-          { label: "TDS Code", value: active.sectionCode, mono: true },
-          { label: "Section Name", value: active.sectionName || "—" },
-          { label: "TDS Rate", value: formatTdsRateDisplay(active.tdsRate) },
-          {
-            label: "Applicable To",
-            value: formatApplicableToLabel(active.applicableTo),
-          },
+          { label: "Unit Code", value: active.unitCode || "—", mono: true },
+          { label: "Short Name", value: active.shortName || "—" },
+          { label: "Parent UOM", value: active.parentUomName || "—" },
+          { label: "Conversion Factor", value: active.conversionFactor || "—", mono: true },
         ],
-        showDescription: !!active.description?.trim(),
-        description: active.description,
+        showDescription: false,
         children: (
           <MasterDrawerSection title="Audit Information">
             <div className="space-y-4">
               <AuditUserRow label="Created By" name={active.createdBy} />
               <div className="space-y-1">
                 <p className="text-[11px] text-muted-foreground">Created Date</p>
-                <p className="text-sm font-medium text-foreground font-mono">
-                  {active.createdAt}
-                </p>
+                <p className="text-sm font-medium text-foreground font-mono">{active.createdAt}</p>
               </div>
               <AuditUserRow label="Updated By" name={active.updatedBy} />
               <div className="space-y-1">
                 <p className="text-[11px] text-muted-foreground">Updated Date</p>
-                <p className="text-sm font-medium text-foreground font-mono">
-                  {active.updatedAt}
-                </p>
+                <p className="text-sm font-medium text-foreground font-mono">{active.updatedAt}</p>
               </div>
             </div>
           </MasterDrawerSection>
         ),
       }
-    : { title: "TDS", basicInfo: [] };
+    : { title: "Unit", basicInfo: [] };
 
   return (
     <ListingContainer
-      title="TDS Master"
-      titleIcon={Percent}
+      title="Unit Master"
+      titleIcon={Ruler}
       tabs={STATUS_TABS.map((t) => ({
         value: t.value,
         label: t.value === statusTab ? `${t.label} (${totalRecords})` : t.label,
@@ -657,10 +621,9 @@ export default function TdsPageClient() {
     >
       {listError ? <p className="mb-2 text-xs text-red-600">{listError}</p> : null}
 
-      <MasterListing<TdsApiRecord>
-        rowKey={(row) => row.tdsUuid || String(row.id)}
+      <MasterListing<UnitRecord>
         columns={columns}
-        data={records}
+        data={displayRecords}
         loading={loading || isFiltering}
         totalRecords={totalRecords}
         page={page}
@@ -671,12 +634,13 @@ export default function TdsPageClient() {
         onFilterChange={setFilters}
         actions={actions}
         onAdd={openAdd}
-        addLabel="Add TDS"
+        addLabel="Add Unit"
         onExport={handleExport}
-        emptyMessage="TDS sections"
-        searchPlaceholder="Search TDS code, section name, rate..."
+        emptyMessage="units"
+        searchPlaceholder="Search unit name, short name..."
         currentFilters={filters}
         currentSort={sort}
+        rowKey={(row) => row.unitUuid ?? String(row.id)}
       />
 
       <MasterListingSheets
@@ -686,74 +650,76 @@ export default function TdsPageClient() {
         onEdit={() => active && openEdit(active)}
         onSave={persist}
         sheetTitle={sheetTitle}
-        icon={Percent}
+        icon={Ruler}
         formError={formError ?? undefined}
         saving={saving}
         viewDrawer={viewDrawer}
         formContent={
           sheetMode !== "view" ? (
             <MasterFormGrid>
-              {sheetMode === "edit" && active ? (
-                <MasterField label="TDS Code" className="sm:col-span-2">
-                  <Input
-                    className={cn(compactInput(), "font-mono bg-muted/30")}
-                    value={active.sectionCode}
-                    disabled
-                    readOnly
-                  />
-                </MasterField>
-              ) : null}
-
-              <MasterField label="TDS Rate %" required error={errors.tdsRate}>
-                <TdsRateInput
-                  className={compactInput()}
-                  value={form.tdsRate}
-                  onChange={(value) => setForm((prev) => ({ ...prev, tdsRate: value }))}
-                  placeholder="e.g. 10"
-                />
-              </MasterField>
-
-              <MasterField
-                label="TDS Section Name"
-                className="sm:col-span-2"
-              >
+              <MasterField label="Unit Name" required className="sm:col-span-2">
                 <Input
-                  className={compactInput()}
-                  value={form.sectionName}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, sectionName: e.target.value }))
-                  }
-                  placeholder="e.g. Professional Fees"
+                  className={cn(compactInput(), errors.unitName && "border-red-400 focus-visible:ring-red-300")}
+                  value={form.unitName}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, unitName: e.target.value }));
+                    setErrors((prev) => ({ ...prev, unitName: "" }));
+                  }}
+                  placeholder="e.g. Kilogram"
                 />
+                {errors.unitName && (
+                  <p className="text-[11px] text-red-500 mt-1">{errors.unitName}</p>
+                )}
               </MasterField>
 
-              <MasterField label="Category" className="sm:col-span-2">
+              <MasterField label="Short Name" required>
+                <Input
+                  className={cn(compactInput(), errors.shortName && "border-red-400 focus-visible:ring-red-300")}
+                  value={form.shortName}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, shortName: e.target.value }));
+                    setErrors((prev) => ({ ...prev, shortName: "" }));
+                  }}
+                  placeholder="e.g. KG"
+                />
+                {errors.shortName && (
+                  <p className="text-[11px] text-red-500 mt-1">{errors.shortName}</p>
+                )}
+              </MasterField>
+
+              <MasterField label="Conversion Factor" required>
+                <Input
+                  type="number"
+                  step="any"
+                  className={cn(compactInput(), errors.conversionFactor && "border-red-400 focus-visible:ring-red-300")}
+                  value={form.conversionFactor}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, conversionFactor: e.target.value }));
+                    setErrors((prev) => ({ ...prev, conversionFactor: "" }));
+                  }}
+                  placeholder="e.g. 1000"
+                />
+                {errors.conversionFactor && (
+                  <p className="text-[11px] text-red-500 mt-1">{errors.conversionFactor}</p>
+                )}
+              </MasterField>
+
+              <MasterField label="Parent UOM" className="sm:col-span-2">
                 <AutocompleteSelect
-                  options={applicableOptions}
-                  value={form.applicableTo}
-                  onChange={(value) =>
+                  options={parentUomSelectOptions}
+                  value={form.uomId}
+                  onChange={(val) =>
                     setForm((prev) => ({
                       ...prev,
-                      applicableTo: typeof value === "string" ? value : "",
+                      uomId: typeof val === "string" ? val : "",
                     }))
                   }
                   placeholder={
-                    categoryQuery.isFetching ? "Loading categories…" : "Select category"
+                    parentUomQuery.isFetching ? "Loading UOM options…" : "Select parent UOM (optional)"
                   }
-                  searchPlaceholder="Search categories…"
-                  disabled={categoryQuery.isFetching}
-                  className="h-8 text-xs"
-                />
-              </MasterField>
-
-              <MasterField label="Description" className="sm:col-span-2">
-                <Textarea
-                  className="min-h-[72px] text-xs"
-                  value={form.description}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, description: e.target.value }))
-                  }
-                  placeholder="Optional description"
+                  searchPlaceholder="Search UOM…"
+                  disabled={parentUomQuery.isFetching}
+                  className="h-8 text-xs rounded-lg"
                 />
               </MasterField>
             </MasterFormGrid>
@@ -768,14 +734,13 @@ export default function TdsPageClient() {
               <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-50 border border-amber-200">
                 <AlertTriangle className="w-4 h-4 text-amber-500" />
               </div>
-              {statusTarget?.status === "active" ? "Deactivate TDS?" : "Activate TDS?"}
+              {statusTarget?.status === "active" ? "Deactivate Unit?" : "Activate Unit?"}
             </DialogTitle>
             <DialogDescription className="text-xs pt-1">
               {statusTarget && (
                 <>
-                  <strong className="text-foreground font-mono">{statusTarget.sectionCode}</strong>{" "}
-                  — {statusTarget.sectionName || "TDS section"} will be marked as{" "}
-                  {statusTarget.status === "active" ? "inactive" : "active"}.
+                  <strong className="text-foreground">{statusTarget.unitName}</strong> will be marked
+                  as {statusTarget.status === "active" ? "inactive" : "active"}.
                 </>
               )}
             </DialogDescription>

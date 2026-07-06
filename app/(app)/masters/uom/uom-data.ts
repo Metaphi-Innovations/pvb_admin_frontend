@@ -1,5 +1,61 @@
-// Unit Master - data types, seed data & localStorage helpers
+// Unit Master - API types and legacy localStorage helpers
 
+export interface UnitRecord {
+  id: number;
+  unitUuid?: string;
+  unitCode: string;
+  unitName: string;
+  shortName: string;
+  uomId: string | null;
+  parentUomName: string;
+  conversionFactor: string;
+  status: "active" | "inactive";
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+export interface UnitForm {
+  unitName: string;
+  shortName: string;
+  uomId: string;
+  conversionFactor: string;
+}
+
+export const DEFAULT_UNIT_FORM: UnitForm = {
+  unitName: "",
+  shortName: "",
+  uomId: "",
+  conversionFactor: "1",
+};
+
+export function unitToForm(record: UnitRecord): UnitForm {
+  return {
+    unitName: record.unitName,
+    shortName: record.shortName,
+    uomId: record.uomId ?? "",
+    conversionFactor: record.conversionFactor || "1",
+  };
+}
+
+export function validateUnitApiForm(form: UnitForm): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!form.unitName.trim()) errors.unitName = "Unit name is required.";
+  if (!form.shortName.trim()) errors.shortName = "Short name is required.";
+
+  const rate = form.conversionFactor.trim();
+  const num = Number(rate);
+  if (!rate) {
+    errors.conversionFactor = "Conversion factor is required.";
+  } else if (!Number.isFinite(num) || num <= 0) {
+    errors.conversionFactor = "Enter a valid conversion factor greater than zero.";
+  }
+
+  return errors;
+}
+
+/** @deprecated legacy localStorage type */
 export interface UOMMaster {
   id: number;
   uomId: string;           // Auto Generated, e.g. "UOM-0001"
