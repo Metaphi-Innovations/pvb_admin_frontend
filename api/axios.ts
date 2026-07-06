@@ -2,6 +2,20 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import { API_ENDPOINTS } from "./endpoints";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const DEV_ACCESS_TOKEN = process.env.NEXT_PUBLIC_DEV_ACCESS_TOKEN;
+
+function resolveAccessToken(): string | null {
+  const token = getAccessTokenFn();
+  if (token) return token;
+  if (process.env.NODE_ENV === "development" && DEV_ACCESS_TOKEN) {
+    return DEV_ACCESS_TOKEN;
+  }
+  return null;
+}
+
+function isUsingDevAccessToken(): boolean {
+  return !getAccessTokenFn() && process.env.NODE_ENV === "development" && !!DEV_ACCESS_TOKEN;
+}
 
 export const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -31,7 +45,7 @@ export const setAuthTokenCallbacks = (
 // Request Interceptor
 axiosInstance.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = getAccessTokenFn();
+    const token = resolveAccessToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -100,9 +114,11 @@ axiosInstance.interceptors.response.use(
 
       if (!refreshToken) {
         isRefreshing = false;
-        clearAuthFn();
-        if (typeof window !== "undefined") {
-          window.location.href = "/login";
+        if (!isUsingDevAccessToken()) {
+          clearAuthFn();
+          if (typeof window !== "undefined") {
+            window.location.href = "/login";
+          }
         }
         return Promise.reject(error);
       }

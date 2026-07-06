@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { Tag } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,7 +12,6 @@ import {
   compactInput,
 } from "@/components/masters/MasterModule";
 import {
-  CATEGORY_SEED,
   CATEGORY_STORAGE_KEY,
   categoryToForm,
   DEFAULT_CATEGORY_FORM,
@@ -20,6 +20,8 @@ import {
   type CategoryRecord,
   validateCategoryForm,
 } from "./category-data";
+import { CategoryListService } from "@/services/category-list.service";
+import { masterKeys } from "@/lib/masters/master-query-keys";
 
 const columns: Column<CategoryRecord>[] = [
   { key: "categoryName", header: "Category Name", sortable: true },
@@ -32,6 +34,8 @@ const columns: Column<CategoryRecord>[] = [
 ];
 
 export default function CategoryPageClient() {
+  const queryClient = useQueryClient();
+
   return (
     <MasterModule<CategoryRecord, CategoryForm>
       config={{
@@ -39,7 +43,7 @@ export default function CategoryPageClient() {
         description: "Product categories for catalog organization",
         icon: Tag,
         storageKey: CATEGORY_STORAGE_KEY,
-        seed: CATEGORY_SEED,
+        seed: [],
         codePrefix: "",
         columns,
         searchKeys: ["categoryName", "description"],
@@ -47,6 +51,39 @@ export default function CategoryPageClient() {
         getFormFromRecord: categoryToForm,
         recordFromForm: formToCategory,
         validate: (f) => validateCategoryForm(f),
+        remoteListConfig: {
+          fetchPage: async ({ page, pageSize, search, status, signal }) => {
+            const params = {
+              page,
+              pageSize,
+              search,
+              status,
+              apiFilters: {},
+            };
+            const result = await queryClient.fetchQuery({
+              queryKey: masterKeys.categories.list(params),
+              queryFn: ({ signal: querySignal }) =>
+                CategoryListService.list({
+                  ...params,
+                  signal: signal ?? querySignal,
+                }),
+            });
+            return {
+              items: result.items.map((item) => ({
+                id: item.id,
+                categoryName: item.name,
+                description: item.remark,
+                status: item.status,
+                createdBy: item.createdBy || "—",
+                updatedBy: item.updatedBy || "—",
+                createdAt: item.createdAt,
+                updatedAt: item.updatedAt,
+              })),
+              total: result.total,
+            };
+          },
+          searchDebounceMs: 350,
+        },
         auditColumnVariant: "product",
         auditColumnHeaders: {
           created: "Created",

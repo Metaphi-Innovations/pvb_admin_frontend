@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import {
   Dialog,
@@ -18,21 +18,29 @@ import type { PurchaseOrder } from "../po-data";
 import {
   SHORT_CLOSE_REASONS,
   getPOQtySummary,
-  shortClosePO,
   type ShortCloseReason,
 } from "../po-qty";
-import { CURRENT_USER } from "@/lib/procurement/config";
+import { allocateShortCloseProducts } from "@/services/purchase-order.service";
+import { shortCloseReasonLabel } from "../po-qty";
+
+export interface ShortCloseSubmitPayload {
+  products: { purchaseOrderProductId: string; shortClosedQty: number }[];
+  reason: ShortCloseReason;
+  remarks: string;
+}
 
 export function ShortClosePOModal({
   open,
   onOpenChange,
   po,
   onConfirm,
+  submitting = false,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   po: PurchaseOrder | null;
-  onConfirm: (updated: PurchaseOrder) => void;
+  onConfirm: (payload: ShortCloseSubmitPayload) => void;
+  submitting?: boolean;
 }) {
   const [qty, setQty] = useState("");
   const [reason, setReason] = useState<ShortCloseReason>("vendor_unable_to_supply");
@@ -41,6 +49,15 @@ export function ShortClosePOModal({
 
   const summary = po ? getPOQtySummary(po) : null;
   const pending = summary?.pendingQty ?? 0;
+
+  const allocation = useMemo(() => {
+    if (!po) return [];
+    const n = Number(qty);
+    if (!Number.isFinite(n) || n <= 0) return allocateShortCloseProducts(po.lines, 0);
+    return allocateShortCloseProducts(po.lines, n);
+  }, [po, qty]);
+
+  const cancelledTotal = allocation.reduce((s, r) => s + r.shortClosedQty, 0);
 
   useEffect(() => {
     if (open && po) {
@@ -67,23 +84,26 @@ export function ShortClosePOModal({
       setError("Remarks are required.");
       return;
     }
-    try {
-      const updated = shortClosePO(po, {
-        quantity: n,
-        reason,
-        remarks: remarks.trim(),
-        by: CURRENT_USER,
-      });
-      onConfirm(updated);
-      onOpenChange(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to short close PO.");
+    const products = allocation
+      .filter((row) => row.shortClosedQty > 0)
+      .map((row) => ({
+        purchaseOrderProductId: row.purchaseOrderProductId,
+        shortClosedQty: row.shortClosedQty,
+      }));
+    if (!products.length) {
+      setError("No product lines available to short close.");
+      return;
     }
+    onConfirm({
+      products,
+      reason,
+      remarks: remarks.trim(),
+    });
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md z-[400]">
+      <DialogContent className="max-w-lg z-[400]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-sm">
             <AlertTriangle className="w-4 h-4 text-amber-600" />
@@ -135,6 +155,59 @@ export function ShortClosePOModal({
             <p className="text-[10px] text-muted-foreground">Maximum: {pending}</p>
           </div>
 
+          {/* Read-only allocation: how many units are cancelled per product */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Cancelled Qty by Product</Label>
+            <div className="rounded-lg border border-border overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-muted/40 border-b border-border">
+                    <th className="px-2.5 py-1.5 text-left font-semibold text-muted-foreground">Product</th>
+                    <th className="px-2.5 py-1.5 text-right font-semibold text-muted-foreground">Pending</th>
+                    <th className="px-2.5 py-1.5 text-right font-semibold text-muted-foreground">Cancelled</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allocation.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="px-2.5 py-3 text-center text-muted-foreground">
+                        No product lines with pending quantity.
+                      </td>
+                    </tr>
+                  ) : (
+                    allocation.map((row) => (
+                      <tr key={row.purchaseOrderProductId} className="border-b border-border/60 last:border-0">
+                        <td className="px-2.5 py-1.5">
+                          <p className="font-medium text-foreground">{row.productName || "—"}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono">{row.productCode}</p>
+                        </td>
+                        <td className="px-2.5 py-1.5 text-right tabular-nums">{row.pendingQty}</td>
+                        <td className="px-2.5 py-1.5 text-right tabular-nums font-semibold text-brand-700">
+                          {row.shortClosedQty}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                {allocation.length > 0 && (
+                  <tfoot>
+                    <tr className="bg-muted/20">
+                      <td className="px-2.5 py-1.5 font-medium">Total Cancelled</td>
+                      <td />
+                      <td className="px-2.5 py-1.5 text-right tabular-nums font-bold text-brand-700">
+                        {cancelledTotal}
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Quantity is allocated across products automatically (no per-product input).
+              Reason: {shortCloseReasonLabel(reason)}.
+            </p>
+          </div>
+
           <div className="space-y-1">
             <Label className="text-xs">Reason *</Label>
             <AutocompleteSelect
@@ -170,8 +243,9 @@ export function ShortClosePOModal({
             size="sm"
             className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
             onClick={submit}
+            disabled={submitting}
           >
-            Confirm Short Close
+            {submitting ? "Saving…" : "Confirm Short Close"}
           </Button>
         </DialogFooter>
       </DialogContent>

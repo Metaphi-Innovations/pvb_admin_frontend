@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { ColumnConfig, FilterState, SortState, MasterListingProps } from "./types";
 import { FilterPopover } from "./FilterPopover";
 import { DateRangeFilter } from "./DateRangeFilter";
+import { AuditFilterPopover } from "./AuditFilterPopover";
 import { ActionMenu } from "./ActionMenu";
 import { Pagination } from "./Pagination";
 import { EmptyState } from "./EmptyState";
@@ -202,6 +203,12 @@ export function MasterListing<T = any>({
                           >
                             {col.filterType === "date" ? (
                               <DateRangeFilter
+                                header={col.header}
+                                value={filters[col.key] as any}
+                                onChange={(val) => handleFilterItemChange(col.key, val)}
+                              />
+                            ) : col.filterType === "audit" ? (
+                              <AuditFilterPopover
                                 header={col.header}
                                 value={filters[col.key] as any}
                                 onChange={(val) => handleFilterItemChange(col.key, val)}

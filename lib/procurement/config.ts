@@ -50,6 +50,13 @@ export const PAYMENT_TERMS_OPTIONS = [
   { value: "net-60", label: "Net 60 Days" },
 ];
 
+/** Purchase Order payment type options (maps to backend `payment_type`). */
+export const PAYMENT_TYPE_OPTIONS = [
+  { label: "Immediate", value: "Immediate" },
+  { label: "Credit", value: "Credit" },
+  { label: "Advance", value: "Advance" },
+];
+
 export const DELIVERY_TERMS_OPTIONS = [
   { value: "ex-works", label: "Ex Works" },
   { value: "fob", label: "FOB" },

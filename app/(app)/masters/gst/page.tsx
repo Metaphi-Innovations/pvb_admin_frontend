@@ -1,45 +1,46 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
   Percent,
   CheckCircle2,
-  XCircle,
   X,
   Edit2,
-  CalendarDays,
   Eye,
-  Trash2,
 } from "lucide-react";
 import {
   GSTMaster,
-  loadGSTMasters,
-  saveGSTMasters,
-  todayStr,
-  nextGSTId,
   generateGSTCode,
+  normalizeGst,
 } from "./gst-data";
-import { MiniKPICard } from "@/components/ui/KPICard";
+import {
+  useGstList,
+  useGst,
+  useCreateGst,
+  useUpdateGst,
+  useToggleGstStatus,
+  useExportGst,
+} from "@/hooks/masters";
 import { MasterListingSheets, buildSimpleMasterViewDrawer } from "@/components/masters/MasterListingSheets";
-
 import { MasterListing } from "@/components/listing/MasterListing";
-import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
+import {
+  MASTER_FILTER_FIELD_MAPS,
+  mergeListRequestFilters,
+  resolveListStatus,
+} from "@/lib/masters/list-api-filters";
+import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
+import {
+  getErrorMessage,
+  getMasterListErrorMessage,
+} from "@/lib/masters/master-query-errors";
+import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 
 interface ToastState {
   msg: string;
@@ -61,28 +62,92 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
   );
 }
 
+function toGstRow(item: {
+  id: number;
+  gstUuid: string;
+  gstPercentage: number;
+  remark: string;
+  status: "active" | "inactive";
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+}): GSTMaster {
+  return normalizeGst({
+    id: item.id,
+    gstUuid: item.gstUuid,
+    gstId: generateGSTCode(item.id),
+    gstPercentage: item.gstPercentage,
+    remarks: item.remark,
+    status: item.status,
+    createdBy: item.createdBy || "—",
+    createdDate: item.createdAt ? item.createdAt.slice(0, 10) : "",
+    updatedBy: item.updatedBy || "—",
+    updatedDate: item.updatedAt ? item.updatedAt.slice(0, 10) : "",
+  });
+}
+
 export default function GSTPage() {
-  const [records, setRecords] = useState<GSTMaster[]>([]);
   const [filters, setFilters] = useState<FilterState>({});
+  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
   const [sort, setSort] = useState<SortState>({ key: "gstPercentage", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [viewId, setViewId] = useState<string | null>(null);
 
-  // Sheet & Dialog states
   const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
   const [active, setActive] = useState<GSTMaster | null>(null);
   const [form, setForm] = useState({
     gstPercentage: 0,
     remarks: "",
-    status: "active" as "active" | "inactive",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [deleteTarget, setDeleteTarget] = useState<GSTMaster | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setRecords(loadGSTMasters());
-  }, []);
+  const apiFilters = useMemo(
+    () => mergeListRequestFilters(debouncedFilters, MASTER_FILTER_FIELD_MAPS.gst),
+    [debouncedFilters],
+  );
+  const listStatus = useMemo(
+    () => resolveListStatus(debouncedFilters),
+    [debouncedFilters],
+  );
+
+  const listParams = useMemo<MasterListKeyParams>(
+    () => ({
+      page,
+      pageSize,
+      search: debouncedSearch,
+      status: listStatus,
+      apiFilters,
+      ordering: "",
+    }),
+    [page, pageSize, debouncedSearch, listStatus, apiFilters],
+  );
+
+  const listQuery = useGstList(listParams);
+  const detailQuery = useGst(viewId);
+  const createMutation = useCreateGst();
+  const updateMutation = useUpdateGst();
+  const toggleStatusMutation = useToggleGstStatus();
+  const exportMutation = useExportGst();
+
+  const records = useMemo(
+    () => (listQuery.data?.items ?? []).map(toGstRow),
+    [listQuery.data],
+  );
+  const totalRecords = listQuery.data?.total ?? 0;
+  const loading = listQuery.isFetching;
+  const listError = listQuery.isError
+    ? getMasterListErrorMessage(listQuery.error, {
+        resource: "GST records",
+        notFoundMessage: "GST list endpoint not found.",
+        serverMessage: "Server error while loading GST records.",
+      })
+    : null;
+  const viewLoading = Boolean(viewId) && detailQuery.isFetching;
+  const saving = createMutation.isPending || updateMutation.isPending;
 
   useEffect(() => {
     if (!toast) return;
@@ -90,25 +155,72 @@ export default function GSTPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const toggleStatus = (record: GSTMaster) => {
-    const newStatus = record.status === "active" ? "inactive" : "active";
-    const updated = records.map((r) =>
-      r.id === record.id
-        ? {
-            ...r,
-            status: newStatus as "active" | "inactive",
-            updatedBy: "Admin",
-            updatedDate: todayStr(),
-          }
-        : r,
-    );
-    setRecords(updated);
-    saveGSTMasters(updated);
-    setToast({
-      msg: `GST status updated to ${newStatus === "active" ? "Active" : "Inactive"}`,
-      type: "success",
-    });
+  useEffect(() => {
+    if (!viewId) return;
+    if (detailQuery.isError) {
+      setToast({
+        msg: getErrorMessage(detailQuery.error, "Failed to load GST details."),
+        type: "error",
+      });
+      setViewId(null);
+      return;
+    }
+    if (detailQuery.data) {
+      setActive(toGstRow(detailQuery.data));
+      setSheetMode("view");
+    }
+  }, [viewId, detailQuery.data, detailQuery.isError, detailQuery.error]);
+
+  const toggleStatus = useCallback(
+    (record: GSTMaster) => {
+      if (!record.gstUuid) {
+        setToast({ msg: "GST id missing. Unable to update status.", type: "error" });
+        return;
+      }
+      toggleStatusMutation.mutate(record.gstUuid, {
+        onSuccess: () => {
+          setToast({
+            msg: `GST status updated to ${record.status === "active" ? "Inactive" : "Active"}`,
+            type: "success",
+          });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to update GST status."),
+            type: "error",
+          });
+        },
+      });
+    },
+    [toggleStatusMutation],
+  );
+
+  const openAdd = () => {
+    setForm({ gstPercentage: 0, remarks: "" });
+    setErrors({});
+    setFormError(null);
+    setActive(null);
+    setSheetMode("add");
   };
+
+  const openEdit = (row: GSTMaster) => {
+    setForm({
+      gstPercentage: row.gstPercentage,
+      remarks: row.remarks || "",
+    });
+    setErrors({});
+    setFormError(null);
+    setActive(row);
+    setSheetMode("edit");
+  };
+
+  const openView = useCallback((row: GSTMaster) => {
+    if (!row.gstUuid) {
+      setToast({ msg: "GST id missing. Unable to load details.", type: "error" });
+      return;
+    }
+    setViewId(row.gstUuid);
+  }, []);
 
   const columns: ColumnConfig<GSTMaster>[] = [
     {
@@ -151,7 +263,7 @@ export default function GSTPage() {
       header: "Created",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "audit",
       width: "120px",
       render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />,
     },
@@ -160,7 +272,7 @@ export default function GSTPage() {
       header: "Updated",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "audit",
       width: "120px",
       render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />,
     },
@@ -172,6 +284,7 @@ export default function GSTPage() {
       action: "view",
       icon: Eye,
       onClick: (row) => openView(row),
+      disabled: () => viewLoading,
     },
     {
       label: "Edit",
@@ -179,93 +292,37 @@ export default function GSTPage() {
       icon: Edit2,
       onClick: (row) => openEdit(row),
     },
-    {
-      label: "Delete",
-      action: "delete",
-      icon: Trash2,
-      variant: "destructive",
-      onClick: (row) => setDeleteTarget(row),
-    },
   ];
 
-  const filtered = useMemo(() => {
-    let result = [...records];
+  const displayRecords = useMemo(() => {
+    if (!sort.key || sort.direction === "none") return records;
+    return [...records].sort((a, b) => {
+      const aVal = String(a[sort.key as keyof GSTMaster] ?? "").toLowerCase();
+      const bVal = String(b[sort.key as keyof GSTMaster] ?? "").toLowerCase();
+      const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      return sort.direction === "asc" ? cmp : -cmp;
+    });
+  }, [records, sort]);
 
-    // Search filter
-    if (filters.search) {
-      const q = String(filters.search).toLowerCase();
-      result = result.filter(
-        (r) =>
-          String(r.gstPercentage).includes(q) ||
-          (r.remarks || "").toLowerCase().includes(q)
-      );
-    }
-
-    // Apply column filters
-    result = applyFilters(result, filters);
-
-    // Sorting
-    if (sort.key && sort.direction !== "none") {
-      result.sort((a, b) => {
-        let aVal = a[sort.key as keyof GSTMaster];
-        let bVal = b[sort.key as keyof GSTMaster];
-        if (aVal == null) aVal = "";
-        if (bVal == null) bVal = "";
-        if (typeof aVal === "string") {
-          aVal = aVal.toLowerCase();
-          bVal = (bVal as string).toLowerCase();
-        }
-        const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-        return sort.direction === "asc" ? cmp : -cmp;
-      });
-    }
-
-    return result;
-  }, [records, filters, sort]);
-
-  const paginated = useMemo(() => {
-    const startOffset = (page - 1) * pageSize;
-    return filtered.slice(startOffset, startOffset + pageSize);
-  }, [filtered, page, pageSize]);
+  const isFiltering = isDebouncing;
 
   useEffect(() => {
     setPage(1);
-  }, [filters, sort, pageSize]);
+  }, [debouncedSearch, apiFilters, pageSize]);
 
-  const openAdd = () => {
-    setForm({
-      gstPercentage: 0,
-      remarks: "",
-      status: "active",
-    });
-    setErrors({});
-    setActive(null);
-    setSheetMode("add");
-  };
-
-  const openEdit = (row: GSTMaster) => {
-    setForm({
-      gstPercentage: row.gstPercentage,
-      remarks: row.remarks || "",
-      status: row.status,
-    });
-    setErrors({});
-    setActive(row);
-    setSheetMode("edit");
-  };
-
-  const openView = (row: GSTMaster) => {
-    setActive(row);
-    setSheetMode("view");
-  };
+  useEffect(() => {
+    setPage(1);
+  }, [sort.key, sort.direction]);
 
   const closeSheet = () => {
     setSheetMode(null);
     setActive(null);
+    setViewId(null);
     setErrors({});
+    setFormError(null);
   };
 
-  const setFormField = (key: string, value: any) => {
+  const setFormField = (key: string, value: string | number) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     if (errors[key]) {
       setErrors((prev) => {
@@ -280,6 +337,8 @@ export default function GSTPage() {
     const e: Record<string, string> = {};
     if (form.gstPercentage === undefined || form.gstPercentage === null || form.gstPercentage < 0) {
       e.gstPercentage = "GST Percentage is required and must be non-negative";
+    } else if (form.gstPercentage > 100) {
+      e.gstPercentage = "GST Percentage cannot exceed 100";
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -287,85 +346,73 @@ export default function GSTPage() {
 
   const persist = () => {
     if (!validate()) return;
-    const list = loadGSTMasters();
-    let updatedList: GSTMaster[];
+
     if (sheetMode === "add") {
-      const id = nextGSTId(list);
-      const newRecord: GSTMaster = {
-        id,
-        gstId: generateGSTCode(id),
-        gstCode: generateGSTCode(id),
-        gstPercentage: form.gstPercentage,
-        remarks: form.remarks,
-        status: form.status,
-        createdBy: "Admin",
-        createdDate: todayStr(),
-        updatedBy: "Admin",
-        updatedDate: todayStr(),
-      };
-      updatedList = [...list, newRecord];
-      setToast({ msg: "GST added successfully", type: "success" });
-    } else if (active) {
-      updatedList = list.map((r) =>
-        r.id === active.id
-          ? {
-              ...r,
-              gstPercentage: form.gstPercentage,
-              remarks: form.remarks,
-              status: form.status,
-              updatedBy: "Admin",
-              updatedDate: todayStr(),
-            }
-          : r,
+      setFormError(null);
+      createMutation.mutate(
+        {
+          gstPercentage: form.gstPercentage,
+          remark: form.remarks,
+        },
+        {
+          onSuccess: () => {
+            setToast({ msg: "GST added successfully", type: "success" });
+            setPage(1);
+            closeSheet();
+          },
+          onError: (error) => {
+            setFormError(getErrorMessage(error, "Failed to create GST record."));
+          },
+        },
       );
-      setToast({ msg: "GST updated successfully", type: "success" });
-    } else {
       return;
     }
-    saveGSTMasters(updatedList);
-    setRecords(updatedList);
-    closeSheet();
-  };
 
-  const confirmDelete = () => {
-    if (!deleteTarget) return;
-    const list = loadGSTMasters().filter((r) => r.id !== deleteTarget.id);
-    saveGSTMasters(list);
-    setRecords(list);
-    setDeleteTarget(null);
-    setToast({ msg: "GST deleted successfully", type: "success" });
+    if (!active?.gstUuid) {
+      setFormError("GST id missing. Unable to update.");
+      return;
+    }
+
+    setFormError(null);
+    updateMutation.mutate(
+      {
+        id: active.gstUuid,
+        payload: {
+          gstPercentage: form.gstPercentage,
+          remark: form.remarks,
+        },
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "GST updated successfully", type: "success" });
+          closeSheet();
+        },
+        onError: (error) => {
+          setFormError(getErrorMessage(error, "Failed to update GST record."));
+        },
+      },
+    );
   };
 
   const handleExport = () => {
-    try {
-      const headers = ["ID", "GST Percentage", "Remarks", "Status", "Created By", "Created Date", "Updated By", "Updated Date"];
-      const csvRows = [headers.join(",")];
-      for (const r of records) {
-        const row = [
-          r.id,
-          r.gstPercentage,
-          `"${(r.remarks || "").replace(/"/g, '""')}"`,
-          r.status,
-          r.createdBy,
-          r.createdDate,
-          r.updatedBy,
-          r.updatedDate,
-        ];
-        csvRows.push(row.join(","));
-      }
-      const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.setAttribute("href", url);
-      link.setAttribute("download", `gst_export_${todayStr()}.csv`);
-      link.style.visibility = "hidden";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setToast({ msg: "GST configs exported successfully", type: "success" });
-    } catch {
-      setToast({ msg: "Failed to export GST configs", type: "error" });
-    }
+    exportMutation.mutate(
+      {
+        search: debouncedSearch,
+        status: listStatus,
+        apiFilters,
+      },
+      {
+        onSuccess: () => {
+          setToast({ msg: "GST configs exported successfully", type: "success" });
+        },
+        onError: (error) => {
+          setToast({
+            msg: getErrorMessage(error, "Failed to export GST configs"),
+            type: "error",
+          });
+        },
+      },
+    );
   };
 
   const sheetTitle =
@@ -385,26 +432,13 @@ export default function GSTPage() {
           </p>
         </div>
 
-        {/* <div className="grid grid-cols-3 gap-3">
-          <MiniKPICard label="Total GST Configs" value={records.length} icon={Percent} accent={true} />
-          <MiniKPICard
-            label="Active"
-            value={records.filter((r) => r.status === "active").length}
-            icon={CheckCircle2}
-            accent={false}
-          />
-          <MiniKPICard
-            label="Inactive"
-            value={records.filter((r) => r.status === "inactive").length}
-            icon={XCircle}
-            accent={false}
-          />
-        </div> */}
+        {listError ? <p className="text-xs text-red-600">{listError}</p> : null}
 
         <MasterListing<GSTMaster>
           columns={columns}
-          data={paginated}
-          totalRecords={filtered.length}
+          data={displayRecords}
+          loading={loading || isFiltering}
+          totalRecords={totalRecords}
           page={page}
           pageSize={pageSize}
           onPageChange={setPage}
@@ -430,6 +464,8 @@ export default function GSTPage() {
         onSave={persist}
         sheetTitle={sheetTitle}
         icon={Percent}
+        formError={formError ?? undefined}
+        saving={saving}
         viewDrawer={
           active
             ? buildSimpleMasterViewDrawer<GSTMaster>({
@@ -445,7 +481,6 @@ export default function GSTPage() {
         }
         formContent={
           <div className="space-y-4">
-            {errors._form && <p className="text-xs text-red-600">{errors._form}</p>}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label className="text-xs font-medium">
@@ -459,6 +494,8 @@ export default function GSTPage() {
                   placeholder="e.g., 18.0"
                   step="0.01"
                   min="0"
+                  max="100"
+                  disabled={saving}
                   className={cn(
                     "h-8 text-xs [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
                     errors.gstPercentage && "border-red-400 focus-visible:ring-red-300",
@@ -473,6 +510,7 @@ export default function GSTPage() {
                   onChange={(e) => setFormField("remarks", e.target.value)}
                   placeholder="Enter remarks"
                   rows={3}
+                  disabled={saving}
                   className="text-xs resize-none rounded-lg min-h-[72px]"
                 />
               </div>
@@ -480,25 +518,6 @@ export default function GSTPage() {
           </div>
         }
       />
-
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-sm">Delete record?</DialogTitle>
-            <DialogDescription className="text-xs">
-              This action cannot be undone. The record will be permanently removed.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button size="sm" className="h-8 text-xs text-white bg-red-600 hover:bg-red-700" onClick={confirmDelete}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </AppLayout>
