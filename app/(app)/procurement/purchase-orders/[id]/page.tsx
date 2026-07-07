@@ -49,6 +49,7 @@ import {
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
 import { getPOStatusLabel } from "@/lib/procurement/po-status";
 import { shortCloseReasonLabel } from "../po-qty";
+import { PODetailPageSkeleton } from "../components/POSkeletons";
 
 const PO_TABS: RecordDetailTab[] = [
   { value: "overview", label: "Overview" },
@@ -85,16 +86,24 @@ export default function PODetailPage() {
   const [actionConfirmType, setActionConfirmType] = useState<POActionConfirmType>("close");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [rawDetail, setRawDetail] = useState<Record<string, unknown> | null>(null);
+  const [rawLoading, setRawLoading] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
+    setRawLoading(true);
     PurchaseOrderService.getRawById(id)
       .then((data) => {
-        if (!cancelled) setRawDetail(data);
+        if (!cancelled) {
+          setRawDetail(data);
+          setRawLoading(false);
+        }
       })
       .catch(() => {
-        if (!cancelled) setRawDetail(null);
+        if (!cancelled) {
+          setRawDetail(null);
+          setRawLoading(false);
+        }
       });
     return () => {
       cancelled = true;
@@ -124,7 +133,7 @@ export default function PODetailPage() {
   }, [toast]);
 
   if (detailQuery.isLoading) {
-    return <div className="p-8 text-sm text-muted-foreground">Loading purchase order…</div>;
+    return <PODetailPageSkeleton />;
   }
 
   if (detailQuery.isError || !po) {
@@ -254,51 +263,73 @@ export default function PODetailPage() {
           </div>
         )}
         {activeTab === "integration" && (
-          <POIntegrationTabs
-            po={po}
-            refreshKey={detailQuery.dataUpdatedAt}
-            invoices={invoices}
-            onUpload={() => {
-              setUploadReplace(false);
-              setUploadOpen(true);
-            }}
-            onReplace={() => {
-              setUploadReplace(true);
-              setUploadOpen(true);
-            }}
-          />
+          rawLoading ? (
+            <div className="rounded-xl border border-border bg-white p-4 shadow-sm">
+              <div className="h-8 w-44 rounded bg-muted animate-pulse" />
+              <div className="mt-4 space-y-3">
+                {Array.from({ length: 5 }).map((_, idx) => (
+                  <div key={idx} className="h-10 rounded bg-muted/60 animate-pulse" />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <POIntegrationTabs
+              po={po}
+              refreshKey={detailQuery.dataUpdatedAt}
+              invoices={invoices}
+              onUpload={() => {
+                setUploadReplace(false);
+                setUploadOpen(true);
+              }}
+              onReplace={() => {
+                setUploadReplace(true);
+                setUploadOpen(true);
+              }}
+            />
+          )
         )}
         {activeTab === "follow-up" && (
-          <VendorFollowUpPanel
-            po={po}
-            followups={followups}
-            onSubmitFollowUp={(input) => {
-              followupMutation.mutate(
-                {
-                  purchaseOrderId: po.id,
-                  followupDate: input.followUpAt,
-                  followupType: input.followUpType,
-                  nextFollowupDate: input.nextFollowUpAt,
-                  spokeWith: input.spokeWith,
-                  remarks: input.remarks,
-                },
-                {
-                  onSuccess: () => {
-                    setToast({ msg: "Follow-up saved.", type: "success" });
-                    void detailQuery.refetch();
+          rawLoading ? (
+            <div className="rounded-xl border border-border bg-white p-4 shadow-sm">
+              <div className="h-8 w-48 rounded bg-muted animate-pulse" />
+              <div className="mt-4 space-y-3">
+                {Array.from({ length: 5 }).map((_, idx) => (
+                  <div key={idx} className="h-10 rounded bg-muted/60 animate-pulse" />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <VendorFollowUpPanel
+              po={po}
+              followups={followups}
+              onSubmitFollowUp={(input) => {
+                followupMutation.mutate(
+                  {
+                    purchaseOrderId: po.id,
+                    followupDate: input.followUpAt,
+                    followupType: input.followUpType,
+                    nextFollowupDate: input.nextFollowUpAt,
+                    spokeWith: input.spokeWith,
+                    remarks: input.remarks,
                   },
-                  onError: (error) => {
-                    setToast({
-                      msg: getErrorMessage(error, "Failed to save follow-up."),
-                      type: "error",
-                    });
+                  {
+                    onSuccess: () => {
+                      setToast({ msg: "Follow-up saved.", type: "success" });
+                      void detailQuery.refetch();
+                    },
+                    onError: (error) => {
+                      setToast({
+                        msg: getErrorMessage(error, "Failed to save follow-up."),
+                        type: "error",
+                      });
+                    },
                   },
-                },
-              );
-            }}
-            submitting={followupMutation.isPending}
-            onToast={(msg) => setToast({ msg, type: "success" })}
-          />
+                );
+              }}
+              submitting={followupMutation.isPending}
+              onToast={(msg) => setToast({ msg, type: "success" })}
+            />
+          )
         )}
       </RecordDetailPage>
 

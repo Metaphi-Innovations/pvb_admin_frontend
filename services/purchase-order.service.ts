@@ -62,6 +62,11 @@ function toDisplayName(user: unknown): string {
   return `${first} ${last}`.trim();
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
 function mapDiscountType(value: unknown): "percentage" | "flat" {
   const raw = asString(value).toLowerCase();
   return raw === "flat" || raw === "fixed" ? "flat" : "percentage";
@@ -203,16 +208,14 @@ function mapInvoices(raw: unknown): PurchaseOrder["activity"] {
 }
 
 export function mapDetail(raw: Record<string, unknown>): PurchaseOrder {
-  const supplier =
-    raw.supplier && typeof raw.supplier === "object" && !Array.isArray(raw.supplier)
-      ? (raw.supplier as Record<string, unknown>)
-      : {};
-  const snapshot =
-    raw.supplier_snapshot &&
-    typeof raw.supplier_snapshot === "object" &&
-    !Array.isArray(raw.supplier_snapshot)
-      ? (raw.supplier_snapshot as Record<string, unknown>)
-      : {};
+  const supplier = asRecord(raw.supplier);
+  const snapshot = asRecord(raw.supplier_snapshot);
+  const supplierTypeFromSupplier = asString(
+    asRecord(supplier.supplier_type).supplier_type_name ?? supplier.supplier_type,
+  );
+  const supplierTypeFromSnapshot = asString(
+    asRecord(snapshot.supplier_type).supplier_type_name ?? snapshot.supplier_type,
+  );
   const pr =
     raw.purchase_requisition &&
     typeof raw.purchase_requisition === "object" &&
@@ -270,7 +273,7 @@ export function mapDetail(raw: Record<string, unknown>): PurchaseOrder {
     poDate: asDateOnly(raw.po_date),
     supplierId: toUuidOrNull(raw.supplier_id ?? supplier.supplier_id) ?? 0,
     supplierName,
-    supplierType: "",
+    supplierType: supplierTypeFromSnapshot || supplierTypeFromSupplier || "",
     supplierContactPerson:
       asString(supplier.contact_person) || asString(snapshot.contact_person),
     supplierMobile: asString(supplier.mobile_number) || asString(snapshot.mobile),

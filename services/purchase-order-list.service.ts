@@ -65,7 +65,8 @@ export type PurchaseOrderFilterField =
 function asString(value: unknown): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "number" || typeof value === "boolean")
+    return String(value);
   return "";
 }
 
@@ -105,7 +106,9 @@ function mapSupplierSecondaryLine(supplier: Record<string, unknown>): string {
 
 function mapItem(raw: Record<string, unknown>): PurchaseOrderListItem {
   const supplier =
-    raw.supplier && typeof raw.supplier === "object" && !Array.isArray(raw.supplier)
+    raw.supplier &&
+    typeof raw.supplier === "object" &&
+    !Array.isArray(raw.supplier)
       ? (raw.supplier as Record<string, unknown>)
       : {};
   const pr =
@@ -205,7 +208,11 @@ export function buildPurchaseOrderApiFilters(
   }
 
   const columnStatus = firstFilterValue(filters.status);
-  const statusToken = columnStatus || (tabStatus && tabStatus !== "all" && tabStatus !== "po_return" ? tabStatus : "");
+  const statusToken =
+    columnStatus ||
+    (tabStatus && tabStatus !== "all" && tabStatus !== "po_return"
+      ? tabStatus
+      : "");
   const backendStatus = mapFrontendStatusToBackend(statusToken);
   if (backendStatus) {
     apiFilters.po_status = backendStatus;
@@ -254,7 +261,9 @@ function buildListQueryString(params: PurchaseOrderListParams): string {
 }
 
 export const PurchaseOrderListService = {
-  async list(params: PurchaseOrderListParams): Promise<PurchaseOrderListResult> {
+  async list(
+    params: PurchaseOrderListParams,
+  ): Promise<PurchaseOrderListResult> {
     const response = await axiosInstance.post(
       `${API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.LIST}?${buildListQueryString(params)}`,
       {
@@ -269,7 +278,9 @@ export const PurchaseOrderListService = {
       throw new Error("Unexpected response shape: 'data' must be an array.");
     }
 
-    const items = data.map((row) => mapItem((row ?? {}) as Record<string, unknown>));
+    const items = data.map((row) =>
+      mapItem((row ?? {}) as Record<string, unknown>),
+    );
     const totalRecords = Number(payload.totalRecords);
     const total = Number.isFinite(totalRecords) ? totalRecords : items.length;
 

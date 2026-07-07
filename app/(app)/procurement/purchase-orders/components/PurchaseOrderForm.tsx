@@ -173,12 +173,12 @@ export function emptyPOLine(): POLineItem {
 
 export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 	const pr = sourcePrId ? getPRById(sourcePrId) : null;
-	const supplier = getActiveSuppliers()[0];
+	const supplier = null;
 
 	const lines =
 		pr?.lines.map((l) => {
 			const info = enrichProductForProcurement(l.productId);
-			const cp = resolvePurchaseCostPrice(l.productId, supplier?.id);
+			const cp = resolvePurchaseCostPrice(l.productId, undefined);
 			const orderUom = l.requestUom ?? "Unit";
 			const orderedQtyPack = l.requestedQty;
 			const orderedQty = l.totalQtyBase ?? calcPackingToBaseQty(orderedQtyPack, info?.conversionQty ?? 1);
@@ -211,14 +211,14 @@ export function defaultPOForm(sourcePrId: number | null = null): POFormValues {
 
 	return {
 		poDate: new Date().toISOString().slice(0, 10),
-		supplierId: supplier?.id ? String(supplier.id) : "",
-		supplierName: supplier?.supplierName ?? "",
-		supplierType: supplier?.supplierType ?? "",
-		supplierContactPerson: supplier?.contactPerson ?? "",
-		supplierMobile: supplier?.mobile || supplier?.phone || "",
+		supplierId: "",
+		supplierName: "",
+		supplierType: "",
+		supplierContactPerson: "",
+		supplierMobile: "",
 		supplierMobileCountry: "+91",
-		supplierEmail: supplier?.email ?? "",
-		supplierGstin: supplier?.gstNumber ?? "",
+		supplierEmail: "",
+		supplierGstin: "",
 		referenceNumber: "",
 		currency: "INR",
 		paymentType: "Credit",
@@ -1218,7 +1218,19 @@ export function PurchaseOrderForm({
 												key={a.uid}
 												className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-xs"
 											>
-												<span className="min-w-0 flex-1 truncate text-foreground">{a.name}</span>
+												{a.url ? (
+													<a
+														href={a.url}
+														target="_blank"
+														rel="noreferrer"
+														className="min-w-0 flex-1 truncate text-foreground hover:text-brand-700 hover:underline"
+														title={a.name}
+													>
+														{a.name}
+													</a>
+												) : (
+													<span className="min-w-0 flex-1 truncate text-foreground">{a.name}</span>
+												)}
 												{!readOnly && (
 													<button
 														type="button"
