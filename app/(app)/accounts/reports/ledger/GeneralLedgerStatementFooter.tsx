@@ -28,7 +28,7 @@ export function GeneralLedgerStatementFooter({ summary }: { summary: GeneralLedg
           key={item.label}
           className="flex flex-col justify-center px-2.5 py-1.5 rounded-md border border-border/50 bg-white min-h-[40px]"
         >
-          <p className="text-[10px] font-medium text-muted-foreground leading-none">{item.label}</p>
+          <p className="text-xs font-medium text-muted-foreground leading-none">{item.label}</p>
           <p className="text-xs font-bold tabular-nums text-foreground mt-0.5 truncate">{item.value}</p>
         </div>
       ))}

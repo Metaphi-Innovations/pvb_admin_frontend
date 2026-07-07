@@ -28,6 +28,12 @@ export interface CategoryListResult {
   total: number;
 }
 
+export interface CategoryDropdownItem {
+  id: string;
+  categoryName: string;
+  categoryCode: string;
+}
+
 function asString(value: unknown): string {
   return typeof value === "string" ? value : String(value ?? "");
 }
@@ -60,6 +66,8 @@ function mapItem(raw: Record<string, unknown>, fallbackIndex: number): CategoryL
     updatedAt: asString(raw.updated_at),
     createdBy: toDisplayName(raw.created_by_user),
     updatedBy: toDisplayName(raw.updated_by_user),
+
+
   };
 }
 
@@ -94,6 +102,29 @@ export interface CategoryExportParams {
   search: string;
   status: "all" | "active" | "inactive";
   apiFilters?: Record<string, unknown>;
+}
+
+export interface CategoryDropdownItem {
+  id: string;
+  categoryName: string;
+}
+
+export type CategorySelectOption = { label: string; value: string };
+
+export function toCategoryNameSelectOptions(
+  items: CategoryDropdownItem[],
+  currentName?: string,
+): CategorySelectOption[] {
+  const options = items.map((item) => ({
+    label: item.categoryName,
+    value: item.categoryName,
+  }));
+
+  if (currentName && !options.some((option) => option.value === currentName)) {
+    return [{ label: currentName, value: currentName }, ...options];
+  }
+
+  return options;
 }
 
 export const CategoryListService = {
@@ -166,6 +197,25 @@ export const CategoryListService = {
     if (!body.success) {
       throw new Error(asString(body.message) || "Failed to update category status.");
     }
+  },
+
+  async dropdown(): Promise<CategoryDropdownItem[]> {
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.CATEGORY.DROPDOWN);
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+
+    return data.map((row) => {
+      const item = (row ?? {}) as Record<string, unknown>;
+      return {
+        id: asString(item.id ?? item.category_id),
+        categoryName: asString(item.categoryName ?? item.category_name),
+        categoryCode: asString(item.category_code ?? item.categoryCode),
+      };
+    });
   },
 
   async export(params: CategoryExportParams): Promise<void> {

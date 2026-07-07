@@ -20,11 +20,11 @@ export function InventoryAccountsKpiStrip() {
   return (
     <div className="flex-shrink-0 border-b border-border/60 bg-gradient-to-r from-emerald-50/80 to-white px-4 py-3">
       <div className="flex items-center justify-between gap-2 mb-2">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Inventory Accounting
         </p>
-        <Link href="/accounts/reports/stock-valuation" className="text-[10px] text-primary hover:underline">
-          Stock Valuation →
+        <Link href="/accounts/reports/stock-valuation" className="text-xs text-primary hover:underline">
+          Stock Valuation â†’
         </Link>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">

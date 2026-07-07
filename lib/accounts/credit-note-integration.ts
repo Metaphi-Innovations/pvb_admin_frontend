@@ -286,15 +286,12 @@ export function createCreditNoteFromPaymentDiscount(
 }
 
 export function tryAutoCreditNoteOnPayment(
-  invoiceId: number,
-  paymentDate: string,
-  paymentAmount: number,
+  _invoiceId: number,
+  _paymentDate: string,
+  _paymentAmount: number,
 ): PaymentDiscountCreditNoteResult | null {
-  const invoice = loadInvoices().find((i) => i.id === invoiceId);
-  if (!invoice) return null;
-  const scheme = findEligiblePaymentDiscountScheme(invoice, paymentDate);
-  if (!scheme) return null;
-  return createCreditNoteFromPaymentDiscount(invoice, paymentDate, scheme, paymentAmount);
+  // Credit notes from scheme/payment discounts are generated manually in Accounts.
+  return null;
 }
 
 export function inferCreditNoteSource(rec: Partial<CreditNoteRecord>): CreditNoteSource {

@@ -5,34 +5,40 @@ import { useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Save, CheckCircle2, XCircle } from "lucide-react";
+import { Save, CheckCircle2, XCircle } from "lucide-react";
 import SalesOrderForm, {
 	type SalesOrderFormValues,
 	validateSalesOrderForm,
 } from "../../components/SalesOrderForm";
 import {
 	type ProductCatalogItem,
-	buildOrderFromForm,
 	canEditOrder,
-	getOrderById,
 	orderToFormValues,
 	getCustomersForTransactionDropdown,
 	getSalesmenForOrders,
-	loadOrders,
 	loadProductCatalog,
-	saveOrders,
+	setDynamicProducts,
 } from "../../orders-data";
+import { setDynamicPricingRecords } from "@/app/(app)/masters/pricing/pricing-data";
 import { syncSchemeUtilizationFromOrder } from "@/app/(app)/masters/scheme/scheme-utilization-data";
 import type { Customer } from "@/app/(app)/masters/customers/customer-data";
 import type { Employee } from "@/app/(app)/user-management/employee/employee-data";
 import { validateSalesOrderCreditLimit } from "@/lib/sales/sales-order-credit";
 import type { CustomerCreditSummary } from "@/lib/sales/customer-credit-limit";
 import CreditLimitExceededDialog from "../../components/CreditLimitExceededDialog";
+import {
+	useSalesOrder,
+	useUpdateSalesOrder,
+	useCustomersDropdown,
+	useSalesmenDropdown,
+	useProductsDropdown,
+	useProductPricingDropdown,
+} from "@/hooks/sales/use-sales-orders";
 
 export default function EditSalesOrderPage() {
 	const params = useParams();
 	const router = useRouter();
-	const id = Number(params.id);
+	const id = params.id as string;
 
 	const [customers, setCustomers] = useState<Customer[]>([]);
 	const [salesmen, setSalesmen] = useState<Employee[]>([]);
@@ -45,8 +51,7 @@ export default function EditSalesOrderPage() {
 		updatedBy: string;
 		updatedDate: string;
 	} | null>(null);
-	const [existingOrder, setExistingOrder] =
-		useState<ReturnType<typeof getOrderById>>(undefined);
+
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [toast, setToast] = useState<{
 		msg: string;
@@ -56,12 +61,93 @@ export default function EditSalesOrderPage() {
 		null,
 	);
 
-	useEffect(() => {
-		setCustomers(getCustomersForTransactionDropdown());
-		setSalesmen(getSalesmenForOrders());
-		setProducts(loadProductCatalog());
+	const { data: order, isLoading } = useSalesOrder(id);
+	const updateMutation = useUpdateSalesOrder();
 
-		const order = getOrderById(id);
+	const { data: customerData } = useCustomersDropdown();
+	const { data: salesmanData } = useSalesmenDropdown();
+	const { data: productData } = useProductsDropdown();
+	const { data: pricingData } = useProductPricingDropdown();
+
+	useEffect(() => {
+		if (customerData) {
+			const mapped = customerData.map((c: any) => ({
+				id: c.customer_id,
+				customerCode: c.customer_code,
+				customerName: c.customer_name,
+				customerType: c.customer_type?.customer_type_name || "",
+				status: c.is_active ? "active" : "inactive",
+				mobile: c.mobile_no || "",
+				email: c.email || "",
+				gstApplicable: c.gst_applicable,
+				gstin: c.gstin_no || "",
+				registeredLegalName: c.registered_legal_name || "",
+				registeredAddress: c.registered_gst_address || "",
+				pan: c.pan_no || "",
+				paymentType: c.payment_type || "Credit",
+				creditLimit: Number(c.credit_limit || 0),
+				creditDays: Number(c.credit_days || 0),
+				branches: [],
+			}));
+			setCustomers(mapped as any);
+		}
+	}, [customerData]);
+
+	useEffect(() => {
+		if (salesmanData) {
+			const mapped = salesmanData.map((s: any) => ({
+				id: s.user_id,
+				employeeId: s.employee_id || s.username || "",
+				employeeCode: s.employee_id || s.username || "",
+				firstName: s.first_name || "",
+				lastName: s.last_name || "",
+				fullName: `${s.first_name || ""} ${s.last_name || ""}`.trim() || s.username || "",
+				email: s.email || "",
+				role: s.role?.role_name || s.role_type || "",
+			}));
+			setSalesmen(mapped as any);
+		}
+	}, [salesmanData]);
+
+	useEffect(() => {
+		if (productData) {
+			const mapped = productData.map((p: any) => ({
+				id: p.product_id,
+				code: p.product_code,
+				name: p.product_name,
+				sku: p.sku || "",
+				stock: Number(p.pack_size || 1000), // fallback stock
+				sellingPrice: Number(p.mrp || 0),
+				gstRate: String(p.gst_rate?.gstPercentage || 18),
+				category: p.category?.categoryName || "",
+				segment: p.segment?.segment_name || "",
+				packSize: Number(p.unit_per_packing || 1),
+			}));
+			setProducts(mapped as any);
+			setDynamicProducts(mapped as any);
+		} else {
+			setDynamicProducts(null);
+		}
+	}, [productData]);
+
+	useEffect(() => {
+		if (pricingData) {
+			const mapped = pricingData.map((pr: any) => ({
+				id: pr.id,
+				productId: pr.product_id,
+				state: pr.state_name,
+				customerType: pr.customer_type?.customer_type_name || "",
+				status: pr.is_active ? "active" : "inactive",
+				dealerPrice: Number(pr.dealer_price || 0),
+				costPrice: Number(pr.cost_price || 0),
+			}));
+			setDynamicPricingRecords(mapped as any);
+		} else {
+			setDynamicPricingRecords(null);
+		}
+	}, [pricingData]);
+
+	useEffect(() => {
 		if (!order) return;
 
 		if (!canEditOrder(order)) {
@@ -70,7 +156,6 @@ export default function EditSalesOrderPage() {
 			return;
 		}
 
-		setExistingOrder(order);
 		setOrderNumber(order.soNumber);
 		setForm(orderToFormValues(order));
 		setAuditInfo({
@@ -79,7 +164,7 @@ export default function EditSalesOrderPage() {
 			updatedBy: order.updatedBy,
 			updatedDate: order.updatedDate,
 		});
-	}, [id, router]);
+	}, [order, router]);
 
 	useEffect(() => {
 		if (!toast) return;
@@ -88,7 +173,7 @@ export default function EditSalesOrderPage() {
 	}, [toast]);
 
 	const handleSave = (asDraft: boolean) => {
-		if (!form || !existingOrder) return;
+		if (!form || !order) return;
 
 		const e = validateSalesOrderForm(form);
 		setErrors(e);
@@ -101,60 +186,48 @@ export default function EditSalesOrderPage() {
 		const creditCheck = validateSalesOrderCreditLimit({
 			form,
 			customer,
-			excludeOrderId: existingOrder.id,
+			excludeOrderId: Number(order.id) || undefined,
 		});
 		if (creditCheck.exceeded && creditCheck.summary) {
 			setCreditDialog(creditCheck.summary);
 			return;
 		}
 
-		const updated = buildOrderFromForm(
-			form,
+		updateMutation.mutate(
 			{
-				id: existingOrder.id,
-				soNumber: existingOrder.soNumber,
-				createdBy: existingOrder.createdBy,
-				createdDate: existingOrder.createdDate,
-				parentOrderId: existingOrder.parentOrderId,
-				parentOrderNumber: existingOrder.parentOrderNumber,
-				splitFromOrderId: existingOrder.splitFromOrderId,
-				splitFromOrderNumber: existingOrder.splitFromOrderNumber,
-				referenceOrderNumber: existingOrder.referenceOrderNumber,
-				packingListId: existingOrder.packingListId,
-				warehouseId: existingOrder.warehouseId,
-				warehouseName: existingOrder.warehouseName,
-				packingListNumber: existingOrder.packingListNumber,
-				packingStatus: existingOrder.packingStatus,
+				id: order.id,
+				form,
+				options: {
+					soNumber: order.soNumber,
+					status: asDraft ? "draft" : form.status || "confirmed",
+				},
 			},
-			asDraft,
+			{
+				onSuccess: (updated) => {
+					if (customer) {
+						syncSchemeUtilizationFromOrder(updated, customer, { isDraft: asDraft });
+					}
+					setToast({
+						msg: asDraft
+							? "Sales order saved as draft."
+							: updated.status === "pending_approval"
+								? "Sales order updated and submitted for approval."
+								: "Sales order updated successfully.",
+						type: "success",
+					});
+					setTimeout(() => router.push("/sales/orders"), 1000);
+				},
+				onError: (err: any) => {
+					setToast({
+						msg: err?.message || "Failed to update sales order.",
+						type: "error",
+					});
+				},
+			}
 		);
-
-		if (!updated) {
-			setToast({
-				msg: "Invalid customer or salesman selection.",
-				type: "error",
-			});
-			return;
-		}
-
-		const orders = loadOrders();
-		saveOrders(orders.map((o) => (o.id === updated.id ? updated : o)));
-		if (customer) {
-			syncSchemeUtilizationFromOrder(updated, customer, { isDraft: asDraft });
-		}
-
-		setToast({
-			msg: asDraft
-				? "Sales order saved as draft."
-				: updated.requiresApproval
-					? "Sales order updated and submitted for approval."
-					: "Sales order updated successfully.",
-			type: "success",
-		});
-		setTimeout(() => router.push("/sales/orders"), 1000);
 	};
 
-	if (!form) {
+	if (isLoading || !form) {
 		return (
 			<FormContainer
 				title='Edit Sales Order'
@@ -183,6 +256,7 @@ export default function EditSalesOrderPage() {
 						size='sm'
 						className='h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white'
 						onClick={() => handleSave(false)}
+						disabled={updateMutation.isPending}
 					>
 						<Save className='w-3.5 h-3.5' /> Save Changes
 					</Button>
@@ -200,7 +274,7 @@ export default function EditSalesOrderPage() {
 				products={products}
 				showStatus
 				auditInfo={auditInfo ?? undefined}
-				excludeOrderId={existingOrder?.id}
+				excludeOrderId={Number(order?.id) || undefined}
 			/>
 
 			{toast && (

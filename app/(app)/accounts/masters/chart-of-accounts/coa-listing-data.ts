@@ -4,21 +4,150 @@ import {
   formatCoaHierarchyPath,
   getDirectChildren,
   getSearchMatchingNodes,
+  resolveParentName,
 } from "./chart-of-accounts-data";
 
 import { ledgerHasChildLedgers } from "@/lib/accounts/coa-hierarchy";
+import { collectDescendantLedgers } from "@/lib/accounts/coa-accounting-view";
+import { isGstCoaLedger } from "@/lib/accounts/gst-coa-sync";
+import { isTdsCoaLedger } from "@/lib/accounts/tds-coa-sync";
 
 import {
-
   computePeriodClosingBalance,
-
   ledgerMovementMapForRange,
-
 } from "@/lib/accounts/ledger-transaction-date-filter";
 
 import { fromSignedBalance, openingSignedBalance, toSignedBalance } from "@/lib/accounts/running-balance";
+import { computeLedgerCurrentBalance } from "../ledgers/ledgers-utils";
 import { buildBundledCoaDemoLedgers } from "./coa-demo-bundle";
 import { getBundledDemoTransactions } from "./coa-demo-transactions";
+
+export type CoaLedgerSourceLabel =
+  | "Manual"
+  | "Customer Master"
+  | "Supplier Master"
+  | "Bank Master"
+  | "GST Master"
+  | "TDS Master"
+  | "Employee Master"
+  | "System";
+
+export interface CoaLedgerListingRow {
+  ledger: ChartOfAccount;
+  parentGroupName: string;
+  source: CoaLedgerSourceLabel;
+  openingAmount: number;
+  openingSide: "Debit" | "Credit";
+  currentAmount: number;
+  currentSide: "Debit" | "Credit";
+}
+
+/** Resolve user-facing source label for a COA ledger row. */
+export function resolveCoaLedgerSource(
+  ledger: ChartOfAccount,
+  records: ChartOfAccount[],
+): CoaLedgerSourceLabel {
+  if (isGstCoaLedger(ledger, records)) return "GST Master";
+  if (isTdsCoaLedger(ledger)) return "TDS Master";
+
+  switch (ledger.erpSourceModule) {
+    case "customer_master":
+      return "Customer Master";
+    case "vendor_master":
+      return "Supplier Master";
+    case "bank_master":
+      return "Bank Master";
+    case "employee_master":
+      return "Employee Master";
+    default:
+      break;
+  }
+
+  if (ledger.isSystemGenerated || ledger.isSystem) return "System";
+  return "Manual";
+}
+
+function ledgerListingMatchesSearch(
+  row: CoaLedgerListingRow,
+  query: string,
+): boolean {
+  const q = query.toLowerCase();
+  return (
+    row.ledger.accountName.toLowerCase().includes(q) ||
+    row.ledger.accountCode.toLowerCase().includes(q) ||
+    row.parentGroupName.toLowerCase().includes(q) ||
+    row.source.toLowerCase().includes(q)
+  );
+}
+
+/** Flat ledger rows for a Level-3 accounting group (all descendant ledgers). */
+export function buildCoaLedgerListingRows(
+  records: ChartOfAccount[],
+  accountingGroupId: number,
+  options: { search?: string } = {},
+): CoaLedgerListingRow[] {
+  const search = options.search?.trim() ?? "";
+  const ledgers = collectDescendantLedgers(records, accountingGroupId)
+    .filter((l) => !l.bankGroupFlag)
+    .sort((a, b) => a.accountName.localeCompare(b.accountName));
+
+  let rows = ledgers.map((ledger) => {
+    const current = computeLedgerCurrentBalance(ledger);
+    return {
+      ledger,
+      parentGroupName: ledger.parentAccountId
+        ? resolveParentName(records, ledger.parentAccountId)
+        : "",
+      source: resolveCoaLedgerSource(ledger, records),
+      openingAmount: ledger.openingBalance,
+      openingSide: ledger.balanceType,
+      currentAmount: current.amount,
+      currentSide: current.balanceType,
+    };
+  });
+
+  if (search) {
+    rows = rows.filter((row) => ledgerListingMatchesSearch(row, search));
+  }
+
+  return rows;
+}
+
+function sumLedgerListingBalances(rows: CoaLedgerListingRow[]) {
+  let openingSigned = 0;
+  let currentSigned = 0;
+
+  for (const row of rows) {
+    openingSigned += toSignedBalance(row.openingAmount, row.openingSide);
+    currentSigned += toSignedBalance(row.currentAmount, row.currentSide);
+  }
+
+  const opening = fromSignedBalance(openingSigned);
+  const current = fromSignedBalance(currentSigned);
+  return {
+    openingAmount: opening.amount,
+    openingSide: opening.balanceType,
+    currentAmount: current.amount,
+    currentSide: current.balanceType,
+  };
+}
+
+export interface CoaLedgerListingSummary {
+  totalLedgers: number;
+  openingAmount: number;
+  openingSide: "Debit" | "Credit";
+  currentAmount: number;
+  currentSide: "Debit" | "Credit";
+}
+
+export function computeCoaLedgerListingSummary(
+  rows: CoaLedgerListingRow[],
+): CoaLedgerListingSummary {
+  return {
+    totalLedgers: rows.length,
+    ...sumLedgerListingBalances(rows),
+  };
+}
 
 function coaListingMovementMapForRange(
   from: string,

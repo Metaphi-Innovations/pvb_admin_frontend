@@ -9,8 +9,8 @@ import {
 } from "../debit-notes-data";
 
 const TABLE_HEAD =
-  "px-2.5 py-2 text-[12px] font-semibold uppercase text-[#6B7280] whitespace-nowrap bg-[#FFF3E6]";
-const TABLE_CELL = "px-2.5 py-1.5 align-middle text-[13px] text-foreground";
+  "px-2.5 py-2 text-xs font-semibold uppercase text-[#6B7280] whitespace-nowrap bg-[#FFF3E6]";
+const TABLE_CELL = "px-2.5 py-1.5 align-middle text-xs text-foreground";
 const ROW_CLASS = "border-b border-border/50 hover:bg-muted/10 min-h-[42px]";
 
 export interface DebitNoteProductTableProps {
@@ -90,7 +90,7 @@ export function DebitNoteProductTable({
                         min={0}
                         max={Number.isFinite(maxQty) ? maxQty : undefined}
                         className={cn(
-                          "h-8 w-[72px] text-[13px] text-right tabular-nums ml-auto",
+                          "h-8 w-[72px] text-xs text-right tabular-nums ml-auto",
                           overMax && "border-red-400",
                         )}
                         value={line.returnQty || ""}

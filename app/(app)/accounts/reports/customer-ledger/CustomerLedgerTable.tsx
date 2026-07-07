@@ -62,7 +62,7 @@ export function CustomerLedgerTable({
         </AccountsTableBody>
         <AccountsTableFoot>
           <AccountsTableRow className="bg-muted/20 font-semibold">
-            <AccountsTableCell colSpan={5} className="text-[11px] text-foreground py-2">
+            <AccountsTableCell colSpan={5} className="text-xs text-foreground py-2">
               Total
             </AccountsTableCell>
             <AccountsTableCell align="right" money className="py-2">

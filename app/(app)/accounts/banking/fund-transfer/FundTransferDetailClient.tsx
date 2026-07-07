@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="space-y-0.5">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
+      <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
       <div className="text-xs text-foreground">{value}</div>
     </div>
   );
@@ -53,7 +53,7 @@ export default function FundTransferDetailClient({ transferId }: { transferId: n
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Banking", "Fund Transfer", "/accounts/banking/fund-transfer")}
       title={transfer.transferNo}
-      description={`${transfer.fromAccountName} → ${transfer.toAccountName}`}
+      description={`${transfer.fromAccountName} â†’ ${transfer.toAccountName}`}
       actions={
         <button
           type="button"
@@ -71,7 +71,7 @@ export default function FundTransferDetailClient({ transferId }: { transferId: n
           <div className="flex items-start justify-between gap-3 pb-3 border-b border-border">
             <div>
               <p className="text-sm font-semibold text-foreground">Transfer Details</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">View only — completed transfers cannot be edited.</p>
+              <p className="text-xs text-muted-foreground mt-0.5">View only — completed transfers cannot be edited.</p>
             </div>
             <StatusBadge status={transfer.status} />
           </div>
@@ -88,7 +88,7 @@ export default function FundTransferDetailClient({ transferId }: { transferId: n
           </div>
 
           <div className="pt-2 border-t border-border">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Attachment</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Attachment</p>
             {transfer.attachmentName ? (
               <div className="flex items-center gap-2 text-xs bg-muted/20 border border-border rounded-lg px-3 py-2">
                 <Paperclip className="w-4 h-4 text-muted-foreground" />
@@ -113,7 +113,7 @@ export default function FundTransferDetailClient({ transferId }: { transferId: n
         <div className="rounded-xl border border-border bg-white shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-border bg-muted/20">
             <p className="text-sm font-semibold text-foreground">Accounting Entry Preview</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5">
               Contra voucher posted to General Ledger, Bank Book and Cash Book.
             </p>
           </div>
@@ -150,7 +150,7 @@ export default function FundTransferDetailClient({ transferId }: { transferId: n
           </div>
         </div>
 
-        <div className="bg-muted/30 rounded-xl p-3 grid grid-cols-2 gap-y-1.5 gap-x-4 text-[11px]">
+        <div className="bg-muted/30 rounded-xl p-3 grid grid-cols-2 gap-y-1.5 gap-x-4 text-xs">
           <div>
             <span className="text-muted-foreground">Created By</span>
             <p className="font-medium">{transfer.createdBy}</p>

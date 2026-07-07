@@ -24,7 +24,7 @@ import { formatINR, PAYMENTS_LIST_PATH } from "./payment-utils";
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="text-xs font-medium text-foreground mt-0.5">{value ?? "—"}</p>
     </div>
   );
@@ -82,7 +82,7 @@ export default function PaymentViewPageClient({ paymentId }: { paymentId: number
       }
       headerActions={
         actions.includes("pay") ? (
-          <Button size="sm" className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1" onClick={() => setPayOpen(true)}>
+          <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1" onClick={() => setPayOpen(true)}>
             <Banknote className="w-4 h-4" /> Record Payment
           </Button>
         ) : undefined
@@ -140,7 +140,7 @@ export default function PaymentViewPageClient({ paymentId }: { paymentId: number
               <DetailRow label="3-Way Match" value={<ThreeWayMatchStatusBadge status={matchCtx.matchStatus} />} />
             </div>
             {mismatchWarning && (
-              <div className="flex gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">
+              <div className="flex gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
                 <p>{mismatchWarning}</p>
               </div>
@@ -174,7 +174,7 @@ export default function PaymentViewPageClient({ paymentId }: { paymentId: number
               <thead className="border-b">
                 <tr>
                   {["Date", "Amount", "Mode", "Reference", "Transaction", "Entered By"].map((h) => (
-                    <th key={h} className="py-1.5 text-left text-[10px] uppercase text-muted-foreground font-semibold">
+                    <th key={h} className="py-1.5 text-left text-xs uppercase text-muted-foreground font-semibold">
                       {h}
                     </th>
                   ))}
@@ -215,7 +215,7 @@ export default function PaymentViewPageClient({ paymentId }: { paymentId: number
                 <div key={i} className="text-xs border-l-2 border-brand-200 pl-3 py-0.5">
                   <p className="font-medium capitalize">{a.action.replaceAll("_", " ")}</p>
                   <p className="text-muted-foreground">{a.detail}</p>
-                  <p className="text-[10px] text-muted-foreground">{a.by} · {new Date(a.at).toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">{a.by} · {new Date(a.at).toLocaleString()}</p>
                 </div>
               ))}
             </div>

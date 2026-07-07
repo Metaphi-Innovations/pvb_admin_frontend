@@ -43,6 +43,8 @@ interface PackingBatchSelectionTableProps {
   selections: Record<string, number>;
   onSelectionsChange: (selections: Record<string, number>) => void;
   caseSize?: number;
+  allocatedQty?: number;
+  pendingQty?: number;
 }
 
 export function PackingBatchSelectionTable({
@@ -53,12 +55,30 @@ export function PackingBatchSelectionTable({
   selections,
   onSelectionsChange,
   caseSize = 10,
+  allocatedQty,
+  pendingQty,
 }: PackingBatchSelectionTableProps) {
   const rows = useMemo(() => {
     const all = getPackingBatchInventoryRows(productName, warehouse, masterToday(), sku);
+    
+    // Ensure any pre-allocated/selected batch is present in the inventory rows
+    Object.keys(selections).forEach((bNo) => {
+      if (!all.some((r) => r.batchNumber === bNo)) {
+        all.push({
+          batchNumber: bNo,
+          manufacturingDate: "—",
+          expiryDate: "—",
+          availableQty: selections[bNo],
+          remainingDays: 999,
+          status: "Available",
+          isSelectable: true,
+        });
+      }
+    });
+
     const fefo = getFefoRecommendedBatchNumbers(all, requiredQty);
-    return all.filter((r) => fefo.has(r.batchNumber));
-  }, [productName, warehouse, sku, requiredQty]);
+    return all.filter((r) => fefo.has(r.batchNumber) || selections[r.batchNumber] > 0);
+  }, [productName, warehouse, sku, requiredQty, selections]);
 
   const handleQtyChange = (row: PackingBatchInventoryRow, value: string) => {
     if (!row.isSelectable) return;
@@ -103,8 +123,8 @@ export function PackingBatchSelectionTable({
                 "SKU",
                 "Mfg Date",
                 "Expiry Date",
-                "Available Qty",
-                "Required Qty",
+                "Allocated Qty",
+                "Pending Qty",
                 "Packing Qty",
                 "Status",
               ].map((header) => (
@@ -112,8 +132,8 @@ export function PackingBatchSelectionTable({
                   key={header}
                   className={cn(
                     "px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap",
-                    (header === "Available Qty" ||
-                      header === "Required Qty" ||
+                    (header === "Allocated Qty" ||
+                      header === "Pending Qty" ||
                       header === "Packing Qty") &&
                       "text-right",
                   )}
@@ -130,12 +150,9 @@ export function PackingBatchSelectionTable({
               const isExpired = row.status === "Expired";
               const isNearExpiry = row.status === "Near Expiry";
               const statusCfg = STATUS_CFG[row.status];
-              const maxPackingQty = getMaxBatchPackingQty(
-                row.batchNumber,
-                selections,
-                requiredQty,
-                row.availableQty,
-              );
+
+              const displayAllocated = allocatedQty !== undefined ? allocatedQty : row.availableQty;
+              const displayPending = pendingQty !== undefined ? pendingQty : requiredQty;
 
               return (
                 <tr
@@ -171,20 +188,20 @@ export function PackingBatchSelectionTable({
                   <td className="px-3 py-2 text-right">
                     <div className="flex flex-col items-end">
                       <span className="text-xs font-mono font-bold tabular-nums text-foreground">
-                        {row.availableQty}
+                        {displayAllocated}
                       </span>
                       <span className="text-[10px] text-muted-foreground font-medium whitespace-nowrap">
-                        {formatCaseLoose(row.availableQty) || "0 Ls"}
+                        {formatCaseLoose(displayAllocated) || "0 Ls"}
                       </span>
                     </div>
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex flex-col items-end">
                       <span className="text-xs font-semibold tabular-nums text-foreground">
-                        {requiredQty}
+                        {displayPending}
                       </span>
                       <span className="text-[10px] text-muted-foreground font-medium whitespace-nowrap">
-                        {formatCaseLoose(requiredQty) || "0 Ls"}
+                        {formatCaseLoose(displayPending) || "0 Ls"}
                       </span>
                     </div>
                   </td>

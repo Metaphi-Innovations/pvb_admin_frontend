@@ -44,7 +44,7 @@ function GstToggle({
 						disabled={disabled}
 						onClick={() => onChange(yes)}
 						className={cn(
-							"h-7 px-2.5 text-[11px] font-medium rounded-md transition-colors",
+							"h-7 px-2.5 text-sm font-medium rounded-md transition-colors",
 							active
 								? "bg-brand-600 text-white shadow-sm"
 								: "text-muted-foreground hover:text-foreground",
@@ -111,7 +111,7 @@ export function InvoiceAdditionalExpensesEditor({
 								<th
 									key={h || "actions"}
 									className={cn(
-										"px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
+										"px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
 										["Amount", "GST %", "GST Amount", "Total Amount"].includes(h) &&
 											"text-right",
 									)}
@@ -147,7 +147,7 @@ export function InvoiceAdditionalExpensesEditor({
 													})
 												}
 											>
-												<SelectTrigger className="h-9 text-[13px] font-medium">
+												<SelectTrigger className="h-9 text-sm font-medium">
 													<SelectValue placeholder="Select expense head…" />
 												</SelectTrigger>
 												<SelectContent>
@@ -203,7 +203,7 @@ export function InvoiceAdditionalExpensesEditor({
 										</td>
 										<td className="p-2 min-w-[140px]">
 											<Input
-												className="h-9 text-[13px] font-medium"
+												className="h-9 text-sm font-medium"
 												placeholder="Optional"
 												disabled={disabled}
 												value={row.remarks}
@@ -239,7 +239,7 @@ export function InvoiceAdditionalExpensesEditor({
 							type="button"
 							variant="outline"
 							size="sm"
-							className="h-9 text-[13px] font-medium gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+							className="h-9 text-sm font-medium gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
 							onClick={() => removeRow(expenses[expenses.length - 1].id)}
 						>
 							<Trash2 className="w-4 h-4" /> Delete Expense
@@ -249,7 +249,7 @@ export function InvoiceAdditionalExpensesEditor({
 						type="button"
 						variant="outline"
 						size="sm"
-						className="h-9 text-[13px] font-medium gap-1.5"
+						className="h-9 text-sm font-medium gap-1.5"
 						onClick={addRow}
 					>
 						<Plus className="w-4 h-4" /> Add Expense
@@ -257,7 +257,7 @@ export function InvoiceAdditionalExpensesEditor({
 				</div>
 			)}
 
-			<p className="text-[11px] text-muted-foreground">
+			<p className="text-xs text-muted-foreground">
 				Expense heads will be linked to Expense Ledger / COA in a future release.
 			</p>
 		</div>

@@ -45,7 +45,7 @@ export function SalesInvoiceDispatchDetailsDialog({
               <DialogTitle className="text-sm font-semibold leading-tight font-mono text-brand-700">
                 {title}
               </DialogTitle>
-              <DialogDescription className="text-[11px] text-muted-foreground mt-0.5">
+              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
                 Dispatch & transport details
               </DialogDescription>
             </div>
@@ -57,7 +57,7 @@ export function SalesInvoiceDispatchDetailsDialog({
         </div>
 
         <div className="px-4 py-3 border-t border-border bg-muted/20 flex justify-end flex-shrink-0">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" size="sm" className="h-8 text-sm" onClick={() => onOpenChange(false)}>
             Close
           </Button>
         </div>

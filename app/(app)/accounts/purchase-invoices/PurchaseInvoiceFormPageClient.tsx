@@ -57,7 +57,7 @@ interface LineItem {
   total: number;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function emptyLine(): LineItem {
   return {
@@ -149,7 +149,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-// ─── GRN Selector ────────────────────────────────────────────────────────────
+// â”€â”€â”€ GRN Selector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function GrnSelector({
   grns,
@@ -195,12 +195,12 @@ function GrnSelector({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold font-mono text-blue-700">{grn.grnNo}</span>
-                <Badge variant="outline" className="text-[10px] h-4 text-emerald-700 border-emerald-200">
+                <Badge variant="outline" className="text-xs h-4 text-emerald-700 border-emerald-200">
                   QC Completed
                 </Badge>
               </div>
               <p className="text-xs font-medium mt-0.5">{grn.vendorName}</p>
-              <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
+              <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{grn.grnDate}</span>
                 <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{grn.warehouse}</span>
                 <span className="flex items-center gap-1"><Package className="w-3 h-3" />{grn.totalQty} qty · {grn.totalProducts} items</span>
@@ -209,9 +209,9 @@ function GrnSelector({
                 {grn.items.map((item) => (
                   <span
                     key={item.productId}
-                    className="inline-flex items-center rounded bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                    className="inline-flex items-center rounded bg-muted/60 px-1.5 py-0.5 text-xs text-muted-foreground"
                   >
-                    {item.productName} × {item.receivedQty} {item.unit}
+                    {item.productName} Ã— {item.receivedQty} {item.unit}
                   </span>
                 ))}
               </div>
@@ -224,7 +224,7 @@ function GrnSelector({
   );
 }
 
-// ─── Main Form Component ──────────────────────────────────────────────────────
+// â”€â”€â”€ Main Form Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId?: number }) {
   const router = useRouter();
@@ -397,7 +397,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <span className="font-bold font-mono text-blue-700 text-sm">{selectedGrn.grnNo}</span>
-                    <Badge className="text-[10px] h-4 bg-emerald-100 text-emerald-700 border-emerald-200">
+                    <Badge className="text-xs h-4 bg-emerald-100 text-emerald-700 border-emerald-200">
                       QC Completed
                     </Badge>
                   </div>
@@ -408,7 +408,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-9 text-[13px] font-medium"
+                  className="h-9 text-sm font-medium"
                   onClick={() => {
                     setSelectedGrn(null);
                     setShowGrnSelector(true);
@@ -457,7 +457,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
               <Label className="text-xs">Invoice Date *</Label>
               <Input
                 type="date"
-                className="h-9 text-[13px] font-medium mt-1"
+                className="h-9 text-sm font-medium mt-1"
                 value={invoiceDate}
                 onChange={(e) => setInvoiceDate(e.target.value)}
               />
@@ -465,7 +465,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
             <div>
               <Label className="text-xs">Supplier Invoice No *</Label>
               <Input
-                className="h-9 text-[13px] font-medium mt-1"
+                className="h-9 text-sm font-medium mt-1"
                 value={vendorInvoiceNo}
                 onChange={(e) => setVendorInvoiceNo(e.target.value)}
                 placeholder="e.g. INV/AC/2026/001"
@@ -475,7 +475,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
               <Label className="text-xs">Due Date</Label>
               <Input
                 type="date"
-                className="h-9 text-[13px] font-medium mt-1"
+                className="h-9 text-sm font-medium mt-1"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
               />
@@ -503,7 +503,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
 
         {/* Line Items */}
         <Section title="Item Details">
-          <p className="text-[11px] text-muted-foreground mb-2">
+          <p className="text-xs text-muted-foreground mb-2">
             Products from Product Master — HSN and GST auto-fill; edit qty, rate, and discount only.
           </p>
           <div className="overflow-x-auto">
@@ -541,7 +541,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                     </td>
                     <td className="py-1.5 pr-2">
                       <Input
-                        className="h-9 text-[13px] font-medium font-mono bg-muted/25"
+                        className="h-9 text-sm font-medium font-mono bg-muted/25"
                         readOnly
                         value={line.hsnCode}
                         placeholder="HSN"
@@ -550,21 +550,21 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                     <td className="py-1.5 pr-2">
                       <Input
                         type="number"
-                        className="h-9 text-[13px] font-medium text-right"
+                        className="h-9 text-sm font-medium text-right"
                         value={line.qty}
                         onChange={(e) => updateLine(idx, { qty: Number(e.target.value) || 0 })}
                       />
                     </td>
                     <td className="py-1.5 pr-2">
                       <Input
-                        className="h-9 text-[13px] font-medium bg-muted/25"
+                        className="h-9 text-sm font-medium bg-muted/25"
                         readOnly
                         value={line.unit}
                       />
                     </td>
                     <td className="py-1.5 pr-2">
                       <AccountsMoneyInput
-                        className="h-9 text-[13px] font-medium text-right"
+                        className="h-9 text-sm font-medium text-right"
                         value={line.rate}
                         onChange={(v) => updateLine(idx, { rate: v })}
                       />
@@ -572,7 +572,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                     <td className="py-1.5 pr-2">
                       <Input
                         type="number"
-                        className="h-9 text-[13px] font-medium text-right"
+                        className="h-9 text-sm font-medium text-right"
                         value={line.discountPct}
                         onChange={(e) => updateLine(idx, { discountPct: Number(e.target.value) || 0 })}
                       />
@@ -580,7 +580,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
                     <td className="py-1.5 pr-2">
                       <Input
                         type="number"
-                        className="h-9 text-[13px] font-medium text-right bg-muted/25"
+                        className="h-9 text-sm font-medium text-right bg-muted/25"
                         readOnly
                         value={line.gstPct}
                       />
@@ -608,7 +608,7 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
           <Button
             variant="outline"
             size="sm"
-            className="h-9 text-[13px] font-medium gap-1 mt-2"
+            className="h-9 text-sm font-medium gap-1 mt-2"
             onClick={addLine}
           >
             <Plus className="w-4 h-4" /> Add Line
@@ -666,14 +666,14 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
           <Button
             variant="outline"
             size="sm"
-            className="h-9 text-xs"
+            className="h-9 text-sm"
             onClick={() => router.push("/accounts/purchase-invoices")}
           >
             Cancel
           </Button>
           <Button
             size="sm"
-            className="h-9 text-xs bg-brand-600 text-white gap-1.5"
+            className="h-9 text-sm bg-brand-600 text-white gap-1.5"
             onClick={doSave}
             disabled={saving || !selectedGrn}
           >
@@ -686,12 +686,12 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
   );
 }
 
-// ── Tiny helpers ──────────────────────────────────────────────────────────────
+// â”€â”€ Tiny helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function Th({ children, w = "" }: { children?: React.ReactNode; w?: string }) {
   return (
     <th
-      className={`pb-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground ${w}`}
+      className={`pb-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground ${w}`}
     >
       {children}
     </th>

@@ -60,7 +60,7 @@ export default function EditPOPage() {
         id: po.id,
         form,
         poNumber: po.poNumber,
-        status: submit ? "pending_approval" : po.status === "rejected" ? "draft" : po.status,
+        status: submit ? "approved" : po.status === "rejected" ? "draft" : po.status,
       },
       {
         onSuccess: () => {

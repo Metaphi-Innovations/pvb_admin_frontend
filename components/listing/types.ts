@@ -9,6 +9,7 @@ export interface ColumnConfig<T = any> {
   filterable?: boolean;
   filterType?: FilterType;
   filterOptions?: { label: string; value: string }[]; // For dropdown filters
+  auditUserOptions?: { label: string; value: string }[]; // For audit user picker
   sticky?: boolean; // e.g. for actions
   width?: string;
   align?: "left" | "center" | "right";
@@ -70,4 +71,5 @@ export interface MasterListingProps<T = any> {
   // State from parent to keep track of current filters/sorting if controlled
   currentFilters?: FilterState;
   currentSort?: SortState;
+  onOpenFilter?: (columnKey: string) => void;
 }

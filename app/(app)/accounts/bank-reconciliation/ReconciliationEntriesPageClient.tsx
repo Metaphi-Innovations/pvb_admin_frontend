@@ -31,7 +31,7 @@ function StatementDetailsCell({ entry }: { entry: BankStatementEntry }) {
   return (
     <div className="min-w-0">
       {entry.referenceNo && (
-        <p className="text-[10px] font-mono text-muted-foreground leading-tight">Ref# {entry.referenceNo}</p>
+        <p className="text-xs font-mono text-muted-foreground leading-tight">Ref# {entry.referenceNo}</p>
       )}
       <p className="text-xs whitespace-normal break-words leading-snug mt-0.5">{entry.narration}</p>
     </div>
@@ -145,7 +145,7 @@ export default function ReconciliationEntriesPageClient({
           </Button>
           <div className="min-w-0">
             <p className="text-sm font-semibold truncate">{statement.bankAccountName}</p>
-            <p className="text-[10px] text-muted-foreground truncate">
+            <p className="text-xs text-muted-foreground truncate">
               {period} · {uncategorized} uncategorized
             </p>
           </div>
@@ -154,7 +154,7 @@ export default function ReconciliationEntriesPageClient({
           {selectedIds.size > 0 && (
             <Button
               size="sm"
-              className="h-9 text-[13px] font-medium bg-brand-600 text-white"
+              className="h-9 text-sm font-medium bg-brand-600 text-white"
               onClick={() => setActiveEntries(selectedEntries)}
             >
               Categorize ({selectedIds.size})
@@ -163,7 +163,7 @@ export default function ReconciliationEntriesPageClient({
           <Button
             variant="outline"
             size="sm"
-            className="h-9 text-[13px] font-medium"
+            className="h-9 text-sm font-medium"
             disabled={exporting}
             onClick={handleExport}
           >
@@ -184,7 +184,7 @@ export default function ReconciliationEntriesPageClient({
           />
         </div>
         <Select value={matchStatus} onValueChange={setMatchStatus}>
-          <SelectTrigger className="h-8 w-[120px] text-xs">
+          <SelectTrigger className="h-8 w-[120px] text-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -197,7 +197,7 @@ export default function ReconciliationEntriesPageClient({
           </SelectContent>
         </Select>
         <Select value={entryType} onValueChange={setEntryType}>
-          <SelectTrigger className="h-8 w-[120px] text-xs">
+          <SelectTrigger className="h-8 w-[120px] text-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -206,7 +206,7 @@ export default function ReconciliationEntriesPageClient({
             <SelectItem value="credit" className="text-xs">Deposits</SelectItem>
           </SelectContent>
         </Select>
-        <span className="text-[10px] text-muted-foreground ml-auto hidden sm:inline">
+        <span className="text-xs text-muted-foreground ml-auto hidden sm:inline">
           W: {formatINR(stats.totalDebit)} · D: {formatINR(stats.totalCredit)}
         </span>
       </div>
@@ -307,7 +307,7 @@ export default function ReconciliationEntriesPageClient({
         {panelEntries.length > 0 ? (
           <Button
             size="sm"
-            className="w-full h-9 text-[13px] font-medium bg-brand-600 text-white"
+            className="w-full h-9 text-sm font-medium bg-brand-600 text-white"
             onClick={() => setMobilePanelOpen(true)}
           >
             Categorize Manually

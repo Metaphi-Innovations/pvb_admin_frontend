@@ -25,7 +25,7 @@ export interface PRAttachment {
 
 export interface PRLineItem {
   uid: string;
-  productId: number;
+  productId: number | string;
   productCode: string;
   productName: string;
   description: string;
@@ -321,7 +321,7 @@ export function recalcPR(pr: PurchaseRequest): PurchaseRequest {
   return {
     ...pr,
     lines: pr.lines
-      .filter((l) => l.productId > 0 || l.productName)
+      .filter((l) => (Boolean(l.productId) && l.productId !== 0 && l.productId !== "0") || l.productName)
       .map((l) => migrateLine(l)),
   };
 }

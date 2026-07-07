@@ -68,11 +68,11 @@ export const PRODUCT_DOCUMENT_KINDS: {
   kind: ProductDocumentKind;
   label: string;
 }[] = [
-  { kind: "technical_datasheet", label: "Technical Datasheet" },
-  { kind: "product_brochure", label: "Product Brochure" },
-  { kind: "msds", label: "MSDS" },
-  { kind: "label_artwork", label: "Label Artwork" },
-];
+    { kind: "technical_datasheet", label: "Technical Datasheet" },
+    { kind: "product_brochure", label: "Product Brochure" },
+    { kind: "msds", label: "MSDS" },
+    { kind: "label_artwork", label: "Label Artwork" },
+  ];
 
 export interface ProductDocument {
   id: string;
@@ -372,9 +372,9 @@ export interface Product {
   /** User-entered SKU (separate from product code). */
   sku: string;
   hsnCode: string;
-  hsnId?: number;
+  hsnId?: number | string;
   gstRate: string;
-  gstId?: number;
+  gstId?: number | string;
   packSize?: number;
   baseUnit?: string;
   /** Measure of Unit (MoU) */
@@ -420,6 +420,7 @@ export interface Product {
   boxWidth?: number;
   boxHeight?: number;
   cft?: number;
+  hsnuuid?: string;
   inventoryAccount?: string;
   salesAccount?: string;
   purchaseAccount?: string;
@@ -1037,7 +1038,16 @@ function migrateProduct(raw: Record<string, unknown>): Product {
   };
 }
 
+let dynamicProducts: Product[] | null = null;
+
+export function setDynamicProducts(products: Product[] | null) {
+  dynamicProducts = products;
+}
+
 export function loadProducts(): Product[] {
+  if (dynamicProducts) {
+    return dynamicProducts;
+  }
   if (typeof window === "undefined") return SEED_PRODUCTS;
   ensureProductDemoSeed();
   return loadProductsRaw();

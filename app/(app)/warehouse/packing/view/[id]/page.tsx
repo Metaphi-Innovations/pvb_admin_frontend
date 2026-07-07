@@ -8,9 +8,10 @@ import {
   Package, FileText, ClipboardCheck, User, Truck
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { getPackingUnionById } from "../../services";
-import { PackingRecordUnion, SalesOrderRecord, SalesOrderProduct, PackingRecord } from "../../types";
+import { PackingListService } from "@/services/packing-list.service";
+import { PackingDoneService } from "@/services/packing-done.service";
 import { STATUS_BADGE_CONFIG } from "../../constants";
+import { PackingRecordUnion, SalesOrderRecord, SalesOrderProduct, PackingRecord } from "../../types";
 import { formatBatchExpiryDate } from "../../../dispatch/near-expiry-dispatch";
 import { NearExpirySchemeBadge } from "../../../dispatch/components/NearExpirySchemeBadge";
 import { NearExpirySchemeInfoPanel } from "../../../dispatch/components/NearExpirySchemeInfoPanel";
@@ -41,10 +42,22 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
   const [unionRecord, setUnionRecord] = useState<PackingRecordUnion | null>(null);
 
   useEffect(() => {
-    const record = getPackingUnionById(params.id);
-    if (record) {
-      setUnionRecord(record);
+    let active = true;
+    async function load() {
+      try {
+        const pd = await PackingDoneService.getById(params.id);
+        if (active) setUnionRecord({ type: "packing", data: pd });
+      } catch (err) {
+        try {
+          const pl = await PackingListService.getById(params.id);
+          if (active) setUnionRecord({ type: "order", data: pl });
+        } catch (inner) {
+          console.error("Failed to load details:", inner);
+        }
+      }
     }
+    load();
+    return () => { active = false; };
   }, [params.id]);
 
   if (!unionRecord) {
@@ -75,6 +88,7 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
   const isPurchaseReturn = isPurchaseReturnDoc(rowData);
   const isStockTransfer = isStockTransferDoc(rowData);
   const qtyLabel = getPackingQtyLabel(docType);
+  const showBatchInfo = isPurchaseReturn || (rowData.products?.some((p: any) => p.batchNumber) ?? false);
 
   return (
     <RecordDetailPage
@@ -229,7 +243,7 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
                     <tr className="border-b border-border bg-slate-50/50">
                       <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Product</th>
                       <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">SKU</th>
-                      {isPurchaseReturn && (
+                      {showBatchInfo && (
                         <>
                           <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Batch</th>
                           <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">GRN No</th>
@@ -246,10 +260,10 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
                   </thead>
                   <tbody>
                     {rowData.products?.map((p: SalesOrderProduct) => (
-                      <tr key={p.sku} className="border-b border-border/60 hover:bg-slate-50/40">
+                      <tr key={`${p.sku}-${p.batchNumber || ""}`} className="border-b border-border/60 hover:bg-slate-50/40">
                         <td className="py-3 px-3 text-xs font-bold text-foreground">{p.product}</td>
                         <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{p.sku}</td>
-                        {isPurchaseReturn && (
+                        {showBatchInfo && (
                           <>
                             <td className="py-3 px-3 text-xs font-mono text-foreground">{p.batchNumber ?? "—"}</td>
                             <td className="py-3 px-3 text-xs font-mono text-navy-700">{p.grnNo ?? "—"}</td>

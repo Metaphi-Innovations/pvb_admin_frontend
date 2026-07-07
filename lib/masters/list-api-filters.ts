@@ -282,6 +282,19 @@ export const MASTER_FILTER_FIELD_MAPS = {
     status: statusColumnMapper,
     ...AUDIT_FILTER_FIELDS,
   },
+  tds: {
+    sectionCode: "tds_code",
+    sectionName: "tds_section_name",
+    tdsRate: (value) => {
+      const raw = Array.isArray(value) ? value[0] : value;
+      const num = Number(String(raw).replace(/%/g, "").trim());
+      return Number.isFinite(num) ? { tds_rate: num } : null;
+    },
+    applicableTo: "applicable_to",
+    description: "description",
+    status: statusColumnMapper,
+    ...AUDIT_FILTER_FIELDS,
+  },
   documentType: {
     title: "title",
     description: "description",
@@ -295,4 +308,29 @@ export const MASTER_FILTER_FIELD_MAPS = {
     status: statusColumnMapper,
     ...AUDIT_FILTER_FIELDS,
   },
+  unit: {
+    unitCode: "unit_code",
+    unitName: "unit_name",
+    shortName: "short_name",
+    parentUomName: "uom.unit_name",
+    conversionFactor: (value) => {
+      const raw = Array.isArray(value) ? value[0] : value;
+      const num = Number(String(raw).trim());
+      return Number.isFinite(num) ? { conversion_factor: num } : null;
+    },
+    status: statusColumnMapper,
+    ...AUDIT_FILTER_FIELDS,
+  },
+  formulation: {
+    formulationName: "formulation_name",
+    formulationCode: "formulation_code",
+    description: "description",
+    status: statusColumnMapper,
+    ...AUDIT_FILTER_FIELDS,
+  },
+  product: {
+    status: statusColumnMapper,
+    ...AUDIT_FILTER_FIELDS,
+  },
 } as const satisfies Record<string, Record<string, FieldMapper>>;
+

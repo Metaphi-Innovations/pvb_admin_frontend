@@ -29,6 +29,14 @@ export interface HsnListResult {
   total: number;
 }
 
+export interface HsnDropdownItem {
+  id: string;
+  hsnCode: string;
+  hsnDescription: string;
+  gstRate: string;
+  gstId: string;
+}
+
 export interface HsnCreatePayload {
   hsnDescription: string;
   gstId: string;
@@ -205,5 +213,27 @@ export const HsnListService = {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
+  },
+
+  async dropdown(): Promise<HsnDropdownItem[]> {
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.HSN.DROPDOWN);
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+
+    return data.map((row) => {
+      const item = (row ?? {}) as Record<string, unknown>;
+      const gst = item.gst as Record<string, unknown> | undefined;
+      return {
+        id: asString(item.id),
+        hsnCode: asString(item.hsn_code ?? item.hsnCode ?? `HSN-${String(item.sr_no || item.id).padStart(4, "0")}`),
+        hsnDescription: asString(item.hsnDescription ?? item.hsn_description),
+        gstRate: gst ? `${asString(gst.gstPercentage)}%` : "",
+        gstId: asString(item.gstId ?? item.gst_id),
+      };
+    });
   },
 };

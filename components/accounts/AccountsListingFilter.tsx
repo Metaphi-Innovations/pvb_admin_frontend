@@ -53,8 +53,8 @@ export function AccountsFilterDateRangeSection({
           aria-label="From date"
           className={ACCOUNTS_DATE_FILTER_WIDTH_CLASS}
         />
-        <span className="text-[11px] text-[#9CA3AF] select-none" aria-hidden>
-          –
+        <span className="text-xs text-[#9CA3AF] select-none" aria-hidden>
+          —
         </span>
         <AccountsDateInput
           value={dateTo}
@@ -115,7 +115,7 @@ export function AccountsListingFilterPopover({
         <button
           type="button"
           className={cn(
-            "h-7 px-2.5 text-xs border rounded-lg inline-flex items-center gap-1.5 transition-colors font-medium",
+            "h-7 px-2.5 text-sm border rounded-lg inline-flex items-center gap-1.5 transition-colors font-medium",
             activeCount > 0
               ? "border-brand-400 bg-brand-50 text-brand-700"
               : "border-border text-muted-foreground hover:bg-muted hover:text-foreground bg-white",
@@ -125,7 +125,7 @@ export function AccountsListingFilterPopover({
           <SlidersHorizontal className="w-4 h-4" />
           Filter
           {activeCount > 0 && (
-            <span className="w-4 h-4 text-[10px] bg-brand-600 text-white rounded-full inline-flex items-center justify-center font-bold">
+            <span className="w-4 h-4 text-xs bg-brand-600 text-white rounded-full inline-flex items-center justify-center font-bold">
               {activeCount}
             </span>
           )}
@@ -178,7 +178,7 @@ export function AccountsListingFilterPopover({
           <button
             type="button"
             onClick={onApply}
-            className="h-7 px-3 text-xs bg-brand-600 text-white rounded-md hover:bg-brand-700 transition-colors"
+            className="h-7 px-3 text-sm bg-brand-600 text-white rounded-md hover:bg-brand-700 transition-colors"
           >
             Apply
           </button>
@@ -272,7 +272,7 @@ export function AccountsListingDateFilter({
           <button
             type="button"
             className={cn(
-              "h-7 px-2.5 text-xs border rounded-lg inline-flex items-center gap-1.5 transition-colors font-medium",
+              "h-7 px-2.5 text-sm border rounded-lg inline-flex items-center gap-1.5 transition-colors font-medium",
               activeCount > 0
                 ? "border-brand-400 bg-brand-50 text-brand-700"
                 : "border-border text-muted-foreground hover:bg-muted hover:text-foreground bg-white",
@@ -282,7 +282,7 @@ export function AccountsListingDateFilter({
             <SlidersHorizontal className="w-4 h-4" />
             Filter
             {activeCount > 0 && (
-              <span className="w-4 h-4 text-[10px] bg-brand-600 text-white rounded-full inline-flex items-center justify-center font-bold">
+              <span className="w-4 h-4 text-xs bg-brand-600 text-white rounded-full inline-flex items-center justify-center font-bold">
                 {activeCount}
               </span>
             )}
@@ -327,7 +327,7 @@ export function AccountsListingDateFilter({
             <button
               type="button"
               onClick={handleApply}
-              className="h-7 px-3 text-xs bg-brand-600 text-white rounded-md hover:bg-brand-700 transition-colors"
+              className="h-7 px-3 text-sm bg-brand-600 text-white rounded-md hover:bg-brand-700 transition-colors"
             >
               Apply
             </button>

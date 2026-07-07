@@ -38,6 +38,7 @@ import {
   useUpdateSegment,
   useToggleSegmentStatus,
   useExportSegments,
+  useSegmentFilterDropdown,
 } from "@/hooks/masters";
 import {
   MASTER_FILTER_FIELD_MAPS,
@@ -180,6 +181,36 @@ export default function SegmentMasterPage() {
   const toggleStatusMutation = useToggleSegmentStatus();
   const exportMutation = useExportSegments();
 
+  const segmentNameOptionsQuery = useSegmentFilterDropdown("segment_name");
+  const descriptionOptionsQuery = useSegmentFilterDropdown("description");
+  const statusOptionsQuery = useSegmentFilterDropdown("is_active");
+  const createdByOptionsQuery = useSegmentFilterDropdown("created_by_user__username");
+  const updatedByOptionsQuery = useSegmentFilterDropdown("updated_by_user__username");
+
+  const segmentNameOptions = useMemo(
+    () => segmentNameOptionsQuery.data ?? [],
+    [segmentNameOptionsQuery.data],
+  );
+  const descriptionOptions = useMemo(
+    () => descriptionOptionsQuery.data ?? [],
+    [descriptionOptionsQuery.data],
+  );
+  const statusOptions = useMemo(() => {
+    if (statusOptionsQuery.data?.length) return statusOptionsQuery.data;
+    return [
+      { label: "Active", value: "active" },
+      { label: "Inactive", value: "inactive" },
+    ];
+  }, [statusOptionsQuery.data]);
+  const createdByOptions = useMemo(
+    () => createdByOptionsQuery.data ?? [],
+    [createdByOptionsQuery.data],
+  );
+  const updatedByOptions = useMemo(
+    () => updatedByOptionsQuery.data ?? [],
+    [updatedByOptionsQuery.data],
+  );
+
   const records = useMemo(
     () => (listQuery.data?.items ?? []).map(toSegmentRow),
     [listQuery.data],
@@ -302,13 +333,15 @@ export default function SegmentMasterPage() {
     setFormError(null);
   };
 
-  const columns: ColumnConfig<SegmentRecord>[] = [
+  const columns: ColumnConfig<SegmentRecord>[] = useMemo(
+    () => [
     {
       key: "segmentName",
       header: "Segment Name",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: segmentNameOptions,
       width: "200px",
       render: (_val, row) => (
         <button
@@ -325,7 +358,8 @@ export default function SegmentMasterPage() {
       header: "Description",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: descriptionOptions,
       width: "280px",
       render: (val) => (
         <span className="text-xs text-muted-foreground">{val ? String(val) : "—"}</span>
@@ -337,10 +371,7 @@ export default function SegmentMasterPage() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: [
-        { label: "Active", value: "active" },
-        { label: "Inactive", value: "inactive" },
-      ],
+      filterOptions: statusOptions,
       width: "100px",
       render: (_val, row) => (
         <ListingStatusToggle
@@ -355,6 +386,7 @@ export default function SegmentMasterPage() {
       sortable: true,
       filterable: true,
       filterType: "audit",
+      auditUserOptions: createdByOptions,
       width: "150px",
       render: (_val, row) => (
         <ListingUserCell name={row.createdBy} date={row.createdAt} />
@@ -366,12 +398,22 @@ export default function SegmentMasterPage() {
       sortable: true,
       filterable: true,
       filterType: "audit",
+      auditUserOptions: updatedByOptions,
       width: "150px",
       render: (_val, row) => (
         <ListingUserCell name={row.updatedBy} date={row.updatedAt} />
       ),
     },
-  ];
+  ],
+    [
+      segmentNameOptions,
+      descriptionOptions,
+      statusOptions,
+      createdByOptions,
+      updatedByOptions,
+      openView,
+    ],
+  );
 
   const actions: ActionItemConfig<SegmentRecord>[] = [
     {

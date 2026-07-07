@@ -64,7 +64,7 @@ export const VISUAL_BADGE_LABEL: Record<CoaVisualLevel, string> = {
 
   account_group: "Group",
 
-  sub_group: "Sub Group",
+  sub_group: "Accounting Group",
 
   ledger: "Ledger",
 
@@ -149,10 +149,10 @@ export const VISUAL_ICON_CLASS: Record<CoaVisualLevel, string> = {
 
 
 export const VISUAL_ROW_CLASS: Record<CoaVisualLevel, string> = {
-  primary_head: "text-[13px] font-semibold text-[#1F2937]",
-  account_group: "text-[13px] font-medium text-[#1F2937]",
-  sub_group: "text-[13px] font-medium text-[#1F2937]/90",
-  ledger: "text-[13px] font-medium text-[#1F2937]/85",
+  primary_head: "text-xs font-semibold text-[#1F2937]",
+  account_group: "text-xs font-medium text-[#1F2937]",
+  sub_group: "text-xs font-medium text-[#1F2937]/90",
+  ledger: "text-xs font-medium text-[#1F2937]/85",
 };
 
 
@@ -211,9 +211,9 @@ export const LEVEL_ROW_CLASS: Record<ChartOfAccount["nodeLevel"], string> = {
 
 
 export const LEVEL_SELECTED_ROW_CLASS: Record<ChartOfAccount["nodeLevel"], string> = {
-  primary_head: "text-[13px] font-semibold text-brand-800",
-  account_group: "text-[13px] font-semibold text-brand-800",
-  ledger: "text-[13px] font-semibold text-[#1F2937]",
+  primary_head: "text-xs font-semibold text-brand-800",
+  account_group: "text-xs font-semibold text-brand-800",
+  ledger: "text-xs font-semibold text-[#1F2937]",
 };
 
 
@@ -222,9 +222,9 @@ export const LEVEL_TITLE_CLASS: Record<ChartOfAccount["nodeLevel"], string> = {
 
   primary_head: "text-xl font-bold text-foreground",
 
-  account_group: "text-lg font-semibold text-foreground",
+  account_group: "text-base font-semibold text-foreground",
 
-  ledger: "text-lg font-semibold text-foreground",
+  ledger: "text-base font-semibold text-foreground",
 
 };
 

@@ -249,6 +249,8 @@ function PackingProductRow({
               requiredQty={requiredQty}
               selections={batchSelections}
               onSelectionsChange={onBatchSelectionsChange}
+              allocatedQty={product.orderedQty}
+              pendingQty={product.pendingQty}
             />
           )}
         </div>

@@ -109,7 +109,7 @@ export default function AllocateReceiptClient() {
       description={`Allocate ${record.receiptNo} against open invoices for ${record.customerName}.`}
       actions={
         <Link href="/accounts/receivables/receipt-allocation">
-          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1">
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1">
             <ArrowLeft className="w-4 h-4" /> Back
           </Button>
         </Link>
@@ -137,7 +137,7 @@ export default function AllocateReceiptClient() {
             ["Balance To Allocate", formatMoney(record.unallocatedAmount)],
           ].map(([label, value]) => (
             <div key={label}>
-              <p className="text-[10px] uppercase text-muted-foreground font-semibold">{label}</p>
+              <p className="text-xs uppercase text-muted-foreground font-semibold">{label}</p>
               <p className="font-medium mt-0.5">{value}</p>
             </div>
           ))}
@@ -150,7 +150,7 @@ export default function AllocateReceiptClient() {
             <thead className="border-b">
               <tr>
                 {["Select", "Invoice No", "Invoice Date", "Due Date", "Invoice Amt", "Already Paid", "Outstanding", "Allocation"].map((h) => (
-                  <th key={h} className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground">{h}</th>
+                  <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold uppercase text-muted-foreground">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -171,7 +171,7 @@ export default function AllocateReceiptClient() {
                   <td className="px-3 py-2.5 text-xs text-right tabular-nums">{formatMoney(inv.outstanding)}</td>
                   <td className="px-3 py-2.5">
                     <AccountsMoneyInput
-                      className="h-9 text-[13px] font-medium w-28"
+                      className="h-9 text-sm font-medium w-28"
                       disabled={!selected[inv.invoiceId]}
                       value={amounts[inv.invoiceId] ?? ""}
                       onChange={(v) => setAmounts((a) => ({ ...a, [inv.invoiceId]: String(v) }))}

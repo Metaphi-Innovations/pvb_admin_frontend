@@ -34,7 +34,7 @@ export function JournalLedgerImpactPreview({
         <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Ledger Impact Preview
         </h2>
-        <p className="text-[11px] text-muted-foreground mt-1">
+        <p className="text-xs text-muted-foreground mt-1">
           Accounting entries when this journal is posted. Draft saves do not post to the ledger.
         </p>
       </div>
@@ -42,7 +42,7 @@ export function JournalLedgerImpactPreview({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="rounded-md border border-border/50 overflow-hidden">
           <div className="px-3 py-2 bg-muted/25 border-b border-border/50">
-            <p className="text-[10px] font-semibold uppercase text-muted-foreground">Debit Side</p>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Debit Side</p>
           </div>
           <div className="divide-y divide-border/30">
             {debitLines.length === 0 ? (
@@ -55,7 +55,7 @@ export function JournalLedgerImpactPreview({
                     {formatMoney(line.debit ?? 0)}
                   </p>
                   {line.note ? (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{line.note}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{line.note}</p>
                   ) : null}
                 </div>
               ))
@@ -65,7 +65,7 @@ export function JournalLedgerImpactPreview({
 
         <div className="rounded-md border border-border/50 overflow-hidden">
           <div className="px-3 py-2 bg-muted/25 border-b border-border/50">
-            <p className="text-[10px] font-semibold uppercase text-muted-foreground">Credit Side</p>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Credit Side</p>
           </div>
           <div className="divide-y divide-border/30">
             {creditLines.length === 0 ? (
@@ -78,7 +78,7 @@ export function JournalLedgerImpactPreview({
                     {formatMoney(line.credit ?? 0)}
                   </p>
                   {line.note ? (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{line.note}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{line.note}</p>
                   ) : null}
                 </div>
               ))

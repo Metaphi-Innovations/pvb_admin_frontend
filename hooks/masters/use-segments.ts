@@ -5,8 +5,10 @@ import {
   SegmentListService,
   type SegmentCreatePayload,
   type SegmentExportParams,
+  type SegmentFilterField,
   type SegmentListParams,
   type SegmentUpdatePayload,
+  type SegmentDropdownItem,
 } from "@/services/segment-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
 
@@ -41,7 +43,10 @@ export function useCreateSegment() {
   return useMutation({
     mutationFn: (payload: SegmentCreatePayload) => SegmentListService.create(payload),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: masterKeys.segments.lists() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: masterKeys.segments.lists() }),
+        queryClient.invalidateQueries({ queryKey: masterKeys.segments.dropdown() }),
+      ]);
     },
   });
 }
@@ -57,6 +62,7 @@ export function useUpdateSegment() {
         queryClient.invalidateQueries({
           queryKey: masterKeys.segments.detail(variables.id),
         }),
+        queryClient.invalidateQueries({ queryKey: masterKeys.segments.dropdown() }),
       ]);
     },
   });
@@ -73,13 +79,30 @@ export function useToggleSegmentStatus() {
         queryClient.invalidateQueries({
           queryKey: masterKeys.segments.detail(variables.id),
         }),
+        queryClient.invalidateQueries({ queryKey: masterKeys.segments.dropdown() }),
       ]);
     },
+  });
+}
+
+export function useSegmentsDropdown() {
+  return useQuery({
+    queryKey: masterKeys.segments.dropdown(),
+    queryFn: () => SegmentListService.dropdown(),
+    staleTime: 60_000,
   });
 }
 
 export function useExportSegments() {
   return useMutation({
     mutationFn: (params: SegmentExportParams) => SegmentListService.export(params),
+  });
+}
+
+export function useSegmentFilterDropdown(fieldName: SegmentFilterField) {
+  return useQuery({
+    queryKey: masterKeys.segments.filterDropdown(fieldName),
+    queryFn: ({ signal }) => SegmentListService.getFilterDropdown(fieldName, signal),
+    staleTime: 5 * 60 * 1000,
   });
 }

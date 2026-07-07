@@ -448,7 +448,7 @@ export default function StockValuationPageClient() {
               </AccountsTableBody>
               <AccountsTableFoot>
                 <AccountsTableRow>
-                  <AccountsTableCell colSpan={7} className="font-semibold text-[11px] text-foreground">
+                  <AccountsTableCell colSpan={7} className="font-semibold text-xs text-foreground">
                     Totals
                   </AccountsTableCell>
                   <AccountsTableCell align="right" className="font-semibold text-xs tabular-nums">

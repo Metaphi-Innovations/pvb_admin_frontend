@@ -111,7 +111,7 @@ export function CoaLedgerDetailPanel({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-xl font-bold text-foreground truncate">{ledger.accountName}</h2>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5">
               {ledgerType} • {parentGroup}
             </p>
           </div>

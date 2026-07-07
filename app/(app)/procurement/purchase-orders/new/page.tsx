@@ -43,7 +43,7 @@ function NewPOContent() {
       {
         form,
         poNumber: submit ? poNumber : poNumber || undefined,
-        status: submit ? "pending_approval" : "draft",
+        status: submit ? "approved" : "draft",
       },
       {
         onSuccess: (created) => {

@@ -22,7 +22,7 @@ export {
 export const ACCOUNTS_DEFAULT_PAGE_SIZE = 25;
 export const ACCOUNTS_PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 
-/* ── COA-style listing toolbar row ── */
+/* â”€â”€ COA-style listing toolbar row â”€â”€ */
 
 export interface AccountsListingToolbarProps {
   children?: React.ReactNode;
@@ -70,7 +70,7 @@ export function AccountsListingToolbar({
   );
 }
 
-/* ── Toolbar: search · filter · export ── */
+/* â”€â”€ Toolbar: search · filter · export â”€â”€ */
 
 export interface AccountsTableToolbarSearch {
   value: string;
@@ -126,7 +126,7 @@ export function AccountsTableToolbar({
   );
 }
 
-/* ── Simple count footer (COA-style) ── */
+/* â”€â”€ Simple count footer (COA-style) â”€â”€ */
 
 export function AccountsListingCountFooter({
   children,
@@ -142,12 +142,12 @@ export function AccountsListingCountFooter({
         className,
       )}
     >
-      <p className="text-[11px] text-muted-foreground">{children}</p>
+      <p className="text-xs text-muted-foreground">{children}</p>
     </div>
   );
 }
 
-/* ── Pagination footer ── */
+/* â”€â”€ Pagination footer â”€â”€ */
 
 export interface AccountsTablePaginationProps {
   page: number;
@@ -179,7 +179,7 @@ export function AccountsTablePagination({
   );
 }
 
-/* ── Table card: filter card · tabs · scroll · footer ── */
+/* â”€â”€ Table card: filter card · tabs · scroll · footer â”€â”€ */
 
 export interface AccountsTableListingProps {
   summary?: React.ReactNode;

@@ -36,7 +36,7 @@ export function formToPR(
     purpose: form.purpose,
     remarks: form.remarks,
     status: meta.status,
-    lines: form.lines.filter((l) => l.productId > 0),
+    lines: form.lines.filter((l) => Boolean(l.productId) && l.productId !== 0 && l.productId !== "0"),
     attachments: form.attachments,
     convertedPoIds: meta.convertedPoIds ?? [],
     createdBy: meta.createdBy,

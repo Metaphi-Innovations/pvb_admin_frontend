@@ -28,7 +28,7 @@ export function AdjustmentSummaryCard({
   const balanceLabel = variant === "credit" ? "Balance Credit Allowed" : "Balance Debit Allowed";
 
   return (
-    <div className="rounded-lg border border-brand-200/60 bg-brand-50/30 p-3 grid grid-cols-2 sm:grid-cols-3 gap-3 text-[13px] text-slate-800">
+    <div className="rounded-lg border border-brand-200/60 bg-brand-50/30 p-3 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs text-slate-800">
       <div>
         <p className={ACCOUNTS_FILTER_LABEL_CLASS}>{partyLabel}</p>
         <p className="font-medium mt-0.5">{partyName || "—"}</p>

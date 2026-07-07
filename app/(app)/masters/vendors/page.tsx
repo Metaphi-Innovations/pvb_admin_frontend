@@ -24,12 +24,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
 import {
-  type Vendor,
-  loadVendors,
-  saveVendors,
-  todayStr,
-} from "./vendor-data";
+  SupplierListService,
+  sortStateToOrdering,
+  type SupplierListRecord,
+} from "@/services/supplier-list.service";
+import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 import { CURRENT_USER } from "@/lib/procurement/config";
 import { MiniKPICard } from "@/components/ui/KPICard";
 
@@ -37,6 +38,7 @@ import { MasterListing } from "@/components/listing/MasterListing";
 import { applyFilters } from "@/components/listing/filter-utils";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { ListingUserCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
+import { useSuppliers, useToggleSupplierStatus, useExportSuppliers } from "@/hooks/masters";
 
 interface ToastState {
   msg: string;
@@ -60,19 +62,34 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 
 export default function VendorMasterPage() {
   const router = useRouter();
-  const [records, setRecords] = useState<Vendor[]>([]);
   const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "vendorName", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "supplierName", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Vendor | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SupplierListRecord | null>(null);
 
-  const refresh = useCallback(() => setRecords(loadVendors()), []);
+  // const refresh = useCallback(() => setRecords(loadVendors()), []);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  // useEffect(() => {
+  //   refresh();
+  // }, [refresh]);
+
+  const listParams: MasterListKeyParams = useMemo(() => {
+    const { search, status, ...rest } = filters as Record<string, unknown>;
+    return {
+      page,
+      pageSize,
+      search: (search as string) ?? "",
+      ordering: sortStateToOrdering(sort.key, sort.direction),
+      status: (status as "all" | "active" | "inactive") ?? "all",
+      apiFilters: rest,
+    };
+  }, [filters, sort, page, pageSize]);
+
+  const { data, isLoading, isFetching } = useSuppliers(listParams);
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
 
   useEffect(() => {
     if (!toast) return;
@@ -80,52 +97,63 @@ export default function VendorMasterPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const toggleStatus = (record: Vendor) => {
-    const nextStatus = record.status === "active" ? "inactive" : "active";
-    const updated: Vendor = {
-      ...record,
-      status: nextStatus,
-      updatedBy: CURRENT_USER,
-      updatedDate: todayStr(),
-    };
-    const updatedList = records.map((x) => (x.id === record.id ? updated : x));
-    saveVendors(updatedList);
-    setRecords(updatedList);
-    setToast({ msg: `Vendor status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`, type: "success" });
+  // const toggleStatus = (record: Vendor) => {
+  //   const nextStatus = record.status === "active" ? "inactive" : "active";
+  //   const updated: Vendor = {
+  //     ...record,
+  //     status: nextStatus,
+  //     updatedBy: CURRENT_USER,
+  //     updatedDate: todayStr(),
+  //   };
+  //   const updatedList = records.map((x) => (x.id === record.id ? updated : x));
+  //   saveVendors(updatedList);
+  //   setRecords(updatedList);
+  //   setToast({ msg: `Vendor status updated to ${nextStatus === "active" ? "Active" : "Inactive"}`, type: "success" });
+  // };
+
+  const toggleStatusMutation = useToggleSupplierStatus();
+  const toggleStatus = (record: SupplierListRecord) => {
+    const nextActive = record.status !== "active";
+    toggleStatusMutation.mutate(
+      { id: record.supplierUuid, isActive: nextActive },
+      {
+        onSuccess: () => setToast({ msg: `Vendor status updated to ${nextActive ? "Active" : "Inactive"}`, type: "success" }),
+        onError: (err) => setToast({ msg: SupplierListService.extractErrorMessage(err, "Failed to update status"), type: "error" }),
+      },
+    );
   };
 
   const confirmDelete = () => {
     if (!deleteTarget) return;
-    const updatedList = records.map((v) =>
-      v.id === deleteTarget.id
-        ? {
-            ...v,
-            status: "inactive" as const,
-            updatedBy: CURRENT_USER,
-            updatedDate: todayStr(),
-          }
-        : v,
+    toggleStatusMutation.mutate(
+      { id: deleteTarget.supplierUuid, isActive: false },
+      {
+        onSuccess: () => {
+          setToast({ msg: `"${deleteTarget.supplierName}" marked as inactive`, type: "success" });
+          setDeleteTarget(null);
+        },
+        onError: (err) => {
+          setToast({ msg: SupplierListService.extractErrorMessage(err, "Failed to deactivate"), type: "error" });
+          setDeleteTarget(null);
+        },
+      },
     );
-    saveVendors(updatedList);
-    setRecords(updatedList);
-    setDeleteTarget(null);
-    setToast({ msg: `"${deleteTarget.vendorName}" marked as inactive`, type: "success" });
   };
 
-  const columns: ColumnConfig<Vendor>[] = [
+  const columns: ColumnConfig<SupplierListRecord>[] = [
     {
-      key: "vendorCode",
+      key: "supplierCode",
       header: "Supplier Code",
       sortable: true,
       filterable: true,
       filterType: "text",
       width: "110px",
       render: (_val, row) => (
-        <span className="font-mono text-xs font-semibold text-foreground">{row.vendorCode || "—"}</span>
+        <span className="font-mono text-xs font-semibold text-foreground">{row.supplierCode || "—"}</span>
       ),
     },
     {
-      key: "vendorName",
+      key: "supplierName",
       header: "Supplier Name",
       sortable: true,
       filterable: true,
@@ -135,20 +163,20 @@ export default function VendorMasterPage() {
         <button
           type="button"
           className="block group/name text-left w-full"
-          onClick={() => router.push(`/masters/vendors/${row.id}`)}
+          onClick={() => router.push(`/masters/vendors/${row.supplierUuid}`)}
         >
-          <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">{row.vendorName}</p>
+          <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">{row.supplierName}</p>
         </button>
       ),
     },
     {
-      key: "vendorType",
+      key: "supplierType",
       header: "Supplier Type",
-      sortable: true,
+      sortable: false,
       filterable: true,
       filterType: "text",
       width: "160px",
-      render: (_val, row) => row.vendorType || "—",
+      render: (_val, row) => row.supplierType?.supplier_type_name || "—",
     },
     {
       key: "contactPerson",
@@ -168,7 +196,7 @@ export default function VendorMasterPage() {
       width: "140px",
       render: (_val, row) => (
         <span className="font-mono text-xs text-muted-foreground">
-          {row.mobile ? `${row.mobileCountryCode} ${row.mobile}` : "—"}
+          {row.mobileNumber ? `${row.mobileCountryCode} ${row.mobileNumber}` : "—"}
         </span>
       ),
     },
@@ -180,7 +208,7 @@ export default function VendorMasterPage() {
       filterType: "text",
       width: "150px",
       render: (_val, row) => (
-        <span className="font-mono text-[11px]">{row.gstNumber || "—"}</span>
+        <span className="font-mono text-[11px]">{row.gstinNumber || "—"}</span>
       ),
     },
     {
@@ -189,7 +217,7 @@ export default function VendorMasterPage() {
       sortable: true,
       width: "150px",
       render: (_val, row) => (
-        <ListingUserCell name={row.createdBy} date={row.createdDate} />
+        <ListingUserCell name={row.createdBy} date={row.createdAt} />
       ),
     },
     {
@@ -198,7 +226,7 @@ export default function VendorMasterPage() {
       sortable: true,
       width: "150px",
       render: (_val, row) => (
-        <ListingUserCell name={row.updatedBy} date={row.updatedDate} />
+        <ListingUserCell name={row.updatedBy} date={row.updatedAt} />
       ),
     },
     {
@@ -218,18 +246,18 @@ export default function VendorMasterPage() {
     },
   ];
 
-  const actions: ActionItemConfig<Vendor>[] = [
+  const actions: ActionItemConfig<SupplierListRecord>[] = [
     {
       label: "View",
       action: "view",
       icon: Eye,
-      onClick: (row) => router.push(`/masters/vendors/${row.id}`),
+      onClick: (row) => router.push(`/masters/vendors/${row.supplierUuid}`),
     },
     {
       label: "Edit",
       action: "edit",
       icon: Edit2,
-      onClick: (row) => router.push(`/masters/vendors/${row.id}/edit`),
+      onClick: (row) => router.push(`/masters/vendors/${row.supplierUuid}/edit`),
     },
     {
       label: "Delete",
@@ -240,75 +268,48 @@ export default function VendorMasterPage() {
     },
   ];
 
-  const filtered = useMemo(() => {
-    let result = [...records];
+  // const filtered = useMemo(() => {
+  //   // let result = [...records];
 
-    if (filters.search) {
-      const q = String(filters.search).trim().toLowerCase();
-      result = result.filter(
-        (v) =>
-          (v.vendorCode || "").toLowerCase().includes(q) ||
-          v.vendorName.toLowerCase().includes(q) ||
-          (v.vendorType || "").toLowerCase().includes(q) ||
-          (v.contactPerson || "").toLowerCase().includes(q) ||
-          v.mobile.includes(q) ||
-          v.email.toLowerCase().includes(q) ||
-          v.gstNumber.toLowerCase().includes(q)
-      );
-    }
+  //   if (filters.search) {
+  //     const q = String(filters.search).trim().toLowerCase();
+  //     result = result.filter(
+  //       (v) =>
+  //         (v.supplierCode || "").toLowerCase().includes(q) ||
+  //         v.supplierName.toLowerCase().includes(q) ||
+  //         (v.vendorType || "").toLowerCase().includes(q) ||
+  //         (v.contactPerson || "").toLowerCase().includes(q) ||
+  //         v.mobile.includes(q) ||
+  //         v.email.toLowerCase().includes(q) ||
+  //         v.gstNumber.toLowerCase().includes(q)
+  //     );
+  //   }
 
-    result = applyFilters(result, filters);
+  //   result = applyFilters(result, filters);
 
-    if (sort.key && sort.direction !== "none") {
-      result.sort((a, b) => {
-        const av = String((a as unknown as Record<string, unknown>)[sort.key] ?? "");
-        const bv = String((b as unknown as Record<string, unknown>)[sort.key] ?? "");
-        const cmp = av.localeCompare(bv);
-        return sort.direction === "asc" ? cmp : -cmp;
-      });
-    }
+  //   if (sort.key && sort.direction !== "none") {
+  //     result.sort((a, b) => {
+  //       const av = String((a as unknown as Record<string, unknown>)[sort.key] ?? "");
+  //       const bv = String((b as unknown as Record<string, unknown>)[sort.key] ?? "");
+  //       const cmp = av.localeCompare(bv);
+  //       return sort.direction === "asc" ? cmp : -cmp;
+  //     });
+  //   }
 
-    return result;
-  }, [records, filters, sort]);
+  //   return result;
+  // }, [records, filters, sort]);
 
-  const paginated = useMemo(() => {
-    const startOffset = (page - 1) * pageSize;
-    return filtered.slice(startOffset, startOffset + pageSize);
-  }, [filtered, page, pageSize]);
+  // const paginated = useMemo(() => {
+  //   const startOffset = (page - 1) * pageSize;
+  //   return filtered.slice(startOffset, startOffset + pageSize);
+  // }, [filtered, page, pageSize]);
 
+  const exportMutation = useExportSuppliers();
   const handleExport = () => {
-    const rows = filtered.map((row) => ({
-      "Supplier Code": row.vendorCode || "",
-      "Supplier Name": row.vendorName,
-      "Supplier Type": row.vendorType || "",
-      "Contact Person": row.contactPerson || "",
-      "Mobile Number": `${row.mobileCountryCode} ${row.mobile || ""}`.trim(),
-      "GST Number": row.gstNumber || "",
-      Status: row.status,
-      "Created By": row.createdBy || "",
-      "Updated By": row.updatedBy || "",
-    }));
-
-    const headers = Object.keys(rows[0] || {});
-    const csv = [
-      headers.join(","),
-      ...rows.map((row) =>
-        headers
-          .map((header) => {
-            const value = String(row[header as keyof typeof row] ?? "");
-            return `"${value.replace(/"/g, '""')}"`;
-          })
-          .join(","),
-      ),
-    ].join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `vendor-master-${todayStr()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    exportMutation.mutate(
+      { search: listParams.search, status: listParams.status, ordering: listParams.ordering, apiFilters: listParams.apiFilters },
+      { onError: (err) => setToast({ msg: SupplierListService.extractErrorMessage(err, "Failed to export"), type: "error" }) },
+    );
   };
 
   useEffect(() => {
@@ -324,15 +325,15 @@ export default function VendorMasterPage() {
         </div>
 
         <div className="grid grid-cols-3 gap-3">
-          <MiniKPICard label="Total Suppliers" value={records.length} icon={Building2} accent={true} />
-          <MiniKPICard label="Active" value={records.filter((v) => v.status === "active").length} icon={CheckCircle2} accent={false} />
-          <MiniKPICard label="Inactive" value={records.filter((v) => v.status === "inactive").length} icon={XCircle} accent={false} />
+          <MiniKPICard label="Total Suppliers" value={total} icon={Building2} accent={true} />
+          <MiniKPICard label="Active" value={items.filter((v) => v.status === "active").length} icon={CheckCircle2} accent={false} />
+          <MiniKPICard label="Inactive" value={items.filter((v) => v.status === "inactive").length} icon={XCircle} accent={false} />
         </div>
 
-        <MasterListing<Vendor>
+        <MasterListing
           columns={columns}
-          data={paginated}
-          totalRecords={filtered.length}
+          data={items}
+          totalRecords={total}
           page={page}
           pageSize={pageSize}
           onPageChange={setPage}
@@ -361,7 +362,7 @@ export default function VendorMasterPage() {
                 Deactivate Supplier?
               </DialogTitle>
               <DialogDescription className="pt-1 text-xs">
-                <strong className="text-foreground">{deleteTarget.vendorName}</strong> will be marked as inactive.
+                <strong className="text-foreground">{deleteTarget.supplierName}</strong> will be marked as inactive.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>

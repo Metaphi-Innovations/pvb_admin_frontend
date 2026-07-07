@@ -87,12 +87,12 @@ export default function CustomerOutstandingDetailClient() {
       actions={
         <div className="flex items-center gap-2">
           <Link href="/accounts/receivables/ageing">
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium gap-1">
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1">
               <ArrowLeft className="w-4 h-4" /> Back
             </Button>
           </Link>
           <Link href={`/accounts/receivables/receipt-allocation?customer=${customer.id}`}>
-            <Button size="sm" className="h-9 text-[13px] font-medium gap-1 bg-brand-600 hover:bg-brand-700 text-white">
+            <Button size="sm" className="h-9 text-sm font-medium gap-1 bg-brand-600 hover:bg-brand-700 text-white">
               <Receipt className="w-4 h-4" /> Go to Receipt Allocation
             </Button>
           </Link>
@@ -103,7 +103,7 @@ export default function CustomerOutstandingDetailClient() {
     >
       <div className="flex-shrink-0 border-b border-border/60 bg-white px-4 py-3 space-y-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">
             Customer Information
           </p>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 text-xs">
@@ -116,7 +116,7 @@ export default function CustomerOutstandingDetailClient() {
               ["Territory", customer.territoryName || "—"],
             ].map(([label, value]) => (
               <div key={label}>
-                <p className="text-[10px] uppercase text-muted-foreground font-semibold">{label}</p>
+                <p className="text-xs uppercase text-muted-foreground font-semibold">{label}</p>
                 <p className="font-medium mt-0.5">{value}</p>
               </div>
             ))}
@@ -125,15 +125,15 @@ export default function CustomerOutstandingDetailClient() {
 
         <div className="grid grid-cols-3 gap-3 rounded-lg border border-border/60 bg-muted/10 p-3 text-xs">
           <div>
-            <p className="text-[10px] uppercase text-muted-foreground font-semibold">Total Sales</p>
+            <p className="text-xs uppercase text-muted-foreground font-semibold">Total Sales</p>
             <p className="text-sm font-bold mt-0.5 tabular-nums">{formatMoney(detail.totalSales)}</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase text-muted-foreground font-semibold">Total Receipts</p>
+            <p className="text-xs uppercase text-muted-foreground font-semibold">Total Receipts</p>
             <p className="text-sm font-bold mt-0.5 tabular-nums">{formatMoney(detail.totalReceipts)}</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase text-muted-foreground font-semibold">Current Outstanding</p>
+            <p className="text-xs uppercase text-muted-foreground font-semibold">Current Outstanding</p>
             <p className="text-sm font-bold mt-0.5 tabular-nums text-brand-700">
               {formatMoney(detail.currentOutstanding)}
             </p>
@@ -143,7 +143,7 @@ export default function CustomerOutstandingDetailClient() {
 
       <div className="flex flex-col flex-1 min-h-0">
         <div className="flex-shrink-0 px-4 py-2 border-b border-border/60 bg-white">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Open Invoices
           </p>
         </div>

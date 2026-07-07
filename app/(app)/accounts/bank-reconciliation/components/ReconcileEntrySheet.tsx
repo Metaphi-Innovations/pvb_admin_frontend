@@ -102,7 +102,7 @@ export function ReconcileEntrySheet({
 
           {row.narration && (
             <div className="space-y-1">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Narration</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Narration</p>
               <p className="text-xs text-foreground bg-muted/20 rounded-lg border border-border/60 px-3 py-2">
                 {row.narration}
               </p>
@@ -125,7 +125,7 @@ export function ReconcileEntrySheet({
               )}
             />
             {!isView && (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Must be on or after entry date ({row.entryDate})
               </p>
             )}
@@ -151,8 +151,8 @@ export function ReconcileEntrySheet({
           )}
 
           {row.status === "reconciled" && (
-            <div className="bg-muted/30 rounded-xl p-3 space-y-2 text-[11px]">
-              <p className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">
+            <div className="bg-muted/30 rounded-xl p-3 space-y-2 text-xs">
+              <p className="font-semibold text-muted-foreground uppercase tracking-wider text-xs">
                 Reconciliation Info
               </p>
               <div className="grid grid-cols-2 gap-y-1.5 gap-x-4">
@@ -170,14 +170,14 @@ export function ReconcileEntrySheet({
 
           {audit.length > 0 && (
             <div className="space-y-2">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                 Audit Trail
               </p>
               <div className="space-y-2 max-h-40 overflow-y-auto">
                 {audit.map((a) => (
                   <div
                     key={a.id}
-                    className="rounded-lg border border-border/60 bg-muted/10 px-3 py-2 text-[11px]"
+                    className="rounded-lg border border-border/60 bg-muted/10 px-3 py-2 text-xs"
                   >
                     <p className="font-medium capitalize">{a.action.replace("_", " ")}</p>
                     <p className="text-muted-foreground mt-0.5">
@@ -197,13 +197,13 @@ export function ReconcileEntrySheet({
         </SheetBody>
 
         <SheetFooter>
-          <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => onOpenChange(false)}>
             {isView ? "Close" : "Cancel"}
           </Button>
           {!isView && (
             <Button
               size="sm"
-              className="h-9 text-[13px] font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+              className="h-9 text-sm font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
               disabled={busy || !bankProcessingDate}
               onClick={handleReconcile}
             >
@@ -230,7 +230,7 @@ function InfoField({
 }) {
   return (
     <div className={className}>
-      <p className="text-[10px] font-medium uppercase text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium uppercase text-muted-foreground">{label}</p>
       <p className={cn("text-xs font-medium mt-0.5", mono && "font-mono text-brand-700")}>{value}</p>
     </div>
   );

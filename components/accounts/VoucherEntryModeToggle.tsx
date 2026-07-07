@@ -41,7 +41,7 @@ export function VoucherEntryModeToggle({
               disabled={disabled}
               onClick={() => !disabled && onChange(opt.id)}
               className={cn(
-                "h-7 px-3 text-xs font-medium rounded-md transition-colors whitespace-nowrap",
+                "h-7 px-3 text-sm font-medium rounded-md transition-colors whitespace-nowrap",
                 active
                   ? "bg-brand-600 text-white shadow-sm"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/50",

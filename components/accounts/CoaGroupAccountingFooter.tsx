@@ -11,7 +11,7 @@ import { CoaAccountingTransactionsTable } from "./CoaAccountingTransactionsTable
 function SummaryField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="rounded-lg border border-border/40 bg-slate-50/40 px-3 py-2">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground mb-0.5">{label}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-0.5">{label}</p>
       <div className="text-sm text-foreground">{value}</div>
     </div>
   );
@@ -83,7 +83,7 @@ export function CoaGroupAccountingFooter({
                   {["Ledger", "Opening", "Balance"].map((h) => (
                     <th
                       key={h}
-                      className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase text-muted-foreground"
+                      className="px-3 py-2.5 text-left text-xs font-semibold uppercase text-muted-foreground"
                     >
                       {h}
                     </th>
@@ -109,7 +109,7 @@ export function CoaGroupAccountingFooter({
       )}
 
       <div className="flex-1 min-h-0">
-        <p className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground bg-white border-b border-border sticky top-0 z-10 shadow-sm">
+        <p className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground bg-white border-b border-border sticky top-0 z-10 shadow-sm">
           Recent Transactions
         </p>
         <CoaAccountingTransactionsTable rows={accounting.recentTransactions} showRunningBalance={false} />

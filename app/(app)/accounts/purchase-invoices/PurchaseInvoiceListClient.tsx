@@ -126,13 +126,13 @@ function PaymentBadge({ inv }: { inv: PurchaseInvoiceRecord }) {
 
   if (st === "paid")
 
-    return <Badge className="text-[10px] h-5 bg-emerald-100 text-emerald-700 border-emerald-200">Paid</Badge>;
+    return <Badge className="text-xs h-5 bg-emerald-100 text-emerald-700 border-emerald-200">Paid</Badge>;
 
   if (st === "partial")
 
-    return <Badge className="text-[10px] h-5 bg-amber-100 text-amber-700 border-amber-200">Partial</Badge>;
+    return <Badge className="text-xs h-5 bg-amber-100 text-amber-700 border-amber-200">Partial</Badge>;
 
-  return <Badge className="text-[10px] h-5 bg-red-100 text-red-700 border-red-200">Unpaid</Badge>;
+  return <Badge className="text-xs h-5 bg-red-100 text-red-700 border-red-200">Unpaid</Badge>;
 
 }
 
@@ -142,7 +142,7 @@ function SourceBadge() {
 
   return (
 
-    <Badge variant="outline" className="text-[10px] h-5 text-blue-700 border-blue-200 bg-blue-50">
+    <Badge variant="outline" className="text-xs h-5 text-blue-700 border-blue-200 bg-blue-50">
 
       GRN
 
@@ -362,7 +362,7 @@ export default function PurchaseInvoiceListClient() {
 
           size="sm"
 
-          className="h-9 text-[13px] font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white px-2.5"
+          className="h-9 text-sm font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white px-2.5"
 
           onClick={() => router.push("/accounts/purchase-invoices/new?mode=grn")}
 
@@ -432,7 +432,7 @@ export default function PurchaseInvoiceListClient() {
 
                         className={cn(
 
-                          "h-7 px-2.5 text-xs rounded-lg border font-medium transition-colors",
+                          "h-7 px-2.5 text-sm rounded-lg border font-medium transition-colors",
 
                           statusFilter === st
 
@@ -476,7 +476,7 @@ export default function PurchaseInvoiceListClient() {
 
                 All Invoices
 
-                <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
+                <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-xs font-semibold tabular-nums">
 
                   {invoices.length}
 
@@ -492,7 +492,7 @@ export default function PurchaseInvoiceListClient() {
 
                 {pendingGrns.length > 0 && (
 
-                  <span className="ml-1 rounded-full bg-amber-500 text-white px-1.5 py-0.5 text-[10px] font-semibold tabular-nums">
+                  <span className="ml-1 rounded-full bg-amber-500 text-white px-1.5 py-0.5 text-xs font-semibold tabular-nums">
 
                     {pendingGrns.length}
 
@@ -740,7 +740,7 @@ export default function PurchaseInvoiceListClient() {
 
                         size="sm"
 
-                        className="h-9 text-[13px] font-medium bg-brand-600 text-white gap-1"
+                        className="h-9 text-sm font-medium bg-brand-600 text-white gap-1"
 
                         onClick={() => router.push(`/accounts/purchase-invoices/new?mode=grn&grnId=${grn.id}`)}
 

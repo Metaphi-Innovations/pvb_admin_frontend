@@ -31,7 +31,7 @@ interface GroupedLedgerSelectProps {
   ledgerFilter?: (ledger: ChartOfAccount) => boolean;
   /** Restrict quick-add parent options (receipt/payment/contra line context) */
   quickAddScope?: VoucherLedgerScope;
-  /** Show ➕ Create New Ledger — default true when not disabled/read-only */
+  /** Show âž• Create New Ledger — default true when not disabled/read-only */
   enableQuickAdd?: boolean;
 }
 
@@ -71,7 +71,7 @@ function HierarchyNodeRow({
         <span className="w-4 shrink-0 text-muted-foreground">•</span>
         <span className="flex-1 truncate">
           {displayCode && (
-            <span className="font-mono text-[10px] text-muted-foreground mr-1">{displayCode}</span>
+            <span className="font-mono text-xs text-muted-foreground mr-1">{displayCode}</span>
           )}
           {displayName}
         </span>
@@ -243,7 +243,7 @@ export function GroupedLedgerSelect({
             placeholder="Search accounts…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-9 text-[13px] font-medium"
+            className="h-9 text-sm font-medium"
             autoFocus
           />
         </div>

@@ -102,7 +102,7 @@ export function useCreatePurchaseOrder() {
       PurchaseOrderService.create(input.form, {
         poNumber: input.poNumber,
         status: input.status,
-        files: input.files,
+        files: input.files ?? input.form.attachments,
       }),
     onSuccess: async () => {
       await invalidatePoQueries(queryClient);
@@ -123,7 +123,7 @@ export function useUpdatePurchaseOrder() {
       PurchaseOrderService.update(input.id, input.form, {
         poNumber: input.poNumber,
         status: input.status,
-        files: input.files,
+        files: input.files ?? input.form.attachments,
       }),
     onSuccess: async (_data, variables) => {
       await invalidatePoQueries(queryClient, variables.id);

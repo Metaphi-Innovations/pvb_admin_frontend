@@ -57,7 +57,7 @@ function buildProductDiscountRows(lines: InvoiceLineItem[]): ProductDiscountSche
 function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div>
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className={cn("mt-0.5 text-xs font-medium", mono && "font-mono text-brand-700")}>
         {value || "—"}
       </p>
@@ -69,7 +69,7 @@ function SettlementBadge({ pending }: { pending: boolean }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium",
+        "inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium",
         pending
           ? "bg-amber-50 text-amber-700 border border-amber-200"
           : "bg-emerald-50 text-emerald-700 border border-emerald-200",
@@ -103,7 +103,7 @@ export function InvoiceApplicableSchemesPanel({
 
       {hasProductDiscount && (
         <div className="space-y-2">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1">
             <Tag className="w-3 h-3" />
             Product Discount Scheme
           </p>
@@ -118,7 +118,7 @@ export function InvoiceApplicableSchemesPanel({
                     <p className="font-mono text-xs font-semibold text-brand-700">{row.schemeCode}</p>
                     <p className="text-xs font-medium text-foreground">{row.schemeName}</p>
                   </div>
-                  <span className="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium">
+                  <span className="inline-flex items-center text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium">
                     Applied on invoice
                   </span>
                 </div>
@@ -136,7 +136,7 @@ export function InvoiceApplicableSchemesPanel({
 
       {hasNearExpiry && (
         <div className="space-y-2">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Other Schemes (Settlement via Credit Note)
           </p>
           <div className="space-y-2">
@@ -178,7 +178,7 @@ export function InvoiceApplicableSchemesPanel({
                     <Field label="Settlement" value={pending ? "Credit Note (Pending)" : "Settled"} />
                   </div>
                   {pending && (
-                    <p className="text-[10px] text-amber-800 mt-2 flex items-center gap-1">
+                    <p className="text-xs text-amber-800 mt-2 flex items-center gap-1">
                       This scheme will appear as pending when creating a{" "}
                       <Link
                         href="/accounts/transactions/credit-notes/new"
@@ -196,7 +196,7 @@ export function InvoiceApplicableSchemesPanel({
         </div>
       )}
 
-      <p className="text-[10px] text-muted-foreground">{NEAR_EXPIRY_SETTLEMENT_TOOLTIP}</p>
+      <p className="text-xs text-muted-foreground">{NEAR_EXPIRY_SETTLEMENT_TOOLTIP}</p>
     </div>
   );
 }

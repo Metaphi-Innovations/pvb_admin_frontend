@@ -14,18 +14,18 @@ function AddressDetailCard({
   if (!option) return null;
   return (
     <div className="rounded-lg border border-border/60 bg-muted/10 p-3 space-y-2">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{title}</p>
+      <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{title}</p>
       <div className="space-y-2 text-xs">
         <div>
-          <p className="text-[10px] text-muted-foreground mb-0.5">Company Name</p>
+          <p className="text-xs text-muted-foreground mb-0.5">Company Name</p>
           <p className="font-medium text-foreground">{option.label}</p>
         </div>
         <div>
-          <p className="text-[10px] text-muted-foreground mb-0.5">Address</p>
+          <p className="text-xs text-muted-foreground mb-0.5">Address</p>
           <p className="text-foreground whitespace-pre-wrap leading-relaxed">{option.formatted || "—"}</p>
         </div>
         <div>
-          <p className="text-[10px] text-muted-foreground mb-0.5">GSTIN No.</p>
+          <p className="text-xs text-muted-foreground mb-0.5">GSTIN No.</p>
           <p className="font-mono text-foreground">{gstin?.trim() || "—"}</p>
         </div>
       </div>

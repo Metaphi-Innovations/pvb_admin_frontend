@@ -28,6 +28,9 @@ interface CoaListingToolbarProps {
   canCreate?: boolean;
   onNewLedger?: () => void;
   searchPlaceholder?: string;
+  hideDateRange?: boolean;
+  /** When false, the New Ledger action is not rendered at all. */
+  showNewLedger?: boolean;
 }
 
 export function CoaListingToolbar({
@@ -45,12 +48,14 @@ export function CoaListingToolbar({
   canCreate,
   onNewLedger,
   searchPlaceholder = "Search accounts…",
+  hideDateRange = false,
+  showNewLedger = true,
 }: CoaListingToolbarProps) {
   return (
     <AccountsListingFilterCard
       actions={
         <>
-          {canCreate && onNewLedger && (
+          {showNewLedger && canCreate && onNewLedger ? (
             <Button
               type="button"
               size="sm"
@@ -63,19 +68,21 @@ export function CoaListingToolbar({
               <Plus className="w-4 h-4" />
               New Ledger
             </Button>
-          )}
+          ) : null}
           <AccountsExportMenu onExcel={onExcel} onPdf={onPdf} disabled={exportDisabled} />
         </>
       }
     >
-      <ReportDateRangeFilter
-        preset={preset}
-        dateFrom={dateFrom}
-        dateTo={dateTo}
-        onPresetChange={onPresetChange}
-        onDateFromChange={onDateFromChange}
-        onDateToChange={onDateToChange}
-      />
+      {!hideDateRange && (
+        <ReportDateRangeFilter
+          preset={preset}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onPresetChange={onPresetChange}
+          onDateFromChange={onDateFromChange}
+          onDateToChange={onDateToChange}
+        />
+      )}
       <ReportSearchFilter
         value={search}
         onChange={onSearchChange}

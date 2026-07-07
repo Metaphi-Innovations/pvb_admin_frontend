@@ -20,7 +20,7 @@ function SummaryCell({
         warn && "border-red-200 bg-red-50/50",
       )}
     >
-      <p className="text-[10px] font-medium text-muted-foreground leading-none">{label}</p>
+      <p className="text-xs font-medium text-muted-foreground leading-none">{label}</p>
       <p
         className={cn(
           "text-sm font-bold tabular-nums leading-tight mt-0.5 truncate",

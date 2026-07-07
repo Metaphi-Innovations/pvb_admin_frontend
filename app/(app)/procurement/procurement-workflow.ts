@@ -67,7 +67,7 @@ function grnReferenceStatus(warehouseStatus: string, hasGrn: boolean): POGrnDisp
 
 export function getPOWorkflowSummary(po: PurchaseOrder): POWorkflowSummary {
   const threeWayMatch = computeThreeWayMatch(po);
-  const invoices = listPurchaseInvoicesByPO(po.id);
+  const invoices = listPurchaseInvoicesByPO(Number(po.id));
   const invoiceStatus: POInvoiceDisplayStatus = invoices.length > 0 ? "uploaded" : "pending";
   const totalInvoiceAmount = invoices.reduce((s, i) => s + i.grandTotal, 0);
 
@@ -80,7 +80,7 @@ export function getPOWorkflowSummary(po: PurchaseOrder): POWorkflowSummary {
   });
 
   const debitNotes: PODebitNoteRef[] = loadDebitNotes()
-    .filter((d) => d.sourcePoId === po.id || d.sourcePoNo === po.poNumber)
+    .filter((d) => d.sourcePoId === Number(po.id) || d.sourcePoNo === po.poNumber)
     .map((d) => ({
       debitNoteNo: d.debitNoteNo,
       debitAmount: d.currentDebitAmount,

@@ -136,7 +136,7 @@ export function UploadStatementDialog({
             <div className="space-y-1">
               <Label className="text-xs">Bank Account</Label>
               <Select value={bankAccountId} onValueChange={setBankAccountId} disabled={!!preset}>
-                <SelectTrigger className="h-9 text-[13px] font-medium">
+                <SelectTrigger className="h-9 text-sm font-medium">
                   <SelectValue placeholder="Select bank" />
                 </SelectTrigger>
                 <SelectContent>
@@ -152,7 +152,7 @@ export function UploadStatementDialog({
               <div className="space-y-1">
                 <Label className="text-xs">Month</Label>
                 <Select value={month} onValueChange={setMonth} disabled={!!preset}>
-                  <SelectTrigger className="h-9 text-[13px] font-medium">
+                  <SelectTrigger className="h-9 text-sm font-medium">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -167,7 +167,7 @@ export function UploadStatementDialog({
               <div className="space-y-1">
                 <Label className="text-xs">Year</Label>
                 <Select value={year} onValueChange={setYear} disabled={!!preset}>
-                  <SelectTrigger className="h-9 text-[13px] font-medium">
+                  <SelectTrigger className="h-9 text-sm font-medium">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -183,7 +183,7 @@ export function UploadStatementDialog({
             <div className="space-y-1">
               <Label className="text-xs">Statement Name</Label>
               <Input
-                className="h-9 text-[13px] font-medium"
+                className="h-9 text-sm font-medium"
                 value={statementName}
                 onChange={(e) => setStatementName(e.target.value)}
                 placeholder="e.g. HDFC June 2026"
@@ -194,19 +194,19 @@ export function UploadStatementDialog({
               <Input
                 type="file"
                 accept=".xlsx,.xls,.csv"
-                className="h-9 text-[13px] font-medium"
+                className="h-9 text-sm font-medium"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />
             </div>
             {error && <p className="text-xs text-red-600">{error}</p>}
           </div>
           <DialogFooter>
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => onOpenChange(false)}>
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button
               size="sm"
-              className="h-9 text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white"
+              className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white"
               disabled={busy}
               onClick={handleSubmit}
             >
@@ -226,12 +226,12 @@ export function UploadStatementDialog({
             and matching data for this month. Do you want to continue?
           </p>
           <DialogFooter>
-            <Button variant="outline" size="sm" className="h-9 text-[13px] font-medium" onClick={() => setOverwriteOpen(false)}>
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={() => setOverwriteOpen(false)}>
               Cancel
             </Button>
             <Button
               size="sm"
-              className="h-9 text-[13px] font-medium bg-amber-600 hover:bg-amber-700 text-white"
+              className="h-9 text-sm font-medium bg-amber-600 hover:bg-amber-700 text-white"
               disabled={busy}
               onClick={() => void doUpload(true)}
             >

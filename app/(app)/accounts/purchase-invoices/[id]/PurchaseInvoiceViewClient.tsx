@@ -31,7 +31,7 @@ import { getPurchaseInvoiceById } from "../purchase-invoices-data";
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
     <div>
-      <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">{label}</p>
+      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">{label}</p>
       <p className="text-xs font-semibold mt-0.5">{value || "—"}</p>
     </div>
   );
@@ -83,7 +83,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
           <Button
             variant="outline"
             size="sm"
-            className="mt-4 h-9 text-[13px] font-medium"
+            className="mt-4 h-9 text-sm font-medium"
             onClick={() => router.push("/accounts/purchase-invoices")}
           >
             Back to List
@@ -114,7 +114,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
           <Button
             variant="outline"
             size="sm"
-            className="h-9 text-[13px] font-medium gap-1.5"
+            className="h-9 text-sm font-medium gap-1.5"
             onClick={() => router.push("/accounts/purchase-invoices")}
           >
             <ArrowLeft className="w-4 h-4" />
@@ -124,7 +124,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
             <Button
               variant="outline"
               size="sm"
-              className="h-9 text-[13px] font-medium gap-1.5"
+              className="h-9 text-sm font-medium gap-1.5"
               onClick={() => router.push(`/accounts/purchase-invoices/${invoice.id}/edit`)}
             >
               <Pencil className="w-4 h-4" />
@@ -134,7 +134,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
           <Button
             variant="outline"
             size="sm"
-            className="h-9 text-[13px] font-medium gap-1.5 text-amber-700 border-amber-200 hover:bg-amber-50"
+            className="h-9 text-sm font-medium gap-1.5 text-amber-700 border-amber-200 hover:bg-amber-50"
             onClick={() => router.push(`/accounts/debit-notes/new?purchaseInvoiceId=${invoice.id}`)}
           >
             <FileMinus className="w-4 h-4" />
@@ -201,16 +201,16 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
             <table className="accounts-table w-full">
               <thead>
                 <tr className="border-b border-border/60 bg-muted/30">
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">#</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Product</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Description</th>
-                  <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-muted-foreground">Qty</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Unit</th>
-                  <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-muted-foreground">Rate</th>
-                  <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-muted-foreground">GST %</th>
-                  <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-muted-foreground">Taxable</th>
-                  <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-muted-foreground">Tax Amt</th>
-                  <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-muted-foreground">Total</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">#</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Product</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Description</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-muted-foreground">Qty</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Unit</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-muted-foreground">Rate</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-muted-foreground">GST %</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-muted-foreground">Taxable</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-muted-foreground">Tax Amt</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-muted-foreground">Total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/20">
@@ -271,12 +271,12 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
             <table className="accounts-table w-full">
               <thead>
                 <tr className="border-b border-border/30 bg-muted/50">
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Date</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Voucher</th>
-                  <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase text-muted-foreground">Narration</th>
-                  <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-muted-foreground">Debit</th>
-                  <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-muted-foreground">Credit</th>
-                  <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase text-muted-foreground">Balance</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Date</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Voucher</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Narration</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-muted-foreground">Debit</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-muted-foreground">Credit</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-muted-foreground">Balance</th>
                 </tr>
               </thead>
               <tbody>

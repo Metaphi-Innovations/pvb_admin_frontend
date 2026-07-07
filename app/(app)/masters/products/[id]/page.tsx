@@ -42,6 +42,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { useProduct, useToggleProductStatus } from "@/hooks/masters";
 
 const STATUS_LABEL: Record<ProductStatus | "draft", string> = {
 	active: "Active",
@@ -177,15 +178,48 @@ function MediaSection({ product }: { product: Product }) {
 export default function ProductDetailPage() {
 	const router = useRouter();
 	const { id } = useParams<{ id: string }>();
-	const [product, setProduct] = useState<Product | null>(null);
-	const [records, setRecords] = useState<Product[]>([]);
 	const [activeTab, setActiveTab] = useState("overview");
 
-	useEffect(() => {
-		const list = loadProducts();
-		setRecords(list);
-		setProduct(list.find((item) => item.id === Number(id)) ?? null);
-	}, [id]);
+	const { data: apiProduct, isLoading, isError } = useProduct(id);
+	const toggleStatusMutation = useToggleProductStatus();
+
+	const product = useMemo<Product | null>(() => {
+		if (!apiProduct) return null;
+		return {
+			id: apiProduct.id,
+			productId: apiProduct.productUuid,
+			productCode: apiProduct.productCode,
+			productName: apiProduct.productName,
+			sku: apiProduct.sku,
+			supplier: apiProduct.supplier || undefined,
+			supplierCode: apiProduct.supplierCode || undefined,
+			category: apiProduct.category,
+			subCategory: apiProduct.subCategory,
+			segment: apiProduct.segment,
+			form: apiProduct.form || "",
+			cfu: apiProduct.cfu || undefined,
+			authority: apiProduct.authority || undefined,
+			hsnCode: apiProduct.hsnCode,
+			hsnId: apiProduct.hsnId || undefined,
+			gstRate: apiProduct.gstRate || "",
+			gstId: apiProduct.gstId || undefined,
+			packSize: apiProduct.packSize ?? undefined,
+			baseUnit: apiProduct.baseUnit,
+			mou: apiProduct.mou || undefined,
+			unitPerCase: apiProduct.unitPerCase ?? undefined,
+			packagingUnit: apiProduct.packagingUnit || "",
+			netWeightPerPackagingUnit: apiProduct.netWeight ?? undefined,
+			grossWeight: apiProduct.grossWeight ?? undefined,
+			mrp: apiProduct.mrp ?? undefined,
+			status: apiProduct.status,
+			createdBy: apiProduct.createdBy || "Admin",
+			createdDate: apiProduct.createdAt || "",
+			updatedBy: apiProduct.updatedBy || "Admin",
+			updatedDate: apiProduct.updatedAt || "",
+			productImages: [],
+			productUrls: [],
+		};
+	}, [apiProduct]);
 
 	const mediaCount = useMemo(() => {
 		if (!product) return 0;
@@ -193,23 +227,21 @@ export default function ProductDetailPage() {
 	}, [product]);
 
 	const updateStatus = (status: ProductStatus) => {
-		if (!product) return;
-		const updated = records.map((item) =>
-			item.id === product.id
-				? {
-						...item,
-						status,
-						updatedBy: "Admin",
-						updatedDate: new Date().toISOString().slice(0, 10),
-					}
-				: item,
-		);
-		setRecords(updated);
-		saveProducts(updated);
-		setProduct(updated.find((item) => item.id === product.id) ?? null);
+		if (!id) return;
+		toggleStatusMutation.mutate({ id, isActive: status === "active" });
 	};
 
-	if (!product) {
+	if (isLoading) {
+		return (
+			<AppLayout>
+				<div className='py-16 text-center'>
+					<p className='text-sm text-muted-foreground'>Loading product details...</p>
+				</div>
+			</AppLayout>
+		);
+	}
+
+	if (isError || !product) {
 		return (
 			<AppLayout>
 				<div className='py-16 text-center'>
@@ -351,8 +383,8 @@ export default function ProductDetailPage() {
 					? (on) => updateStatus(on ? "active" : "inactive")
 					: undefined
 			}
-			toggleDisabled={(product.status as string) === "draft"}
-			onEdit={() => router.push(`/masters/products/${product.id}/edit`)}
+			toggleDisabled={(product.status as string) === "draft" || toggleStatusMutation.isPending}
+			onEdit={() => router.push(`/masters/products/${id}/edit`)}
 			sidebar={{
 				summary: [
 					{ label: "Product Code", value: productCode || "—", highlight: true },

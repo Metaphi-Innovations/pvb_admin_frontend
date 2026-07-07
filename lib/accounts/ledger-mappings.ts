@@ -88,9 +88,9 @@ export const DEFAULT_MAPPING_TARGETS: Record<
     subGroupName: "Trade Payables / Sundry Creditors",
     description: "Credit vendor payable on purchase invoice",
   },
-  purchase_cgst: { module: "procurement", subGroupName: "Duties & Taxes Payable", description: "Input CGST (ITC)" },
-  purchase_sgst: { module: "procurement", subGroupName: "Duties & Taxes Payable", description: "Input SGST (ITC)" },
-  purchase_igst: { module: "procurement", subGroupName: "Duties & Taxes Payable", description: "Input IGST (ITC)" },
+  purchase_cgst: { module: "procurement", subGroupName: "GST Input Credit", description: "Input CGST (ITC)" },
+  purchase_sgst: { module: "procurement", subGroupName: "GST Input Credit", description: "Input SGST (ITC)" },
+  purchase_igst: { module: "procurement", subGroupName: "GST Input Credit", description: "Input IGST (ITC)" },
   grn_clearing: {
     module: "procurement",
     subGroupName: "Other Current Liabilities",
@@ -178,6 +178,7 @@ export function resolveMappingLedger(
     isSystemGenerated?: boolean;
     erpSourceModule?: string;
     erpSourceId?: number;
+    gstRatePct?: number;
   },
 ): ChartOfAccount | null {
   const mappings = loadLedgerMappings();
@@ -190,7 +191,7 @@ export function resolveMappingLedger(
   }
 
   if (isGstMappingKey(mappingKey)) {
-    const gstLedger = resolveGstLedger(mappingKey);
+    const gstLedger = resolveGstLedger(mappingKey, options?.gstRatePct);
     if (gstLedger) return gstLedger;
     const ledgerName = GST_MAPPING_LEDGER_NAMES[mappingKey];
     if (ledgerName) {

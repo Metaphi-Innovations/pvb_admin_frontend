@@ -7,6 +7,7 @@ import {
   type HsnExportParams,
   type HsnListParams,
   type HsnUpdatePayload,
+  type HsnDropdownItem,
 } from "@/services/hsn-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
 
@@ -41,7 +42,10 @@ export function useCreateHsn() {
   return useMutation({
     mutationFn: (payload: HsnCreatePayload) => HsnListService.create(payload),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: masterKeys.hsn.lists() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: masterKeys.hsn.lists() }),
+        queryClient.invalidateQueries({ queryKey: masterKeys.hsn.dropdown() }),
+      ]);
     },
   });
 }
@@ -55,6 +59,7 @@ export function useUpdateHsn() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: masterKeys.hsn.lists() }),
         queryClient.invalidateQueries({ queryKey: masterKeys.hsn.detail(variables.id) }),
+        queryClient.invalidateQueries({ queryKey: masterKeys.hsn.dropdown() }),
       ]);
     },
   });
@@ -68,8 +73,17 @@ export function useToggleHsnStatus() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: masterKeys.hsn.lists() }),
         queryClient.invalidateQueries({ queryKey: masterKeys.hsn.detail(id) }),
+        queryClient.invalidateQueries({ queryKey: masterKeys.hsn.dropdown() }),
       ]);
     },
+  });
+}
+
+export function useHsnDropdown() {
+  return useQuery({
+    queryKey: masterKeys.hsn.dropdown(),
+    queryFn: () => HsnListService.dropdown(),
+    staleTime: 60_000,
   });
 }
 

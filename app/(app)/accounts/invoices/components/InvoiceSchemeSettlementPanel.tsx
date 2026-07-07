@@ -26,7 +26,7 @@ interface InvoiceSchemeSettlementPanelProps {
 function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div>
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className={`mt-0.5 text-xs font-medium ${mono ? "font-mono text-brand-700" : ""}`}>{value || "—"}</p>
     </div>
   );
@@ -145,8 +145,8 @@ export function InvoiceSchemeSettlementPanel({
       </div>
       {!isDetail && (
         <>
-          <p className="text-[10px] text-muted-foreground">{NEAR_EXPIRY_SETTLEMENT_TOOLTIP}</p>
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">{NEAR_EXPIRY_SETTLEMENT_TOOLTIP}</p>
+          <p className="text-xs text-muted-foreground">
             Informational only. Invoice value, product rates, taxable amounts, GST, and grand total are
             not modified by scheme settlement.
           </p>
