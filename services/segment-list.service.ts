@@ -29,6 +29,12 @@ export interface SegmentListResult {
   total: number;
 }
 
+export interface SegmentDropdownItem {
+  id: string;
+  segmentName: string;
+  segmentCode: string;
+}
+
 export interface SegmentCreatePayload {
   segment_name: string;
   description?: string | null;
@@ -236,6 +242,25 @@ export const SegmentListService = {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
+  },
+
+  async dropdown(): Promise<SegmentDropdownItem[]> {
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.SEGMENT.DROPDOWN);
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+
+    return data.map((row) => {
+      const item = (row ?? {}) as Record<string, unknown>;
+      return {
+        id: asString(item.id ?? item.segment_id),
+        segmentName: asString(item.segment_name ?? item.segmentName),
+        segmentCode: asString(item.segment_code),
+      };
+    });
   },
 
   extractErrorMessage,

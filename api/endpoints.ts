@@ -17,6 +17,7 @@ export const API_ENDPOINTS = {
       STATUS_UPDATE: (id: string) => `/master/category/update-status/${id}`,
       EXPORT: "/master/category/export",
       VIEW: (id: string) => `/master/category/${id}`,
+      DROPDOWN: "/master/category/dropdown"
     },
     DOCUMENT_TYPE: {
       LIST: "/master/document-type/list",
@@ -51,6 +52,7 @@ export const API_ENDPOINTS = {
       STATUS_UPDATE: (id: string) => `/master/hsn/update-status/${id}`,
       VIEW: (id: string) => `/master/hsn/${id}`,
       EXPORT: "/master/hsn/export",
+      DROPDOWN: "/master/hsn/dropdown",
     },
     SEGMENT: {
       LIST: "/master/segment/list",
@@ -60,13 +62,14 @@ export const API_ENDPOINTS = {
       VIEW: (id: string) => `/master/segment/details/${id}`,
       EXPORT: "/master/segment/export",
       PREVIEW_NUMBER: "/master/segment/preview-number",
+      DROPDOWN: "/master/segment/dropdown"
     },
     PRODUCT: {
       LIST: "/master/product/list",
       CREATE: "/master/product/create",
       UPDATE: (id: string) => `/master/product/update/${id}`,
       STATUS_UPDATE: (id: string) => `/master/product/update-status/${id}`,
-      VIEW: (id: string) => `/master/product/details/${id}`,
+      VIEW: (id: string) => `/master/product/${id}`,
       EXPORT: "/master/product/export",
       PREVIEW_NUMBER: "/master/product/preview-number",
       DROPDOWN: "/master/product/dropdown",
@@ -78,6 +81,16 @@ export const API_ENDPOINTS = {
     WAREHOUSE: {
       DROPDOWN: "/master/warehouse/dropdown",
     },
+    SUPPLIER: {
+      LIST: "/master/supplier/list",
+      CREATE: "/master/supplier/create",
+      UPDATE: (id: string) => `/master/supplier/update/${id}`,
+      STATUS_UPDATE: (id: string) => `/master/supplier/toggle-status/${id}`,
+      VIEW: (id: string) => `/master/supplier/details/${id}`,
+      EXPORT: "/master/supplier/export",
+      PREVIEW_NUMBER: "/master/supplier/preview-number",
+      DROPDOWN: "/master/supplier/dropdown"
+    }
   },
   PROCUREMENT: {
     PURCHASE_ORDER: {

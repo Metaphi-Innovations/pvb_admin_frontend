@@ -22,6 +22,7 @@ import {
   type ProductFormValues,
   validateProductForm,
 } from "../components/ProductForm";
+import { useCreateProduct } from "@/hooks/masters";
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -37,6 +38,8 @@ export default function NewProductPage() {
       delete next[key];
       return next;
     });
+
+  const createMutation = useCreateProduct();
 
   const handleSave = () => {
     const list = loadProducts();
@@ -58,26 +61,52 @@ export default function NewProductPage() {
       return;
     }
 
-    try {
-      const today = todayStr();
-      const record = formValuesToProduct(resolvedForm, {
-        id: nextProductId(list),
-        productImages,
-        productUrls,
-        createdBy: "Admin",
-        createdDate: today,
-      });
+    const parseNum = (val: string) => {
+      const num = Number(val);
+      return isNaN(num) ? null : num;
+    };
 
-      saveProducts([...list, record]);
-      setToast({ msg: "Product created successfully.", type: "success" });
-      setTimeout(() => router.push("/masters/products"), 900);
-    } catch {
-      setToast({
-        msg: "Failed to save product. Storage may be full — try fewer/larger uploads.",
-        type: "error",
-      });
-      setTimeout(() => setToast(null), 4000);
-    }
+    const payload = {
+      product_code: resolvedForm.productCode,
+      product_name: resolvedForm.productName,
+      sku: resolvedForm.sku,
+      supplier_id: resolvedForm.supplier || null,
+      supplier_code: resolvedForm.supplierCode || null,
+      hsn_id: resolvedForm.hsnId || resolvedForm.hsnCode || null,
+      gst_rate_id: resolvedForm.gstId || null,
+      category_name: resolvedForm.category,
+      segment_name: resolvedForm.segment,
+      form_name: resolvedForm.form,
+      cfu: resolvedForm.cfu || null,
+      authority: resolvedForm.authority || null,
+      pack_size: parseNum(resolvedForm.packSize),
+      base_unit: resolvedForm.baseUnit,
+      unit: resolvedForm.baseUnit,
+      mou: resolvedForm.mou || null,
+      unit_per_case: parseNum(resolvedForm.unitPerCase),
+      units_per_case: parseNum(resolvedForm.unitPerCase),
+      packaging_unit: resolvedForm.packagingUnit,
+      net_weight: parseNum(resolvedForm.netWeightPerPackagingUnit),
+      net_weight_per_packaging_unit: parseNum(resolvedForm.netWeightPerPackagingUnit),
+      gross_weight: parseNum(resolvedForm.grossWeight),
+      mrp: parseNum(resolvedForm.mrp),
+      is_active: resolvedForm.status === "active",
+      status: resolvedForm.status === "active" ? "Active" : "Inactive",
+    };
+
+    createMutation.mutate(payload, {
+      onSuccess: () => {
+        setToast({ msg: "Product created successfully.", type: "success" });
+        setTimeout(() => router.push("/masters/products"), 900);
+      },
+      onError: (err) => {
+        setToast({
+          msg: err instanceof Error ? err.message : "Failed to save product.",
+          type: "error",
+        });
+        setTimeout(() => setToast(null), 4000);
+      },
+    });
   };
 
   return (
@@ -94,6 +123,7 @@ export default function NewProductPage() {
             type="button"
             className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
+            disabled={createMutation.isPending}
           >
             <Save className="w-4 h-4" /> Save
           </Button>

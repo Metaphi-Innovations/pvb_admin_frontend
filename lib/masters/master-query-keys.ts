@@ -21,6 +21,7 @@ export const masterKeys = {
       [...masterKeys.categories.lists(), params] as const,
     details: () => [...masterKeys.categories.all(), "detail"] as const,
     detail: (id: string) => [...masterKeys.categories.details(), id] as const,
+    dropdown: () => [...masterKeys.categories.all(), "dropdown"] as const
   },
 
   gst: {
@@ -38,6 +39,7 @@ export const masterKeys = {
     list: (params: MasterListKeyParams) => [...masterKeys.hsn.lists(), params] as const,
     details: () => [...masterKeys.hsn.all(), "detail"] as const,
     detail: (id: string) => [...masterKeys.hsn.details(), id] as const,
+    dropdown: () => [...masterKeys.hsn.all(), "dropdown"] as const
   },
 
   segments: {
@@ -47,6 +49,7 @@ export const masterKeys = {
       [...masterKeys.segments.lists(), params] as const,
     details: () => [...masterKeys.segments.all(), "detail"] as const,
     detail: (id: string) => [...masterKeys.segments.details(), id] as const,
+    dropdown: () => [...masterKeys.segments.all(), "dropdown"] as const,
   },
 
   documentTypes: {
@@ -76,4 +79,15 @@ export const masterKeys = {
     details: () => [...masterKeys.products.all(), "detail"] as const,
     detail: (id: string) => [...masterKeys.products.details(), id] as const,
   },
+
+  suppliers: {
+    all: () => [...masterKeys.all, "suppliers"] as const,
+    lists: () => [...masterKeys.suppliers.all(), "list"] as const,
+    list: (params: MasterListKeyParams) => [...masterKeys.suppliers.lists(), params] as const,
+    details: () => [...masterKeys.suppliers.all(), "detail"] as const,
+    detail: (id: string) => [...masterKeys.suppliers.details(), id] as const,
+    dropdown: () => [...masterKeys.suppliers.all(), "dropdown"] as const,
+    previewNumber: () => [...masterKeys.suppliers.all(), "preview-number"] as const,
+    export: () => [...masterKeys.suppliers.all(), "export"] as const,
+  }
 } as const;

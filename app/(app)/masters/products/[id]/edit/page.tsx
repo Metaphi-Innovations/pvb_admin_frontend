@@ -11,6 +11,7 @@ import {
   getProductImages,
   getProductUrls,
   loadProducts,
+  Product,
   saveProducts,
   type ProductImage,
   type ProductUrl,
@@ -22,6 +23,7 @@ import {
   type ProductFormValues,
   validateProductForm,
 } from "../../components/ProductForm";
+import { useProduct, useUpdateProduct } from "@/hooks/masters";
 
 export default function EditProductPage() {
   const router = useRouter();
@@ -32,13 +34,49 @@ export default function EditProductPage() {
   const [productImages, setProductImages] = useState<ProductImage[]>([]);
   const [productUrls, setProductUrls] = useState<ProductUrl[]>([]);
 
+  const { data: apiProduct, isLoading, isError } = useProduct(id);
+  const updateMutation = useUpdateProduct();
+
   useEffect(() => {
-    const found = loadProducts().find((item) => item.id === Number(id));
-    if (!found) return;
-    setForm(productToFormValues(found));
-    setProductImages(getProductImages(found));
-    setProductUrls(getProductUrls(found));
-  }, [id]);
+    if (!apiProduct) return;
+    const mappedProduct: Product = {
+      id: apiProduct.id,
+      productId: apiProduct.productUuid,
+      productCode: apiProduct.productCode,
+      productName: apiProduct.productName,
+      sku: apiProduct.sku,
+      supplier: apiProduct.supplierId || "",
+      supplierCode: apiProduct.supplierCode || undefined,
+      category: apiProduct.category,
+      subCategory: apiProduct.subCategory,
+      segment: apiProduct.segment,
+      form: apiProduct.form || "",
+      cfu: apiProduct.cfu || undefined,
+      authority: apiProduct.authority || undefined,
+      hsnCode: apiProduct.hsnUuid || apiProduct.hsnCode,
+      hsnId: apiProduct.hsnId ? String(apiProduct.hsnId) : "",
+      gstRate: apiProduct.gstRate || "",
+      gstId: apiProduct.gstUuid || (apiProduct.gstId ? String(apiProduct.gstId) : ""),
+      packSize: apiProduct.packSize ?? undefined,
+      baseUnit: apiProduct.baseUnit,
+      mou: apiProduct.mou || undefined,
+      unitPerCase: apiProduct.unitPerCase ?? undefined,
+      packagingUnit: apiProduct.packagingUnit || "",
+      netWeightPerPackagingUnit: apiProduct.netWeight ?? undefined,
+      grossWeight: apiProduct.grossWeight ?? undefined,
+      mrp: apiProduct.mrp ?? undefined,
+      status: apiProduct.status,
+      createdBy: apiProduct.createdBy || "Admin",
+      createdDate: apiProduct.createdAt || "",
+      updatedBy: apiProduct.updatedBy || "Admin",
+      updatedDate: apiProduct.updatedAt || "",
+      productImages: [],
+      productUrls: [],
+    };
+    setForm(productToFormValues(mappedProduct));
+    setProductImages(getProductImages(mappedProduct));
+    setProductUrls(getProductUrls(mappedProduct));
+  }, [apiProduct]);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -48,7 +86,7 @@ export default function EditProductPage() {
     });
 
   const handleSave = () => {
-    if (!form) return;
+    if (!form || !id) return;
     const validation = validateProductForm(form);
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
@@ -61,21 +99,66 @@ export default function EditProductPage() {
       return;
     }
 
-    const list = loadProducts();
-    const existing = list.find((item) => item.id === Number(id));
-    if (!existing) return;
+    const parseNum = (val: string) => {
+      const num = Number(val);
+      return isNaN(num) ? null : num;
+    };
 
-    const updated = formValuesToProduct(form, {
-      ...existing,
-      productImages,
-      productUrls,
-    });
-    saveProducts(list.map((item) => (item.id === updated.id ? updated : item)));
-    setToast({ msg: "Product updated successfully.", type: "success" });
-    setTimeout(() => router.push(`/masters/products/${id}`), 900);
+    const payload = {
+      product_code: form.productCode,
+      product_name: form.productName,
+      sku: form.sku,
+      supplier_id: form.supplier || null,
+      supplier_code: form.supplierCode || null,
+      hsn_id: form.hsnId || form.hsnCode || null,
+      gst_rate_id: form.gstId || null,
+      category_name: form.category,
+      segment_name: form.segment,
+      form_name: form.form,
+      cfu: form.cfu || null,
+      authority: form.authority || null,
+      pack_size: parseNum(form.packSize),
+      base_unit: form.baseUnit,
+      unit: form.baseUnit,
+      mou: form.mou || null,
+      unit_per_case: parseNum(form.unitPerCase),
+      units_per_case: parseNum(form.unitPerCase),
+      packaging_unit: form.packagingUnit,
+      net_weight: parseNum(form.netWeightPerPackagingUnit),
+      net_weight_per_packaging_unit: parseNum(form.netWeightPerPackagingUnit),
+      gross_weight: parseNum(form.grossWeight),
+      mrp: parseNum(form.mrp),
+      is_active: form.status === "active",
+      status: form.status === "active" ? "Active" : "Inactive",
+    };
+
+    updateMutation.mutate(
+      { id, payload },
+      {
+        onSuccess: () => {
+          setToast({ msg: "Product updated successfully.", type: "success" });
+          setTimeout(() => router.push(`/masters/products/${id}`), 900);
+        },
+        onError: (err) => {
+          setToast({
+            msg: err instanceof Error ? err.message : "Failed to update product.",
+            type: "error",
+          });
+          setTimeout(() => setToast(null), 4000);
+        },
+      }
+    );
   };
 
-  if (!form) {
+  if (isLoading) {
+    return (
+      <div className="py-16 text-center">
+        <p className="text-sm text-muted-foreground">Loading product details...</p>
+      </div>
+    );
+  }
+
+  if (isError || !form) {
     return (
       <div className="py-16 text-center">
         <p className="text-sm text-muted-foreground">Product not found.</p>
@@ -105,6 +188,7 @@ export default function EditProductPage() {
             type="button"
             className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
             onClick={handleSave}
+            disabled={updateMutation.isPending}
           >
             <Save className="w-4 h-4" /> Update Product
           </Button>

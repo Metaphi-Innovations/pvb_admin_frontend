@@ -7,6 +7,7 @@ import {
   type SegmentExportParams,
   type SegmentListParams,
   type SegmentUpdatePayload,
+  type SegmentDropdownItem,
 } from "@/services/segment-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
 
@@ -41,7 +42,10 @@ export function useCreateSegment() {
   return useMutation({
     mutationFn: (payload: SegmentCreatePayload) => SegmentListService.create(payload),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: masterKeys.segments.lists() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: masterKeys.segments.lists() }),
+        queryClient.invalidateQueries({ queryKey: masterKeys.segments.dropdown() }),
+      ]);
     },
   });
 }
@@ -57,6 +61,7 @@ export function useUpdateSegment() {
         queryClient.invalidateQueries({
           queryKey: masterKeys.segments.detail(variables.id),
         }),
+        queryClient.invalidateQueries({ queryKey: masterKeys.segments.dropdown() }),
       ]);
     },
   });
@@ -73,8 +78,17 @@ export function useToggleSegmentStatus() {
         queryClient.invalidateQueries({
           queryKey: masterKeys.segments.detail(variables.id),
         }),
+        queryClient.invalidateQueries({ queryKey: masterKeys.segments.dropdown() }),
       ]);
     },
+  });
+}
+
+export function useSegmentsDropdown() {
+  return useQuery({
+    queryKey: masterKeys.segments.dropdown(),
+    queryFn: () => SegmentListService.dropdown(),
+    staleTime: 60_000,
   });
 }
 

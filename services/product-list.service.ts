@@ -46,10 +46,18 @@ export interface ProductListRecord {
   sku: string;
   supplierCode: string;
   supplier: string;
+  /** UUID of the supplier (for dropdown re-selection on edit) */
+  supplierId?: string;
   hsnCode: string;
+  /** UUID of the HSN record */
+  hsnUuid?: string;
   category: string;
+  /** UUID of the category */
+  categoryId?: string;
   subCategory: string;
   segment: string;
+  /** UUID of the segment */
+  segmentId?: string;
   packSize: number | null;
   baseUnit: string;
   mrp: number | null;
@@ -58,6 +66,21 @@ export interface ProductListRecord {
   updatedAt: string;
   createdBy: string;
   updatedBy: string;
+  scientificName?: string;
+  form?: string;
+  formId?: string;
+  cfu?: string;
+  cfuId?: string;
+  authority?: string;
+  packagingUnit?: string;
+  unitPerCase?: number | null;
+  mou?: string;
+  grossWeight?: number | null;
+  netWeight?: number | null;
+  gstRate?: string;
+  hsnId?: number | null;
+  gstId?: number | null;
+  gstUuid?: string;
 }
 
 export interface ProductListResult {
@@ -122,8 +145,10 @@ function asString(value: unknown): string {
   return typeof value === "string" ? value : String(value ?? "");
 }
 
-function toStatus(value: unknown): "active" | "inactive" {
-  return value === true ? "active" : "inactive";
+function toStatus(value: unknown, fallbackValue?: unknown): "active" | "inactive" {
+  const primaryVal = value !== undefined && value !== null ? value : fallbackValue;
+  const str = String(primaryVal).trim().toLowerCase();
+  return str === "active" || str === "true" || primaryVal === true ? "active" : "inactive";
 }
 
 function toDisplayName(user: unknown): string {
@@ -146,11 +171,48 @@ function toNullableNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Safely reads a name string from a field that may be a plain string or a nested object. */
+function readNestedName(primary: unknown, ...fallbacks: unknown[]): string {
+  if (primary && typeof primary === "object" && !Array.isArray(primary)) {
+    const obj = primary as Record<string, unknown>;
+    // Try common name keys
+    for (const key of ["categoryName", "segment_name", "formulation_name", "cfu_name",
+                        "supplier_name", "name", "title"]) {
+      if (obj[key]) return asString(obj[key]);
+    }
+    return "";
+  }
+  if (primary !== null && primary !== undefined && primary !== "") return asString(primary);
+  for (const fb of fallbacks) {
+    if (fb && typeof fb !== "object") return asString(fb);
+  }
+  return "";
+}
+
+/** Safely reads a UUID from a nested object or a flat id field. */
+function readNestedId(nested: unknown, flatId: unknown, ...idKeys: string[]): string {
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    const obj = nested as Record<string, unknown>;
+    for (const key of ["id", "category_id", "segment_id", "formulation_id", "cfu_id",
+                        "supplier_id", "hsn_id", "gst_id", ...idKeys]) {
+      if (obj[key]) return asString(obj[key]);
+    }
+  }
+  return asString(flatId);
+}
+
 function mapItem(
   raw: Record<string, unknown>,
   fallbackIndex: number,
 ): ProductListRecord {
   const srNo = Number(raw.sr_no);
+  const categoryObj = raw.category as Record<string, unknown> | null | undefined;
+  const segmentObj  = raw.segment  as Record<string, unknown> | null | undefined;
+  const supplierObj = raw.supplier  as Record<string, unknown> | null | undefined;
+  const formulationObj = raw.formulation as Record<string, unknown> | null | undefined;
+  const cfuObj      = raw.cfu       as Record<string, unknown> | null | undefined;
+  const hsnObj      = raw.hsn       as Record<string, unknown> | null | undefined;
+  const gstObj      = raw.gst_rate  as Record<string, unknown> | null | undefined;
   return {
     id: Number.isFinite(srNo) && srNo > 0 ? srNo : fallbackIndex + 1,
     productUuid: asString(raw.product_id),
@@ -158,45 +220,46 @@ function mapItem(
     productName: asString(raw.product_name),
     sku: asString(raw.sku),
     supplierCode: asString(raw.supplier_code),
-    supplier: asString(raw.supplier_name ?? raw.supplier),
-    hsnCode: asString(raw.hsn_code),
-    category: asString(raw.category_name ?? raw.category),
+    supplier: readNestedName(supplierObj?.supplier_name ?? supplierObj, raw.supplier_name),
+    supplierId: readNestedId(supplierObj, raw.supplier_id),
+    hsnCode: asString(raw.hsn_code) || asString(hsnObj?.hsnCode),
+    hsnUuid: readNestedId(hsnObj, raw.hsn_id),
+    category: readNestedName(categoryObj?.categoryName ?? categoryObj, raw.category_name),
+    categoryId: readNestedId(categoryObj, raw.category_id),
     subCategory: asString(raw.sub_category_name ?? raw.sub_category),
-    segment: asString(raw.segment_name ?? raw.segment),
+    segment: readNestedName(segmentObj?.segment_name ?? segmentObj, raw.segment_name),
+    segmentId: readNestedId(segmentObj, raw.segment_id, "segment_id"),
     packSize: toNullableNumber(raw.pack_size),
-    baseUnit: asString(raw.base_unit),
+    baseUnit: asString(raw.base_unit ?? raw.unit),
     mrp: toNullableNumber(raw.mrp),
-    status: toStatus(raw.is_active),
+    status: toStatus(raw.status, raw.is_active),
     createdAt: formatDate(raw.created_at),
     updatedAt: formatDate(raw.updated_at),
     createdBy: toDisplayName(raw.created_by_user),
     updatedBy: toDisplayName(raw.updated_by_user),
+    scientificName: asString(raw.scientific_name),
+    form: readNestedName(formulationObj?.formulation_name ?? formulationObj, raw.form_name ?? raw.form),
+    formId: readNestedId(formulationObj, raw.formulation_id),
+    cfu: readNestedName(cfuObj?.cfu_name ?? cfuObj, raw.cfu),
+    cfuId: readNestedId(cfuObj, raw.cfu_id, "cfu_id"),
+    authority: asString(raw.authority),
+    packagingUnit: asString(raw.packing_unit ?? raw.packaging_unit),
+    unitPerCase: toNullableNumber(raw.unit_per_packing ?? raw.unit_per_case ?? raw.units_per_case),
+    mou: asString(raw.mou),
+    grossWeight: toNullableNumber(raw.gross_weight),
+    netWeight: toNullableNumber(raw.net_weight ?? raw.net_weight_per_packaging_unit),
+    gstRate: gstObj ? `${asString(gstObj.gstPercentage)}%` : asString(raw.gst_rate),
+    gstUuid: readNestedId(gstObj, raw.gst_rate_id ?? raw.gst_id),
+    hsnId: toNullableNumber(raw.hsn_id),
+    gstId: toNullableNumber(raw.gst_id),
   };
 }
 
 function mapDetail(raw: Record<string, unknown>): ProductListRecord {
-  const srNo = Number(raw.sr_no);
-  return {
-    id: Number.isFinite(srNo) && srNo > 0 ? srNo : 0,
-    productUuid: asString(raw.product_id),
-    productCode: asString(raw.product_code),
-    productName: asString(raw.product_name),
-    sku: asString(raw.sku),
-    supplierCode: asString(raw.supplier_code),
-    supplier: asString(raw.supplier_name ?? raw.supplier),
-    hsnCode: asString(raw.hsn_code),
-    category: asString(raw.category_name ?? raw.category),
-    subCategory: asString(raw.sub_category_name ?? raw.sub_category),
-    segment: asString(raw.segment_name ?? raw.segment),
-    packSize: toNullableNumber(raw.pack_size),
-    baseUnit: asString(raw.base_unit),
-    mrp: toNullableNumber(raw.mrp),
-    status: toStatus(raw.is_active),
-    createdAt: formatDate(raw.created_at),
-    updatedAt: formatDate(raw.updated_at),
-    createdBy: toDisplayName(raw.created_by_user),
-    updatedBy: toDisplayName(raw.updated_by_user),
-  };
+  // mapDetail reuses mapItem so nested-object handling is centralised
+  const mapped = mapItem(raw, -1);
+  mapped.id = Number(raw.sr_no) > 0 ? Number(raw.sr_no) : 0;
+  return mapped;
 }
 
 function extractErrorMessage(error: unknown, fallback: string): string {
