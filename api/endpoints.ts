@@ -37,10 +37,6 @@ export const API_ENDPOINTS = {
       EXPORT: "/master/customer-type/export",
       DROPDOWN: "/master/customer-type/dropdown",
     },
-    CUSTOMER:{
-      CUSTOMER: "/master/customer/dropdown",
-      CUSTOMER_DETAILS: (id: string) => `/master/customer/${id}`,
-    },
     GST: {
       LIST: "/master/gst/list",
       CREATE: "/master/gst/create",
@@ -111,7 +107,7 @@ export const API_ENDPOINTS = {
       DROPDOWN: "/master/product/dropdown",
       PRICING: "/master/product/pricing",
     },
-    PRICING:{
+    PRICING: {
       DROPDOWN: "/master/product-pricing/dropdown",
     },
     WAREHOUSE: {

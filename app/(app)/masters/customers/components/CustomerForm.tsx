@@ -111,8 +111,9 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { CustomerCreatePayload, CustomerListRecord, CustomerUpdatePayload } from "@/services/customer-list.service";
+import { CustomerCreatePayload, CustomerListRecord, CustomerBranchPayload, CustomerUpdatePayload, CustomerBranchDocumentPayload } from "@/services/customer-list.service";
 import { useGstDropdown, useTdsDropdown } from "@/hooks/masters";
+import { useSalesmenDropdown } from "@/hooks/sales/use-sales-orders";
 
 export interface BranchAddress {
 	address: string;
@@ -126,6 +127,7 @@ export interface BranchAddress {
 }
 
 export interface BranchDocument {
+	documentTypeId?: string;
 	documentName: string;
 	required: boolean;
 	fileName?: string;
@@ -684,6 +686,46 @@ interface CustomerFormProps {
 	}[];
 }
 
+function branchToPayload(b: CustomerBranch, bIdx: number): {
+	payload: CustomerBranchPayload;
+	fileEntries: { key: string; file: File }[];
+} {
+	const fileEntries: { key: string; file: File }[] = [];
+
+	const documents: CustomerBranchDocumentPayload[] = b.documents
+		.filter((d) => d.file && (d as any).documentTypeId)
+		.map((d) => {
+			const key = `branch_${bIdx}_doc_${(d as any).documentTypeId}`;
+			fileEntries.push({ key, file: d.file as File });
+			return { document_type_id: (d as any).documentTypeId, file_key: key };
+		});
+
+	return {
+		payload: {
+			branch_name: b.branchName,
+			is_main_branch: !!b.isMain,
+			billing_country: b.billingAddress.country ?? "India",
+			billing_address_line_1: b.billingAddress.address,
+			billing_address_line_2: b.billingAddress.addressLine2 ?? "",
+			billing_state: b.billingAddress.state,
+			billing_city: b.billingAddress.city,
+			billing_town: b.billingAddress.town ?? "",
+			billing_pincode: b.billingAddress.pincode,
+			billing_pincode_id: (b.billingAddress as any).pincodeId ?? "",
+			shipping_country: b.shippingAddress.country ?? "India",
+			shipping_address_line_1: b.shippingAddress.address,
+			shipping_address_line_2: b.shippingAddress.addressLine2 ?? "",
+			shipping_state: b.shippingAddress.state,
+			shipping_city: b.shippingAddress.city,
+			shipping_town: b.shippingAddress.town ?? "",
+			shipping_pincode: b.shippingAddress.pincode,
+			shipping_pincode_id: (b.shippingAddress as any).pincodeId ?? "",
+			documents,
+		},
+		fileEntries,
+	};
+}
+
 export function CustomerForm({
 	form,
 	onChange,
@@ -697,6 +739,7 @@ export function CustomerForm({
 }: CustomerFormProps) {
 	const { data: gstDropdownItems = [] } = useGstDropdown();
 	const { data: tdsDropdownItems = [] } = useTdsDropdown();
+	const { data: salesmanData = [] } = useSalesmenDropdown();
 
 	const [geoNodes] = useState(() =>
 		typeof window !== "undefined" ? loadGeoNodes() : [],
@@ -882,18 +925,18 @@ export function CustomerForm({
 	}, [form.territoryId, geoNodes]);
 
 	const salesOptions = useMemo(() => {
-		return getActiveSalesEmployees().map((e) => {
-			const name = e.fullName || `${e.firstName} ${e.lastName}`.trim();
-			const label = e.geoRegion ? `${name} (${e.geoRegion})` : name;
+		return salesmanData.map((s: any) => {
+			const name = `${s.first_name || ""} ${s.last_name || ""}`.trim() || s.username || "";
+			const label = s.geo_region ? `${name} (${s.geo_region})` : name;
 			return {
-				value: String(e.id),
+				value: String(s.user_id),
 				label,
-				sublabel: [e.employeeId, e.mobile, e.role, e.territory]
+				sublabel: [s.employee_id || s.username, s.mobile_no || s.mobile, s.role?.role_name || s.role_type]
 					.filter(Boolean)
 					.join(" - "),
 			};
 		});
-	}, []);
+	}, [salesmanData]);
 
 	const activeProducts = useMemo((): ProductCatalogItem[] => {
 		return loadProducts()
@@ -2453,7 +2496,7 @@ export function formValuesToUpdatePayload(
 		ifsc_code: form.ifscCode.trim().toUpperCase(),
 		swift_code: form.swiftCode.trim(),
 
-		branches: form.branches,
+		branches: form.branches.map((branch, idx) => branchToPayload(branch, idx).payload),
 	};
 }
 
@@ -2502,7 +2545,7 @@ export function formValuesToCreatePayload(
 		ifsc_code: form.ifscCode.trim().toUpperCase(),
 		swift_code: form.swiftCode.trim(),
 
-		branches: form.branches,
+		branches: form.branches.map((branch, idx) => branchToPayload(branch, idx).payload),
 	};
 }
 

@@ -446,7 +446,7 @@ export function ProductForm({
 		<div className='w-full space-y-4'>
 			{/* Basic & classification */}
 			<div>
-				<SectionHead label='Product Inform2323232ation' />
+				<SectionHead label='Product Information' />
 				<div className={formGrid}>
 					<div className='space-y-1 md:col-span-1'>
 						<Label className='text-xs font-medium'>

@@ -2,6 +2,34 @@ import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import { CustomerBranch } from "@/app/(app)/masters/customers/customer-data";
 
+export interface CustomerBranchDocumentPayload {
+    document_type_id: string;
+    file_key: string;
+}
+
+export interface CustomerBranchPayload {
+    branch_name: string;
+    is_main_branch: boolean;
+    billing_country: string;
+    billing_address_line_1: string;
+    billing_address_line_2: string;
+    billing_state: string;
+    billing_city: string;
+    billing_town: string;
+    billing_pincode: string;
+    billing_pincode_id: string;
+    shipping_country: string;
+    shipping_address_line_1: string;
+    shipping_address_line_2: string;
+    shipping_state: string;
+    shipping_city: string;
+    shipping_town: string;
+    shipping_pincode: string;
+    shipping_pincode_id: string;
+    documents: CustomerBranchDocumentPayload[];
+}
+
+
 export interface CustomerCreatePayload {
     customer_name: string;
     customer_type_id: string;
@@ -48,7 +76,7 @@ export interface CustomerCreatePayload {
     ifsc_code?: string;
     swift_code?: string;
 
-    branches: CustomerBranch[];
+    branches: CustomerBranchPayload[];
 
     [key: string]: unknown;
 }
