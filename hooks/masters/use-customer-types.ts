@@ -7,6 +7,7 @@ import {
   type CustomerTypeExportParams,
   type CustomerTypeListParams,
   type CustomerTypeUpdatePayload,
+  type CustomerTypeDropdownItem,
 } from "@/services/customer-type-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
 
@@ -81,5 +82,13 @@ export function useExportCustomerTypes() {
   return useMutation({
     mutationFn: (params: CustomerTypeExportParams) =>
       CustomerTypeListService.export(params),
+  });
+}
+
+export function useCustomerTypeDropdown() {
+  return useQuery<CustomerTypeDropdownItem[]>({
+    queryKey: masterKeys.customerTypes.all(),
+    queryFn: () => CustomerTypeListService.dropdown(),
+    staleTime: 30_000,
   });
 }

@@ -7,17 +7,17 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, Save, X, CheckCircle2, XCircle, ShieldAlert } from "lucide-react";
-import { loadCustomers, saveCustomers, todayStr } from "../../customer-data";
 import {
   CustomerForm,
-  customerToFormValues,
+  customerRecordToFormValues, // new — see below
   validateCustomerForm,
-  formValuesToCustomer,
+  formValuesToUpdatePayload, // new — see below
   type CustomerFormValues,
 } from "../../components/CustomerForm";
 import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
 import { hasCustomerPermission } from "../../customer-permissions";
-import { buildCreditAuditEntriesOnSave } from "@/lib/masters/customer-credit";
+import { useUpdateCustomer, useCustomer } from "@/hooks/masters";
+import { useCustomerTypeDropdown } from "@/hooks/masters/use-customer-types";
 
 interface ToastState {
   msg: string;
@@ -53,16 +53,24 @@ export default function EditCustomerPage() {
   const [form, setForm] = useState<CustomerFormValues | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [customerCode, setCustomerCode] = useState("");
+
+  const { data: customer, isLoading, isError } = useCustomer(id);
+  const updateCustomer = useUpdateCustomer();
+  const {
+    data: customerTypes = [],
+    isLoading: customerTypesLoading,
+  } = useCustomerTypeDropdown();
 
   useEffect(() => {
     setAllowed(hasCustomerPermission("edit"));
-    const list = loadCustomers();
-    const found = list.find((c) => c.id === Number(id));
-    if (!found) return;
-    setForm(customerToFormValues(found));
-    setCustomerCode(found.customerCode);
-  }, [id]);
+  }, []);
+
+  // Seed the form once the record arrives (or when a different id loads)
+  useEffect(() => {
+    if (customer) {
+      setForm(customerRecordToFormValues(customer));
+    }
+  }, [customer]);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
@@ -72,7 +80,7 @@ export default function EditCustomerPage() {
     });
 
   const handleSave = () => {
-    if (!form) return;
+    if (!form || !customer) return;
     const e = validateCustomerForm(form);
     setErrors(e);
     if (Object.keys(e).length > 0) {
@@ -82,40 +90,53 @@ export default function EditCustomerPage() {
       return;
     }
 
-    const list = loadCustomers();
-    const existing = list.find((c) => c.id === Number(id));
-    if (!existing) return;
+    const payload = formValuesToUpdatePayload(form);
 
-    const today = todayStr();
-    const updated = formValuesToCustomer(form, {
-      ...existing,
-      creditAuditLog: buildCreditAuditEntriesOnSave({ form, existing }),
-      lastStatusChange:
-        existing.status !== form.status ? today : existing.lastStatusChange,
-      statusHistory:
-        existing.status !== form.status
-          ? [
-              ...existing.statusHistory,
-              {
-                date: today,
-                from: existing.status,
-                to: form.status,
-                by: "Admin",
-                reason:
-                  form.status === "blocked"
-                    ? form.blockReason.trim()
-                    : "Status updated",
-              },
-            ]
-          : existing.statusHistory,
-    });
+    updateCustomer.mutate(
+      { id: customer.customerUuid, payload },
+      {
+        onSuccess: () => {
+          if (form.status === "active") {
+            const mainBranch =
+              form.branches.find((b) => b.isMain) ??
+              form.branches.find((b) => b.branchName === "Main Branch") ??
+              form.branches[0];
 
-    saveCustomers(list.map((c) => (c.id === updated.id ? updated : c)));
-    if (updated.status === "active") {
-      ensureCustomerLedgerFromMaster(updated);
-    }
-    setToast({ msg: "Customer updated successfully.", type: "success" });
-    setTimeout(() => router.push(`/masters/customers/${id}`), 900);
+            ensureCustomerLedgerFromMaster({
+              id: customer.id,
+              customerUuid: customer.customerUuid,
+              customerName: form.customerName,
+              customerCode: customer.customerCode,
+              status: form.status,
+              gstApplicable: form.gstRegistered,
+              gstin: form.gstRegistered ? form.gstin : "",
+              pan: form.pan,
+              tdsApplicable: form.tdsApplicable,
+              creditLimit: form.creditLimit ? parseFloat(form.creditLimit) : 0,
+              paymentTerms: "",
+              address: mainBranch?.billingAddress?.address ?? "",
+              districtName: mainBranch?.billingAddress?.district ?? mainBranch?.billingAddress?.city ?? "",
+              stateName: mainBranch?.billingAddress?.state ?? "",
+              pincode: mainBranch?.billingAddress?.pincode ?? "",
+              branches: form.branches,
+              salesManName: "",
+              mobile: form.mobile,
+              countryCode: form.countryCode,
+              email: form.email,
+            });
+          }
+          setToast({ msg: "Customer updated successfully.", type: "success" });
+          setTimeout(() => router.push(`/masters/customers/${id}`), 900);
+        },
+        onError: (err) => {
+          setToast({
+            msg: err instanceof Error ? err.message : "Failed to update customer.",
+            type: "error",
+          });
+          setTimeout(() => setToast(null), 3200);
+        },
+      },
+    );
   };
 
   if (allowed === false) {
@@ -138,20 +159,24 @@ export default function EditCustomerPage() {
     );
   }
 
-  if (!form || allowed === null) {
+  if (allowed === null || isLoading || customerTypesLoading) {
     return (
       <div className="py-16 text-center">
-        <p className="text-sm text-muted-foreground">
-          {allowed === null ? "Loading..." : "Customer not found."}
-        </p>
-        {allowed !== null && (
-          <Link
-            href="/masters/customers"
-            className="mt-2 inline-block text-xs text-brand-600 hover:underline"
-          >
-            Back to listing
-          </Link>
-        )}
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  if (isError || !customer || !form) {
+    return (
+      <div className="py-16 text-center">
+        <p className="text-sm text-muted-foreground">Customer not found.</p>
+        <Link
+          href="/masters/customers"
+          className="mt-2 inline-block text-xs text-brand-600 hover:underline"
+        >
+          Back to listing
+        </Link>
       </div>
     );
   }
@@ -164,13 +189,19 @@ export default function EditCustomerPage() {
       actions={
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
-            {customerCode}
+            {customer.customerCode}
           </span>
           <Button variant="ghost" size="sm" onClick={() => router.back()}>
             Discard
           </Button>
-          <Button variant="default" size="sm" onClick={handleSave}>
-            <Save className="w-4 h-4" /> Update Customer
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleSave}
+            disabled={updateCustomer.isPending}
+          >
+            <Save className="w-4 h-4" />
+            {updateCustomer.isPending ? "Saving..." : "Update Customer"}
           </Button>
         </div>
       }
@@ -181,7 +212,8 @@ export default function EditCustomerPage() {
         errors={errors}
         onSetErrors={setErrors}
         onClearError={clearErr}
-        customerCode={customerCode}
+        customerCode={customer.customerCode}
+        customerTypes={customerTypes}
       />
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}

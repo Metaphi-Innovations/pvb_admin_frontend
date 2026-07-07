@@ -130,5 +130,17 @@ export const masterKeys = {
     dropdown: () => [...masterKeys.suppliers.all(), "dropdown"] as const,
     previewNumber: () => [...masterKeys.suppliers.all(), "preview-number"] as const,
     export: () => [...masterKeys.suppliers.all(), "export"] as const,
-  }
+  },
+
+  customers: {
+    all: () => [...masterKeys.all, "customers"] as const,
+    lists: () => [...masterKeys.customers.all(), "list"] as const,
+    list: (params: MasterListKeyParams) =>
+      [...masterKeys.customers.lists(), params] as const,
+    details: () => [...masterKeys.customers.all(), "detail"] as const,
+    detail: (id: string) => [...masterKeys.customers.details(), id] as const,
+    dropdown: () => [...masterKeys.customers.all(), "dropdown"] as const,
+    previewNumber: () => [...masterKeys.customers.all(), "preview-number"] as const,
+    export: () => [...masterKeys.customers.all(), "export"] as const,
+  },
 } as const;

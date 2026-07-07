@@ -118,6 +118,11 @@ export interface CustomerTypeExportParams {
   apiFilters?: Record<string, unknown>;
 }
 
+export interface CustomerTypeDropdownItem {
+  id: string;
+  customerType: string;
+}
+
 export const CustomerTypeListService = {
   async list(params: CustomerTypeListParams): Promise<CustomerTypeListResult> {
     const ordering = encodeURIComponent(params.ordering ?? "");
@@ -210,5 +215,20 @@ export const CustomerTypeListService = {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
+  },
+
+  async dropdown(): Promise<CustomerTypeDropdownItem[]> {
+    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.CUSTOMER_TYPE.DROPDOWN);
+    const payload = response.data as Record<string, unknown>;
+    const data = payload.data;
+
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an array.");
+    }
+
+    return data.map(item => ({
+      id: String(item.id),
+      customerType: String(item.customer_type_name),
+    }));
   },
 };

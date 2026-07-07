@@ -82,6 +82,7 @@ export interface CustomerBranch {
 
 export interface Customer {
 	id: number;
+	customerUuid: string;
 	customerCode: string;
 	customerName: string;
 	customerType: string;
@@ -2003,6 +2004,7 @@ function migrateCustomer(raw: Record<string, unknown>): Customer {
 
 	return {
 		id: c.id ?? 0,
+		customerUuid: c.customerUuid ?? "",
 		customerCode: c.customerCode ?? "",
 		customerName: c.customerName ?? "",
 		customerType: c.customerType ?? "distributor",

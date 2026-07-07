@@ -7,10 +7,6 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, CheckCircle2, Save, X, XCircle, ShieldAlert } from "lucide-react";
 import {
-  loadCustomers,
-  saveCustomers,
-  nextCustomerId,
-  generateCustomerCodeForType,
   todayStr,
 } from "../customer-data";
 import {
@@ -19,6 +15,7 @@ import {
   validateCustomerForm,
   formValuesToCustomer,
   type CustomerFormValues,
+  formValuesToCreatePayload,
 } from "../components/CustomerForm";
 import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync";
 import { hasCustomerPermission } from "../customer-permissions";
@@ -35,6 +32,10 @@ import {
   computeDistributorAssessment,
   formatCategoryLabel,
 } from "@/lib/distributor/distributor-scoring";
+import { useCreateCustomer } from "@/hooks/masters";
+import { formValuesToStructured, paymentTermsToLegacy } from "@/lib/masters/payment-terms";
+import { useCustomerTypeDropdown } from "@/hooks/masters/use-customer-types";
+import { CustomerListService } from "@/services/customer-list.service";
 
 interface ToastState {
   msg: string;
@@ -70,11 +71,18 @@ export default function NewCustomerPage() {
   const [form, setForm] = useState<CustomerFormValues>(DEFAULT_CUSTOMER_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [customerCode, setCustomerCode] = useState("");
+  const [codeLoading, setCodeLoading] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [sourceDistributorId, setSourceDistributorId] = useState<number | null>(null);
   const [distributorAssessmentLabel, setDistributorAssessmentLabel] = useState<string | null>(
     null,
   );
+
+  const createCustomer = useCreateCustomer();
+  const {
+    data: customerTypes = [],
+    isLoading: customerTypesLoading,
+  } = useCustomerTypeDropdown();
 
   useEffect(() => {
     setAllowed(hasCustomerPermission("create"));
@@ -85,9 +93,9 @@ export default function NewCustomerPage() {
     const fromSession =
       typeof window !== "undefined"
         ? Number.parseInt(
-            window.sessionStorage.getItem(CONVERT_DISTRIBUTOR_STORAGE_KEY) ?? "",
-            10,
-          )
+          window.sessionStorage.getItem(CONVERT_DISTRIBUTOR_STORAGE_KEY) ?? "",
+          10,
+        )
         : Number.NaN;
 
     const distributorId = Number.isNaN(fromQuery) ? fromSession : fromQuery;
@@ -105,14 +113,37 @@ export default function NewCustomerPage() {
     );
   }, [searchParams]);
 
+  // Fetch the real preview customer code from the API whenever customer type changes.
+  // Replaces the old hardcoded "Auto-generated" placeholder.
   useEffect(() => {
     if (!form.customerType) {
       setCustomerCode("");
       return;
     }
-    setCustomerCode(
-      generateCustomerCodeForType(form.customerType, loadCustomers()),
-    );
+
+    let cancelled = false;
+    setCodeLoading(true);
+    setCustomerCode("");
+
+    CustomerListService.previewNumber()
+      .then((code) => {
+        if (!cancelled) setCustomerCode(code);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch customer code preview", err);
+        if (!cancelled) {
+          setCustomerCode("");
+          setToast({ msg: "Could not generate customer code. Try again.", type: "error" });
+          setTimeout(() => setToast(null), 3200);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCodeLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [form.customerType]);
 
   const clearErr = (key: string) =>
@@ -122,7 +153,7 @@ export default function NewCustomerPage() {
       return next;
     });
 
-  const persist = (asDraft: boolean) => {
+  const persist = async (asDraft: boolean) => {
     const e = validateCustomerForm(form, true);
     if (!form.customerType) {
       e.customerType = "Customer type is required";
@@ -140,7 +171,6 @@ export default function NewCustomerPage() {
       return;
     }
 
-    const list = loadCustomers();
     const today = todayStr();
     const status = asDraft
       ? "draft"
@@ -148,47 +178,75 @@ export default function NewCustomerPage() {
         ? "active"
         : form.status;
 
-    const record = formValuesToCustomer(
-      { ...form, status },
-      {
-        id: nextCustomerId(list),
-        customerCode,
-        createdBy: "Admin",
-        createdDate: today,
-        lastStatusChange: today,
-        blockReason: "",
-        statusHistory: [
-          {
-            date: today,
-            from: "-",
-            to: status,
-            by: "Admin",
-            reason: asDraft ? "Saved as draft" : "Customer created",
-          },
-        ],
-        creditAuditLog: buildCreditAuditEntriesOnSave({ form, existing: null }),
-      },
-    );
+    const payload = formValuesToCreatePayload({ ...form, status });
 
-    saveCustomers([...list, record]);
-    if (sourceDistributorId !== null) {
-      updateDistributorConversion(
-        sourceDistributorId,
-        record.id,
-        asDraft || status === "draft" ? "draft_customer" : "customer_completed",
-      );
-      if (typeof window !== "undefined") {
-        window.sessionStorage.removeItem(CONVERT_DISTRIBUTOR_STORAGE_KEY);
+
+    try {
+      const created = await createCustomer.mutateAsync(payload);
+      const newId = (created as any)?.id;
+      const finalCode = (created as any)?.customerCode ?? customerCode;
+
+      if (sourceDistributorId !== null) {
+        updateDistributorConversion(
+          sourceDistributorId,
+          newId,
+          asDraft || status === "draft" ? "draft_customer" : "customer_completed",
+        );
+        if (typeof window !== "undefined") {
+          window.sessionStorage.removeItem(CONVERT_DISTRIBUTOR_STORAGE_KEY);
+        }
       }
+
+      if (!asDraft && status !== "draft") {
+        const mainBranch =
+          form.branches.find((b) => b.isMain) ??
+          form.branches.find((b) => b.branchName === "Main Branch") ??
+          form.branches[0];
+
+        ensureCustomerLedgerFromMaster({
+          id: newId,
+          customerUuid: (created as any)?.customerUuid,
+          customerName: form.customerName,
+          customerCode: finalCode,
+          status,
+          gstApplicable: form.gstRegistered,
+          gstin: form.gstRegistered ? form.gstin : "",
+          pan: form.pan,
+          tdsApplicable: form.tdsApplicable,
+          creditLimit: form.creditLimit ? parseFloat(form.creditLimit) : 0,
+          paymentTerms: paymentTermsToLegacy(
+            formValuesToStructured({
+              paymentType: form.paymentType,
+              creditDays: form.creditDays,
+              advancePercentage: form.advancePercentage,
+            })!,
+          ),
+          address: mainBranch?.billingAddress?.address ?? "",
+          districtName: mainBranch?.billingAddress?.district ?? mainBranch?.billingAddress?.city ?? "",
+          stateName: mainBranch?.billingAddress?.state ?? "",
+          pincode: mainBranch?.billingAddress?.pincode ?? "",
+          branches: form.branches,
+          salesManName: "", // resolve from getActiveSalesEmployees() if needed, see below
+          mobile: form.mobile,
+          countryCode: form.countryCode,
+          email: form.email,
+        });
+      }
+
+      setToast({
+        msg: asDraft ? "Draft saved successfully." : "Customer created successfully.",
+        type: "success",
+      });
+      setTimeout(() => router.push("/masters/customers"), 1000);
+    } catch (err) {
+      console.error(err);
+      setToast({
+        msg: err instanceof Error ? err.message : "Failed to save customer.",
+        type: "error",
+      });
+      setTimeout(() => setToast(null), 3200);
     }
-    if (!asDraft && status !== "draft") {
-      ensureCustomerLedgerFromMaster(record);
-    }
-    setToast({
-      msg: asDraft ? "Draft saved successfully." : "Customer created successfully.",
-      type: "success",
-    });
-    setTimeout(() => router.push("/masters/customers"), 1000);
+
   };
 
   if (allowed === false) {
@@ -225,13 +283,19 @@ export default function NewCustomerPage() {
       actions={
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-mono font-semibold px-2 py-1.5 rounded bg-brand-50 text-brand-700">
-            {customerCode}
+            {codeLoading ? "Generating…" : customerCode || "—"}
           </span>
           <Button variant="ghost" size="sm" onClick={() => router.back()}>
             Discard
           </Button>
-          <Button variant="default" size="sm" onClick={() => persist(false)}>
-            <Save className="w-4 h-4" /> Save
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => persist(false)}
+            disabled={createCustomer.isPending}
+          >
+            <Save className="w-4 h-4" />
+            {createCustomer.isPending ? "Saving…" : "Save"}
           </Button>
         </div>
       }
@@ -256,6 +320,7 @@ export default function NewCustomerPage() {
         onClearError={clearErr}
         isAdd={true}
         customerCode={customerCode}
+        customerTypes={customerTypes}
       />
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}

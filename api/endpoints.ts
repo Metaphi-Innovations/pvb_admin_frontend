@@ -35,6 +35,7 @@ export const API_ENDPOINTS = {
       STATUS_UPDATE: (id: string) => `/master/customer-type/update-status/${id}`,
       VIEW: (id: string) => `/master/customer-type/${id}`,
       EXPORT: "/master/customer-type/export",
+      DROPDOWN: "/master/customer-type/dropdown",
     },
     GST: {
       LIST: "/master/gst/list",
@@ -118,6 +119,16 @@ export const API_ENDPOINTS = {
       PREVIEW_NUMBER: "/master/supplier/preview-number",
       DROPDOWN: "/master/supplier/dropdown",
       DETAILS: (id: string) => `/master/supplier/details/${id}`,
+    },
+    CUSTOMER: {
+      LIST: "/master/customer/list",
+      CREATE: "/master/customer/create",
+      UPDATE: (id: string) => `/master/customer/update/${id}`,
+      STATUS_UPDATE: (id: string) => `/master/customer/update-status/${id}`,
+      VIEW: (id: string) => `/master/customer/${id}`,
+      EXPORT: "/master/customer/export",
+      PREVIEW_NUMBER: "/master/customer/preview-number",
+      DROPDOWN: "/master/customer/dropdown",
     }
   },
   PROCUREMENT: {
