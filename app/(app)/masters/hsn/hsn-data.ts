@@ -180,6 +180,11 @@ export function hsnToForm(record: HSNMaster): HSNForm {
   return {
     hsnDescription: record.hsnDescription,
     gstId: record.gstId ?? "",
+    hsnCode: record.hsnCode,
+    gstRate: record.gstRate,
+    productCategory: record.productCategory ?? "",
+    effectiveDate: record.effectiveDate ?? "",
+    status: record.status,
   };
 }
 
@@ -191,12 +196,12 @@ export function formToHsn(
   const now = masterToday();
   return {
     id,
-    hsnCode: form.hsnCode.trim(),
+    hsnCode: (form.hsnCode ?? "").trim(),
     hsnDescription: form.hsnDescription.trim(),
-    gstRate: form.gstRate,
-    productCategory: form.productCategory.trim(),
-    effectiveDate: form.effectiveDate.trim(),
-    status: form.status,
+    gstRate: form.gstRate ?? "",
+    productCategory: (form.productCategory ?? "").trim(),
+    effectiveDate: (form.effectiveDate ?? "").trim(),
+    status: form.status ?? "active",
     createdBy: existing?.createdBy ?? MASTER_CURRENT_USER,
     createdDate: existing?.createdDate ?? now,
     updatedBy: MASTER_CURRENT_USER,
@@ -223,7 +228,7 @@ export function validateHsnForm(
   excludeId?: number,
 ): Record<string, string> {
   const errors: Record<string, string> = {};
-  const code = sanitizeHsnCodeInput(form.hsnCode);
+  const code = sanitizeHsnCodeInput(form.hsnCode ?? "");
 
   if (!code) {
     errors.hsnCode = "HSN code is required.";

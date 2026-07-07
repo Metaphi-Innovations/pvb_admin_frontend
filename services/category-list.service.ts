@@ -211,8 +211,9 @@ export const CategoryListService = {
     return data.map((row) => {
       const item = (row ?? {}) as Record<string, unknown>;
       return {
-        id: asString(item.id),
+        id: asString(item.id ?? item.category_id),
         categoryName: asString(item.categoryName ?? item.category_name),
+        categoryCode: asString(item.category_code ?? item.categoryCode),
       };
     });
   },
@@ -233,24 +234,5 @@ export const CategoryListService = {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
-  },
-
-  async dropdown(): Promise<CategoryDropdownItem[]> {
-    const response = await axiosInstance.get(API_ENDPOINTS.MASTER.CATEGORY.DROPDOWN);
-    const payload = response.data as Record<string, unknown>;
-    const data = payload.data;
-
-    if (!Array.isArray(data)) {
-      throw new Error("Unexpected response shape: 'data' must be an array.");
-    }
-
-    return data.map((row) => {
-      const item = (row ?? {}) as Record<string, unknown>;
-      return {
-        id: asString(item.id ?? item.category_id),
-        categoryName: asString(item.category_name ?? item.categoryName),
-        categoryCode: asString(item.category_code),
-      };
-    });
   },
 };

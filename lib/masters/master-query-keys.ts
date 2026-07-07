@@ -49,6 +49,7 @@ export const masterKeys = {
       [...masterKeys.segments.lists(), params] as const,
     details: () => [...masterKeys.segments.all(), "detail"] as const,
     detail: (id: string) => [...masterKeys.segments.details(), id] as const,
+    dropdown: () => [...masterKeys.segments.all(), "dropdown"] as const,
     filterDropdowns: () => [...masterKeys.segments.all(), "filter-dropdown"] as const,
     filterDropdown: (fieldName: string) =>
       [...masterKeys.segments.filterDropdowns(), fieldName] as const,
