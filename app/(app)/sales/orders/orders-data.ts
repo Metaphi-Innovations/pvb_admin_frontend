@@ -39,10 +39,6 @@ export const APPROVAL_ORDER_STATUSES: OrderStatus[] = ["pending_approval", "appr
 /** Statuses that may be changed on edit. */
 export const EDITABLE_ORDER_STATUSES: OrderStatus[] = [
   "draft",
-  "pending_approval",
-  "approved",
-  "rejected",
-  "confirmed",
 ];
 
 export const ORDER_STATUS_OPTIONS: { value: OrderStatus; label: string }[] = [
@@ -108,6 +104,10 @@ export interface SalesOrderLineItem {
   cgstAmount?: number;
   sgstAmount?: number;
   igstAmount?: number;
+  cgstPercentage?: number;
+  sgstPercentage?: number;
+  igstPercentage?: number;
+  gstPercentage?: number;
   lineTotal: number;
   /** Split form only: parent line when qty is taken from original order */
   splitSourceLineId?: string;
@@ -424,8 +424,11 @@ export function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function parseGstRate(gstRate: string): number {
-  const n = parseFloat(gstRate.replace("%", "").trim());
+export function parseGstRate(gstRate: any): number {
+  if (typeof gstRate === "number") return gstRate;
+  if (!gstRate) return 0;
+  const str = String(gstRate);
+  const n = parseFloat(str.replace("%", "").trim());
   return Number.isFinite(n) ? n : 0;
 }
 
@@ -634,6 +637,10 @@ export function applyLineTaxFields(
     sgstAmount: breakdown.sgstAmount,
     igstAmount: breakdown.igstAmount,
     gstAmount: breakdown.gstAmount,
+    cgstPercentage: breakdown.cgstRate,
+    sgstPercentage: breakdown.sgstRate,
+    igstPercentage: breakdown.igstRate,
+    gstPercentage: breakdown.cgstRate + breakdown.sgstRate + breakdown.igstRate,
   });
 }
 
@@ -843,8 +850,17 @@ export function loadProductCatalog(): ProductCatalogItem[] {
   return PRODUCT_CATALOG.filter(p => p.status === "active");
 }
 
-export function getProductById(id: number): ProductCatalogItem | undefined {
-  return PRODUCT_CATALOG.find(p => p.id === id);
+let dynamicProducts: ProductCatalogItem[] | null = null;
+
+export function setDynamicProducts(products: ProductCatalogItem[] | null) {
+  dynamicProducts = products;
+}
+
+export function getProductById(id: any): ProductCatalogItem | undefined {
+  if (dynamicProducts) {
+    return dynamicProducts.find(p => String(p.id) === String(id));
+  }
+  return PRODUCT_CATALOG.find(p => String(p.id) === String(id));
 }
 
 export { getCustomersForTransactionDropdown, loadCustomers };

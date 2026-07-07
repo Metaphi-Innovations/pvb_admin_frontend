@@ -82,4 +82,30 @@ export const API_ENDPOINTS = {
       REJECT: "/procurement/purchase-order/reject",
     },
   },
+  SALES: {
+    SALES_ORDER: {
+      NEXT_SO_NUMBER: "/sales/sales-order/next-so-number",
+      FILTER: "/sales/sales-order/filter",
+      LIST: "/sales/sales-order/list",
+      EXPORT: "/sales/sales-order/export",
+      CREATE: "/sales/sales-order/create",
+      DETAILS: (id: string) => `/sales/sales-order/${id}`,
+      UPDATE: (id: string) => `/sales/sales-order/update/${id}`,
+      APPROVE_REJECT: (id: string) => `/sales/sales-order/${id}/approve-reject`,
+      CANCEL: (id: string) => `/sales/sales-order/${id}/cancel`,
+      SPLIT: (id: string) => `/sales/sales-order/${id}/split`,
+    },
+  },
+  USER_MANAGEMENT: {
+    USER: {
+      DROPDOWN: "/user-management/user/dropdown",
+    },
+  },
+  MASTER_DROPDOWNS: {
+    CUSTOMER: "/master/customer/dropdown",
+    CUSTOMER_DETAILS: (id: string) => `/master/customer/${id}`,
+    WAREHOUSE: "/master/warehouse/dropdown",
+    PRODUCT: "/master/product/dropdown",
+    PRICING: "/master/product-pricing/dropdown",
+  },
 };

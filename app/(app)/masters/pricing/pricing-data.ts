@@ -932,7 +932,16 @@ export function ensurePricingDemoSeed(): void {
   localStorage.setItem(PRICING_SEED_VERSION_KEY, PRICING_DEMO_SEED_VERSION);
 }
 
+let dynamicPricingRecords: PricingRecord[] | null = null;
+
+export function setDynamicPricingRecords(records: PricingRecord[] | null) {
+  dynamicPricingRecords = records;
+}
+
 export function loadPricingRecords(): PricingRecord[] {
+  if (dynamicPricingRecords) {
+    return dynamicPricingRecords;
+  }
   ensurePricingDemoSeed();
   const records = loadMasterRecords<PricingRecord>(PRICING_STORAGE_KEY, PRICING_SEED);
   return records.map((r) => migratePricingRecord(r));

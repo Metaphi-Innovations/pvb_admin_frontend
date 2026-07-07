@@ -1037,7 +1037,16 @@ function migrateProduct(raw: Record<string, unknown>): Product {
   };
 }
 
+let dynamicProducts: Product[] | null = null;
+
+export function setDynamicProducts(products: Product[] | null) {
+  dynamicProducts = products;
+}
+
 export function loadProducts(): Product[] {
+  if (dynamicProducts) {
+    return dynamicProducts;
+  }
   if (typeof window === "undefined") return SEED_PRODUCTS;
   ensureProductDemoSeed();
   return loadProductsRaw();
