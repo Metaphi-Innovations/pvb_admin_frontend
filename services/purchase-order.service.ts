@@ -2,7 +2,10 @@ import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import { COMPANY_BILLING } from "@/lib/procurement/config";
 import { amountInWords, round2 } from "@/lib/procurement/utils";
-import type { ProcurementAdditionalCharge } from "@/lib/procurement/procurement-line-utils";
+import {
+  calcPackingToBaseQty,
+  type ProcurementAdditionalCharge,
+} from "@/lib/procurement/procurement-line-utils";
 import {
   mapBackendStatusToFrontend,
   mapFrontendStatusToBackend,
@@ -76,6 +79,61 @@ function mapBackendDiscountType(value: unknown): "Percentage" | "Flat" {
   return mapDiscountType(value) === "flat" ? "Flat" : "Percentage";
 }
 
+function resolveLineQtyFields(line: POLineItem): {
+  packingQty: number;
+  baseQty: number;
+} {
+  const conversionQty = line.conversionQty ?? 1;
+  const packingQty = line.orderedQtyPack ?? 0;
+  const baseQty =
+    line.orderedQty ?? calcPackingToBaseQty(packingQty, conversionQty);
+  return { packingQty, baseQty };
+}
+
+function resolveQtyFromBackend(raw: Record<string, unknown>): {
+  packingQty: number;
+  baseQty: number;
+  conversionQty: number;
+} {
+  const snapshot = asRecord(raw.product_snapshot);
+  const snapshotConversion = asNumber(snapshot.unit_per_packing) || 0;
+
+  const requestedPack = asNumber(raw.requested_qty);
+  const orderedPack = asNumber(raw.ordered_qty);
+  const requestedBase = asNumber(raw.requested_base_qty);
+  const orderedBase = asNumber(raw.ordered_base_qty);
+  const hasBaseFields = requestedBase > 0 || orderedBase > 0;
+
+  let packingQty: number;
+  let baseQty: number;
+
+  if (hasBaseFields) {
+    packingQty = orderedPack || requestedPack;
+    baseQty = orderedBase || requestedBase;
+  } else if (requestedPack > 0 && orderedPack > 0 && requestedPack !== orderedPack) {
+    // Legacy payloads stored packing qty in requested_qty and base qty in ordered_qty.
+    packingQty = requestedPack;
+    baseQty = orderedPack;
+  } else {
+    packingQty = orderedPack || requestedPack;
+    baseQty = orderedPack || requestedPack;
+  }
+
+  packingQty = packingQty || 1;
+  baseQty = baseQty || packingQty;
+
+  const conversionQty =
+    snapshotConversion ||
+    (packingQty > 0 ? Math.round((baseQty / packingQty) * 1000) / 1000 : 0) ||
+    1;
+
+  if (!hasBaseFields && !(requestedPack > 0 && orderedPack > 0 && requestedPack !== orderedPack)) {
+    baseQty = calcPackingToBaseQty(packingQty, conversionQty);
+  }
+
+  return { packingQty, baseQty, conversionQty };
+}
+
 function mapAdditionalCharges(raw: unknown): ProcurementAdditionalCharge[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((item, idx) => {
@@ -118,15 +176,15 @@ function mapAttachments(raw: unknown): POAttachment[] {
 }
 
 function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
-  const orderedQty = asNumber(raw.ordered_qty ?? raw.ordered_base_qty);
+  const { packingQty, baseQty, conversionQty } = resolveQtyFromBackend(raw);
   const rate = asNumber(raw.rate);
   const discountType = mapDiscountType(raw.discount_type);
   const discountValue = asNumber(raw.discount_value);
   const discountAmount =
     discountType === "percentage"
-      ? round2((orderedQty * rate * discountValue) / 100)
+      ? round2((baseQty * rate * discountValue) / 100)
       : discountValue;
-  const taxable = round2(orderedQty * rate - discountAmount);
+  const taxable = round2(baseQty * rate - discountAmount);
   const cgstPct = asNumber(raw.cgst_percent);
   const sgstPct = asNumber(raw.sgst_percent);
   const igstPct = asNumber(raw.igst_percent);
@@ -146,11 +204,11 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
     hsnCode: "",
     baseUnit: asString(raw.base_unit) || "Unit",
     packagingUnit: asString(raw.packing_unit) || "Box",
-    conversionQty: 1,
+    conversionQty,
     orderUom: "Unit",
-    orderedQtyPack: orderedQty || 1,
+    orderedQtyPack: packingQty,
     uom: asString(raw.base_unit) || "Unit",
-    orderedQty: orderedQty || 1,
+    orderedQty: baseQty,
     unitPrice: rate,
     discountType,
     discountPct: discountType === "percentage" ? discountValue : 0,
@@ -159,7 +217,7 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
     cgstPct,
     sgstPct,
     igstPct,
-    grossAmount: round2(orderedQty * rate),
+    grossAmount: round2(baseQty * rate),
     taxAmount: gstAmount,
     netAmount: totalAmount || round2(taxable + gstAmount),
     deliverySchedule: "",
@@ -445,26 +503,31 @@ function buildWriteBody(
     grand_total: draft.summary.grandTotal,
     products: form.lines
       .filter((l) => l.productName || l.productCode || l.productId)
-      .map((line) => ({
-        product_id: toUuidOrNull(line.productId),
-        product_code: line.productCode || null,
-        product_name: line.productName || null,
-        base_unit: line.baseUnit || null,
-        packing_unit: line.packagingUnit || null,
-        requested_qty: line.orderedQtyPack ?? line.orderedQty,
-        ordered_qty: line.orderedQty,
-        rate: line.unitPrice,
-        discount_type: mapBackendDiscountType(line.discountType),
-        discount_value:
-          line.discountType === "flat" ? line.discountFlatAmount : line.discountPct,
-        gst_percent: round2(line.cgstPct + line.sgstPct + line.igstPct),
-        cgst_percent: line.cgstPct,
-        sgst_percent: line.sgstPct,
-        igst_percent: line.igstPct,
-        gst_amount: line.taxAmount,
-        total_amount: line.netAmount,
-        remarks: line.remarks || null,
-      })),
+      .map((line) => {
+        const { packingQty, baseQty } = resolveLineQtyFields(line);
+        return {
+          product_id: toUuidOrNull(line.productId),
+          product_code: line.productCode || null,
+          product_name: line.productName || null,
+          base_unit: line.baseUnit || null,
+          packing_unit: line.packagingUnit || null,
+          requested_qty: packingQty,
+          requested_base_qty: baseQty,
+          ordered_qty: packingQty,
+          ordered_base_qty: baseQty,
+          rate: line.unitPrice,
+          discount_type: mapBackendDiscountType(line.discountType),
+          discount_value:
+            line.discountType === "flat" ? line.discountFlatAmount : line.discountPct,
+          gst_percent: round2(line.cgstPct + line.sgstPct + line.igstPct),
+          cgst_percent: line.cgstPct,
+          sgst_percent: line.sgstPct,
+          igst_percent: line.igstPct,
+          gst_amount: line.taxAmount,
+          total_amount: line.netAmount,
+          remarks: line.remarks || null,
+        };
+      }),
     existingAttachments: (form.existingAttachments ?? [])
       .map((a) => a.url)
       .filter(Boolean),

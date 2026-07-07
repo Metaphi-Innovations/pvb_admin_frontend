@@ -145,7 +145,7 @@ export default function PurchaseOrdersPageClient() {
 
   const [filters, setFilters] = useState<FilterState>({});
   const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
-  const [sort, setSort] = useState<SortState>({ key: "poDate", direction: "desc" });
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
