@@ -3,8 +3,6 @@
  */
 
 import type { CreditNoteRecord } from "./credit-notes-data";
-import { creditNoteSourceToKind } from "./credit-notes-data";
-import { resolveCreditNoteSourceKind } from "./credit-note-source-types";
 import type { LedgerImpactLine } from "@/components/accounts/LedgerImpactPreview";
 import { getActivePostingLedgers } from "@/lib/accounts/coa-hierarchy";
 import { resolveMappingLedger } from "@/lib/accounts/ledger-mappings";
@@ -34,44 +32,22 @@ function findLedgerIdByName(name: string): number | null {
   return account?.id ?? null;
 }
 
-import type { CreditNoteSourceKind } from "./credit-note-source-types";
-
-/** Debit ledger by credit note source — Sales Return, Scheme Expense, or Discount Allowed. */
-export function resolveCreditNoteDebitLedger(sourceKind: CreditNoteSourceKind): string {
-  switch (sourceKind) {
-    case "sales_return": {
-      const fromCoa = getActivePostingLedgers().find((l) =>
-        l.accountName.toLowerCase().includes("sales return"),
-      );
-      if (fromCoa) return fromCoa.accountName;
-      const mapped = resolveMappingLedger("sales_revenue", "Sales Return", { createIfMissing: false });
-      return mapped?.accountName ?? "Sales Return";
-    }
-    case "cash_discount":
-    case "payment_discount":
-      return (
-        findLedgerByHint("Discount Allowed") ??
-        findLedgerByHint("Cash Discount") ??
-        "Discount Allowed"
-      );
-    case "near_expiry":
-    case "festive_scheme":
-    case "turnover_discount":
-      return (
-        findLedgerByHint("Scheme Expense") ??
-        findLedgerByHint("Scheme Discount") ??
-        findLedgerByHint("Sales Promotion") ??
-        findLedgerByHint("Dealer Promotion Expense") ??
-        "Scheme Expense / Sales Promotion"
-      );
-    default:
-      return findLedgerByHint("Discount Allowed") ?? "Discount Allowed";
-  }
-}
-
-/** @deprecated Use resolveCreditNoteDebitLedger with source kind. */
+/** Scheme / sales-return debit ledger — never "General". */
 export function resolveCreditNoteDiscountLedger(isSchemeSettlement: boolean): string {
-  return resolveCreditNoteDebitLedger(isSchemeSettlement ? "near_expiry" : "sales_return");
+  if (isSchemeSettlement) {
+    return (
+      findLedgerByHint("Scheme Discount") ??
+      findLedgerByHint("Sales Promotion") ??
+      findLedgerByHint("Dealer Promotion Expense") ??
+      "Scheme Discount / Sales Promotion"
+    );
+  }
+  const fromCoa = getActivePostingLedgers().find((l) =>
+    l.accountName.toLowerCase().includes("sales return"),
+  );
+  if (fromCoa) return fromCoa.accountName;
+  const mapped = resolveMappingLedger("sales_revenue", "Sales Return", { createIfMissing: false });
+  return mapped?.accountName ?? "Sales Return";
 }
 
 export function resolveCreditNoteCustomerLedger(customerLedgerName: string, customerName: string): string {
@@ -110,7 +86,6 @@ export function buildCreditNoteLedgerImpact(input: {
   taxable: number;
   taxAmount: number;
   grandTotal: number;
-  sourceKind?: CreditNoteSourceKind;
   isSchemeSettlement?: boolean;
   isManualAdjustment?: boolean;
   adjustmentLedgerName?: string;
@@ -128,13 +103,10 @@ export function buildCreditNoteLedgerImpact(input: {
         }
       : normalizeGstAmounts(input.taxAmount, input.interstate);
 
-  const sourceKind: CreditNoteSourceKind =
-    input.sourceKind ??
-    (input.isManualAdjustment ? "manual" : input.isSchemeSettlement ? "near_expiry" : "sales_return");
   const discountLedger =
     input.isManualAdjustment && input.adjustmentLedgerName?.trim()
       ? input.adjustmentLedgerName.trim()
-      : resolveCreditNoteDebitLedger(sourceKind);
+      : resolveCreditNoteDiscountLedger(!!input.isSchemeSettlement);
   const customerLedger = resolveCreditNoteCustomerLedger(
     input.customerLedgerName,
     input.customerName,
@@ -163,9 +135,8 @@ export function buildCreditNoteLedgerImpact(input: {
 export function postCreditNoteAccounting(note: CreditNoteRecord): PostingResult | null {
   if (note.status !== "approved") return null;
 
-  const sourceKind = resolveCreditNoteSourceKind(note);
-  const isScheme = sourceKind !== "sales_return" && sourceKind !== "manual";
-  const isManual = note.source === "manual" || sourceKind === "manual";
+  const isScheme = Boolean(note.schemeSettlementKey) || note.source === "payment_discount_scheme";
+  const isManual = note.source === "manual";
   const customerName = note.receivableLedger?.trim() || note.customerName;
   const interstate = inferInterstateFromPlaceOfSupply(
     (note as { placeOfSupply?: string }).placeOfSupply,
@@ -189,7 +160,7 @@ export function postCreditNoteAccounting(note: CreditNoteRecord): PostingResult 
   const discountLedgerName =
     isManual && note.adjustmentLedgerName?.trim()
       ? note.adjustmentLedgerName.trim()
-      : resolveCreditNoteDebitLedger(creditNoteSourceToKind(note.source, note));
+      : resolveCreditNoteDiscountLedger(isScheme);
   const discountLedgerId =
     isManual && note.adjustmentLedgerId
       ? note.adjustmentLedgerId

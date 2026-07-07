@@ -11,7 +11,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  BarChart3,
   Plus,
   Download,
   MoreVertical,
@@ -27,7 +26,6 @@ import {
   FileText,
   Package,
   XCircle,
-  Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ListingContainer } from "@/components/layout/ListingContainer";
@@ -40,17 +38,15 @@ import { downloadProformaInvoice } from "./pi-document";
 import {
   type SalesOrder,
   type OrderStatus,
-  loadOrders,
   formatOrderStatus,
-  ORDER_STATUS_OPTIONS,
   canEditOrder,
   canSplitOrder,
   canCancelOrder,
   canDownloadPI,
   canGeneratePackingList,
   hydrateOrderLineItems,
-  isApprovalRelatedOrder,
 } from "./orders-data";
+import { useSalesOrders, useCancelSalesOrder, useSalesOrderFilterOptions } from "@/hooks/sales/use-sales-orders";
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   draft: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
@@ -63,24 +59,7 @@ const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   cancelled: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-400" },
 };
 
-const FILTER_STATUSES: OrderStatus[] = [...ORDER_STATUS_OPTIONS.map((o) => o.value), "dispatched", "delivered"];
-
 type OrderListTab = "all" | "draft" | "pending_approval" | "rejected" | "sales_return";
-
-function matchesOrderTab(order: SalesOrder, tab: OrderListTab): boolean {
-  switch (tab) {
-    case "all":
-      return true;
-    case "draft":
-      return order.status === "draft";
-    case "pending_approval":
-      return order.status === "pending_approval";
-    case "rejected":
-      return order.status === "rejected";
-    default:
-      return true;
-  }
-}
 
 function StatusPill({ status }: { status: string }) {
   const cfg = STATUS_CFG[status] ?? STATUS_CFG.draft;
@@ -92,94 +71,36 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
-function SortTh({
-  label,
-  colKey,
-  sortKey,
-  sortDir,
-  onSort,
-  className,
-}: {
-  label: string;
-  colKey: string;
-  sortKey: string;
-  sortDir: "asc" | "desc";
-  onSort: (k: string) => void;
-  className?: string;
-}) {
-  const active = sortKey === colKey;
-  return (
-    <th
-      onClick={() => onSort(colKey)}
-      className={cn(
-        "px-4 py-3 text-left text-xs font-semibold cursor-pointer select-none group whitespace-nowrap",
-        active && "bg-brand-50/60",
-        className,
-      )}
-    >
-      <div className="flex items-center gap-1.5">
-        <span className={active ? "text-brand-700" : "text-foreground"}>{label}</span>
-        {active ? (
-          <ChevronDown className={cn("w-3 h-3 text-brand-600 transition-transform", sortDir === "desc" && "rotate-180")} />
-        ) : (
-          <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground" />
-        )}
-      </div>
-    </th>
-  );
-}
-
-function ActionButton({
-  onClick,
-  icon: Icon,
-  label,
-  destructive,
-  disabled,
-}: {
-  onClick: () => void;
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  destructive?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className={cn(
-        "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
-        disabled
-          ? "text-muted-foreground/50 cursor-not-allowed"
-          : destructive
-            ? "text-red-600 hover:bg-red-50"
-            : "text-foreground hover:bg-muted/60",
-      )}
-    >
-      <Icon className="w-3.5 h-3.5" /> {label}
-    </button>
-  );
-}
-
 export default function SalesOrdersPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [activeTab, setActiveTab] = useState<OrderListTab>("all");
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortState>({ key: "orderDate", direction: "desc" });
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(25);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-
   const [salesReturnCount, setSalesReturnCount] = useState(0);
-
   const [cancelOrder, setCancelOrder] = useState<SalesOrder | null>(null);
 
-  const refreshOrders = () => setOrders(loadOrders());
+  const { data: customerFilterRaw } = useSalesOrderFilterOptions("customer__customer_name", activeTab);
+  const { data: soNumberFilterRaw } = useSalesOrderFilterOptions("so_number", activeTab);
+
+  const customerOptions = useMemo(() => {
+    return (customerFilterRaw || []).map((item: any) => ({
+      label: item.customer__customer_name,
+      value: item.customer__customer_name,
+    }));
+  }, [customerFilterRaw]);
+
+  const soNumberOptions = useMemo(() => {
+    return (soNumberFilterRaw || []).map((item: any) => ({
+      label: item.so_number,
+      value: item.so_number,
+    }));
+  }, [soNumberFilterRaw]);
 
   useEffect(() => {
-    refreshOrders();
     setSalesReturnCount(getSalesReturnRecords().length);
   }, []);
 
@@ -203,81 +124,65 @@ export default function SalesOrdersPage() {
     setPage(1);
   }, [activeTab, filters, pageSize]);
 
-  const filtered = useMemo(() => {
-    let d = orders.filter((o) => matchesOrderTab(o, activeTab));
-
-    const searchVal = filters.search as string;
-    if (searchVal?.trim()) {
-      const q = searchVal.toLowerCase();
-      d = d.filter(
-        (o) =>
-          o.soNumber.toLowerCase().includes(q) ||
-          o.customerName.toLowerCase().includes(q) ||
-          o.territory.toLowerCase().includes(q)
-      );
-    }
-
-    const soNumberVal = filters.soNumber as string;
-    if (soNumberVal?.trim()) {
-      d = d.filter((o) => o.soNumber.toLowerCase().includes(soNumberVal.toLowerCase()));
-    }
-
-    const customerVal = filters.customerName as string[];
-    if (customerVal && customerVal.length > 0) {
-      d = d.filter((o) => customerVal.includes(o.customerName));
-    }
-
-    const territoryVal = filters.territory as string[];
-    if (territoryVal && territoryVal.length > 0) {
-      d = d.filter((o) => territoryVal.includes(o.territory));
-    }
-
-    const statusVal = filters.status as string[];
-    if (statusVal && statusVal.length > 0) {
-      d = d.filter((o) => statusVal.includes(o.status));
-    }
-
-    if (sort.key && sort.direction !== "none") {
-      d = [...d].sort((a, b) => {
-        const av = (a as unknown as Record<string, unknown>)[sort.key];
-        const bv = (b as unknown as Record<string, unknown>)[sort.key];
-        const cmp = String(av ?? "").localeCompare(String(bv ?? ""), undefined, { numeric: true });
-        return sort.direction === "asc" ? cmp : -cmp;
-      });
-    }
-    return d;
-  }, [orders, activeTab, filters, sort]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
-
-  const paginated = useMemo(
-    () => filtered.slice((page - 1) * pageSize, page * pageSize),
-    [filtered, page, pageSize],
-  );
-
-  const kpi = {
-    total: orders.length,
-    confirmed: orders.filter((o) => o.status === "confirmed").length,
-    dispatched: orders.filter((o) => o.status === "dispatched").length,
-    delivered: orders.filter((o) => o.status === "delivered").length,
-    totalValue: orders.reduce((s, o) => s + o.totalAmount, 0),
-  };
-
-  const tabCounts = useMemo(() => {
-    return {
-      all: orders.length,
-      draft: orders.filter((o) => o.status === "draft").length,
-      pending_approval: orders.filter((o) => o.status === "pending_approval").length,
-      rejected: orders.filter((o) => o.status === "rejected").length,
-      sales_return: salesReturnCount,
+  // Construct ordering query param
+  const ordering = useMemo(() => {
+    if (!sort.key || sort.direction === "none") return undefined;
+    const fieldMap: Record<string, string> = {
+      soNumber: "so_number",
+      customerName: "customer__customer_name",
+      status: "status",
+      orderDate: "order_date",
+      totalAmount: "grand_total",
     };
-  }, [orders, salesReturnCount]);
+    const backendKey = fieldMap[sort.key] || sort.key;
+    return sort.direction === "desc" ? `-${backendKey}` : backendKey;
+  }, [sort]);
 
-  const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
+  // Construct filters payload
+  const apiFilters = useMemo(() => {
+    const backendFilters: Record<string, any> = {};
+    if (activeTab && activeTab !== "all" && activeTab !== "sales_return") {
+      backendFilters.status = activeTab.toUpperCase();
+    }
+
+    if (filters.soNumber && Array.isArray(filters.soNumber) && filters.soNumber.length > 0) {
+      backendFilters.so_number = filters.soNumber[0];
+    } else if (filters.soNumber && typeof filters.soNumber === "string") {
+      backendFilters.so_number = filters.soNumber;
+    }
+
+    if (filters.status && Array.isArray(filters.status) && filters.status.length > 0) {
+      backendFilters.status = filters.status[0].toUpperCase();
+    }
+
+    if (filters.customerName && Array.isArray(filters.customerName) && filters.customerName.length > 0) {
+      backendFilters.customer = { customer_name: filters.customerName[0] };
+    }
+
+    return backendFilters;
+  }, [activeTab, filters]);
+
+  const searchVal = (filters.search as string) || "";
+
+  // Call the useSalesOrders Query hook
+  const { data: salesOrdersData, isLoading, refetch } = useSalesOrders({
+    page,
+    pageSize,
+    search: searchVal,
+    ordering,
+    apiFilters,
+  });
+
+  const orders = salesOrdersData?.items ?? [];
+  const totalRecords = salesOrdersData?.total ?? 0;
+
+  const cancelMutation = useCancelSalesOrder();
+
+  const handleCancelSuccess = () => {
+    refetch();
+    setCancelOrder(null);
+    setToast({ msg: "Sales order cancelled successfully.", type: "success" });
+  };
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab as OrderListTab);
@@ -287,25 +192,14 @@ export default function SalesOrdersPage() {
 
   const isApprovalTab = activeTab === "pending_approval";
 
-  const customerOptions = useMemo(() => {
-    return Array.from(new Set(orders.map((o) => o.customerName)))
-      .filter(Boolean)
-      .map((name) => ({ label: name, value: name }));
-  }, [orders]);
-
-  const territoryOptions = useMemo(() => {
-    return Array.from(new Set(orders.map((o) => o.territory)))
-      .filter(Boolean)
-      .map((t) => ({ label: t, value: t }));
-  }, [orders]);
-
   const columns: ColumnConfig<SalesOrder>[] = [
     {
       key: "soNumber",
       header: "SO Number",
       sortable: true,
       filterable: true,
-      filterType: "text",
+      filterType: "dropdown",
+      filterOptions: soNumberOptions,
       render: (val, row) => (
         <div>
           <span className="font-mono text-xs font-semibold text-brand-700">{row.soNumber}</span>
@@ -333,9 +227,6 @@ export default function SalesOrdersPage() {
       key: "territory",
       header: "Territory",
       sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: territoryOptions,
       render: (val, row) => (
         <span className="text-xs text-muted-foreground">{row.territory}</span>
       )
@@ -361,13 +252,9 @@ export default function SalesOrdersPage() {
       key: "status",
       header: "Status",
       sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: FILTER_STATUSES.map(s => ({ label: formatOrderStatus(s), value: s })),
       render: (val, row) => (
         <div>
           <StatusPill status={row.status} />
-          {row.packingListNumber && <p className="text-[10px] text-muted-foreground mt-0.5">{row.packingListNumber}</p>}
         </div>
       )
     },
@@ -490,10 +377,10 @@ export default function SalesOrdersPage() {
       metrics={
         <div className="grid grid-cols-4 gap-3">
           {[
-            { label: "Total Orders", value: kpi.total, icon: ShoppingBag, accent: true },
-            { label: "Confirmed", value: kpi.confirmed, icon: CheckCircle2 },
-            { label: "Dispatched", value: kpi.dispatched, icon: TrendingUp },
-            { label: "Delivered", value: kpi.delivered, icon: CheckCircle2 },
+            { label: "Total Orders", value: totalRecords, icon: ShoppingBag, accent: true },
+            { label: "Confirmed", value: orders.filter((o) => o.status === "confirmed").length, icon: CheckCircle2 },
+            { label: "Dispatched", value: orders.filter((o) => o.status === "dispatched").length, icon: TrendingUp },
+            { label: "Delivered", value: orders.filter((o) => o.status === "delivered").length, icon: CheckCircle2 },
           ].map(({ label, value, icon: Icon, accent }) => (
             <div key={label} className="bg-white rounded-xl border border-border p-2 flex items-center gap-3">
               <div
@@ -510,11 +397,11 @@ export default function SalesOrdersPage() {
         </div>
       }
       tabs={[
-        { value: "all", label: `Sales (${tabCounts.all})` },
-        { value: "draft", label: `Draft (${tabCounts.draft})` },
-        { value: "pending_approval", label: `Approval (${tabCounts.pending_approval})` },
-        { value: "rejected", label: `Rejected (${tabCounts.rejected})` },
-        { value: "sales_return", label: `Sales Return (${tabCounts.sales_return})` },
+        { value: "all", label: "Sales" },
+        { value: "draft", label: "Draft" },
+        { value: "pending_approval", label: "Approval" },
+        { value: "rejected", label: "Rejected" },
+        { value: "sales_return", label: `Sales Return (${salesReturnCount})` },
       ]}
       activeTab={activeTab}
       onTabChange={handleTabChange}
@@ -525,8 +412,8 @@ export default function SalesOrdersPage() {
         <div>
           <MasterListing<SalesOrder>
             columns={columns}
-            data={paginated}
-            totalRecords={filtered.length}
+            data={orders}
+            totalRecords={totalRecords}
             page={page}
             pageSize={pageSize}
             onPageChange={setPage}
@@ -539,20 +426,20 @@ export default function SalesOrdersPage() {
             currentSort={sort}
             onAdd={() => router.push("/sales/orders/add")}
             addLabel="New Order"
+            loading={isLoading}
             onExport={() => console.log("Exporting sales orders...")}
           />
         </div>
       )}
 
-      <CancelOrderDialog
-        order={cancelOrder}
-        open={!!cancelOrder}
-        onClose={() => setCancelOrder(null)}
-        onSuccess={() => {
-          refreshOrders();
-          showToast("Sales order cancelled successfully.");
-        }}
-      />
+      {cancelOrder && (
+        <CancelOrderDialog
+          order={cancelOrder}
+          open={!!cancelOrder}
+          onClose={() => setCancelOrder(null)}
+          onSuccess={handleCancelSuccess}
+        />
+      )}
 
       {toast && (
         <div
@@ -568,4 +455,3 @@ export default function SalesOrdersPage() {
     </ListingContainer>
   );
 }
-

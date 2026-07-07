@@ -14,12 +14,6 @@ import {
   PRICING_STATES,
 } from "../pricing/pricing-data";
 import { migrateSchemeRecord, mergeSchemeSeedRecords, normalizeSchemeApprovalStatus, resolveDisplayApprovalStatus, resolveSchemeOperationalStatus, SCHEME_SEED, SCHEME_STORAGE_KEY, isSchemeEditable, type CustomerType, type ProductDiscountSchemeLine, type SchemeRecord } from "./scheme-data";
-import {
-  invalidateCreditNotePendingCaches,
-  invalidateModuleDataCache,
-  MODULE_CACHE_KEYS,
-  readThroughModuleCache,
-} from "@/lib/accounts/module-data-cache";
 
 export type ProductDiscountDiscountType = "Percentage" | "Rupees";
 export type DiscountApplicationMode = "Common" | "Product-wise";
@@ -334,25 +328,13 @@ function deriveMergedSchemeName(group: SchemeRecord[], base: SchemeRecord): stri
   return base.schemeName.replace(/\s*-\s*[^-]+$/, "").replace(/\s*-\s*[^-]+$/, "").trim() || base.schemeName;
 }
 
-function loadConsolidatedSchemeRecordsUncached(): SchemeRecord[] {
+export function loadConsolidatedSchemeRecords(): SchemeRecord[] {
   const loaded = mergeSchemeSeedRecords(
     loadMasterRecords<SchemeRecord>(SCHEME_STORAGE_KEY, SCHEME_SEED),
     SCHEME_SEED,
   );
   const migrated = loaded.map((record) => normalizeSchemeApprovalStatus(migrateSchemeRecord(record)));
   return consolidateProductDiscountRecords(migrated);
-}
-
-export function loadConsolidatedSchemeRecords(): SchemeRecord[] {
-  return readThroughModuleCache(
-    MODULE_CACHE_KEYS.schemeRecordsDiscount,
-    loadConsolidatedSchemeRecordsUncached,
-  );
-}
-
-export function invalidateConsolidatedSchemeRecordsCache(): void {
-  invalidateModuleDataCache(MODULE_CACHE_KEYS.schemeRecordsDiscount);
-  invalidateCreditNotePendingCaches();
 }
 
 const BLOCKING_APPROVAL_STATUSES = new Set(["approved", "active"]);

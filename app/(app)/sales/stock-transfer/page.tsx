@@ -87,7 +87,7 @@ export default function StockTransferPage() {
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortState>({ key: "transferDate", direction: "desc" });
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(25);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [cancelTransfer, setCancelTransfer] = useState<StockTransfer | null>(null);
 

@@ -19,7 +19,7 @@ export function SalesReturnTab({ onCountChange }: { onCountChange?: (count: numb
   const [returnFilters, setReturnFilters] = useState<FilterState>({});
   const [returnSort, setReturnSort] = useState<SortState>({ key: "", direction: "none" });
   const [returnPage, setReturnPage] = useState(1);
-  const [returnPageSize, setReturnPageSize] = useState(10);
+  const [returnPageSize, setReturnPageSize] = useState(25);
   const [salesReturns, setSalesReturns] = useState<SalesReturnRecord[]>([]);
 
   const refreshReturns = useCallback(() => {

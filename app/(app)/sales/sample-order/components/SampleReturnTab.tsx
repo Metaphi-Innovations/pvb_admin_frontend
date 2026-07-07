@@ -18,7 +18,7 @@ export function SampleReturnTab({ onCountChange }: { onCountChange?: (count: num
   const [returnFilters, setReturnFilters] = useState<FilterState>({});
   const [returnSort, setReturnSort] = useState<SortState>({ key: "", direction: "none" });
   const [returnPage, setReturnPage] = useState(1);
-  const [returnPageSize, setReturnPageSize] = useState(10);
+  const [returnPageSize, setReturnPageSize] = useState(25);
   const [sampleReturns, setSampleReturns] = useState<SampleReturnRecord[]>([]);
 
   const refreshReturns = useCallback(() => {

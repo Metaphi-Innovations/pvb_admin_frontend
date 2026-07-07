@@ -577,7 +577,7 @@ export function getVendorsForDebitNote(): Vendor[] {
 }
 
 export function findPurchaseInvoiceForPO(poId: number): PurchaseInvoiceRecord | undefined {
-  const po = loadPurchaseOrders().find((p) => p.id === poId);
+  const po = loadPurchaseOrders().find((p) => String(p.id) === String(poId));
   if (!po) return undefined;
   return loadPurchaseInvoices().find(
     (pi) => pi.poId === poId || pi.poNumber === po.poNumber || pi.vendorName === po.supplierName,
@@ -612,7 +612,7 @@ export function buildReferenceFromPurchaseInvoice(invoiceId: number): DebitRefer
 }
 
 export function buildReferenceFromPurchaseOrder(poId: number): DebitReferencePreview | null {
-  const po = loadPurchaseOrders().find((p) => p.id === poId);
+  const po = loadPurchaseOrders().find((p) => String(p.id) === String(poId));
   if (!po || po.status === "cancelled") return null;
   const linkedPi = findPurchaseInvoiceForPO(poId);
   const vendor = getActiveVendors().find((v) => v.id === po.supplierId || v.vendorName === po.supplierName);
@@ -641,11 +641,11 @@ export function buildReferenceFromPurchaseOrder(poId: number): DebitReferencePre
     documentDate: po.poDate,
     sourceInvoiceId: linkedPi?.id ?? null,
     sourceInvoiceNo: linkedPi?.invoiceNo ?? "",
-    sourcePoId: po.id,
+    sourcePoId: Number(po.id) || (po.id as any),
     sourcePoNo: po.poNumber,
     sourceGrnNo: wh.sourceGrnNo,
     sourceQcNo: wh.sourceQcNo,
-    vendorId: po.supplierId ?? vendor?.id ?? null,
+    vendorId: (Number(po.supplierId) || (po.supplierId as any)) ?? vendor?.id ?? null,
     vendorName: po.supplierName,
     vendorPhone: vendor ? `${vendor.mobileCountryCode} ${vendor.mobile}`.trim() : "",
     vendorEmail: vendor?.email ?? "",
@@ -662,7 +662,7 @@ export function buildReferenceFromQc(qcId: string): DebitReferencePreview | null
   if (!qc || qc.status !== "completed" || qc.totalRejectedQty <= 0) return null;
   const grn = getGrnRecords().find((g) => g.grnNo === qc.grnNo);
   const po = loadPurchaseOrders().find((p) => p.poNumber === (qc.poNumber ?? grn?.poNumber));
-  const linkedPi = po ? findPurchaseInvoiceForPO(po.id) : undefined;
+  const linkedPi = po ? findPurchaseInvoiceForPO(Number(po.id)) : undefined;
   const vendor = getActiveVendors().find((v) => v.vendorName === qc.vendorName);
   const lines = qc.items
     .filter((it) => it.rejectedQty > 0)
@@ -698,11 +698,11 @@ export function buildReferenceFromQc(qcId: string): DebitReferencePreview | null
     documentDate: qc.inspectionDate,
     sourceInvoiceId: linkedPi?.id ?? null,
     sourceInvoiceNo: linkedPi?.invoiceNo ?? "",
-    sourcePoId: po?.id ?? null,
+    sourcePoId: po?.id ? (Number(po.id) || (po.id as any)) : null,
     sourcePoNo: qc.poNumber ?? grn?.poNumber ?? "",
     sourceGrnNo: qc.grnNo,
     sourceQcNo: qc.qcNo,
-    vendorId: po?.supplierId ?? vendor?.id ?? null,
+    vendorId: (po?.supplierId ? (Number(po.supplierId) || (po.supplierId as any)) : null) ?? vendor?.id ?? null,
     vendorName: qc.vendorName,
     vendorPhone: vendor ? `${vendor.mobileCountryCode} ${vendor.mobile}`.trim() : "",
     vendorEmail: vendor?.email ?? "",
@@ -765,7 +765,7 @@ export function buildDebitNoteFromPurchaseInvoice(invoiceId: number): Partial<De
 export function lookupPurchaseOrderForDebit(poId: number) {
   const p = buildReferenceFromPurchaseOrder(poId);
   if (!p) return null;
-  const po = loadPurchaseOrders().find((x) => x.id === poId)!;
+  const po = loadPurchaseOrders().find((x) => String(x.id) === String(poId))!;
   return {
     po,
     originalAmount: p.originalAmount,

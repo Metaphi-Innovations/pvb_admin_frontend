@@ -20,12 +20,6 @@ export interface CreditNoteProductTableProps {
 }
 
 function lineAmounts(line: CreditNoteLine) {
-  if (line.creditAmount > 0 && line.returnQty <= 0) {
-    const rate = 1 + (line.taxPct || 0) / 100;
-    const taxable = Math.round((line.creditAmount / rate) * 100) / 100;
-    const taxAmt = Math.round((line.creditAmount - taxable) * 100) / 100;
-    return { base: taxable, discountAmt: 0, taxable, taxAmt, amount: line.creditAmount };
-  }
   if (line.returnQty <= 0 || line.unitPrice <= 0) return null;
   const gross = calcCreditLineAmounts(line);
   if (line.creditAmount <= 0) return { ...gross, amount: 0 };
