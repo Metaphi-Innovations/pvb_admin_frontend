@@ -36,6 +36,10 @@ export const API_ENDPOINTS = {
       VIEW: (id: string) => `/master/customer-type/${id}`,
       EXPORT: "/master/customer-type/export",
     },
+    CUSTOMER:{
+      CUSTOMER: "/master/customer/dropdown",
+      CUSTOMER_DETAILS: (id: string) => `/master/customer/${id}`,
+    },
     GST: {
       LIST: "/master/gst/list",
       CREATE: "/master/gst/create",
@@ -104,6 +108,10 @@ export const API_ENDPOINTS = {
       EXPORT: "/master/product/export",
       PREVIEW_NUMBER: "/master/product/preview-number",
       DROPDOWN: "/master/product/dropdown",
+      PRICING: "/master/product/pricing",
+    },
+    PRICING:{
+      DROPDOWN: "/master/product-pricing/dropdown",
     },
     WAREHOUSE: {
       DROPDOWN: "/master/warehouse/dropdown",
@@ -159,13 +167,7 @@ export const API_ENDPOINTS = {
       DROPDOWN: "/user-management/user/dropdown",
     },
   },
-  MASTER_DROPDOWNS: {
-    CUSTOMER: "/master/customer/dropdown",
-    CUSTOMER_DETAILS: (id: string) => `/master/customer/${id}`,
-    WAREHOUSE: "/master/warehouse/dropdown",
-    PRODUCT: "/master/product/dropdown",
-    PRICING: "/master/product-pricing/dropdown",
-  },
+
   WAREHOUSE: {
     PACKING_LIST: {
       BATCHES: "/warehouse/packing-list/batches",
